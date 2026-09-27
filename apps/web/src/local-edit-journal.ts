@@ -5,11 +5,13 @@ import type {
   AuthorEditProposalTarget,
   AuthorEditUnit,
   DigestValue,
+  DraftRetry,
   EditorBaseSnapshot,
   ManuscriptBlock,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
 import { applyAuthorEditPrimitive } from "./author-edit-primitive.ts";
+import { validDraftRetry, validRetrySettlement } from "./draft-retry-binding.ts";
 import { readDraftUndoJournal } from "./draft-undo-journal.ts";
 import { readDiscardJournal } from "./refused-edit-discard.ts";
 import { readAcceptanceJournal } from "./acceptance-journal.ts";
@@ -557,6 +559,7 @@ async function validateCoverage(
         !== firstRecord?.expected_authoritative_heads[0]
       || JSON.stringify(request?.expected_proposal_head_revision_ids)
         !== JSON.stringify(firstRecord?.expected_proposal_heads)
+      || JSON.stringify(request?.retry_source) !== JSON.stringify(firstRecord?.retry_source.kind === "draft_retry" ? firstRecord.retry_source : undefined)
       || JSON.stringify(request?.proposal_target)
         !== JSON.stringify(firstRecord?.proposal_target)
       || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord?.target_refs)
@@ -577,6 +580,14 @@ async function validateCoverage(
         > AUTHOR_EDIT_MAX_WIRE_BODY_BYTES) {
       throw new Error("Journal Submission Group is corrupt");
     }
+    const settled = group.settlement;
+    if (request.retry_source !== undefined && settled.kind === "zero_authority_receipt_settled"
+      && !validRetrySettlement(request, settled)) throw new Error("Retry settlement is corrupt");
+    if (request.retry_source !== undefined && settled.kind === "applied_receipt_settled"
+      && !validRetrySettlement(request, { receipt: settled.receipt, source_draft_disposition: settled.source_draft_disposition ?? null,
+        effect: { kind: "authoritative_applied", authoritative_revision: settled.installed_base_snapshot.materialized_revision,
+          authoritative_commit_id: settled.authoritative_commit_id, author_action_sequence: settled.author_action_sequence,
+          project_activity_position: settled.project_activity_position } })) throw new Error("Retry settlement is corrupt");
     for (const [index, item] of coverage.entries()) {
       const record = coveredRecords[index]!;
       const sequence = record.local_intent_sequence;
@@ -612,7 +623,7 @@ export async function validateJournalSnapshot(
       || record.local_intent_sequence <= priorSequence
       || record.projection_dependency?.prior_sequence !== priorSequence
       || record.projection_dependency?.snapshot_id !== record.base_snapshot_id
-      || record.retry_source?.kind !== "fresh_editor_intent"
+      || (record.retry_source?.kind !== "fresh_editor_intent" && !validDraftRetry(record.retry_source))
       || record.editor_contract_revision !== EDITOR_CONTRACT_REVISION
       || record.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || record.undo_group_binding?.kind !== "direct_author_input"
@@ -737,6 +748,12 @@ function pendingProjectionFromSnapshot(
         || (group.settlement.kind === "zero_authority_receipt_settled"
           && group.settlement.effect.kind === "refused_to_draft"
           && group.settlement.receipt.result === "refused_to_draft")
+        || (group.frozen_request_body.retry_source !== undefined
+          && group.settlement.kind === "zero_authority_receipt_settled"
+          && group.settlement.source_draft_disposition?.kind === "unchanged"
+          && ["no_effect", "conflicted", "refused"].includes(group.settlement.effect.kind))
+        || (group.frozen_request_body.retry_source !== undefined
+          && group.settlement.kind === "zero_authority_receipt_settled" && group.settlement.effect.kind === "proposal_revised")
         || provenNoEffectAgainstDurableBase(group, snapshot, base)) {
         for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
       } else {
@@ -747,6 +764,12 @@ function pendingProjectionFromSnapshot(
   const activeRecords = snapshot.records.filter((record) =>
     recordTargetsCurrentBase(record, base)
     && !resolvedSequences.has(record.local_intent_sequence));
+  const recoveredRetrySequences = new Set(snapshot.groups.filter((group) =>
+    group.settlement.kind === "unsettled" && group.frozen_request_body.retry_source !== undefined
+    && group.frozen_request_body.chapter_id === base.chapter_id).flatMap((group) =>
+    group.ordered_coverage.map((coverage) => coverage.local_intent_sequence)));
+  for (const record of activeRecords) recoveredRetrySequences.delete(record.local_intent_sequence);
+  const pendingRecordCount = activeRecords.length + recoveredRetrySequences.size;
   const authoritativeRecords = activeRecords.filter((record) => record.proposal_target === undefined);
   const blocks = (authoritativeRecords.length === 0
     ? cloneBlocks(base.materialized_revision.blocks)
@@ -766,11 +789,11 @@ function pendingProjectionFromSnapshot(
     blocks: cloneBlocks(blocks),
     save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || hasLegacyReplaceSelection
       ? "needs_attention"
-      : activeRecords.length
+      : pendingRecordCount
         ? "saving"
         : "saved",
-    unsettled_intent_count: activeRecords.length + pendingAcceptanceCount,
-    ...(pendingAcceptanceCount > 0 ? { author_edit_unsettled_intent_count: activeRecords.length } : {}),
+    unsettled_intent_count: pendingRecordCount + pendingAcceptanceCount,
+    ...(pendingAcceptanceCount > 0 ? { author_edit_unsettled_intent_count: pendingRecordCount } : {}),
     authoritative_revision_id: base.authoritative_head_revision_id,
     ...(workspace.session.author_undo_frontier_sequence
       ? { author_undo_frontier_sequence: workspace.session.author_undo_frontier_sequence }
@@ -855,8 +878,26 @@ export async function persistStructuredSelection(
   }, cryptoImpl);
 }
 
+export async function persistDraftRetryUnit(workspace: EditorWorkspace, authorEditUnit: AuthorEditUnit,
+  retrySource: DraftRetry, expectedProposalHeads: string[]): Promise<PendingEditProjection> {
+  const snapshot = await prepareJournalAppend(workspace);
+  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
+  if (projection.save_state !== "saved" || projection.unsettled_intent_count !== 0 || !validDraftRetry(retrySource)
+    || expectedProposalHeads.some((head) => !UUID.test(head))
+    || expectedProposalHeads.length !== new Set(expectedProposalHeads).size) {
+    throw new Error("Draft retry requires a settled writer");
+  }
+  const expectedBlocks = cloneBlocks(projection.blocks);
+  for (const primitive of authorEditUnit.normalized_primitives) applyAuthorEditPrimitive(expectedBlocks, primitive);
+  const expectedBody = flattenChapterBody(expectedBlocks);
+  return persistAuthorEditUnit(workspace, { snapshot, projection, authorEditUnit, retrySource,
+    expectedBody, expectedBlocks, resultingBody: expectedBody, extraUtf8: JSON.stringify(authorEditUnit),
+    inputOrigin: "selection_replacement", expectedProposalHeads }, workspace.cryptoImpl);
+}
+
 export interface CandidateSelectionEdit {
   kind: "candidate_selection";
+  retrySource?: DraftRetry;
   target: AuthorEditProposalTarget;
   expectedProposalHeads: string[];
   priorText: string;
@@ -897,6 +938,7 @@ export async function persistCandidateSelection(
   }], primitive);
   return persistAuthorEditUnit(workspace, {
     snapshot, projection,
+    ...(edit.retrySource === undefined ? {} : { retrySource: edit.retrySource }),
     authorEditUnit: {
       normalized_primitives: [primitive],
       selection_snapshot: {
@@ -1229,6 +1271,7 @@ async function persistAuthorEditUnit(
     undoGroupId?: string | undefined;
     createdAt?: string | undefined;
     expectedProposalHeads?: string[];
+    retrySource?: DraftRetry;
     candidate?: {
       target: AuthorEditProposalTarget;
       expectedProposalHeads: string[];
@@ -1420,10 +1463,11 @@ async function persistAuthorEditUnit(
       ?? base.proposal_head_revision_ids,
     ...(edit.candidate === undefined ? {} : { proposal_target: edit.candidate.target }),
     proposal_anchors: workspace.inlineProposalAnchors ?? [],
-    observed_ownership_partition: edit.expectedProposalHeads !== undefined ? "mixed" : edit.candidate === undefined
+    observed_ownership_partition: edit.expectedProposalHeads !== undefined
+      ? edit.expectedProposalHeads.length === 0 ? "authoritative" : "mixed" : edit.candidate === undefined
       ? base.observed_ownership_partition : "mixed",
     author_edit_unit: authorEditUnit,
-    retry_source: { kind: "fresh_editor_intent" },
+    retry_source: edit.retrySource ?? { kind: "fresh_editor_intent" },
     editor_contract_revision: EDITOR_CONTRACT_REVISION,
     undo_group_binding: { kind: "direct_author_input", undo_group_id: undoGroupId },
     payload_chain_ref: payloadChain.payload_chain_id,

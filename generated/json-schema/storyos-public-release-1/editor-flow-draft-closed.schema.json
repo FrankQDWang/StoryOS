@@ -76,10 +76,16 @@
   "additionalProperties": false,
   "properties": {
     "author_action_sequence": {
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "close_reason": {
-      "const": "abandoned",
+      "enum": [
+        "abandoned",
+        "superseded"
+      ],
       "type": "string"
     },
     "closure": {
@@ -132,7 +138,6 @@
     "closure",
     "close_reason",
     "source",
-    "author_action_sequence",
     "created_at"
   ],
   "title": "StoryOS Draft Closed Event",

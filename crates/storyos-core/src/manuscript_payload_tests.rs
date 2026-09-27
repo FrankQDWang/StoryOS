@@ -39,6 +39,7 @@ fn versioned_command() -> ApplyVersionedAuthorEdit {
         current_payload: upgrade_legacy_manuscript("A😀B\n雨", "block-1"),
         expected_authoritative_revision_id: "revision-1".to_owned(),
         expected_proposal_head_revision_ids: Vec::new(),
+        current_target_ownership: super::VersionedTargetOwnership::Chapter,
         current_ownership: CurrentOwnershipFacts {
             proposal_head_revision_ids: Vec::new(),
             anchor_refs: Vec::new(),
@@ -143,6 +144,7 @@ fn split_command() -> ApplyVersionedAuthorEdit {
         current_payload: upgrade_legacy_manuscript("HelloWorld", "block-left"),
         expected_authoritative_revision_id: "revision-1".to_owned(),
         expected_proposal_head_revision_ids: Vec::new(),
+        current_target_ownership: super::VersionedTargetOwnership::Chapter,
         current_ownership: CurrentOwnershipFacts {
             proposal_head_revision_ids: Vec::new(),
             anchor_refs: Vec::new(),

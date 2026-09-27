@@ -1,5 +1,9 @@
-import { verifyProductionDiscard } from "./production-discard-command.ts";
+import { readProductionJournal, verifyProductionDiscard } from "./production-discard-command.ts";
+import { verifyProductionDraftUndo } from "./production-draft-undo-command.ts";
+import { verifyProductionRetryReservationRace } from "./production-draft-retry-race.ts";
+import { queryStoryOSPostgres } from "./node-integration.ts";
 import assert from "node:assert/strict";
+import { expect } from "playwright/test";
 import { createHash } from "node:crypto";
 import type { BrowserContext, Page } from "playwright";
 import type { ApplyAuthorEditRequest, ApplyAuthorEditResponse, BlockProposalInspect,
@@ -16,7 +20,8 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   let key = "";
   let reached!: () => void;
   const committed = new Promise<void>((resolve) => { reached = resolve; });
-  await page.route((url) => url.pathname.endsWith("/manuscript/author-edits"), async (route) => {
+  const originalEditRoute = (url: URL) => url.pathname.endsWith("/manuscript/author-edits");
+  await page.route(originalEditRoute, async (route) => {
     posts += 1;
     request = route.request().postDataJSON() as ApplyAuthorEditRequest;
     key = route.request().headers()["idempotency-key"]!;
@@ -102,7 +107,8 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
   page.off("request", track);
   assert.deepEqual(mutations, []);
-  assert.equal(await draft.locator("button").count(), 2);
+  await draft.locator("button[data-draft-retry]").waitFor();
+  assert.equal(await draft.locator("button").count(), 3);
   const wrong = await page.evaluate(async (draftId) => {
     const response = await fetch(`/api/v1/projects/018f0000-0000-7001-8000-000000000005/refused-edit-drafts/${draftId}`);
     return { status: response.status, text: await response.text() };
@@ -135,6 +141,170 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   assert.equal(await page.locator("button[data-draft-copy]").count(), 0);
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
   await page.unroute(draftRoute);
+  await page.reload();
+  await draft.locator("button[data-draft-retry]").waitFor();
+  await page.unroute(originalEditRoute);
+  await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0
+    WHERE owner_user_id='018f0000-0000-7001-8000-000000000001'::uuid AND project_id='${projectId}'::uuid`);
+  let retryRequest: ApplyAuthorEditRequest | undefined, retryResponse: ApplyAuthorEditResponse | undefined;
+  let retryKey = "", retryPosts = 0;
+  let releaseRetry!: () => void, rejectRetry!: (error: unknown) => void;
+  const committedRetry = new Promise<void>((resolve, reject) => { releaseRetry = resolve; rejectRetry = reject; });
+  const retryRoute = (url: URL) => url.pathname.endsWith("/manuscript/author-edits");
+  const snapshotRoute = (url: URL) => url.pathname.startsWith(`/api/v1/projects/${projectId}/editor-sessions/`);
+  await page.route(retryRoute, async (route) => {
+    retryPosts += 1; retryRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
+    retryKey = route.request().headers()["idempotency-key"]!;
+    try {
+      const settled = await route.fetch({ timeout: 10000 }); assert.equal(settled.status(), 200, await settled.text());
+      retryResponse = await settled.json() as ApplyAuthorEditResponse;
+      await route.abort("failed"); releaseRetry();
+    } catch (error) { rejectRetry(error); await route.abort("failed"); }
+  });
+  try {
+  await draft.locator("button[data-draft-retry]").click();
+  const range = draft.locator('textarea[name="draft-range-text"]');
+  await range.dblclick();
+  assert.deepEqual(await range.evaluate((field) => ({
+    from: (field as HTMLTextAreaElement).selectionStart, to: (field as HTMLTextAreaElement).selectionEnd,
+    text: (field as HTMLTextAreaElement).value.slice((field as HTMLTextAreaElement).selectionStart,
+      (field as HTMLTextAreaElement).selectionEnd),
+  })), { from: 9, to: 14, text: "mixed" });
+  assert.deepEqual(await draft.locator("[data-retry-preview]").evaluateAll((blocks) => blocks.map((block) => ({
+    block_kind: (block as HTMLElement).dataset.retryPreview, text: block.textContent,
+  }))), [{ block_kind: "paragraph", text: "mixed" }]);
+  const submittedRetry = page.waitForRequest((request) => request.method() === "POST"
+    && new URL(request.url()).pathname.endsWith("/manuscript/author-edits"));
+  await draft.locator("button[data-draft-retry-submit]").click();
+  await Promise.all([submittedRetry, committedRetry]).catch(async (error: unknown) => {
+    throw new Error(`Retry did not settle: ${await draft.textContent()}`, { cause: error });
+  });
+  assert.ok(retryRequest?.retry_source && retryResponse?.effect.kind === "refused_to_draft");
+  assert.notEqual(retryKey, key);
+  assert.notEqual(retryRequest.completed_intent_record_id, request.completed_intent_record_id);
+  assert.deepEqual(retryRequest.author_edit_units, [{ ...unit,
+    normalized_primitives: [{ kind: "replace_structured_selection", replacement: [{ block_kind: "paragraph", text: "mixed" }] }] }]);
+  assert.deepEqual(retryRequest.retry_source, { kind: "draft_retry", source_draft_kind: "refused_edit",
+    source_draft_id: retained.draft.draft_id, source_current_draft_revision_id: retained.draft.draft_revision_id,
+    source_draft_payload_digest: retained.draft.payload_digest, expected_source_draft_closure: "open",
+    selected_payload_range: { kind: "exact_structured_range", coordinate_profile: "storyos.draft-replacement.block-utf16.v1",
+      from: { block_index: 0, offset: 9 }, to: { block_index: 0, offset: 14 },
+      slice_digest: createHash("sha256").update('[{"block_kind":"paragraph","text":"mixed"}]').digest("hex") } });
+  await restart(); await page.reload();
+  const next = page.locator(`[data-refused-edit-draft="${retryResponse.effect.draft_id}"]`);
+  await next.locator("button[data-draft-retry]").waitFor();
+  await draft.locator("[data-draft-closed]").waitFor();
+  assert.equal(await draft.locator("button[data-draft-retry], button[data-draft-discard]").count(), 0);
+  assert.equal(retryPosts, 1, "retry response loss and restart must not create another authority command");
+  const replacement = await page.evaluate(async ({ projectId, draftId }) => {
+    const result = await fetch(`/api/v1/projects/${projectId}/refused-edit-drafts/${draftId}`);
+    if (!result.ok) throw new Error(`Replacement read ${result.status}`); return result.json();
+  }, { projectId, draftId: retryResponse.effect.draft_id }) as GetRefusedEditDraftResponse;
+  assert.deepEqual(replacement.draft.payload.author_edit_units, retryRequest.author_edit_units);
+  assert.deepEqual(replacement.draft.replacement_provenance, retryResponse.effect.replacement_provenance);
+  assert.equal(replacement.draft.closure, "open");
+  assert.deepEqual((await read()).draft.payload, retained.draft.payload);
+  await next.locator("button[data-draft-copy]").click(); await next.getByText("Copied").waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "mixed");
+  await page.unroute(retryRoute);
+  let reopened = replacement.draft;
+  for (const [targetIndex, acknowledgement] of [["0", "lost"], ["0", "received"], ["1", "received"]] as const) {
+    await next.locator("button[data-draft-retry]").click();
+    await next.locator('textarea[name="draft-range-text"]').dblclick();
+    await next.locator('select[name="draft-retry-target"]').selectOption(targetIndex);
+    const target = next.locator('textarea[name="draft-target-text"]');
+    await target.waitFor();
+    const targetText = targetIndex === "0" ? proposal.candidate_text : right.text;
+    await expect(target).toHaveValue(targetText);
+    await target.click(); await page.keyboard.press("ControlOrMeta+A");
+    assert.deepEqual(await target.evaluate((field) => ({ from: (field as HTMLTextAreaElement).selectionStart,
+      to: (field as HTMLTextAreaElement).selectionEnd })), { from: 0, to: targetText.length });
+    await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0
+      WHERE owner_user_id='018f0000-0000-7001-8000-000000000001'::uuid AND project_id='${projectId}'::uuid`);
+    let proposalRetry!: ApplyAuthorEditResponse;
+    let nativePosts = 0, malformedSnapshots = 0;
+    let frozenJournal: Awaited<ReturnType<typeof readProductionJournal>> | undefined;
+    let nativeKey = "", nativeSession = "";
+    if (targetIndex === "1") await page.route(snapshotRoute, async (route) => {
+      const reply = await route.fetch(), snapshot = await reply.json();
+      if (malformedSnapshots === 0 && proposalRetry?.effect.kind === "authoritative_applied"
+        && JSON.stringify(snapshot.project_scope) === JSON.stringify(proposalRetry.project_scope)
+        && snapshot.editor_session.editor_session_id === nativeSession
+        && snapshot.base_snapshot.authoritative_head_revision_id === proposalRetry.effect.authoritative_revision.revision_id) {
+        malformedSnapshots += 1;
+        snapshot.base_snapshot.materialized_payload_digest.value_hex_lowercase = "0".repeat(64);
+        await route.fulfill({ response: reply, json: snapshot });
+      } else await route.fulfill({ response: reply });
+    });
+    let finishProposal!: () => void, failProposal!: (error: unknown) => void;
+    const settledProposal = new Promise<void>((resolve, reject) => { finishProposal = resolve; failProposal = reject; });
+    await page.route(retryRoute, async (route) => {
+      try {
+        nativePosts += 1; nativeKey = route.request().headers()["idempotency-key"]!;
+        nativeSession = (route.request().postDataJSON() as ApplyAuthorEditRequest).editor_session_id;
+        if (targetIndex === "1") frozenJournal = await readProductionJournal(page, projectId);
+        const reply = await route.fetch(); assert.equal(reply.status(), 200, await reply.text());
+        proposalRetry = await reply.json(); await route.fulfill({ response: reply }); finishProposal();
+      } catch (error) { failProposal(error); await route.abort("failed"); }
+    });
+    const submit = async () => {
+      const proposalPost = page.waitForRequest((request) => request.method() === "POST"
+        && new URL(request.url()).pathname.endsWith("/manuscript/author-edits"));
+      await next.locator("button[data-draft-retry-submit]").click();
+      await Promise.all([proposalPost, settledProposal]);
+      return proposalRetry;
+    };
+    if (targetIndex === "1") await verifyProductionRetryReservationRace({ origin, projectId,
+      chapterId: chapter.chapter.chapter_id, blockId: right.manuscript_block_id, retry: submit });
+    else await submit();
+    assert.equal(proposalRetry.effect.kind, targetIndex === "0" ? "proposal_revised" : "authoritative_applied");
+    assert.equal(proposalRetry.source_draft_disposition?.kind, "closed_superseded");
+    if (proposalRetry.effect.kind === "authoritative_applied") assert.deepEqual(
+      proposalRetry.effect.authoritative_revision.blocks, blocks.map((block) =>
+        block.manuscript_block_id === right.manuscript_block_id ? { ...block, text: "mixed" } : block));
+    if (targetIndex === "1") {
+      try {
+        await page.getByText("Editor Base Snapshot did not converge", { exact: true }).waitFor();
+        assert.equal(malformedSnapshots, 1); assert.ok(frozenJournal);
+        const rejected = await readProductionJournal(page, projectId);
+        const group = rejected.submission_groups!.find((row) => row.idempotency_key === nativeKey);
+        assert.ok(group); assert.deepEqual(group.settlement, { kind: "unsettled" });
+        const baseKey = `active_base:${String(group.journal_partition_id)}`;
+        const originalBase = frozenJournal.metadata!.find((row) => row.key === baseKey);
+        assert.ok(originalBase);
+        assert.deepEqual(rejected.metadata!.find((row) => row.key === baseKey), originalBase);
+        assert.deepEqual(group, frozenJournal.submission_groups!.find((row) => row.idempotency_key === nativeKey));
+      } finally { await page.unroute(snapshotRoute); }
+      await page.reload();
+      await expect.poll(async () => {
+        const journal = await readProductionJournal(page, projectId);
+        return Reflect.get(journal.submission_groups!.find((row) => row.idempotency_key === nativeKey)!.settlement as object, "kind");
+      }, { timeout: 5000 }).toBe("applied_receipt_settled");
+    }
+    await next.locator("[data-draft-closed]").waitFor();
+    assert.equal(nativePosts, 1);
+    await page.unroute(retryRoute);
+    const readReplacement = () => page.evaluate(async ({ projectId, draftId }) => {
+      const reply = await fetch(`/api/v1/projects/${projectId}/refused-edit-drafts/${draftId}`);
+      if (!reply.ok) throw new Error(`Retry source read ${reply.status}`); return (await reply.json()).draft;
+    }, { projectId, draftId: replacement.draft.draft_id });
+    const coupledSource = await readReplacement();
+    reopened = await verifyProductionDraftUndo(page, projectId, coupledSource, restart, acknowledgement);
+    if (targetIndex === "0") {
+      const restoredProposal = await page.evaluate(async ({ projectId, proposalId }) => {
+        const reply = await fetch(`/api/v1/projects/${projectId}/proposals/${proposalId}`);
+        if (!reply.ok) throw new Error(`Restored Proposal read ${reply.status}`); return (await reply.json()).proposal;
+      }, { projectId, proposalId: proposal.proposal_id }) as BlockProposalInspect;
+      assert.deepEqual({ ...restoredProposal, revision_id: proposal.revision_id, validation_receipt: proposal.validation_receipt }, proposal);
+      assert.notEqual(restoredProposal.revision_id, proposal.revision_id);
+      assert.ok(restoredProposal.validation_receipt.kind === "present");
+      assert.match(restoredProposal.validation_receipt.validation_receipt_id, /^[0-9a-f-]{36}$/);
+      assert.equal(restoredProposal.validation_receipt.result, "valid");
+    }
+    assert.deepEqual((await read()).draft.payload, retained.draft.payload);
+    assert.equal((await read()).draft.closure, "closed");
+  }
   await verifyProductionDiscard({ page, context, origin, projectId, chapterId: chapter.chapter.chapter_id,
-    proposalId: proposal.proposal_id, draft: retained.draft, restart });
+    proposalId: proposal.proposal_id, draft: reopened, restart });
+  } finally { await page.unroute(snapshotRoute); await page.unroute(retryRoute); }
 }

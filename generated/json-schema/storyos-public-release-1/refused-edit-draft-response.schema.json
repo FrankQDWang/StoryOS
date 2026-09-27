@@ -223,6 +223,26 @@
       ],
       "type": "object"
     },
+    "DraftPayloadPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "block_index": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offset": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "block_index",
+        "offset"
+      ],
+      "type": "object"
+    },
     "DraftReopenReceipt": {
       "additionalProperties": false,
       "properties": {
@@ -260,6 +280,34 @@
         "event_id",
         "result",
         "created_at"
+      ],
+      "type": "object"
+    },
+    "DraftRetryReplacement": {
+      "additionalProperties": false,
+      "properties": {
+        "closure_event_ref": {
+          "type": "string"
+        },
+        "selected_payload_range": {
+          "$ref": "#/$defs/ExactStructuredRange"
+        },
+        "source_draft_id": {
+          "type": "string"
+        },
+        "source_draft_payload_digest": {
+          "type": "string"
+        },
+        "source_draft_revision_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_draft_id",
+        "source_draft_revision_id",
+        "source_draft_payload_digest",
+        "closure_event_ref",
+        "selected_payload_range"
       ],
       "type": "object"
     },
@@ -317,7 +365,10 @@
       "additionalProperties": false,
       "properties": {
         "author_action_sequence": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "close_reason": {
           "type": "string"
@@ -368,7 +419,6 @@
         "closure",
         "close_reason",
         "source",
-        "author_action_sequence",
         "created_at"
       ],
       "type": "object"
@@ -440,6 +490,40 @@
         "created_at"
       ],
       "type": "object"
+    },
+    "ExactStructuredRange": {
+      "additionalProperties": false,
+      "properties": {
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        },
+        "kind": {
+          "$ref": "#/$defs/ExactStructuredRangeKind"
+        },
+        "slice_digest": {
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        }
+      },
+      "required": [
+        "kind",
+        "coordinate_profile",
+        "from",
+        "to",
+        "slice_digest"
+      ],
+      "type": "object"
+    },
+    "ExactStructuredRangeKind": {
+      "enum": [
+        "exact_structured_range"
+      ],
+      "type": "string"
     },
     "ManuscriptBlockKind": {
       "enum": [
@@ -608,6 +692,16 @@
           "anyOf": [
             {
               "$ref": "#/$defs/EditorFlowDraftReopened"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "replacement_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DraftRetryReplacement"
             },
             {
               "type": "null"

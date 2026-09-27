@@ -382,7 +382,9 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
     if len(effect_variants) != len(variants):
         errors.append("applyAuthorEdit effect branches are not unique tagged objects")
     expected_fields = {
-        "refused_to_draft": {"kind", "refusal_origin", "draft_id", "draft_revision_id", "creation_event_id"},
+        "refused_to_draft": {
+            "kind", "refusal_origin", "draft_id", "draft_revision_id", "creation_event_id",
+            "replacement_provenance"},
         "authoritative_applied": {
             "kind", "authoritative_revision", "authoritative_commit_id",
             "author_action_sequence", "project_activity_position"},
@@ -398,7 +400,9 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         variant = variants.get(kind, {})
         properties = variant.get("properties", {})
         required = variant.get("required", [])
-        if set(properties) != expected_variant_fields or set(required) != expected_variant_fields:
+        expected_required = expected_variant_fields - (
+            {"replacement_provenance"} if kind == "refused_to_draft" else set())
+        if set(properties) != expected_variant_fields or set(required) != expected_required:
             errors.append(f"applyAuthorEdit {kind} effect shape drifted")
         if variant.get("additionalProperties") is not False:
             errors.append(f"applyAuthorEdit {kind} no-extra-field guard drifted")
@@ -532,7 +536,7 @@ def apply_author_edit_outcome_contract_errors(
     errors: list[str] = []
     if hashlib.sha256(json.dumps(
             outcome_schema, sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "8d0e3fa82ca48c842577c98b3dba9827a2a711128237943f09c5a908645564df":
+    ).encode()).hexdigest() != "a401cbbd8f56148a3bfab7dccdca4ad93345439c547915a2be272837220317e9":
         errors.append("outcome Query generated schema drifted")
     root_properties = outcome_schema.get("properties", {})
     if (outcome_schema.get("$id") != "storyos.query.apply-author-edit-outcome.response.v1"

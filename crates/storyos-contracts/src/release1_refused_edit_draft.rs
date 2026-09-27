@@ -68,6 +68,8 @@ pub struct RefusedEditDraftCreated {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct RefusedEditDraftInspect {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement_provenance: Option<crate::DraftRetryReplacement>,
     pub draft_id: String,
     pub draft_revision_id: String,
     pub kind: String,

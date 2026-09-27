@@ -6,7 +6,8 @@ import type { CloseEditorFlowDraftResponse, RefusedEditDraftInspect, UndoLatestA
 import { readProductionJournal } from "./production-discard-command.ts";
 
 export async function verifyProductionDraftUndo(page: Page, projectId: string,
-  draft: RefusedEditDraftInspect, restart: () => Promise<void>): Promise<RefusedEditDraftInspect> {
+  draft: RefusedEditDraftInspect, restart: () => Promise<void>,
+  acknowledgement: "lost" | "received" = "lost"): Promise<RefusedEditDraftInspect> {
   const surface = page.locator(`[data-refused-edit-draft="${draft.draft_id}"]`);
   const original = await readProductionJournal(page, projectId);
   let posts = 0;
@@ -14,28 +15,54 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
   let frozen: Record<string, unknown> | undefined;
   let request: unknown;
   let key = "", nonce = "";
-  let release!: () => void;
-  const committed = new Promise<void>((resolve) => { release = resolve; });
+  let release!: () => void, rejectUndo!: (error: unknown) => void;
+  const committed = new Promise<void>((resolve, reject) => { release = resolve; rejectUndo = reject; });
   const undoRoute = (url: URL) => url.pathname.endsWith(`/projects/${projectId}/author-actions/undo`);
   await page.route(undoRoute, async (route) => {
+    try {
     posts += 1; request = route.request().postDataJSON();
     key = route.request().headers()["idempotency-key"]!;
     nonce = route.request().headers()["x-storyos-anti-forgery"]!;
-    frozen = (await readProductionJournal(page, projectId)).metadata!.find((row) => String(row.key).startsWith("draft-undo:"));
+    frozen = (await readProductionJournal(page, projectId)).metadata!.find((row) => row.key === `draft-undo:${draft.closure_event!.event_id}`);
     if (frozen === undefined) { await route.abort("failed"); release(); return; }
     const group = frozen.group as { frozen_request_body: unknown; idempotency_key: string };
     assert.deepEqual(group.frozen_request_body, request); assert.equal(group.idempotency_key, key);
     const reply = await route.fetch(); assert.equal(reply.status(), 200, await reply.text());
-    response = await reply.json(); await route.abort("failed"); release();
+    response = await reply.json();
+    if (acknowledgement === "received") await route.fulfill({ response: reply });
+    else await route.abort("failed");
+    release();
+    } catch (error) { rejectUndo(error); await route.abort("failed"); }
   });
   await page.locator('[data-manuscript-editor][contenteditable="true"]').focus();
   await page.keyboard.press("ControlOrMeta+Z");
-  await expect.poll(() => posts, { timeout: 5000 }).toBe(1).catch(async (cause: unknown) => {
-    throw new Error(`Root Undo did not submit (${await page.locator("[data-editor-failure]").getAttribute("data-editor-failure")}): ${await page.locator("body").innerText()}`, { cause });
+  await Promise.all([committed, expect.poll(() => posts, { timeout: 5000 }).toBe(1)]).catch(async (cause: unknown) => {
+    throw new Error(`Root Undo POST count ${posts}, durable ${frozen !== undefined} (${await page.locator("[data-editor-failure]").getAttribute("data-editor-failure")}): ${await page.locator("body").innerText()}`, { cause });
   });
   await committed;
   assert.ok(frozen, "Original Undo identity must be durable before the first POST");
-  assert.ok(response?.effect.kind === "draft_compensated");
+  assert.ok(response);
+  const event = response.effect.kind === "draft_compensated" ? response.effect.event : response.source_reopen_event;
+  assert.equal(response.effect.kind, draft.closure_event!.close_reason === "superseded" ? "compensated" : "draft_compensated");
+  assert.ok(event);
+  if (draft.closure_event!.close_reason === "superseded") {
+    const source = draft.payload.author_edit_units[0]!.selection_snapshot!.ordered_selection!.sources[0]!.owner;
+    if (response.proposal_revision_id != null) {
+      assert.ok(source.kind === "proposal");
+      const restored = await page.evaluate(async ({ projectId, proposalId }) => {
+        const reply = await fetch(`/api/v1/projects/${projectId}/proposals/${proposalId}`);
+        if (!reply.ok) throw new Error(`Compensated Proposal read ${reply.status}`); return (await reply.json()).proposal;
+      }, { projectId, proposalId: source.proposal_id });
+      assert.equal(restored.revision_id, response.proposal_revision_id);
+    } else {
+      const restored = await page.evaluate(async ({ projectId, chapterId }) => {
+        const reply = await fetch(`/api/v1/projects/${projectId}/chapters/${chapterId}`);
+        if (!reply.ok) throw new Error(`Compensated Prose read ${reply.status}`); return (await reply.json()).chapter.current_revision;
+      }, { projectId, chapterId: draft.payload.chapter_id });
+      assert.ok(response.effect.kind === "compensated");
+      assert.deepEqual(restored, response.effect.authoritative_revision);
+    }
+  }
   await restart(); await page.reload();
   await surface.locator("[data-draft-reopened]").waitFor();
   await surface.locator("button[data-draft-discard]").waitFor();
@@ -47,9 +74,12 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     function assertResponse(result: Response) { if (!result.ok) throw new Error(`Draft read ${result.status}`); }
   }, { projectId, draftId: draft.draft_id });
   const reopened = await read() as RefusedEditDraftInspect;
-  assert.deepEqual(reopened, { ...draft, closure: "open", reopen_event: response.effect.event });
+  assert.deepEqual(reopened, { ...draft, closure: "open", reopen_event: event });
   const journal = await readProductionJournal(page, projectId);
   assert.deepEqual(journal.metadata!.find((row) => row.key === frozen!.key), frozen);
+  if (acknowledgement === "received") assert.deepEqual(journal.metadata!.find((row) => row.key ===
+    `draft-undo-observation:${draft.closure_event!.event_id}`), { key: `draft-undo-observation:${draft.closure_event!.event_id}`,
+    record_key: frozen.key, response });
   for (const row of original.metadata!.filter((row) => String(row.key).startsWith("discard:")))
     assert.deepEqual(journal.metadata!.find((other) => other.key === row.key), row);
   await page.unroute(undoRoute);
@@ -60,6 +90,7 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     if (!reply.ok) throw new Error(`Undo replay ${reply.status}`); return reply.json();
   }, { projectId, request, key, nonce });
   assert.deepEqual(replay, response); assert.deepEqual(await read(), reopened);
+  if (draft.closure_event!.close_reason === "superseded") return reopened;
   let releaseClose!: (response: CloseEditorFlowDraftResponse) => void;
   const closeReply = new Promise<CloseEditorFlowDraftResponse>((resolve) => { releaseClose = resolve; });
   const closeRoute = (url: URL) => url.pathname.endsWith(`/drafts/${draft.draft_id}/closures`);
@@ -97,7 +128,8 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
   assert.equal(final.reopen_event!.source_close_event_id, secondCloseEvent.event_id);
   assert.notEqual(final.reopen_event!.event_id, reopened.reopen_event!.event_id);
   const settled = await readProductionJournal(page, projectId);
-  assert.equal(settled.metadata!.filter((row) => String(row.key).startsWith("draft-undo:")).length, 2);
+  assert.equal(settled.metadata!.filter((row) => String(row.key).startsWith("draft-undo:")).length,
+    original.metadata!.filter((row) => String(row.key).startsWith("draft-undo:")).length + 2);
   const observed = settled.metadata!.find((row) => row.key === `draft-undo-observation:${secondCloseEvent.event_id}`)!;
   assert.deepEqual(observed, { key: observed.key, record_key: `draft-undo:${secondCloseEvent.event_id}`, event: second.effect.event });
   for (const row of journal.metadata!.filter((row) => String(row.key).startsWith("discard:") || String(row.key).startsWith("draft-undo")))

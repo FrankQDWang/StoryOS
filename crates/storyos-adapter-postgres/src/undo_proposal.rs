@@ -55,11 +55,17 @@ pub(super) async fn persist_proposal_compensation(
         .map_err(undo_database_error)?;
     let author_action_sequence = parse_u64(counter_row.get(0)).map_err(undo_from_author_edit)?;
     let project_activity_position = parse_u64(counter_row.get(1)).map_err(undo_from_author_edit)?;
+    let payload = serde_json::json!({
+        "proposal_revision_id": proposal_revision_id,
+        "source_proposal_revision_id": frontier.current_revision_id,
+        "project_activity_position": project_activity_position.to_string(),
+    })
+    .to_string();
     let receipt_created_at = insert_undo_receipt(
         client,
         command,
         "authoritative_applied",
-        "{}",
+        &payload,
         &command.expected_authoritative_revision_id,
         &command.expected_authoritative_revision_id,
         UndoReceiptAuthority::None,
@@ -84,11 +90,12 @@ pub(super) async fn persist_proposal_compensation(
         .await
         .map_err(undo_from_session)?;
     Ok(UndoLatestAuthorActionSettlement {
+        source_reopen_event: None,
         ids: command.ids.clone(),
         effect: UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
             source_sequence,
             author_action_sequence,
-            proposal_revision_id,
+            proposal_revision_id: Some(proposal_revision_id),
             author_undo_frontier_sequence,
         },
         receipt_created_at,

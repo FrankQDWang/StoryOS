@@ -42,7 +42,8 @@ pub(super) async fn load_frontier(
         (snapshot.owner_user_id,snapshot.project_id,snapshot.chapter_object_id)
         WHERE action.owner_user_id=$1::text::uuid AND action.project_id=$2::text::uuid
         AND action.author_action_sequence=$3::text::numeric AND action.disposition='forward'
-        AND receipt.command_kind='closeEditorFlowDraft' AND receipt.result_kind='draft_closure_changed'
+        AND ((receipt.command_kind='closeEditorFlowDraft' AND receipt.result_kind='draft_closure_changed')
+          OR (receipt.command_kind='applyAuthorEdit' AND closed.close_reason='superseded' AND receipt.result_kind IN ('authoritative_applied','proposal_revised')))
         FOR UPDATE OF draft", &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&sequence.to_string(),&command.editor_session_id.as_ref()])
         .await.map_err(undo_database_error)?;
     let Some(row) = row else {
@@ -121,6 +122,55 @@ pub(super) async fn persist_compensation(
         },
     )
     .await?;
+    client.execute("INSERT INTO storyos.author_action_entries(owner_user_id,project_id,author_action_sequence,disposition,compensated_source_sequence,receipt_id,receipt_result_kind)
+        VALUES($1::text::uuid,$2::text::uuid,$3::text::numeric,'compensation',$4::text::numeric,$5::text::uuid,'draft_closure_changed')",
+        &[&owner,&project,&sequence,&frontier.sequence.to_string(),&command.ids.receipt_id]).await.map_err(undo_database_error)?;
+    let event = persist_reopen(
+        client,
+        command,
+        frontier,
+        DraftReopenWrite {
+            event_id,
+            handler_receipt_id,
+            sequence,
+            created_at: created_at.clone(),
+        },
+    )
+    .await?;
+    let response_project = settle_idempotency(client, command).await?;
+    Ok(UndoLatestAuthorActionSettlement {
+        source_reopen_event: None,
+        ids: command.ids.clone(),
+        effect: UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
+            event: Box::new(event),
+            author_undo_frontier_sequence: next
+                .map(|value| value.parse())
+                .transpose()
+                .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?,
+        },
+        receipt_created_at: created_at,
+        project_activity_position: activity
+            .parse()
+            .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?,
+        response_project,
+    })
+}
+
+pub(super) struct DraftReopenWrite {
+    pub event_id: String,
+    pub handler_receipt_id: String,
+    pub sequence: String,
+    pub created_at: String,
+}
+
+pub(super) async fn persist_reopen(
+    client: &tokio_postgres::Client,
+    command: &UndoLatestAuthorActionCommand,
+    frontier: &ObservedDraftClose,
+    write: DraftReopenWrite,
+) -> Result<storyos_contracts::EditorFlowDraftReopened, UndoLatestAuthorActionError> {
+    let owner = command.project_scope.owner_user_id.as_ref();
+    let project = command.project_scope.project_id.as_ref();
     let contract_scope = storyos_contracts::ProjectScope {
         owner_user_id: owner.to_owned(),
         project_id: project.to_owned(),
@@ -128,7 +178,7 @@ pub(super) async fn persist_compensation(
     let event = storyos_contracts::EditorFlowDraftReopened {
         schema_id: "storyos.event.editor-flow-draft-reopened.v1".to_owned(),
         event_kind: "editor_flow_draft_reopened".to_owned(),
-        event_id: event_id.clone(),
+        event_id: write.event_id.clone(),
         project_scope: contract_scope.clone(),
         draft_id: frontier.draft_id.clone(),
         draft_revision_id: frontier.revision_id.clone(),
@@ -149,53 +199,35 @@ pub(super) async fn persist_compensation(
         },
         handler_receipt: storyos_contracts::DraftReopenReceipt {
             schema_id: "storyos.receipt.draft-reopen.v1".to_owned(),
-            receipt_id: handler_receipt_id.clone(),
+            receipt_id: write.handler_receipt_id.clone(),
             project_scope: contract_scope,
             author_undo_receipt_id: command.ids.receipt_id.clone(),
             source_close_event_id: frontier.close_event_id.clone(),
-            event_id: event_id.clone(),
+            event_id: write.event_id.clone(),
             result: "draft_reopened".to_owned(),
-            created_at: created_at.clone(),
+            created_at: write.created_at.clone(),
         },
         source_author_action_sequence: frontier.sequence.to_string(),
-        author_action_sequence: sequence.clone(),
-        created_at: created_at.clone(),
+        author_action_sequence: write.sequence.clone(),
+        created_at: write.created_at.clone(),
     };
     client.execute("INSERT INTO storyos.draft_reopen_receipts(owner_user_id,project_id,receipt_id,author_undo_receipt_id,source_close_event_id,event_id,payload)
         VALUES($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7::text::jsonb)",
-        &[&owner,&project,&handler_receipt_id,&command.ids.receipt_id,&frontier.close_event_id,&event_id,
+        &[&owner,&project,&write.handler_receipt_id,&command.ids.receipt_id,&frontier.close_event_id,&write.event_id,
           &serde_json::to_string(&event.handler_receipt).map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?])
         .await.map_err(undo_database_error)?;
-    client.execute("INSERT INTO storyos.author_action_entries(owner_user_id,project_id,author_action_sequence,disposition,compensated_source_sequence,receipt_id,receipt_result_kind)
-        VALUES($1::text::uuid,$2::text::uuid,$3::text::numeric,'compensation',$4::text::numeric,$5::text::uuid,'draft_closure_changed')",
-        &[&owner,&project,&sequence,&frontier.sequence.to_string(),&command.ids.receipt_id]).await.map_err(undo_database_error)?;
     client.execute("INSERT INTO storyos.draft_reopen_events(owner_user_id,project_id,event_id,draft_id,revision_id,source_close_event_id,handler_receipt_id,author_action_sequence,payload)
         VALUES($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7::text::uuid,$8::text::numeric,$9::text::jsonb)",
-        &[&owner,&project,&event_id,&frontier.draft_id,&frontier.revision_id,&frontier.close_event_id,&handler_receipt_id,&sequence,
+        &[&owner,&project,&write.event_id,&frontier.draft_id,&frontier.revision_id,&frontier.close_event_id,&write.handler_receipt_id,&write.sequence,
           &serde_json::to_string(&event).map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?]).await.map_err(undo_database_error)?;
     let updated = client.execute("UPDATE storyos.draft_artifacts SET closure='open',reopen_event_id=$4::text::uuid
         WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND draft_id=$3::text::uuid
         AND current_revision_id=$5::text::uuid AND close_event_id=$6::text::uuid AND closure='closed' AND retention_state='retained'",
-        &[&owner,&project,&frontier.draft_id,&event_id,&frontier.revision_id,&frontier.close_event_id]).await.map_err(undo_database_error)?;
+        &[&owner,&project,&frontier.draft_id,&write.event_id,&frontier.revision_id,&frontier.close_event_id]).await.map_err(undo_database_error)?;
     if updated != 1 {
         return Err(UndoLatestAuthorActionError::BindingConflict);
     }
-    let response_project = settle_idempotency(client, command).await?;
-    Ok(UndoLatestAuthorActionSettlement {
-        ids: command.ids.clone(),
-        effect: UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
-            event: Box::new(event),
-            author_undo_frontier_sequence: next
-                .map(|value| value.parse())
-                .transpose()
-                .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?,
-        },
-        receipt_created_at: created_at,
-        project_activity_position: activity
-            .parse()
-            .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?,
-        response_project,
-    })
+    Ok(event)
 }
 
 pub(super) async fn read_event(

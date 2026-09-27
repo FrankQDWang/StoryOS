@@ -19,6 +19,7 @@ export async function retainRefusedEditRecoveryExpectation(
       AND record.project_id = '${projectId}'::uuid)`).join(",")},
     'domain_receipts', (SELECT coalesce(jsonb_agg(to_jsonb(receipt) ORDER BY receipt.receipt_id), '[]'::jsonb)
       FROM storyos.domain_receipts AS receipt WHERE receipt.owner_user_id='${USER_A}'::uuid
-      AND receipt.project_id='${projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft','undoLatestAuthorAction') AND cardinality(receipt.draft_artifact_refs)>0))::text`));
+      AND receipt.project_id='${projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft','undoLatestAuthorAction')
+      AND (cardinality(receipt.draft_artifact_refs)>0 OR receipt.source_draft_disposition IS NOT NULL)))::text`));
   await appendFile(path, `${JSON.stringify({ projectId, ownerUserId: USER_A, drafts, exports, state })}\n`);
 }

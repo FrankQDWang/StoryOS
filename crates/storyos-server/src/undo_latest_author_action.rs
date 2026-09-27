@@ -126,7 +126,19 @@ fn undo_response(
     settlement: storyos_application::UndoLatestAuthorActionSettlement,
 ) -> Result<Json<contracts::UndoLatestAuthorActionResponse>, ApiError> {
     let project = settlement.response_project;
-    let (draft_refs, lifecycle_refs) = match &settlement.effect {
+    let proposal_revision_id = match &settlement.effect {
+        UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
+            proposal_revision_id,
+            ..
+        } => proposal_revision_id.clone(),
+        UndoLatestAuthorActionSettlementEffect::CompensatedDraft { .. }
+        | UndoLatestAuthorActionSettlementEffect::Compensated { .. }
+        | UndoLatestAuthorActionSettlementEffect::CompensatedStructure { .. }
+        | UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter { .. }
+        | UndoLatestAuthorActionSettlementEffect::Conflicted { .. }
+        | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => None,
+    };
+    let (mut draft_refs, mut lifecycle_refs) = match &settlement.effect {
         UndoLatestAuthorActionSettlementEffect::CompensatedDraft { event, .. } => {
             (vec![event.draft_id.clone()], vec![event.event_id.clone()])
         }
@@ -137,6 +149,10 @@ fn undo_response(
         | UndoLatestAuthorActionSettlementEffect::Conflicted { .. }
         | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => (Vec::new(), Vec::new()),
     };
+    if let Some(event) = &settlement.source_reopen_event {
+        draft_refs.push(event.draft_id.clone());
+        lifecycle_refs.push(event.event_id.clone());
+    }
     let (receipt_result, effect, revision_ids, commit_ids, resulting_head, action_sequence) =
         match settlement.effect {
             UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
@@ -312,6 +328,8 @@ fn undo_response(
     let contract_project_scope = contract_scope(&command.project_scope);
     let expected = vec![command.expected_authoritative_revision_id.clone()];
     Ok(Json(contracts::UndoLatestAuthorActionResponse {
+        proposal_revision_id,
+        source_reopen_event: settlement.source_reopen_event,
         schema_id: contracts::UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: command.correlation_id.clone(),
         project_scope: contract_project_scope.clone(),

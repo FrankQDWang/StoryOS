@@ -86,8 +86,8 @@ pub(super) async fn read_settled_identity(
                  event.command_id, event.author_command_admission_id)
           WHERE event.owner_user_id = $1::text::uuid AND event.project_id = $2::text::uuid
             AND event.receipt_id = $3::text::uuid AND receipt.result_kind = 'refused_to_draft'
-            AND receipt.draft_artifact_refs = ARRAY[event.draft_id::text]
-            AND receipt.artifact_lifecycle_event_refs = ARRAY[event.creation_event_id::text]",
+            AND receipt.draft_artifact_refs[1] = event.draft_id::text
+            AND receipt.artifact_lifecycle_event_refs[1] = event.creation_event_id::text",
         &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref(), &receipt_id],
     ).await.map_err(author_edit_database_error)?.ok_or(AuthorEditError::BindingConflict)?;
     Ok(RefusedEditDraftIdentity {
@@ -122,7 +122,8 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                     closed_receipt.author_command_admission_id::text, closed.receipt_id::text,
                     closed_receipt.command_digest, closed_receipt.idempotency_key::text,
                     closed.author_action_sequence::text,
-                    to_char(closed.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'), reopened.payload::text
+                    to_char(closed.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'), reopened.payload::text, closed.close_reason, receipt.source_draft_disposition::text,
+                    (admission.command_payload->'retry_source')::text
                FROM storyos.draft_artifacts AS draft
                JOIN storyos.projects AS project USING (owner_user_id, project_id)
                JOIN storyos.draft_artifact_revisions AS revision
@@ -134,6 +135,9 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                JOIN storyos.domain_receipts AS receipt
                  ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
                     (event.owner_user_id, event.project_id, event.receipt_id)
+               JOIN storyos.author_command_admissions AS admission ON
+                 (admission.owner_user_id,admission.project_id,admission.author_command_admission_id)=
+                 (receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id)
                LEFT JOIN storyos.draft_close_events AS closed
                  ON (closed.owner_user_id,closed.project_id,closed.event_id,closed.draft_id,closed.revision_id)=
                     (draft.owner_user_id,draft.project_id,draft.close_event_id,draft.draft_id,draft.current_revision_id)
@@ -159,7 +163,21 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                         "Draft payload digest mismatch",
                     )));
                 }
+                let disposition: Option<storyos_contracts::SourceDraftDisposition> = row
+                    .get::<_, Option<String>>(23)
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()
+                    .map_err(ProjectReadError::unavailable)?;
+                let retry: Option<storyos_contracts::DraftRetry> = row
+                    .get::<_, Option<String>>(24)
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()
+                    .map_err(ProjectReadError::unavailable)?;
                 Ok(RefusedEditDraftRecord {
+                    replacement_provenance: crate::draft_retry::replacement_provenance(
+                        disposition.as_ref(),
+                        retry.as_ref(),
+                    ),
                     project_scope: scope.clone(),
                     identity: RefusedEditDraftIdentity {
                         draft_id: row.get(0),
@@ -195,6 +213,7 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                             command_digest: row.get(17),
                             idempotency_key: row.get(18),
                             author_action_sequence: row.get(19),
+                            close_reason: row.get(22),
                             created_at: row.get(20),
                         }
                     }),

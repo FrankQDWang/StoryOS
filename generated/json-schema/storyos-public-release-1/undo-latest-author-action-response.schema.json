@@ -584,12 +584,28 @@
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
     },
+    "proposal_revision_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "receipt": {
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
       "const": "storyos.command.undo-latest-author-action.response.v1",
       "type": "string"
+    },
+    "source_reopen_event": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EditorFlowDraftReopened"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

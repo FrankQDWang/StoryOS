@@ -1414,6 +1414,23 @@ Convergence is positive and branches by settlement kind:
 | `PreAdmissionRefused` | the exact `PreAdmissionProblemObservation`, typed refusal surface, and complete preserved local payload are visible; no Activity position or resulting Head is required or fabricated |
 | `RequiresReconfirmation` | the exact `RequiresReconfirmationObservation`, reason, and applicable retained payload or returned `recovery_draft_ref` plus reconfirmation controls are visible; no Receipt, Core effect, Activity position, or resulting Head is required or fabricated |
 
+For a validated Draft Retry with one `ReplaceBlockSelection`, no ordered
+selection, and a frozen mixed command with Proposal Heads, an existing
+canonical authoritative base permits the next canonical Snapshot to retain
+empty Proposal Heads and authoritative ownership. This Snapshot projects
+authoritative materialization. Its empty array does not prove that the Chapter
+has no Proposal. Receipt and source settlement checks remain required, and
+the frozen command retains its actual Heads and ownership. This qualification
+does not authorize fresh edits or regrouping. A later Retry must read its
+known scoped Proposal Heads and check the target again before submission.
+After reload, covered unsettled Draft Retry records remain pending even if a
+later authorized base is installed. They do not replay a patch into that base.
+The existing protected proof queries the frozen command identity. A validated
+single Block Retry outcome may settle against the same installed canonical
+Snapshot only when its whole base matches and its ID differs from the first
+validated covered record's original base. Direct acknowledgements still
+require a new Snapshot ID.
+
 Applied manuscript convergence additionally requires no unresolved earlier
 Activity gap. Zero-authority result visibility neither clears nor creates an
 unrelated Activity gap. A no-Receipt refusal/reconfirmation surface may

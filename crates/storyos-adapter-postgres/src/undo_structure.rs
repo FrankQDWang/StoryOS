@@ -80,6 +80,7 @@ pub(super) async fn persist_structure_compensation(
         .await
         .map_err(undo_from_session)?;
     Ok(UndoLatestAuthorActionSettlement {
+        source_reopen_event: None,
         ids: command.ids.clone(),
         effect: UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
             source_sequence,

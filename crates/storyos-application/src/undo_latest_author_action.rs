@@ -21,6 +21,7 @@ pub struct UndoLatestAuthorActionCommand {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UndoLatestAuthorActionSettlement {
+    pub source_reopen_event: Option<storyos_contracts::EditorFlowDraftReopened>,
     pub ids: AuthorCommandAdmissionIds,
     pub effect: UndoLatestAuthorActionSettlementEffect,
     pub receipt_created_at: String,
@@ -59,7 +60,7 @@ pub enum UndoLatestAuthorActionSettlementEffect {
     CompensatedProposal {
         source_sequence: u64,
         author_action_sequence: u64,
-        proposal_revision_id: String,
+        proposal_revision_id: Option<String>,
         author_undo_frontier_sequence: Option<u64>,
     },
     Conflicted {

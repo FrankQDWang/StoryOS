@@ -221,10 +221,10 @@ pub(super) fn event_schema_bytes() -> Vec<u8> {
         ("event_kind", "editor_flow_draft_closed"),
         ("prior_closure", "open"),
         ("closure", "closed"),
-        ("close_reason", "abandoned"),
     ] {
         value["properties"][field]["const"] = json!(constant);
     }
+    value["properties"]["close_reason"]["enum"] = json!(["abandoned", "superseded"]);
     json_bytes(&value)
 }
 pub(super) fn event_fixture_bytes() -> Vec<u8> {

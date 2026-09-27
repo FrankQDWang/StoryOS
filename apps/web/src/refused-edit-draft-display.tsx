@@ -1,3 +1,6 @@
+import { RefusedEditRetryControls } from "./refused-edit-retry-controls.tsx";
+import { retryRefusedEdit, type RetryTargetRead } from "./refused-edit-retry.ts";
+import type { DraftPayloadPosition } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { useEffect, useRef, useState } from "react";
 import { getRefusedEditDraft } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ProjectScope, RefusedEditDraftInspect }
@@ -7,14 +10,16 @@ import { validDraftReopen, reconcileDraftUndo } from "./draft-undo-journal.ts";
 import { rebuildPendingProjection, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import type { EditorWorkspace, JournalSubmissionGroup, PendingEditProjection } from "./editor-types.ts";
 
-export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, refreshKey, onHoldChange, onProjection }: {
+export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, refreshKey, onHoldChange, onProjection, onResult }: {
   workspace: EditorWorkspace | undefined; scope: ProjectScope; baseUrl: string;
   fetchImpl: typeof fetch; refreshKey: string; onHoldChange?: ((hold: boolean) => void) | undefined;
-  onProjection?: ((projection: PendingEditProjection) => void) | undefined;
+  onProjection?: ((projection: PendingEditProjection) => void) | undefined; onResult?: (() => void) | undefined;
 }) {
   const [reads, setReads] = useState<{ group: JournalSubmissionGroup;
     draft?: RefusedEditDraftInspect; copied?: boolean; discard?: DiscardObservation | undefined }[]>([]);
   const lifetime = useRef(0);
+  const [retryRefresh, setRetryRefresh] = useState(0);
+  const [retryResults, setRetryResults] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [settledWriter, setSettledWriter] = useState(false);
   async function read(group: JournalSubmissionGroup): Promise<RefusedEditDraftInspect> {
@@ -42,7 +47,7 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       || event.event_kind !== "editor_flow_draft_closed" || canonical(event.project_scope) !== canonical(scope)
       || event.draft_id !== effect.draft_id || event.draft_revision_id !== effect.draft_revision_id
       || event.payload_digest !== draft.payload_digest || event.closure !== "closed" || event.prior_closure !== "open"
-      || event.close_reason !== "abandoned")) || (draft.closure === "open" && !validDraftReopen(draft, scope))) throw new Error("Draft unavailable");
+      || !["abandoned", "superseded"].includes(event.close_reason))) || (draft.closure === "open" && !validDraftReopen(draft, scope))) throw new Error("Draft unavailable");
     if (result.schema_id !== "storyos.query.refused-edit-draft.response.v1"
       || canonical(result.project_scope) !== canonical(scope)
       || canonical(group.project_scope) !== canonical(scope)
@@ -50,6 +55,7 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       || !["open", "closed"].includes(draft.closure)
       || draft.draft_id !== effect.draft_id || draft.draft_revision_id !== effect.draft_revision_id
       || canonical(draft.payload) !== canonical(expected) || draft.payload_digest !== hex
+      || canonical(draft.replacement_provenance) !== canonical(effect.replacement_provenance)
       || draft.payload_digest_profile !== "storyos.refused-edit-payload.jcs.v1"
       || draft.creation.event_kind !== "refused_edit_draft_created"
       || draft.creation.schema_id !== "storyos.event.refused-edit-draft-created.v1"
@@ -81,6 +87,14 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
         && projection.unsettled_intent_count === 0 && (snapshot.explicitDiscard?.length ?? MAX_DISCARD_RECORDS) < MAX_DISCARD_RECORDS);
       const groups = snapshot.groups.filter((group) => group.settlement.kind === "zero_authority_receipt_settled"
         && group.settlement.effect.kind === "refused_to_draft");
+      const results: Record<string, string> = {};
+      for (const group of snapshot.groups) {
+        const source = group.frozen_request_body.retry_source;
+        if (source) results[source.source_draft_id] = group.settlement.kind === "applied_receipt_settled"
+          ? "authoritative_applied" : group.settlement.kind === "zero_authority_receipt_settled"
+            ? group.settlement.effect.kind : "Outcome unresolved. No new retry was submitted.";
+      }
+      setRetryResults(results);
       const next = await Promise.all(groups.map(async (group) => {
         try { const draft = await read(group);
           return { group, draft, discard: await reconcileDiscard(workspace, draft) }; } catch { return { group }; }
@@ -93,7 +107,7 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
         onProjection?.(currentProjection); }
     })().catch(() => { if (active) setReads([]); });
     return () => { active = false; lifetime.current += 1; };
-  }, [workspace, scope.owner_user_id, scope.project_id, baseUrl, fetchImpl, refreshKey]);
+  }, [workspace, scope.owner_user_id, scope.project_id, baseUrl, fetchImpl, refreshKey, retryRefresh]);
   async function discard(group: JournalSubmissionGroup) {
     if (workspace === undefined || busy) return;
     const started = lifetime.current;
@@ -114,6 +128,21 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       onProjection?.(projection);
     } catch {
       if (started === lifetime.current) setReads((current) => current.map((item) => item.group === group ? { group } : item));
+    } finally { if (started === lifetime.current) { setBusy(false); onHoldChange?.(false); } }
+  }
+  async function retry(group: JournalSubmissionGroup, from: DraftPayloadPosition, to: DraftPayloadPosition,
+    target: string, targetFrom: number, targetTo: number, targetRead: RetryTargetRead) {
+    if (!workspace || busy) return;
+    const started = lifetime.current;
+    setBusy(true); onHoldChange?.(true);
+    try {
+      const draft = await read(group);
+      if (started !== lifetime.current) throw new Error("Retry view changed");
+      const projection = await retryRefusedEdit({ workspace, draft, from, to, target, targetFrom, targetTo, targetRead,
+        baseUrl, fetchImpl, isCurrent: () => started === lifetime.current });
+      if (started !== lifetime.current) return;
+      onProjection?.(projection); onResult?.();
+      setRetryRefresh((value) => value + 1);
     } finally { if (started === lifetime.current) { setBusy(false); onHoldChange?.(false); } }
   }
   async function copy(group: JournalSubmissionGroup) {
@@ -142,11 +171,18 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
         ? primitive.replacement.map((block, index) => <pre key={index} data-draft-replacement={block.block_kind}>{block.text}</pre>) : [])}
       {draft.closure === "open" && observation === undefined && settledWriter
         ? <button type="button" data-draft-discard disabled={busy} onClick={() => { void discard(group); }}>Discard</button> : null}
+      {draft.closure === "open" && observation === undefined && settledWriter
+        ? <RefusedEditRetryControls draft={draft} workspace={workspace!} baseUrl={baseUrl} fetchImpl={fetchImpl} disabled={busy}
+          submit={(from, to, target, start, end, read) => retry(group, from, to, target, start, end, read)} /> : null}
+      {retryResults[id] ? <p role="status" data-draft-retry-result>{retryResults[id]}</p> : null}
+      {draft.replacement_provenance ? <p data-draft-replacement-source>Replacement of Draft {draft.replacement_provenance.source_draft_id}.
+        Closure event: {draft.replacement_provenance.closure_event_ref}.</p> : null}
       {observation?.kind === "unresolved" ? <p role="status" data-discard-unresolved>Discard outcome unresolved. No new Discard was submitted.</p> : null}
       {observation?.kind === "settled" && observation.response.effect.kind !== "draft_closure_changed"
         ? <p role="status" data-discard-settled>Discard {observation.response.effect.kind}. The Draft was not closed by this command.</p> : null}
       {draft.closure === "closed" && draft.closure_event ? <p data-draft-closed>
-        Closed: {draft.closure_event.close_reason}. Event: {draft.closure_event.event_id}. Root Undo requires this exact latest action.</p> : null}
+        Closed: {draft.closure_event.close_reason}. Event: {draft.closure_event.event_id}. {draft.closure_event.author_action_sequence === null
+          ? "This closure has no Author Action." : "Root Undo requires this exact latest action."}</p> : null}
       {draft.reopen_event ? <p data-draft-reopened>Reopened. Event: {draft.reopen_event.event_id}.</p> : null}
       <button type="button" data-draft-copy onClick={() => { void copy(group); }}>Copy</button>
       {copied ? <p role="status">Copied</p> : null}

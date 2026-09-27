@@ -6,6 +6,7 @@ use super::*;
 
 fn request() -> contracts::ApplyAuthorEditRequest {
     contracts::ApplyAuthorEditRequest {
+        retry_source: None,
         command_schema: contracts::APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID.to_owned(),
         client_contract_revision: "client".to_owned(),
         security_policy_revision: "security".to_owned(),

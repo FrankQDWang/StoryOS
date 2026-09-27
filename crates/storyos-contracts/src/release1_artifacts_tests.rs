@@ -585,7 +585,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     let profile = release1_protocol_profile();
     assert_eq!(
         profile.contract_revision,
-        "release1-wire-catalog-2026-09-26-refused-edit-discard"
+        "release1-wire-catalog-2026-09-27-refused-edit-retry"
     );
     assert_eq!(
         profile.release_identity.web_client_contract_revision,
@@ -697,6 +697,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
             reason: AuthorEditRefusalReason::InvalidSelection,
         },
         ApplyAuthorEditEffect::RefusedToDraft {
+            replacement_provenance: None,
             refusal_origin: crate::RefusedEditOrigin::FreshEditorIntent,
             draft_id: "draft-1".to_owned(),
             draft_revision_id: "draft-revision-1".to_owned(),

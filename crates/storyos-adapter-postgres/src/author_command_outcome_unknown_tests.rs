@@ -292,6 +292,7 @@ async fn append_is_exact_serialized_and_has_zero_authority_effect() {
             successor_blocks: None,
             proposal_context: None,
         },
+        /*source_disposition*/ None,
     )
     .await
     .unwrap();

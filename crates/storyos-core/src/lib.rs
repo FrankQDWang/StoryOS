@@ -15,8 +15,10 @@ mod create_project;
 mod create_volume;
 mod delete_chapter;
 mod delete_volume;
+mod draft_retry;
 mod manuscript_payload;
 mod refused_edit;
+pub use draft_retry::select_draft_replacement;
 pub use refused_edit::{CurrentOrderedSourceFacts, ProposalEditSourceFacts};
 mod open_block_proposal;
 mod open_inline_proposal;
@@ -95,9 +97,10 @@ pub use delete_volume::{
     DeleteVolumeResult, VolumeChildPolicy, VolumeRemovalLifecycle, delete_volume,
 };
 pub use manuscript_payload::{
-    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,
+    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, BlockReservation, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
-    apply_versioned_author_edit, chapter_display_body, upgrade_legacy_manuscript,
+    VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
+    upgrade_legacy_manuscript,
 };
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,

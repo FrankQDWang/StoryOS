@@ -191,11 +191,31 @@ export type UndoLatestAuthorActionUnavailableReason = "no_frontier" | "barrier" 
 
 export type UndoLatestAuthorActionEffect = { "kind": "draft_compensated", event: EditorFlowDraftReopened, author_undo_frontier_sequence: string | null, } | { "kind": "compensated", source_sequence: string, author_action_sequence: string, authoritative_commit_id: string, authoritative_revision: AuthoritativeChapterRevision, project_activity_position: string, author_undo_frontier_sequence: string | null, } | { "kind": "conflicted", reason: UndoLatestAuthorActionConflictReason, current_author_undo_frontier_sequence: string | null, } | { "kind": "unavailable", reason: UndoLatestAuthorActionUnavailableReason, };
 
-export type UndoLatestAuthorActionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UndoLatestAuthorActionEffect, };
+export type UndoLatestAuthorActionResponse = { proposal_revision_id?: string | null, source_reopen_event?: EditorFlowDraftReopened | null, schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UndoLatestAuthorActionEffect, };
+
+export type DraftRetry = { kind: DraftRetryKind, source_draft_kind: RetryDraftKind, source_draft_id: string, source_current_draft_revision_id: string, source_draft_payload_digest: string, expected_source_draft_closure: RetryDraftClosure, selected_payload_range: ExactStructuredRange, };
+
+export type DraftRetryKind = "draft_retry";
+
+export type ExactStructuredRangeKind = "exact_structured_range";
+
+export type DraftPayloadPosition = { block_index: number, offset: number, };
+
+export type ExactStructuredRange = { kind: ExactStructuredRangeKind, coordinate_profile: string, from: DraftPayloadPosition, to: DraftPayloadPosition, slice_digest: string, };
+
+export type RetryDraftKind = "refused_edit";
+
+export type RetryDraftClosure = "open";
+
+export type SourceDraftDisposition = { "kind": "unchanged", source_draft_kind: RetryDraftKind, source_draft_id: string, requested_source_draft_revision_id: string, current_source_draft_revision_id: string, current_source_draft_payload_digest: string, current_closure: ObservedDraftClosure, } | { "kind": "closed_superseded", source_draft_kind: RetryDraftKind, source_draft_id: string, source_draft_revision_id: string, source_draft_payload_digest: string, prior_closure: RetryDraftClosure, resulting_closure: string, close_reason: string, closure_event_ref: string, };
+
+export type ObservedDraftClosure = { "kind": "open" } | { "kind": "closed", close_reason: string, closure_event_ref: string, };
+
+export type DraftRetryReplacement = { source_draft_id: string, source_draft_revision_id: string, source_draft_payload_digest: string, closure_event_ref: string, selected_payload_range: ExactStructuredRange, };
 
 export type RefusedEditPayload = { schema_revision: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, author_edit_units: Array<AuthorEditUnit>, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, };
 
-export type RefusedEditOrigin = "fresh_editor_intent";
+export type RefusedEditOrigin = "fresh_editor_intent" | "draft_retry_replacement";
 
 export type ReplacementBlock = { block_kind: ManuscriptBlockKind, text: string, };
 
@@ -215,7 +235,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type AuthorEditProposalTarget = { proposal_id: string, operation_id: string, revision_id: string, manuscript_block_id: string, };
 
-export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
+export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, retry_source?: DraftRetry | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
 export type DomainReceiptCommandKind = "closeEditorFlowDraft" | "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun" | "pauseAgentRun" | "cancelAgentRun";
 
@@ -231,9 +251,9 @@ export type AuthorEditConflictReason = "stale_authoritative_head" | "proposal_he
 
 export type AuthorEditRefusalReason = "unsupported_intent_shape" | "invalid_selection" | "target_mismatch";
 
-export type ApplyAuthorEditEffect = { "kind": "refused_to_draft", refusal_origin: RefusedEditOrigin, draft_id: string, draft_revision_id: string, creation_event_id: string, } | { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "proposal_revised", proposal_revision_id: string, author_action_sequence: string, } | { "kind": "no_effect", reason: NoEffectReason, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, };
+export type ApplyAuthorEditEffect = { "kind": "refused_to_draft", refusal_origin: RefusedEditOrigin, replacement_provenance?: DraftRetryReplacement | null, draft_id: string, draft_revision_id: string, creation_event_id: string, } | { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "proposal_revised", proposal_revision_id: string, author_action_sequence: string, } | { "kind": "no_effect", reason: NoEffectReason, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, };
 
-export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, };
+export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, source_draft_disposition?: SourceDraftDisposition | null, completed_intent_record_id: string, local_intent_sequence: string, };
 
 export type GetApplyAuthorEditOutcomeRequest = { project_id: string, idempotency_key: string, };
 
@@ -444,12 +464,12 @@ export type CancelAgentRunResponse = { schema_id: string, correlation_id: string
 export type RefusedEditDraftSource = { command_id: string, author_command_admission_id: string, receipt_id: string, idempotency_key: string, command_digest: DigestValue, };
 export type RefusedEditDraftCreated = { event_kind: string, project_scope: ProjectScope, creator: RefusedEditDraftCreator, schema_id: string, creation_event_id: string, draft_id: string, draft_revision_id: string, created_at: string, source: RefusedEditDraftSource, };
 export type RefusedEditDraftCreator = { "kind": "core_transition", receipt_id: string, };
-export type RefusedEditDraftInspect = { draft_id: string, draft_revision_id: string, kind: string, closure: string, retention_state: string, payload: RefusedEditPayload, payload_digest: string, payload_digest_profile: string, creation: RefusedEditDraftCreated, closure_event?: EditorFlowDraftClosed | null, reopen_event?: EditorFlowDraftReopened | null, };
+export type RefusedEditDraftInspect = { replacement_provenance?: DraftRetryReplacement | null, draft_id: string, draft_revision_id: string, kind: string, closure: string, retention_state: string, payload: RefusedEditPayload, payload_digest: string, payload_digest_profile: string, creation: RefusedEditDraftCreated, closure_event?: EditorFlowDraftClosed | null, reopen_event?: EditorFlowDraftReopened | null, };
 export type GetRefusedEditDraftResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, draft: RefusedEditDraftInspect, };
 export type CloseEditorFlowDraftInput = { draft_id: string, draft_kind: string, source_current_draft_revision_id: string, source_draft_payload_digest: string, source_reopen_event_id?: string | null, expected_closure: string, close_reason: string, editor_session_id: string, writer_generation: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 export type CloseEditorFlowDraftRequest = { command_schema: string, close_editor_flow_draft_input: CloseEditorFlowDraftInput, };
 export type DraftCloseRefusal = "source_draft_not_open" | "source_unavailable";
-export type EditorFlowDraftClosed = { schema_id: string, event_kind: string, event_id: string, project_scope: ProjectScope, draft_id: string, draft_revision_id: string, payload_digest: string, prior_closure: string, closure: string, close_reason: string, source: RefusedEditDraftSource, author_action_sequence: string, created_at: string, };
+export type EditorFlowDraftClosed = { schema_id: string, event_kind: string, event_id: string, project_scope: ProjectScope, draft_id: string, draft_revision_id: string, payload_digest: string, prior_closure: string, closure: string, close_reason: string, source: RefusedEditDraftSource, author_action_sequence: string | null, created_at: string, };
 export type CloseEditorFlowDraftEffect = { "kind": "draft_closure_changed", event: EditorFlowDraftClosed, } | { "kind": "conflicted", current_revision_id: string, current_digest: string, current_closure: string, } | { "kind": "refused", reason: DraftCloseRefusal, current_closure: string, };
 export type CloseEditorFlowDraftResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: CloseEditorFlowDraftEffect, };
 export type ProposalSourceInspect = { "kind": "agent_run_decision", run_id: string, decision_id: string, };

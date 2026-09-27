@@ -53,6 +53,8 @@ pub struct ApplyAuthorEditRequest {
     pub expected_proposal_head_revision_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proposal_target: Option<AuthorEditProposalTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_source: Option<crate::DraftRetry>,
     pub target_refs: Vec<String>,
     pub observed_ownership_partition: String,
     pub editor_contract_revision: String,
@@ -320,6 +322,8 @@ pub enum AuthorEditRefusalReason {
 pub enum ApplyAuthorEditEffect {
     RefusedToDraft {
         refusal_origin: RefusedEditOrigin,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        replacement_provenance: Option<crate::DraftRetryReplacement>,
         draft_id: String,
         draft_revision_id: String,
         creation_event_id: String,
@@ -356,6 +360,8 @@ pub struct ApplyAuthorEditResponse {
     pub author_command_admission_id: String,
     pub receipt: DomainReceipt,
     pub effect: ApplyAuthorEditEffect,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_draft_disposition: Option<crate::SourceDraftDisposition>,
     pub completed_intent_record_id: String,
     pub local_intent_sequence: String,
 }
@@ -364,4 +370,5 @@ pub struct ApplyAuthorEditResponse {
 #[serde(rename_all = "snake_case")]
 pub enum RefusedEditOrigin {
     FreshEditorIntent,
+    DraftRetryReplacement,
 }

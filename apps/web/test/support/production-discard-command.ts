@@ -47,6 +47,7 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   await page.reload();
   const surface = page.locator(`[data-refused-edit-draft="${draft.draft_id}"]`);
   await surface.locator("button[data-draft-discard]").waitFor();
+  const priorDiscard = (await readProductionJournal(page, projectId)).metadata!.filter((record) => String(record.key).startsWith("discard:"));
   const before = await readObjects(page, projectId, chapterId, proposalId);
   const sessionRoute = (url: URL) => url.pathname.includes("/editor-sessions/");
   await page.route(sessionRoute, async (route) => {
@@ -56,7 +57,7 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   });
   await surface.locator("button[data-draft-discard]").click();
   await surface.locator("button[data-draft-discard]:not([disabled])").waitFor();
-  assert.equal((await readProductionJournal(page, projectId)).metadata!.filter((record) => String(record.key).startsWith("discard:")).length, 0);
+  assert.deepEqual((await readProductionJournal(page, projectId)).metadata!.filter((record) => String(record.key).startsWith("discard:")), priorDiscard);
   await page.unroute(sessionRoute);
   const queryRoute = (url: URL) => url.pathname.endsWith(`/refused-edit-drafts/${draft.draft_id}`);
   await page.route(queryRoute, async (route) => {
@@ -65,7 +66,7 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   });
   await surface.locator("button[data-draft-discard]").click();
   await page.locator(`[data-draft-unavailable="${draft.draft_id}"]`).waitFor();
-  assert.equal((await readProductionJournal(page, projectId)).metadata!.filter((record) => String(record.key).startsWith("discard:")).length, 0);
+  assert.deepEqual((await readProductionJournal(page, projectId)).metadata!.filter((record) => String(record.key).startsWith("discard:")), priorDiscard);
   await page.unroute(queryRoute);
   await page.reload();
   await surface.locator("button[data-draft-discard]").waitFor();
@@ -85,13 +86,15 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
     const request = route.request().postDataJSON() as CloseEditorFlowDraftRequest;
     const key = route.request().headers()["idempotency-key"]!;
     nonce = route.request().headers()["x-storyos-anti-forgery"]!;
-    frozen = (await readProductionJournal(page, projectId)).metadata!.find((record) => record.key === `discard:${draft.draft_id}`) as DiscardRecord;
+    frozen = (await readProductionJournal(page, projectId)).metadata!.find((record) => record.key ===
+      `discard:${draft.draft_id}${draft.reopen_event ? `:${draft.reopen_event.event_id}` : ""}`) as DiscardRecord;
     assert.ok(frozen);
     assert.deepEqual(frozen.group.frozen_request_body, request);
     assert.equal(frozen.group.idempotency_key, key);
     assert.deepEqual(request.close_editor_flow_draft_input, { draft_id: draft.draft_id, draft_kind: "refused_edit",
       source_current_draft_revision_id: draft.draft_revision_id, source_draft_payload_digest: draft.payload_digest,
-      expected_closure: "open", close_reason: "abandoned", editor_session_id: frozen.editor_session_id,
+      expected_closure: "open", close_reason: "abandoned",
+      ...(draft.reopen_event ? { source_reopen_event_id: draft.reopen_event.event_id } : {}), editor_session_id: frozen.editor_session_id,
       writer_generation: frozen.writer_generation, client_contract_revision: "storyos.web-client.release-1.v3",
       security_policy_revision: "storyos.web-security-policy.release-1.v1", correlation_id: request.close_editor_flow_draft_input.correlation_id });
     assert.ok(!JSON.stringify(frozen).includes("nonce"));
@@ -117,7 +120,11 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   const track = (request: import("playwright").Request) => { if (request.method() !== "GET") mutations.push(request.url()); };
   page.on("request", track);
   await surface.locator("button[data-draft-copy]").click(); await surface.getByText("Copied").waitFor();
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()),
+    draft.payload.author_edit_units.flatMap((unit) => unit.normalized_primitives.flatMap((primitive) => {
+      assert.equal(primitive.kind, "replace_structured_selection");
+      return primitive.replacement.map((block) => block.text);
+    })).join("\n"));
   page.off("request", track); assert.deepEqual(mutations, []);
   await page.unroute(closeRoute);
   const reopened = await verifyProductionDraftUndo(page, projectId, closed, restart);
@@ -224,7 +231,11 @@ export async function verifyRestoredProductionDiscard(context: BrowserContext): 
     assert.equal(await surface.locator("button[data-draft-discard]").count(), 1);
     await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
     await surface.locator("button[data-draft-copy]").click(); await surface.getByText("Copied").waitFor();
-    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()),
+      expected.draft.payload.author_edit_units.flatMap((unit) => unit.normalized_primitives.flatMap((primitive) => {
+        assert.equal(primitive.kind, "replace_structured_selection");
+        return primitive.replacement.map((block) => block.text);
+      })).join("\n"));
     assert.deepEqual(mutations, []);
     const fetchImpl = sessionFetch(origin, "session-a");
     const exported = await getExportOperation({ baseUrl: origin, projectId: expected.projectId,
@@ -237,8 +248,11 @@ export async function verifyRestoredProductionDiscard(context: BrowserContext): 
     assert.equal(download.status, 200);
     assert.equal(createHash("sha256").update(new Uint8Array(await download.arrayBuffer())).digest("hex"), expected.archive.bytesSha256);
     const current = await readProductionJournal(page, expected.projectId);
-    const original = expected.journal.metadata!.find((record) => String(record.key).startsWith("discard:"));
-    assert.deepEqual(current.metadata!.find((record) => record.key === original!.key), original);
+    for (const prefix of ["discard:", "draft-undo:", "draft-undo-observation:"]) {
+      const original = expected.journal.metadata!.filter((record) => String(record.key).startsWith(prefix));
+      assert.ok(original.length > 0);
+      assert.deepEqual(current.metadata!.filter((record) => String(record.key).startsWith(prefix)), original);
+    }
     console.log(`Restored production Discard ${expected.projectId}/${expected.draft.draft_id}: exact local record, closed event and full Copy`);
   } finally { await page.close(); }
 }

@@ -42,6 +42,16 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     let source_types = [
+        crate::DraftRetry::decl(&config),
+        crate::DraftRetryKind::decl(&config),
+        crate::ExactStructuredRangeKind::decl(&config),
+        crate::DraftPayloadPosition::decl(&config),
+        crate::ExactStructuredRange::decl(&config),
+        crate::RetryDraftKind::decl(&config),
+        crate::RetryDraftClosure::decl(&config),
+        crate::SourceDraftDisposition::decl(&config),
+        crate::ObservedDraftClosure::decl(&config),
+        crate::DraftRetryReplacement::decl(&config),
         RefusedEditPayload::decl(&config),
         RefusedEditOrigin::decl(&config),
         ReplacementBlock::decl(&config),

@@ -6,7 +6,7 @@ import { getExportOperation, getRefusedEditDraft, StoryOSProtocolError } from ".
 
 const [container, baseUrl, expectedPath] = process.argv.slice(2);
 const expectations = readFileSync(expectedPath, "utf8").trim().split("\n").map(JSON.parse);
-assert.equal(expectations.length, 4);
+assert.equal(expectations.length, 14);
 const fetchImpl = (input, init) => {
   const headers = new Headers(init?.headers);
   headers.set("origin", baseUrl);
@@ -29,7 +29,8 @@ for (const expected of expectations) {
         AND record.project_id='${expected.projectId}'::uuid)`).join(",")},
       'domain_receipts', (SELECT coalesce(jsonb_agg(to_jsonb(receipt) ORDER BY receipt.receipt_id), '[]'::jsonb)
         FROM storyos.domain_receipts AS receipt WHERE receipt.owner_user_id='${expected.ownerUserId}'::uuid
-        AND receipt.project_id='${expected.projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft','undoLatestAuthorAction') AND cardinality(receipt.draft_artifact_refs)>0))::text`], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }));
+        AND receipt.project_id='${expected.projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft','undoLatestAuthorAction')
+        AND (cardinality(receipt.draft_artifact_refs)>0 OR receipt.source_draft_disposition IS NOT NULL)))::text`], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }));
   assert.deepEqual(state, expected.state);
   for (const retained of expected.drafts) {
     const query = () => getRefusedEditDraft({ baseUrl, projectId: expected.projectId,
@@ -57,5 +58,5 @@ for (const expected of expectations) {
     }
   }
 }
-assert.equal(restoredDrafts, 6);
-console.log("Restored six public Refused Edit Drafts: complete payloads, digests, creation, Receipts, Heads, lifecycle, and archive copies unchanged");
+assert.equal(restoredDrafts, 18);
+console.log("Restored eighteen public Refused Edit Drafts: complete payloads, digests, creation, Receipts, Heads, lifecycle, and archive copies unchanged");

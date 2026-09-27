@@ -45,6 +45,8 @@ import {
   readAvailableCommandProof,
 } from "./protected-transport-capsule.ts";
 
+import { validRetrySettlement } from "./draft-retry-binding.ts";
+
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const boundedU64 = (value: unknown): value is string => typeof value === "string" && U64.test(value)
@@ -165,6 +167,7 @@ async function validateFrozenGroup(
     || request?.expected_authoritative_revision_id !== firstRecord.expected_authoritative_heads[0]
     || JSON.stringify(request?.expected_proposal_head_revision_ids)
       !== JSON.stringify(firstRecord.expected_proposal_heads)
+    || JSON.stringify(request?.retry_source) !== JSON.stringify(firstRecord.retry_source.kind === "draft_retry" ? firstRecord.retry_source : undefined)
     || JSON.stringify(request?.proposal_target)
       !== JSON.stringify(firstRecord.proposal_target)
     || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord.target_refs)
@@ -268,6 +271,7 @@ export async function freezeOneIntentSubmission(
     undo_group_id: firstRecord.undo_group_binding.undo_group_id,
     completed_intent_record_id: firstRecord.completed_intent_record_id,
     local_intent_sequence: String(firstRecord.local_intent_sequence),
+    ...(firstRecord.retry_source.kind === "draft_retry" ? { retry_source: firstRecord.retry_source } : {}),
     author_edit_units: records.map((record) => record.author_edit_unit!),
   };
   const orderedCoverage: JournalCoverage[] = records.map((record) => ({
@@ -373,10 +377,10 @@ async function settleAuthorEditResponse({
         !== JSON.stringify([effect?.kind === "proposal_revised" ? effect.proposal_revision_id : ""])
         || receipt.proposal_revision_ids.length !== 1)
       : JSON.stringify(receipt.proposal_revision_ids) !== JSON.stringify([]))
-    || JSON.stringify(receipt.draft_artifact_refs) !== JSON.stringify(
-      effect?.kind === "refused_to_draft" ? [effect.draft_id] : [])
-    || JSON.stringify(receipt.artifact_lifecycle_event_refs) !== JSON.stringify(
-      effect?.kind === "refused_to_draft" ? [effect.creation_event_id] : [])
+    || !validRetrySettlement(group.frozen_request_body, settledResponse)
+    || (group.frozen_request_body.retry_source === undefined && (
+      JSON.stringify(receipt.draft_artifact_refs) !== JSON.stringify(effect?.kind === "refused_to_draft" ? [effect.draft_id] : [])
+      || JSON.stringify(receipt.artifact_lifecycle_event_refs) !== JSON.stringify(effect?.kind === "refused_to_draft" ? [effect.creation_event_id] : [])))
     || JSON.stringify(receipt.condition_refs) !== JSON.stringify([])
     || typeof receipt.created_at !== "string"
     || Number.isNaN(Date.parse(receipt.created_at))) {
@@ -403,6 +407,7 @@ async function settleAuthorEditResponse({
         command_id: settledResponse.command_id,
         author_command_admission_id: settledResponse.author_command_admission_id,
         receipt,
+        ...(settledResponse.source_draft_disposition == null ? {} : { source_draft_disposition: settledResponse.source_draft_disposition }),
         effect,
       },
     };
@@ -422,7 +427,8 @@ async function settleAuthorEditResponse({
           && UUID.test(effect.current_authoritative_revision_id ?? "")
           && receipt.result === "conflicted"
         : effect?.kind === "refused_to_draft"
-          ? effect.refusal_origin === "fresh_editor_intent" && receipt.result === "refused_to_draft"
+          ? effect.refusal_origin === (group.frozen_request_body.retry_source === undefined ? "fresh_editor_intent" : "draft_retry_replacement")
+            && receipt.result === "refused_to_draft"
             && UUID.test(effect.draft_id) && UUID.test(effect.draft_revision_id)
             && UUID.test(effect.creation_event_id)
             && group.frozen_request_body.author_edit_units.length === 1
@@ -449,6 +455,7 @@ async function settleAuthorEditResponse({
         command_id: settledResponse.command_id,
         author_command_admission_id: settledResponse.author_command_admission_id,
         receipt,
+        ...(settledResponse.source_draft_disposition == null ? {} : { source_draft_disposition: settledResponse.source_draft_disposition }),
         effect,
       },
     };
@@ -480,6 +487,24 @@ async function settleAuthorEditResponse({
     fetchImpl,
   });
   const freshBase = canonical.base_snapshot;
+  const request = group.frozen_request_body;
+  const primitive = request.author_edit_units[0]?.normalized_primitives[0];
+  const canonicalRetryProjection = request.retry_source !== undefined
+    && request.author_edit_units.length === 1
+    && request.author_edit_units[0]?.normalized_primitives.length === 1
+    && primitive?.kind === "replace_block_selection"
+    && request.author_edit_units[0]?.selection_snapshot?.ordered_selection == null
+    && request.observed_ownership_partition === "mixed"
+    && request.expected_proposal_head_revision_ids.length > 0
+    && workspace.session.base_snapshot.proposal_head_revision_ids.length === 0
+    && workspace.session.base_snapshot.observed_ownership_partition === "authoritative";
+  const sourceRecord = durableQuery && canonicalRetryProjection
+    ? (await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace))).records.find(
+      (record) => record.completed_intent_record_id === group.ordered_coverage[0]?.intent_record_ref,
+    ) : undefined;
+  const recoveredCanonicalBase = sourceRecord !== undefined
+    && sourceRecord.base_snapshot_id !== freshBase.snapshot_id
+    && JSON.stringify(freshBase) === JSON.stringify(workspace.session.base_snapshot);
   if (canonical.schema_id !== "storyos.query.editor-session.response.v1"
     || !UUID.test(canonical.correlation_id ?? "")
     || JSON.stringify(canonical.project_scope) !== JSON.stringify(group.project_scope)
@@ -488,16 +513,16 @@ async function settleAuthorEditResponse({
       canonical.writer, workspace.session.writer, workspace.partition.writer_generation,
     )
     || !UUID.test(freshBase?.snapshot_id ?? "")
-    || freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id
+    || (freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id && !recoveredCanonicalBase)
     || freshBase.chapter_id !== group.frozen_request_body.chapter_id
     || freshBase.project_activity_position !== effect.project_activity_position
     || freshBase.authoritative_head_revision_id !== effect.authoritative_revision.revision_id
     || JSON.stringify(freshBase.proposal_head_revision_ids)
-      !== JSON.stringify(group.frozen_request_body.expected_proposal_head_revision_ids)
+      !== JSON.stringify(canonicalRetryProjection ? [] : request.expected_proposal_head_revision_ids)
     || JSON.stringify(freshBase.target_refs)
       !== JSON.stringify(group.frozen_request_body.target_refs)
     || freshBase.observed_ownership_partition
-      !== group.frozen_request_body.observed_ownership_partition
+      !== (canonicalRetryProjection ? "authoritative" : request.observed_ownership_partition)
     || JSON.stringify(freshBase.materialized_revision)
       !== JSON.stringify(effect.authoritative_revision)
     || freshBase.materialized_payload_digest?.algorithm !== "sha256"
@@ -524,6 +549,7 @@ async function settleAuthorEditResponse({
       command_id: settledResponse.command_id,
       author_command_admission_id: settledResponse.author_command_admission_id,
       receipt,
+      ...(settledResponse.source_draft_disposition == null ? {} : { source_draft_disposition: settledResponse.source_draft_disposition }),
       authoritative_revision: effect.authoritative_revision,
       authoritative_commit_id: effect.authoritative_commit_id,
       author_action_sequence: effect.author_action_sequence,

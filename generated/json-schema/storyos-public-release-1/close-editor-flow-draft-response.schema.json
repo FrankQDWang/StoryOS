@@ -258,7 +258,10 @@
       "additionalProperties": false,
       "properties": {
         "author_action_sequence": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "close_reason": {
           "type": "string"
@@ -309,7 +312,6 @@
         "closure",
         "close_reason",
         "source",
-        "author_action_sequence",
         "created_at"
       ],
       "type": "object"

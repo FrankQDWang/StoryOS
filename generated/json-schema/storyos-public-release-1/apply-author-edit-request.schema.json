@@ -222,6 +222,68 @@
       ],
       "type": "object"
     },
+    "DraftPayloadPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "block_index": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offset": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "block_index",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "DraftRetry": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_source_draft_closure": {
+          "$ref": "#/$defs/RetryDraftClosure"
+        },
+        "kind": {
+          "$ref": "#/$defs/DraftRetryKind"
+        },
+        "selected_payload_range": {
+          "$ref": "#/$defs/ExactStructuredRange"
+        },
+        "source_current_draft_revision_id": {
+          "type": "string"
+        },
+        "source_draft_id": {
+          "type": "string"
+        },
+        "source_draft_kind": {
+          "$ref": "#/$defs/RetryDraftKind"
+        },
+        "source_draft_payload_digest": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "source_draft_kind",
+        "source_draft_id",
+        "source_current_draft_revision_id",
+        "source_draft_payload_digest",
+        "expected_source_draft_closure",
+        "selected_payload_range"
+      ],
+      "type": "object"
+    },
+    "DraftRetryKind": {
+      "enum": [
+        "draft_retry"
+      ],
+      "type": "string"
+    },
     "EditSourceOwner": {
       "oneOf": [
         {
@@ -272,6 +334,40 @@
         }
       ]
     },
+    "ExactStructuredRange": {
+      "additionalProperties": false,
+      "properties": {
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        },
+        "kind": {
+          "$ref": "#/$defs/ExactStructuredRangeKind"
+        },
+        "slice_digest": {
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        }
+      },
+      "required": [
+        "kind",
+        "coordinate_profile",
+        "from",
+        "to",
+        "slice_digest"
+      ],
+      "type": "object"
+    },
+    "ExactStructuredRangeKind": {
+      "enum": [
+        "exact_structured_range"
+      ],
+      "type": "string"
+    },
     "ManuscriptBlockKind": {
       "enum": [
         "paragraph",
@@ -317,6 +413,18 @@
         "text"
       ],
       "type": "object"
+    },
+    "RetryDraftClosure": {
+      "enum": [
+        "open"
+      ],
+      "type": "string"
+    },
+    "RetryDraftKind": {
+      "enum": [
+        "refused_edit"
+      ],
+      "type": "string"
     },
     "SelectedEditSource": {
       "additionalProperties": false,
@@ -460,6 +568,16 @@
       "anyOf": [
         {
           "$ref": "#/$defs/AuthorEditProposalTarget"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "retry_source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DraftRetry"
         },
         {
           "type": "null"

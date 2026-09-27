@@ -16,6 +16,7 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyo
 import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
 
 import { readDiscardJournal, canonicalDraftValue } from "./refused-edit-discard.ts";
+import { readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import { freezeDraftUndo, readDraftUndoJournal, observeDraftUndo, reconcileDraftUndo,
   type DraftUndoRecord } from "./draft-undo-journal.ts";
 
@@ -135,10 +136,37 @@ export async function undoOwnedLatestAuthorAction(options: {
     inFlight.set(identity, flight);
   }
   if (durable === undefined) {
-    const closed = (await readDiscardJournal(options.workspace)).flatMap(({ observation }) =>
+    let closed = (await readDiscardJournal(options.workspace)).flatMap(({ observation }) =>
       observation?.kind === "settled_closed" ? [observation.event]
         : observation?.kind === "settled" && observation.response.effect.kind === "draft_closure_changed"
           ? [observation.response.effect.event] : []).find((event) => event.author_action_sequence === frontier);
+    if (closed === undefined) {
+      const snapshot = await validateJournalSnapshot(options.workspace, await readJournalSnapshot(options.workspace));
+      const group = snapshot.groups.find(({ settlement }) =>
+        (settlement.kind === "applied_receipt_settled" || settlement.kind === "zero_authority_receipt_settled"
+          && settlement.effect.kind === "proposal_revised")
+        && settlement.receipt.author_action_sequence === frontier
+        && settlement.source_draft_disposition?.kind === "closed_superseded");
+      const settled = group?.settlement;
+      if (settled?.kind === "applied_receipt_settled" || settled?.kind === "zero_authority_receipt_settled") {
+        const source = settled.source_draft_disposition;
+        if (source?.kind === "closed_superseded") {
+          const current = await getRefusedEditDraft({ baseUrl: options.baseUrl, projectId: canonical.project_scope.project_id,
+            draftId: source.source_draft_id, fetchImpl: options.fetchImpl });
+          closed = current.draft.closure_event ?? undefined;
+          if (canonicalDraftValue(current.project_scope) !== canonicalDraftValue(canonical.project_scope)
+            || current.draft.retention_state !== "retained" || current.draft.closure !== "closed"
+            || current.draft.draft_revision_id !== source.source_draft_revision_id
+            || current.draft.payload_digest !== source.source_draft_payload_digest
+            || closed?.event_id !== source.closure_event_ref || closed.author_action_sequence !== frontier
+            || closed.close_reason !== "superseded" || closed.source.receipt_id !== settled.receipt.receipt_id
+            || closed.source.idempotency_key !== group!.idempotency_key
+            || canonicalDraftValue(closed.source.command_digest) !== canonicalDraftValue(group!.frozen_request_digest)) {
+            throw new Error("Undo source changed");
+          }
+        }
+      }
+    }
     if (closed !== undefined) {
       const current = await getRefusedEditDraft({ baseUrl: options.baseUrl, projectId: canonical.project_scope.project_id,
         draftId: closed.draft_id, fetchImpl: options.fetchImpl });
@@ -146,6 +174,7 @@ export async function undoOwnedLatestAuthorAction(options: {
         || canonicalDraftValue(current.draft.closure_event) !== canonicalDraftValue(closed)) throw new Error("Undo source changed");
       durable = await freezeDraftUndo(options.workspace, closed,
         undoRequest(options.workspace, frontier, expectedHead, flight.correlationId), flight.idempotencyKey, options.isCurrent);
+      await readDraftUndoJournal(options.workspace);
     }
   }
   if (durable !== undefined) {
