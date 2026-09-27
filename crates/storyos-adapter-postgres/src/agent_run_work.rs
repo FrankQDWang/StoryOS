@@ -180,7 +180,7 @@ async fn settle_one_phase(
             Some(storyos_core::AssistanceAvailability::Available)
         );
     if attempt_id.is_none() {
-        let expiry = crate::agent_run_expiry::plan_expiry_rebuild(
+        let rebuild = match crate::agent_run_expiry::plan_expiry_rebuild(
             client,
             claim,
             &conversation_id,
@@ -189,29 +189,15 @@ async fn settle_one_phase(
             assistance.as_ref(),
             &assembly_manifest_id,
         )
-        .await?;
-        if let crate::agent_run_expiry::ExpiryPlan::Refuse { capability, row } = &expiry {
-            crate::agent_run_expiry::insert_recovery(
-                client,
-                claim,
-                &conversation_id,
-                row,
-                /*model_attempt_id*/ None,
-            )
-            .await?;
-            update_run(
-                client,
-                claim,
-                "refused",
-                Some(&serde_json::json!({
-                    "kind": "execution_refused",
-                    "capability": capability
-                })),
-                /*clear_lease*/ true,
-            )
-            .await?;
-            return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
-        }
+        .await?
+        {
+            crate::agent_run_expiry::ExpiryAdmission::Settled => {
+                return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
+            }
+            crate::agent_run_expiry::ExpiryAdmission::Dispatch(rebuild) => {
+                rebuild.map(|dispatch| *dispatch)
+            }
+        };
         if blocked || matches!(plan, FakeDispatchPlan::RefuseWithoutDispatch { .. }) {
             let settlement = match plan {
                 FakeDispatchPlan::RefuseWithoutDispatch { capability } => {
@@ -241,12 +227,7 @@ async fn settle_one_phase(
             .await?;
             return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
         }
-        let rebuild = match expiry {
-            crate::agent_run_expiry::ExpiryPlan::Rebuild(dispatch) => Some(dispatch),
-            crate::agent_run_expiry::ExpiryPlan::Continue => None,
-            crate::agent_run_expiry::ExpiryPlan::Refuse { .. } => None,
-        };
-        let created_attempt_id = persist_uncertain_attempt(
+        let created_attempt_id = crate::agent_run_attempt::persist_uncertain_attempt(
             client,
             claim,
             &conversation_id,
@@ -500,116 +481,6 @@ async fn persist_stream_and_decision(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn persist_uncertain_attempt(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    conversation_id: &str,
-    author_message: &str,
-    chapter_id: &str,
-    assembly_manifest_id: &str,
-    assistance: &storyos_application::ProjectAssistanceRecord,
-    rebuild: Option<&crate::agent_run_expiry::RebuildDispatch>,
-) -> Result<String, CompleteAgentRunError> {
-    let model_attempt_id = Uuid::now_v7().to_string();
-    let destination_attempt_id = Uuid::now_v7().to_string();
-    let outbound_disclosure_event_id = Uuid::now_v7().to_string();
-    let destination_context_manifest_id = Uuid::now_v7().to_string();
-    let outbound_disclosure_manifest_id = Uuid::now_v7().to_string();
-    let wire_payload_projection_id = Uuid::now_v7().to_string();
-    let mut continuation = crate::agent_run_continuation::decide_continuation(
-        client,
-        claim,
-        conversation_id,
-        author_message,
-        assistance,
-    )
-    .await?;
-    let model_invocation_id = match rebuild {
-        Some(dispatch) => {
-            continuation.mapping = storyos_core::ContinuationInputMapping::Full;
-            continuation.prior_binding_id = None;
-            dispatch.model_invocation_id.clone()
-        }
-        None => Uuid::now_v7().to_string(),
-    };
-    let digest = host_fake_wire_digest(author_message, chapter_id);
-    let payload = serde_json::json!({
-        "execution_profile": {
-            "profile_revision": HOST_FAKE_EXECUTION_PROFILE,
-            "mapping_revision": HOST_FAKE_MAPPING_REVISION,
-            "network_io": false,
-            "provider_bound": "unknown"
-        },
-        "wire": {
-            "digest": digest,
-            "author_message": author_message,
-            "chapter_id": chapter_id,
-            "prior_continuation_binding_id": continuation.prior_binding_id
-        },
-        "items": [],
-        "decision": null,
-        "usage": { "kind": "unknown" },
-        "continuation": crate::agent_run_continuation::encode_wire(&continuation),
-        "evidence": evidence_values(
-            &model_attempt_id,
-            author_message,
-            assembly_manifest_id,
-            continuation.known_prior_binding_id.as_deref(),
-        )
-    });
-    client
-        .execute(
-            "UPDATE storyos.context_assembly_manifests
-                SET destination_context_manifest_id = $4::text::uuid,
-                    outbound_disclosure_manifest_id = $5::text::uuid
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND manifest_role = 'decision'
-                AND destination_context_manifest_id IS NULL",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &destination_context_manifest_id,
-                &outbound_disclosure_manifest_id,
-            ],
-        )
-        .await
-        .map_err(complete_database_error)?;
-    client
-        .execute(
-            "INSERT INTO storyos.model_attempts
-               (owner_user_id, project_id, run_id, model_attempt_id,
-                destination_attempt_id, outbound_disclosure_event_id,
-                destination_context_manifest_id, outbound_disclosure_manifest_id,
-                wire_payload_projection_id, model_invocation_id, conversation_id,
-                dispatch_state, payload)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, $10::text::uuid, $11::text::uuid, 'uncertain',
-                     $12::text::jsonb)",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &model_attempt_id,
-                &destination_attempt_id,
-                &outbound_disclosure_event_id,
-                &destination_context_manifest_id,
-                &outbound_disclosure_manifest_id,
-                &wire_payload_projection_id,
-                &model_invocation_id,
-                &conversation_id,
-                &payload.to_string(),
-            ],
-        )
-        .await
-        .map_err(complete_database_error)?;
-    Ok(model_attempt_id)
-}
-
-#[allow(clippy::too_many_arguments)]
 fn encode_payload(
     author_message: &str,
     chapter_id: &str,
@@ -724,7 +595,7 @@ fn encode_payload(
     })
 }
 
-fn evidence_values(
+pub(crate) fn evidence_values(
     attempt_id: &str,
     author_message: &str,
     assembly_manifest_id: &str,
@@ -794,7 +665,7 @@ async fn complete_or_compact(
     Ok(WorkPhase::Done(CompleteAgentRun::Settled))
 }
 
-async fn update_run(
+pub(crate) async fn update_run(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     status: &str,
@@ -865,6 +736,6 @@ fn complete_challenge_error(
     CompleteAgentRunError::Unavailable(Box::new(error))
 }
 
-fn complete_database_error(error: tokio_postgres::Error) -> CompleteAgentRunError {
+pub(crate) fn complete_database_error(error: tokio_postgres::Error) -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(error))
 }

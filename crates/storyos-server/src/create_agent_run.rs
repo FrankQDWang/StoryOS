@@ -210,7 +210,37 @@ pub(super) async fn get_agent_run(
         decision: inspect_decision(&record.decision),
         model_attempt: inspect_model(record.model.as_ref()),
         active_compaction: inspect_active_compaction(record.active_compaction.as_ref()),
-        reference_recovery: inspect_reference_recovery(record.reference_recovery.as_ref()),
+        reference_recovery: match record.reference_recovery.as_ref() {
+            None => contracts::OptionalReferenceRecoveryInspect::Absent,
+            Some(recovery) => contracts::OptionalReferenceRecoveryInspect::Present {
+                recovery_id: recovery.recovery_id.clone(),
+                disposition: match recovery.disposition {
+                    storyos_application::ReferenceRecoveryDisposition::Rebuilt => {
+                        contracts::ReferenceRecoveryDisposition::Rebuilt
+                    }
+                    storyos_application::ReferenceRecoveryDisposition::Blocked => {
+                        contracts::ReferenceRecoveryDisposition::Blocked
+                    }
+                    storyos_application::ReferenceRecoveryDisposition::UnknownCreate => {
+                        contracts::ReferenceRecoveryDisposition::UnknownCreate
+                    }
+                },
+                block_reason: recovery.block_reason.clone(),
+                predecessor_run_id: recovery.predecessor_run_id.clone(),
+                predecessor_continuation_binding_id: recovery
+                    .predecessor_continuation_binding_id
+                    .clone(),
+                run_step_id: recovery.run_step_id.clone(),
+                model_invocation_id: recovery.model_invocation_id.clone(),
+                model_attempt_id: recovery.model_attempt_id.clone(),
+                assembly_manifest_id: recovery.assembly_manifest_id.clone(),
+                lossless_provider_reconstruction: recovery.lossless_provider_reconstruction,
+                semantic_erasure: recovery.semantic_erasure,
+                opaque_reused: recovery.opaque_reused,
+                covered_content_included: recovery.covered_content_included,
+                predecessor_terminal: recovery.predecessor_terminal,
+            },
+        },
         evidence: record
             .model
             .as_ref()
@@ -408,40 +438,6 @@ fn inspect_active_compaction(
                 .external_compatibility_decision
                 .clone(),
         },
-    }
-}
-
-fn inspect_reference_recovery(
-    recovery: Option<&storyos_application::ReferenceRecoveryInspect>,
-) -> contracts::OptionalReferenceRecoveryInspect {
-    let Some(recovery) = recovery else {
-        return contracts::OptionalReferenceRecoveryInspect::Absent;
-    };
-    contracts::OptionalReferenceRecoveryInspect::Present {
-        recovery_id: recovery.recovery_id.clone(),
-        disposition: match recovery.disposition {
-            storyos_application::ReferenceRecoveryDisposition::Rebuilt => {
-                contracts::ReferenceRecoveryDisposition::Rebuilt
-            }
-            storyos_application::ReferenceRecoveryDisposition::Blocked => {
-                contracts::ReferenceRecoveryDisposition::Blocked
-            }
-            storyos_application::ReferenceRecoveryDisposition::UnknownCreate => {
-                contracts::ReferenceRecoveryDisposition::UnknownCreate
-            }
-        },
-        block_reason: recovery.block_reason.clone(),
-        predecessor_run_id: recovery.predecessor_run_id.clone(),
-        predecessor_continuation_binding_id: recovery.predecessor_continuation_binding_id.clone(),
-        run_step_id: recovery.run_step_id.clone(),
-        model_invocation_id: recovery.model_invocation_id.clone(),
-        model_attempt_id: recovery.model_attempt_id.clone(),
-        assembly_manifest_id: recovery.assembly_manifest_id.clone(),
-        lossless_provider_reconstruction: recovery.lossless_provider_reconstruction,
-        semantic_erasure: recovery.semantic_erasure,
-        opaque_reused: recovery.opaque_reused,
-        covered_content_included: recovery.covered_content_included,
-        predecessor_terminal: recovery.predecessor_terminal,
     }
 }
 

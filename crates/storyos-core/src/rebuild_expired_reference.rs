@@ -72,41 +72,36 @@ pub fn decide_confirmed_expiry_rebuild(facts: &ExpiryRebuildFacts) -> ExpiryRebu
             ..idle
         },
         ContinuationReferenceCondition::ConfirmedExpired
-        | ContinuationReferenceCondition::ConfirmedUnusable => match rebuild_block(facts) {
-            Some(reason) => ExpiryRebuildDecision {
-                disposition: ExpiryRebuildDisposition::Blocked(reason),
-                ..idle
-            },
-            None => ExpiryRebuildDecision {
-                disposition: ExpiryRebuildDisposition::Rebuilt,
-                new_run_step_and_invocation: facts.effective_model_context_changed,
-                covered_content_included: !facts.covered_copy_restricted,
-                ..idle
-            },
-        },
+        | ContinuationReferenceCondition::ConfirmedUnusable => {
+            let reason = if !facts.prior_submissions_settled {
+                Some(ExpiryRebuildBlock::PriorSubmissionUnsettled)
+            } else if facts.predecessor_fenced {
+                Some(ExpiryRebuildBlock::FencedPredecessor)
+            } else if !facts.same_processing_boundary {
+                Some(ExpiryRebuildBlock::ProcessingBoundaryChanged)
+            } else if !facts.current_authority {
+                Some(ExpiryRebuildBlock::AuthorityMissing)
+            } else if !facts.budget_covers_submission {
+                Some(ExpiryRebuildBlock::BudgetInsufficient)
+            } else if !facts.required_input_present {
+                Some(ExpiryRebuildBlock::RequiredInputMissing)
+            } else {
+                None
+            };
+            match reason {
+                Some(reason) => ExpiryRebuildDecision {
+                    disposition: ExpiryRebuildDisposition::Blocked(reason),
+                    ..idle
+                },
+                None => ExpiryRebuildDecision {
+                    disposition: ExpiryRebuildDisposition::Rebuilt,
+                    new_run_step_and_invocation: facts.effective_model_context_changed,
+                    covered_content_included: !facts.covered_copy_restricted,
+                    ..idle
+                },
+            }
+        }
     }
-}
-
-fn rebuild_block(facts: &ExpiryRebuildFacts) -> Option<ExpiryRebuildBlock> {
-    if !facts.prior_submissions_settled {
-        return Some(ExpiryRebuildBlock::PriorSubmissionUnsettled);
-    }
-    if facts.predecessor_fenced {
-        return Some(ExpiryRebuildBlock::FencedPredecessor);
-    }
-    if !facts.same_processing_boundary {
-        return Some(ExpiryRebuildBlock::ProcessingBoundaryChanged);
-    }
-    if !facts.current_authority {
-        return Some(ExpiryRebuildBlock::AuthorityMissing);
-    }
-    if !facts.budget_covers_submission {
-        return Some(ExpiryRebuildBlock::BudgetInsufficient);
-    }
-    if !facts.required_input_present {
-        return Some(ExpiryRebuildBlock::RequiredInputMissing);
-    }
-    None
 }
 
 #[cfg(test)]

@@ -30,13 +30,9 @@ pub(crate) struct RebuildDispatch {
     pub row: RecoveryDraft,
 }
 
-pub(crate) enum ExpiryPlan {
-    Continue,
-    Refuse {
-        capability: &'static str,
-        row: RecoveryDraft,
-    },
-    Rebuild(RebuildDispatch),
+pub(crate) enum ExpiryAdmission {
+    Settled,
+    Dispatch(Option<Box<RebuildDispatch>>),
 }
 
 pub(crate) async fn plan_expiry_rebuild(
@@ -47,15 +43,26 @@ pub(crate) async fn plan_expiry_rebuild(
     sufficiency: &str,
     assistance: Option<&ProjectAssistanceRecord>,
     assembly_manifest_id: &str,
-) -> Result<ExpiryPlan, CompleteAgentRunError> {
+) -> Result<ExpiryAdmission, CompleteAgentRunError> {
     let Some(prior) = load_latest_attempt(client, claim, conversation_id).await? else {
-        return Ok(ExpiryPlan::Continue);
+        return Ok(ExpiryAdmission::Dispatch(None));
     };
     let payload = serde_json::from_str::<serde_json::Value>(&prior.payload).map_err(unavailable)?;
     let identity = payload.get("produced_binding").and_then(parse_identity);
-    let reference = reference_condition(&prior.dispatch_state, &payload);
+    let reference = if prior.dispatch_state == "uncertain" {
+        ContinuationReferenceCondition::UnknownCreate
+    } else {
+        match payload
+            .pointer("/produced_binding/reference_condition")
+            .and_then(serde_json::Value::as_str)
+        {
+            Some("confirmed_expired") => ContinuationReferenceCondition::ConfirmedExpired,
+            Some("confirmed_unusable") => ContinuationReferenceCondition::ConfirmedUnusable,
+            _ => ContinuationReferenceCondition::Usable,
+        }
+    };
     if matches!(reference, ContinuationReferenceCondition::Usable) {
-        return Ok(ExpiryPlan::Continue);
+        return Ok(ExpiryAdmission::Dispatch(None));
     }
     let current = assistance.map(|record| current_identity(claim, conversation_id, record));
     let decision = decide_confirmed_expiry_rebuild(&ExpiryRebuildFacts {
@@ -90,27 +97,33 @@ pub(crate) async fn plan_expiry_rebuild(
         predecessor_run_id: prior.run_id,
         predecessor_attempt_id: prior.attempt_id,
         predecessor_binding_id: prior.binding_id,
-        disposition: disposition_name(decision.disposition),
-        block_reason: block_reason(decision.disposition),
+        disposition: match decision.disposition {
+            ExpiryRebuildDisposition::NotApplicable => "not_applicable",
+            ExpiryRebuildDisposition::UnknownCreate => "unknown_create",
+            ExpiryRebuildDisposition::Blocked(_) => "blocked",
+            ExpiryRebuildDisposition::Rebuilt => "rebuilt",
+        },
+        block_reason: match decision.disposition {
+            ExpiryRebuildDisposition::Blocked(reason) => Some(block_labels(reason).0),
+            ExpiryRebuildDisposition::NotApplicable
+            | ExpiryRebuildDisposition::UnknownCreate
+            | ExpiryRebuildDisposition::Rebuilt => None,
+        },
         run_step_id: None,
         model_invocation_id: None,
         assembly_manifest_id: None,
         covered_content_included: decision.covered_content_included,
         predecessor_terminal: decision.predecessor_stays_terminal,
     };
-    match decision.disposition {
-        ExpiryRebuildDisposition::NotApplicable => Ok(ExpiryPlan::Continue),
-        ExpiryRebuildDisposition::UnknownCreate => Ok(ExpiryPlan::Refuse {
-            capability: "expiry_rebuild_unknown_create",
-            row: draft,
-        }),
-        ExpiryRebuildDisposition::Blocked(reason) => Ok(ExpiryPlan::Refuse {
-            capability: block_capability(reason),
-            row: draft,
-        }),
+    let capability = match decision.disposition {
+        ExpiryRebuildDisposition::NotApplicable => {
+            return Ok(ExpiryAdmission::Dispatch(None));
+        }
+        ExpiryRebuildDisposition::UnknownCreate => "expiry_rebuild_unknown_create",
+        ExpiryRebuildDisposition::Blocked(reason) => block_labels(reason).1,
         ExpiryRebuildDisposition::Rebuilt if decision.new_run_step_and_invocation => {
             let model_invocation_id = Uuid::now_v7().to_string();
-            Ok(ExpiryPlan::Rebuild(RebuildDispatch {
+            return Ok(ExpiryAdmission::Dispatch(Some(Box::new(RebuildDispatch {
                 model_invocation_id: model_invocation_id.clone(),
                 row: RecoveryDraft {
                     run_step_id: Some(Uuid::now_v7().to_string()),
@@ -118,12 +131,34 @@ pub(crate) async fn plan_expiry_rebuild(
                     assembly_manifest_id: Some(assembly_manifest_id.to_owned()),
                     ..draft
                 },
-            }))
+            }))));
         }
-        ExpiryRebuildDisposition::Rebuilt => Err(unavailable(std::io::Error::other(
-            "Confirmed expiry rebuild requires a new Run Step and Invocation",
-        ))),
-    }
+        ExpiryRebuildDisposition::Rebuilt => {
+            return Err(unavailable(std::io::Error::other(
+                "Confirmed expiry rebuild requires a new Run Step and Invocation",
+            )));
+        }
+    };
+    insert_recovery(
+        client,
+        claim,
+        conversation_id,
+        &draft,
+        /*model_attempt_id*/ None,
+    )
+    .await?;
+    crate::agent_run_work::update_run(
+        client,
+        claim,
+        "refused",
+        Some(&serde_json::json!({
+            "kind": "execution_refused",
+            "capability": capability
+        })),
+        /*clear_lease*/ true,
+    )
+    .await?;
+    Ok(ExpiryAdmission::Settled)
 }
 
 pub(crate) async fn insert_recovery(
@@ -283,62 +318,29 @@ async fn load_latest_attempt(
     }))
 }
 
-fn reference_condition(
-    dispatch_state: &str,
-    payload: &serde_json::Value,
-) -> ContinuationReferenceCondition {
-    if dispatch_state == "uncertain" {
-        return ContinuationReferenceCondition::UnknownCreate;
-    }
-    match payload
-        .pointer("/produced_binding/reference_condition")
-        .and_then(serde_json::Value::as_str)
-    {
-        Some("confirmed_expired") => ContinuationReferenceCondition::ConfirmedExpired,
-        Some("confirmed_unusable") => ContinuationReferenceCondition::ConfirmedUnusable,
-        _ => ContinuationReferenceCondition::Usable,
-    }
-}
-
-fn disposition_name(disposition: ExpiryRebuildDisposition) -> &'static str {
-    match disposition {
-        ExpiryRebuildDisposition::NotApplicable => "not_applicable",
-        ExpiryRebuildDisposition::UnknownCreate => "unknown_create",
-        ExpiryRebuildDisposition::Blocked(_) => "blocked",
-        ExpiryRebuildDisposition::Rebuilt => "rebuilt",
-    }
-}
-
-fn block_reason(disposition: ExpiryRebuildDisposition) -> Option<&'static str> {
-    match disposition {
-        ExpiryRebuildDisposition::Blocked(reason) => Some(block_name(reason)),
-        ExpiryRebuildDisposition::NotApplicable
-        | ExpiryRebuildDisposition::UnknownCreate
-        | ExpiryRebuildDisposition::Rebuilt => None,
-    }
-}
-
-fn block_name(reason: ExpiryRebuildBlock) -> &'static str {
+fn block_labels(reason: ExpiryRebuildBlock) -> (&'static str, &'static str) {
     match reason {
-        ExpiryRebuildBlock::PriorSubmissionUnsettled => "prior_submission_unsettled",
-        ExpiryRebuildBlock::FencedPredecessor => "fenced_predecessor",
-        ExpiryRebuildBlock::ProcessingBoundaryChanged => "processing_boundary_changed",
-        ExpiryRebuildBlock::AuthorityMissing => "authority_missing",
-        ExpiryRebuildBlock::BudgetInsufficient => "budget_insufficient",
-        ExpiryRebuildBlock::RequiredInputMissing => "required_input_missing",
-    }
-}
-
-fn block_capability(reason: ExpiryRebuildBlock) -> &'static str {
-    match reason {
-        ExpiryRebuildBlock::PriorSubmissionUnsettled => "expiry_rebuild_prior_submission_unsettled",
-        ExpiryRebuildBlock::FencedPredecessor => "expiry_rebuild_fenced_predecessor",
-        ExpiryRebuildBlock::ProcessingBoundaryChanged => {
-            "expiry_rebuild_processing_boundary_changed"
+        ExpiryRebuildBlock::PriorSubmissionUnsettled => (
+            "prior_submission_unsettled",
+            "expiry_rebuild_prior_submission_unsettled",
+        ),
+        ExpiryRebuildBlock::FencedPredecessor => {
+            ("fenced_predecessor", "expiry_rebuild_fenced_predecessor")
         }
-        ExpiryRebuildBlock::AuthorityMissing => "expiry_rebuild_authority_missing",
-        ExpiryRebuildBlock::BudgetInsufficient => "expiry_rebuild_budget_insufficient",
-        ExpiryRebuildBlock::RequiredInputMissing => "expiry_rebuild_required_input_missing",
+        ExpiryRebuildBlock::ProcessingBoundaryChanged => (
+            "processing_boundary_changed",
+            "expiry_rebuild_processing_boundary_changed",
+        ),
+        ExpiryRebuildBlock::AuthorityMissing => {
+            ("authority_missing", "expiry_rebuild_authority_missing")
+        }
+        ExpiryRebuildBlock::BudgetInsufficient => {
+            ("budget_insufficient", "expiry_rebuild_budget_insufficient")
+        }
+        ExpiryRebuildBlock::RequiredInputMissing => (
+            "required_input_missing",
+            "expiry_rebuild_required_input_missing",
+        ),
     }
 }
 
