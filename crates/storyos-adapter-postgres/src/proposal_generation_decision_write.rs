@@ -63,7 +63,8 @@ async fn copy_successor_context(
                         $6::text::uuid, $7::text::uuid, {rebound}
                    FROM storyos.operation_requirements
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND run_id = $3::text::uuid"
+                    AND run_id = $3::text::uuid
+                    AND requirement_role = 'primary'"
             ),
             &[
                 &scope.owner_user_id.as_ref(),
@@ -94,7 +95,8 @@ async fn copy_successor_context(
                         $5::text::uuid, sufficiency, NULL, NULL, {rebound}, $7::text::uuid
                    FROM storyos.context_assembly_manifests
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND run_id = $3::text::uuid"
+                    AND run_id = $3::text::uuid
+                    AND manifest_role = 'decision'"
             ),
             &[
                 &scope.owner_user_id.as_ref(),

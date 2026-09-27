@@ -418,6 +418,76 @@ pub enum OptionalModelAttemptInspect {
     },
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ActiveCompactionInstallState {
+    Staged,
+    Installed,
+    Refused,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ActiveCompactionMappingKind {
+    HostManaged,
+    Native,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ActiveCompactionKnownInput {
+    ModelAttempt {
+        id: String,
+    },
+    Manifest {
+        id: String,
+    },
+    Projection {
+        source_class: String,
+        source_version: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalCompactionInstallInspect {
+    Absent,
+    Present {
+        run_step_id: String,
+        model_invocation_id: String,
+        model_attempt_id: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[allow(clippy::large_enum_variant)]
+pub enum OptionalActiveCompactionInspect {
+    Absent,
+    Present {
+        compaction_id: String,
+        install_state: ActiveCompactionInstallState,
+        prior_model_attempt_id: String,
+        prior_manifest_id: String,
+        prior_run_step_id: String,
+        producer_model_attempt_id: String,
+        producer_manifest_id: String,
+        producer_invocation_id: String,
+        producer: String,
+        mapping_kind: ActiveCompactionMappingKind,
+        mapping_revision: String,
+        known_inputs: Vec<ActiveCompactionKnownInput>,
+        output_text: String,
+        usage: AgentRunUsageInspect,
+        loss_facts: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refusal_reason: Option<String>,
+        installed: OptionalCompactionInstallInspect,
+        preserved_item_ids: Vec<String>,
+        admission: ContinuationAdmissionInspect,
+    },
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct GetAgentRunRequest {
@@ -460,6 +530,7 @@ pub struct GetAgentRunResponse {
     pub context: AgentRunContextInspect,
     pub decision: OptionalDecisionInspect,
     pub model_attempt: OptionalModelAttemptInspect,
+    pub active_compaction: OptionalActiveCompactionInspect,
     pub evidence: Vec<AttemptEvidence>,
     pub items: Vec<AgentRunStreamItemInspect>,
     pub usage: AgentRunUsageInspect,

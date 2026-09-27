@@ -1,5 +1,81 @@
 {
   "$defs": {
+    "ActiveCompactionInstallState": {
+      "enum": [
+        "staged",
+        "installed",
+        "refused"
+      ],
+      "type": "string"
+    },
+    "ActiveCompactionKnownInput": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "model_attempt",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "manifest",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "projection",
+              "type": "string"
+            },
+            "source_class": {
+              "type": "string"
+            },
+            "source_version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source_class",
+            "source_version"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ActiveCompactionMappingKind": {
+      "enum": [
+        "host_managed",
+        "native"
+      ],
+      "type": "string"
+    },
     "AgentRunContextInspect": {
       "additionalProperties": false,
       "properties": {
@@ -603,6 +679,175 @@
       ],
       "type": "object"
     },
+    "OptionalActiveCompactionInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "admission": {
+              "$ref": "#/$defs/ContinuationAdmissionInspect"
+            },
+            "compaction_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "install_state": {
+              "$ref": "#/$defs/ActiveCompactionInstallState"
+            },
+            "installed": {
+              "$ref": "#/$defs/OptionalCompactionInstallInspect"
+            },
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "known_inputs": {
+              "items": {
+                "$ref": "#/$defs/ActiveCompactionKnownInput"
+              },
+              "type": "array"
+            },
+            "loss_facts": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "mapping_kind": {
+              "$ref": "#/$defs/ActiveCompactionMappingKind"
+            },
+            "mapping_revision": {
+              "type": "string"
+            },
+            "output_text": {
+              "type": "string"
+            },
+            "preserved_item_ids": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "prior_manifest_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "prior_model_attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "prior_run_step_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "producer": {
+              "type": "string"
+            },
+            "producer_invocation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "producer_manifest_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "producer_model_attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "refusal_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "usage": {
+              "$ref": "#/$defs/AgentRunUsageInspect"
+            }
+          },
+          "required": [
+            "kind",
+            "compaction_id",
+            "install_state",
+            "prior_model_attempt_id",
+            "prior_manifest_id",
+            "prior_run_step_id",
+            "producer_model_attempt_id",
+            "producer_manifest_id",
+            "producer_invocation_id",
+            "producer",
+            "mapping_kind",
+            "mapping_revision",
+            "known_inputs",
+            "output_text",
+            "usage",
+            "loss_facts",
+            "installed",
+            "preserved_item_ids",
+            "admission"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OptionalCompactionInstallInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "model_attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "model_invocation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "run_step_id": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "run_step_id",
+            "model_invocation_id",
+            "model_attempt_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "OptionalContinuationInspect": {
       "oneOf": [
         {
@@ -1016,6 +1261,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "active_compaction": {
+      "$ref": "#/$defs/OptionalActiveCompactionInspect"
+    },
     "context": {
       "$ref": "#/$defs/AgentRunContextInspect"
     },
@@ -1086,6 +1334,7 @@
     "context",
     "decision",
     "model_attempt",
+    "active_compaction",
     "evidence",
     "items",
     "usage",

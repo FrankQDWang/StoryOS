@@ -54,6 +54,59 @@ pub struct AgentRunRecord {
     pub context: AgentRunContext,
     pub decision: AgentRunDecisionInspect,
     pub model: Option<AgentRunModelInspect>,
+    pub active_compaction: Option<ActiveCompactionInspect>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ActiveCompactionInstallState {
+    Staged,
+    Installed,
+    Refused,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ActiveCompactionMappingKind {
+    HostManaged,
+    Native,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ActiveCompactionKnownInput {
+    ModelAttempt {
+        id: String,
+    },
+    Manifest {
+        id: String,
+    },
+    Projection {
+        source_class: String,
+        source_version: String,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActiveCompactionInspect {
+    pub compaction_id: String,
+    pub install_state: ActiveCompactionInstallState,
+    pub prior_model_attempt_id: String,
+    pub prior_manifest_id: String,
+    pub prior_run_step_id: String,
+    pub producer_model_attempt_id: String,
+    pub producer_manifest_id: String,
+    pub producer_invocation_id: String,
+    pub producer: String,
+    pub mapping_kind: ActiveCompactionMappingKind,
+    pub mapping_revision: String,
+    pub known_inputs: Vec<ActiveCompactionKnownInput>,
+    pub output_text: String,
+    pub usage_kind: String,
+    pub loss_facts: Vec<String>,
+    pub refusal_reason: Option<String>,
+    pub installed_run_step_id: Option<String>,
+    pub installed_model_invocation_id: Option<String>,
+    pub installed_model_attempt_id: Option<String>,
+    pub preserved_item_ids: Vec<String>,
+    pub admission: AgentRunContinuationAdmission,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

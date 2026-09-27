@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:e78e157bc2b01e14b1a0f9f46f811113b07d62e93a77f91f023ab64d1a398d3d"
+    "digest": "sha256:4089a6ba2eae8c25548e33e8cc5b77f2f02ce43d2faf2c49cb2fbe76b94b4ad8"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,15 +19,15 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:a63373f19ec0ef6b3b0d672a3dd85d0ec6c53e65abf439defaa340396eb55518",
+    "migration_chain_digest": "sha256:111590d5cfda8a5ea7dee19f9275480015cd793691432b21aab632802a310dbf",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
-      "route_catalog_contract_revision": "release1-wire-catalog-2026-09-27-replan-proposal",
+      "route_catalog_contract_revision": "release1-wire-catalog-2026-09-27-active-compaction",
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:063bfa49cfab86bfd87d568f706dcd7ce603913d16f4e872ee0d3d661bbeaee6",
+      "route_catalog_sha256": "sha256:ef5594a384b20d0049a3fa15f20dcf5b9d1948cac0d08701e4d94afbb081f8ff",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:d6f953ce45a5ec3e04dd602180bb5e06c2e63384781cbaae90f1cc444447e05c",
+      "manifest_sha256": "sha256:d5280aeb6dadf832493d25c8218c6d708ab9fd53d627cf82463defc6bd06b027",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -507,6 +507,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0068_replan_proposal.sql",
           "lf_sha256": "sha256:0f7ee3fad8a6d6939ca671aeddb67b283737586521e6dc6afaeef3ada93f00ca"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0069_active_context_compaction.sql",
+          "lf_sha256": "sha256:9c620058f428c94afb7eb2fbbf5ea8af0f9b85b1f400e23d8491c2a5e31607d2"
         }
       ]
     },
@@ -700,7 +704,7 @@
     },
     {
       "family_id": "operational-context-disclosure",
-      "table_families": ["processing_destination_identities", "processing_destination_identity_evidence_revisions", "operation_requirements", "context_candidates", "context_eligibility_decisions", "context_selection_decisions", "context_assembly_manifests", "context_manifest_members", "project_external_use_binding_revisions", "external_contract_compatibility_decisions", "destination_attempts", "wire_payload_projections", "outbound_disclosure_events", "destination_attempt_settlements", "tool_calls", "tool_attempts", "mcp_app_artifacts", "skill_activations", "model_route_requests", "model_route_decisions", "model_invocations", "model_attempts", "model_usage_settlements"],
+      "table_families": ["processing_destination_identities", "processing_destination_identity_evidence_revisions", "operation_requirements", "context_candidates", "context_eligibility_decisions", "context_selection_decisions", "context_assembly_manifests", "context_manifest_members", "project_external_use_binding_revisions", "external_contract_compatibility_decisions", "destination_attempts", "wire_payload_projections", "outbound_disclosure_events", "destination_attempt_settlements", "tool_calls", "tool_attempts", "mcp_app_artifacts", "skill_activations", "model_route_requests", "model_route_decisions", "model_invocations", "active_context_compactions", "model_attempts", "model_usage_settlements"],
       "owner": "context",
       "authority_class": "operational",
       "durability_class": "immutable_manifests_attempts_and_disclosure_events",

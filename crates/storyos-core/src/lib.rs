@@ -7,6 +7,7 @@ mod archive_path;
 mod archive_project;
 mod archive_zip;
 mod assemble_context;
+mod compact_active_context;
 mod complete_fake_decision;
 mod continuation_input;
 mod create_agent_run;
@@ -67,6 +68,12 @@ pub use assemble_context::{
     ContextBlockReason, ContextSourceClass, ContextSufficiency, CurrentPassageAssembly,
     CurrentPassageAssemblyRecord, DestinationIo, InstructionBindingInput, RejectionReason,
     assemble_current_passage_context, decode_assembly_record, encode_assembly_record,
+};
+pub use compact_active_context::{
+    ACTIVE_COMPACTION_REQUEST_PREFIX, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
+    CompactionInstallFacts, CompactionInstallRefusal, HOST_FAKE_COMPACTION_OUTPUT,
+    HOST_FAKE_COMPACTION_PRODUCER, active_context_input_digest, decide_compaction_install,
+    requests_active_compaction,
 };
 pub use complete_fake_decision::{
     ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,

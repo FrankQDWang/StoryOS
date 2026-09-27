@@ -3,6 +3,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_agent_run::{
+    ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
     AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
     CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
@@ -13,7 +14,8 @@ use crate::release1_agent_run::{
     CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
     DestinationIo, EvidenceAvailability, GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
     GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect,
-    InstructionBinding, OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
+    InstructionBinding, OptionalActiveCompactionInspect, OptionalCompactionInstallInspect,
+    OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
     OptionalModelAttemptInspect, OptionalOpenedProposalInspect, ProjectionMode, SourceAvailability,
     TokenCountingProfileInspect,
 };
@@ -161,6 +163,9 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         "AttemptEvidence",
         "OptionalDecisionInspect",
         "OptionalModelAttemptInspect",
+        "OptionalActiveCompactionInspect",
+        "OptionalCompactionInstallInspect",
+        "ActiveCompactionKnownInput",
         "OptionalContinuationInspect",
         "OptionalOpenedProposalInspect",
         "ContinuationAdmissionInspect",
@@ -177,6 +182,15 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
                     "model_invocation_id",
                     "continuation_binding_id",
                     "reference_id",
+                    "compaction_id",
+                    "prior_model_attempt_id",
+                    "prior_manifest_id",
+                    "prior_run_step_id",
+                    "producer_model_attempt_id",
+                    "producer_manifest_id",
+                    "producer_invocation_id",
+                    "run_step_id",
+                    "id",
                     "proposal_id",
                     "processing_destination_identity",
                     "model_registration_revision",
@@ -233,7 +247,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
@@ -269,6 +283,11 @@ pub(super) fn typescript_type_declarations() -> String {
         ContinuationInputMappingInspect::decl(&config),
         ContinuationAdmissionInspect::decl(&config),
         OptionalModelAttemptInspect::decl(&config),
+        ActiveCompactionInstallState::decl(&config),
+        ActiveCompactionMappingKind::decl(&config),
+        ActiveCompactionKnownInput::decl(&config),
+        OptionalCompactionInstallInspect::decl(&config),
+        OptionalActiveCompactionInspect::decl(&config),
         AgentRunStreamItemInspect::decl(&config),
         AgentRunUsageInspect::decl(&config),
         GetAgentRunRequest::decl(&config),
@@ -466,6 +485,7 @@ fn get_fixture() -> Value {
         },
         "decision": { "kind": "absent" },
         "model_attempt": { "kind": "absent" },
+        "active_compaction": { "kind": "absent" },
         "evidence": [],
         "items": [],
         "usage": { "kind": "unknown" },

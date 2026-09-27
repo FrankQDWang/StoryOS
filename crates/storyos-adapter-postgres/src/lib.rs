@@ -95,6 +95,7 @@ mod set_current_chapter_authority_tests;
 mod accept_proposal;
 mod acceptance_refusal;
 mod admitted_proposal_target;
+mod agent_run_compaction;
 mod agent_run_continuation;
 mod agent_run_control;
 mod agent_run_work;
