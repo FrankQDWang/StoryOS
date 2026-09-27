@@ -170,7 +170,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
   const hold = join(tmpdir(), `storyos-fake-expiry-${process.pid}`);
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("e410"), "Expiry Novel", "e42");
+    const prepared = await prepare(started.baseUrl, id("e7c8"), "Expiry Novel", "e42");
     const first = await admit(started.baseUrl, prepared, id("e431"), FIRST);
     const firstInspect = await inspect(started.baseUrl, prepared, first.effect.run_id);
     const firstBinding = produced(firstInspect);
