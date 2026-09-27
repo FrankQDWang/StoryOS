@@ -15,3 +15,8 @@ it("recovers one prose request through the production Web, Server, database, and
 it("preserves and copies a complete mixed edit through response loss, reload and Server restart", async () => {
   await expect(verifyProductionHost({ scenario: "refused_edit" })).resolves.toEqual({ kind: "production_host_verified" });
 });
+
+it("recovers a conflicted Proposal through reload, replan, and an explicit retry", async () => {
+  await expect(verifyProductionHost({ scenario: "conflicted_proposal" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+}, 240_000);

@@ -14,6 +14,7 @@ import type {
   RejectProposalOperationsResponse, UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { verifyConflictedProposalRecovery } from "./production-conflict-recovery-command.ts";
 import { verifyRestoredProductionDiscard } from "./production-discard-command.ts";
 import { verifyProductionRefusedEdit } from "./production-refused-edit-command.ts";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch, startStoryOSServer, stopStoryOSServer } from "./node-integration";
@@ -226,6 +227,13 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.deepEqual(await page.locator("[data-manuscript-editor] > p").allTextContents(),
       ["The lantern went dark.", "The second door opened."]);
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    if (scenario === "conflicted_proposal") {
+      await verifyConflictedProposalRecovery({ page, context, origin, projectId, chapterId,
+        proposalId: firstProposalId, proposal: firstProposal, chapterRevisionId:
+          before.chapter.current_revision.revision_id });
+      assert.deepEqual(errors, []);
+      return;
+    }
     if (scenario === "refused_edit") {
       await verifyProductionRefusedEdit({ page, context, origin, projectId, chapter: before, proposal: firstProposal,
         restart: async () => { await stopStoryOSServer(owned!.server);

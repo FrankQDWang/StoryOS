@@ -293,6 +293,28 @@ export async function knownProblemDisplayedAcceptance(workspace: EditorWorkspace
     responseBody: delivery.responseBody, terminal: false };
 }
 
+export async function acceptanceSessionBlocked(workspace: EditorWorkspace,
+  proposalId: string): Promise<boolean> {
+  const journal = await readAcceptanceJournal(workspace);
+  const record = journal.records.filter((item) => item.command_kind === "acceptProposal"
+    && (item.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId)
+    .sort((left, right) => (right.local_intent_sequence as number)
+      - (left.local_intent_sequence as number))[0];
+  if (record === undefined || record.writer_generation !== workspace.partition.writer_generation) {
+    return false;
+  }
+  const group = journal.groups.find((item) =>
+    (item.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref
+      === record.explicit_command_record_id);
+  const settlement = group?.settlement as { kind?: string; refusal?: { reason?: string };
+    problem?: { code?: string } } | undefined;
+  return (settlement?.kind === "refused"
+      && (settlement.refusal?.reason === "stale_writer"
+        || settlement.refusal?.reason === "session_changed"))
+    || (settlement?.kind === "pre_admission_problem"
+      && settlement.problem?.code === "acceptance_session_ineligible");
+}
+
 export async function acceptanceJournalProposals(workspace: EditorWorkspace): Promise<{
   proposalIds: string[];
   unresolvedIds: string[];
@@ -480,9 +502,14 @@ async function commitFlight(workspace: EditorReadyState,
     throw new Error("Journal sequence changed");
   }
   const input = decisionInput(flight as DecisionFlight);
+  const storedDisposition = (partition as { disposition?: string } | undefined)?.disposition;
+  if (storedDisposition !== "current_writer_open"
+    || workspace.partition.disposition !== "current_writer_open") {
+    transaction.abort();
+    throw new Error("Acceptance session is closed");
+  }
   if (schema?.version !== 4
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
-    || workspace.partition.disposition !== "current_writer_open"
     || flight.journal_partition_id !== workspace.partition.journal_partition_id
     || JSON.stringify(flight.project_scope) !== JSON.stringify(workspace.partition.project_scope)
     || flight.editor_session_id !== workspace.partition.editor_session_id
