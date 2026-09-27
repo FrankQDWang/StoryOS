@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { getExportOperation, getRefusedEditDraft, StoryOSProtocolError } from "../generated/typescript/storyos-public-release-1/client.mjs";
+import { getExportOperation, getProposal, getRefusedEditDraft, StoryOSProtocolError } from "../generated/typescript/storyos-public-release-1/client.mjs";
 
 const [container, baseUrl, expectedPath] = process.argv.slice(2);
 const expectations = readFileSync(expectedPath, "utf8").trim().split("\n").map(JSON.parse);
-assert.equal(expectations.length, 14);
+assert.equal(expectations.length, 15);
 const fetchImpl = (input, init) => {
   const headers = new Headers(init?.headers);
   headers.set("origin", baseUrl);
@@ -29,9 +29,11 @@ for (const expected of expectations) {
         AND record.project_id='${expected.projectId}'::uuid)`).join(",")},
       'domain_receipts', (SELECT coalesce(jsonb_agg(to_jsonb(receipt) ORDER BY receipt.receipt_id), '[]'::jsonb)
         FROM storyos.domain_receipts AS receipt WHERE receipt.owner_user_id='${expected.ownerUserId}'::uuid
-        AND receipt.project_id='${expected.projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft','undoLatestAuthorAction')
+        AND receipt.project_id='${expected.projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft','undoLatestAuthorAction','expandRefusedEditDraftToProposal')
         AND (cardinality(receipt.draft_artifact_refs)>0 OR receipt.source_draft_disposition IS NOT NULL)))::text`], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }));
   assert.deepEqual(state, expected.state);
+  for (const proposal of expected.proposals ?? []) assert.deepEqual((await getProposal({ baseUrl,
+    projectId: expected.projectId, proposalId: proposal.proposal_id, fetchImpl })).proposal, proposal);
   for (const retained of expected.drafts) {
     const query = () => getRefusedEditDraft({ baseUrl, projectId: expected.projectId,
       draftId: retained.draft.draft_id, fetchImpl });
@@ -58,5 +60,5 @@ for (const expected of expectations) {
     }
   }
 }
-assert.equal(restoredDrafts, 18);
-console.log("Restored eighteen public Refused Edit Drafts: complete payloads, digests, creation, Receipts, Heads, lifecycle, and archive copies unchanged");
+assert.equal(restoredDrafts, 19);
+console.log("Restored nineteen public Refused Edit Drafts and the expanded Proposal: complete payloads, structure, sources, Receipts, Heads, lifecycle, and archive copies unchanged");

@@ -164,3 +164,12 @@ public Archive retains the backend close facts and complete eligible content.
 Copy always needs a fresh permitted query and sends no state-changing request.
 Closed Drafts show the exact reason/event and the current non-skippable Undo
 Barrier; they expose no Discard, Retry or Expand control.
+
+## Whole Draft expansion
+
+Issue 385 adds an explicit whole-payload expansion against current Anchors.
+The fresh pending Proposal retains all ordered replacement blocks and exact
+Draft provenance. Expansion supersedes its source and creates no Manuscript
+Commit. Root Undo withdraws that exact Proposal and reopens the source together.
+The existing Journal freezes one identity for exact loss, reload and restart
+recovery. Structured candidates have no text-edit or Acceptance qualification.

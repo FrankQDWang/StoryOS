@@ -1,5 +1,5 @@
 import { appendFile } from "node:fs/promises";
-import type { GetRefusedEditDraftResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { BlockProposalInspect, GetRefusedEditDraftResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres } from "./node-integration.ts";
 import { USER_A } from "./acceptance.ts";
 
@@ -7,6 +7,7 @@ export async function retainRefusedEditRecoveryExpectation(
   projectId: string,
   drafts: { draft: GetRefusedEditDraftResponse["draft"]; available: boolean }[],
   exports: { exportId: string; root: string; status: number; bytesSha256?: string }[] = [],
+  proposals: BlockProposalInspect[] = [],
 ): Promise<void> {
   const path = process.env.STORYOS_REFUSED_EDIT_RECOVERY_EXPECTED;
   if (path === undefined) return;
@@ -19,7 +20,7 @@ export async function retainRefusedEditRecoveryExpectation(
       AND record.project_id = '${projectId}'::uuid)`).join(",")},
     'domain_receipts', (SELECT coalesce(jsonb_agg(to_jsonb(receipt) ORDER BY receipt.receipt_id), '[]'::jsonb)
       FROM storyos.domain_receipts AS receipt WHERE receipt.owner_user_id='${USER_A}'::uuid
-      AND receipt.project_id='${projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft','undoLatestAuthorAction')
+      AND receipt.project_id='${projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft','undoLatestAuthorAction','expandRefusedEditDraftToProposal')
       AND (cardinality(receipt.draft_artifact_refs)>0 OR receipt.source_draft_disposition IS NOT NULL)))::text`));
-  await appendFile(path, `${JSON.stringify({ projectId, ownerUserId: USER_A, drafts, exports, state })}\n`);
+  await appendFile(path, `${JSON.stringify({ projectId, ownerUserId: USER_A, drafts, exports, proposals, state })}\n`);
 }
