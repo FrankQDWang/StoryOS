@@ -16,8 +16,8 @@ use crate::release1_agent_run::{
     GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect,
     InstructionBinding, OptionalActiveCompactionInspect, OptionalCompactionInstallInspect,
     OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
-    OptionalModelAttemptInspect, OptionalOpenedProposalInspect, ProjectionMode, SourceAvailability,
-    TokenCountingProfileInspect,
+    OptionalModelAttemptInspect, OptionalOpenedProposalInspect, OptionalReferenceRecoveryInspect,
+    ProjectionMode, ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
 };
 
 pub(super) const CREATE_REQUEST_SCHEMA_PATH: &str =
@@ -165,6 +165,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         "OptionalModelAttemptInspect",
         "OptionalActiveCompactionInspect",
         "OptionalCompactionInstallInspect",
+        "OptionalReferenceRecoveryInspect",
         "ActiveCompactionKnownInput",
         "OptionalContinuationInspect",
         "OptionalOpenedProposalInspect",
@@ -183,6 +184,10 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
                     "continuation_binding_id",
                     "reference_id",
                     "compaction_id",
+                    "recovery_id",
+                    "predecessor_run_id",
+                    "predecessor_continuation_binding_id",
+                    "assembly_manifest_id",
                     "prior_model_attempt_id",
                     "prior_manifest_id",
                     "prior_run_step_id",
@@ -247,7 +252,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
@@ -288,6 +293,8 @@ pub(super) fn typescript_type_declarations() -> String {
         ActiveCompactionKnownInput::decl(&config),
         OptionalCompactionInstallInspect::decl(&config),
         OptionalActiveCompactionInspect::decl(&config),
+        ReferenceRecoveryDisposition::decl(&config),
+        OptionalReferenceRecoveryInspect::decl(&config),
         AgentRunStreamItemInspect::decl(&config),
         AgentRunUsageInspect::decl(&config),
         GetAgentRunRequest::decl(&config),
@@ -486,6 +493,7 @@ fn get_fixture() -> Value {
         "decision": { "kind": "absent" },
         "model_attempt": { "kind": "absent" },
         "active_compaction": { "kind": "absent" },
+        "reference_recovery": { "kind": "absent" },
         "evidence": [],
         "items": [],
         "usage": { "kind": "unknown" },

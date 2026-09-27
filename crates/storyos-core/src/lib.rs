@@ -18,6 +18,7 @@ mod delete_chapter;
 mod delete_volume;
 mod draft_retry;
 mod expand_refused_edit_draft;
+mod rebuild_expired_reference;
 pub use expand_refused_edit_draft::{ExpandRefusedEditDraftResult, expand_refused_edit_draft};
 mod manuscript_payload;
 mod refused_edit;
@@ -84,7 +85,7 @@ pub use complete_fake_decision::{
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
-    continuation_mapping_can_represent, map_continuation_input,
+    continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
 };
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
@@ -151,6 +152,10 @@ pub use readable_export::{
 pub use readable_export_command::{
     ExportHumanReadableManuscript, ExportHumanReadableManuscriptRefusal,
     ExportHumanReadableManuscriptResult, export_human_readable_manuscript,
+};
+pub use rebuild_expired_reference::{
+    ContinuationReferenceCondition, ExpiryRebuildBlock, ExpiryRebuildDecision,
+    ExpiryRebuildDisposition, ExpiryRebuildFacts, decide_confirmed_expiry_rebuild,
 };
 pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,

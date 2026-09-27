@@ -98,6 +98,7 @@ mod admitted_proposal_target;
 mod agent_run_compaction;
 mod agent_run_continuation;
 mod agent_run_control;
+mod agent_run_expiry;
 mod agent_run_work;
 mod archive_project;
 mod author_command_outcome_unknown;

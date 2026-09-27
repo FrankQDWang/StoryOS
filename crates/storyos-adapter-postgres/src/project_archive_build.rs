@@ -77,6 +77,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/context_assembly_manifests.json",
     ),
     (
+        "context_reference_recoveries",
+        "canonical/context_reference_recoveries.json",
+    ),
+    (
         "conversation_memory_settings",
         "canonical/conversation_memory_settings.json",
     ),

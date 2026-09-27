@@ -488,6 +488,42 @@ pub enum OptionalActiveCompactionInspect {
     },
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ReferenceRecoveryDisposition {
+    Rebuilt,
+    Blocked,
+    UnknownCreate,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalReferenceRecoveryInspect {
+    Absent,
+    Present {
+        recovery_id: String,
+        disposition: ReferenceRecoveryDisposition,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        block_reason: Option<String>,
+        predecessor_run_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        predecessor_continuation_binding_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        run_step_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model_invocation_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model_attempt_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        assembly_manifest_id: Option<String>,
+        lossless_provider_reconstruction: bool,
+        semantic_erasure: bool,
+        opaque_reused: bool,
+        covered_content_included: bool,
+        predecessor_terminal: bool,
+    },
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct GetAgentRunRequest {
@@ -531,6 +567,7 @@ pub struct GetAgentRunResponse {
     pub decision: OptionalDecisionInspect,
     pub model_attempt: OptionalModelAttemptInspect,
     pub active_compaction: OptionalActiveCompactionInspect,
+    pub reference_recovery: OptionalReferenceRecoveryInspect,
     pub evidence: Vec<AttemptEvidence>,
     pub items: Vec<AgentRunStreamItemInspect>,
     pub usage: AgentRunUsageInspect,

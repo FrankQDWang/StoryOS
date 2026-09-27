@@ -109,7 +109,7 @@ pub(crate) fn default_inspect_admission() -> AgentRunContinuationAdmission {
     }
 }
 
-fn current_identity(
+pub(crate) fn current_identity(
     claim: &ClaimedAgentRun,
     conversation_id: &str,
     assistance: &ProjectAssistanceRecord,
@@ -194,7 +194,7 @@ fn identity_value(identity: &ContinuationIdentity) -> serde_json::Value {
     })
 }
 
-fn parse_identity(value: &serde_json::Value) -> Option<ContinuationIdentity> {
+pub(crate) fn parse_identity(value: &serde_json::Value) -> Option<ContinuationIdentity> {
     Some(ContinuationIdentity {
         owner_user_id: string_field(value, "owner_user_id")?,
         project_id: string_field(value, "project_id")?,

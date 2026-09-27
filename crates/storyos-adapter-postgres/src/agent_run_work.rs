@@ -180,6 +180,38 @@ async fn settle_one_phase(
             Some(storyos_core::AssistanceAvailability::Available)
         );
     if attempt_id.is_none() {
+        let expiry = crate::agent_run_expiry::plan_expiry_rebuild(
+            client,
+            claim,
+            &conversation_id,
+            &author_message,
+            &sufficiency,
+            assistance.as_ref(),
+            &assembly_manifest_id,
+        )
+        .await?;
+        if let crate::agent_run_expiry::ExpiryPlan::Refuse { capability, row } = &expiry {
+            crate::agent_run_expiry::insert_recovery(
+                client,
+                claim,
+                &conversation_id,
+                row,
+                /*model_attempt_id*/ None,
+            )
+            .await?;
+            update_run(
+                client,
+                claim,
+                "refused",
+                Some(&serde_json::json!({
+                    "kind": "execution_refused",
+                    "capability": capability
+                })),
+                /*clear_lease*/ true,
+            )
+            .await?;
+            return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
+        }
         if blocked || matches!(plan, FakeDispatchPlan::RefuseWithoutDispatch { .. }) {
             let settlement = match plan {
                 FakeDispatchPlan::RefuseWithoutDispatch { capability } => {
@@ -209,7 +241,12 @@ async fn settle_one_phase(
             .await?;
             return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
         }
-        persist_uncertain_attempt(
+        let rebuild = match expiry {
+            crate::agent_run_expiry::ExpiryPlan::Rebuild(dispatch) => Some(dispatch),
+            crate::agent_run_expiry::ExpiryPlan::Continue => None,
+            crate::agent_run_expiry::ExpiryPlan::Refuse { .. } => None,
+        };
+        let created_attempt_id = persist_uncertain_attempt(
             client,
             claim,
             &conversation_id,
@@ -221,8 +258,19 @@ async fn settle_one_phase(
                     "Dispatch requires current assistance admission",
                 )))
             })?,
+            rebuild.as_ref(),
         )
         .await?;
+        if let Some(dispatch) = rebuild.as_ref() {
+            crate::agent_run_expiry::insert_recovery(
+                client,
+                claim,
+                &conversation_id,
+                &dispatch.row,
+                Some(created_attempt_id.as_str()),
+            )
+            .await?;
+        }
         return Ok(WorkPhase::Hold("dispatch"));
     }
     if destination_manifest.is_none() {
@@ -451,6 +499,7 @@ async fn persist_stream_and_decision(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn persist_uncertain_attempt(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -459,15 +508,15 @@ async fn persist_uncertain_attempt(
     chapter_id: &str,
     assembly_manifest_id: &str,
     assistance: &storyos_application::ProjectAssistanceRecord,
-) -> Result<(), CompleteAgentRunError> {
+    rebuild: Option<&crate::agent_run_expiry::RebuildDispatch>,
+) -> Result<String, CompleteAgentRunError> {
     let model_attempt_id = Uuid::now_v7().to_string();
     let destination_attempt_id = Uuid::now_v7().to_string();
     let outbound_disclosure_event_id = Uuid::now_v7().to_string();
     let destination_context_manifest_id = Uuid::now_v7().to_string();
     let outbound_disclosure_manifest_id = Uuid::now_v7().to_string();
     let wire_payload_projection_id = Uuid::now_v7().to_string();
-    let model_invocation_id = Uuid::now_v7().to_string();
-    let continuation = crate::agent_run_continuation::decide_continuation(
+    let mut continuation = crate::agent_run_continuation::decide_continuation(
         client,
         claim,
         conversation_id,
@@ -475,6 +524,14 @@ async fn persist_uncertain_attempt(
         assistance,
     )
     .await?;
+    let model_invocation_id = match rebuild {
+        Some(dispatch) => {
+            continuation.mapping = storyos_core::ContinuationInputMapping::Full;
+            continuation.prior_binding_id = None;
+            dispatch.model_invocation_id.clone()
+        }
+        None => Uuid::now_v7().to_string(),
+    };
     let digest = host_fake_wire_digest(author_message, chapter_id);
     let payload = serde_json::json!({
         "execution_profile": {
@@ -549,7 +606,7 @@ async fn persist_uncertain_attempt(
         )
         .await
         .map_err(complete_database_error)?;
-    Ok(())
+    Ok(model_attempt_id)
 }
 
 #[allow(clippy::too_many_arguments)]
