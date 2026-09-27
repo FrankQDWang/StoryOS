@@ -363,6 +363,6 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     );
   } finally {
     if (existsSync(hold)) unlinkSync(hold);
-    await stopRealServer(started);
+    await stopRealServer(started.server);
   }
 });
