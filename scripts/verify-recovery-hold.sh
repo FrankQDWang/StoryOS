@@ -206,7 +206,13 @@ STORYOS_VITEST_FILE_ORDER=test/node-postgresql/accept-proposal-http.integration.
     test/node-postgresql/accept-proposal-http.integration.test.ts \
     test/node-postgresql/acceptance-refusal-http.integration.test.ts
 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
-acceptance_before=$(node scripts/inspect-acceptance-conditions.mjs "$primary" "$STORYOS_DEV_SERVER")
+# Fixture-only records three acceptProposal refusals. Mixed also records the production conflicted Proposal acceptance.
+if [ "$recovery_drill" = "mixed" ]; then
+  acceptance_condition_count=4
+else
+  acceptance_condition_count=3
+fi
+acceptance_before=$(node scripts/inspect-acceptance-conditions.mjs "$primary" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")
 stop_recovery_drill_server
 
 role_count=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
@@ -714,7 +720,7 @@ if [ "$recovery_drill" = "mixed" ]; then
   node scripts/inspect-recovered-refused-edit-drafts.mjs \
     "$hold" "$STORYOS_DEV_SERVER" "$refused_edit_expected"
 fi
-acceptance_after=$(node scripts/inspect-acceptance-conditions.mjs "$hold" "$STORYOS_DEV_SERVER")
+acceptance_after=$(node scripts/inspect-acceptance-conditions.mjs "$hold" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")
 if [ "$acceptance_before" != "$acceptance_after" ]; then
   echo "Restored Acceptance conditions or immutable evidence changed" >&2
   exit 1

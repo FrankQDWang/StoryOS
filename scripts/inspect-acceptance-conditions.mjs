@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { getProposal } from "../generated/typescript/storyos-public-release-1/client.mjs";
 
-const [container, baseUrl] = process.argv.slice(2);
+const [container, baseUrl, expectedCountText] = process.argv.slice(2);
+const expectedCount = Number(expectedCountText);
+if (!Number.isInteger(expectedCount)) {
+  throw new Error("Acceptance condition count is required");
+}
 const rows = JSON.parse(execFileSync("docker", ["exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
   "-U", "postgres", "-Atc", `SELECT json_agg(row_to_json(evidence) ORDER BY evidence.proposal_id) FROM (
     SELECT condition.*, to_jsonb(receipt) AS acceptance, to_jsonb(validation.*) AS historical_validation
@@ -12,8 +16,7 @@ const rows = JSON.parse(execFileSync("docker", ["exec", container, "psql", "-X",
       (validation.owner_user_id, validation.project_id, validation.proposal_id, validation.proposal_revision_id) =
       (condition.owner_user_id, condition.project_id, condition.proposal_id, condition.proposal_revision_id)
   ) AS evidence`], { encoding: "utf8" }));
-// Three acceptProposal refusals plus the production conflicted Proposal acceptance.
-assert.equal(rows.length, 4);
+assert.equal(rows.length, expectedCount);
 const inspected = [];
 for (const row of rows) {
   const options = { baseUrl, projectId: row.project_id, proposalId: row.proposal_id };
