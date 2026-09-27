@@ -36,7 +36,7 @@ async function recordFor(partition: EditorWorkspace["partition"], request: Reque
   const input = request.expand_refused_edit_draft_to_proposal_input, digest = await digestExpandRefusedEditDraft(request, crypto);
   const coverage = { ordered_coverage: [{ local_intent_sequence: sequence, intent_record_ref: recordId, payload_digest: digest }],
     covered_sequence_range: { first: sequence, last: sequence } };
-  return { key: `expansion:${input.draft_id}:${input.source_reopen_event_id ?? "initial"}`, schema_id: SCHEMA,
+  return { key: `expansion:${input.draft_id}:${input.source_reopen_event_id ?? "initial"}:${recordId}`, schema_id: SCHEMA,
     project_scope: partition.project_scope, journal_partition_id: partition.journal_partition_id,
     editor_session_id: partition.editor_session_id, writer_generation: partition.writer_generation,
     explicit_command_record_id: recordId, local_intent_sequence: sequence, created_at: createdAt,
@@ -54,6 +54,8 @@ function validResponse(record: ExpansionRecord, response: ExpandRefusedEditDraft
   const input = record.group.frozen_request_body.expand_refused_edit_draft_to_proposal_input;
   const receipt = response.receipt, effect = response.effect;
   if (!keys(response, ["schema_id", "correlation_id", "project_scope", "command_id", "author_command_admission_id", "receipt", "effect"])
+    || !keys(effect, effect.kind === "proposal_created_from_draft" ? ["kind", "proposal_id", "proposal_revision_id", "event"]
+      : effect.kind === "conflicted" ? ["kind", "current_revision_id", "current_digest", "current_closure"] : ["kind", "reason", "current_closure"])
     || !keys(receipt, ["receipt_id", "project_scope", "command_kind", "command_digest", "idempotency_key", "producer_cause",
       "author_command_admission_id", "expected_heads", "prior_heads", "resulting_heads", "authoritative_revision_ids", "proposal_revision_ids",
       "authoritative_commit_ids", "draft_artifact_refs", "artifact_lifecycle_event_refs", "condition_refs", "result", "created_at"], ["author_action_sequence"])
@@ -69,10 +71,11 @@ function validResponse(record: ExpansionRecord, response: ExpandRefusedEditDraft
   if (effect.kind !== "proposal_created_from_draft") return receipt.result === effect.kind && receipt.author_action_sequence == null
     && [receipt.proposal_revision_ids, receipt.artifact_lifecycle_event_refs].every((refs) => same(refs, []))
     && (effect.kind === "conflicted" ? UUID.test(effect.current_revision_id) && /^[0-9a-f]{64}$/.test(effect.current_digest)
-      && ["open", "closed"].includes(effect.current_closure) : ["source_draft_not_open", "source_unavailable", "unsupported_payload", "target_unavailable"].includes(effect.reason)
+      && ["open", "closed"].includes(effect.current_closure) : effect.kind === "refused" && ["source_draft_not_open", "source_unavailable", "unsupported_payload", "target_unavailable"].includes(effect.reason)
         && ["open", "closed"].includes(effect.current_closure));
   const event = effect.event;
-  return receipt.result === effect.kind && [effect.proposal_id, effect.proposal_revision_id, event.event_id].every((id) => UUID.test(id))
+  return keys(event, ["schema_id", "event_kind", "event_id", "project_scope", "draft_id", "draft_revision_id", "payload_digest",
+    "prior_closure", "closure", "close_reason", "author_action_sequence", "created_at", "source"]) && receipt.result === effect.kind && [effect.proposal_id, effect.proposal_revision_id, event.event_id].every((id) => UUID.test(id))
     && same(receipt.prior_heads, input.expected_target_revisions) && same(receipt.proposal_revision_ids, [effect.proposal_revision_id])
     && same(receipt.artifact_lifecycle_event_refs, [event.event_id]) && /^[1-9][0-9]{0,19}$/.test(receipt.author_action_sequence ?? "")
     && event.schema_id === "storyos.event.editor-flow-draft-closed.v1" && event.event_kind === "editor_flow_draft_closed"
@@ -97,16 +100,26 @@ export async function readExpansionJournal(workspace: EditorWorkspace) {
     const partition = await read(workspace.database.transaction("partitions").objectStore("partitions").get(record.journal_partition_id)) as EditorWorkspace["partition"];
     const input = record.group.frozen_request_body.expand_refused_edit_draft_to_proposal_input;
     if (!partition || !same(partition.project_scope, workspace.partition.project_scope)
+      || !keys(record.group.frozen_request_body, ["command_schema", "expand_refused_edit_draft_to_proposal_input"])
+      || !keys(input, ["draft_id", "source_current_draft_revision_id", "source_draft_payload_digest", "expected_source_draft_closure",
+        "selected_payload_range", "proposal_kind", "chapter_id", "target_refs", "expected_target_revisions", "anchors", "editor_session_id",
+        "writer_generation", "client_contract_revision", "security_policy_revision", "correlation_id"], ["source_reopen_event_id"])
       || record.group.frozen_request_body.command_schema !== "storyos.command.expand-refused-edit-draft-to-proposal.request.v1"
       || input.editor_session_id !== partition.editor_session_id || input.writer_generation !== partition.writer_generation
       || input.client_contract_revision !== partition.client_contract_revision || input.security_policy_revision !== partition.security_policy_revision
       || input.expected_source_draft_closure !== "open" || input.proposal_kind !== "inline_edit" || !same(input.selected_payload_range, { kind: "whole_draft_payload" })
       || input.target_refs.length !== 1 || input.expected_target_revisions.length !== 1 || input.anchors.length !== 1
+      || input.anchors.some((anchor) => !keys(anchor, ["manuscript_block_id", "base_authoritative_revision_id", "manuscript_schema_version",
+        "coordinate_profile", "from", "to", "boundary_profile", "base_slice_digest"]) || anchor.manuscript_schema_version !== 1
+        || ![anchor.manuscript_block_id, anchor.base_authoritative_revision_id].every((id) => UUID.test(id))
+        || anchor.coordinate_profile !== "prosemirror-token-utf16.v1" || anchor.boundary_profile !== "exclusive-authoritative-edges.v1"
+        || !Number.isSafeInteger(anchor.from) || !Number.isSafeInteger(anchor.to) || anchor.from < 0 || anchor.to <= anchor.from || !/^sha256:[0-9a-f]{64}$/.test(anchor.base_slice_digest))
       || ![record.explicit_command_record_id, record.group.journal_submission_group_id, record.group.idempotency_key,
-        input.draft_id, input.source_current_draft_revision_id, input.chapter_id, input.correlation_id, ...input.target_refs, ...input.expected_target_revisions].every((id) => UUID.test(id))
+        input.draft_id, input.source_current_draft_revision_id, input.chapter_id, input.correlation_id, ...input.target_refs, ...input.expected_target_revisions, ...(input.source_reopen_event_id === undefined ? [] : [input.source_reopen_event_id])].every((id) => typeof id === "string" && UUID.test(id))
       || !/^[0-9a-f]{64}$/.test(input.source_draft_payload_digest) || !Number.isSafeInteger(record.local_intent_sequence)
       || record.local_intent_sequence < 1 || !Number.isFinite(Date.parse(record.created_at))
-      || !same(record, await recordFor(partition, record.group.frozen_request_body, { sequence: record.local_intent_sequence,
+      || ![ `expansion:${input.draft_id}:${input.source_reopen_event_id ?? "initial"}`, `expansion:${input.draft_id}:${input.source_reopen_event_id ?? "initial"}:${record.explicit_command_record_id}` ].includes(record.key)
+      || !same({ ...record, key: `expansion:${input.draft_id}:${input.source_reopen_event_id ?? "initial"}:${record.explicit_command_record_id}` }, await recordFor(partition, record.group.frozen_request_body, { sequence: record.local_intent_sequence,
         recordId: record.explicit_command_record_id, groupId: record.group.journal_submission_group_id, key: record.group.idempotency_key,
         createdAt: record.created_at }, workspace.cryptoImpl))) throw new Error("Expansion Journal unavailable");
     const observation = observations.find((value) => value.record_key === record.key);

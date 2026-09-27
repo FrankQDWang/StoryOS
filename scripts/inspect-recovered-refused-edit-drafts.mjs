@@ -60,5 +60,5 @@ for (const expected of expectations) {
     }
   }
 }
-assert.equal(restoredDrafts, 19);
-console.log("Restored nineteen public Refused Edit Drafts and the expanded Proposal: complete payloads, structure, sources, Receipts, Heads, lifecycle, and archive copies unchanged");
+assert.equal(restoredDrafts, 20);
+console.log("Restored twenty public Refused Edit Drafts and the expanded Proposal: complete payloads, structure, sources, Receipts, Heads, lifecycle, and archive copies unchanged");

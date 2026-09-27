@@ -13,6 +13,19 @@ export async function verifyProductionDraftExpansion(page: Page, projectId: stri
   await surface.locator('select[name="draft-retry-target"]').selectOption("1");
   const target = surface.locator('textarea[name="draft-target-text"]');
   await target.waitFor(); await target.click(); await page.keyboard.press("ControlOrMeta+A");
+  const sessionRoute = (url: URL) => url.pathname.includes("/editor-sessions/");
+  await page.route(sessionRoute, async (route) => {
+    const reply = await route.fetch();
+    const changed = await reply.json();
+    for (const block of changed.base_snapshot.materialized_revision.blocks) block.text = `X${block.text.slice(1)}`;
+    await route.fulfill({ response: reply, json: changed });
+  });
+  const conflict = page.waitForResponse((reply) => reply.url().endsWith(`/drafts/${draft.draft_id}/proposal-expansions`));
+  await surface.locator("button[data-draft-expand]").click();
+  assert.equal((await (await conflict).json()).effect.kind, "conflicted");
+  await page.unroute(sessionRoute);
+  await expect(surface.getByText("conflicted", { exact: true })).toBeVisible();
+  await target.click(); await page.keyboard.press("ControlOrMeta+A");
   let response: ExpandRefusedEditDraftResponse | undefined;
   let request: unknown, key = "", frozen: Record<string, unknown> | undefined;
   let committed!: () => void, failed!: (error: unknown) => void;
@@ -25,7 +38,7 @@ export async function verifyProductionDraftExpansion(page: Page, projectId: stri
       if (posts === 1) {
         request = route.request().postDataJSON(); key = route.request().headers()["idempotency-key"]!;
         frozen = (await readProductionJournal(page, projectId)).metadata!.find((row) =>
-          String(row.key).startsWith(`expansion:${draft.draft_id}:`));
+          String(row.key).startsWith(`expansion:${draft.draft_id}:`) && (row.group as { idempotency_key?: string })?.idempotency_key === key);
         assert.ok(frozen, "Expansion must be frozen before its first POST");
       } else {
         assert.deepEqual(route.request().postDataJSON(), request);
