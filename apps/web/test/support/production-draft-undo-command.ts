@@ -43,9 +43,10 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
   assert.ok(frozen, "Original Undo identity must be durable before the first POST");
   assert.ok(response);
   const event = response.effect.kind === "draft_compensated" ? response.effect.event : response.source_reopen_event;
-  assert.equal(response.effect.kind, draft.closure_event!.close_reason === "superseded" ? "compensated" : "draft_compensated");
+  const expansion = draft.closure_event!.source.command_digest.profile === "storyos.command.expandRefusedEditDraftToProposal.jcs.v1";
+  assert.equal(response.effect.kind, draft.closure_event!.close_reason === "superseded" && !expansion ? "compensated" : "draft_compensated");
   assert.ok(event);
-  if (draft.closure_event!.close_reason === "superseded") {
+  if (draft.closure_event!.close_reason === "superseded" && !expansion) {
     const source = draft.payload.author_edit_units[0]!.selection_snapshot!.ordered_selection!.sources[0]!.owner;
     if (response.proposal_revision_id != null) {
       assert.ok(source.kind === "proposal");

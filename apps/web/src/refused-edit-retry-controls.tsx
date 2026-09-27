@@ -4,9 +4,10 @@ import type { DraftPayloadPosition, RefusedEditDraftInspect }
 import type { EditorWorkspace } from "./editor-types.ts";
 import { readRetryTarget, selectedDraftBlocks, type RetryTargetRead } from "./refused-edit-retry.ts";
 
-export function RefusedEditRetryControls({ draft, workspace, baseUrl, fetchImpl, disabled, submit }: {
+export function RefusedEditRetryControls({ draft, workspace, baseUrl, fetchImpl, disabled, submit, expand }: {
   draft: RefusedEditDraftInspect; workspace: EditorWorkspace; baseUrl: string; fetchImpl: typeof fetch; disabled: boolean;
-  submit: (from: DraftPayloadPosition, to: DraftPayloadPosition, target: string, start: number, end: number, read: RetryTargetRead) => Promise<void> }) {
+  submit: (from: DraftPayloadPosition, to: DraftPayloadPosition, target: string, start: number, end: number, read: RetryTargetRead) => Promise<void>;
+  expand: (target: string, start: number, end: number, read: RetryTargetRead) => Promise<void> }) {
   const [expanded, setExpanded] = useState(false);
   const [from, setFrom] = useState({ block_index: 0, offset: 0 }), [to, setTo] = useState({ block_index: 0, offset: 0 });
   const [target, setTarget] = useState("original"), [start, setStart] = useState(0), [end, setEnd] = useState(0);
@@ -53,6 +54,11 @@ export function RefusedEditRetryControls({ draft, workspace, baseUrl, fetchImpl,
         setStart(event.currentTarget.selectionStart); setEnd(event.currentTarget.selectionEnd);
       }} /></label> : null}
     <button type="submit" data-draft-retry-submit disabled={disabled || preview === undefined || targetRead === undefined}>Retry selected range</button>
+    <button type="button" data-draft-expand disabled={disabled || target === "original" || targetRead === undefined
+      || targetRead.proposal !== undefined || start >= end} onClick={() => {
+      if (targetRead) void expand(target, start, end, targetRead)
+        .catch((error: unknown) => setError(error instanceof Error ? error.message : "Expansion unavailable"));
+    }}>Expand the whole Draft into a Proposal</button>
     <button type="button" disabled={disabled} onClick={() => setExpanded(false)}>Cancel</button>
     {error ? <p role="status">{error}</p> : null}
   </form>;

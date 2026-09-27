@@ -167,14 +167,14 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   assert.equal(download.status, 200);
   const bytes = new Uint8Array(await download.arrayBuffer());
   const entries = zipStoreFiles(bytes);
-  for (const table of ["draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events", "draft_reopen_events", "draft_reopen_receipts", "domain_receipts", "author_action_entries", "author_command_admissions"]) {
+  for (const table of ["proposals", "proposal_heads", "proposal_revisions", "proposal_operations", "proposal_anchors", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events", "draft_reopen_events", "draft_reopen_receipts", "domain_receipts", "author_action_entries", "author_command_admissions"]) {
     const restriction = table === "domain_receipts" ? " AND cardinality(draft_artifact_refs)>0"
-      : table === "author_command_admissions" ? " AND command_kind IN ('closeEditorFlowDraft','undoLatestAuthorAction')" : "";
+      : table === "author_command_admissions" ? " AND command_kind IN ('closeEditorFlowDraft','undoLatestAuthorAction','expandRefusedEditDraftToProposal')" : "";
     const expected = JSON.parse(await queryStoryOSPostgres(`SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)::text
       FROM storyos.${table} AS record WHERE owner_user_id='${USER}'::uuid AND project_id='${projectId}'::uuid${restriction}`));
     const actual = JSON.parse(new TextDecoder().decode(entries.get(`canonical/${table}.json`)))
       .filter((record: { draft_artifact_refs?: string[]; command_kind?: string }) => table === "domain_receipts"
-        ? (record.draft_artifact_refs?.length ?? 0) > 0 : table !== "author_command_admissions" || ["closeEditorFlowDraft", "undoLatestAuthorAction"].includes(record.command_kind ?? ""));
+        ? (record.draft_artifact_refs?.length ?? 0) > 0 : table !== "author_command_admissions" || ["closeEditorFlowDraft", "undoLatestAuthorAction", "expandRefusedEditDraftToProposal"].includes(record.command_kind ?? ""));
     const order = (a: Record<string, unknown>, b: Record<string, unknown>) =>
       JSON.stringify(a, Object.keys(a).sort()).localeCompare(JSON.stringify(b, Object.keys(b).sort()));
     assert.deepEqual(actual.sort(order), expected.sort(order));

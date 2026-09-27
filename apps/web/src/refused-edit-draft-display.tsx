@@ -1,5 +1,6 @@
 import { RefusedEditRetryControls } from "./refused-edit-retry-controls.tsx";
 import { retryRefusedEdit, type RetryTargetRead } from "./refused-edit-retry.ts";
+import { expandWholeDraft } from "./refused-edit-expansion.ts";
 import type { DraftPayloadPosition } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { useEffect, useRef, useState } from "react";
 import { getRefusedEditDraft } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -159,6 +160,16 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       setReads((current) => current.map((item) => item.group === group ? { group, draft, copied: true, discard: observation } : item));
     } catch { /* The fresh query is required before Copy. */ }
   }
+  async function expand(group: JournalSubmissionGroup, target: string, start: number, end: number, targetRead: RetryTargetRead) {
+    if (!workspace || busy) return;
+    const started = lifetime.current; setBusy(true); onHoldChange?.(true);
+    try {
+      const draft = await read(group);
+      await expandWholeDraft(workspace, draft, target, start, end, targetRead, baseUrl, fetchImpl, () => started === lifetime.current);
+    } finally {
+      if (started === lifetime.current) { setBusy(false); onHoldChange?.(false); onResult?.(); setRetryRefresh((value) => value + 1); }
+    }
+  }
   return reads.map(({ group, draft, copied, discard: observation }) => {
     const settled = group.settlement;
     if (settled.kind !== "zero_authority_receipt_settled" || settled.effect.kind !== "refused_to_draft") return null;
@@ -173,7 +184,8 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
         ? <button type="button" data-draft-discard disabled={busy} onClick={() => { void discard(group); }}>Discard</button> : null}
       {draft.closure === "open" && observation === undefined && settledWriter
         ? <RefusedEditRetryControls draft={draft} workspace={workspace!} baseUrl={baseUrl} fetchImpl={fetchImpl} disabled={busy}
-          submit={(from, to, target, start, end, read) => retry(group, from, to, target, start, end, read)} /> : null}
+          submit={(from, to, target, start, end, read) => retry(group, from, to, target, start, end, read)}
+          expand={(target, start, end, read) => expand(group, target, start, end, read)} /> : null}
       {retryResults[id] ? <p role="status" data-draft-retry-result>{retryResults[id]}</p> : null}
       {draft.replacement_provenance ? <p data-draft-replacement-source>Replacement of Draft {draft.replacement_provenance.source_draft_id}.
         Closure event: {draft.replacement_provenance.closure_event_ref}.</p> : null}

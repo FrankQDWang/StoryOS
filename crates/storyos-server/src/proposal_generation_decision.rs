@@ -166,17 +166,17 @@ pub(super) async fn continue_proposal_generation(
     Ok(Json(continue_response(&command, &digest_hex, settlement)))
 }
 
-struct PreparedRequest {
-    bytes: axum::body::Bytes,
-    scope: storyos_application::ProjectScope,
-    client_binding: EditorClientBinding,
-    nonce_digest: String,
+pub(super) struct PreparedRequest {
+    pub(super) bytes: axum::body::Bytes,
+    pub(super) scope: storyos_application::ProjectScope,
+    pub(super) client_binding: EditorClientBinding,
+    pub(super) nonce_digest: String,
     idempotency_key: String,
     proposal_id: String,
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn prepare_request(
+pub(super) async fn prepare_request(
     state: &ServerState,
     project_id: &str,
     proposal_id: &str,
@@ -236,7 +236,7 @@ async fn prepare_request(
     })
 }
 
-fn challenge_binding(
+pub(super) fn challenge_binding(
     prepared: &PreparedRequest,
     schema: &str,
     kind: &str,
@@ -261,7 +261,7 @@ fn challenge_binding(
     }
 }
 
-fn fresh_ids() -> AuthorCommandAdmissionIds {
+pub(super) fn fresh_ids() -> AuthorCommandAdmissionIds {
     AuthorCommandAdmissionIds {
         command_id: Uuid::now_v7().to_string(),
         author_command_admission_id: Uuid::now_v7().to_string(),

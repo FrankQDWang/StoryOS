@@ -120,6 +120,7 @@ mod delete_chapter;
 mod delete_volume;
 mod draft_retry;
 mod editor_session;
+mod expand_refused_edit_draft;
 mod export_work;
 mod get_proposal;
 mod list_projects;

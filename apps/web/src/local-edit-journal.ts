@@ -14,6 +14,7 @@ import { applyAuthorEditPrimitive } from "./author-edit-primitive.ts";
 import { validDraftRetry, validRetrySettlement } from "./draft-retry-binding.ts";
 import { readDraftUndoJournal } from "./draft-undo-journal.ts";
 import { readDiscardJournal } from "./refused-edit-discard.ts";
+import { readExpansionJournal } from "./refused-edit-expansion.ts";
 import { readAcceptanceJournal } from "./acceptance-journal.ts";
 import type {
   EditorWorkspace,
@@ -360,6 +361,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   const workingBoundary = await readJournalWorkingBoundary(transaction, workspace);
   const explicitAcceptance = await explicitAcceptancePromise;
   const explicitDiscard = await readDiscardJournal(workspace);
+  const explicitExpansion = await readExpansionJournal(workspace);
   const explicitDraftUndo = await readDraftUndoJournal(workspace);
   const schema = schemaValue as { version?: unknown } | undefined;
   const watermark = watermarkValue as JournalSnapshot["watermark"];
@@ -380,7 +382,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   groups.sort((left, right) => left.covered_sequence_range.first
     - right.covered_sequence_range.first);
   return {
-    watermark, activeBase, records, payloadChains, groups, fences, explicitAcceptance, explicitDiscard, explicitDraftUndo,
+    watermark, activeBase, records, payloadChains, groups, fences, explicitAcceptance, explicitDiscard, explicitDraftUndo, explicitExpansion,
     ...(workingBoundary ? { workingBoundary } : {}),
   };
 }
@@ -732,7 +734,8 @@ function pendingProjectionFromSnapshot(
   const pendingDiscardCount = snapshot.explicitDiscard?.filter(({ observation }) =>
     observation === undefined || observation.kind === "unresolved").length ?? 0;
   const pendingUndoCount = snapshot.explicitDraftUndo?.filter(({ observation }) => observation === undefined).length ?? 0;
-  const pendingAcceptanceCount = pendingUndoCount + pendingDiscardCount + (snapshot.explicitAcceptance?.groups.filter((group) =>
+  const pendingExpansionCount = snapshot.explicitExpansion?.filter(({ observation }) => observation === undefined).length ?? 0;
+  const pendingAcceptanceCount = pendingExpansionCount + pendingUndoCount + pendingDiscardCount + (snapshot.explicitAcceptance?.groups.filter((group) =>
     (group.settlement as { kind?: string })?.kind === "unsettled").length ?? 0);
   const resolvedSequences = new Set<number>();
   let hasZeroAuthoritySettlement = false;

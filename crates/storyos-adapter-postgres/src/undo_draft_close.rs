@@ -17,6 +17,7 @@ pub(super) struct ObservedDraftClose {
     pub close_event_id: String,
     pub kind: AuthorUndoFrontierKind,
     pub current_head_revision_id: String,
+    pub derived_proposal: Option<(String, String)>,
 }
 
 pub(super) async fn load_frontier(
@@ -29,7 +30,7 @@ pub(super) async fn load_frontier(
         closed.event_id::text, draft.current_revision_id::text, revision.payload_digest, draft.closure,
         draft.retention_state, draft.close_event_id::text,
         CASE WHEN draft.retention_state='retained' THEN revision.payload::text END,
-        head.current_revision_id::text
+        head.current_revision_id::text, receipt.command_kind
         FROM storyos.author_action_entries AS action JOIN storyos.domain_receipts AS receipt USING(owner_user_id,project_id,receipt_id)
         JOIN storyos.draft_close_events AS closed USING(owner_user_id,project_id,receipt_id,author_action_sequence)
         JOIN storyos.draft_artifacts AS draft USING(owner_user_id,project_id,draft_id)
@@ -43,6 +44,7 @@ pub(super) async fn load_frontier(
         WHERE action.owner_user_id=$1::text::uuid AND action.project_id=$2::text::uuid
         AND action.author_action_sequence=$3::text::numeric AND action.disposition='forward'
         AND ((receipt.command_kind='closeEditorFlowDraft' AND receipt.result_kind='draft_closure_changed')
+          OR (receipt.command_kind='expandRefusedEditDraftToProposal' AND receipt.result_kind='proposal_created_from_draft' AND closed.close_reason='superseded')
           OR (receipt.command_kind='applyAuthorEdit' AND closed.close_reason='superseded' AND receipt.result_kind IN ('authoritative_applied','proposal_revised')))
         FOR UPDATE OF draft", &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&sequence.to_string(),&command.editor_session_id.as_ref()])
         .await.map_err(undo_database_error)?;
@@ -52,7 +54,7 @@ pub(super) async fn load_frontier(
     let revision_id: String = row.get(1);
     let digest: String = row.get(2);
     let close_event_id: String = row.get(3);
-    let kind = if row.get::<_, String>(7) != "retained" {
+    let mut kind = if row.get::<_, String>(7) != "retained" {
         AuthorUndoFrontierKind::DraftSourceUnavailable
     } else {
         let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(9))
@@ -68,6 +70,32 @@ pub(super) async fn load_frontier(
             AuthorUndoFrontierKind::DraftBindingChanged
         }
     };
+    let derived_proposal = if row.get::<_, String>(11) == "expandRefusedEditDraftToProposal" {
+        let derived = client.query_opt("SELECT proposal.proposal_id::text, candidate.revision_id::text
+          FROM storyos.draft_close_events AS closed JOIN storyos.domain_receipts AS receipt USING(owner_user_id,project_id,receipt_id)
+          JOIN storyos.proposals AS proposal ON (proposal.owner_user_id,proposal.project_id,proposal.proposal_id::text)=
+            (receipt.owner_user_id,receipt.project_id,receipt.result_payload->>'proposal_id')
+          JOIN storyos.proposal_heads AS head ON (head.owner_user_id,head.project_id,head.proposal_id)=
+            (proposal.owner_user_id,proposal.project_id,proposal.proposal_id)
+          JOIN storyos.proposal_revisions AS candidate ON (candidate.owner_user_id,candidate.project_id,candidate.proposal_id,candidate.revision_id)=
+            (head.owner_user_id,head.project_id,head.proposal_id,head.current_revision_id)
+          WHERE closed.owner_user_id=$1::text::uuid AND closed.project_id=$2::text::uuid AND closed.event_id=$3::text::uuid
+            AND receipt.proposal_revision_ids=ARRAY[candidate.revision_id] AND candidate.closure='open' AND candidate.validation='pending'
+            AND candidate.base_authoritative_revision_id=$4::text::uuid
+            AND (proposal.source_draft_id,proposal.source_draft_revision_id,proposal.source_draft_payload_digest)=
+              (closed.draft_id,closed.revision_id,closed.payload_digest)
+            AND EXISTS(SELECT 1 FROM storyos.proposal_operations AS operation WHERE
+              (operation.owner_user_id,operation.project_id,operation.proposal_id)=(proposal.owner_user_id,proposal.project_id,proposal.proposal_id)
+              AND operation.resolution='pending' AND operation.reservation_state='unresolved') FOR UPDATE OF head,candidate",
+          &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&close_event_id,&row.get::<_,String>(10)])
+          .await.map_err(undo_database_error)?;
+        if derived.is_none() && kind == AuthorUndoFrontierKind::ReversibleDraftClose {
+            kind = AuthorUndoFrontierKind::DraftBindingChanged;
+        }
+        derived.map(|row| (row.get(0), row.get(1)))
+    } else {
+        None
+    };
     Ok(Some(ObservedDraftClose {
         sequence,
         draft_id: row.get(0),
@@ -76,6 +104,7 @@ pub(super) async fn load_frontier(
         close_event_id,
         kind,
         current_head_revision_id: row.get(10),
+        derived_proposal,
     }))
 }
 
@@ -87,6 +116,17 @@ pub(super) async fn persist_compensation(
     let scope = &command.project_scope;
     let owner = scope.owner_user_id.as_ref();
     let project = scope.project_id.as_ref();
+    if let Some((proposal, revision)) = &frontier.derived_proposal {
+        let count = client.execute("WITH withdrawn AS (UPDATE storyos.proposal_revisions SET closure='withdrawn'
+          WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND proposal_id=$3::text::uuid
+            AND revision_id=$4::text::uuid AND closure='open' RETURNING proposal_id)
+          UPDATE storyos.proposal_operations SET reservation_state='resolved' WHERE owner_user_id=$1::text::uuid
+            AND project_id=$2::text::uuid AND proposal_id IN (SELECT proposal_id FROM withdrawn)",
+          &[&owner,&project,&proposal,&revision]).await.map_err(undo_database_error)?;
+        if count != 1 {
+            return Err(UndoLatestAuthorActionError::BindingConflict);
+        }
+    }
     let row = client
         .query_one(
             "UPDATE storyos.scope_counters SET author_action_sequence=author_action_sequence+1

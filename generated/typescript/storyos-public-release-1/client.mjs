@@ -238,6 +238,22 @@ export async function closeEditorFlowDraft({ projectId, draftId, request, idempo
   return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/drafts/${encodeURIComponent(draftId)}/closures`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
+export async function digestExpandRefusedEditDraft(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestExpandRefusedEditDraft requires request");
+  const canonical = canonicalJson(request);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.expandRefusedEditDraftToProposal.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+
+export async function expandRefusedEditDraftToProposal({ projectId, draftId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("expandRefusedEditDraftToProposal requires projectId");
+  if (typeof draftId !== "string" || draftId.length === 0) throw new TypeError("expandRefusedEditDraftToProposal requires draftId");
+  if (!request || typeof request !== "object") throw new TypeError("expandRefusedEditDraftToProposal requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("expandRefusedEditDraftToProposal requires security bindings");
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/drafts/${encodeURIComponent(draftId)}/proposal-expansions`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+}
+
 export async function digestAcceptProposal(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestAcceptProposal requires request");
   const canonical = canonicalJson(request);

@@ -243,7 +243,12 @@ pub(super) fn closed_event(
     payload_digest: &str,
     closed: &storyos_application::RefusedEditDraftClosure,
 ) -> Result<contracts::EditorFlowDraftClosed, ApiError> {
-    let profile = if closed.close_reason == "superseded" {
+    let profile = if closed
+        .command_digest
+        .starts_with("sha256:storyos.command.expandRefusedEditDraftToProposal.jcs.v1:")
+    {
+        contracts::EXPAND_REFUSED_EDIT_DRAFT_DIGEST_PROFILE
+    } else if closed.close_reason == "superseded" {
         "storyos.command.applyAuthorEdit.jcs.v1"
     } else {
         contracts::CLOSE_EDITOR_FLOW_DRAFT_DIGEST_PROFILE

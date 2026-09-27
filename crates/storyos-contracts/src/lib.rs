@@ -354,6 +354,14 @@ pub use release1_refused_edit_draft::{
 };
 
 mod release1_close_editor_flow_draft;
+mod release1_expand_refused_edit_draft;
+mod release1_expand_refused_edit_draft_artifacts;
+pub use release1_expand_refused_edit_draft::{
+    EXPAND_REFUSED_EDIT_DRAFT_DIGEST_PROFILE, EXPAND_REFUSED_EDIT_DRAFT_PATH,
+    EXPAND_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID, EXPAND_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID,
+    ExpandRefusedEditDraftEffect, ExpandRefusedEditDraftInput, ExpandRefusedEditDraftRequest,
+    ExpandRefusedEditDraftResponse, WholeDraftPayload,
+};
 mod release1_close_editor_flow_draft_artifacts;
 pub use release1_close_editor_flow_draft::{
     CLOSE_EDITOR_FLOW_DRAFT_DIGEST_PROFILE, CLOSE_EDITOR_FLOW_DRAFT_PATH,

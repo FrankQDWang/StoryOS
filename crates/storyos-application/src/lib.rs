@@ -545,7 +545,12 @@ pub async fn open_current_chapter(
 mod tests;
 
 mod close_editor_flow_draft;
+mod expand_refused_edit_draft;
 pub use close_editor_flow_draft::{
     CloseEditorFlowDraftCommand, CloseEditorFlowDraftStore, DraftCloseError, DraftCloseSettlement,
     close_editor_flow_draft,
+};
+pub use expand_refused_edit_draft::{
+    DraftExpansionSettlement, ExpandRefusedEditDraftCommand, ExpandRefusedEditDraftStore,
+    expand_refused_edit_draft,
 };
