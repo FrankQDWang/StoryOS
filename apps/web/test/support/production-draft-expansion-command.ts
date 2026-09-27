@@ -9,10 +9,6 @@ import { verifyProductionDraftUndo } from "./production-draft-undo-command.ts";
 export async function verifyProductionDraftExpansion(page: Page, projectId: string,
   draft: RefusedEditDraftInspect, restart: () => Promise<void>): Promise<RefusedEditDraftInspect> {
   const surface = page.locator(`[data-refused-edit-draft="${draft.draft_id}"]`);
-  await surface.locator("button[data-draft-retry]").click();
-  await surface.locator('select[name="draft-retry-target"]').selectOption("1");
-  const target = surface.locator('textarea[name="draft-target-text"]');
-  await target.waitFor(); await target.click(); await page.keyboard.press("ControlOrMeta+A");
   const sessionRoute = (url: URL) => url.pathname.includes("/editor-sessions/");
   await page.route(sessionRoute, async (route) => {
     const reply = await route.fetch();
@@ -20,11 +16,17 @@ export async function verifyProductionDraftExpansion(page: Page, projectId: stri
     for (const block of changed.base_snapshot.materialized_revision.blocks) block.text = `X${block.text.slice(1)}`;
     await route.fulfill({ response: reply, json: changed });
   });
+  await surface.locator("button[data-draft-retry]").click();
+  await surface.locator('select[name="draft-retry-target"]').selectOption("1");
+  const target = surface.locator('textarea[name="draft-target-text"]');
+  await target.waitFor(); await target.click(); await page.keyboard.press("ControlOrMeta+A");
   const conflict = page.waitForResponse((reply) => reply.url().endsWith(`/drafts/${draft.draft_id}/proposal-expansions`));
   await surface.locator("button[data-draft-expand]").click();
   assert.equal((await (await conflict).json()).effect.kind, "conflicted");
   await page.unroute(sessionRoute);
-  await expect(surface.getByText("conflicted", { exact: true })).toBeVisible();
+  await expect.poll(async () => (await readProductionJournal(page, projectId)).metadata!.filter((row) => String(row.key).startsWith("expansion-observation:")).length).toBe(1);
+  await surface.locator('select[name="draft-retry-target"]').selectOption("original");
+  await surface.locator('select[name="draft-retry-target"]').selectOption("1");
   await target.click(); await page.keyboard.press("ControlOrMeta+A");
   let response: ExpandRefusedEditDraftResponse | undefined;
   let request: unknown, key = "", frozen: Record<string, unknown> | undefined;
