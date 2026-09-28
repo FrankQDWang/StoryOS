@@ -60,6 +60,7 @@ pub enum WithdrawProposalCause {
 pub struct WithdrawProposalInput {
     pub cause: WithdrawProposalCause,
     pub proposal_revision_id: String,
+    pub expected_closure: String,
     pub expected_target_revisions: Vec<String>,
     pub withdrawal_reason: ProposalWithdrawalReason,
     pub editor_session_id: String,

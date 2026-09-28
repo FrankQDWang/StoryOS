@@ -23,6 +23,7 @@ pub struct WithdrawProposalCommand {
     pub editor_session_id: EditorSessionId,
     pub proposal_id: String,
     pub proposal_revision_id: String,
+    pub expected_closure: String,
     pub expected_authoritative_revision_id: String,
     pub withdrawal_note: WithdrawalNote,
 }
@@ -129,6 +130,7 @@ pub async fn withdraw_proposal(
         || challenge.command_schema != storyos_contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID
         || command.proposal_id.is_empty()
         || command.proposal_revision_id.is_empty()
+        || command.expected_closure != "open"
         || command.expected_authoritative_revision_id.is_empty()
     {
         return Err(WithdrawProposalError::BindingConflict);

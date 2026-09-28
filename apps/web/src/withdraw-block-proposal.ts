@@ -151,6 +151,7 @@ export async function withdrawDisplayedBlockProposal(options: WithdrawTarget): P
         withdraw_proposal_input: {
           cause: "author",
           proposal_revision_id: options.proposalRevisionId,
+          expected_closure: "open",
           expected_target_revisions: [options.targetRevisionId],
           withdrawal_reason: { kind: "author_withdrew", note: { kind: "omitted" } },
           editor_session_id: workspace.partition.editor_session_id,

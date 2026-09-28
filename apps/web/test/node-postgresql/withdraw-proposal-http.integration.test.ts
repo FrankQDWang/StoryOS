@@ -15,7 +15,7 @@ test("author withdraw closes the current Proposal without changing authority", a
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("e8e00111"), "Withdraw Proposal Novel", "e8e2");
+    const prepared = await prepare(started.baseUrl, id("e8f00111"), "Withdraw Proposal Novel", "e8f2");
     const before = await getChapter({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
@@ -23,7 +23,7 @@ test("author withdraw closes the current Proposal without changing authority", a
       fetchImpl: prepared.fetchImpl,
     });
     const queried = await admitProse(
-      started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("e8e00131"),
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("e8f00131"),
     );
     assert.equal(queried.decision.kind, "prose_change");
     if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") {
@@ -42,7 +42,7 @@ test("author withdraw closes the current Proposal without changing authority", a
         availability: "unavailable",
         expected_assistance_revision: "1",
         ...BINDING,
-        correlation_id: id("e8e00141"),
+        correlation_id: id("e8f00141"),
       },
     };
     const stopped = await challenged(
@@ -53,12 +53,12 @@ test("author withdraw closes the current Proposal without changing authority", a
       "/api/v1/projects/{project_id}/assistance",
       assistanceRequest.command_schema,
       await digestUpdateProjectAssistance(assistanceRequest),
-      id("e8e00143"),
+      id("e8f00143"),
       (antiForgery) => updateProjectAssistance({
         baseUrl: started.baseUrl,
         projectId: prepared.projectId,
         fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("e8e00143"),
+        idempotencyKey: id("e8f00143"),
         antiForgery,
         request: assistanceRequest,
       }),
@@ -78,7 +78,7 @@ test("author withdraw closes the current Proposal without changing authority", a
     const sessionRequest = {
       command_schema: "storyos.command.create-editor-session.request.v1" as const,
       ...BINDING,
-      correlation_id: id("e8e00151"),
+      correlation_id: id("e8f00151"),
     };
     const session = await challenged(
       started.baseUrl,
@@ -88,12 +88,12 @@ test("author withdraw closes the current Proposal without changing authority", a
       "/api/v1/projects/{project_id}/editor-sessions",
       sessionRequest.command_schema,
       await digestCreateEditorSession(sessionRequest),
-      id("e8e00152"),
+      id("e8f00152"),
       (antiForgery) => createEditorSession({
         baseUrl: started.baseUrl,
         projectId: prepared.projectId,
         fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("e8e00152"),
+        idempotencyKey: id("e8f00152"),
         antiForgery,
         request: sessionRequest,
       }),
@@ -103,11 +103,12 @@ test("author withdraw closes the current Proposal without changing authority", a
       withdraw_proposal_input: {
         cause: "author",
         proposal_revision_id: opened.proposal.revision_id,
+        expected_closure: "open",
         expected_target_revisions: [before.chapter.current_revision.revision_id],
         withdrawal_reason: { kind: "author_withdrew", note: { kind: "omitted" } },
         editor_session_id: session.editor_session.editor_session_id,
         ...BINDING,
-        correlation_id: id("e8e00161"),
+        correlation_id: id("e8f00161"),
       },
     };
     const withdrawn = await challenged(
@@ -118,13 +119,13 @@ test("author withdraw closes the current Proposal without changing authority", a
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals",
       withdrawRequest.command_schema,
       await digestWithdrawProposal(withdrawRequest),
-      id("e8e00162"),
+      id("e8f00162"),
       (antiForgery) => withdrawProposal({
         baseUrl: started.baseUrl,
         projectId: prepared.projectId,
         proposalId: opened.proposal.proposal_id,
         fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("e8e00162"),
+        idempotencyKey: id("e8f00162"),
         antiForgery,
         request: withdrawRequest,
       }),
@@ -161,13 +162,13 @@ test("author withdraw closes the current Proposal without changing authority", a
         "/api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals",
         withdrawRequest.command_schema,
         foreignDigest,
-        id("e8e00181"),
+        id("e8f00181"),
         (antiForgery) => withdrawProposal({
           baseUrl: started.baseUrl,
           projectId: prepared.projectId,
           proposalId: opened.proposal.proposal_id,
           fetchImpl: foreignFetch,
-          idempotencyKey: id("e8e00181"),
+          idempotencyKey: id("e8f00181"),
           antiForgery,
           request: withdrawRequest,
         }),
@@ -181,7 +182,7 @@ test("author withdraw closes the current Proposal without changing authority", a
       ...withdrawRequest,
       withdraw_proposal_input: {
         ...withdrawRequest.withdraw_proposal_input,
-        correlation_id: id("e8e00171"),
+        correlation_id: id("e8f00171"),
       },
     };
     const again = await challenged(
@@ -192,13 +193,13 @@ test("author withdraw closes the current Proposal without changing authority", a
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals",
       againRequest.command_schema,
       await digestWithdrawProposal(againRequest),
-      id("e8e00172"),
+      id("e8f00172"),
       (antiForgery) => withdrawProposal({
         baseUrl: started.baseUrl,
         projectId: prepared.projectId,
         proposalId: opened.proposal.proposal_id,
         fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("e8e00172"),
+        idempotencyKey: id("e8f00172"),
         antiForgery,
         request: againRequest,
       }),

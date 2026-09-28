@@ -360,7 +360,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/withdraw-proposal-request.schema.json",
       "schema_id": "storyos.command.withdraw-proposal.request.v1",
-      "sha256": "sha256:d343707cc6d4b7db4de0464ed6aed5aa4880082c020d8e13088456a04655725a"
+      "sha256": "sha256:78a6d49e1b5140ea55e8b17c170f2a4870635e56ba8ff87adff81b592f29a27d"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/withdraw-proposal-response.schema.json",

@@ -78,6 +78,10 @@
           "format": "uuid",
           "type": "string"
         },
+        "expected_closure": {
+          "const": "open",
+          "type": "string"
+        },
         "expected_target_revisions": {
           "items": {
             "type": "string"
@@ -98,6 +102,7 @@
       "required": [
         "cause",
         "proposal_revision_id",
+        "expected_closure",
         "expected_target_revisions",
         "withdrawal_reason",
         "editor_session_id",

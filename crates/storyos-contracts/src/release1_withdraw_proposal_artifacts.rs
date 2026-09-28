@@ -28,6 +28,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
     schema["properties"]["command_schema"]["const"] = json!(WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID);
     let input = &mut schema["$defs"]["WithdrawProposalInput"]["properties"];
     input["proposal_revision_id"]["format"] = json!("uuid");
+    input["expected_closure"]["const"] = json!("open");
     input["editor_session_id"]["format"] = json!("uuid");
     input["correlation_id"]["format"] = json!("uuid");
     json_bytes(&schema)

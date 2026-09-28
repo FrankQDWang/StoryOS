@@ -589,7 +589,7 @@ export type WithdrawProposalCause = "author";
 
 export type ProposalWithdrawalReason = { "kind": "author_withdrew", note: BoundedAuthorNote, };
 
-export type WithdrawProposalInput = { cause: WithdrawProposalCause, proposal_revision_id: string, expected_target_revisions: Array<string>, withdrawal_reason: ProposalWithdrawalReason, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type WithdrawProposalInput = { cause: WithdrawProposalCause, proposal_revision_id: string, expected_closure: string, expected_target_revisions: Array<string>, withdrawal_reason: ProposalWithdrawalReason, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type WithdrawProposalRequest = { command_schema: string, withdraw_proposal_input: WithdrawProposalInput, };
 

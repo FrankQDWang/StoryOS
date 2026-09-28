@@ -41,6 +41,7 @@ pub(super) async fn withdraw_proposal(
         || input.client_contract_revision != session.client_contract_revision
         || input.security_policy_revision != session.security_policy_revision
         || input.cause != contracts::WithdrawProposalCause::Author
+        || input.expected_closure != "open"
         || input.expected_target_revisions.len() != 1
     {
         return Err(invalid_request());
@@ -120,6 +121,7 @@ pub(super) async fn withdraw_proposal(
         editor_session_id: EditorSessionId::new(input.editor_session_id.clone()),
         proposal_id,
         proposal_revision_id: input.proposal_revision_id.clone(),
+        expected_closure: input.expected_closure.clone(),
         expected_authoritative_revision_id,
         withdrawal_note,
     };
