@@ -63,6 +63,8 @@ mod release1_reject_proposal_operations;
 mod release1_reject_proposal_operations_artifacts;
 mod release1_reopen_rejected_operations;
 mod release1_reopen_rejected_operations_artifacts;
+mod release1_reopen_withdrawn_proposal;
+mod release1_reopen_withdrawn_proposal_artifacts;
 mod release1_replan_proposal;
 mod release1_replan_proposal_artifacts;
 mod release1_set_current_chapter;
@@ -297,6 +299,15 @@ pub use release1_reopen_rejected_operations::{
     ReopenRejectedOperationsConflictReason, ReopenRejectedOperationsEffect,
     ReopenRejectedOperationsInput, ReopenRejectedOperationsRefusalReason,
     ReopenRejectedOperationsRequest, ReopenRejectedOperationsResponse,
+};
+pub use release1_reopen_withdrawn_proposal::{
+    REOPEN_WITHDRAWN_PROPOSAL_DIGEST_PROFILE, REOPEN_WITHDRAWN_PROPOSAL_METHOD,
+    REOPEN_WITHDRAWN_PROPOSAL_PATH, REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
+    REOPEN_WITHDRAWN_PROPOSAL_RESPONSE_SCHEMA_ID, ReopenWithdrawnProposalConflictReason,
+    ReopenWithdrawnProposalEffect, ReopenWithdrawnProposalInput,
+    ReopenWithdrawnProposalNoEffectReason, ReopenWithdrawnProposalRefusalReason,
+    ReopenWithdrawnProposalRequest, ReopenWithdrawnProposalResponse, ReopenWithdrawnReceipt,
+    ReopenWithdrawnReceiptResult,
 };
 pub use release1_replan_proposal::{
     REPLAN_PROPOSAL_DIGEST_PROFILE, REPLAN_PROPOSAL_METHOD, REPLAN_PROPOSAL_PATH,

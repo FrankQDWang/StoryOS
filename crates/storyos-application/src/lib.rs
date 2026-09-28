@@ -69,6 +69,7 @@ mod readable_export;
 mod readable_export_work;
 mod reject_proposal_operations;
 mod reopen_rejected_operations;
+mod reopen_withdrawn_proposal;
 mod replan_proposal;
 mod set_current_chapter;
 mod snapshot;
@@ -224,6 +225,11 @@ pub use reopen_rejected_operations::{
     ReopenRejectedOperationsCommand, ReopenRejectedOperationsError,
     ReopenRejectedOperationsSettlement, ReopenRejectedOperationsSettlementEffect,
     ReopenRejectedOperationsStore, reopen_rejected_operations,
+};
+pub use reopen_withdrawn_proposal::{
+    ReopenWithdrawnProposalCommand, ReopenWithdrawnProposalError,
+    ReopenWithdrawnProposalSettlement, ReopenWithdrawnProposalSettlementEffect,
+    ReopenWithdrawnProposalStore, reopen_withdrawn_proposal,
 };
 pub use replan_proposal::{
     ReplanProposalCommand, ReplanProposalError, ReplanProposalSettlement,

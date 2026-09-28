@@ -22,6 +22,7 @@
     "reopenRejectedOperations",
     "replanProposal",
     "withdrawProposal",
+    "reopenWithdrawnProposal",
     "completeReadyPartialProposal",
     "continueProposalGeneration",
     "archiveProject",
@@ -346,6 +347,16 @@
       "path": "generated/json-schema/storyos-public-release-1/reopen-rejected-operations-response.schema.json",
       "schema_id": "storyos.command.reopen-rejected-operations.response.v1",
       "sha256": "sha256:e0e2faf48c1c35da9b1b6f3ba4efe3a10bacbf3e080dcfb87a73a5d352f0b971"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/reopen-withdrawn-proposal-request.schema.json",
+      "schema_id": "storyos.command.reopen-withdrawn-proposal.request.v1",
+      "sha256": "sha256:cf9b2db58eb7c2d2d5ba2af59156c9ff76833af58b5673828a4ae4ea4e432c56"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/reopen-withdrawn-proposal-response.schema.json",
+      "schema_id": "storyos.command.reopen-withdrawn-proposal.response.v1",
+      "sha256": "sha256:e936581790648ebf674ae6e4a6fc4551dfda3c0014a3fefa5cd3e9acff81c61a"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/replan-proposal-request.schema.json",

@@ -6,6 +6,7 @@ pub(super) enum ObservedFrontier {
     Structure(ObservedStructureFrontier),
     CurrentChapter(ObservedCurrentChapterFrontier),
     Proposal(crate::author_edit_proposal::ObservedProposalFrontier),
+    AuthorWithdrawal(crate::undo_withdrawal::ObservedAuthorWithdrawal),
     DraftClose(crate::undo_draft_close::ObservedDraftClose),
     Barrier { sequence: u64 },
 }
@@ -164,6 +165,16 @@ pub(super) async fn load_observed_frontier(
                 return Ok(LoadedUndoFrontier {
                     lifecycle_state: row.get(0),
                     observed: Some(ObservedFrontier::DraftClose(frontier)),
+                });
+            }
+            if row.get::<_, Option<String>>(11).as_deref() == Some("withdrawProposal")
+                && let Some(frontier) =
+                    crate::undo_withdrawal::load_author_withdrawal(client, command, sequence)
+                        .await?
+            {
+                return Ok(LoadedUndoFrontier {
+                    lifecycle_state: row.get(0),
+                    observed: Some(ObservedFrontier::AuthorWithdrawal(frontier)),
                 });
             }
             match crate::author_edit_proposal::load_proposal_frontier(
@@ -417,6 +428,7 @@ impl ObservedFrontier {
             Self::Structure(frontier) => frontier.sequence,
             Self::CurrentChapter(frontier) => frontier.sequence,
             Self::Proposal(frontier) => frontier.sequence,
+            Self::AuthorWithdrawal(frontier) => frontier.sequence,
             Self::DraftClose(frontier) => frontier.sequence,
             Self::Barrier { sequence } => *sequence,
         }
@@ -427,9 +439,10 @@ impl ObservedFrontier {
             Self::Prose(frontier) => AuthorUndoFrontierKind::ReversibleDirectAuthorAction {
                 resulting_revision_id: frontier.resulting_revision_id.clone(),
             },
-            Self::Structure(_) | Self::CurrentChapter(_) | Self::Proposal(_) => {
-                AuthorUndoFrontierKind::ReversibleStructureTransition
-            }
+            Self::Structure(_)
+            | Self::CurrentChapter(_)
+            | Self::Proposal(_)
+            | Self::AuthorWithdrawal(_) => AuthorUndoFrontierKind::ReversibleStructureTransition,
             Self::DraftClose(frontier) => frontier.kind.clone(),
             Self::Barrier { .. } => AuthorUndoFrontierKind::Barrier,
         }
@@ -441,6 +454,7 @@ impl ObservedFrontier {
             Self::Structure(_)
             | Self::CurrentChapter(_)
             | Self::Proposal(_)
+            | Self::AuthorWithdrawal(_)
             | Self::Barrier { .. } => None,
             Self::DraftClose(frontier) => Some(frontier.current_head_revision_id.as_str()),
         }
