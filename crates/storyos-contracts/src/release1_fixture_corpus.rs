@@ -63,6 +63,8 @@ use crate::release1_reject_proposal_operations::REJECT_PROPOSAL_OPERATIONS;
 use crate::release1_reject_proposal_operations_artifacts as reject_proposal_operations_artifacts;
 use crate::release1_reopen_rejected_operations::REOPEN_REJECTED_OPERATIONS;
 use crate::release1_reopen_rejected_operations_artifacts as reopen_rejected_operations_artifacts;
+use crate::release1_reopen_withdrawn_proposal::REOPEN_WITHDRAWN_PROPOSAL;
+use crate::release1_reopen_withdrawn_proposal_artifacts as reopen_withdrawn_proposal_artifacts;
 use crate::release1_replan_proposal::REPLAN_PROPOSAL;
 use crate::release1_replan_proposal_artifacts as replan_proposal_artifacts;
 use crate::release1_set_current_chapter::SET_CURRENT_CHAPTER;
@@ -502,6 +504,15 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| replan_proposal_artifacts::fixture_bytes(),
             |_profile| replan_proposal_artifacts::invalid_fixture_bytes(),
             |_profile| replan_proposal_artifacts::boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        reopen_withdrawn_proposal_artifacts::FIXTURE_PATHS,
+        &REOPEN_WITHDRAWN_PROPOSAL,
+        [
+            |_profile| reopen_withdrawn_proposal_artifacts::fixture_bytes(),
+            |_profile| reopen_withdrawn_proposal_artifacts::invalid_fixture_bytes(),
+            |_profile| reopen_withdrawn_proposal_artifacts::boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

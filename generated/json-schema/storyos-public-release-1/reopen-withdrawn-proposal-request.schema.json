@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "ReopenWithdrawnProposalInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "editor_session_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_closure": {
+          "const": "withdrawn",
+          "type": "string"
+        },
+        "expected_target_revisions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "proposal_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        },
+        "withdrawal_event_ref": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_revision_id",
+        "withdrawal_event_ref",
+        "expected_closure",
+        "expected_target_revisions",
+        "editor_session_id",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.reopen-withdrawn-proposal.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.reopen-withdrawn-proposal.request.v1",
+      "type": "string"
+    },
+    "reopen_withdrawn_proposal_input": {
+      "$ref": "#/$defs/ReopenWithdrawnProposalInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "reopen_withdrawn_proposal_input"
+  ],
+  "title": "StoryOS Reopen Withdrawn Proposal Request",
+  "type": "object"
+}

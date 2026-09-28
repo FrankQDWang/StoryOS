@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:d7a0bb0933d0602519c15761215270ac88420d34811974847eee47e4bb4b5712",
+  "corpus_digest": "sha256:fd923d83451437478f7f955ead85dad86a7ac6e0b537dcdd25ebf365cd8a6a4e",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -102,6 +102,9 @@
       "generated/golden-wire/storyos-public-release-1/replan-proposal.json",
       "generated/golden-wire/storyos-public-release-1/replan-proposal.invalid.json",
       "generated/golden-wire/storyos-public-release-1/replan-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.boundary.json",
       "generated/golden-wire/storyos-public-release-1/withdraw-proposal.json",
       "generated/golden-wire/storyos-public-release-1/withdraw-proposal.invalid.json",
       "generated/golden-wire/storyos-public-release-1/withdraw-proposal.boundary.json",
@@ -749,6 +752,24 @@
       "fixture_id": "storyos.golden.replanProposal.boundary.v1",
       "operation_id": "replanProposal",
       "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.reopenWithdrawnProposal.positive.v1",
+      "operation_id": "reopenWithdrawnProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.reopenWithdrawnProposal.invalid.v1",
+      "operation_id": "reopenWithdrawnProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.reopenWithdrawnProposal.boundary.v1",
+      "operation_id": "reopenWithdrawnProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.boundary.json"
     },
     {
       "classification": "positive",

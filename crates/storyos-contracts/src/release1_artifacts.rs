@@ -85,6 +85,8 @@ use crate::release1_reject_proposal_operations::REJECT_PROPOSAL_OPERATIONS;
 use crate::release1_reject_proposal_operations_artifacts as reject_proposal_operations_artifacts;
 use crate::release1_reopen_rejected_operations::REOPEN_REJECTED_OPERATIONS;
 use crate::release1_reopen_rejected_operations_artifacts as reopen_rejected_operations_artifacts;
+use crate::release1_reopen_withdrawn_proposal::REOPEN_WITHDRAWN_PROPOSAL;
+use crate::release1_reopen_withdrawn_proposal_artifacts as reopen_withdrawn_proposal_artifacts;
 use crate::release1_replan_proposal::REPLAN_PROPOSAL;
 use crate::release1_replan_proposal_artifacts as replan_proposal_artifacts;
 use crate::release1_set_current_chapter::SET_CURRENT_CHAPTER;
@@ -178,7 +180,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:e99b950b8f713a20359dff39f614032a8cbac9ad1131fcd5e9d84d09e1608691";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:77f066c35b8880352f35c911736c9a603dade3429b127b91287877d02c127f94";
+    "sha256:f3ae9abb851f0602506dbdd351fe1387621e30c591e00b1936492e50972c007b";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -315,6 +317,10 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
         reopen_rejected_operations_artifacts::request_schema_bytes();
     let reopen_rejected_operations_response_schema =
         reopen_rejected_operations_artifacts::response_schema_bytes();
+    let reopen_withdrawn_proposal_request_schema =
+        reopen_withdrawn_proposal_artifacts::request_schema_bytes();
+    let reopen_withdrawn_proposal_response_schema =
+        reopen_withdrawn_proposal_artifacts::response_schema_bytes();
     let replan_proposal_request_schema = replan_proposal_artifacts::request_schema_bytes();
     let replan_proposal_response_schema = replan_proposal_artifacts::response_schema_bytes();
     let withdraw_proposal_request_schema = withdraw_proposal_artifacts::request_schema_bytes();
@@ -635,6 +641,16 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             crate::REOPEN_REJECTED_OPERATIONS_RESPONSE_SCHEMA_ID,
             reopen_rejected_operations_artifacts::RESPONSE_SCHEMA_PATH,
             reopen_rejected_operations_response_schema,
+        ),
+        (
+            crate::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
+            reopen_withdrawn_proposal_artifacts::REQUEST_SCHEMA_PATH,
+            reopen_withdrawn_proposal_request_schema,
+        ),
+        (
+            crate::REOPEN_WITHDRAWN_PROPOSAL_RESPONSE_SCHEMA_ID,
+            reopen_withdrawn_proposal_artifacts::RESPONSE_SCHEMA_PATH,
+            reopen_withdrawn_proposal_response_schema,
         ),
         (
             crate::REPLAN_PROPOSAL_REQUEST_SCHEMA_ID,
@@ -1022,6 +1038,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             command_operation_graph(&REOPEN_REJECTED_OPERATIONS, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "selected_rejected_operations", "matching_rejection_event_refs", "expected_target_revisions", "explicit_editor_control"]),
             command_operation_graph(&REPLAN_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "exact_conflict_or_recovery_conflict_source", "expected_current_proposal_head", "expected_current_target_revisions", "explicit_editor_control"]),
             command_operation_graph(&WITHDRAW_PROPOSAL, &["proposal_scope_join", "current_open_proposal_revision", "expected_target_revisions", "author_or_exact_current_producer_cause"]),
+            command_operation_graph(&REOPEN_WITHDRAWN_PROPOSAL, &["proposal_scope_join", "current_closure_withdrawn", "exact_withdrawal_event_ref", "expected_target_revisions"]),
             command_operation_graph(&COMPLETE_READY_PARTIAL_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_ready_partial_generation", "expected_candidate_digest", "last_applied_stream_seq", "expected_target_revisions", "explicit_editor_control"]),
             command_operation_graph(&CONTINUE_PROPOSAL_GENERATION, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_generation_ready_partial_or_ready", "prior_generation_id", "expected_candidate_digest", "selected_pending_operations", "expected_target_revisions", "explicit_editor_control"]),
             command_operation_graph(&ARCHIVE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_not_deleted"]),
@@ -1158,6 +1175,7 @@ fn openapi_bytes() -> Vec<u8> {
     paths.push_str(&reopen_rejected_operations_artifacts::openapi());
     paths.push_str(&replan_proposal_artifacts::openapi());
     paths.push_str(&withdraw_proposal_artifacts::openapi());
+    paths.push_str(&reopen_withdrawn_proposal_artifacts::openapi());
     paths.push_str(&proposal_generation_decision_artifacts::openapi());
     paths.push_str(&archive_project_artifacts::openapi());
     paths.push_str(&create_volume_artifacts::openapi());
@@ -1361,6 +1379,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         REOPEN_REJECTED_OPERATIONS.operation_id,
         REPLAN_PROPOSAL.operation_id,
         WITHDRAW_PROPOSAL.operation_id,
+        REOPEN_WITHDRAWN_PROPOSAL.operation_id,
         COMPLETE_READY_PARTIAL_PROPOSAL.operation_id,
         CONTINUE_PROPOSAL_GENERATION.operation_id,
         ARCHIVE_PROJECT.operation_id,
@@ -1414,6 +1433,8 @@ fn typescript_client_bytes() -> Vec<u8> {
         reopen_rejected_operations_artifacts::typescript_client_source();
     let replan_proposal_client = replan_proposal_artifacts::typescript_client_source();
     let withdraw_proposal_client = withdraw_proposal_artifacts::typescript_client_source();
+    let reopen_withdrawn_proposal_client =
+        reopen_withdrawn_proposal_artifacts::typescript_client_source();
     let author_edit_client = author_edit_artifacts::typescript_client_source();
     let author_edit_outcome_client = author_edit_outcome_artifacts::typescript_client_source();
     format!(concat!(
@@ -1482,7 +1503,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -1518,6 +1539,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         reopen_rejected_operations_client,
         replan_proposal_client,
         withdraw_proposal_client,
+        reopen_withdrawn_proposal_client,
         proposal_generation_decision_artifacts::typescript_client_source(),
         archive_project_client,
         create_volume_client,
@@ -1613,6 +1635,8 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str("\n\n");
     declaration.push_str(&withdraw_proposal_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
+    declaration.push_str(&reopen_withdrawn_proposal_artifacts::typescript_type_declarations());
+    declaration.push_str("\n\n");
     declaration.push_str(&proposal_generation_decision_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
     declaration.push_str(
@@ -1644,6 +1668,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(reopen_rejected_operations_artifacts::typescript_declarations());
     declaration.push_str(replan_proposal_artifacts::typescript_declarations());
     declaration.push_str(withdraw_proposal_artifacts::typescript_declarations());
+    declaration.push_str(reopen_withdrawn_proposal_artifacts::typescript_declarations());
     declaration.push_str(proposal_generation_decision_artifacts::typescript_declarations());
     declaration.push_str(archive_project_artifacts::typescript_declarations());
     declaration.push_str(create_volume_artifacts::typescript_declarations());
@@ -1945,6 +1970,10 @@ mod reopen_rejected_operations_tests;
 #[cfg(test)]
 #[path = "release1_replan_proposal_artifacts_tests.rs"]
 mod replan_proposal_tests;
+
+#[cfg(test)]
+#[path = "release1_reopen_withdrawn_proposal_artifacts_tests.rs"]
+mod reopen_withdrawn_proposal_tests;
 
 #[cfg(test)]
 #[path = "release1_withdraw_proposal_artifacts_tests.rs"]

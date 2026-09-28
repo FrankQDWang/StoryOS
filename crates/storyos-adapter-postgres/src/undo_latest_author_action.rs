@@ -139,6 +139,10 @@ async fn persist_undo(
             Some(frontier.chapter_id.as_str()),
             Some(command.expected_authoritative_revision_id.as_str()),
         ),
+        Some(ObservedFrontier::AuthorWithdrawal(frontier)) => (
+            Some(frontier.chapter_id.as_str()),
+            Some(command.expected_authoritative_revision_id.as_str()),
+        ),
         Some(
             ObservedFrontier::Structure(_)
             | ObservedFrontier::CurrentChapter(_)
@@ -183,6 +187,15 @@ async fn persist_undo(
             }
             Some(ObservedFrontier::Proposal(frontier)) => {
                 crate::undo_proposal::persist_proposal_compensation(
+                    client,
+                    command,
+                    frontier,
+                    source_sequence,
+                )
+                .await
+            }
+            Some(ObservedFrontier::AuthorWithdrawal(frontier)) => {
+                crate::undo_withdrawal::persist_withdrawal_compensation(
                     client,
                     command,
                     frontier,
@@ -954,7 +967,23 @@ async fn read_undo_settlement(
                     .parse()
                     .map_err(undo_parse_error)?;
                 let authoritative_commit_id = row.get::<_, Option<String>>(8);
-                if row.get::<_, Option<String>>(18).as_deref() == Some("proposal_revised") {
+                let source_result_kind = row.get::<_, Option<String>>(18);
+                if source_result_kind.as_deref() == Some("proposal_closure_changed") {
+                    let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
+                        .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
+                    let proposal_revision_id = payload["proposal_revision_id"]
+                        .as_str()
+                        .map(str::to_owned);
+                    if proposal_revision_id.is_none() {
+                        return Err(UndoLatestAuthorActionError::BindingConflict);
+                    }
+                    UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
+                        source_sequence,
+                        author_action_sequence,
+                        proposal_revision_id,
+                        author_undo_frontier_sequence: current_frontier,
+                    }
+                } else if source_result_kind.as_deref() == Some("proposal_revised") {
                     let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
                         .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
                     let proposal_revision_id = row.get::<_, Option<String>>(19);
