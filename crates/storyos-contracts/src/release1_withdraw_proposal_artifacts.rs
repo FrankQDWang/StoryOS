@@ -3,9 +3,10 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_withdraw_proposal::{
-    ProposalWithdrawalReason, WITHDRAW_PROPOSAL, WITHDRAW_PROPOSAL_DIGEST_PROFILE,
-    WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID, WITHDRAW_PROPOSAL_RESPONSE_SCHEMA_ID,
-    WithdrawProposalCause, WithdrawProposalConflictReason, WithdrawProposalEffect,
+    AgentRunDecisionKind, AgentRunDecisionProducer, AuthorWithdrawalReason,
+    CurrentProducerWithdrawalReason, ProposalWithdrawalReason, WITHDRAW_PROPOSAL,
+    WITHDRAW_PROPOSAL_DIGEST_PROFILE, WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
+    WITHDRAW_PROPOSAL_RESPONSE_SCHEMA_ID, WithdrawProposalConflictReason, WithdrawProposalEffect,
     WithdrawProposalInput, WithdrawProposalNoEffectReason, WithdrawProposalRefusalReason,
     WithdrawProposalRequest, WithdrawProposalResponse, WithdrawalReceipt, WithdrawalReceiptResult,
 };
@@ -26,11 +27,29 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
         "StoryOS Withdraw Proposal Request",
     );
     schema["properties"]["command_schema"]["const"] = json!(WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID);
-    let input = &mut schema["$defs"]["WithdrawProposalInput"]["properties"];
-    input["proposal_revision_id"]["format"] = json!("uuid");
-    input["expected_closure"]["const"] = json!("open");
-    input["editor_session_id"]["format"] = json!("uuid");
-    input["correlation_id"]["format"] = json!("uuid");
+    let branches = schema["$defs"]["WithdrawProposalInput"]["oneOf"]
+        .as_array_mut()
+        .expect("withdraw input is a closed cause union");
+    for branch in branches {
+        let properties = branch["properties"]
+            .as_object_mut()
+            .expect("withdraw input branch has properties");
+        if let Some(revision) = properties.get_mut("proposal_revision_id") {
+            revision["format"] = json!("uuid");
+        }
+        if let Some(closure) = properties.get_mut("expected_closure") {
+            closure["const"] = json!("open");
+        }
+        if let Some(session) = properties.get_mut("editor_session_id") {
+            session["format"] = json!("uuid");
+        }
+        if let Some(correlation) = properties.get_mut("correlation_id") {
+            correlation["format"] = json!("uuid");
+        }
+    }
+    let producer = &mut schema["$defs"]["AgentRunDecisionProducer"]["properties"];
+    producer["run_id"]["format"] = json!("uuid");
+    producer["decision_id"]["format"] = json!("uuid");
     json_bytes(&schema)
 }
 
@@ -86,8 +105,11 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
-        WithdrawProposalCause::decl(&config),
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        AgentRunDecisionKind::decl(&config),
+        AgentRunDecisionProducer::decl(&config),
+        AuthorWithdrawalReason::decl(&config),
+        CurrentProducerWithdrawalReason::decl(&config),
         ProposalWithdrawalReason::decl(&config),
         WithdrawProposalInput::decl(&config),
         WithdrawProposalRequest::decl(&config),
@@ -114,8 +136,10 @@ pub(super) fn typescript_client_source() -> String {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"withdrawProposal requires projectId\");\n",
             "  if (typeof proposalId !== \"string\" || proposalId.length === 0) throw new TypeError(\"withdrawProposal requires proposalId\");\n",
             "  if (!request || typeof request !== \"object\") throw new TypeError(\"withdrawProposal requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"withdrawProposal requires security bindings\");\n",
-            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
+            "  if (typeof idempotencyKey !== \"string\") throw new TypeError(\"withdrawProposal requires an idempotency key\");\n",
+            "  const commandHeaders = {{ \"idempotency-key\": idempotencyKey }};\n",
+            "  if (typeof antiForgery === \"string\") commandHeaders[\"x-storyos-anti-forgery\"] = antiForgery;\n",
+            "  return commandJson({{ ...options, method: \"POST\", path: `{}`, body: request, commandHeaders }});\n}}\n",
         ),
         WITHDRAW_PROPOSAL_DIGEST_PROFILE,
         WITHDRAW_PROPOSAL
@@ -128,7 +152,7 @@ pub(super) fn typescript_client_source() -> String {
 pub(super) fn typescript_declarations() -> &'static str {
     concat!(
         "export declare function digestWithdrawProposal(request: WithdrawProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-        "export declare function withdrawProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: WithdrawProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<WithdrawProposalResponse>;\n",
+        "export declare function withdrawProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: WithdrawProposalRequest; idempotencyKey: string; antiForgery?: string }): Promise<WithdrawProposalResponse>;\n",
     )
 }
 

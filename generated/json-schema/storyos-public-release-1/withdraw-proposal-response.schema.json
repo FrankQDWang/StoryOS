@@ -154,6 +154,19 @@
             "note"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "current_producer_withdrew",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -169,7 +182,10 @@
           "additionalProperties": false,
           "properties": {
             "author_action_sequence": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "closure_event_refs": {
               "items": {
@@ -194,7 +210,14 @@
               "type": "string"
             },
             "undo_disposition": {
-              "$ref": "#/$defs/AuthorUndoDisposition"
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AuthorUndoDisposition"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "withdrawal_reason": {
               "$ref": "#/$defs/ProposalWithdrawalReason"
@@ -202,8 +225,6 @@
           },
           "required": [
             "kind",
-            "author_action_sequence",
-            "undo_disposition",
             "preserved_generation",
             "preserved_validation",
             "prior_closure",
@@ -286,7 +307,10 @@
       "additionalProperties": false,
       "properties": {
         "author_command_admission_id": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "authoritative_commit_ids": {
           "items": {
@@ -342,7 +366,6 @@
         "project_scope",
         "command_digest",
         "idempotency_key",
-        "author_command_admission_id",
         "proposal_id",
         "proposal_revision_id",
         "expected_target_revisions",
@@ -370,7 +393,10 @@
   "properties": {
     "author_command_admission_id": {
       "format": "uuid",
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "command_id": {
       "format": "uuid",
@@ -402,7 +428,6 @@
     "correlation_id",
     "project_scope",
     "command_id",
-    "author_command_admission_id",
     "receipt",
     "project",
     "effect"

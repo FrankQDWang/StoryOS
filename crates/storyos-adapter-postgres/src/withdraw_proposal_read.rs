@@ -1,6 +1,6 @@
 use storyos_application::{
-    WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,
-    WithdrawProposalSettlementEffect, WithdrawalNote,
+    ResolvedWithdrawal, WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,
+    WithdrawProposalSettlementEffect,
 };
 use storyos_core::{WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal};
 
@@ -107,11 +107,13 @@ pub(super) async fn read_withdraw_settlement(
         let reason: Option<String> = row.get(4);
         let effect = match (result_kind.as_str(), reason.as_deref()) {
             ("proposal_closure_changed", _) => WithdrawProposalSettlementEffect::Resolved {
-                author_action_sequence: parse_u64(row.get::<_, String>(6))
-                    .map_err(withdraw_parse_error)?,
-                withdrawal_note: match row.get::<_, Option<String>>(10) {
-                    Some(text) => WithdrawalNote::Present { text },
-                    None => WithdrawalNote::Omitted,
+                ownership: ResolvedWithdrawal::Author {
+                    author_action_sequence: parse_u64(row.get::<_, String>(6))
+                        .map_err(withdraw_parse_error)?,
+                    withdrawal_note: match row.get::<_, Option<String>>(10) {
+                        Some(text) => storyos_application::WithdrawalNote::Present { text },
+                        None => storyos_application::WithdrawalNote::Omitted,
+                    },
                 },
                 preserved_generation: row.get(7),
                 preserved_validation: row.get(8),

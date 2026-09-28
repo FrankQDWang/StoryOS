@@ -45,28 +45,60 @@ pub const WITHDRAW_PROPOSAL_METHOD: &str = WITHDRAW_PROPOSAL.method;
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum ProposalWithdrawalReason {
+pub enum AuthorWithdrawalReason {
     AuthorWithdrew { note: BoundedAuthorNote },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CurrentProducerWithdrawalReason {
+    CurrentProducerWithdrew,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProposalWithdrawalReason {
+    AuthorWithdrew { note: BoundedAuthorNote },
+    CurrentProducerWithdrew,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
-pub enum WithdrawProposalCause {
-    Author,
+pub enum AgentRunDecisionKind {
+    AgentRunDecision,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
-pub struct WithdrawProposalInput {
-    pub cause: WithdrawProposalCause,
-    pub proposal_revision_id: String,
-    pub expected_closure: String,
-    pub expected_target_revisions: Vec<String>,
-    pub withdrawal_reason: ProposalWithdrawalReason,
-    pub editor_session_id: String,
-    pub client_contract_revision: String,
-    pub security_policy_revision: String,
-    pub correlation_id: String,
+pub struct AgentRunDecisionProducer {
+    pub kind: AgentRunDecisionKind,
+    pub run_id: String,
+    pub decision_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "cause", rename_all = "snake_case", deny_unknown_fields)]
+pub enum WithdrawProposalInput {
+    Author {
+        proposal_revision_id: String,
+        expected_closure: String,
+        expected_target_revisions: Vec<String>,
+        withdrawal_reason: AuthorWithdrawalReason,
+        editor_session_id: String,
+        client_contract_revision: String,
+        security_policy_revision: String,
+        correlation_id: String,
+    },
+    CurrentProducer {
+        producer: AgentRunDecisionProducer,
+        proposal_revision_id: String,
+        expected_closure: String,
+        expected_target_revisions: Vec<String>,
+        withdrawal_reason: CurrentProducerWithdrawalReason,
+        client_contract_revision: String,
+        security_policy_revision: String,
+        correlation_id: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -92,7 +124,8 @@ pub struct WithdrawalReceipt {
     pub project_scope: crate::release1::ProjectScope,
     pub command_digest: DigestValue,
     pub idempotency_key: String,
-    pub author_command_admission_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_command_admission_id: Option<String>,
     pub proposal_id: String,
     pub proposal_revision_id: String,
     pub expected_target_revisions: Vec<String>,
@@ -130,8 +163,10 @@ pub enum WithdrawProposalNoEffectReason {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum WithdrawProposalEffect {
     Resolved {
-        author_action_sequence: String,
-        undo_disposition: AuthorUndoDisposition,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        author_action_sequence: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        undo_disposition: Option<AuthorUndoDisposition>,
         preserved_generation: String,
         preserved_validation: String,
         prior_closure: String,
@@ -157,7 +192,8 @@ pub struct WithdrawProposalResponse {
     pub correlation_id: String,
     pub project_scope: crate::release1::ProjectScope,
     pub command_id: String,
-    pub author_command_admission_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_command_admission_id: Option<String>,
     pub receipt: WithdrawalReceipt,
     pub project: ControlledProject,
     pub effect: WithdrawProposalEffect,

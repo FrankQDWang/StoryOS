@@ -585,17 +585,23 @@ export type ReplanProposalEffect = { "kind": "resolved", author_action_sequence:
 
 export type ReplanProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReplanReceipt, project: ControlledProject, effect: ReplanProposalEffect, };
 
-export type WithdrawProposalCause = "author";
+export type AgentRunDecisionKind = "agent_run_decision";
 
-export type ProposalWithdrawalReason = { "kind": "author_withdrew", note: BoundedAuthorNote, };
+export type AgentRunDecisionProducer = { kind: AgentRunDecisionKind, run_id: string, decision_id: string, };
 
-export type WithdrawProposalInput = { cause: WithdrawProposalCause, proposal_revision_id: string, expected_closure: string, expected_target_revisions: Array<string>, withdrawal_reason: ProposalWithdrawalReason, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type AuthorWithdrawalReason = { "kind": "author_withdrew", note: BoundedAuthorNote, };
+
+export type CurrentProducerWithdrawalReason = { "kind": "current_producer_withdrew" };
+
+export type ProposalWithdrawalReason = { "kind": "author_withdrew", note: BoundedAuthorNote, } | { "kind": "current_producer_withdrew" };
+
+export type WithdrawProposalInput = { "cause": "author", proposal_revision_id: string, expected_closure: string, expected_target_revisions: Array<string>, withdrawal_reason: AuthorWithdrawalReason, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, } | { "cause": "current_producer", producer: AgentRunDecisionProducer, proposal_revision_id: string, expected_closure: string, expected_target_revisions: Array<string>, withdrawal_reason: CurrentProducerWithdrawalReason, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type WithdrawProposalRequest = { command_schema: string, withdraw_proposal_input: WithdrawProposalInput, };
 
 export type WithdrawalReceiptResult = "resolved" | "conflicted" | "refused" | "no_effect";
 
-export type WithdrawalReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, expected_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: WithdrawalReceiptResult, created_at: string, };
+export type WithdrawalReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string | null, proposal_id: string, proposal_revision_id: string, expected_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: WithdrawalReceiptResult, created_at: string, };
 
 export type WithdrawProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision";
 
@@ -603,9 +609,9 @@ export type WithdrawProposalConflictReason = "changed_head";
 
 export type WithdrawProposalNoEffectReason = "unsupported_cause" | "terminal_supersession" | "closure_not_open";
 
-export type WithdrawProposalEffect = { "kind": "resolved", author_action_sequence: string, undo_disposition: AuthorUndoDisposition, preserved_generation: string, preserved_validation: string, prior_closure: string, resulting_closure: string, withdrawal_reason: ProposalWithdrawalReason, closure_event_refs: Array<string>, } | { "kind": "conflicted", reason: WithdrawProposalConflictReason, } | { "kind": "refused", reason: WithdrawProposalRefusalReason, } | { "kind": "no_effect", reason: WithdrawProposalNoEffectReason, };
+export type WithdrawProposalEffect = { "kind": "resolved", author_action_sequence: string | null, undo_disposition: AuthorUndoDisposition | null, preserved_generation: string, preserved_validation: string, prior_closure: string, resulting_closure: string, withdrawal_reason: ProposalWithdrawalReason, closure_event_refs: Array<string>, } | { "kind": "conflicted", reason: WithdrawProposalConflictReason, } | { "kind": "refused", reason: WithdrawProposalRefusalReason, } | { "kind": "no_effect", reason: WithdrawProposalNoEffectReason, };
 
-export type WithdrawProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: WithdrawalReceipt, project: ControlledProject, effect: WithdrawProposalEffect, };
+export type WithdrawProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string | null, receipt: WithdrawalReceipt, project: ControlledProject, effect: WithdrawProposalEffect, };
 
 export type CompleteReadyPartialProposalInput = { proposal_revision_id: string, generation_id: string, expected_candidate_digest: string, last_applied_stream_seq: string, expected_target_revisions: Array<string>, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
@@ -684,7 +690,7 @@ export declare function reopenRejectedOperations(options: StoryOSQueryOptions & 
 export declare function digestReplanProposal(request: ReplanProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function replanProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReplanProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<ReplanProposalResponse>;
 export declare function digestWithdrawProposal(request: WithdrawProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
-export declare function withdrawProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: WithdrawProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<WithdrawProposalResponse>;
+export declare function withdrawProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: WithdrawProposalRequest; idempotencyKey: string; antiForgery?: string }): Promise<WithdrawProposalResponse>;
 export declare function digestCompleteReadyPartialProposal(request: CompleteReadyPartialProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function completeReadyPartialProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: CompleteReadyPartialProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<CompleteReadyPartialProposalResponse>;
 export declare function digestContinueProposalGeneration(request: ContinueProposalGenerationRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

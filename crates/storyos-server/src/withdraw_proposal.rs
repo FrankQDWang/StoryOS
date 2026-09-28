@@ -2,8 +2,8 @@ use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
     AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId,
-    ProjectCommandChallengeBinding, WithdrawProposalCommand, WithdrawProposalError,
-    WithdrawProposalSettlementEffect, WithdrawalNote,
+    ProjectCommandChallengeBinding, ResolvedWithdrawal, WithdrawProposalCommand,
+    WithdrawProposalError, WithdrawProposalSettlementEffect, WithdrawalActor, WithdrawalNote,
 };
 
 use super::editor_session::{exact_header, session_binding_ref};
@@ -32,43 +32,115 @@ pub(super) async fn withdraw_proposal(
         .map_err(|_| payload_too_large())?;
     let body = serde_json::from_slice::<contracts::WithdrawProposalRequest>(&bytes)
         .map_err(|_| invalid_request_shape())?;
-    let input = &body.withdraw_proposal_input;
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session = state
         .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
+    let (
+        proposal_revision_id,
+        expected_closure,
+        expected_target_revisions,
+        correlation_id,
+        client_contract_revision,
+        security_policy_revision,
+        withdrawal_note,
+        editor_session_id,
+        actor,
+        require_anti_forgery,
+    ) = match &body.withdraw_proposal_input {
+        contracts::WithdrawProposalInput::Author {
+            proposal_revision_id,
+            expected_closure,
+            expected_target_revisions,
+            withdrawal_reason,
+            editor_session_id,
+            client_contract_revision,
+            security_policy_revision,
+            correlation_id,
+        } => {
+            let withdrawal_note = match withdrawal_reason {
+                contracts::AuthorWithdrawalReason::AuthorWithdrew { note } => match note {
+                    contracts::BoundedAuthorNote::Omitted => WithdrawalNote::Omitted,
+                    contracts::BoundedAuthorNote::Present { text } => {
+                        if text.is_empty() {
+                            return Err(invalid_request());
+                        }
+                        WithdrawalNote::Present { text: text.clone() }
+                    }
+                },
+            };
+            valid_uuid(editor_session_id)?;
+            (
+                proposal_revision_id.clone(),
+                expected_closure.clone(),
+                expected_target_revisions.clone(),
+                correlation_id.clone(),
+                client_contract_revision.clone(),
+                security_policy_revision.clone(),
+                withdrawal_note,
+                EditorSessionId::new(editor_session_id.clone()),
+                WithdrawalActor::Author,
+                true,
+            )
+        }
+        contracts::WithdrawProposalInput::CurrentProducer {
+            producer:
+                contracts::AgentRunDecisionProducer {
+                    kind: contracts::AgentRunDecisionKind::AgentRunDecision,
+                    run_id,
+                    decision_id,
+                },
+            proposal_revision_id,
+            expected_closure,
+            expected_target_revisions,
+            withdrawal_reason: contracts::CurrentProducerWithdrawalReason::CurrentProducerWithdrew,
+            client_contract_revision,
+            security_policy_revision,
+            correlation_id,
+        } => {
+            valid_uuid(run_id)?;
+            valid_uuid(decision_id)?;
+            (
+                proposal_revision_id.clone(),
+                expected_closure.clone(),
+                expected_target_revisions.clone(),
+                correlation_id.clone(),
+                client_contract_revision.clone(),
+                security_policy_revision.clone(),
+                WithdrawalNote::Omitted,
+                EditorSessionId::new(String::new()),
+                WithdrawalActor::CurrentProducer {
+                    run_id: run_id.clone(),
+                    decision_id: decision_id.clone(),
+                },
+                false,
+            )
+        }
+    };
     if body.command_schema != contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID
-        || input.client_contract_revision != session.client_contract_revision
-        || input.security_policy_revision != session.security_policy_revision
-        || input.cause != contracts::WithdrawProposalCause::Author
-        || input.expected_closure != "open"
-        || input.expected_target_revisions.len() != 1
+        || client_contract_revision != session.client_contract_revision
+        || security_policy_revision != session.security_policy_revision
+        || expected_closure != "open"
+        || expected_target_revisions.len() != 1
     {
         return Err(invalid_request());
     }
-    let expected_authoritative_revision_id = input.expected_target_revisions[0].clone();
-    valid_uuid(&input.correlation_id)?;
-    valid_uuid(&input.proposal_revision_id)?;
+    let expected_authoritative_revision_id = expected_target_revisions[0].clone();
+    valid_uuid(&correlation_id)?;
+    valid_uuid(&proposal_revision_id)?;
     valid_uuid(&expected_authoritative_revision_id)?;
-    valid_uuid(&input.editor_session_id)?;
-    let withdrawal_note = match &input.withdrawal_reason {
-        contracts::ProposalWithdrawalReason::AuthorWithdrew { note } => match note {
-            contracts::BoundedAuthorNote::Omitted => WithdrawalNote::Omitted,
-            contracts::BoundedAuthorNote::Present { text } => {
-                if text.is_empty() {
-                    return Err(invalid_request());
-                }
-                WithdrawalNote::Present { text: text.clone() }
-            }
-        },
-    };
     let idempotency_key = exact_header(&headers, "idempotency-key")?;
-    let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
+    let nonce = if require_anti_forgery {
+        exact_header(&headers, "x-storyos-anti-forgery")?.to_owned()
+    } else {
+        String::new()
+    };
     if !valid_uuid_v7(idempotency_key)
-        || nonce.len() != 64
-        || !nonce
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || (require_anti_forgery
+            && (nonce.len() != 64
+                || !nonce
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())))
     {
         return Err(invalid_request());
     }
@@ -112,18 +184,19 @@ pub(super) async fn withdraw_proposal(
         },
         nonce_digest: plain_digest(nonce.as_bytes()),
         canonical_command_bytes,
-        correlation_id: input.correlation_id.clone(),
+        correlation_id,
         ids: AuthorCommandAdmissionIds {
             command_id: Uuid::now_v7().to_string(),
             author_command_admission_id: Uuid::now_v7().to_string(),
             receipt_id: Uuid::now_v7().to_string(),
         },
-        editor_session_id: EditorSessionId::new(input.editor_session_id.clone()),
+        editor_session_id,
         proposal_id,
-        proposal_revision_id: input.proposal_revision_id.clone(),
-        expected_closure: input.expected_closure.clone(),
+        proposal_revision_id,
+        expected_closure,
         expected_authoritative_revision_id,
         withdrawal_note,
+        actor,
     };
     let settlement = storyos_application::withdraw_proposal(&store, &command)
         .await
@@ -139,33 +212,53 @@ fn withdraw_response(
 ) -> Result<Json<contracts::WithdrawProposalResponse>, ApiError> {
     let project = settlement.response_project;
     let contract_project_scope = contract_scope(&command.project_scope);
+    let author_command_admission_id = match &command.actor {
+        WithdrawalActor::Author => Some(settlement.ids.author_command_admission_id.clone()),
+        WithdrawalActor::CurrentProducer { .. } => None,
+    };
     let (result, effect) = match settlement.effect {
         WithdrawProposalSettlementEffect::Resolved {
-            author_action_sequence,
-            withdrawal_note,
+            ownership,
             preserved_generation,
             preserved_validation,
             withdrawal_event_id,
-        } => (
-            contracts::WithdrawalReceiptResult::Resolved,
-            contracts::WithdrawProposalEffect::Resolved {
-                author_action_sequence: author_action_sequence.to_string(),
-                undo_disposition: contracts::AuthorUndoDisposition::Forward,
-                preserved_generation,
-                preserved_validation,
-                prior_closure: "open".to_owned(),
-                resulting_closure: "withdrawn".to_owned(),
-                withdrawal_reason: contracts::ProposalWithdrawalReason::AuthorWithdrew {
-                    note: match withdrawal_note {
-                        WithdrawalNote::Omitted => contracts::BoundedAuthorNote::Omitted,
-                        WithdrawalNote::Present { text } => {
-                            contracts::BoundedAuthorNote::Present { text }
-                        }
+        } => {
+            let (author_action_sequence, undo_disposition, withdrawal_reason) = match ownership {
+                ResolvedWithdrawal::Author {
+                    author_action_sequence,
+                    withdrawal_note,
+                } => (
+                    Some(author_action_sequence.to_string()),
+                    Some(contracts::AuthorUndoDisposition::Forward),
+                    contracts::ProposalWithdrawalReason::AuthorWithdrew {
+                        note: match withdrawal_note {
+                            WithdrawalNote::Omitted => contracts::BoundedAuthorNote::Omitted,
+                            WithdrawalNote::Present { text } => {
+                                contracts::BoundedAuthorNote::Present { text }
+                            }
+                        },
                     },
+                ),
+                ResolvedWithdrawal::CurrentProducer => (
+                    None,
+                    None,
+                    contracts::ProposalWithdrawalReason::CurrentProducerWithdrew,
+                ),
+            };
+            (
+                contracts::WithdrawalReceiptResult::Resolved,
+                contracts::WithdrawProposalEffect::Resolved {
+                    author_action_sequence,
+                    undo_disposition,
+                    preserved_generation,
+                    preserved_validation,
+                    prior_closure: "open".to_owned(),
+                    resulting_closure: "withdrawn".to_owned(),
+                    withdrawal_reason,
+                    closure_event_refs: vec![withdrawal_event_id],
                 },
-                closure_event_refs: vec![withdrawal_event_id],
-            },
-        ),
+            )
+        }
         WithdrawProposalSettlementEffect::Conflicted { reason } => (
             contracts::WithdrawalReceiptResult::Conflicted,
             contracts::WithdrawProposalEffect::Conflicted {
@@ -214,7 +307,7 @@ fn withdraw_response(
         correlation_id: command.correlation_id.clone(),
         project_scope: contract_project_scope.clone(),
         command_id: settlement.ids.command_id,
-        author_command_admission_id: settlement.ids.author_command_admission_id.clone(),
+        author_command_admission_id: author_command_admission_id.clone(),
         receipt: contracts::WithdrawalReceipt {
             receipt_id: settlement.ids.receipt_id,
             project_scope: contract_project_scope,
@@ -224,7 +317,7 @@ fn withdraw_response(
                 value_hex_lowercase: digest_hex.to_owned(),
             },
             idempotency_key: command.challenge_binding.idempotency_key.clone(),
-            author_command_admission_id: settlement.ids.author_command_admission_id,
+            author_command_admission_id,
             proposal_id: command.proposal_id.clone(),
             proposal_revision_id: command.proposal_revision_id.clone(),
             expected_target_revisions: vec![command.expected_authoritative_revision_id.clone()],

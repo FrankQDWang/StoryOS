@@ -1,5 +1,54 @@
 {
   "$defs": {
+    "AgentRunDecisionKind": {
+      "enum": [
+        "agent_run_decision"
+      ],
+      "type": "string"
+    },
+    "AgentRunDecisionProducer": {
+      "additionalProperties": false,
+      "properties": {
+        "decision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/AgentRunDecisionKind"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "run_id",
+        "decision_id"
+      ],
+      "type": "object"
+    },
+    "AuthorWithdrawalReason": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "author_withdrew",
+              "type": "string"
+            },
+            "note": {
+              "$ref": "#/$defs/BoundedAuthorNote"
+            }
+          },
+          "required": [
+            "kind",
+            "note"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "BoundedAuthorNote": {
       "oneOf": [
         {
@@ -34,83 +83,129 @@
         }
       ]
     },
-    "ProposalWithdrawalReason": {
+    "CurrentProducerWithdrawalReason": {
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
             "kind": {
-              "const": "author_withdrew",
+              "const": "current_producer_withdrew",
               "type": "string"
-            },
-            "note": {
-              "$ref": "#/$defs/BoundedAuthorNote"
             }
           },
           "required": [
-            "kind",
-            "note"
+            "kind"
           ],
           "type": "object"
         }
       ]
     },
-    "WithdrawProposalCause": {
-      "enum": [
-        "author"
-      ],
-      "type": "string"
-    },
     "WithdrawProposalInput": {
-      "additionalProperties": false,
-      "properties": {
-        "cause": {
-          "$ref": "#/$defs/WithdrawProposalCause"
-        },
-        "client_contract_revision": {
-          "type": "string"
-        },
-        "correlation_id": {
-          "format": "uuid",
-          "type": "string"
-        },
-        "editor_session_id": {
-          "format": "uuid",
-          "type": "string"
-        },
-        "expected_closure": {
-          "const": "open",
-          "type": "string"
-        },
-        "expected_target_revisions": {
-          "items": {
-            "type": "string"
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cause": {
+              "const": "author",
+              "type": "string"
+            },
+            "client_contract_revision": {
+              "type": "string"
+            },
+            "correlation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "editor_session_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "expected_closure": {
+              "const": "open",
+              "type": "string"
+            },
+            "expected_target_revisions": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "proposal_revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "security_policy_revision": {
+              "type": "string"
+            },
+            "withdrawal_reason": {
+              "$ref": "#/$defs/AuthorWithdrawalReason"
+            }
           },
-          "type": "array"
+          "required": [
+            "cause",
+            "proposal_revision_id",
+            "expected_closure",
+            "expected_target_revisions",
+            "withdrawal_reason",
+            "editor_session_id",
+            "client_contract_revision",
+            "security_policy_revision",
+            "correlation_id"
+          ],
+          "type": "object"
         },
-        "proposal_revision_id": {
-          "format": "uuid",
-          "type": "string"
-        },
-        "security_policy_revision": {
-          "type": "string"
-        },
-        "withdrawal_reason": {
-          "$ref": "#/$defs/ProposalWithdrawalReason"
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cause": {
+              "const": "current_producer",
+              "type": "string"
+            },
+            "client_contract_revision": {
+              "type": "string"
+            },
+            "correlation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "expected_closure": {
+              "const": "open",
+              "type": "string"
+            },
+            "expected_target_revisions": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "producer": {
+              "$ref": "#/$defs/AgentRunDecisionProducer"
+            },
+            "proposal_revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "security_policy_revision": {
+              "type": "string"
+            },
+            "withdrawal_reason": {
+              "$ref": "#/$defs/CurrentProducerWithdrawalReason"
+            }
+          },
+          "required": [
+            "cause",
+            "producer",
+            "proposal_revision_id",
+            "expected_closure",
+            "expected_target_revisions",
+            "withdrawal_reason",
+            "client_contract_revision",
+            "security_policy_revision",
+            "correlation_id"
+          ],
+          "type": "object"
         }
-      },
-      "required": [
-        "cause",
-        "proposal_revision_id",
-        "expected_closure",
-        "expected_target_revisions",
-        "withdrawal_reason",
-        "editor_session_id",
-        "client_contract_revision",
-        "security_policy_revision",
-        "correlation_id"
-      ],
-      "type": "object"
+      ]
     }
   },
   "$id": "storyos.command.withdraw-proposal.request.v1",
