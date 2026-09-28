@@ -41,7 +41,7 @@ pub fn map_continuation_input(input: &ContinuationMappingInput) -> ContinuationI
     let Some(prior) = input.prior.as_ref() else {
         return ContinuationInputMapping::None;
     };
-    if prior.covered_copy_restricted || !identities_match(&input.current, prior) {
+    if prior.covered_copy_restricted || !continuation_boundary_matches(&input.current, prior) {
         return ContinuationInputMapping::NewTransport;
     }
     if input.mapping_can_represent {
@@ -51,7 +51,11 @@ pub fn map_continuation_input(input: &ContinuationMappingInput) -> ContinuationI
     }
 }
 
-fn identities_match(current: &ContinuationIdentity, prior: &ContinuationIdentity) -> bool {
+/// Same Scope, conversation, destination, registration, mapping, and use boundary.
+pub fn continuation_boundary_matches(
+    current: &ContinuationIdentity,
+    prior: &ContinuationIdentity,
+) -> bool {
     current.owner_user_id == prior.owner_user_id
         && current.project_id == prior.project_id
         && current.conversation_id == prior.conversation_id

@@ -1163,6 +1163,111 @@
         }
       ]
     },
+    "OptionalReferenceRecoveryInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "assembly_manifest_id": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "block_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "covered_content_included": {
+              "type": "boolean"
+            },
+            "disposition": {
+              "$ref": "#/$defs/ReferenceRecoveryDisposition"
+            },
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "lossless_provider_reconstruction": {
+              "type": "boolean"
+            },
+            "model_attempt_id": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model_invocation_id": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "opaque_reused": {
+              "type": "boolean"
+            },
+            "predecessor_continuation_binding_id": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "predecessor_run_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "predecessor_terminal": {
+              "type": "boolean"
+            },
+            "recovery_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "run_step_id": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "semantic_erasure": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "recovery_id",
+            "disposition",
+            "predecessor_run_id",
+            "lossless_provider_reconstruction",
+            "semantic_erasure",
+            "opaque_reused",
+            "covered_content_included",
+            "predecessor_terminal"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "ProjectScope": {
       "additionalProperties": false,
       "properties": {
@@ -1184,6 +1289,14 @@
     "ProjectionMode": {
       "enum": [
         "exact_required"
+      ],
+      "type": "string"
+    },
+    "ReferenceRecoveryDisposition": {
+      "enum": [
+        "rebuilt",
+        "blocked",
+        "unknown_create"
       ],
       "type": "string"
     },
@@ -1307,6 +1420,9 @@
     "redaction_profile": {
       "type": "string"
     },
+    "reference_recovery": {
+      "$ref": "#/$defs/OptionalReferenceRecoveryInspect"
+    },
     "run_id": {
       "format": "uuid",
       "type": "string"
@@ -1335,6 +1451,7 @@
     "decision",
     "model_attempt",
     "active_compaction",
+    "reference_recovery",
     "evidence",
     "items",
     "usage",

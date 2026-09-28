@@ -133,7 +133,8 @@ pub use release1_agent_run::{
     GetAgentRunResponse, HostControlInspect, InstructionBinding, OptionalActiveCompactionInspect,
     OptionalCompactionInstallInspect, OptionalContinuationInspect, OptionalDecisionInspect,
     OptionalManifestRef, OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
-    ProjectionMode, SourceAvailability, TokenCountingProfileInspect,
+    OptionalReferenceRecoveryInspect, ProjectionMode, ReferenceRecoveryDisposition,
+    SourceAvailability, TokenCountingProfileInspect,
 };
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,

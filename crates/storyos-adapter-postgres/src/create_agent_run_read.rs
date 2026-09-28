@@ -232,6 +232,8 @@ pub(super) async fn load_agent_run(
             client, scope, run_id,
         )
         .await?,
+        reference_recovery: crate::agent_run_expiry::load_reference_recovery(client, scope, run_id)
+            .await?,
     }))
 }
 

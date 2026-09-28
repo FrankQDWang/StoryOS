@@ -55,6 +55,7 @@ pub struct AgentRunRecord {
     pub decision: AgentRunDecisionInspect,
     pub model: Option<AgentRunModelInspect>,
     pub active_compaction: Option<ActiveCompactionInspect>,
+    pub reference_recovery: Option<ReferenceRecoveryInspect>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,6 +108,31 @@ pub struct ActiveCompactionInspect {
     pub installed_model_attempt_id: Option<String>,
     pub preserved_item_ids: Vec<String>,
     pub admission: AgentRunContinuationAdmission,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReferenceRecoveryDisposition {
+    Rebuilt,
+    Blocked,
+    UnknownCreate,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReferenceRecoveryInspect {
+    pub recovery_id: String,
+    pub disposition: ReferenceRecoveryDisposition,
+    pub block_reason: Option<String>,
+    pub predecessor_run_id: String,
+    pub predecessor_continuation_binding_id: Option<String>,
+    pub run_step_id: Option<String>,
+    pub model_invocation_id: Option<String>,
+    pub model_attempt_id: Option<String>,
+    pub assembly_manifest_id: Option<String>,
+    pub lossless_provider_reconstruction: bool,
+    pub semantic_erasure: bool,
+    pub opaque_reused: bool,
+    pub covered_content_included: bool,
+    pub predecessor_terminal: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

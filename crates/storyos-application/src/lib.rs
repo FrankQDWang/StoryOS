@@ -127,7 +127,8 @@ pub use create_agent_run::{
     AgentRunDecisionInspect, AgentRunEvidence, AgentRunInputMapping, AgentRunModelInspect,
     AgentRunRecord, AgentRunStatus, AgentRunStreamItem, ConversationSelection,
     CreateAgentRunAdmission, CreateAgentRunCommand, CreateAgentRunError, CreateAgentRunStore,
-    EvidenceAvailability, WorkingTargetAvailability, open_agent_run, request_create_agent_run,
+    EvidenceAvailability, ReferenceRecoveryDisposition, ReferenceRecoveryInspect,
+    WorkingTargetAvailability, open_agent_run, request_create_agent_run,
 };
 pub use create_chapter::{
     CreateChapterAuthority, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,
