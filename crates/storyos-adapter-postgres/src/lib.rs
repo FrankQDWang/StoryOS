@@ -166,6 +166,7 @@ mod update_project;
 mod update_project_assistance;
 mod update_volume;
 mod volume_storage_order;
+mod withdraw_proposal;
 
 use std::sync::Arc;
 use std::time::Duration;

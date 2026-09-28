@@ -42,6 +42,7 @@ mod update_chapter;
 mod update_project;
 mod update_project_assistance;
 mod update_volume;
+mod withdraw_proposal;
 
 pub use accept_proposal::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalRefusal,
@@ -197,6 +198,10 @@ pub use update_project_assistance::{
 pub use update_volume::{
     UpdateVolume, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
     UpdateVolumeResult, update_volume,
+};
+pub use withdraw_proposal::{
+    WithdrawProposal, WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
+    WithdrawProposalResult, WithdrawalAllocation, WithdrawalCause, withdraw_proposal,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

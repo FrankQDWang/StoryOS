@@ -78,6 +78,7 @@ mod update_chapter;
 mod update_project;
 mod update_project_assistance;
 mod update_volume;
+mod withdraw_proposal;
 
 #[cfg(test)]
 #[path = "author_command_outcome_unknown_tests.rs"]
@@ -253,6 +254,10 @@ pub use update_project_assistance::{
 pub use update_volume::{
     UpdateVolumeAuthority, UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlement,
     UpdateVolumeSettlementEffect, UpdateVolumeStore, update_volume,
+};
+pub use withdraw_proposal::{
+    WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,
+    WithdrawProposalSettlementEffect, WithdrawProposalStore, WithdrawalNote, withdraw_proposal,
 };
 
 pub use editor_session::{

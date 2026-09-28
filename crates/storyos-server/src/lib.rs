@@ -59,6 +59,7 @@ mod update_project_assistance;
 mod update_volume;
 mod web_assets;
 mod web_host;
+mod withdraw_proposal;
 
 pub use public_origin::{
     PackagedPublicOrigin, PackagedTransportError, PackagedTransportPlan, SessionCookieSecure,
@@ -113,6 +114,7 @@ use update_chapter::update_chapter;
 use update_project::update_project;
 use update_project_assistance::{get_project_assistance, update_project_assistance};
 use update_volume::update_volume;
+use withdraw_proposal::withdraw_proposal;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClientSessionBinding {
@@ -390,6 +392,13 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::REPLAN_PROPOSAL_METHOD),
                 replan_proposal,
+            ),
+        )
+        .route(
+            contracts::WITHDRAW_PROPOSAL_PATH,
+            routing::on(
+                method_filter(contracts::WITHDRAW_PROPOSAL_METHOD),
+                withdraw_proposal,
             ),
         )
         .route(

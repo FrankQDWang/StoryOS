@@ -79,6 +79,8 @@ mod release1_update_project;
 mod release1_update_project_artifacts;
 mod release1_update_volume;
 mod release1_update_volume_artifacts;
+mod release1_withdraw_proposal;
+mod release1_withdraw_proposal_artifacts;
 mod stage1_bundle;
 mod stage1_crosswalk;
 mod stage1_delivery;
@@ -348,6 +350,14 @@ pub use release1_update_volume::{
     UPDATE_VOLUME_REQUEST_SCHEMA_ID, UPDATE_VOLUME_RESPONSE_SCHEMA_ID, UpdateVolumeConflictReason,
     UpdateVolumeEffect, UpdateVolumeInput, UpdateVolumeNoEffectReason, UpdateVolumeRefusalReason,
     UpdateVolumeRequest, UpdateVolumeResponse,
+};
+pub use release1_withdraw_proposal::{
+    ProposalWithdrawalReason, WITHDRAW_PROPOSAL_DIGEST_PROFILE, WITHDRAW_PROPOSAL_METHOD,
+    WITHDRAW_PROPOSAL_PATH, WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
+    WITHDRAW_PROPOSAL_RESPONSE_SCHEMA_ID, WithdrawProposalCause, WithdrawProposalConflictReason,
+    WithdrawProposalEffect, WithdrawProposalInput, WithdrawProposalNoEffectReason,
+    WithdrawProposalRefusalReason, WithdrawProposalRequest, WithdrawProposalResponse,
+    WithdrawalReceipt, WithdrawalReceiptResult,
 };
 pub use stage1_crosswalk::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,
