@@ -256,8 +256,9 @@ pub use update_volume::{
     UpdateVolumeSettlementEffect, UpdateVolumeStore, update_volume,
 };
 pub use withdraw_proposal::{
-    WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,
-    WithdrawProposalSettlementEffect, WithdrawProposalStore, WithdrawalNote, withdraw_proposal,
+    ResolvedWithdrawal, WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,
+    WithdrawProposalSettlementEffect, WithdrawProposalStore, WithdrawalActor, WithdrawalNote,
+    withdraw_proposal,
 };
 
 pub use editor_session::{

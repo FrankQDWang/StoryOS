@@ -360,12 +360,12 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/withdraw-proposal-request.schema.json",
       "schema_id": "storyos.command.withdraw-proposal.request.v1",
-      "sha256": "sha256:78a6d49e1b5140ea55e8b17c170f2a4870635e56ba8ff87adff81b592f29a27d"
+      "sha256": "sha256:76e4272993534f61c91e369cc9b0cf07a2819378a33acb8d33eef926666457f8"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/withdraw-proposal-response.schema.json",
       "schema_id": "storyos.command.withdraw-proposal.response.v1",
-      "sha256": "sha256:2e644084c46a53982174be6809488d6596efd6cdf2244bb0c768af76b2d65431"
+      "sha256": "sha256:ea262ec36f7d73d244fd0c3f1b55b3e254aa101aea8d8df30391a86772b633fe"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/complete-ready-partial-proposal-request.schema.json",

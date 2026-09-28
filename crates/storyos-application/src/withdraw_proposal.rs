@@ -11,6 +11,13 @@ pub enum WithdrawalNote {
     Present { text: String },
 }
 
+/// The actor permitted to withdraw this Proposal.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WithdrawalActor {
+    Author,
+    CurrentProducer { run_id: String, decision_id: String },
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WithdrawProposalCommand {
     pub project_scope: ProjectScope,
@@ -26,6 +33,7 @@ pub struct WithdrawProposalCommand {
     pub expected_closure: String,
     pub expected_authoritative_revision_id: String,
     pub withdrawal_note: WithdrawalNote,
+    pub actor: WithdrawalActor,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -37,10 +45,18 @@ pub struct WithdrawProposalSettlement {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum WithdrawProposalSettlementEffect {
-    Resolved {
+pub enum ResolvedWithdrawal {
+    Author {
         author_action_sequence: u64,
         withdrawal_note: WithdrawalNote,
+    },
+    CurrentProducer,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WithdrawProposalSettlementEffect {
+    Resolved {
+        ownership: ResolvedWithdrawal,
         preserved_generation: String,
         preserved_validation: String,
         withdrawal_event_id: String,
@@ -91,7 +107,7 @@ impl std::error::Error for WithdrawProposalError {
     }
 }
 
-/// Owns one admitted author Withdrawal and its atomic Core settlement.
+/// Settles one permitted Withdrawal for the author or the current producer.
 pub trait WithdrawProposalStore: Sync {
     fn withdraw_proposal(
         &self,

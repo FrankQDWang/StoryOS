@@ -1,6 +1,6 @@
 use storyos_application::{
-    ChapterId, Project, WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,
-    WithdrawProposalSettlementEffect, WithdrawalNote,
+    ChapterId, Project, ResolvedWithdrawal, WithdrawProposalCommand, WithdrawProposalError,
+    WithdrawProposalSettlement, WithdrawProposalSettlementEffect, WithdrawalActor, WithdrawalNote,
 };
 use storyos_core::WithdrawalAllocation;
 use uuid::Uuid;
@@ -17,9 +17,21 @@ pub(super) async fn persist_resolved(
     loaded: &LoadedProposal,
     allocation: WithdrawalAllocation,
 ) -> Result<WithdrawProposalSettlement, WithdrawProposalError> {
-    if allocation != WithdrawalAllocation::AuthorForward {
-        return Err(WithdrawProposalError::BindingConflict);
+    match allocation {
+        WithdrawalAllocation::AuthorForward => {
+            persist_author_resolved(client, command, loaded).await
+        }
+        WithdrawalAllocation::CurrentProducerOwned => {
+            persist_producer_resolved(client, command, loaded).await
+        }
     }
+}
+
+async fn persist_author_resolved(
+    client: &tokio_postgres::Client,
+    command: &WithdrawProposalCommand,
+    loaded: &LoadedProposal,
+) -> Result<WithdrawProposalSettlement, WithdrawProposalError> {
     let updated = client
         .execute(
             "UPDATE storyos.proposal_revisions
@@ -107,8 +119,75 @@ pub(super) async fn persist_resolved(
     Ok(WithdrawProposalSettlement {
         ids: command.ids.clone(),
         effect: WithdrawProposalSettlementEffect::Resolved {
-            author_action_sequence,
-            withdrawal_note: command.withdrawal_note.clone(),
+            ownership: ResolvedWithdrawal::Author {
+                author_action_sequence,
+                withdrawal_note: command.withdrawal_note.clone(),
+            },
+            preserved_generation: loaded.generation.clone(),
+            preserved_validation: loaded.validation.clone(),
+            withdrawal_event_id,
+        },
+        receipt_created_at: created_at,
+        response_project,
+    })
+}
+
+async fn persist_producer_resolved(
+    client: &tokio_postgres::Client,
+    command: &WithdrawProposalCommand,
+    loaded: &LoadedProposal,
+) -> Result<WithdrawProposalSettlement, WithdrawProposalError> {
+    let updated = client
+        .execute(
+            "UPDATE storyos.proposal_revisions
+                SET closure = 'withdrawn'
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND proposal_id = $3::text::uuid AND revision_id = $4::text::uuid
+                AND closure = 'open'",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.proposal_id,
+                &command.proposal_revision_id,
+            ],
+        )
+        .await
+        .map_err(withdraw_database_error)?;
+    if updated != 1 {
+        return Err(WithdrawProposalError::BindingConflict);
+    }
+    let withdrawal_event_id = Uuid::now_v7().to_string();
+    let created_at = insert_receipt(
+        client,
+        command,
+        "proposal_closure_changed",
+        r#"{"transition":"withdraw"}"#,
+    )
+    .await?;
+    client
+        .execute(
+            "INSERT INTO storyos.proposal_withdrawals
+               (owner_user_id, project_id, withdrawal_event_id, proposal_id,
+                proposal_revision_id, withdrawal_reason, author_note,
+                withdrawal_receipt_id, author_action_sequence)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                     $5::text::uuid, 'current_producer_withdrew', NULL, $6::text::uuid, NULL)",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &withdrawal_event_id,
+                &command.proposal_id,
+                &command.proposal_revision_id,
+                &command.ids.receipt_id,
+            ],
+        )
+        .await
+        .map_err(withdraw_database_error)?;
+    let response_project = settle_idempotency(client, command).await?;
+    Ok(WithdrawProposalSettlement {
+        ids: command.ids.clone(),
+        effect: WithdrawProposalSettlementEffect::Resolved {
+            ownership: ResolvedWithdrawal::CurrentProducer,
             preserved_generation: loaded.generation.clone(),
             preserved_validation: loaded.validation.clone(),
             withdrawal_event_id,
@@ -142,53 +221,95 @@ async fn insert_receipt(
     result_kind: &str,
     result_payload: &str,
 ) -> Result<String, WithdrawProposalError> {
-    let created_at = client
-        .query_one(
-            "INSERT INTO storyos.domain_receipts
-               (owner_user_id, project_id, receipt_id, author_command_admission_id,
-                command_id, command_kind, command_digest, idempotency_key, producer_cause,
-                expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
-                proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
-                artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'withdrawProposal', $6, $7::text::uuid,
-                     'author_command_admission', ARRAY[$8::text::uuid], ARRAY[$8::text::uuid],
-                     ARRAY[$8::text::uuid], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::text[], '{}'::text[], '{}'::text[],
-                     $9, $10::text::jsonb)
-          RETURNING to_char(created_at AT TIME ZONE 'UTC',
-                            'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.command_id,
-                &command.challenge_binding.canonical_command_digest,
-                &command.challenge_binding.idempotency_key,
-                &command.expected_authoritative_revision_id,
-                &result_kind,
-                &result_payload,
-            ],
-        )
-        .await
-        .map_err(withdraw_database_error)?
-        .get::<_, String>(0);
-    client
-        .execute(
-            "INSERT INTO storyos.author_command_admission_settlements
-               (owner_user_id, project_id, author_command_admission_id, settlement_kind, receipt_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
-                     'receipt_settled', $4::text::uuid)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(withdraw_database_error)?;
+    let created_at = if matches!(command.actor, WithdrawalActor::CurrentProducer { .. }) {
+        client
+            .query_one(
+                "INSERT INTO storyos.domain_receipts
+                   (owner_user_id, project_id, receipt_id, author_command_admission_id,
+                    command_id, command_kind, command_digest, idempotency_key, producer_cause,
+                    expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
+                    proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
+                    artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, NULL,
+                         $4::text::uuid, 'withdrawProposal', $5, $6::text::uuid,
+                         'agent_run_decision', ARRAY[$7::text::uuid], ARRAY[$7::text::uuid],
+                         ARRAY[$7::text::uuid], '{}'::uuid[], '{}'::uuid[],
+                         '{}'::uuid[], '{}'::text[], '{}'::text[], '{}'::text[],
+                         $8, $9::text::jsonb)
+              RETURNING to_char(created_at AT TIME ZONE 'UTC',
+                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &command.ids.receipt_id,
+                    &command.ids.command_id,
+                    &command.challenge_binding.canonical_command_digest,
+                    &command.challenge_binding.idempotency_key,
+                    &command.expected_authoritative_revision_id,
+                    &result_kind,
+                    &result_payload,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                if error.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) {
+                    WithdrawProposalError::BindingConflict
+                } else {
+                    withdraw_database_error(error)
+                }
+            })?
+            .get::<_, String>(0)
+    } else {
+        client
+            .query_one(
+                "INSERT INTO storyos.domain_receipts
+                   (owner_user_id, project_id, receipt_id, author_command_admission_id,
+                    command_id, command_kind, command_digest, idempotency_key, producer_cause,
+                    expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
+                    proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
+                    artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                         $5::text::uuid, 'withdrawProposal', $6, $7::text::uuid,
+                         'author_command_admission', ARRAY[$8::text::uuid], ARRAY[$8::text::uuid],
+                         ARRAY[$8::text::uuid], '{}'::uuid[], '{}'::uuid[],
+                         '{}'::uuid[], '{}'::text[], '{}'::text[], '{}'::text[],
+                         $9, $10::text::jsonb)
+              RETURNING to_char(created_at AT TIME ZONE 'UTC',
+                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &command.ids.receipt_id,
+                    &command.ids.author_command_admission_id,
+                    &command.ids.command_id,
+                    &command.challenge_binding.canonical_command_digest,
+                    &command.challenge_binding.idempotency_key,
+                    &command.expected_authoritative_revision_id,
+                    &result_kind,
+                    &result_payload,
+                ],
+            )
+            .await
+            .map_err(withdraw_database_error)?
+            .get::<_, String>(0)
+    };
+    if matches!(command.actor, WithdrawalActor::Author) {
+        client
+            .execute(
+                "INSERT INTO storyos.author_command_admission_settlements
+                   (owner_user_id, project_id, author_command_admission_id, settlement_kind, receipt_id)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
+                         'receipt_settled', $4::text::uuid)",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &command.ids.author_command_admission_id,
+                    &command.ids.receipt_id,
+                ],
+            )
+            .await
+            .map_err(withdraw_database_error)?;
+    }
     Ok(created_at)
 }
 
@@ -296,27 +417,29 @@ async fn settle_idempotency(
         title: row.get(0),
         current_chapter_id: row.get::<_, Option<String>>(1).map(ChapterId::new),
     };
-    let encoded_project = encode_command_response_project(&response_project);
-    client
-        .execute(
-            "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled',
-                    result_reference = $3,
-                    acknowledgement_format = $5,
-                    response_project = $6::text::jsonb
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'withdrawProposal'
-                AND idempotency_key = $4::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.challenge_binding.idempotency_key,
-                &COMMAND_RESPONSE_PROJECT_FORMAT,
-                &encoded_project,
-            ],
-        )
-        .await
-        .map_err(withdraw_database_error)?;
+    if matches!(command.actor, WithdrawalActor::Author) {
+        let encoded_project = encode_command_response_project(&response_project);
+        client
+            .execute(
+                "UPDATE storyos.command_idempotency
+                    SET outcome_kind = 'settled',
+                        result_reference = $3,
+                        acknowledgement_format = $5,
+                        response_project = $6::text::jsonb
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND command_kind = 'withdrawProposal'
+                    AND idempotency_key = $4::text::uuid",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &command.ids.receipt_id,
+                    &command.challenge_binding.idempotency_key,
+                    &COMMAND_RESPONSE_PROJECT_FORMAT,
+                    &encoded_project,
+                ],
+            )
+            .await
+            .map_err(withdraw_database_error)?;
+    }
     Ok(response_project)
 }

@@ -352,12 +352,12 @@ pub use release1_update_volume::{
     UpdateVolumeRequest, UpdateVolumeResponse,
 };
 pub use release1_withdraw_proposal::{
-    ProposalWithdrawalReason, WITHDRAW_PROPOSAL_DIGEST_PROFILE, WITHDRAW_PROPOSAL_METHOD,
-    WITHDRAW_PROPOSAL_PATH, WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
-    WITHDRAW_PROPOSAL_RESPONSE_SCHEMA_ID, WithdrawProposalCause, WithdrawProposalConflictReason,
-    WithdrawProposalEffect, WithdrawProposalInput, WithdrawProposalNoEffectReason,
-    WithdrawProposalRefusalReason, WithdrawProposalRequest, WithdrawProposalResponse,
-    WithdrawalReceipt, WithdrawalReceiptResult,
+    AgentRunDecisionKind, AgentRunDecisionProducer, AuthorWithdrawalReason,
+    CurrentProducerWithdrawalReason, ProposalWithdrawalReason, WITHDRAW_PROPOSAL_DIGEST_PROFILE,
+    WITHDRAW_PROPOSAL_METHOD, WITHDRAW_PROPOSAL_PATH, WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
+    WITHDRAW_PROPOSAL_RESPONSE_SCHEMA_ID, WithdrawProposalConflictReason, WithdrawProposalEffect,
+    WithdrawProposalInput, WithdrawProposalNoEffectReason, WithdrawProposalRefusalReason,
+    WithdrawProposalRequest, WithdrawProposalResponse, WithdrawalReceipt, WithdrawalReceiptResult,
 };
 pub use stage1_crosswalk::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,
