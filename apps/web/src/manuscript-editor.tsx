@@ -48,7 +48,7 @@ export interface ManuscriptEditorProps {
   controllerRef: { current: ManualInputController | null };
   onProjection: (projection: PendingEditProjection, source?: "local") => void;
   onFailure: (error: unknown) => void;
-  onCandidateSettled?: () => void;
+  onCandidateSettled?: (proposalId?: string) => void;
   onAcceptProposal?: (target: {
     proposalId: string;
     operationId: string;
@@ -308,6 +308,9 @@ export function ManuscriptEditor({
           onProjectionRef.current(projection);
           onCandidateSettledRef.current?.(); return;
         }
+        if (settled?.effect.kind === "reversal_required") {
+          onCandidateSettledRef.current?.(settled.proposal_id ?? undefined); return;
+        }
         if (settled === undefined || settled.effect.kind !== "compensated") {
           if (settled !== undefined) {
             onFailureRef.current(new Error("Author Undo did not compensate"));
@@ -319,7 +322,7 @@ export function ManuscriptEditor({
         observedBlocksRef.current = restored.map((block) => ({ ...block }));
         syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
         onProjectionRef.current(await rebuildPendingProjection(workspace));
-        onCandidateSettledRef.current?.();
+        onCandidateSettledRef.current?.(settled.proposal_id ?? undefined);
       } catch (error) {
         if (isCurrent()) onFailureRef.current(error);
       }

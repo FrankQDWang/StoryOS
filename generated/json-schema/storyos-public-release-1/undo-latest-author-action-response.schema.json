@@ -513,6 +513,35 @@
         {
           "additionalProperties": false,
           "properties": {
+            "author_action_sequence": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "reversal_required",
+              "type": "string"
+            },
+            "proposal_id": {
+              "type": "string"
+            },
+            "proposal_revision_id": {
+              "type": "string"
+            },
+            "source_sequence": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_id",
+            "proposal_revision_id",
+            "author_action_sequence",
+            "source_sequence"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "current_author_undo_frontier_sequence": {
               "type": [
                 "string",
@@ -585,6 +614,12 @@
     },
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
+    },
+    "proposal_id": {
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "proposal_revision_id": {
       "type": [

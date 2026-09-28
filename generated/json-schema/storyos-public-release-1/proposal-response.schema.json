@@ -256,7 +256,8 @@
         "kind": {
           "enum": [
             "block_edit",
-            "inline_edit"
+            "inline_edit",
+            "reversal"
           ],
           "type": "string"
         },

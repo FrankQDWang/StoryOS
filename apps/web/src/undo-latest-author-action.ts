@@ -193,7 +193,8 @@ export async function undoOwnedLatestAuthorAction(options: {
     const settled = await submitUndo(durable === undefined ? options : guarded, frontier, expectedHead, flight, durable?.group.frozen_request_body);
     if (durable !== undefined) await observeDraftUndo(options.workspace, durable, { response: settled }, options.isCurrent);
     inFlight.delete(identity);
-    if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated") {
+    if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated"
+      || settled.effect.kind === "reversal_required") {
       await refreshSessionAfterCompensation(options);
     }
     return settled;
@@ -212,7 +213,8 @@ export async function undoOwnedLatestAuthorAction(options: {
     }
     const settled = await submitUndo(options, frontier, expectedHead, flight);
     inFlight.delete(identity);
-    if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated") {
+    if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated"
+      || settled.effect.kind === "reversal_required") {
       await refreshSessionAfterCompensation(options);
     }
     return settled;

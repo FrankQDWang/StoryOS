@@ -126,23 +126,36 @@ fn undo_response(
     settlement: storyos_application::UndoLatestAuthorActionSettlement,
 ) -> Result<Json<contracts::UndoLatestAuthorActionResponse>, ApiError> {
     let project = settlement.response_project;
-    let proposal_revision_id = match &settlement.effect {
+    let (proposal_id, proposal_revision_id) = match &settlement.effect {
         UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
             proposal_revision_id,
             ..
-        } => proposal_revision_id.clone(),
+        } => (None, proposal_revision_id.clone()),
+        UndoLatestAuthorActionSettlementEffect::Compensated {
+            proposal_id,
+            proposal_revision_id,
+            ..
+        } => (proposal_id.clone(), proposal_revision_id.clone()),
+        UndoLatestAuthorActionSettlementEffect::ReversalRequired {
+            proposal_id,
+            proposal_revision_id,
+            ..
+        } => (
+            Some(proposal_id.clone()),
+            Some(proposal_revision_id.clone()),
+        ),
         UndoLatestAuthorActionSettlementEffect::CompensatedDraft { .. }
-        | UndoLatestAuthorActionSettlementEffect::Compensated { .. }
         | UndoLatestAuthorActionSettlementEffect::CompensatedStructure { .. }
         | UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter { .. }
         | UndoLatestAuthorActionSettlementEffect::Conflicted { .. }
-        | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => None,
+        | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => (None, None),
     };
     let (mut draft_refs, mut lifecycle_refs) = match &settlement.effect {
         UndoLatestAuthorActionSettlementEffect::CompensatedDraft { event, .. } => {
             (vec![event.draft_id.clone()], vec![event.event_id.clone()])
         }
         UndoLatestAuthorActionSettlementEffect::Compensated { .. }
+        | UndoLatestAuthorActionSettlementEffect::ReversalRequired { .. }
         | UndoLatestAuthorActionSettlementEffect::CompensatedProposal { .. }
         | UndoLatestAuthorActionSettlementEffect::CompensatedStructure { .. }
         | UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter { .. }
@@ -246,6 +259,25 @@ fn undo_response(
                 command.expected_authoritative_revision_id.clone(),
                 Some(author_action_sequence.to_string()),
             ),
+            UndoLatestAuthorActionSettlementEffect::ReversalRequired {
+                source_sequence,
+                author_action_sequence,
+                proposal_id,
+                proposal_revision_id,
+            } => (
+                // The wire result names the reversal. Storage keeps the zero-commit undo shape.
+                contracts::DomainReceiptResult::ProposalRevised,
+                contracts::UndoLatestAuthorActionEffect::ReversalRequired {
+                    proposal_id,
+                    proposal_revision_id,
+                    author_action_sequence: author_action_sequence.to_string(),
+                    source_sequence: source_sequence.to_string(),
+                },
+                Vec::new(),
+                Vec::new(),
+                command.expected_authoritative_revision_id.clone(),
+                Some(author_action_sequence.to_string()),
+            ),
             UndoLatestAuthorActionSettlementEffect::Compensated {
                 source_sequence,
                 author_action_sequence,
@@ -254,6 +286,7 @@ fn undo_response(
                 body,
                 blocks,
                 author_undo_frontier_sequence,
+                ..
             } => (
                 contracts::DomainReceiptResult::AuthoritativeApplied,
                 contracts::UndoLatestAuthorActionEffect::Compensated {
@@ -328,6 +361,7 @@ fn undo_response(
     let contract_project_scope = contract_scope(&command.project_scope);
     let expected = vec![command.expected_authoritative_revision_id.clone()];
     Ok(Json(contracts::UndoLatestAuthorActionResponse {
+        proposal_id,
         proposal_revision_id,
         source_reopen_event: settlement.source_reopen_event,
         schema_id: contracts::UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID.to_owned(),

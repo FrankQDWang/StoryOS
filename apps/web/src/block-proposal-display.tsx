@@ -281,7 +281,8 @@ export function BlockProposalDisplay({
     const operation = proposal?.operations.find((item) =>
       item.manuscript_block_id === proposal.manuscript_block_id);
     const condition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
-    const anchored = proposal !== undefined && proposal.kind === "block_edit"
+    const anchored = proposal !== undefined
+      && (proposal.kind === "block_edit" || proposal.kind === "reversal")
       && operation !== undefined
       && blockCounts.get(proposal.manuscript_block_id) === 1 && safeToProject;
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
@@ -742,7 +743,13 @@ export function BlockProposalDisplay({
           && accepting === undefined
           && pendingAcceptances.length === 0}
         proposals={projections}
-        onCandidateSettled={() => setSettlementRefresh((value) => value + 1)}
+        onCandidateSettled={(proposalId) => {
+          if (typeof proposalId === "string" && proposalId.length > 0) {
+            setRecoveredProposalIds((current) => current.includes(proposalId)
+              ? current : [...current, proposalId]);
+          }
+          setSettlementRefresh((value) => value + 1);
+        }}
         onAcceptProposal={acceptDisplayed} onRejectProposal={rejectDisplayed}
         onReplanProposal={replanDisplayed} onWithdrawProposal={withdrawDisplayed}
         onCopyProposal={copyDisplayed} />

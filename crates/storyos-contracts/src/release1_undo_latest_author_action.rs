@@ -127,6 +127,12 @@ pub enum UndoLatestAuthorActionEffect {
         #[serde(skip_serializing_if = "Option::is_none")]
         author_undo_frontier_sequence: Option<String>,
     },
+    ReversalRequired {
+        proposal_id: String,
+        proposal_revision_id: String,
+        author_action_sequence: String,
+        source_sequence: String,
+    },
     Conflicted {
         reason: UndoLatestAuthorActionConflictReason,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -140,6 +146,8 @@ pub enum UndoLatestAuthorActionEffect {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct UndoLatestAuthorActionResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proposal_revision_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

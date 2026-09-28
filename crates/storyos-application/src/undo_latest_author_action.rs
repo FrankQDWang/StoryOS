@@ -43,6 +43,14 @@ pub enum UndoLatestAuthorActionSettlementEffect {
         body: String,
         blocks: Vec<crate::ManuscriptBlock>,
         author_undo_frontier_sequence: Option<u64>,
+        proposal_id: Option<String>,
+        proposal_revision_id: Option<String>,
+    },
+    ReversalRequired {
+        source_sequence: u64,
+        author_action_sequence: u64,
+        proposal_id: String,
+        proposal_revision_id: String,
     },
     CompensatedStructure {
         source_sequence: u64,
