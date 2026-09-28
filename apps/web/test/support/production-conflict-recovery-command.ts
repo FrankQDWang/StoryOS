@@ -205,12 +205,13 @@ export async function verifyConflictedProposalRecovery(input: {
     await observer.getByText("已复制候选文字。").waitFor();
     assert.equal(await observer.evaluate(() => navigator.clipboard.readText()), proposal.candidate_text);
     assert.equal(await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-reject]`).count(), 0);
-    assert.equal(await observer.locator("[data-proposal-withdraw]").count(), 0);
+    assert.equal(await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-withdraw]`).count(), 1);
     await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-replan]`).waitFor();
     await queryStoryOSPostgres(`UPDATE storyos.proposal_validation_conditions
       SET condition_kind = 'proposal_conflict' WHERE conflict_id = '${conflictRef}'::uuid`);
     await observer.reload();
     await observer.locator(`[data-proposal-id="${proposalId}"][data-proposal-condition="proposal_conflict"]`).waitFor();
+    assert.equal(await observer.locator("[data-proposal-withdraw]").count(), 0);
 
     let replanPosts = 0;
     let replanKey = "";

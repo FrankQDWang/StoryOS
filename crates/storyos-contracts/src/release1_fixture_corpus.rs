@@ -79,6 +79,8 @@ use crate::release1_update_project::UPDATE_PROJECT;
 use crate::release1_update_project_artifacts as update_project_artifacts;
 use crate::release1_update_volume::UPDATE_VOLUME;
 use crate::release1_update_volume_artifacts as update_volume_artifacts;
+use crate::release1_withdraw_proposal::WITHDRAW_PROPOSAL;
+use crate::release1_withdraw_proposal_artifacts as withdraw_proposal_artifacts;
 
 use super::{
     BOUNDARY_PROFILE_PATH, CHALLENGE_FIXTURE_PATHS, CHAPTER_FIXTURE_PATHS,
@@ -500,6 +502,15 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| replan_proposal_artifacts::fixture_bytes(),
             |_profile| replan_proposal_artifacts::invalid_fixture_bytes(),
             |_profile| replan_proposal_artifacts::boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        withdraw_proposal_artifacts::FIXTURE_PATHS,
+        &WITHDRAW_PROPOSAL,
+        [
+            |_profile| withdraw_proposal_artifacts::fixture_bytes(),
+            |_profile| withdraw_proposal_artifacts::invalid_fixture_bytes(),
+            |_profile| withdraw_proposal_artifacts::boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

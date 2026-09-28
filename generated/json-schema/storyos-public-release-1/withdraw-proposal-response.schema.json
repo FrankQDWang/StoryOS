@@ -1,0 +1,412 @@
+{
+  "$defs": {
+    "AuthorUndoDisposition": {
+      "enum": [
+        "forward"
+      ],
+      "type": "string"
+    },
+    "BoundedAuthorNote": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "omitted",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ControlledProject": {
+      "additionalProperties": false,
+      "properties": {
+        "open": {
+          "$ref": "#/$defs/ProjectOpenState"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "title",
+        "open"
+      ],
+      "type": "object"
+    },
+    "DigestAlgorithm": {
+      "enum": [
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/DigestAlgorithm"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    },
+    "ProjectOpenState": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "empty",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_chapter_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "current_chapter",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "current_chapter_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "ProposalWithdrawalReason": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "author_withdrew",
+              "type": "string"
+            },
+            "note": {
+              "$ref": "#/$defs/BoundedAuthorNote"
+            }
+          },
+          "required": [
+            "kind",
+            "note"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "WithdrawProposalConflictReason": {
+      "enum": [
+        "changed_head"
+      ],
+      "type": "string"
+    },
+    "WithdrawProposalEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "author_action_sequence": {
+              "type": "string"
+            },
+            "closure_event_refs": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "resolved",
+              "type": "string"
+            },
+            "preserved_generation": {
+              "type": "string"
+            },
+            "preserved_validation": {
+              "type": "string"
+            },
+            "prior_closure": {
+              "type": "string"
+            },
+            "resulting_closure": {
+              "type": "string"
+            },
+            "undo_disposition": {
+              "$ref": "#/$defs/AuthorUndoDisposition"
+            },
+            "withdrawal_reason": {
+              "$ref": "#/$defs/ProposalWithdrawalReason"
+            }
+          },
+          "required": [
+            "kind",
+            "author_action_sequence",
+            "undo_disposition",
+            "preserved_generation",
+            "preserved_validation",
+            "prior_closure",
+            "resulting_closure",
+            "withdrawal_reason",
+            "closure_event_refs"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/WithdrawProposalConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/WithdrawProposalRefusalReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "no_effect",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/WithdrawProposalNoEffectReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "WithdrawProposalNoEffectReason": {
+      "enum": [
+        "unsupported_cause",
+        "terminal_supersession",
+        "closure_not_open"
+      ],
+      "type": "string"
+    },
+    "WithdrawProposalRefusalReason": {
+      "enum": [
+        "wrong_scope",
+        "wrong_admission",
+        "stale_proposal_revision"
+      ],
+      "type": "string"
+    },
+    "WithdrawalReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "author_command_admission_id": {
+          "type": "string"
+        },
+        "authoritative_commit_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "expected_target_revisions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "prior_authoritative_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "proposal_id": {
+          "type": "string"
+        },
+        "proposal_revision_id": {
+          "type": "string"
+        },
+        "receipt_id": {
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/WithdrawalReceiptResult"
+        },
+        "resulting_authoritative_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "receipt_id",
+        "project_scope",
+        "command_digest",
+        "idempotency_key",
+        "author_command_admission_id",
+        "proposal_id",
+        "proposal_revision_id",
+        "expected_target_revisions",
+        "prior_authoritative_revision_ids",
+        "resulting_authoritative_revision_ids",
+        "authoritative_commit_ids",
+        "result",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "WithdrawalReceiptResult": {
+      "enum": [
+        "resolved",
+        "conflicted",
+        "refused",
+        "no_effect"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "storyos.command.withdraw-proposal.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "author_command_admission_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "command_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "effect": {
+      "$ref": "#/$defs/WithdrawProposalEffect"
+    },
+    "project": {
+      "$ref": "#/$defs/ControlledProject"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "receipt": {
+      "$ref": "#/$defs/WithdrawalReceipt"
+    },
+    "schema_id": {
+      "const": "storyos.command.withdraw-proposal.response.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "command_id",
+    "author_command_admission_id",
+    "receipt",
+    "project",
+    "effect"
+  ],
+  "title": "StoryOS Withdraw Proposal Response",
+  "type": "object"
+}

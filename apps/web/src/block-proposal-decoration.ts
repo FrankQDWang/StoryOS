@@ -16,6 +16,7 @@ export type BlockProposalProjection = {
   rejectEligible?: boolean;
   retryRejection?: boolean;
   replanEligible?: boolean;
+  withdrawEligible?: boolean;
   copyEligible?: boolean;
   conditionKind?: string;
   validity?: string;
@@ -27,7 +28,7 @@ export type BlockProposalProjection = {
 const ATTRIBUTES = [
   "proposalId", "operationId", "revisionId", "blockId", "sourceRunId",
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
-  "rejectEligible", "retryRejection", "replanEligible",
+  "rejectEligible", "retryRejection", "replanEligible", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
 ] as const;
 
@@ -86,6 +87,7 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
         rejectEligible: node.attrs.rejectEligible as boolean,
         retryRejection: node.attrs.retryRejection as boolean,
         replanEligible: node.attrs.replanEligible as boolean,
+        withdrawEligible: node.attrs.withdrawEligible as boolean,
         copyEligible: node.attrs.copyEligible as boolean,
         conditionKind: node.attrs.conditionKind as string,
         validity: node.attrs.validity as string,
@@ -132,6 +134,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         rejectEligible: proposal.rejectEligible ?? false,
         retryRejection: proposal.retryRejection ?? false,
         replanEligible: proposal.replanEligible ?? false,
+        withdrawEligible: proposal.withdrawEligible ?? false,
         copyEligible: proposal.copyEligible ?? false,
         conditionKind: proposal.conditionKind ?? "absent",
         validity: proposal.validity ?? "",
@@ -167,6 +170,7 @@ export const blockProposalDecoration = TiptapNode.create({
     const rejectEligible = node.attrs.rejectEligible === true;
     const retryRejection = node.attrs.retryRejection === true;
     const replanEligible = node.attrs.replanEligible === true;
+    const withdrawEligible = node.attrs.withdrawEligible === true;
     const copyEligible = node.attrs.copyEligible === true;
     return ["div", {
       class: "block-proposal",
@@ -201,6 +205,10 @@ export const blockProposalDecoration = TiptapNode.create({
       type: "button", class: "block-proposal-replan",
       "data-proposal-replan": node.attrs.proposalId, contenteditable: "false",
     }, "重新规划"]] : []),
+    ...(withdrawEligible ? [["button", {
+      type: "button", class: "block-proposal-withdraw",
+      "data-proposal-withdraw": node.attrs.proposalId, contenteditable: "false",
+    }, "撤回"]] : []),
     ...(copyEligible ? [["button", {
       type: "button", class: "block-proposal-copy",
       "data-proposal-copy": node.attrs.proposalId, contenteditable: "false",

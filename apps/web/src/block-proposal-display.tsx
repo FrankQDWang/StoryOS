@@ -16,10 +16,12 @@ import { rejectDisplayedBlockProposal, rejectionJournalState,
 import { acceptanceJournalProposals, acceptanceSessionBlocked, hasPendingDisplayedAcceptance,
   knownProblemDisplayedAcceptance, reconcileDisplayedAcceptance,
   settledDisplayedAcceptance } from "./acceptance-journal.ts";
-import { proposalConditionKind, recoveryStatus, type SessionPosture }
-  from "./proposal-recovery-surface.ts";
+import { proposalConditionKind } from "./proposal-recovery-surface.ts";
 import { pendingReplanIds, replanDisplayedBlockProposal, retryPendingDisplayedReplan }
   from "./replan-block-proposal.ts";
+import { authorWithdrawControlReady, dispatchDisplayedWithdraw, dispatchDisplayedWithdrawRetry,
+  pendingWithdrawIds } from "./withdraw-block-proposal.ts";
+import { ProposalDecisionStatus } from "./proposal-decision-status.tsx";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
@@ -89,6 +91,7 @@ export function BlockProposalDisplay({
   const [journalPendingIds, setJournalPendingIds] = useState<string[]>([]);
   const [pendingRejections, setPendingRejections] = useState<string[]>([]);
   const [pendingReplans, setPendingReplans] = useState<string[]>([]);
+  const [pendingWithdrawals, setPendingWithdrawals] = useState<string[]>([]);
   const [sessionBlockedIds, setSessionBlockedIds] = useState<string[]>([]);
   const [settledRejections, setSettledRejections] = useState<Record<string,
     "resolved" | "conflicted" | "refused">>({});
@@ -111,8 +114,8 @@ export function BlockProposalDisplay({
     }
     setRecoveryChecked(false);
     void Promise.all([acceptanceJournalProposals(workspace), rejectionJournalState(workspace),
-      readExpansionJournal(workspace), pendingReplanIds(workspace)])
-      .then(async ([acceptance, rejection, expansions, replans]) => {
+      readExpansionJournal(workspace), pendingReplanIds(workspace), pendingWithdrawIds(workspace)])
+      .then(async ([acceptance, rejection, expansions, replans, withdrawals]) => {
       for (const entry of expansions) if (entry.observation === undefined) {
         const response = await retryExpansion(workspace, entry.record, editorProps.baseUrl, editorProps.fetchImpl, () => active);
         entry.observation = { key: `expansion-observation:${entry.record.key}`, record_key: entry.record.key, response };
@@ -126,6 +129,7 @@ export function BlockProposalDisplay({
         ...rejection.pendingIds])]);
       setPendingRejections(rejection.pendingIds);
       setPendingReplans(replans);
+      setPendingWithdrawals(withdrawals);
       setSettledRejections(rejection.settledResults);
       setRecoveryUnavailable(false);
     }).catch(() => {
@@ -314,6 +318,12 @@ export function BlockProposalDisplay({
       && proposal.closure === "open" && operation.resolution === "pending"
       && !pendingAcceptance && !pendingRejections.includes(proposal.proposal_id)
       && !pendingReplans.includes(proposal.proposal_id);
+    const withdrawEligible = authorWithdrawControlReady({
+      controlsReady, condition, closure: proposal.closure, resolution: operation.resolution,
+      pendingAcceptance, pendingRejection: pendingRejections.includes(proposal.proposal_id),
+      pendingReplan: pendingReplans.includes(proposal.proposal_id),
+      pendingWithdraw: pendingWithdrawals.includes(proposal.proposal_id),
+    });
     projections.push({
       proposalId: proposal.proposal_id,
       operationId: operation.operation_id,
@@ -330,6 +340,7 @@ export function BlockProposalDisplay({
       retryRejection: pendingRejections.includes(proposal.proposal_id)
         && accepting !== proposal.proposal_id,
       replanEligible,
+      withdrawEligible,
       copyEligible: proposal.candidate_text.length > 0,
       conditionKind: condition,
       validity: proposal.validation,
@@ -677,6 +688,34 @@ export function BlockProposalDisplay({
     })();
   };
 
+  const withdrawControl = {
+    baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
+    cryptoImpl: editorProps.cryptoImpl, workspace: editorProps.persistWorkspace,
+    authoritativeRevisionId,
+    markBusy: (proposalId: string) => { acceptingRef.current = true; setAccepting(proposalId); },
+    markIdle: () => { acceptingRef.current = false; setAccepting(undefined); },
+    report: (proposalId: string, message: string) => setDecisionMessages((current) =>
+      ({ ...current, [proposalId]: message })),
+    refresh: () => setSettlementRefresh((value) => value + 1),
+    onAccepted,
+  };
+  const withdrawDisplayed = (target: {
+    proposalId: string; operationId: string; revisionId: string; text: string;
+  }) => {
+    const displayed = reads.find(({ proposal }) => proposal?.proposal_id === target.proposalId)?.proposal;
+    const projection = projections.find((item) => item.proposalId === target.proposalId);
+    dispatchDisplayedWithdraw({
+      ...withdrawControl, target, pending: pendingWithdrawals.includes(target.proposalId),
+      busy: acceptingRef.current, displayedRevisionId: displayed?.revision_id,
+      eligible: projection?.withdrawEligible === true, writerReady: writerReady(),
+    });
+  };
+  const retryWithdraw = (proposalId: string) => {
+    dispatchDisplayedWithdrawRetry({
+      ...withdrawControl, proposalId, busy: acceptingRef.current,
+    });
+  };
+
   const copyDisplayed = (proposalId: string) => {
     const displayed = reads.find(({ proposal }) => proposal?.proposal_id === proposalId)?.proposal;
     if (displayed === undefined || displayed.candidate_text.length === 0) return;
@@ -705,7 +744,8 @@ export function BlockProposalDisplay({
         proposals={projections}
         onCandidateSettled={() => setSettlementRefresh((value) => value + 1)}
         onAcceptProposal={acceptDisplayed} onRejectProposal={rejectDisplayed}
-        onReplanProposal={replanDisplayed} onCopyProposal={copyDisplayed} />
+        onReplanProposal={replanDisplayed} onWithdrawProposal={withdrawDisplayed}
+        onCopyProposal={copyDisplayed} />
       <RefusedEditDraftDisplay workspace={editorProps.persistWorkspace} scope={scope}
         baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
         refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold} onProjection={editorProps.onProjection}
@@ -718,61 +758,24 @@ export function BlockProposalDisplay({
             : <p key={index} data-proposal-structured-block style={{ whiteSpace: "pre-wrap" }}>{block.text}</p>)}
         </section>] : [])}
       {recoveryUnavailable ? <p role="alert">接受记录暂不可读取，请检查本地数据。</p> : null}
-      {reads.map(({ locator, proposal }) => {
-        const problem = knownProblems[locator.proposalId];
-        const rejectionResult = settledRejections[locator.proposalId];
-        const writerOpen = editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
-          && editorProps.persistWorkspace.session.writer.kind === "current_writer";
-        const posture: SessionPosture = !writerOpen ? "closed"
-          : sessionBlockedIds.includes(locator.proposalId) ? "blocked" : "current";
-        const message = pendingRejections.includes(locator.proposalId)
-            ? "拒绝结果尚未确认。请重试同一操作。"
-          : proposal?.operation_resolution === "rejected"
-            ? "已拒绝，正文保持不变。"
-          : rejectionResult !== undefined
-            ? {
-              resolved: "已拒绝，正文保持不变。",
-              conflicted: "正文已变化，拒绝结果请检查。",
-              refused: "此次拒绝未生效，请检查当前候选文字。",
-            }[rejectionResult]
-          : pendingReplans.includes(locator.proposalId)
-            ? "重新规划结果尚未确认。请重试同一操作。"
-          : problem !== undefined && problem.code !== "acceptance_session_ineligible"
-            ? `Acceptance ${problem.code} (HTTP ${problem.status}): ${problem.message}`
-          : pendingAcceptances.includes(locator.proposalId)
-            ? proposal?.operation_resolution === "applied"
-              ? "正文已变化；此次接受结果尚未确认。请重试同一操作。"
-              : decisionMessages[locator.proposalId]
-                ?? "接受结果尚未确认。请重试同一操作。"
-          : proposal?.operation_resolution === "applied"
-          ? !acceptanceChecked ? "正在同步正文。"
-            : decisionMessages[locator.proposalId]?.includes("请刷新")
-            ? decisionMessages[locator.proposalId] : "已接受，正文已更新。"
-          : proposal === undefined ? decisionMessages[locator.proposalId]
-          : (recoveryStatus(proposal, posture) ?? decisionMessages[locator.proposalId]);
-        return message === undefined ? null : (
-          <p data-proposal-decision={locator.proposalId} role="status" key={locator.proposalId}>
-            {message}
-            {pendingAcceptances.includes(locator.proposalId)
-              && problem === undefined ? (
-                <button type="button" disabled={accepting !== undefined}
-                  onClick={() => retryPending(locator.proposalId)}>重试接受</button>
-              ) : null}
-            {pendingRejections.includes(locator.proposalId) ? (
-              <button type="button" disabled={accepting !== undefined}
-                onClick={() => retryRejection(locator.proposalId)}>重试拒绝</button>
-            ) : null}
-            {pendingReplans.includes(locator.proposalId) ? (
-              <button type="button" data-proposal-replan={locator.proposalId}
-                disabled={accepting !== undefined}
-                onClick={() => retryReplan(locator.proposalId)}>重试重新规划</button>
-            ) : null}
-            {decisionMessages[locator.proposalId] === "已复制候选文字。"
-              && message !== "已复制候选文字。"
-              ? <span>已复制候选文字。</span> : null}
-          </p>
-        );
-      })}
+      {reads.map(({ locator, proposal }) => (
+        <ProposalDecisionStatus key={locator.proposalId} proposalId={locator.proposalId}
+          proposal={proposal} problem={knownProblems[locator.proposalId]}
+          rejectionResult={settledRejections[locator.proposalId]}
+          writerOpen={editorProps.persistWorkspace?.partition.disposition === "current_writer_open"
+            && editorProps.persistWorkspace.session.writer.kind === "current_writer"}
+          sessionBlocked={sessionBlockedIds.includes(locator.proposalId)}
+          pendingRejection={pendingRejections.includes(locator.proposalId)}
+          pendingReplan={pendingReplans.includes(locator.proposalId)}
+          pendingWithdraw={pendingWithdrawals.includes(locator.proposalId)}
+          pendingAcceptance={pendingAcceptances.includes(locator.proposalId)}
+          decisionMessage={decisionMessages[locator.proposalId]}
+          acceptanceChecked={acceptanceChecked} retryDisabled={accepting !== undefined}
+          onRetryPending={() => retryPending(locator.proposalId)}
+          onRetryRejection={() => retryRejection(locator.proposalId)}
+          onRetryReplan={() => retryReplan(locator.proposalId)}
+          onRetryWithdraw={() => retryWithdraw(locator.proposalId)} />
+      ))}
       {unavailable.map(({ locator, proposal }) => (
         <p className="block-proposal-unavailable" data-proposal-unavailable={locator.proposalId}
           data-proposal-revision-id={proposal?.revision_id ?? ""}
