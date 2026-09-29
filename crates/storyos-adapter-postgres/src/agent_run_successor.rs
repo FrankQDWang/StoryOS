@@ -145,14 +145,26 @@ pub(crate) async fn advance(
         UnknownCreateSuccessorDecision::ProhibitedByCancellation => {
             let consumed = flag(&marker, "allowance_consumed");
             let fenced = flag(&marker, "predecessor_fenced");
-            seal(&mut marker, "prohibited", None, consumed, fenced);
+            seal(
+                &mut marker,
+                "prohibited",
+                /*pause_reason*/ None,
+                consumed,
+                fenced,
+            );
             marker["dispatch_prohibited"] = serde_json::json!(true);
             row.payload["unknown_create_successor"] = marker;
             write_decision_payload(client, claim, &row.attempt_id, &row.payload).await?;
             Ok(SuccessorWork::Done(CompleteAgentRun::Settled))
         }
         UnknownCreateSuccessorDecision::Pause { reason } => {
-            seal(&mut marker, "paused", Some(reason.label()), false, false);
+            seal(
+                &mut marker,
+                "paused",
+                Some(reason.label()),
+                /*allowance_consumed*/ false,
+                /*predecessor_fenced*/ false,
+            );
             row.payload["unknown_create_successor"] = marker;
             write_decision_payload(client, claim, &row.attempt_id, &row.payload).await?;
             update_run(
@@ -169,7 +181,13 @@ pub(crate) async fn advance(
             Ok(SuccessorWork::Done(CompleteAgentRun::Settled))
         }
         UnknownCreateSuccessorDecision::FenceAndDispatch => {
-            seal(&mut marker, "fenced", None, true, true);
+            seal(
+                &mut marker,
+                "fenced",
+                /*pause_reason*/ None,
+                /*allowance_consumed*/ true,
+                /*predecessor_fenced*/ true,
+            );
             row.payload["unknown_create_successor"] = marker;
             row.payload["reservation"] =
                 serde_json::json!({"kind": "worst_case", "released": false});
@@ -218,7 +236,13 @@ pub(crate) async fn prohibit_automatic_successor(
     }
     let consumed = flag(marker, "allowance_consumed");
     let fenced = flag(marker, "predecessor_fenced");
-    seal(marker, "prohibited", None, consumed, fenced);
+    seal(
+        marker,
+        "prohibited",
+        /*pause_reason*/ None,
+        consumed,
+        fenced,
+    );
     marker["dispatch_prohibited"] = serde_json::json!(true);
     let claim = ClaimedAgentRun {
         project_scope: scope.clone(),
@@ -358,7 +382,13 @@ async fn dispatch_pending(
         marker["successor_model_attempt_id"] = serde_json::json!(created.attempt_id);
         marker["successor_manifest_id"] = serde_json::json!(created.manifest_id);
         marker["successor_decision_id"] = serde_json::json!(created.decision_id);
-        seal(marker, "dispatched", None, true, true);
+        seal(
+            marker,
+            "dispatched",
+            /*pause_reason*/ None,
+            /*allowance_consumed*/ true,
+            /*predecessor_fenced*/ true,
+        );
         row.payload["unknown_create_successor"] = marker.clone();
         row.payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": false});
         row.payload["usage"] = serde_json::json!({"kind": "unknown"});
