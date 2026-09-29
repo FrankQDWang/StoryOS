@@ -19,6 +19,7 @@
   ],
   "rust_cache": {"high_water_bytes": 12884901888, "total_limit_bytes": 21474836480},
   "targeted": {
+    "verification-teardown": {"command": ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", "node-contract", "test/node-contract/required-global-teardown.test.ts"], "clean": false},
     "verification-file-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_file_tests_tests.py"], "clean": false},
     "verification-node-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_node_tests.py"], "clean": false},
     "verification-observation-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_observation*tests.py"], "clean": false},
@@ -120,6 +121,7 @@
       "project-scope": {"requires": ["release-package"], "members": ["postgres-scope", "postgres-challenge", "postgres-library", "http-files", "author-edit-process-cut", "readable-export-process-cut", "project-export-process-cut", "exact-dist", "recovery-fixture", "recovery-mixed"]}
     },
     "targeted": {
+      "verification-teardown": ["file:node-contract:apps/web/test/node-contract/required-global-teardown.test.ts"],
       "verification-file-tests": ["check:verification-tools"],
       "verification-node-tests": ["check:verification-tools"],
       "verify-tracker": ["check:verify-tracker"],
@@ -197,6 +199,7 @@
     }
   ],
   "daily_consumers": [
+    {"pattern": "scripts/verification*.py", "groups": ["node-contract"]},
     {"pattern": "crates/storyos-application/*", "groups": ["database", "node-postgresql"]},
     {"pattern": "crates/storyos-server/*", "groups": ["database", "node-postgresql", "node-contract"]},
     {"pattern": "crates/storyos-worker/*", "groups": ["database", "node-process-cut"]},

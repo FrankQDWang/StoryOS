@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { queryStoryOSPostgres } from "./node-integration";
+import { requiredGlobalTeardown } from "./required-global-teardown";
 
 const USER_A = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
@@ -8,7 +9,7 @@ const CHAPTER = "018f0000-0000-7001-8000-000000000003";
 
 export default function exactDistGlobalSetup(): (() => Promise<void>) | undefined {
   if (process.env.STORYOS_STAGE1_AUTHORITY_ORACLE !== "1") return undefined;
-  return async () => {
+  return requiredGlobalTeardown(async () => {
     const authorityJson = await queryStoryOSPostgres(`
       WITH production AS (
         SELECT owner_user_id, project_id, current_chapter_id FROM storyos.projects
@@ -140,5 +141,5 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       activity_consumer_receipt_count: 2,
       non_fixture_non_create_project_receipt_count: 0,
     });
-  };
+  });
 }
