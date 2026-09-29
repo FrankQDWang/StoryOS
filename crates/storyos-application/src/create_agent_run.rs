@@ -57,6 +57,7 @@ pub struct AgentRunRecord {
     pub active_compaction: Option<ActiveCompactionInspect>,
     pub reference_recovery: Option<ReferenceRecoveryInspect>,
     pub original_result_retrieval: Option<OriginalResultRetrievalInspect>,
+    pub unknown_create_successor: Option<UnknownCreateSuccessorInspect>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -160,6 +161,33 @@ pub struct OriginalResultRetrievalInspect {
     pub advances_continuation: bool,
     pub reservation_released: bool,
     pub usage_kind: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnknownCreateSuccessorDisposition {
+    Fenced,
+    Dispatched,
+    Paused,
+    Prohibited,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnknownCreateSuccessorInspect {
+    pub recovery_id: String,
+    pub disposition: UnknownCreateSuccessorDisposition,
+    pub pause_reason: Option<String>,
+    pub lookup_unavailable_reason: Option<String>,
+    pub predecessor_model_attempt_id: String,
+    pub successor_model_attempt_id: Option<String>,
+    pub model_invocation_id: String,
+    pub predecessor_fenced: bool,
+    pub allowance_consumed: bool,
+    pub predecessor_usage_kind: String,
+    pub predecessor_reservation_released: bool,
+    pub successor_settles_predecessor: bool,
+    pub supplies_tool_call: bool,
+    pub advances_predecessor_continuation: bool,
+    pub reuses_changed_context: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

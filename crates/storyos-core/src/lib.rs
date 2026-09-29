@@ -20,6 +20,7 @@ mod draft_retry;
 mod expand_refused_edit_draft;
 mod rebuild_expired_reference;
 mod retrieve_original_result;
+mod unknown_create_successor;
 pub use expand_refused_edit_draft::{ExpandRefusedEditDraftResult, expand_refused_edit_draft};
 mod manuscript_payload;
 mod refused_edit;
@@ -197,6 +198,12 @@ pub use undo_latest_author_action::{
     AuthorUndoFrontier, AuthorUndoFrontierKind, UndoLatestAuthorAction,
     UndoLatestAuthorActionConflict, UndoLatestAuthorActionResult,
     UndoLatestAuthorActionUnavailable, undo_latest_author_action,
+};
+pub use unknown_create_successor::{
+    LookupUnavailable, ScriptedSuccessorConditions, SuccessorAllowance, SuccessorEffect,
+    SuccessorLookup, SuccessorPauseReason, UnknownCreateScript, UnknownCreateSuccessorDecision,
+    UnknownCreateSuccessorFacts, decide_unknown_create_successor, scripted_successor_conditions,
+    unknown_create_script,
 };
 pub use update_chapter::{
     ChapterJoin, UpdateChapter, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,

@@ -138,6 +138,13 @@ async fn persist_control(
                 )
                 .await
                 .map_err(|error| AgentRunControlError::Unavailable(Box::new(error)))?;
+                crate::agent_run_successor::prohibit_automatic_successor(
+                    client,
+                    &command.project_scope,
+                    &command.run_id,
+                )
+                .await
+                .map_err(|error| AgentRunControlError::Unavailable(Box::new(error)))?;
                 effect
             }
             CancelAgentRunResult::AlreadyCancelled => AgentRunControlEffect::NoEffect {

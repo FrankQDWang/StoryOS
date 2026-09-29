@@ -102,6 +102,9 @@
   },
   "run_id": "018f0000-0000-7001-8000-000000000a34",
   "schema_id": "storyos.query.agent-run.response.v2",
+  "unknown_create_successor": {
+    "kind": "absent"
+  },
   "usage": {
     "kind": "unknown"
   }

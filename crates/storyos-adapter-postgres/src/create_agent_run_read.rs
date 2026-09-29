@@ -215,7 +215,7 @@ pub(super) async fn load_agent_run(
         }),
         None => None,
     };
-    Ok(Some(AgentRunRecord {
+    let mut record = AgentRunRecord {
         project_agent_id: row.get(0),
         conversation_id: row.get(1),
         memory_settings_revision: row.get(2),
@@ -238,7 +238,35 @@ pub(super) async fn load_agent_run(
             client, scope, run_id,
         )
         .await?,
-    }))
+        unknown_create_successor: crate::agent_run_successor::load_unknown_create_successor(
+            client, scope, run_id,
+        )
+        .await?,
+    };
+    if let Some(selection) =
+        crate::agent_run_successor::load_successor_selection(client, scope, run_id).await?
+        && let Some(model) = record.model.as_mut()
+    {
+        record.decision = inspect_decision(
+            /*settlement*/ None,
+            Some(&selection.payload),
+            selection.continuation_binding_id,
+        );
+        model.items = selection
+            .payload
+            .get("items")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::as_slice)
+            .map(parse_items)
+            .unwrap_or_default();
+        model.usage_kind = selection
+            .payload
+            .pointer("/usage/kind")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unknown")
+            .to_owned();
+    }
+    Ok(Some(record))
 }
 
 fn parse_run_status(status: &str) -> Result<AgentRunStatus, CreateAgentRunError> {

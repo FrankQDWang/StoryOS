@@ -261,20 +261,37 @@ async fn settle_one_phase(
     }
     let payload: serde_json::Value = serde_json::from_str(&run.get::<_, String>(12))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    if payload.get("original_result_retrieval").is_some() {
-        let result = crate::agent_run_retrieval::advance_original_result_retrieval(
-            client,
-            claim,
-            &payload,
-            crate::agent_run_retrieval::RetrievalAdvance {
-                attempt_id: attempt_id.as_deref().expect("attempt exists"),
-                conversation_id: &conversation_id,
-                run_status: &status,
-            },
-            crate::agent_run_retrieval::RetrievalFence::Open,
-        )
-        .await?;
-        return Ok(WorkPhase::Done(result));
+    if payload.get("original_result_retrieval").is_some()
+        || payload.get("unknown_create_successor").is_some()
+    {
+        let follow_successor = payload.get("unknown_create_successor").is_some();
+        if payload.get("original_result_retrieval").is_some() {
+            let result = crate::agent_run_retrieval::advance_original_result_retrieval(
+                client,
+                claim,
+                &payload,
+                crate::agent_run_retrieval::RetrievalAdvance {
+                    attempt_id: attempt_id.as_deref().expect("attempt exists"),
+                    conversation_id: &conversation_id,
+                    run_status: &status,
+                },
+                crate::agent_run_retrieval::RetrievalFence::Open,
+                if follow_successor {
+                    crate::agent_run_retrieval::RetrievalRunWrite::Defer
+                } else {
+                    crate::agent_run_retrieval::RetrievalRunWrite::Write
+                },
+            )
+            .await?;
+            if !follow_successor {
+                return Ok(WorkPhase::Done(result));
+            }
+        }
+        return match crate::agent_run_successor::advance(client, claim, assistance.as_ref()).await?
+        {
+            crate::agent_run_successor::SuccessorWork::Done(result) => Ok(WorkPhase::Done(result)),
+            crate::agent_run_successor::SuccessorWork::Hold(kind) => Ok(WorkPhase::Hold(kind)),
+        };
     }
     let items_empty = payload
         .get("items")
@@ -731,6 +748,8 @@ async fn hold_if_requested(kind: &str) {
         "stream" => "STORYOS_TEST_FAKE_STREAM_HOLD_PATH",
         "decision" => "STORYOS_TEST_FAKE_DECISION_HOLD_PATH",
         "compaction_stage" => "STORYOS_TEST_FAKE_COMPACTION_STAGE_HOLD_PATH",
+        "successor_fence" => "STORYOS_TEST_FAKE_SUCCESSOR_FENCE_HOLD_PATH",
+        "successor_late" => "STORYOS_TEST_FAKE_SUCCESSOR_LATE_HOLD_PATH",
         _ => return,
     };
     let Ok(path) = std::env::var(key) else {
