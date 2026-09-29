@@ -244,6 +244,9 @@ pub(super) async fn get_agent_run(
         original_result_retrieval: inspect_original_result_retrieval(
             record.original_result_retrieval.as_ref(),
         ),
+        unknown_create_successor: inspect_unknown_create_successor(
+            record.unknown_create_successor.as_ref(),
+        ),
         evidence: record
             .model
             .as_ref()
@@ -296,6 +299,44 @@ fn inspect_original_result_retrieval(
             advances_continuation: retrieval.advances_continuation,
             reservation_released: retrieval.reservation_released,
             usage_kind: retrieval.usage_kind.clone(),
+        },
+    }
+}
+
+fn inspect_unknown_create_successor(
+    successor: Option<&storyos_application::UnknownCreateSuccessorInspect>,
+) -> contracts::OptionalUnknownCreateSuccessorInspect {
+    match successor {
+        None => contracts::OptionalUnknownCreateSuccessorInspect::Absent,
+        Some(successor) => contracts::OptionalUnknownCreateSuccessorInspect::Present {
+            recovery_id: successor.recovery_id.clone(),
+            disposition: match successor.disposition {
+                storyos_application::UnknownCreateSuccessorDisposition::Fenced => {
+                    contracts::UnknownCreateSuccessorDisposition::Fenced
+                }
+                storyos_application::UnknownCreateSuccessorDisposition::Dispatched => {
+                    contracts::UnknownCreateSuccessorDisposition::Dispatched
+                }
+                storyos_application::UnknownCreateSuccessorDisposition::Paused => {
+                    contracts::UnknownCreateSuccessorDisposition::Paused
+                }
+                storyos_application::UnknownCreateSuccessorDisposition::Prohibited => {
+                    contracts::UnknownCreateSuccessorDisposition::Prohibited
+                }
+            },
+            pause_reason: successor.pause_reason.clone(),
+            lookup_unavailable_reason: successor.lookup_unavailable_reason.clone(),
+            predecessor_model_attempt_id: successor.predecessor_model_attempt_id.clone(),
+            successor_model_attempt_id: successor.successor_model_attempt_id.clone(),
+            model_invocation_id: successor.model_invocation_id.clone(),
+            predecessor_fenced: successor.predecessor_fenced,
+            allowance_consumed: successor.allowance_consumed,
+            predecessor_usage_kind: successor.predecessor_usage_kind.clone(),
+            predecessor_reservation_released: successor.predecessor_reservation_released,
+            successor_settles_predecessor: successor.successor_settles_predecessor,
+            supplies_tool_call: successor.supplies_tool_call,
+            advances_predecessor_continuation: successor.advances_predecessor_continuation,
+            reuses_changed_context: successor.reuses_changed_context,
         },
     }
 }

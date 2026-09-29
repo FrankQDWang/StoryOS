@@ -20,6 +20,11 @@ pub(crate) enum RetrievalFence {
     Fenced,
 }
 
+pub(crate) enum RetrievalRunWrite {
+    Write,
+    Defer,
+}
+
 pub(crate) struct RetrievalAdvance<'a> {
     pub attempt_id: &'a str,
     pub conversation_id: &'a str,
@@ -95,9 +100,10 @@ pub(crate) async fn advance_original_result_retrieval(
     payload: &serde_json::Value,
     advance: RetrievalAdvance<'_>,
     fence: RetrievalFence,
+    run_write: RetrievalRunWrite,
 ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
     let fenced = matches!(fence, RetrievalFence::Fenced);
-    apply(client, claim, payload, &advance, fenced).await
+    apply(client, claim, payload, &advance, fenced, run_write).await
 }
 
 pub(crate) async fn reconcile_fenced_original_result(
@@ -150,6 +156,7 @@ pub(crate) async fn reconcile_fenced_original_result(
             run_status: &row.get::<_, String>(3),
         },
         RetrievalFence::Fenced,
+        RetrievalRunWrite::Write,
     )
     .await?;
     Ok(())
@@ -234,7 +241,9 @@ async fn apply(
     payload: &serde_json::Value,
     advance: &RetrievalAdvance<'_>,
     fenced: bool,
+    run_write: RetrievalRunWrite,
 ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
+    let defer_run_status = matches!(run_write, RetrievalRunWrite::Defer);
     let subject = payload
         .get("original_result_retrieval")
         .ok_or_else(|| unavailable(std::io::Error::other("The retrieval subject is missing")))?;
@@ -243,7 +252,7 @@ async fn apply(
         .and_then(serde_json::Value::as_bool)
         == Some(true)
     {
-        if !fenced {
+        if !fenced && !defer_run_status {
             restore_reconciled(client, claim, subject).await?;
         }
         return Ok(CompleteAgentRun::AlreadySettled);
@@ -338,7 +347,7 @@ async fn apply(
             );
         }
         write_settled_decision(client, claim, &decision_id, &binding, &next).await?;
-        if !fenced {
+        if !fenced && !defer_run_status {
             update_run(
                 client,
                 claim,
@@ -351,6 +360,7 @@ async fn apply(
     } else {
         write_unsettled_payload(client, claim, advance.attempt_id, &next).await?;
         if !fenced
+            && !defer_run_status
             && matches!(
                 decision,
                 OriginalResultRetrievalDecision::KeepUnknown { .. }

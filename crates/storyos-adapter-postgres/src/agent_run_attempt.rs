@@ -65,7 +65,21 @@ pub(crate) async fn persist_uncertain_attempt(
             continuation.known_prior_binding_id.as_deref(),
         )
     });
-    if let Some(subject) = crate::agent_run_retrieval::subject_record(
+    if let Some(prepared) = crate::agent_run_successor::prepare_subject(
+        author_message,
+        &crate::agent_run_successor::SuccessorOrigin {
+            owner_user_id: claim.project_scope.owner_user_id.as_ref(),
+            project_id: claim.project_scope.project_id.as_ref(),
+            conversation_id,
+            destination_identity: &assistance.processing_destination_identity,
+            predecessor_attempt_id: &model_attempt_id,
+            model_invocation_id: &model_invocation_id,
+        },
+    ) {
+        payload["original_result_retrieval"] = prepared.retrieval;
+        payload["unknown_create_successor"] = prepared.marker;
+        payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": false});
+    } else if let Some(subject) = crate::agent_run_retrieval::subject_record(
         author_message,
         claim.project_scope.owner_user_id.as_ref(),
         claim.project_scope.project_id.as_ref(),

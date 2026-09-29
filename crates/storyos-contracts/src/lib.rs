@@ -138,8 +138,9 @@ pub use release1_agent_run::{
     OptionalCompactionInstallInspect, OptionalContinuationInspect, OptionalDecisionInspect,
     OptionalManifestRef, OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
-    OriginalResultRetrievalDisposition, ProjectionMode, ReferenceRecoveryDisposition,
-    SourceAvailability, TokenCountingProfileInspect,
+    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, ProjectionMode,
+    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
+    UnknownCreateSuccessorDisposition,
 };
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,

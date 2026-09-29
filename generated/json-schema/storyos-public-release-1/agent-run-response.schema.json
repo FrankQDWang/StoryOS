@@ -1371,6 +1371,106 @@
         }
       ]
     },
+    "OptionalUnknownCreateSuccessorInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "advances_predecessor_continuation": {
+              "type": "boolean"
+            },
+            "allowance_consumed": {
+              "type": "boolean"
+            },
+            "disposition": {
+              "$ref": "#/$defs/UnknownCreateSuccessorDisposition"
+            },
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "lookup_unavailable_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model_invocation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "pause_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "predecessor_fenced": {
+              "type": "boolean"
+            },
+            "predecessor_model_attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "predecessor_reservation_released": {
+              "type": "boolean"
+            },
+            "predecessor_usage_kind": {
+              "type": "string"
+            },
+            "recovery_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "reuses_changed_context": {
+              "type": "boolean"
+            },
+            "successor_model_attempt_id": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "successor_settles_predecessor": {
+              "type": "boolean"
+            },
+            "supplies_tool_call": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "recovery_id",
+            "disposition",
+            "predecessor_model_attempt_id",
+            "model_invocation_id",
+            "predecessor_fenced",
+            "allowance_consumed",
+            "predecessor_usage_kind",
+            "predecessor_reservation_released",
+            "successor_settles_predecessor",
+            "supplies_tool_call",
+            "advances_predecessor_continuation",
+            "reuses_changed_context"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "OriginalResultRetrievalDisposition": {
       "enum": [
         "kept_unknown",
@@ -1479,6 +1579,15 @@
         "item_token_limit"
       ],
       "type": "object"
+    },
+    "UnknownCreateSuccessorDisposition": {
+      "enum": [
+        "fenced",
+        "dispatched",
+        "paused",
+        "prohibited"
+      ],
+      "type": "string"
     }
   },
   "$id": "storyos.query.agent-run.response.v2",
@@ -1548,6 +1657,9 @@
     "status": {
       "$ref": "#/$defs/AgentRunStatus"
     },
+    "unknown_create_successor": {
+      "$ref": "#/$defs/OptionalUnknownCreateSuccessorInspect"
+    },
     "usage": {
       "$ref": "#/$defs/AgentRunUsageInspect"
     }
@@ -1567,6 +1679,7 @@
     "active_compaction",
     "reference_recovery",
     "original_result_retrieval",
+    "unknown_create_successor",
     "evidence",
     "items",
     "usage",
