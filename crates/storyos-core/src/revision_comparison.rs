@@ -1,5 +1,3 @@
-//! Derive an optional comparison from one exact base revision and one candidate revision.
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RevisionComparisonAccess {
     SameScope,
@@ -52,21 +50,18 @@ pub fn inspect_revision_comparison(
     access: RevisionComparisonAccess,
     source: &ExactRevisionTexts,
 ) -> Option<RevisionComparison> {
-    match access {
-        RevisionComparisonAccess::WrongScope => None,
-        RevisionComparisonAccess::SameScope => Some(derive_revision_comparison(source)),
+    if let RevisionComparisonAccess::WrongScope = access {
+        return None;
     }
-}
-
-fn derive_revision_comparison(source: &ExactRevisionTexts) -> RevisionComparison {
-    let edits =
-        normalize_fragmented_matches(&diff_texts(&source.base_text, &source.candidate_text));
-    RevisionComparison {
+    let base: Vec<char> = source.base_text.chars().collect();
+    let candidate: Vec<char> = source.candidate_text.chars().collect();
+    let edits = normalize_fragmented_matches(&coalesce(&myers_edits(&base, &candidate)));
+    Some(RevisionComparison {
         base_revision_id: source.base_revision_id.clone(),
         candidate_revision_id: source.candidate_revision_id.clone(),
         operation_id: source.operation_id.clone(),
         spans: replacement_spans(&edits),
-    }
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -76,14 +71,7 @@ enum Edit {
     Insert(String),
 }
 
-/// One comparison trace stays inside the existing public JSON string ceiling.
 const TRACE_BYTE_CEILING: usize = 1024 * 1024;
-
-fn diff_texts(base: &str, candidate: &str) -> Vec<Edit> {
-    let base_chars: Vec<char> = base.chars().collect();
-    let candidate_chars: Vec<char> = candidate.chars().collect();
-    coalesce(&myers_edits(&base_chars, &candidate_chars))
-}
 
 fn myers_edits(base: &[char], candidate: &[char]) -> Vec<Edit> {
     if base.is_empty() && candidate.is_empty() {
