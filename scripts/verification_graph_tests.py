@@ -78,12 +78,12 @@ class GraphPlanTests(unittest.TestCase):
         self.policy['targeted'] = {'sample': {'command': ['echo', 'sample'], 'clean': False}}
         self.policy['workflow']['targeted'] = {'sample': ['check:foundation-tests']}
         self.save()
-        result = self.fixture.repo.cli('status', '--check', 'sample', '--json')
+        result = self.fixture.repo.cli('status', '--check', 'sample', '--json', '--details')
         self.assertEqual(result.returncode, 0, result.stderr)
         nodes = json.loads(result.stdout)['plan']['graph']['nodes']
         self.assertTrue(all(n['selected'] for n in nodes if n['type'] == 'test-file'))
         self.other.unlink()
-        result = self.fixture.repo.cli('status', '--check', 'sample', '--json')
+        result = self.fixture.repo.cli('status', '--check', 'sample', '--json', '--details')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn(str(self.other.relative_to(self.fixture.root)), json.loads(result.stdout)['plan']['test_files'])
         self.assertFalse(list(self.fixture.root.glob('target/verification/*/report.json')))

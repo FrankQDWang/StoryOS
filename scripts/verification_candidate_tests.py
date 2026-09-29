@@ -108,7 +108,10 @@ class CandidateCommandTests(unittest.TestCase):
                 while process.stdout.readline().strip() != 'ready':
                     self.assertIsNone(process.poll())
                 status = self.repo.cli('status', '--attempt', self.repo.report()['run_id'], '--json')
-                self.assertEqual(json.loads(status.stdout)['execution'], 'active')
+                value = json.loads(status.stdout)
+                self.assertEqual((value['execution'], value['decision']), ('active', 'observe'))
+                self.assertIn('status', value['nextAction']['argv'])
+                self.assertNotIn('recover', value['nextAction']['argv'])
                 duplicate = self.run_complete()
                 self.assertEqual(duplicate.returncode, 0, duplicate.stderr)
                 self.assertIn('active', duplicate.stdout)
@@ -133,7 +136,7 @@ class CandidateCommandTests(unittest.TestCase):
         data['complete']['stages'].append('leaf')
         policy.write_text(json.dumps(data))
         self.install_child(child)
-        first = subprocess.run(['make', 'verify-local', 'BASE=origin/main', 'VERIFY_ARGS=--issue 746 --pr 123'],
+        first = subprocess.run(['make', 'verify-local', 'BASE=' + self.repo.git('rev-parse', 'HEAD'), 'VERIFY_ARGS=--issue 746 --pr 123'],
                                cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
         self.assertNotEqual(first.returncode, 0)
         report = self.repo.report()
@@ -141,6 +144,13 @@ class CandidateCommandTests(unittest.TestCase):
         status = self.repo.cli('status', '--attempt', report['run_id'], '--json')
         self.assertEqual(json.loads(status.stdout)['status'], 'failed')
         self.assertIn('recover --attempt', json.loads(status.stdout)['next_command'])
+        self.assertEqual(json.loads(status.stdout)['decision'], 'recover')
+        self.repo.environment['STATUS_EXECUTION_INPUT'] = 'changed'
+        stale = json.loads(self.repo.cli('status', '--attempt', report['run_id'], '--json').stdout)
+        self.assertEqual((stale['decision'], stale['changedInputs']), ('replan', ['inputs']))
+        self.assertEqual(stale['nextAction']['argv'], ['make', 'verify-plan', 'BASE=' + report['base']])
+        self.repo.environment.pop('STATUS_EXECUTION_INPUT')
+        self.repo.git('update-ref', 'refs/remotes/origin/main', report['base'])
         self.assertNotEqual(self.run_complete().returncode, 0)
         self.assertEqual((self.root / 'target/launches').read_text(), 'x')
         self.assertNotEqual(self.repo.cli('recover', '--attempt', report['run_id'], '--reason', 'Check failure').returncode, 0)
@@ -242,6 +252,9 @@ class CandidateCommandTests(unittest.TestCase):
                 group = self.repo.report()['process']['child_group']
                 process.kill()
                 process.wait(timeout=10)
+                status = self.repo.cli('status', '--attempt', self.repo.report()['run_id'], '--json')
+                value = json.loads(status.stdout)
+                self.assertEqual((value['execution'], value['reasonCode']), ('lost', 'process-lost'))
                 self.repo.environment['CANDIDATE_CASE'] = 'changed'
                 result = self.run_complete()
                 self.assertNotEqual(result.returncode, 0)

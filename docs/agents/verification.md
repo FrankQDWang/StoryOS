@@ -460,3 +460,16 @@ a delta alone does not prove a cause. Observation does not authorize recovery.
 `make observe-dashboard` generates both dashboards; `make observe-smoke` queries
 both through the real SQLite plugin. Synthetic examples prove display behavior,
 not real-candidate recovery. Historical records are never changed.
+
+## Status output
+
+Status commands return version 2 summaries by default. JSON consumers that need
+`plan` or full prerequisites must add `--details`. Text summaries also omit file
+reasons and graph membership. Plan JSON and retained reports keep their full format.
+
+Use `decision`, `reasonCode`, `nextAction.argv`, and `agentHint` to select the next
+step. `changedInputs` lists changed identity fields, never environment values.
+An active process points to observation. A lost process needs cleanup confirmation.
+A changed identity requires a fresh plan. Recovery commands still enforce current
+admission and require an accurate reason. A current PASS covers only the selected
+verification scope; merge checks and reviews retain their separate authority.
