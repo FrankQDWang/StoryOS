@@ -524,6 +524,41 @@ pub enum OptionalReferenceRecoveryInspect {
     },
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum OriginalResultRetrievalDisposition {
+    KeptUnknown,
+    EvidenceOnly,
+    Settled,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalOriginalResultRetrievalInspect {
+    Absent,
+    Present {
+        reconciliation_id: String,
+        disposition: OriginalResultRetrievalDisposition,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keep_reason: Option<String>,
+        original_model_attempt_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        response_reference_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retrieval_attempt_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        assembly_manifest_id: Option<String>,
+        repeats_original_create: bool,
+        resumes_stream: bool,
+        proves_create_idempotency: bool,
+        supplies_decision: bool,
+        supplies_tool_call: bool,
+        advances_continuation: bool,
+        reservation_released: bool,
+        usage_kind: String,
+    },
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct GetAgentRunRequest {
@@ -568,6 +603,7 @@ pub struct GetAgentRunResponse {
     pub model_attempt: OptionalModelAttemptInspect,
     pub active_compaction: OptionalActiveCompactionInspect,
     pub reference_recovery: OptionalReferenceRecoveryInspect,
+    pub original_result_retrieval: OptionalOriginalResultRetrievalInspect,
     pub evidence: Vec<AttemptEvidence>,
     pub items: Vec<AgentRunStreamItemInspect>,
     pub usage: AgentRunUsageInspect,

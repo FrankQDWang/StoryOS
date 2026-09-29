@@ -129,7 +129,16 @@ async fn persist_control(
         },
         AgentRunControlIntent::Cancel => match classify_cancel_agent_run(lifecycle) {
             CancelAgentRunResult::Applied => {
-                apply_control(client, command, AgentRunControlStatus::Cancelled).await?
+                let effect =
+                    apply_control(client, command, AgentRunControlStatus::Cancelled).await?;
+                crate::agent_run_retrieval::reconcile_fenced_original_result(
+                    client,
+                    &command.project_scope,
+                    &command.run_id,
+                )
+                .await
+                .map_err(|error| AgentRunControlError::Unavailable(Box::new(error)))?;
+                effect
             }
             CancelAgentRunResult::AlreadyCancelled => AgentRunControlEffect::NoEffect {
                 reason: AgentRunControlNoEffect::AlreadyCancelled,

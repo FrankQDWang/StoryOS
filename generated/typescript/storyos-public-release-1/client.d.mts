@@ -449,7 +449,11 @@ export type AgentRunUsageInspect = { kind: string, };
 
 export type GetAgentRunRequest = { model_attempt_id?: string | null, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
+
+export type OriginalResultRetrievalDisposition = "kept_unknown" | "evidence_only" | "settled";
+
+export type OptionalOriginalResultRetrievalInspect = { "kind": "absent" } | { "kind": "present", reconciliation_id: string, disposition: OriginalResultRetrievalDisposition, keep_reason?: string | null, original_model_attempt_id: string, response_reference_id?: string | null, retrieval_attempt_id?: string | null, assembly_manifest_id?: string | null, repeats_original_create: boolean, resumes_stream: boolean, proves_create_idempotency: boolean, supplies_decision: boolean, supplies_tool_call: boolean, advances_continuation: boolean, reservation_released: boolean, usage_kind: string, };
 
 export type PauseAgentRunInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 

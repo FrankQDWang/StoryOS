@@ -39,9 +39,9 @@ export const RELEASE_1_PROTOCOL_PROFILE = Object.freeze({
     "worker_contract_revision": "storyos.worker.release-1.v6",
     "generated_client_revision": "storyos.typescript-client.release-1.v32",
     "openapi_digest": "sha256:4b147c47a2c2cd2adbaafc387f3d336508409bbba2cf514b49ade60c88a37896",
-    "json_schema_catalog_digest": "sha256:1cf87fb35d44ed30933c0ea388e5994c1d27df95632ec6fcaa587fcef1dd1b87",
-    "typescript_artifact_digest": "sha256:b790432d464b214f30cfffa03f11d42b82f47d1e71001835d68125430a350e6b",
-    "fixture_corpus_digest": "sha256:ad5516c135d3d5ec4608d13fee2a7f6f97f6daf0e725c31e05b7cd5be57123ad",
+    "json_schema_catalog_digest": "sha256:5ecdad7573a10f1a07fe5bfaa891233841d77c0acc6d6f85c3cf8854ef41a951",
+    "typescript_artifact_digest": "sha256:7fa2b49b4c808bada43837baa1eac5805a9f333b165c707963a228423372029d",
+    "fixture_corpus_digest": "sha256:01e9c37e2abdf216923c8457db6f428b3904f650ea17c274d38ccb6a5509b886",
     "activity_profile": "storyos.project-activity.v1",
     "limit_profile_revision": "storyos.foundation.absolute.v1"
   }

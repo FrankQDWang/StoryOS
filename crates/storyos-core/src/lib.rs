@@ -19,6 +19,7 @@ mod delete_volume;
 mod draft_retry;
 mod expand_refused_edit_draft;
 mod rebuild_expired_reference;
+mod retrieve_original_result;
 pub use expand_refused_edit_draft::{ExpandRefusedEditDraftResult, expand_refused_edit_draft};
 mod manuscript_payload;
 mod refused_edit;
@@ -80,7 +81,7 @@ pub use compact_active_context::{
     requests_active_compaction,
 };
 pub use complete_fake_decision::{
-    ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
+    ADVISORY_TEXT, ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
     HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
     INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT,
     STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole, StreamItemState, host_fake_wire_digest,
@@ -175,6 +176,11 @@ pub use reopen_withdrawn_proposal::{
 pub use replan_proposal::{
     ReplanProposal, ReplanProposalConflict, ReplanProposalRefusal, ReplanProposalResult,
     replan_proposal,
+};
+pub use retrieve_original_result::{
+    OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
+    OriginalResultScript, RetainedResponseReference, RetrievalBounds, RetrievalCapability,
+    RetrievedOriginalResult, decide_original_result_retrieval, original_result_script,
 };
 pub use revision_comparison::{
     ExactRevisionTexts, ReplacementSpan, RevisionComparison, RevisionComparisonAccess,

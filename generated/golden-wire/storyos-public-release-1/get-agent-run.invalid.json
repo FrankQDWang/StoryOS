@@ -88,6 +88,9 @@
   "model_attempt": {
     "kind": "absent"
   },
+  "original_result_retrieval": {
+    "kind": "absent"
+  },
   "project_agent_id": "018f0000-0000-7001-8000-000000000a35",
   "project_scope": {
     "owner_user_id": "018f0000-0000-7001-8000-000000000001",

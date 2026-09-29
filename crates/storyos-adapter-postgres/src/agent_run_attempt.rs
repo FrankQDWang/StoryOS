@@ -41,7 +41,7 @@ pub(crate) async fn persist_uncertain_attempt(
         None => Uuid::now_v7().to_string(),
     };
     let digest = host_fake_wire_digest(author_message, chapter_id);
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "execution_profile": {
             "profile_revision": HOST_FAKE_EXECUTION_PROFILE,
             "mapping_revision": HOST_FAKE_MAPPING_REVISION,
@@ -65,6 +65,16 @@ pub(crate) async fn persist_uncertain_attempt(
             continuation.known_prior_binding_id.as_deref(),
         )
     });
+    if let Some(subject) = crate::agent_run_retrieval::subject_record(
+        author_message,
+        claim.project_scope.owner_user_id.as_ref(),
+        claim.project_scope.project_id.as_ref(),
+        conversation_id,
+        &assistance.processing_destination_identity,
+    ) {
+        payload["original_result_retrieval"] = subject;
+        payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": false});
+    }
     client
         .execute(
             "UPDATE storyos.context_assembly_manifests

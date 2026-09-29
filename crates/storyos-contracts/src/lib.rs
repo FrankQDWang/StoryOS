@@ -137,7 +137,8 @@ pub use release1_agent_run::{
     GetAgentRunResponse, HostControlInspect, InstructionBinding, OptionalActiveCompactionInspect,
     OptionalCompactionInstallInspect, OptionalContinuationInspect, OptionalDecisionInspect,
     OptionalManifestRef, OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
-    OptionalReferenceRecoveryInspect, ProjectionMode, ReferenceRecoveryDisposition,
+    OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
+    OriginalResultRetrievalDisposition, ProjectionMode, ReferenceRecoveryDisposition,
     SourceAvailability, TokenCountingProfileInspect,
 };
 pub use release1_agent_run_control::{
