@@ -196,6 +196,7 @@ def main():
     parser.add_argument("action", choices=("plan", "status", "run", "execute"))
     parser.add_argument("--profile", choices=("daily", "complete"), default="daily")
     parser.add_argument("--format", choices=("json", "text"), default="json")
+    parser.add_argument("--details", action="store_true")
     parser.add_argument("--issue", type=int)
     parser.add_argument("--pr", type=int)
     parser.add_argument("--base", default="origin/main")
@@ -229,8 +230,14 @@ def main():
         if args.action in {"plan", "status"}:
             if args.action == "plan" and args.format == "json":
                 print(json.dumps(plan, indent=2))
+            elif args.action == "plan":
+                value = verification.verification_status.status(root, plan)
+                print(f"Status: {value['status']}")
+                for check in plan['checks']:
+                    print(f"  {check['group']}: {check['status']}; {'; '.join(check.get('reasons', []))}")
+                print(f"Next: {value['next_command']}")
             else:
-                verification.verification_status.display(verification.verification_status.status(root, plan), args.format == "json")
+                verification.verification_status.display(verification.verification_status.status(root, plan), args.format == "json", args.details)
             return 0
         if args.action == "execute":
             return execute_plan(root, plan)

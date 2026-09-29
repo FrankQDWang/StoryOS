@@ -426,6 +426,7 @@ def main():
         entry.add_argument("--check", required=action == "targeted")
         if action == "status":
             entry.add_argument("--attempt")
+            entry.add_argument("--details", action="store_true")
         entry.add_argument("--json", action="store_true")
         entry.add_argument("--issue", type=int)
         entry.add_argument("--pr", type=int)
@@ -455,7 +456,7 @@ def main():
             if arguments.action == "targeted":
                 return verification_status.execute(root, arguments.check, {"issue": arguments.issue, "pr": arguments.pr})
             verification_status.display(verification_status.attempt_status(root, arguments.attempt) if arguments.attempt
-                                        else verification_status.status(root, verification_status.targeted_plan(root, arguments.check)), arguments.json)
+                                        else verification_status.status(root, verification_status.targeted_plan(root, arguments.check)), arguments.json, arguments.details)
             return 0
         if arguments.action == "rust-tests":
             if not os.environ.get("STORYOS_VERIFICATION_RUN"):

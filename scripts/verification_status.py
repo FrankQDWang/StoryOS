@@ -61,7 +61,7 @@ def process_state(process):
 
 def status(root, plan):
     next_command = (f"python3 scripts/verification.py targeted --check {shlex.quote(plan['check'])}"
-                    if 'check' in plan else f"make verify-changed BASE={plan['base']}")
+                    if 'check' in plan else f"make verify-changed BASE={shlex.quote(plan['base'])}")
     if plan.get('changes') == []:
         next_command = 'make verify-targeted CHECK=verify-policy'
     result = {'status': 'pending', 'plan': plan, 'next_command': next_command}
@@ -81,7 +81,9 @@ def status(root, plan):
         comparable = lambda p: {k: v for k, v in p.items() if k not in {'digest', 'historical_estimate_seconds'}}
         current = comparable(previous) == comparable(plan)
         result.update(status=report['status'] if current else 'stale', report=str(path), run_id=report.get('run_id'))
-        if current and report['status'] == 'running':
+        result['changedInputs'] = sorted(k for k in comparable(previous).keys() | comparable(plan).keys()
+                                         if comparable(previous).get(k) != comparable(plan).get(k))
+        if report['status'] == 'running':
             result['execution'] = process_state(report.get('process', {}))
             result['heartbeat_at'] = report.get('heartbeat_at')
         if result['status'] == 'passed' and (report.get('source_end') != plan['source'] or
@@ -92,30 +94,89 @@ def status(root, plan):
         result['status'] = 'unmet-prerequisites'
         result['prerequisites'] = pending
         result['next_command'] = 'git status --short' if plan['source']['dirty'] else 'make verify-plan'
+    observe = (['python3', 'scripts/verification.py', 'status', '--check', plan['check'], '--json']
+               if 'check' in plan else ['python3', 'scripts/verification_plan.py', 'status', '--base', plan['base']])
+    return guidance(result, observe, complete=False)
+
+
+def guidance(result, observe, *, complete):
+    action = shlex.split(result['next_command'])
+    state = result['status']
+    if result.get('execution') == 'active':
+        decision, reason, action = 'observe', 'process-active', observe
+        hint = 'Observe this run. Wait for it to finish before execution or recovery.'
+    elif result.get('changedInputs') or state in {'stale', 'source-changed', 'incomplete'}:
+        decision, reason = 'replan', 'identity-changed' if result.get('changedInputs') else 'invalid-evidence'
+        plan = result.get('plan', {})
+        action = ['make', 'verify-plan', 'BASE=' + plan.get('base', result.get('base', 'origin/main'))]
+        hint = 'Inspect a fresh plan and run applicable targeted checks. Refresh candidate reviews after source edits.'
+    elif result.get('execution') == 'lost':
+        decision, reason = ('recover' if complete else 'blocked'), 'process-lost'
+        if not complete:
+            action = None
+        hint = 'Confirm child-process cleanup before recovery or another run. Recovery rechecks admission.'
+    elif state == 'unmet-prerequisites':
+        dirty = result['plan']['source']['dirty']
+        decision, reason = 'blocked', 'dirty-package-inputs' if dirty else 'pending-obligations'
+        hint = 'Account for existing changes before package checks.' if dirty else 'Inspect pending obligations in the full plan.'
+    elif state == 'passed':
+        decision, reason, action = 'satisfied', 'current-pass', None
+        hint = 'This verification scope passed. This status does not grant merge approval.'
+    elif complete:
+        decision, reason = 'recover', 'candidate-' + state
+        hint = 'Inspect the retained failure and supply its recovery reason. Recovery rechecks admission.'
+    else:
+        decision, reason = 'run', ('missing-evidence' if state == 'pending' else
+                                   ('targeted-' if 'check' in result['plan'] else 'daily-') + state)
+        hint = 'Run the selected checks.' if state == 'pending' else 'Correct the failure, then run the selected checks.'
+    result.update(version=2, decision=decision, reasonCode=reason,
+                  nextAction={'argv': action} if action else None, agentHint=hint,
+                  next_command=shlex.join(action) if action else None)
     return result
 
 
-def display(value, as_json):
+def display(value, as_json, details=False):
+    output = value
+    if not details:
+        output = {key: item for key, item in value.items() if key not in {'plan', 'prerequisites'}}
+        checks = value.get('plan', {}).get('checks', [])
+        output['checks'] = [{key: check[key] for key in ('group', 'status')} for check in checks[:8]]
+        output['omittedChecks'] = max(0, len(checks) - 8)
+        failures = value.get('failed_stages', [])
+        if failures:
+            output['failed_stages'] = failures[:8]
+            output['omittedFailedStages'] = max(0, len(failures) - 8)
     if as_json:
-        print(json.dumps(value, indent=2))
+        print(json.dumps(output, indent=2))
     else:
-        print(f"Status: {value['status']}")
-        for check in value.get('plan', {}).get('checks', []):
-            print(f"  {check['group']}: {check['status']}; {'; '.join(check.get('reasons', []))}")
-        print(f"Next: {value['next_command']}")
+        print(f"Status: {output['status']}; decision: {output['decision']}; reason: {output['reasonCode']}")
+        if output.get('changedInputs'):
+            print('Changed inputs: ' + ', '.join(output['changedInputs'][:8]))
+        if output.get('run_id'):
+            print(f"Run: {output['run_id']}; report: {output.get('report', 'unknown')}")
+        for check in output.get('checks', []):
+            print(f"  {check['group']}: {check['status']}")
+        print(f"Next: {output['next_command'] or 'none'}")
+        print(output['agentHint'])
+        if details:
+            print(json.dumps(output, indent=2))
 
 
 def attempt_status(root, attempt):
     import verification_candidate
     if Path(attempt).name != attempt:
         raise ValueError('Use one retained attempt identity')
-    report = json.loads((root / 'target/verification' / attempt / 'report.json').read_text())
-    current = report.get('candidate') == verification_candidate.identity(root, report['command'], report['base'])
-    result = {'status': report['status'] if current else 'stale', 'run_id': attempt,
+    path = root / 'target/verification' / attempt / 'report.json'
+    report = json.loads(path.read_text())
+    if report.get('profile') != 'complete':
+        raise ValueError('Use --check for targeted status or verification_plan.py status for daily status')
+    previous = report.get('candidate', {})
+    candidate = verification_candidate.identity(root, report['command'], report['base'])
+    changed = sorted(key for key in previous.keys() | candidate.keys() if previous.get(key) != candidate.get(key))
+    result = {'status': report['status'] if not changed else 'stale', 'run_id': attempt, 'report': str(path),
+              'changedInputs': changed, 'base': report['base'],
               'failed_stages': [s['stage'] for s in report.get('steps', []) if s['status'] == 'failed'],
               'next_command': f"python3 scripts/verification.py recover --attempt {shlex.quote(attempt)} --reason 'Check failed stage'"}
     if report['status'] == 'running':
         result.update(execution=process_state(report['process']), heartbeat_at=report.get('heartbeat_at'))
-    if not current or report['status'] in {'passed', 'source-changed', 'incomplete'}:
-        result['next_command'] = 'make verify-status'
-    return result
+    return guidance(result, ['python3', 'scripts/verification.py', 'status', '--attempt', attempt, '--json'], complete=True)

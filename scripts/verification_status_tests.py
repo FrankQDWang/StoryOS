@@ -1,6 +1,7 @@
 """Observe targeted results and read-only status through public commands."""
 
 import json
+import signal
 import subprocess
 import sys
 import unittest
@@ -50,6 +51,77 @@ class TargetedStatusTests(unittest.TestCase):
         self.assertNotEqual(self.repo.cli('targeted', '--check', 'sample').returncode, 0)
         self.assertEqual(self.status()['status'], 'failed')
         self.assertEqual((self.root / 'target/launches').read_text(), 'xx')
+
+    def test_summary_is_bounded_and_details_preserve_large_plan(self):
+        fixture = verification_plan_tests.FilePlanTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        for index in range(180):
+            fixture.add_test(f'case_{index}.test.ts')
+        before = fixture.repo.git('status', '--porcelain')
+        plan = json.loads(fixture.cli('plan').stdout)
+        summary = fixture.cli('status')
+        value = json.loads(summary.stdout)
+        self.assertNotIn('plan', value)
+        self.assertLess(len(summary.stdout), 4096)
+        text = fixture.cli('plan', '--format', 'text').stdout
+        for check in plan['checks']:
+            for reason in check.get('reasons', []):
+                self.assertIn(reason, text)
+        details = fixture.cli('status', '--details')
+        self.assertEqual(details.returncode, 0, details.stderr)
+        self.assertEqual(json.loads(details.stdout)['plan'], plan)
+        self.assertEqual(fixture.repo.git('status', '--porcelain'), before)
+        self.assertFalse((fixture.root / 'target').exists())
+
+    def test_guidance_distinguishes_execution_drift_failure_and_package_block(self):
+        self.assertEqual(self.status()['decision'], 'run')
+        self.assertEqual(self.repo.cli('targeted', '--check', 'sample').returncode, 0)
+        self.assertEqual((self.status()['decision'], self.status()['nextAction']), ('satisfied', None))
+        before = {str(p): p.read_bytes() for p in self.root.glob('target/verification/**/*.json')}
+        self.repo.environment['STATUS_EXECUTION_INPUT'] = 'private-value'
+        value = self.status()
+        self.assertEqual((value['decision'], value['reasonCode']), ('replan', 'identity-changed'))
+        self.assertIn('execution_inputs_sha256', value['changedInputs'])
+        self.assertNotIn('private-value', json.dumps(value))
+        text = self.repo.cli('status', '--check', 'sample').stdout
+        self.assertIn('execution_inputs_sha256', text)
+        self.assertNotIn('private-value', text)
+        self.repo.environment.pop('STATUS_EXECUTION_INPUT')
+        (self.root / 'AGENTS.md').write_text('Changed input.\n')
+        self.assertIn('source', self.status()['changedInputs'])
+        self.assertEqual(self.status('package')['reasonCode'], 'dirty-package-inputs')
+        self.assertEqual(before, {str(p): p.read_bytes() for p in self.root.glob('target/verification/**/*.json')})
+        (self.root / 'target/fail').touch()
+        self.assertNotEqual(self.repo.cli('targeted', '--check', 'sample').returncode, 0)
+        value = self.status()
+        self.assertEqual((value['decision'], value['reasonCode']), ('run', 'targeted-failed'))
+        self.assertEqual(value['nextAction']['argv'][-2:], ['--check', 'sample'])
+        self.assertEqual((self.root / 'target/launches').read_text(), 'xx')
+
+    def test_active_targeted_run_only_offers_observation_even_after_source_change(self):
+        policy = self.root / 'docs/agents/verification-policy.json'
+        data = json.loads(policy.read_text())
+        data['targeted']['sample']['command'] = [sys.executable, '-c',
+            "import signal; print('ready', flush=True); signal.pause()"]
+        policy.write_text(json.dumps(data))
+        with subprocess.Popen([sys.executable, str(verification_tests.COMMAND), 'targeted', '--check', 'sample'],
+                              cwd=self.root, env=self.repo.environment, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, text=True) as process:
+            try:
+                while process.stdout.readline().strip() != 'ready':
+                    self.assertIsNone(process.poll())
+                for source_changed in (False, True):
+                    if source_changed:
+                        (self.root / 'AGENTS.md').write_text('Changed during execution.\n')
+                    value = self.status()
+                    self.assertEqual((value['execution'], value['decision']), ('active', 'observe'))
+                    self.assertEqual(value['nextAction']['argv'],
+                                     ['python3', 'scripts/verification.py', 'status', '--check', 'sample', '--json'])
+                    self.assertEqual(len(list(self.root.glob('target/verification/*/report.json'))), 1)
+            finally:
+                process.send_signal(signal.SIGTERM)
+                process.communicate(timeout=10)
 
     def test_make_selector_does_not_invalidate_public_python_status(self):
         runner = verification_tests.COMMAND.resolve()
