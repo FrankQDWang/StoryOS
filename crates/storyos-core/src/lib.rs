@@ -36,6 +36,7 @@ mod reject_proposal_operations;
 mod reopen_rejected_operations;
 mod reopen_withdrawn_proposal;
 mod replan_proposal;
+mod revision_comparison;
 mod set_current_chapter;
 mod statistics_profile;
 mod undo_latest_author_action;
@@ -174,6 +175,10 @@ pub use reopen_withdrawn_proposal::{
 pub use replan_proposal::{
     ReplanProposal, ReplanProposalConflict, ReplanProposalRefusal, ReplanProposalResult,
     replan_proposal,
+};
+pub use revision_comparison::{
+    ExactRevisionTexts, ReplacementSpan, RevisionComparison, RevisionComparisonAccess,
+    inspect_revision_comparison, utf16_slice,
 };
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,

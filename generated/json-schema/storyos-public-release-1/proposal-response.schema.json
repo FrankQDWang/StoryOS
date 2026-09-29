@@ -288,6 +288,9 @@
         "reservation_state": {
           "type": "string"
         },
+        "revision_comparison": {
+          "$ref": "#/$defs/OptionalRevisionComparisonInspect"
+        },
         "revision_id": {
           "format": "uuid",
           "type": "string"
@@ -325,7 +328,8 @@
         "candidate_text",
         "source",
         "validation_receipt",
-        "anchors"
+        "anchors",
+        "revision_comparison"
       ],
       "type": "object"
     },
@@ -455,6 +459,58 @@
             "limit_profile_revision",
             "challenge_rate_policy_revision",
             "recorded_at"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OptionalRevisionComparisonInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "base_authoritative_revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "candidate_revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "operation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "spans": {
+              "items": {
+                "$ref": "#/$defs/ReplacementSpanInspect"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "base_authoritative_revision_id",
+            "candidate_revision_id",
+            "operation_id",
+            "spans"
           ],
           "type": "object"
         }
@@ -806,6 +862,46 @@
       "required": [
         "block_kind",
         "text"
+      ],
+      "type": "object"
+    },
+    "ReplacementSpanInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "base_from": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "base_text": {
+          "type": "string"
+        },
+        "base_to": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "candidate_from": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "candidate_text": {
+          "type": "string"
+        },
+        "candidate_to": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "base_from",
+        "base_to",
+        "candidate_from",
+        "candidate_to",
+        "base_text",
+        "candidate_text"
       ],
       "type": "object"
     },

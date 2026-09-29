@@ -6,8 +6,9 @@ use crate::release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,
     BlockProposalInspect, GET_PROPOSAL, GET_PROPOSAL_REQUEST_SCHEMA_ID,
     GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalResponse, OptionalAcceptanceRefusalInspect,
-    OptionalValidationReceiptInspect, ProposalAnchorInspect, ProposalOperationInspect,
-    ProposalSourceConditionInspect, ProposalSourceInspect,
+    OptionalRevisionComparisonInspect, OptionalValidationReceiptInspect, ProposalAnchorInspect,
+    ProposalOperationInspect, ProposalSourceConditionInspect, ProposalSourceInspect,
+    ReplacementSpanInspect,
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -77,6 +78,27 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     if let Some(receipt) = schema["$defs"].get_mut("OptionalValidationReceiptInspect") {
         receipt["properties"]["validation_receipt_id"]["format"] = json!("uuid");
     }
+    if let Some(variants) = schema["$defs"]
+        .get_mut("OptionalRevisionComparisonInspect")
+        .and_then(|comparison| comparison.get_mut("oneOf"))
+        .and_then(Value::as_array_mut)
+    {
+        for variant in variants {
+            for field in [
+                "base_authoritative_revision_id",
+                "candidate_revision_id",
+                "operation_id",
+            ] {
+                if variant
+                    .get("properties")
+                    .and_then(|properties| properties.get(field))
+                    .is_some()
+                {
+                    variant["properties"][field]["format"] = json!("uuid");
+                }
+            }
+        }
+    }
     json_bytes(&schema)
 }
 
@@ -112,7 +134,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ProposalSourceInspect::decl(&config),
         ProposalSourceConditionInspect::decl(&config),
         OptionalValidationReceiptInspect::decl(&config),
@@ -122,6 +144,8 @@ pub(super) fn typescript_type_declarations() -> String {
         OptionalAcceptanceRefusalInspect::decl(&config),
         ProposalOperationInspect::decl(&config),
         ProposalAnchorInspect::decl(&config),
+        ReplacementSpanInspect::decl(&config),
+        OptionalRevisionComparisonInspect::decl(&config),
         BlockProposalInspect::decl(&config),
         GetProposalResponse::decl(&config),
     )
@@ -208,7 +232,8 @@ fn proposal_fixture() -> Value {
                 "validation_receipt_id": "018f0000-0000-7001-8000-000000000b08",
                 "result": "valid"
             },
-            "anchors": []
+            "anchors": [],
+            "revision_comparison": { "kind": "absent" }
         }
     })
 }

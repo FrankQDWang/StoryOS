@@ -28,6 +28,7 @@ pub struct BlockProposalRecord {
     pub validation_receipt_id: Option<String>,
     pub validation_receipt_result: Option<String>,
     pub anchors: Vec<ProposalAnchorRecord>,
+    pub revision_comparison: Option<storyos_core::RevisionComparison>,
 }
 
 /// One inspectable Proposal Operation incarnation.

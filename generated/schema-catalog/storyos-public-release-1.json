@@ -316,7 +316,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/proposal-response.schema.json",
       "schema_id": "storyos.query.proposal.response.v1",
-      "sha256": "sha256:a4ce2c5c58bdc7f4ce0e4e9fe58495cc2de475de73b9095cf00e8d38a695003c"
+      "sha256": "sha256:24e344cff039f972df84678ed9c79bf23dbf13ac8da5f023ab27d139cc7f4db4"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/accept-proposal-request.schema.json",

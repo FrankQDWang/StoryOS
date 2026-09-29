@@ -141,6 +141,30 @@ pub struct BlockProposalInspect {
     pub source: ProposalSourceInspect,
     pub validation_receipt: OptionalValidationReceiptInspect,
     pub anchors: Vec<ProposalAnchorInspect>,
+    pub revision_comparison: OptionalRevisionComparisonInspect,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalRevisionComparisonInspect {
+    Absent,
+    Present {
+        base_authoritative_revision_id: String,
+        candidate_revision_id: String,
+        operation_id: String,
+        spans: Vec<ReplacementSpanInspect>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReplacementSpanInspect {
+    pub base_from: u32,
+    pub base_to: u32,
+    pub candidate_from: u32,
+    pub candidate_to: u32,
+    pub base_text: String,
+    pub candidate_text: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

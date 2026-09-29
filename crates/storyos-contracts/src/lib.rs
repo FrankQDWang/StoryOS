@@ -252,8 +252,9 @@ pub use release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,
     BlockProposalInspect, GET_PROPOSAL_METHOD, GET_PROPOSAL_PATH, GET_PROPOSAL_REQUEST_SCHEMA_ID,
     GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalRequest, GetProposalResponse,
-    OptionalAcceptanceRefusalInspect, OptionalValidationReceiptInspect, ProposalAnchorInspect,
-    ProposalOperationInspect, ProposalSourceConditionInspect, ProposalSourceInspect,
+    OptionalAcceptanceRefusalInspect, OptionalRevisionComparisonInspect,
+    OptionalValidationReceiptInspect, ProposalAnchorInspect, ProposalOperationInspect,
+    ProposalSourceConditionInspect, ProposalSourceInspect, ReplacementSpanInspect,
 };
 pub use release1_proposal_generation_decision::{
     COMPLETE_READY_PARTIAL_PROPOSAL_DIGEST_PROFILE, COMPLETE_READY_PARTIAL_PROPOSAL_METHOD,
