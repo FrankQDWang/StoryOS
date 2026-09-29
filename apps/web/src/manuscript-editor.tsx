@@ -302,14 +302,14 @@ export function ManuscriptEditor({
           cryptoImpl, isCurrent,
         });
         if (!isCurrent()) return;
-        if (settled?.effect.kind === "draft_compensated" || settled?.effect.kind === "draft_reconciled") {
+        if (settled !== undefined && (settled.effect.kind === "draft_compensated" || settled.effect.kind === "draft_reconciled")) {
           const projection = await rebuildPendingProjection(workspace);
           if (!isCurrent()) return;
           onProjectionRef.current(projection);
           onCandidateSettledRef.current?.(); return;
         }
-        if (settled?.effect.kind === "reversal_required") {
-          onCandidateSettledRef.current?.(settled.proposal_id ?? undefined); return;
+        if (settled !== undefined && settled.effect.kind === "reversal_required") {
+          onCandidateSettledRef.current?.("proposal_id" in settled ? settled.proposal_id ?? undefined : undefined); return;
         }
         if (settled === undefined || settled.effect.kind !== "compensated") {
           if (settled !== undefined) {
@@ -322,7 +322,7 @@ export function ManuscriptEditor({
         observedBlocksRef.current = restored.map((block) => ({ ...block }));
         syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
         onProjectionRef.current(await rebuildPendingProjection(workspace));
-        onCandidateSettledRef.current?.(settled.proposal_id ?? undefined);
+        onCandidateSettledRef.current?.("proposal_id" in settled ? settled.proposal_id ?? undefined : undefined);
       } catch (error) {
         if (isCurrent()) onFailureRef.current(error);
       }
