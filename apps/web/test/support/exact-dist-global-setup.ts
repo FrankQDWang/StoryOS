@@ -116,12 +116,12 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
     const authority: unknown = JSON.parse(authorityJson);
     assert.deepEqual(authority, {
       prose_request: {
-        project_count: 1,
-        receipts: { createProject: 1, createVolume: 1, createChapter: 1,
-          applyAuthorEdit: 4, undoLatestAuthorAction: 1,
-          updateProjectAssistance: 1, createAgentRun: 2, acceptProposal: 1,
-          rejectProposalOperations: 1 },
-        author_action_count: 9,
+        project_count: 2,
+        receipts: { createProject: 2, createVolume: 2, createChapter: 2,
+          applyAuthorEdit: 8, undoLatestAuthorAction: 1,
+          updateProjectAssistance: 2, createAgentRun: 3, acceptProposal: 2,
+          rejectProposalOperations: 1, replanProposal: 1, takeOverProjectWriter: 1 },
+        author_action_count: 16,
       },
       production_host: {
         project_count: 1,
