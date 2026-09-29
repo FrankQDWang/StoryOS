@@ -68,6 +68,36 @@ class CandidateCommandTests(unittest.TestCase):
         self.assertNotEqual(self.run_complete().returncode, 0)
         self.assertEqual((self.root / 'target/launches').read_text(), 'x')
 
+    def test_selector_change_reuses_success_but_semantic_input_change_does_not(self):
+        self.install_child("import os; from pathlib import Path; "
+                           "p=Path('target/launches'); p.write_text(p.read_text()+'x' if p.exists() else 'x'); "
+                           "assert 'CHECK' not in os.environ")
+        self.repo.environment['CHECK'] = 'verify-policy'
+        first = self.run_complete()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        self.repo.environment.pop('CHECK')
+        second = self.run_complete()
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertIn('reused', second.stdout)
+        self.assertEqual((self.root / 'target/launches').read_text(), 'x')
+        self.repo.environment['STORYOS_TEST_EXECUTION_PROFILE'] = 'different'
+        changed = self.run_complete()
+        self.assertEqual(changed.returncode, 0, changed.stdout + changed.stderr)
+        self.assertEqual((self.root / 'target/launches').read_text(), 'xx')
+
+    def test_selector_change_cannot_bypass_failed_candidate_recovery(self):
+        self.install_child("from pathlib import Path; p=Path('target/launches'); "
+                           "p.write_text(p.read_text()+'x' if p.exists() else 'x'); raise SystemExit(7)")
+        first = self.run_complete()
+        self.assertNotEqual(first.returncode, 0)
+        report = self.repo.report()
+        self.repo.environment['CHECK'] = 'verify-policy'
+        retry = self.run_complete()
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertIn('recover --attempt ' + report['run_id'], retry.stderr)
+        self.assertEqual((self.root / 'target/launches').read_text(), 'x')
+        self.assertEqual(len(list(self.root.glob('target/verification/*/report.json'))), 1)
+
     def test_running_duplicate_returns_active_attempt_and_interruption_requires_recovery(self):
         child = "import signal; print('ready', flush=True); signal.pause()"
         self.install_child(child)
