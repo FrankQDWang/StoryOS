@@ -109,7 +109,7 @@ test("undo acceptance requires a reversal proposal when the authoritative head h
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("e191"), "Undo Acceptance Reversal Novel", "e4");
+    const prepared = await prepare(started.baseUrl, id("e1c1"), "Undo Acceptance Reversal Novel", "e4");
     const accepted = await acceptOpened(started.baseUrl, prepared, "ec");
     await queryPostgres(`UPDATE storyos.authoritative_heads SET current_revision_id = '${accepted.beforeRevision}'::uuid
       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid

@@ -396,8 +396,16 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
       UPDATE storyos.proposal_heads AS head SET current_revision_id=advanced.revision_id FROM advanced
       WHERE (head.owner_user_id,head.project_id,head.proposal_id)=(advanced.owner_user_id,advanced.project_id,advanced.proposal_id)
         AND head.current_revision_id='${guardProposal.revision_id}'::uuid RETURNING 1) SELECT count(*)::text FROM moved`), "1");
+    const advancedRevisionId = id("e0fb906");
+    const guardComparison = guardProposal.revision_comparison;
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
-      proposalId: guardProposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal, { ...guardProposal, revision_id: id("e0fb906") });
+      proposalId: guardProposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal, {
+      ...guardProposal,
+      revision_id: advancedRevisionId,
+      revision_comparison: guardComparison.kind === "present"
+        ? { ...guardComparison, candidate_revision_id: advancedRevisionId }
+        : guardComparison,
+    });
     const guardUndo = { ...undo, undo_latest_author_action_input: { ...undo.undo_latest_author_action_input,
       expected_author_undo_frontier_sequence: guardExpansion.receipt.author_action_sequence! } };
     const beforeDriftUndo = await retainedState(prepared.projectId);
