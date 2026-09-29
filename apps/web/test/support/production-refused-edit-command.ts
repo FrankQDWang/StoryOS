@@ -296,7 +296,15 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
         const reply = await fetch(`/api/v1/projects/${projectId}/proposals/${proposalId}`);
         if (!reply.ok) throw new Error(`Restored Proposal read ${reply.status}`); return (await reply.json()).proposal;
       }, { projectId, proposalId: proposal.proposal_id }) as BlockProposalInspect;
-      assert.deepEqual({ ...restoredProposal, revision_id: proposal.revision_id, validation_receipt: proposal.validation_receipt }, proposal);
+      const restoredComparison = restoredProposal.revision_comparison;
+      assert.deepEqual({
+        ...restoredProposal,
+        revision_id: proposal.revision_id,
+        validation_receipt: proposal.validation_receipt,
+        revision_comparison: restoredComparison.kind === "present"
+          ? { ...restoredComparison, candidate_revision_id: proposal.revision_id }
+          : restoredComparison,
+      }, proposal);
       assert.notEqual(restoredProposal.revision_id, proposal.revision_id);
       assert.ok(restoredProposal.validation_receipt.kind === "present");
       assert.match(restoredProposal.validation_receipt.validation_receipt_id, /^[0-9a-f-]{36}$/);
