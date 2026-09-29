@@ -16,7 +16,13 @@ pub struct AuthorUndoFrontier {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthorUndoFrontierKind {
-    ReversibleDirectAuthorAction { resulting_revision_id: String },
+    ReversibleDirectAuthorAction {
+        resulting_revision_id: String,
+    },
+    ReversibleAcceptance {
+        resulting_revision_id: String,
+        prior_evidence_usable: bool,
+    },
     ReversibleStructureTransition,
     ReversibleDraftClose,
     DraftSourceUnavailable,
@@ -27,6 +33,9 @@ pub enum AuthorUndoFrontierKind {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UndoLatestAuthorActionResult {
     Compensated {
+        source_sequence: u64,
+    },
+    ReversalRequired {
         source_sequence: u64,
     },
     Conflicted {
@@ -92,6 +101,32 @@ pub fn undo_latest_author_action(command: &UndoLatestAuthorAction) -> UndoLatest
         AuthorUndoFrontierKind::ReversibleStructureTransition => {
             UndoLatestAuthorActionResult::Compensated {
                 source_sequence: frontier.sequence,
+            }
+        }
+        AuthorUndoFrontierKind::ReversibleAcceptance {
+            resulting_revision_id,
+            prior_evidence_usable,
+        } => {
+            if command.current_head_revision_id != command.expected_head_revision_id {
+                return UndoLatestAuthorActionResult::Conflicted {
+                    reason: UndoLatestAuthorActionConflict::WrongTargetHead,
+                };
+            }
+            if command.current_head_revision_id == *resulting_revision_id && *prior_evidence_usable
+            {
+                UndoLatestAuthorActionResult::Compensated {
+                    source_sequence: frontier.sequence,
+                }
+            } else if command.current_head_revision_id != *resulting_revision_id
+                && *prior_evidence_usable
+            {
+                UndoLatestAuthorActionResult::ReversalRequired {
+                    source_sequence: frontier.sequence,
+                }
+            } else {
+                UndoLatestAuthorActionResult::Unavailable {
+                    reason: UndoLatestAuthorActionUnavailable::SourceUnavailable,
+                }
             }
         }
         AuthorUndoFrontierKind::ReversibleDirectAuthorAction {

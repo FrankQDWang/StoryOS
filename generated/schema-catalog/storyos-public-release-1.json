@@ -316,7 +316,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/proposal-response.schema.json",
       "schema_id": "storyos.query.proposal.response.v1",
-      "sha256": "sha256:e068a8847bd5d6800c9d037ed995e9af8ee1c680d6629b56eb4667481b97170b"
+      "sha256": "sha256:a4ce2c5c58bdc7f4ce0e4e9fe58495cc2de475de73b9095cf00e8d38a695003c"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/accept-proposal-request.schema.json",
@@ -486,7 +486,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/undo-latest-author-action-response.schema.json",
       "schema_id": "storyos.command.undo-latest-author-action.response.v1",
-      "sha256": "sha256:e16bd00fd30a35a55a171cb68aa3ee3bf63d51a15b887001ec35e1b70c8456af"
+      "sha256": "sha256:fd9e04f41809b6e4373e99c93bf4988b41f1bdbd705489de7ac4907db46e6939"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json",

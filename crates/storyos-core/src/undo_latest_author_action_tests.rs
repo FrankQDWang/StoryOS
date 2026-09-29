@@ -5,6 +5,19 @@ use super::{
 };
 
 const HEAD: &str = "018f0000-0000-7001-8000-000000000805";
+const OTHER: &str = "018f0000-0000-7001-8000-000000000806";
+
+fn acceptance(resulting: &str, prior_evidence_usable: bool) -> UndoLatestAuthorAction {
+    let mut command = command();
+    command.current_author_undo_frontier = Some(AuthorUndoFrontier {
+        sequence: 1,
+        kind: AuthorUndoFrontierKind::ReversibleAcceptance {
+            resulting_revision_id: resulting.to_owned(),
+            prior_evidence_usable,
+        },
+    });
+    command
+}
 
 fn command() -> UndoLatestAuthorAction {
     UndoLatestAuthorAction {
@@ -77,6 +90,70 @@ fn a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect() {
         undo_latest_author_action(&wrong),
         UndoLatestAuthorActionResult::Conflicted {
             reason: UndoLatestAuthorActionConflict::WrongTargetHead,
+        }
+    );
+}
+
+#[test]
+fn a_matching_acceptance_frontier_classifies_as_compensated() {
+    assert_eq!(
+        undo_latest_author_action(&acceptance(HEAD, /*prior_evidence_usable*/ true)),
+        UndoLatestAuthorActionResult::Compensated { source_sequence: 1 }
+    );
+}
+
+#[test]
+fn a_drifted_acceptance_head_with_usable_evidence_requires_reversal() {
+    let mut drifted = acceptance(HEAD, /*prior_evidence_usable*/ true);
+    drifted.current_head_revision_id = OTHER.to_owned();
+    drifted.expected_head_revision_id = OTHER.to_owned();
+    assert_eq!(
+        undo_latest_author_action(&drifted),
+        UndoLatestAuthorActionResult::ReversalRequired { source_sequence: 1 }
+    );
+}
+
+#[test]
+fn unusable_acceptance_evidence_is_unavailable() {
+    let mut drifted = acceptance(HEAD, /*prior_evidence_usable*/ false);
+    drifted.current_head_revision_id = OTHER.to_owned();
+    drifted.expected_head_revision_id = OTHER.to_owned();
+    assert_eq!(
+        undo_latest_author_action(&drifted),
+        UndoLatestAuthorActionResult::Unavailable {
+            reason: UndoLatestAuthorActionUnavailable::SourceUnavailable,
+        }
+    );
+    assert_eq!(
+        undo_latest_author_action(&acceptance(HEAD, /*prior_evidence_usable*/ false)),
+        UndoLatestAuthorActionResult::Unavailable {
+            reason: UndoLatestAuthorActionUnavailable::SourceUnavailable,
+        }
+    );
+}
+
+#[test]
+fn a_stale_expected_acceptance_head_stays_conflicted() {
+    let mut stale = acceptance(HEAD, /*prior_evidence_usable*/ true);
+    stale.expected_head_revision_id = OTHER.to_owned();
+    assert_eq!(
+        undo_latest_author_action(&stale),
+        UndoLatestAuthorActionResult::Conflicted {
+            reason: UndoLatestAuthorActionConflict::WrongTargetHead,
+        }
+    );
+}
+
+#[test]
+fn an_acceptance_frontier_mismatch_stays_conflicted() {
+    let mut stale = acceptance(HEAD, /*prior_evidence_usable*/ true);
+    stale.expected_author_undo_frontier_sequence = 9;
+    assert_eq!(
+        undo_latest_author_action(&stale),
+        UndoLatestAuthorActionResult::Conflicted {
+            reason: UndoLatestAuthorActionConflict::FrontierMismatch {
+                current_author_undo_frontier_sequence: Some(1),
+            },
         }
     );
 }

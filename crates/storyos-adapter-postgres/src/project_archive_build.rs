@@ -13,6 +13,10 @@ use storyos_core::{
 const EXPORT_TABLES: &[(&str, &str)] = &[
     ("acceptance_receipts", "canonical/acceptance_receipts.json"),
     (
+        "undo_acceptance_receipts",
+        "canonical/undo_acceptance_receipts.json",
+    ),
+    (
         "active_context_compactions",
         "canonical/active_context_compactions.json",
     ),

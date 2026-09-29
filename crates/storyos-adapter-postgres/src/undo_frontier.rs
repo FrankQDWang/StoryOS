@@ -2,6 +2,7 @@ use storyos_application::{UndoLatestAuthorActionCommand, UndoLatestAuthorActionE
 use storyos_core::AuthorUndoFrontierKind;
 
 pub(super) enum ObservedFrontier {
+    Acceptance(crate::undo_acceptance::LoadedAcceptance),
     Prose(ObservedProseFrontier),
     Structure(ObservedStructureFrontier),
     CurrentChapter(ObservedCurrentChapterFrontier),
@@ -154,6 +155,14 @@ pub(super) async fn load_observed_frontier(
         return Err(UndoLatestAuthorActionError::MissingProject);
     };
     let observed = observed_frontier(&row)?;
+    if let Some(ObservedFrontier::Acceptance(pending)) = observed {
+        return Ok(LoadedUndoFrontier {
+            lifecycle_state: row.get(0),
+            observed: Some(ObservedFrontier::Acceptance(
+                crate::undo_acceptance::enrich(client, command, pending).await?,
+            )),
+        });
+    }
     let observed = match observed {
         Some(ObservedFrontier::Barrier { sequence }) => {
             if matches!(
@@ -223,6 +232,29 @@ fn observed_frontier(
             row.get::<_, Option<String>>(12),
             row.get::<_, Option<String>>(13),
         ) {
+            (
+                Some(chapter_id),
+                Some(resulting_revision_id),
+                Some(prior_revision_id),
+                prior_payload,
+                Some(current_head_revision_id),
+                _,
+                _,
+                _,
+                _,
+                Some(command_kind),
+                _,
+                _,
+            ) if command_kind == "acceptProposal" => {
+                ObservedFrontier::Acceptance(crate::undo_acceptance::LoadedAcceptance::pending(
+                    sequence,
+                    chapter_id,
+                    resulting_revision_id,
+                    prior_revision_id,
+                    prior_payload,
+                    current_head_revision_id,
+                ))
+            }
             (
                 Some(chapter_id),
                 Some(resulting_revision_id),
@@ -424,6 +456,7 @@ fn observed_frontier(
 impl ObservedFrontier {
     pub(super) fn sequence(&self) -> u64 {
         match self {
+            Self::Acceptance(frontier) => frontier.sequence,
             Self::Prose(frontier) => frontier.sequence,
             Self::Structure(frontier) => frontier.sequence,
             Self::CurrentChapter(frontier) => frontier.sequence,
@@ -436,6 +469,10 @@ impl ObservedFrontier {
 
     pub(super) fn kind(&self) -> AuthorUndoFrontierKind {
         match self {
+            Self::Acceptance(frontier) => AuthorUndoFrontierKind::ReversibleAcceptance {
+                resulting_revision_id: frontier.resulting_revision_id.clone(),
+                prior_evidence_usable: frontier.prior_evidence_usable,
+            },
             Self::Prose(frontier) => AuthorUndoFrontierKind::ReversibleDirectAuthorAction {
                 resulting_revision_id: frontier.resulting_revision_id.clone(),
             },
@@ -450,6 +487,7 @@ impl ObservedFrontier {
 
     pub(super) fn prose_head(&self) -> Option<&str> {
         match self {
+            Self::Acceptance(frontier) => Some(frontier.current_head_revision_id.as_str()),
             Self::Prose(frontier) => Some(frontier.current_head_revision_id.as_str()),
             Self::Structure(_)
             | Self::CurrentChapter(_)

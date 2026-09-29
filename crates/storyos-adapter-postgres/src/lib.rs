@@ -155,6 +155,7 @@ mod stream_proposal_generation;
 mod stream_proposal_pause;
 mod structural_authority_settlement;
 mod takeover;
+mod undo_acceptance;
 mod undo_current_chapter;
 mod undo_draft_close;
 mod undo_draft_retry;

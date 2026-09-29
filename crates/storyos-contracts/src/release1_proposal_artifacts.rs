@@ -58,7 +58,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
         ] {
             proposal["properties"][field]["format"] = json!("uuid");
         }
-        proposal["properties"]["kind"]["enum"] = json!(["block_edit", "inline_edit"]);
+        proposal["properties"]["kind"]["enum"] = json!(["block_edit", "inline_edit", "reversal"]);
     }
     if let Some(operation) = schema["$defs"].get_mut("ProposalOperationInspect") {
         for field in ["operation_id", "manuscript_block_id"] {

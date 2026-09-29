@@ -131,6 +131,10 @@ async fn persist_undo(
     });
     let session_chapter = crate::undo_structure::editor_session_chapter(client, command).await?;
     let (admission_chapter, admission_expected) = match &observed {
+        Some(ObservedFrontier::Acceptance(frontier)) => (
+            Some(frontier.chapter_id.as_str()),
+            Some(command.expected_authoritative_revision_id.as_str()),
+        ),
         Some(ObservedFrontier::Prose(frontier)) => (
             Some(frontier.chapter_id.as_str()),
             Some(frontier.resulting_revision_id.as_str()),
@@ -164,6 +168,56 @@ async fn persist_undo(
     insert_undo_admission(client, command, admission_chapter, admission_expected).await?;
     let mut settlement = match classified {
         UndoLatestAuthorActionResult::Compensated { source_sequence } => match &observed {
+            Some(ObservedFrontier::Acceptance(loaded)) => {
+                let prose = ObservedProseFrontier {
+                    sequence: loaded.sequence,
+                    chapter_id: loaded.chapter_id.clone(),
+                    resulting_revision_id: loaded.resulting_revision_id.clone(),
+                    prior_revision_id: loaded.prior_revision_id.clone(),
+                    prior_payload: loaded.prior_payload.clone(),
+                    current_head_revision_id: loaded.current_head_revision_id.clone(),
+                };
+                let mut settlement =
+                    persist_compensation(client, command, &prose, source_sequence).await?;
+                let (commit_id, revision_id) = match &settlement.effect {
+                    UndoLatestAuthorActionSettlementEffect::Compensated {
+                        authoritative_commit_id,
+                        revision_id,
+                        ..
+                    } => (authoritative_commit_id.clone(), revision_id.clone()),
+                    UndoLatestAuthorActionSettlementEffect::CompensatedDraft { .. }
+                    | UndoLatestAuthorActionSettlementEffect::ReversalRequired { .. }
+                    | UndoLatestAuthorActionSettlementEffect::CompensatedStructure { .. }
+                    | UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
+                        ..
+                    }
+                    | UndoLatestAuthorActionSettlementEffect::CompensatedProposal { .. }
+                    | UndoLatestAuthorActionSettlementEffect::Conflicted { .. }
+                    | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => {
+                        return Err(UndoLatestAuthorActionError::BindingConflict);
+                    }
+                };
+                let (proposal_id, proposal_revision_id) =
+                    crate::undo_acceptance::link_after_compensation(
+                        client,
+                        command,
+                        loaded,
+                        &commit_id,
+                        &revision_id,
+                        settlement.project_activity_position,
+                    )
+                    .await?;
+                if let UndoLatestAuthorActionSettlementEffect::Compensated {
+                    proposal_id: linked_proposal,
+                    proposal_revision_id: linked_revision,
+                    ..
+                } = &mut settlement.effect
+                {
+                    *linked_proposal = proposal_id;
+                    *linked_revision = proposal_revision_id;
+                }
+                Ok(settlement)
+            }
             Some(ObservedFrontier::Prose(frontier)) => {
                 persist_compensation(client, command, frontier, source_sequence).await
             }
@@ -210,6 +264,48 @@ async fn persist_undo(
                 Err(UndoLatestAuthorActionError::BindingConflict)
             }
         },
+        UndoLatestAuthorActionResult::ReversalRequired { source_sequence } => match &observed {
+            Some(ObservedFrontier::Acceptance(loaded)) => {
+                match crate::undo_acceptance::persist_reversal(
+                    client,
+                    command,
+                    loaded,
+                    source_sequence,
+                )
+                .await?
+                {
+                    Some(settlement) => Ok(settlement),
+                    None => {
+                        let settlement = persist_zero_authority(
+                            client,
+                            command,
+                            observed.as_ref(),
+                            (
+                                "refused",
+                                "source_unavailable",
+                                UndoLatestAuthorActionSettlementEffect::Unavailable {
+                                    reason:
+                                        storyos_core::UndoLatestAuthorActionUnavailable::SourceUnavailable,
+                                },
+                            ),
+                        )
+                        .await?;
+                        crate::undo_acceptance::record_unavailable(client, command, loaded).await?;
+                        Ok(settlement)
+                    }
+                }
+            }
+            Some(
+                ObservedFrontier::Prose(_)
+                | ObservedFrontier::Structure(_)
+                | ObservedFrontier::CurrentChapter(_)
+                | ObservedFrontier::Proposal(_)
+                | ObservedFrontier::AuthorWithdrawal(_)
+                | ObservedFrontier::DraftClose(_)
+                | ObservedFrontier::Barrier { .. },
+            )
+            | None => Err(UndoLatestAuthorActionError::BindingConflict),
+        },
         UndoLatestAuthorActionResult::Conflicted { reason } => {
             persist_zero_authority(
                 client,
@@ -232,7 +328,7 @@ async fn persist_undo(
             .await
         }
         UndoLatestAuthorActionResult::Unavailable { reason } => {
-            persist_zero_authority(
+            let settlement = persist_zero_authority(
                 client,
                 command,
                 observed.as_ref(),
@@ -250,7 +346,11 @@ async fn persist_undo(
                     UndoLatestAuthorActionSettlementEffect::Unavailable { reason },
                 ),
             )
-            .await
+            .await?;
+            if let Some(ObservedFrontier::Acceptance(loaded)) = &observed {
+                crate::undo_acceptance::record_unavailable(client, command, loaded).await?;
+            }
+            Ok(settlement)
         }
     }?;
     settlement.source_reopen_event =
@@ -528,6 +628,8 @@ async fn persist_compensation(
             body,
             blocks,
             author_undo_frontier_sequence,
+            proposal_id: None,
+            proposal_revision_id: None,
         },
         receipt_created_at,
         project_activity_position,
@@ -535,7 +637,7 @@ async fn persist_compensation(
     })
 }
 
-async fn persist_zero_authority(
+pub(super) async fn persist_zero_authority(
     client: &tokio_postgres::Client,
     command: &UndoLatestAuthorActionCommand,
     frontier: Option<&ObservedFrontier>,
@@ -932,7 +1034,36 @@ async fn read_undo_settlement(
         };
         let result_kind = row.get::<_, String>(3);
         let reason = row.get::<_, Option<String>>(4);
-        let effect = match (result_kind.as_str(), reason.as_deref()) {
+        let acceptance_retry = crate::undo_acceptance::read_retry(
+            &client,
+            command.project_scope.owner_user_id.as_ref(),
+            command.project_scope.project_id.as_ref(),
+            receipt_id,
+        )
+        .await?;
+        let mut effect = if let Some(retry) = acceptance_retry
+            .as_ref()
+            .filter(|retry| retry.outcome == "reversal_required")
+        {
+            let author_action_sequence = row
+                .get::<_, Option<String>>(7)
+                .ok_or(UndoLatestAuthorActionError::BindingConflict)?
+                .parse()
+                .map_err(undo_parse_error)?;
+            UndoLatestAuthorActionSettlementEffect::ReversalRequired {
+                source_sequence: retry.source_sequence,
+                author_action_sequence,
+                proposal_id: retry
+                    .proposal_id
+                    .clone()
+                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
+                proposal_revision_id: retry
+                    .proposal_revision_id
+                    .clone()
+                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
+            }
+        } else {
+            match (result_kind.as_str(), reason.as_deref()) {
             ("draft_closure_changed", None) => {
                 let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
                     .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
@@ -1022,6 +1153,8 @@ async fn read_undo_settlement(
                         body: crate::manuscript_block::display_body_from_stored(&stored, &blocks),
                         blocks,
                         author_undo_frontier_sequence: current_frontier,
+                        proposal_id: None,
+                        proposal_revision_id: None,
                     }
                 } else if let Some(authoritative_commit_id) = authoritative_commit_id {
                     UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
@@ -1080,7 +1213,20 @@ async fn read_undo_settlement(
                 reason: storyos_core::UndoLatestAuthorActionUnavailable::Barrier,
             },
             _ => return Err(UndoLatestAuthorActionError::BindingConflict),
+            }
         };
+        if let Some(retry) = acceptance_retry
+            .as_ref()
+            .filter(|retry| retry.outcome == "compensated")
+            && let UndoLatestAuthorActionSettlementEffect::Compensated {
+                proposal_id,
+                proposal_revision_id,
+                ..
+            } = &mut effect
+        {
+            *proposal_id = retry.proposal_id.clone();
+            *proposal_revision_id = retry.proposal_revision_id.clone();
+        }
         let project_activity_position = row
             .get::<_, Option<String>>(11)
             .or_else(|| row.get::<_, Option<String>>(14))
@@ -1098,6 +1244,11 @@ async fn read_undo_settlement(
                 None => return Err(UndoLatestAuthorActionError::BindingConflict),
             }
         } else { project_activity_position };
+        let project_activity_position = acceptance_retry
+            .as_ref()
+            .filter(|retry| retry.outcome == "reversal_required")
+            .map(|retry| retry.project_activity_position)
+            .unwrap_or(project_activity_position);
         Ok(UndoLatestAuthorActionSettlement {
             source_reopen_event: crate::undo_draft_retry::read_reopen(&client, command, receipt_id)
                 .await?,
