@@ -1,6 +1,7 @@
 """Observe targeted results and read-only status through public commands."""
 
 import json
+import subprocess
 import sys
 import unittest
 
@@ -49,6 +50,20 @@ class TargetedStatusTests(unittest.TestCase):
         self.assertNotEqual(self.repo.cli('targeted', '--check', 'sample').returncode, 0)
         self.assertEqual(self.status()['status'], 'failed')
         self.assertEqual((self.root / 'target/launches').read_text(), 'xx')
+
+    def test_make_selector_does_not_invalidate_public_python_status(self):
+        runner = verification_tests.COMMAND.resolve()
+        (self.root / 'scripts/verification.py').write_text(
+            f'import runpy,sys\nsys.path.insert(0, {str(runner.parent)!r})\n'
+            f'runpy.run_path({str(runner)!r}, run_name="__main__")\n')
+        self.repo.git('add', '.')
+        self.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                      'commit', '--quiet', '-m', 'Use the public Make entry.')
+        result = subprocess.run(['make', '-f', str(runner.parent.parent / 'Makefile'),
+                                 'verify-targeted', 'CHECK=sample'], cwd=self.root,
+                                env=self.repo.environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.status()['status'], 'passed')
 
     def test_dirty_package_refuses_without_start_and_nested_steps_share_one_root(self):
         (self.root / 'AGENTS.md').write_text('Dirty package input.\n')
