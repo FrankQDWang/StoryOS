@@ -56,6 +56,7 @@ pub struct AgentRunRecord {
     pub model: Option<AgentRunModelInspect>,
     pub active_compaction: Option<ActiveCompactionInspect>,
     pub reference_recovery: Option<ReferenceRecoveryInspect>,
+    pub original_result_retrieval: Option<OriginalResultRetrievalInspect>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -133,6 +134,32 @@ pub struct ReferenceRecoveryInspect {
     pub opaque_reused: bool,
     pub covered_content_included: bool,
     pub predecessor_terminal: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OriginalResultRetrievalDisposition {
+    KeptUnknown,
+    EvidenceOnly,
+    Settled,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OriginalResultRetrievalInspect {
+    pub reconciliation_id: String,
+    pub disposition: OriginalResultRetrievalDisposition,
+    pub keep_reason: Option<String>,
+    pub original_model_attempt_id: String,
+    pub response_reference_id: Option<String>,
+    pub retrieval_attempt_id: Option<String>,
+    pub assembly_manifest_id: Option<String>,
+    pub repeats_original_create: bool,
+    pub resumes_stream: bool,
+    pub proves_create_idempotency: bool,
+    pub supplies_decision: bool,
+    pub supplies_tool_call: bool,
+    pub advances_continuation: bool,
+    pub reservation_released: bool,
+    pub usage_kind: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

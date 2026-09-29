@@ -241,6 +241,9 @@ pub(super) async fn get_agent_run(
                 predecessor_terminal: recovery.predecessor_terminal,
             },
         },
+        original_result_retrieval: inspect_original_result_retrieval(
+            record.original_result_retrieval.as_ref(),
+        ),
         evidence: record
             .model
             .as_ref()
@@ -260,6 +263,41 @@ pub(super) async fn get_agent_run(
         },
         redaction_profile: "storyos.author.v1".to_owned(),
     }))
+}
+
+fn inspect_original_result_retrieval(
+    retrieval: Option<&storyos_application::OriginalResultRetrievalInspect>,
+) -> contracts::OptionalOriginalResultRetrievalInspect {
+    match retrieval {
+        None => contracts::OptionalOriginalResultRetrievalInspect::Absent,
+        Some(retrieval) => contracts::OptionalOriginalResultRetrievalInspect::Present {
+            reconciliation_id: retrieval.reconciliation_id.clone(),
+            disposition: match retrieval.disposition {
+                storyos_application::OriginalResultRetrievalDisposition::KeptUnknown => {
+                    contracts::OriginalResultRetrievalDisposition::KeptUnknown
+                }
+                storyos_application::OriginalResultRetrievalDisposition::EvidenceOnly => {
+                    contracts::OriginalResultRetrievalDisposition::EvidenceOnly
+                }
+                storyos_application::OriginalResultRetrievalDisposition::Settled => {
+                    contracts::OriginalResultRetrievalDisposition::Settled
+                }
+            },
+            keep_reason: retrieval.keep_reason.clone(),
+            original_model_attempt_id: retrieval.original_model_attempt_id.clone(),
+            response_reference_id: retrieval.response_reference_id.clone(),
+            retrieval_attempt_id: retrieval.retrieval_attempt_id.clone(),
+            assembly_manifest_id: retrieval.assembly_manifest_id.clone(),
+            repeats_original_create: retrieval.repeats_original_create,
+            resumes_stream: retrieval.resumes_stream,
+            proves_create_idempotency: retrieval.proves_create_idempotency,
+            supplies_decision: retrieval.supplies_decision,
+            supplies_tool_call: retrieval.supplies_tool_call,
+            advances_continuation: retrieval.advances_continuation,
+            reservation_released: retrieval.reservation_released,
+            usage_kind: retrieval.usage_kind.clone(),
+        },
+    }
 }
 
 fn inspect_status(status: storyos_application::AgentRunStatus) -> contracts::AgentRunStatus {

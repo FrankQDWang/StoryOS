@@ -1163,6 +1163,109 @@
         }
       ]
     },
+    "OptionalOriginalResultRetrievalInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "advances_continuation": {
+              "type": "boolean"
+            },
+            "assembly_manifest_id": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "disposition": {
+              "$ref": "#/$defs/OriginalResultRetrievalDisposition"
+            },
+            "keep_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "original_model_attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "proves_create_idempotency": {
+              "type": "boolean"
+            },
+            "reconciliation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "repeats_original_create": {
+              "type": "boolean"
+            },
+            "reservation_released": {
+              "type": "boolean"
+            },
+            "response_reference_id": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "resumes_stream": {
+              "type": "boolean"
+            },
+            "retrieval_attempt_id": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "supplies_decision": {
+              "type": "boolean"
+            },
+            "supplies_tool_call": {
+              "type": "boolean"
+            },
+            "usage_kind": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reconciliation_id",
+            "disposition",
+            "original_model_attempt_id",
+            "repeats_original_create",
+            "resumes_stream",
+            "proves_create_idempotency",
+            "supplies_decision",
+            "supplies_tool_call",
+            "advances_continuation",
+            "reservation_released",
+            "usage_kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "OptionalReferenceRecoveryInspect": {
       "oneOf": [
         {
@@ -1267,6 +1370,14 @@
           "type": "object"
         }
       ]
+    },
+    "OriginalResultRetrievalDisposition": {
+      "enum": [
+        "kept_unknown",
+        "evidence_only",
+        "settled"
+      ],
+      "type": "string"
     },
     "ProjectScope": {
       "additionalProperties": false,
@@ -1410,6 +1521,9 @@
     "model_attempt": {
       "$ref": "#/$defs/OptionalModelAttemptInspect"
     },
+    "original_result_retrieval": {
+      "$ref": "#/$defs/OptionalOriginalResultRetrievalInspect"
+    },
     "project_agent_id": {
       "format": "uuid",
       "type": "string"
@@ -1452,6 +1566,7 @@
     "model_attempt",
     "active_compaction",
     "reference_recovery",
+    "original_result_retrieval",
     "evidence",
     "items",
     "usage",

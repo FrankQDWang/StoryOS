@@ -261,6 +261,21 @@ async fn settle_one_phase(
     }
     let payload: serde_json::Value = serde_json::from_str(&run.get::<_, String>(12))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    if payload.get("original_result_retrieval").is_some() {
+        let result = crate::agent_run_retrieval::advance_original_result_retrieval(
+            client,
+            claim,
+            &payload,
+            crate::agent_run_retrieval::RetrievalAdvance {
+                attempt_id: attempt_id.as_deref().expect("attempt exists"),
+                conversation_id: &conversation_id,
+                run_status: &status,
+            },
+            crate::agent_run_retrieval::RetrievalFence::Open,
+        )
+        .await?;
+        return Ok(WorkPhase::Done(result));
+    }
     let items_empty = payload
         .get("items")
         .and_then(serde_json::Value::as_array)
