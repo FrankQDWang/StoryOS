@@ -70,7 +70,7 @@ test("undo acceptance restores the prior chapter, reopens the proposal, and reap
     assert.equal(reapplied.effect.authoritative_revision.body, REVISED);
     assert.notEqual(reapplied.receipt.receipt_id, accepted.receiptId);
   } finally {
-    await stopRealServer(started);
+    await stopRealServer(started.server);
   }
 });
 
@@ -101,7 +101,7 @@ test("undo acceptance derives a proposal when the accepted lineage has drifted",
     assert.equal(derived.proposal.candidate_text, REVISED);
     assert.notEqual(derived.proposal.proposal_id, accepted.proposalId);
   } finally {
-    await stopRealServer(started);
+    await stopRealServer(started.server);
   }
 });
 
@@ -109,7 +109,7 @@ test("undo acceptance requires a reversal proposal when the authoritative head h
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("e191"), "Undo Acceptance Reversal Novel", "e4");
+    const prepared = await prepare(started.baseUrl, id("e1c1"), "Undo Acceptance Reversal Novel", "e4");
     const accepted = await acceptOpened(started.baseUrl, prepared, "ec");
     await queryPostgres(`UPDATE storyos.authoritative_heads SET current_revision_id = '${accepted.beforeRevision}'::uuid
       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
@@ -142,7 +142,7 @@ test("undo acceptance requires a reversal proposal when the authoritative head h
     assert.equal(reversal.proposal.operation_resolution, "pending");
     assert.equal(reversal.proposal.candidate_text, accepted.beforeBody);
   } finally {
-    await stopRealServer(started);
+    await stopRealServer(started.server);
   }
 });
 
@@ -170,7 +170,7 @@ test("undo acceptance is unavailable when the accepted payload digest does not m
         AND compensated_source_sequence = ${accepted.frontier}
         AND disposition = 'compensation'`), "0");
   } finally {
-    await stopRealServer(started);
+    await stopRealServer(started.server);
   }
 });
 

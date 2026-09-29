@@ -115,6 +115,26 @@ pub(super) async fn get_proposal(
                     base_slice_digest: anchor.base_slice_digest,
                 })
                 .collect(),
+            revision_comparison: match record.revision_comparison {
+                None => contracts::OptionalRevisionComparisonInspect::Absent,
+                Some(comparison) => contracts::OptionalRevisionComparisonInspect::Present {
+                    base_authoritative_revision_id: comparison.base_revision_id,
+                    candidate_revision_id: comparison.candidate_revision_id,
+                    operation_id: comparison.operation_id,
+                    spans: comparison
+                        .spans
+                        .into_iter()
+                        .map(|span| contracts::ReplacementSpanInspect {
+                            base_from: span.base_from,
+                            base_to: span.base_to,
+                            candidate_from: span.candidate_from,
+                            candidate_to: span.candidate_to,
+                            base_text: span.base_text,
+                            candidate_text: span.candidate_text,
+                        })
+                        .collect(),
+                },
+            },
         },
     }))
 }

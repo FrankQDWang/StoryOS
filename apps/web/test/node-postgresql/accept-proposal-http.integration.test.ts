@@ -298,9 +298,14 @@ test.each(["invalid_validation", "changed_head", "altered_candidate"] as const)(
     assert.deepEqual(failed.effect, { kind: validation, reason });
     assert.equal(failed.receipt.condition_refs.length, reason === "changed_head" ? 1 : 0);
     for (const ref of failed.receipt.condition_refs) assert.match(ref, UUID_V7);
+    const tampered = "Tampered narrator voice.";
+    const comparison = revised.proposal.revision_comparison;
     const expected = {
       ...revised.proposal, validation, condition_refs: failed.receipt.condition_refs,
-      candidate_text: reason === "altered_candidate" ? "Tampered narrator voice." : revised.proposal.candidate_text,
+      candidate_text: reason === "altered_candidate" ? tampered : revised.proposal.candidate_text,
+      revision_comparison: reason === "altered_candidate" && comparison.kind === "present"
+        ? { ...comparison, spans: [{ base_from: 0, base_to: 0, candidate_from: 0, candidate_to: tampered.length, base_text: "", candidate_text: tampered }] }
+        : comparison,
       source_condition: reason === "changed_head"
         ? { kind: "proposal_conflict" as const, proposal_conflict_ref: failed.receipt.condition_refs[0] ?? "" }
         : revised.proposal.source_condition,

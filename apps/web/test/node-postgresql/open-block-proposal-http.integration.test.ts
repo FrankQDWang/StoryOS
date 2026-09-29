@@ -265,7 +265,8 @@ test("Worker opens one Block Proposal in place without changing Authoritative pr
       }),
       (error) => {
         const protocol = requireStoryOSProtocolError(error);
-        return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
+        const body = String(protocol.responseBody);
+        return protocol.status === 404 && !body.includes(USER_A) && !body.includes(PROSE);
       },
     );
     await assert.rejects(

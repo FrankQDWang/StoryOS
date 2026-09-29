@@ -1,5 +1,10 @@
 use storyos_application::{
-    BlockProposalRecord, ProjectReadError, ProjectScope, ProposalOperationRecord, ProposalReader,
+    BlockProposalRecord, ProjectReadError, ProjectScope, ProposalAnchorRecord,
+    ProposalOperationRecord, ProposalReader,
+};
+use storyos_core::{
+    ExactRevisionTexts, ManuscriptBlock, ManuscriptBlockKind, RevisionComparisonAccess,
+    inspect_revision_comparison, proposal_anchor_base_slice_digest, utf16_slice,
 };
 
 use super::{PostgresProjectReader, read_error, set_scope};
@@ -86,6 +91,19 @@ impl ProposalReader for PostgresProjectReader {
             }
             _ => Vec::new(),
         };
+        let base_block = match row.as_ref() {
+            Some(row) => {
+                load_exact_base_block(
+                    &transaction,
+                    scope,
+                    &row.get::<_, String>(8),
+                    &row.get::<_, String>(10),
+                    &row.get::<_, String>(9),
+                )
+                .await?
+            }
+            None => None,
+        };
         transaction.commit().await.map_err(read_error)?;
         row.map(|row| {
             Ok(BlockProposalRecord {
@@ -120,7 +138,16 @@ impl ProposalReader for PostgresProjectReader {
                     row.get::<_, Option<String>>(17),
                 ),
                 latest_acceptance_refusal,
-                anchors,
+                anchors: anchors.clone(),
+                revision_comparison: bound_comparison(
+                    &row.get::<_, String>(1),
+                    &row.get::<_, String>(2),
+                    &row.get::<_, String>(6),
+                    &row.get::<_, String>(10),
+                    &row.get::<_, String>(12),
+                    base_block.as_ref(),
+                    &anchors,
+                ),
             })
         })
         .transpose()
@@ -223,4 +250,108 @@ async fn read_inline_anchors(
             })
         })
         .collect()
+}
+
+async fn load_exact_base_block(
+    client: &impl tokio_postgres::GenericClient,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    base_revision_id: &str,
+    manuscript_block_id: &str,
+) -> Result<Option<ManuscriptBlock>, ProjectReadError> {
+    let row = client
+        .query_opt(
+            "SELECT convert_from(payload.canonical_bytes, 'UTF8')
+               FROM storyos.authoritative_revisions AS revision
+               JOIN storyos.authoritative_payloads AS payload
+                 ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                    (revision.owner_user_id, revision.project_id, revision.payload_id)
+              WHERE revision.owner_user_id = $1::text::uuid
+                AND revision.project_id = $2::text::uuid
+                AND revision.manuscript_object_id = $3::text::uuid
+                AND revision.revision_id = $4::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &chapter_id,
+                &base_revision_id,
+            ],
+        )
+        .await
+        .map_err(read_error)?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let body: String = row.get(0);
+    let blocks = crate::manuscript_block::load_revision_blocks(
+        client,
+        scope.owner_user_id.as_ref(),
+        scope.project_id.as_ref(),
+        chapter_id,
+        base_revision_id,
+        &body,
+    )
+    .await
+    .map_err(read_error)?;
+    Ok(blocks
+        .into_iter()
+        .find(|block| block.manuscript_block_id == manuscript_block_id))
+}
+
+fn bound_comparison(
+    kind: &str,
+    revision_id: &str,
+    operation_id: &str,
+    base_revision_id: &str,
+    candidate_text: &str,
+    block: Option<&ManuscriptBlock>,
+    anchors: &[ProposalAnchorRecord],
+) -> Option<storyos_core::RevisionComparison> {
+    let base_text = match kind {
+        "block_edit" | "reversal" => block?.text.clone(),
+        "inline_edit" => proven_inline_slice(base_revision_id, block?, anchors)?,
+        _ => return None,
+    };
+    inspect_revision_comparison(
+        RevisionComparisonAccess::SameScope,
+        &ExactRevisionTexts {
+            base_revision_id: base_revision_id.to_owned(),
+            candidate_revision_id: revision_id.to_owned(),
+            operation_id: operation_id.to_owned(),
+            base_text,
+            candidate_text: candidate_text.to_owned(),
+        },
+    )
+}
+
+fn proven_inline_slice(
+    base_revision_id: &str,
+    block: &ManuscriptBlock,
+    anchors: &[ProposalAnchorRecord],
+) -> Option<String> {
+    let [anchor] = anchors else {
+        return None;
+    };
+    if anchor.base_authoritative_revision_id != base_revision_id
+        || anchor.manuscript_block_id != block.manuscript_block_id
+    {
+        return None;
+    }
+    let slice = utf16_slice(&block.text, anchor.from, anchor.to)?;
+    let digest = proposal_anchor_base_slice_digest(
+        &block.manuscript_block_id,
+        match block.block_kind {
+            ManuscriptBlockKind::Paragraph => "paragraph",
+            ManuscriptBlockKind::Heading => "heading",
+        },
+        anchor.manuscript_schema_version,
+        &anchor.coordinate_profile,
+        anchor.from,
+        anchor.to,
+        slice,
+    );
+    if digest != anchor.base_slice_digest {
+        return None;
+    }
+    Some(slice.to_owned())
 }

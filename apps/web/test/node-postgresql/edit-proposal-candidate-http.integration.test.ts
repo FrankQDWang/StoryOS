@@ -193,6 +193,27 @@ async function admitProse(
   return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
 }
 
+function assertEmptyBaseComparison(
+  proposal: Awaited<ReturnType<typeof getProposal>>["proposal"],
+  candidateText: string,
+) {
+  assert.equal(proposal.candidate_text, candidateText);
+  assert.deepEqual(proposal.revision_comparison, {
+    kind: "present",
+    base_authoritative_revision_id: proposal.base_authoritative_revision_id,
+    candidate_revision_id: proposal.revision_id,
+    operation_id: proposal.operation_id,
+    spans: [{
+      base_from: 0,
+      base_to: 0,
+      candidate_from: 0,
+      candidate_to: candidateText.length,
+      base_text: "",
+      candidate_text: candidateText,
+    }],
+  });
+}
+
 test("applyAuthorEdit revises one Proposal candidate in place and Root Undo restores it", async () => {
   const started = await startRealServer();
   try {
@@ -217,6 +238,10 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       fetchImpl: prepared.fetchImpl,
     });
     assert.equal(opened.proposal.candidate_text, PROSE);
+    const baseBlock = before.chapter.current_revision.blocks.find((block) =>
+      block.manuscript_block_id === opened.proposal.manuscript_block_id);
+    assert.equal(baseBlock?.text, "");
+    assertEmptyBaseComparison(opened.proposal, PROSE);
     assert.equal(opened.proposal.validation_receipt.kind, "present");
     if (opened.proposal.validation_receipt.kind !== "present") throw new Error("expected receipt");
     const openedReceiptId = opened.proposal.validation_receipt.validation_receipt_id;
@@ -326,7 +351,9 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
     assert.equal(revised.proposal.proposal_id, opened.proposal.proposal_id);
     assert.equal(revised.proposal.operation_id, opened.proposal.operation_id);
     assert.equal(revised.proposal.revision_id, edited.effect.proposal_revision_id);
-    assert.equal(revised.proposal.candidate_text, REVISED);
+    assert.notEqual(revised.proposal.revision_id, opened.proposal.revision_id);
+    assertEmptyBaseComparison(revised.proposal, REVISED);
+    assert.equal(revised.proposal.validation, opened.proposal.validation);
     assert.equal(revised.proposal.validation, "valid");
     assert.equal(revised.proposal.validation_receipt.kind, "present");
     if (revised.proposal.validation_receipt.kind !== "present") throw new Error("expected new receipt");
@@ -458,7 +485,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
     });
     assert.equal(restored.proposal.proposal_id, opened.proposal.proposal_id);
     assert.equal(restored.proposal.operation_id, opened.proposal.operation_id);
-    assert.equal(restored.proposal.candidate_text, PROSE);
+    assertEmptyBaseComparison(restored.proposal, PROSE);
     assert.notEqual(restored.proposal.revision_id, revised.proposal.revision_id);
     assert.notEqual(restored.proposal.revision_id, opened.proposal.revision_id);
     assert.equal(restored.proposal.validation_receipt.kind, "present");
