@@ -249,6 +249,10 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       assert.deepEqual(errors, []);
       return;
     }
+    await queryStoryOSPostgres(`
+      UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+      WHERE owner_user_id = '${USER}'::uuid AND project_id = '${projectId}'::uuid
+    `);
     delivery = "refused";
     await page.locator('input[name="assistant-message"]').fill(CORRECTION);
     await page.locator(".composer button").click();
@@ -671,6 +675,48 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       [MESSAGE, CORRECTION, "Help with this passage."]);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, acceptedChapter.chapter);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-851-new-conversation.png"), fullPage: true });
+    await editor.waitFor();
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    await editor.click();
+    await editor.locator(":scope > p").last().evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.collapse(false);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+    });
+    await page.keyboard.insertText(" The author kept writing.");
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    const freshChapter = await getChapter({ ...options, chapterId });
+    assert.equal(freshChapter.chapter.current_revision.blocks.at(-1)?.text,
+      `${secondBlock.text} The author kept writing.`);
+    const followUpResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname.endsWith("/agent-runs") && response.request().method() === "POST");
+    const followUp = "Keep the voice in this current passage.";
+    await page.locator('input[name="assistant-message"]').fill(followUp);
+    await page.locator(".composer button").click();
+    const followUpAcknowledgement = await (await followUpResponse).json() as CreateAgentRunResponse;
+    assert.equal(followUpAcknowledgement.conversation_id, separate.conversation_id);
+    const followUpRunId = followUpAcknowledgement.effect.run_id;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      if ((await getAgentRun({ ...options, runId: followUpRunId })).status === "completed") break;
+      await runStoryOSWorker({ repositoryRoot,
+        workerBinary: join(repositoryRoot, "target", "release-package", "storyos-worker"), args: ["--once"] });
+    }
+    const plainFollowUp = await getAgentRun({ ...options, runId: followUpRunId });
+    assert.ok(separate.decision.kind === "advisory" && separate.decision.continuation.kind === "present");
+    assert.ok(plainFollowUp.model_attempt.kind === "present");
+    assert.deepEqual(plainFollowUp.model_attempt.prior_continuation, separate.decision.continuation);
+    assert.equal(plainFollowUp.context.selected.find((item) =>
+      item.source_class === "author_instruction")?.content, followUp);
+    assert.equal(plainFollowUp.context.selected.find((item) =>
+      item.source_class === "working_target")?.content, freshChapter.chapter.current_revision.body);
+    await page.reload();
+    await page.locator('[data-assistant-dispatch="completed"]').waitFor();
+    assert.deepEqual(await page.locator(".assistant-author-message").allTextContents(),
+      [MESSAGE, CORRECTION, "Help with this passage.", followUp]);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, freshChapter.chapter);
+    await page.screenshot({ path: join(repositoryRoot, "target", "issue-851-plain-follow-up.png"), fullPage: true });
     assert.deepEqual(errors, []);
   } finally {
     if (owned !== undefined) await stopStoryOSServer(owned.server);
