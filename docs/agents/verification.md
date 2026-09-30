@@ -40,7 +40,7 @@ Bundle. Keep secrets in environment variables, not recorded command arguments.
 
 ## Daily file selection
 
-Use `make verify-plan BASE=origin/main` to inspect the changed files and reasons.
+Use `make verify-plan BASE=origin/main` to inspect a bounded daily summary.
 Use `make verify-changed BASE=origin/main` to execute that scope. Set BASE to the
 actual comparison commit or ref; `BASE=HEAD` checks current working changes only.
 The daily entry never dispatches complete verification. Each check is ready or pending.
@@ -90,7 +90,7 @@ oracles and both recovery drills remain mandatory. The PR `verify` sentinel chec
 
 Daily and targeted plans include a version 1 `graph`. Complete reports retain the
 same graph beside `plan` for local diagnosis. Use
-`make verify-plan VERIFY_ARGS='--profile complete'` to read the committed HEAD
+`python3 scripts/verification_plan.py plan --profile complete` to read the committed HEAD
 workflow without execution. Daily exports read current working inputs.
 
 The policy owns operation types, preparation requirements, and check membership.
@@ -274,7 +274,7 @@ when requested.
 `make verify-status BASE=origin/main` reads the current daily plan and retained
 results. It does not run tests or write observations. Use
 `python3 scripts/verification_plan.py status --base origin/main` for JSON, or
-`make verify-plan VERIFY_ARGS='--format text'` for a readable plan. An empty
+`make verify-plan` for a readable plan summary. An empty
 change set remains pending. A prior result can be passed, failed, or stale;
 package-dependent work on dirty sources has unmet prerequisites.
 
@@ -473,3 +473,24 @@ An active process points to observation. A lost process needs cleanup confirmati
 A changed identity requires a fresh plan. Recovery commands still enforce current
 admission and require an accurate reason. A current PASS covers only the selected
 verification scope; merge checks and reviews retain their separate authority.
+
+
+### Bounded daily queries
+
+`make verify-plan` now calls `verification_plan.py summary --format text`.
+`VERIFY_ARGS='--format json'` returns the same summary as JSON. Daily status and
+plan summaries have a 16 KiB and 80-line limit, eight checks per page, and clipped
+text fields with original character counts. Failures and pending checks come first.
+Counts cover all checks; equal blocking reasons share a count. Query errors also
+use a bounded summary; `--details` retains the full error. Partial readiness
+does not satisfy pending checks. Guidance does not authorize execution.
+
+Use `make verify-plan VERIFY_ARGS='--select blocked --page 2'` for another page.
+Use `VERIFY_ARGS='--index 3 --details'` for the exact current check, including all
+reasons and members. Indexes belong to the displayed plan digest; refresh after
+source changes. `--details` gives full status/plan facts without a size limit.
+`python3 scripts/verification_plan.py plan --format json --base origin/main`
+retains the full version 1 plan for program consumers. Redirect this explicit
+export to `target/plan.json` when a saved plan is needed. Full graph exports use
+`plan --profile complete`. The runner still recomputes and rejects stale inputs.
+Queries do not create files, run tests, or change retained evidence.

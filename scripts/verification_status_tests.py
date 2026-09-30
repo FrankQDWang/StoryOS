@@ -64,7 +64,7 @@ class TargetedStatusTests(unittest.TestCase):
         value = json.loads(summary.stdout)
         self.assertNotIn('plan', value)
         self.assertLess(len(summary.stdout), 4096)
-        text = fixture.cli('plan', '--format', 'text').stdout
+        text = fixture.cli('plan', '--format', 'text', '--details').stdout
         for check in plan['checks']:
             for reason in check.get('reasons', []):
                 self.assertIn(reason, text)
