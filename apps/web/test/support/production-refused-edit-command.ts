@@ -2,6 +2,7 @@ import { readProductionJournal, verifyProductionDiscard } from "./production-dis
 import { verifyProductionDraftUndo } from "./production-draft-undo-command.ts";
 import { verifyProductionRetryReservationRace } from "./production-draft-retry-race.ts";
 import { verifyProductionDraftExpansion } from "./production-draft-expansion-command.ts";
+import { verifyProductionDraftChapterSource, verifyRemovedDraftChapterSource } from "./production-draft-chapter-source.ts";
 import { queryStoryOSPostgres } from "./node-integration.ts";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -164,6 +165,9 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   await page.reload();
   await draft.locator("button[data-draft-retry]").waitFor();
   await page.unroute(originalEditRoute);
+  await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0
+    WHERE owner_user_id='018f0000-0000-7001-8000-000000000001'::uuid AND project_id='${projectId}'::uuid`);
+  await verifyProductionDraftChapterSource(page, projectId, chapter, retained.draft, screenshots);
   await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0
     WHERE owner_user_id='018f0000-0000-7001-8000-000000000001'::uuid AND project_id='${projectId}'::uuid`);
   let retryRequest: ApplyAuthorEditRequest | undefined, retryResponse: ApplyAuthorEditResponse | undefined;
@@ -343,5 +347,6 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   reopened = await verifyProductionDraftExpansion(page, projectId, reopened, restart);
   await verifyProductionDiscard({ page, context, origin, projectId, chapterId: chapter.chapter.chapter_id,
     proposalId: proposal.proposal_id, draft: reopened, restart });
+  await verifyRemovedDraftChapterSource(page, projectId, retained.draft, screenshots);
   } finally { await page.unroute(snapshotRoute); await page.unroute(retryRoute); }
 }

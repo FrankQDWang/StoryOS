@@ -59,7 +59,7 @@ export async function verifyProductionDraftExpansion(page: Page, projectId: stri
     await surface.locator("button[data-draft-expand]").click(); await settlement;
     assert.ok(response && response.effect.kind === "proposal_created_from_draft");
     const proposalId = response.effect.proposal_id;
-    const proposal = page.locator(`[data-proposal-id="${proposalId}"]`);
+    const proposal = page.locator(`section[aria-label="Draft Proposal"][data-proposal-id="${proposalId}"]`);
     await expect(proposal.locator("[data-proposal-structured-block]")).toHaveText(["mixed"]);
     await restart(); await page.reload();
     await expect(proposal.locator("[data-proposal-structured-block]")).toHaveText(["mixed"]);
