@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
 import type { BrowserContext } from "playwright";
 import {
   createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun,
-  getChapter, getProposal, updateProjectAssistance,
+  getChapter, getEditorSession, getProposal, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunResponse, UpdateProjectAssistanceRequest }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -298,7 +299,34 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
           edgeBase.chapter.current_revision.blocks[1]!]).catch((error) => {
           throw new Error(`${error}\nEdge request and response: ${JSON.stringify({ mixedRequest, mixedResponse })}`);
         });
-      await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      const retainEdgeFacts = async () => {
+        const journal = await page.evaluate(async () => {
+          const result: Record<string, unknown> = {};
+          for (const item of await indexedDB.databases()) {
+            if (item.name == null) continue;
+            const database = await new Promise<IDBDatabase>((resolve, reject) => {
+              const opening = indexedDB.open(item.name!);
+              opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error);
+            });
+            const stores = ["intents", "submission_groups", "metadata"].filter((store) => database.objectStoreNames.contains(store));
+            const values: Record<string, unknown> = {};
+            for (const store of stores) values[store] = await new Promise((resolve, reject) => {
+              const request = database.transaction(store).objectStore(store).getAll();
+              request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+            });
+            result[item.name] = values; database.close();
+          }
+          return result;
+        });
+        const session = mixedRequest === undefined ? undefined : await getEditorSession({ ...options,
+          editorSessionId: mixedRequest.editor_session_id });
+        await writeFile(join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-facts.json`),
+          JSON.stringify({ request: mixedRequest, response: mixedResponse, session, journal }, null, 2));
+      };
+      await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor().catch(async (error) => {
+        await retainEdgeFacts(); throw error;
+      });
+      await retainEdgeFacts();
       assert.deepEqual(mixedRequest?.expected_proposal_head_revision_ids, [opened.proposal.revision_id]);
       assert.equal(mixedRequest?.proposal_target, undefined);
       const afterEdge = (await getProposal({ ...options, proposalId: opened.proposalId })).proposal;
