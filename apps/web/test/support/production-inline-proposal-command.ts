@@ -113,6 +113,18 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-ready.png") });
     await page.locator(`[data-proposal-id="${proposalId}"][data-proposal-eligibility="eligible"]`).waitFor();
     await editor.waitFor();
+    const candidateRequests: { key: string | undefined; body: string | null }[] = [];
+    let finishCandidateLoss = () => {};
+    const candidateLost = new Promise<void>((resolve) => { finishCandidateLoss = resolve; });
+    const editRoute = (url: URL) => url.pathname.endsWith("/manuscript/author-edits");
+    await page.route(editRoute, async (route) => {
+      candidateRequests.push({ key: (await route.request().allHeaders())["idempotency-key"],
+        body: route.request().postData() });
+      const response = await route.fetch();
+      assert.equal(response.status(), 200);
+      if (candidateRequests.length === 1) { await route.abort("failed"); finishCandidateLoss(); }
+      else await route.fulfill({ response });
+    });
     await candidate.click();
     await candidate.evaluate((element) => {
       const range = document.createRange();
@@ -124,12 +136,22 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
 
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.candidate_text)
       .toBe("narraxxtor tone");
+    await candidateLost;
     const edited = (await getProposal({ ...options, proposalId })).proposal;
     assert.notEqual(edited.revision_id, proposal.revision_id);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
     await page.reload();
     await expect(candidate).toHaveText("narraxxtor tone");
     assert.equal(await candidate.getAttribute("data-proposal-revision-id"), edited.revision_id);
+    await page.locator(`[data-proposal-id="${proposalId}"][data-proposal-eligibility="eligible"]`).waitFor();
+    assert.ok(candidateRequests.length >= 1);
+    assert.ok(candidateRequests.every((request) => JSON.stringify(request) === JSON.stringify(candidateRequests[0])));
+    const frozenEdit = JSON.parse(candidateRequests[0]!.body!) as ApplyAuthorEditRequest;
+    assert.deepEqual(frozenEdit.proposal_target, {
+      proposal_id: proposalId, operation_id: proposal.operations[0]!.operation_id,
+      revision_id: proposal.revision_id, manuscript_block_id: proposal.manuscript_block_id,
+    });
+    await page.unroute(editRoute);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-edited-reloaded.png") });
     let acceptanceRequest: AcceptProposalRequest | undefined;
     let acceptancePosts = 0;
@@ -193,20 +215,27 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await expect(secondCandidate).toHaveText("narrator tone");
     await page.locator(`[data-proposal-id="${second.proposalId}"][data-proposal-eligibility="eligible"]`).waitFor();
     let mixedRequest: ApplyAuthorEditRequest | undefined;
+    let mixedResponse: unknown;
     await page.route((url) => url.pathname.endsWith("/author-edits"), async (route) => {
       mixedRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
-      await route.continue();
+      const response = await route.fetch();
+      mixedResponse = await response.json();
+      await route.fulfill({ response });
     });
-    await secondCandidate.click();
+    await editor.focus();
     await secondCandidate.evaluate((element) => {
       const range = document.createRange();
       range.setStart(element.parentElement!.firstChild!, 6);
       range.setEnd(element.firstChild!, 5);
       const selection = window.getSelection()!;
       selection.removeAllRanges(); selection.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
     });
+    assert.equal(await secondCandidate.evaluate(() => window.getSelection()?.toString()), "the narra");
     await page.keyboard.insertText("Preserve my complete mixed input.");
-    await expect(page.locator("[data-draft-replacement]")).toHaveText("Preserve my complete mixed input.");
+    await expect(page.locator("[data-draft-replacement]")).toHaveText("Preserve my complete mixed input.").catch((error) => {
+      throw new Error(`${error}\nMixed input request and response: ${JSON.stringify({ mixedRequest, mixedResponse })}`);
+    });
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
     assert.deepEqual((await getProposal({ ...options, proposalId: second.proposalId })).proposal, second.proposal);
     const sources = mixedRequest?.author_edit_units[0]?.selection_snapshot.ordered_selection?.sources;

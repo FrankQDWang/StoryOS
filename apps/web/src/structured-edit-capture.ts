@@ -53,6 +53,11 @@ export function captureStructuredSelection(state: EditorState, transaction: Tran
   if (!valid || owners.size < 2 || !sources.some((source) => source.owner.kind === "proposal")) return undefined;
   const replacement: ReplacementBlock[] = [];
   step.slice.content.forEach((node) => {
+    if (node.type.name === "inlineProposal" && node.content.size === 0
+      && step.slice.openEnd > 0 && sources.some((source) => source.owner.kind === "proposal"
+        && source.owner.proposal_id === node.attrs.proposalId
+        && source.owner.operation_id === node.attrs.operationId
+        && source.owner.revision_id === node.attrs.revisionId)) return;
     if (!node.isText && node.type.name !== "paragraph" && node.type.name !== "heading") valid = false;
     const clipboard = transaction.getMeta("storyos.origin") === "paste"
       || transaction.getMeta("storyos.origin") === "drop";
