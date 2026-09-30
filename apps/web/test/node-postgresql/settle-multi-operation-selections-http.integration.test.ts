@@ -11,7 +11,8 @@ import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
   CreateEditorSessionRequest, GetProposalResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
+import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch,
+  stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer } from "../support/acceptance.ts";
 
@@ -280,8 +281,8 @@ test("acceptProposal applies a reversed multi-operation set without using array 
   }
 });
 
-test("acceptProposal applies one domain Operation and leaves the other pending", async () => {
-  const started = await startRealServer();
+test("partial Acceptance preserves exact validation history and conflicts the remaining Operation", async () => {
+  let started = await startRealServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("f3820311"), "Subset Operation Novel", "f3826");
@@ -297,20 +298,47 @@ test("acceptProposal applies one domain Operation and leaves the other pending",
     const firstOperation = opened.proposal.operations[0];
     const secondOperation = opened.proposal.operations[1];
     if (!firstOperation || !secondOperation) throw new Error("expected two Operations");
+    const retainedHistory = async () => JSON.parse(await queryPostgres(`SELECT jsonb_build_object(
+      'revision', (SELECT to_jsonb(record) FROM storyos.proposal_revisions AS record
+        WHERE project_id='${prepared.projectId}'::uuid AND revision_id='${opened.proposal.revision_id}'::uuid),
+      'validation', (SELECT to_jsonb(record) FROM storyos.validation_receipts AS record
+        WHERE project_id='${prepared.projectId}'::uuid AND proposal_revision_id='${opened.proposal.revision_id}'::uuid))::text`));
+    const originalHistory = await retainedHistory();
     const firstRequest = acceptRequest(
       opened, [firstOperation.operation_id], seeded.revisionId,
       seeded.session.editor_session.editor_session_id, id("f3820351"),
     );
-    const firstAccepted = await challenged(
+    let durableResponse: Awaited<ReturnType<typeof acceptProposal>> | undefined;
+    const lossyFetch: typeof fetch = async (input, init) => {
+      const response = await prepared.fetchImpl(input, init);
+      if (String(input).endsWith("/acceptances") && response.status === 200) {
+        durableResponse = await response.clone().json();
+        if (started.server.exitCode === null && started.server.signalCode === null) await stopRealServer(started.server);
+        throw new Error("Controlled acknowledgement loss");
+      }
+      return response;
+    };
+    let nonce = "";
+    await assert.rejects(challenged(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
       firstRequest.command_schema, await digestAcceptProposal(firstRequest), id("f3820352"),
       (antiForgery) => acceptProposal({
         baseUrl: started.baseUrl, projectId: prepared.projectId,
-        proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("f3820352"), antiForgery, request: firstRequest,
+        proposalId: opened.proposal.proposal_id, fetchImpl: lossyFetch,
+        idempotencyKey: id("f3820352"), antiForgery: (nonce = antiForgery), request: firstRequest,
       }),
-    );
+    ), /Controlled acknowledgement loss/);
+    const address = new URL(started.baseUrl);
+    started = await startRealServer(`${address.hostname}:${address.port}`);
+    const fetchImpl = browserFetch(started.baseUrl, "session-a");
+    const firstAccepted = await acceptProposal({
+      baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl,
+      idempotencyKey: id("f3820352"), antiForgery: nonce, request: firstRequest,
+    });
+    assert.deepEqual(firstAccepted, durableResponse);
+    assert.deepEqual(await retainedHistory(), originalHistory);
     assert.equal(firstAccepted.effect.kind, "applied");
     const afterFirst = await getProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
@@ -336,11 +364,24 @@ test("acceptProposal applies one domain Operation and leaves the other pending",
         idempotencyKey: id("f3820354"), antiForgery, request: secondRequest,
       }),
     );
-    assert.equal(secondAccepted.effect.kind, "applied");
-    if (secondAccepted.effect.kind !== "applied") throw new Error("expected applied");
-    assert.equal(secondAccepted.effect.authoritative_revision.body, `${PROSE}\n${SECOND_PROSE}`);
+    assert.deepEqual(secondAccepted.effect, { kind: "conflicted", reason: "changed_head" });
+    assert.deepEqual(await retainedHistory(), originalHistory);
+    const afterConflict = await getProposal({
+      baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl,
+    });
+    assert.deepEqual(afterConflict.proposal, {
+      ...afterFirst.proposal, validation: "conflicted",
+      condition_refs: secondAccepted.receipt.condition_refs,
+      source_condition: { kind: "proposal_conflict", proposal_conflict_ref: secondAccepted.receipt.condition_refs[0]! },
+    });
+    const chapter = await getChapter({
+      baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl,
+    });
+    assert.deepEqual(chapter.chapter.current_revision, firstAccepted.effect.authoritative_revision);
   } finally {
-    await stopRealServer(started.server);
+    if (started.server.exitCode === null && started.server.signalCode === null) await stopRealServer(started.server);
   }
 });
 

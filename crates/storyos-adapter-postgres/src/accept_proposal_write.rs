@@ -103,69 +103,6 @@ pub(super) async fn persist_applied(
     if updated != u64::try_from(command.selected_operation_ids.len()).unwrap_or(0) {
         return Err(AcceptProposalError::BindingConflict);
     }
-    let pending = client
-        .query_one(
-            "SELECT count(*)::bigint
-               FROM storyos.proposal_operations
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND proposal_id = $3::text::uuid AND resolution = 'pending'",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.proposal_id,
-            ],
-        )
-        .await
-        .map_err(accept_database_error)?
-        .get::<_, i64>(0);
-    if pending == 0 {
-        client
-            .execute(
-                "UPDATE storyos.validation_receipts
-                    SET reservation_state = 'resolved'
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND validation_receipt_id = $3::text::uuid",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &command.validation_receipt_id,
-                ],
-            )
-            .await
-            .map_err(accept_database_error)?;
-    } else {
-        client
-            .execute(
-                "UPDATE storyos.proposal_revisions
-                    SET base_authoritative_revision_id = $4::text::uuid
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND proposal_id = $3::text::uuid AND revision_id = $5::text::uuid",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &command.proposal_id,
-                    &ids.revision_id,
-                    &command.proposal_revision_id,
-                ],
-            )
-            .await
-            .map_err(accept_database_error)?;
-        client
-            .execute(
-                "UPDATE storyos.validation_receipts
-                    SET base_authoritative_revision_id = $4::text::uuid
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND validation_receipt_id = $3::text::uuid",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &command.validation_receipt_id,
-                    &ids.revision_id,
-                ],
-            )
-            .await
-            .map_err(accept_database_error)?;
-    }
     let created_at = insert_receipts(
         client,
         command,
