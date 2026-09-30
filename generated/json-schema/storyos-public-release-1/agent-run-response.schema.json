@@ -348,6 +348,49 @@
         }
       ]
     },
+    "CapturedMemorySettingsInspect": {
+      "description": "Settings evidence from the exact revision captured by this Run.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contribution_enabled": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "available",
+              "type": "string"
+            },
+            "memory_settings_revision": {
+              "type": "string"
+            },
+            "use_enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "memory_settings_revision",
+            "use_enabled",
+            "contribution_enabled"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "ContextBlockReason": {
       "oneOf": [
         {
@@ -1597,6 +1640,9 @@
     "active_compaction": {
       "$ref": "#/$defs/OptionalActiveCompactionInspect"
     },
+    "captured_memory_settings": {
+      "$ref": "#/$defs/CapturedMemorySettingsInspect"
+    },
     "context": {
       "$ref": "#/$defs/AgentRunContextInspect"
     },
@@ -1671,6 +1717,7 @@
     "project_agent_id",
     "conversation_id",
     "memory_settings_revision",
+    "captured_memory_settings",
     "run_id",
     "status",
     "context",

@@ -7,9 +7,9 @@ use crate::release1_agent_run::{
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
     AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
     CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
-    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ContextBlockReason, ContextProjectionInspect,
-    ContextPurpose, ContextRejectionInspect, ContextRejectionReason, ContextSourceClass,
-    ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
+    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, CapturedMemorySettingsInspect, ContextBlockReason,
+    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
+    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
     ContinuationInputMappingInspect, ConversationSelection, CreateAgentRunEffect,
     CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
     DestinationIo, EvidenceAvailability, GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
@@ -81,6 +81,13 @@ pub(super) fn create_response_schema_bytes() -> Vec<u8> {
         schema["properties"][field]["format"] = json!("uuid");
     }
     schema["properties"]["memory_settings_revision"]["format"] = json!("uuid");
+    if let Some(settings) = schema["$defs"].get_mut("CapturedMemorySettingsInspect") {
+        for variant in settings["oneOf"].as_array_mut().into_iter().flatten() {
+            if let Some(revision) = variant["properties"].get_mut("memory_settings_revision") {
+                revision["format"] = json!("uuid");
+            }
+        }
+    }
     if let Some(effect) = schema["$defs"].get_mut("CreateAgentRunEffect") {
         constrain_uuid_fields(
             effect,
@@ -309,7 +316,11 @@ pub(super) fn typescript_type_declarations() -> String {
         AgentRunStreamItemInspect::decl(&config),
         AgentRunUsageInspect::decl(&config),
         GetAgentRunRequest::decl(&config),
-        GetAgentRunResponse::decl(&config),
+        format!(
+            "{}\n\nexport {}",
+            CapturedMemorySettingsInspect::decl(&config),
+            GetAgentRunResponse::decl(&config)
+        ),
         OriginalResultRetrievalDisposition::decl(&config),
         OptionalOriginalResultRetrievalInspect::decl(&config),
         UnknownCreateSuccessorDisposition::decl(&config),
@@ -440,6 +451,12 @@ fn get_fixture() -> Value {
         "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",
         "run_id": "018f0000-0000-7001-8000-000000000a34",
         "status": "queued",
+        "captured_memory_settings": {
+            "kind": "available",
+            "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",
+            "use_enabled": true,
+            "contribution_enabled": true
+        },
         "context": {
             "operation_requirement_id": "018f0000-0000-7001-8000-000000000a39",
             "input_snapshot_id": "018f0000-0000-7001-8000-000000000a3a",
