@@ -5,9 +5,9 @@ import assert from "node:assert/strict";
 import type { BrowserContext } from "playwright";
 import { expect } from "playwright/test";
 
-import { getAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { CreateAgentRunResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { id, prepare, settleOnce, USER_A } from "./acceptance";
+import { cancelAgentRun, digestCancelAgentRun, getAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { CancelAgentRunRequest, CreateAgentRunResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { BINDING, challenged, id, prepare, settleOnce, USER_A } from "./acceptance";
 import { queryStoryOSPostgres, startStoryOSServer, stopStoryOSServer } from "./node-integration";
 
 export async function verifyProductionRunEvidence(context: BrowserContext): Promise<void> {
@@ -154,7 +154,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     for (const [suffix, disposition, explanation] of [
       ["4", "rebuilt", "已用还能读取的内容重新准备这次请求。"],
       ["5", "blocked", "无法找回先前内容：可用额度不足。"],
-      ["6", "unknown_create", "最初那次生成的结果还不确定，不能认定先前内容已经过期。"],
+      ["6", "unknown_create", "先前那次生成的结果还不确定，不能认定先前内容已经过期。"],
     ] as const) {
       await openCase(suffix);
       const priorId = await submit("Help with this passage.");
@@ -184,6 +184,46 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       await page.reload();
       await expect(recovery).toContainText(explanation);
     }
+    for (const [suffix, message, disposition, explanation] of [
+      ["7", "SCRIPT:retrieve-complete", "settled", "已找回并确认最初那次生成的结果。"],
+      ["8", "SCRIPT:retrieve-missing", "kept_unknown", "原来的结果仍无法确认"],
+    ] as const) {
+      await openCase(suffix);
+      const runId = await submit(message);
+      await settleOnce();
+      const run = await inspect(runId);
+      assert.equal(run.original_result_retrieval.kind, "present");
+      await page.locator('[data-assistant-inspect]').click();
+      const lookup = page.locator(`[data-run-result-retrieval="${disposition}"]`);
+      await expect(lookup).toContainText(explanation);
+      await expect(lookup).toContainText("没有重新生成，也没有继续原来的回复。");
+      await page.reload();
+      await expect(lookup).toContainText(explanation);
+    }
+    const cancel = async (runId: string, suffix: string) => {
+      const request: CancelAgentRunRequest = { command_schema: "storyos.command.cancel-agent-run.request.v1",
+        cancel_agent_run_input: { ...BINDING, correlation_id: id(`f877${suffix}b0`) } };
+      return challenged(server.baseUrl, setup.fetchImpl, setup.projectId, "POST",
+        "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel", request.command_schema,
+        await digestCancelAgentRun(request), id(`f877${suffix}b1`), (antiForgery) => cancelAgentRun({
+          baseUrl: server.baseUrl, projectId: setup.projectId, runId, fetchImpl: setup.fetchImpl,
+          idempotencyKey: id(`f877${suffix}b1`), antiForgery, request }));
+    };
+    await openCase("9");
+    const cancelledLookupId = await submit("SCRIPT:retrieve-complete");
+    const lookupHold = join(repositoryRoot, "target/issue-877/lookup.hold");
+    writeFileSync(lookupHold, "hold");
+    const lookupWorker = settleOnce({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: lookupHold });
+    void lookupWorker.catch(() => undefined);
+    try {
+      await expect.poll(async () => (await inspect(cancelledLookupId)).model_attempt.kind).toBe("present");
+      assert.equal((await cancel(cancelledLookupId, "9")).effect.kind, "applied");
+    } finally { if (existsSync(lookupHold)) unlinkSync(lookupHold); await lookupWorker; }
+    await page.locator('[data-assistant-inspect]').click();
+    await expect(page.locator('[data-run-result-retrieval="evidence_only"]'))
+      .toContainText("找回的记录已保留，但请求已经结束，结果保持原状。");
+    await page.reload();
+    await expect(page.locator('[data-run-result-retrieval="evidence_only"]')).toBeVisible();
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
