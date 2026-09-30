@@ -34,7 +34,7 @@ export type ClipboardPermissionResult = Readonly<{ kind: "clipboard_permission_u
 export type ClientSessionCookieResult = Readonly<{ kind: "client_session_cookie_updated" }>;
 export type ProductionHostRequest = Readonly<{
   scenario: "open_edit_reload_takeover" | "prose_request" | "refused_edit" | "restored_refused_edit"
-    | "conflicted_proposal";
+    | "conflicted_proposal" | "run_evidence";
 }>;
 export type ProductionHostResult = Readonly<{ kind: "production_host_verified" }>;
 export type CommandChallengeRateWindowsRequest = Readonly<{ action: "reset" }>;
@@ -196,7 +196,7 @@ export function parseClientSessionCookieResult(value: unknown): ClientSessionCoo
 export function parseProductionHostRequest(value: unknown): ProductionHostRequest {
   const request = exactObject(value, ["scenario"], "production host request");
   const scenario = property(request, "scenario");
-  if (scenario !== "open_edit_reload_takeover" && scenario !== "prose_request" && scenario !== "refused_edit" && scenario !== "restored_refused_edit" && scenario !== "conflicted_proposal") {
+  if (scenario !== "open_edit_reload_takeover" && scenario !== "prose_request" && scenario !== "refused_edit" && scenario !== "restored_refused_edit" && scenario !== "conflicted_proposal" && scenario !== "run_evidence") {
     throw new TypeError("production host scenario is unsupported");
   }
   return { scenario };

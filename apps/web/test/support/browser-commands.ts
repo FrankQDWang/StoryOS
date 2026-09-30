@@ -11,6 +11,7 @@ import {
   storyOSBrowserCommandNames,
 } from "./browser-command-contract";
 import { queryStoryOSPostgres } from "./node-integration";
+import { verifyProductionRunEvidence } from "./production-run-evidence-command";
 import { verifyProductionHostJourney } from "./production-host-command";
 import { verifyProductionProseRequest } from "./production-prose-request-command";
 
@@ -39,7 +40,9 @@ export const storyOSBrowserCommands = {
   [storyOSBrowserCommandNames.productionHost]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
       const request = parseProductionHostRequest(value);
-      if (request.scenario === "prose_request" || request.scenario === "refused_edit" || request.scenario === "restored_refused_edit" || request.scenario === "conflicted_proposal") {
+      if (request.scenario === "run_evidence") {
+        await verifyProductionRunEvidence(context.context);
+      } else if (request.scenario === "prose_request" || request.scenario === "refused_edit" || request.scenario === "restored_refused_edit" || request.scenario === "conflicted_proposal") {
         await verifyProductionProseRequest(context.context, request.scenario);
       } else {
         await verifyProductionHostJourney(context.context);
