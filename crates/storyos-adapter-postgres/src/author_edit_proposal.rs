@@ -283,6 +283,9 @@ pub(super) fn route_inline_author_edit(
         return Err(AuthorEditRefusal::UnsupportedIntentShape);
     };
     if context.operation_id.is_some() {
+        if context.structured_candidate {
+            return Err(AuthorEditRefusal::UnsupportedIntentShape);
+        }
         let candidate_to = u32::try_from(context.candidate_text.encode_utf16().count())
             .map_err(|_| AuthorEditRefusal::InvalidSelection)?;
         if classify_inline_input_owner(&[(0, candidate_to)], from, to) != InlineInputOwner::Proposal

@@ -2111,7 +2111,7 @@ test("explicit Inline candidate input binds the exact Operation and preserves so
     const edited = await send(request, id("d828046"));
     assert.equal(edited.effect.kind, "proposal_revised");
     const revised = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
-    assert.equal(revised.candidate_text, "narrxxator tone");
+    assert.equal(revised.candidate_text, "narraxxtor tone");
     assert.notEqual(revised.revision_id, opened.proposal.revision_id);
     assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
   } finally { await stopRealServer(started.server); }

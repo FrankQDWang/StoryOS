@@ -1,3 +1,4 @@
+import { inlineSelectionSources } from "./inline-proposal-decoration.ts";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import type { AuthorEditUnit, SelectedEditSource, ReplacementBlock }
@@ -24,6 +25,12 @@ export function captureStructuredSelection(state: EditorState, transaction: Tran
       for (const head of node.attrs.expectedHeads as string[]) expectedHeads.add(head);
     }
     if (node.type.name !== "blockProposal") blockKind = node.type.name === "heading" ? "heading" : "paragraph";
+    const inline = inlineSelectionSources(node, position, step.from, step.to);
+    if (inline !== undefined) {
+      sources.push(...inline.sources);
+      valid &&= inline.valid;
+      return;
+    }
     const start = position + 1;
     const end = start + node.textContent.length;
     if (step.from > end || step.to < start

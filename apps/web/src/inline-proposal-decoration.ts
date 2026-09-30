@@ -2,7 +2,7 @@ import { Node as TiptapNode } from "@tiptap/core";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import { TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
-import type { BlockProposalInspect } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { BlockProposalInspect, SelectedEditSource } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { isUtf16Boundary, type ManuscriptParagraph } from "./manuscript-doc.ts";
 import { PROPOSAL_ATTRIBUTES, type BlockProposalProjection } from "./block-proposal-decoration.ts";
 
@@ -42,6 +42,36 @@ export function restoreInlineSource(node: ProseMirrorNode): ProseMirrorNode {
     else if (child.attrs.sourceText) children.push(node.type.schema.text(child.attrs.sourceText as string));
   });
   return node.copy(Fragment.fromArray(children));
+}
+
+export function inlineSelectionSources(node: ProseMirrorNode, position: number, from: number, to: number) {
+  if (!Array.from({ length: node.childCount }, (_, index) => node.child(index)).some((child) => child.type.name === "inlineProposal")) return undefined;
+  const sourceText = restoreInlineSource(node).textContent;
+  const sources: SelectedEditSource[] = [];
+  let sourceOffset = 0;
+  let valid = true;
+  node.forEach((child, childPosition) => {
+    const candidate = child.type.name === "inlineProposal";
+    const start = position + 1 + childPosition + (candidate ? 1 : 0);
+    const end = start + child.textContent.length;
+    const sourceStart = candidate ? 0 : sourceOffset;
+    if (from < end && to > start) {
+      if (candidate && child.attrs.eligible !== true) valid = false;
+      sources.push({
+        owner: candidate ? { kind: "proposal", proposal_id: child.attrs.proposalId as string,
+          operation_id: child.attrs.operationId as string, revision_id: child.attrs.revisionId as string,
+          manuscript_block_id: child.attrs.blockId as string }
+          : { kind: "manuscript", manuscript_block_id: node.attrs.id as string },
+        coordinate_profile: candidate ? "storyos.editor.utf16-code-unit.v1" : "prosemirror-token-utf16.v1",
+        from: sourceStart + Math.max(0, from - start),
+        to: sourceStart + Math.min(child.textContent.length, to - start),
+        block_kind: node.type.name === "heading" ? "heading" : "paragraph",
+        source_text: candidate ? child.textContent : sourceText,
+      });
+    }
+    sourceOffset += candidate ? (child.attrs.sourceText as string).length : child.textContent.length;
+  });
+  return { sources, valid };
 }
 
 export function routeInlineEdgeInsertion(transaction: Transaction, state: EditorState): boolean {
