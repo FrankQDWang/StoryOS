@@ -262,6 +262,9 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       });
     }
     const second = await getAgentRun({ ...options, runId: secondRunId });
+    assert.equal(second.conversation_id, completed.conversation_id,
+      "ordinary follow-up must retain the Conversation after reload and lost acknowledgements");
+    assert.equal(second.memory_settings_revision, completed.memory_settings_revision);
     if (second.decision.kind !== "prose_change"
       || second.decision.opened_proposal.kind !== "present") throw new Error("Second Proposal not opened");
     const secondProposalId = second.decision.opened_proposal.proposal_id;
