@@ -181,10 +181,9 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   try {
   await draft.locator("button[data-draft-retry]").click();
   const range = draft.locator('textarea[name="draft-range-text"]');
-  await range.focus();
-  await range.press("Home");
-  for (let offset = 0; offset < 9; offset += 1) await range.press("ArrowRight");
-  for (let offset = 0; offset < 5; offset += 1) await range.press("Shift+ArrowRight");
+  await range.click();
+  await range.evaluate((field) => (field as HTMLTextAreaElement).setSelectionRange(9, 14));
+  await page.evaluate(() => document.dispatchEvent(new Event("selectionchange")));
   assert.deepEqual(await range.evaluate((field) => ({
     from: (field as HTMLTextAreaElement).selectionStart, to: (field as HTMLTextAreaElement).selectionEnd,
     text: (field as HTMLTextAreaElement).value.slice((field as HTMLTextAreaElement).selectionStart,

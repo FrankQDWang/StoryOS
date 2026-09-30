@@ -201,6 +201,8 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
         ? <RefusedEditRetryControls draft={draft} workspace={workspace!} baseUrl={baseUrl} fetchImpl={fetchImpl} disabled={busy}
           submit={(from, to, target, start, end, read) => retry(group, from, to, target, start, end, read)}
           expand={(target, start, end, read) => expand(group, target, start, end, read)} /> : null}
+      <button type="button" data-draft-copy onClick={() => { void copy(group); }}>Copy</button>
+      {copied ? <p role="status">Copied</p> : null}
       {retryResults[id] ? <p role="status" data-draft-retry-result>{retryResults[id]}</p> : null}
       {draft.replacement_provenance ? <p data-draft-replacement-source>This draft preserves the complete text of a retry from an earlier draft.</p> : null}
       {observation?.kind === "unresolved" ? <p role="status" data-discard-unresolved>The discard outcome is not yet confirmed. No new discard was submitted.</p> : null}
@@ -209,8 +211,6 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       {draft.closure === "closed" && draft.closure_event ? <p data-draft-closed>
         {draft.closure_event.close_reason === "abandoned" ? "Discarded." : "Replaced by the retry result."} The full text remains available to copy.</p> : null}
       {draft.reopen_event ? <p data-draft-reopened>Restored by Undo. This draft is available again.</p> : null}
-      <button type="button" data-draft-copy onClick={() => { void copy(group); }}>Copy</button>
-      {copied ? <p role="status">Copied</p> : null}
       <details><summary>Original selected text</summary>
         {unit.selection_snapshot?.ordered_selection?.sources.map((source, index) => <div key={index}>
           <p>{source.owner.kind === "proposal" ? "Proposal text" : "Manuscript text"}</p>
