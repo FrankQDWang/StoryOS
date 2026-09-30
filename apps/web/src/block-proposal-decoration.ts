@@ -5,6 +5,7 @@ import { projectInlineCandidate, restoreInlineSource } from "./inline-proposal-d
 import { contiguousUtf16Replace } from "./manuscript-doc.ts";
 
 export type BlockProposalProjection = {
+  inlineProposal?: boolean;
   inlineAnchor?: { from: number; to: number; sourceText: string };
   proposalId: string;
   operationId: string;
@@ -32,7 +33,7 @@ export const PROPOSAL_ATTRIBUTES = [
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
   "rejectEligible", "retryRejection", "replanEligible", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
-  "inlineFrom", "inlineTo", "sourceText",
+  "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
@@ -145,6 +146,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         validity: proposal.validity ?? "",
         sessionEligible: proposal.sessionEligible ?? false,
         expectedHeads: proposal.expectedHeads,
+        inlineProposal: proposal.inlineProposal ?? false,
         inlineFrom: proposal.inlineAnchor?.from ?? null,
         inlineTo: proposal.inlineAnchor?.to ?? null,
         sourceText: proposal.inlineAnchor?.sourceText ?? null,
@@ -186,7 +188,8 @@ export const blockProposalDecoration = TiptapNode.create({
     const withdrawEligible = node.attrs.withdrawEligible === true;
     const copyEligible = node.attrs.copyEligible === true;
     return ["div", {
-      class: node.attrs.inlineFrom === null ? "block-proposal" : "block-proposal inline-proposal-controls",
+      class: node.attrs.inlineFrom !== null ? "block-proposal inline-proposal-controls"
+        : node.attrs.inlineProposal === true ? "block-proposal inline-proposal-stale" : "block-proposal",
       "data-proposal-id": node.attrs.proposalId,
       "data-proposal-operation-id": node.attrs.operationId,
       "data-proposal-revision-id": node.attrs.revisionId,

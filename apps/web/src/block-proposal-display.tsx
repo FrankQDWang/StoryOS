@@ -332,6 +332,7 @@ export function BlockProposalDisplay({
       pendingWithdraw: pendingWithdrawals.includes(proposal.proposal_id),
     });
     projections.push({
+      inlineProposal: proposal.kind === "inline_edit",
       ...(baseMatches && inlineAnchor !== undefined ? { inlineAnchor } : {}),
       proposalId: proposal.proposal_id,
       operationId: operation.operation_id,
