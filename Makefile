@@ -120,7 +120,7 @@ verify-status:
 verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
 
-OBSERVE = docker compose -p storyos-observation -f scripts/observation/compose.yaml
+OBSERVE = python3 scripts/verification_observation_runtime.py
 .PHONY: observe-build observe-dashboard observe-start observe-stop observe-status observe-rebuild observe-smoke
 observe-dashboard:
 	@python3 scripts/verification_observation_dashboard.py
@@ -128,14 +128,11 @@ observe-build:
 	python3 scripts/verification_observation_app.py
 observe-start: observe-build
 	@python3 scripts/verification_observation_dashboard.py --check
-	@mkdir -p target/verification target/observation/data
-	@python3 scripts/verification_observation_runtime.py
-	@python3 scripts/verification_observation.py collect
-	@$(OBSERVE) up -d --build
+	@$(OBSERVE) start
 observe-stop:
-	@$(OBSERVE) down
+	@$(OBSERVE) stop
 observe-status:
-	@$(OBSERVE) ps
+	@$(OBSERVE) status
 	@curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3754/api/v1/health
 	@python3 scripts/verification_observation.py status
 observe-rebuild:

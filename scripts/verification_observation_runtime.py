@@ -1,8 +1,12 @@
-"""Keep Grafana runtime data inside the checkout before starting observation."""
+"""Manage the singleton observation service only from its owner checkout."""
 
+import argparse
+import fcntl
 import json
+import os
 from pathlib import Path
 import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,7 +14,7 @@ OUTPUT = ROOT / 'target/observation'
 COMPOSE = ['docker', 'compose', '-p', 'storyos-observation', '-f', str(ROOT / 'scripts/observation/compose.yaml')]
 
 
-def main():
+def prepare():
     grafana = OUTPUT / 'grafana'
     if not grafana.exists():
         container = subprocess.check_output([*COMPOSE, 'ps', '-aq', 'grafana'], text=True).strip()
@@ -30,5 +34,41 @@ def main():
     (OUTPUT / 'health').mkdir(parents=True, exist_ok=True)
 
 
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', nargs='?', default='prepare', choices=('prepare', 'start', 'stop', 'status'))
+    action = parser.parse_args().action
+    # The fixed loopback ports belong to one local owner across all checkouts.
+    descriptor = os.open(f'/tmp/storyos-observation-{os.getuid()}.lock',
+                         os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        containers = subprocess.check_output(['docker', 'ps', '--all', '--quiet', '--filter',
+            'label=com.docker.compose.project=storyos-observation'], text=True).split()
+        if containers:
+            records = json.loads(subprocess.check_output(['docker', 'inspect', *containers]))
+            for record in records:
+                labels = record.get('Config', {}).get('Labels') or {}
+                owner = labels.get('com.docker.compose.project.working_dir')
+                if not owner or Path(owner).resolve() != ROOT / 'scripts/observation':
+                    raise ValueError(f'Observation owner is {owner or "unknown"}; use that checkout to stop it. '
+                                     'No service or retained data was changed.')
+        if action in ('prepare', 'start'):
+            prepare()
+        if action == 'start':
+            (ROOT / 'target/verification').mkdir(parents=True, exist_ok=True)
+            (OUTPUT / 'data').mkdir(parents=True, exist_ok=True)
+            subprocess.run([sys.executable, str(ROOT / 'scripts/verification_observation.py'), 'collect'], check=True)
+            subprocess.run([*COMPOSE, 'up', '-d', '--build'], check=True)
+        elif action == 'stop':
+            subprocess.run([*COMPOSE, 'down'], check=True)
+        elif action == 'status':
+            subprocess.run([*COMPOSE, 'ps'], check=True)
+
+
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except (ValueError, subprocess.CalledProcessError) as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1)

@@ -2,10 +2,11 @@
 # Local Active, fixture-loaded PostgreSQL: eval "$(scripts/dev-postgres.sh up)"
 set -eu
 
-repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 . "$repository_root/scripts/lib/controlled-postgres.sh"
 
-container=storyos-dev-postgres
+checkout_id=$(printf '%s' "$repository_root" | shasum -a 256 | cut -c 1-20)
+container="storyos-dev-postgres-$checkout_id"
 storage_bin="$repository_root/target/release-package/storyos-storage"
 
 print_env() {
