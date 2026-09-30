@@ -48,14 +48,10 @@ pub(super) async fn load_inline_target_ownership(
            JOIN storyos.proposal_anchors AS anchor
              ON (anchor.owner_user_id, anchor.project_id, anchor.proposal_id, anchor.operation_id) =
                 (operation.owner_user_id, operation.project_id, operation.proposal_id, operation.operation_id)
-           LEFT JOIN storyos.proposal_validation_conditions AS failure
-             ON (failure.owner_user_id, failure.project_id, failure.proposal_id, failure.proposal_revision_id) =
-                (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)
           WHERE proposal.owner_user_id=$1::text::uuid AND proposal.project_id=$2::text::uuid
             AND proposal.chapter_id=$3::text::uuid AND proposal.proposal_id=$4::text::uuid
             AND head.current_revision_id=$5::text::uuid AND proposal.kind='inline_edit'
             AND revision.base_authoritative_revision_id=$6::text::uuid AND revision.closure='open'
-            AND revision.generation='ready' AND COALESCE(failure.validation, revision.validation)='valid'
             AND operation.manuscript_block_id=$7::text::uuid AND operation.resolution='pending'
             AND operation.reservation_state='unresolved' AND anchor.manuscript_block_id=$7::text::uuid
             AND anchor.base_authoritative_revision_id=$6::text::uuid AND anchor.manuscript_schema_version=1
