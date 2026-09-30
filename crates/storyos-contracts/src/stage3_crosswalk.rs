@@ -83,6 +83,10 @@ const MULTI: &str =
     "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts";
 const STREAM: &str =
     "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts";
+const PARTIAL: &str =
+    "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts";
+const CONTINUE_GENERATION: &str =
+    "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts";
 const ACCEPT: &str = "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts";
 const REJECT: &str =
     "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts";

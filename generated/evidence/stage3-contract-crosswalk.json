@@ -172,6 +172,7 @@
           "https://github.com/FrankQDWang/StoryOS/issues/381",
           "https://github.com/FrankQDWang/StoryOS/issues/382",
           "https://github.com/FrankQDWang/StoryOS/issues/383",
+          "https://github.com/FrankQDWang/StoryOS/issues/384",
           "https://github.com/FrankQDWang/StoryOS/issues/387",
           "https://github.com/FrankQDWang/StoryOS/issues/388",
           "https://github.com/FrankQDWang/StoryOS/issues/389"
@@ -179,6 +180,8 @@
         "evidence": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
+          "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
           "crates/storyos-core/src/revision_comparison_tests.rs",
@@ -343,6 +346,7 @@
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/382",
           "https://github.com/FrankQDWang/StoryOS/issues/383",
+          "https://github.com/FrankQDWang/StoryOS/issues/384",
           "https://github.com/FrankQDWang/StoryOS/issues/388",
           "https://github.com/FrankQDWang/StoryOS/issues/389"
         ],
@@ -351,6 +355,8 @@
           "crates/storyos-core/src/revision_comparison_tests.rs",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
           "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
+          "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts"
@@ -368,7 +374,8 @@
           "OWN-WEB"
         ],
         "implementation_issues": [
-          "https://github.com/FrankQDWang/StoryOS/issues/391"
+          "https://github.com/FrankQDWang/StoryOS/issues/391",
+          "https://github.com/FrankQDWang/StoryOS/issues/384"
         ],
         "evidence": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
         "supporting_evidence": [
@@ -377,14 +384,18 @@
           "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
           "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts",
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
           "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
           "apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts",
           "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts",
           "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
           "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
+          "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts"
         ],
         "evidence_class": "stage"
@@ -498,12 +509,15 @@
           "https://github.com/FrankQDWang/StoryOS/issues/381",
           "https://github.com/FrankQDWang/StoryOS/issues/382",
           "https://github.com/FrankQDWang/StoryOS/issues/383",
+          "https://github.com/FrankQDWang/StoryOS/issues/384",
           "https://github.com/FrankQDWang/StoryOS/issues/388",
           "https://github.com/FrankQDWang/StoryOS/issues/389"
         ],
         "evidence": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
+          "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "crates/storyos-core/src/revision_comparison_tests.rs",
