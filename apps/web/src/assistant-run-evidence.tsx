@@ -15,6 +15,12 @@ const sourceLabels: Record<ContextSourceClass, string> = {
   host_control: "宿主管理信息",
 };
 
+const compactionRefusals: Readonly<Record<string, string>> = {
+  changed_input: "输入已改变",
+  restricted_source: "原内容不能用于这次请求",
+  exact_required_unsatisfied: "必须完整保留的输入无法满足",
+};
+
 export function AssistantRunEvidence({ run, selection }: Readonly<{
   run: GetAgentRunResponse;
   selection: AssistantRunSelection;
@@ -26,6 +32,7 @@ export function AssistantRunEvidence({ run, selection }: Readonly<{
   const attempt = run.model_attempt;
   const evidence = attempt.kind === "present"
     ? run.evidence.filter((item) => item.attempt_id === attempt.model_attempt_id) : [];
+  const compaction = run.active_compaction;
   return (
     <section data-run-evidence="" data-run-evidence-run-id={run.run_id}
       data-run-evidence-attempt-id={attempt.kind === "present" ? attempt.model_attempt_id : ""}
@@ -62,6 +69,20 @@ export function AssistantRunEvidence({ run, selection }: Readonly<{
             ? <p>提供方内部内容仍未知，不能当作已知输入。</p> : null}
         </>
       )}
+      {compaction.kind === "present" ? (
+        <div data-run-compaction={compaction.install_state}>
+          <strong>输入摘要</strong>
+          <p>{compaction.install_state === "installed" ? "摘要已用于后续尝试。"
+            : compaction.install_state === "staged" ? "摘要已准备，尚未用于后续尝试。" : "摘要未采用。"}</p>
+          <p>摘要依据 {compaction.known_inputs.length} 项已知输入；{compaction.mapping_kind === "host_managed" ? "由宿主管理摘要。" : "使用模型原生摘要。"}</p>
+          <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{compaction.output_text}</p>
+          {compaction.loss_facts.includes("semantic_preservation_unknown")
+            ? <p>摘要是否完整保留原文语义仍未知。</p> : <p>不能仅凭摘要已采用就证明内容无损。</p>}
+          {compaction.loss_facts.some((fact) => fact !== "semantic_preservation_unknown")
+            ? <p>另有内容保留情况尚无法解释。</p> : null}
+          {compaction.install_state === "refused" ? <p>未采用原因：{compactionRefusals[compaction.refusal_reason ?? ""] ?? "具体原因尚无法解释"}。</p> : null}
+        </div>
+      ) : null}
     </section>
   );
 }

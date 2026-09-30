@@ -1,3 +1,4 @@
+import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -19,7 +20,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
   page.on("pageerror", (error) => errors.push(error.message));
   page.setDefaultTimeout(10_000);
   try {
-    const setup = await prepare(server.baseUrl, id("f87700"), "Run evidence acceptance", "f8771");
+    let setup = await prepare(server.baseUrl, id("f87700"), "Run evidence acceptance", "f8771");
     await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
     await page.locator(`button[data-chapter-id="${setup.chapterId}"]`).click();
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
@@ -114,6 +115,42 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     await page.unroute(oldQuery);
     await history.click();
     await expect(evidence).toHaveAttribute("data-run-evidence-run-id", firstId);
+    const openCase = async (suffix: string) => {
+      setup = await prepare(server.baseUrl, id(`f877${suffix}00`), `Run evidence ${suffix}`, `f877${suffix}`);
+      await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
+      await page.locator(`button[data-chapter-id="${setup.chapterId}"]`).click();
+      await editor.waitFor();
+      await page.locator(".composer button:not([disabled])").waitFor();
+    };
+    for (const [suffix, installed] of [["2", true], ["3", false]] as const) {
+      await openCase(suffix);
+      const runId = await submit("Compact active context between calls.");
+      const hold = join(repositoryRoot, "target/issue-877/compaction.hold");
+      writeFileSync(hold, "hold");
+      const worker = settleOnce({ STORYOS_TEST_FAKE_COMPACTION_STAGE_HOLD_PATH: hold });
+      void worker.catch(() => undefined);
+      try {
+        await expect.poll(async () => {
+          const current = (await inspect(runId)).active_compaction;
+          return current.kind === "present" ? current.install_state : "absent";
+        }).toBe("staged");
+        await page.locator('[data-assistant-inspect]').click();
+        await expect(page.locator('[data-run-compaction="staged"]')).toContainText("尚未用于后续尝试");
+        if (!installed) {
+          await editor.click();
+          await page.keyboard.insertText("A later change.");
+          await expect.poll(async () => (await inspect(runId)).context.current_availability.working_target.kind)
+            .toBe("superseded");
+        }
+      } finally { if (existsSync(hold)) unlinkSync(hold); await worker; }
+      await page.locator('[data-assistant-inspect]').click();
+      const summary = page.locator(`[data-run-compaction="${installed ? "installed" : "refused"}"]`);
+      await expect(summary).toContainText(installed ? "摘要已用于后续尝试。" : "输入已改变");
+      await expect(summary).toContainText("Bounded later-request summary. Semantic preservation is unknown.");
+      await expect(summary).toContainText("摘要是否完整保留原文语义仍未知。");
+      await page.reload();
+      await expect(summary).toBeVisible();
+    }
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
