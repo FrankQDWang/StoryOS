@@ -193,22 +193,25 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.getByRole("button", { name: "重试接受", exact: true }).click();
     await expect.poll(() => acceptancePosts).toBe(3);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-accepted-recovered.png") });
-    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
-    await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
-      WHERE project_id = '${projectId}'::uuid`);
-    await page.locator('form[data-create-chapter] input[name="chapter-title"]').fill("Inline Rejection Chapter");
-    await page.locator('form[data-create-chapter] input[name="chapter-title"]').press("Enter");
-    await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]').filter({ hasText: "Inline Rejection Chapter" }).click();
-    chapterId = (await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]').filter({ hasText: "Inline Rejection Chapter" })
-      .getAttribute("data-chapter-id"))!;
-    assert.ok(chapterId);
-    await page.locator(`[data-make-current-chapter="${chapterId}"]`).click();
-    await editor.waitFor(); await editor.click(); await page.keyboard.insertText(SOURCE);
-    await expect.poll(async () => (await getChapter({ ...options, chapterId: chapterId! })).chapter.current_revision.body)
-      .toBe(SOURCE);
-    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
-    await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
-      WHERE project_id = '${projectId}'::uuid`);
+    const createInlineChapter = async (title: string) => {
+      await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+      await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+        WHERE project_id = '${projectId}'::uuid`);
+      await page.locator('form[data-create-chapter] input[name="chapter-title"]').fill(title);
+      await page.locator('form[data-create-chapter] input[name="chapter-title"]').press("Enter");
+      await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]').filter({ hasText: title }).click();
+      chapterId = (await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]').filter({ hasText: title })
+        .getAttribute("data-chapter-id"))!;
+      assert.ok(chapterId);
+      await page.locator(`[data-make-current-chapter="${chapterId}"]`).click();
+      await editor.waitFor(); await editor.click(); await page.keyboard.insertText(SOURCE);
+      await expect.poll(async () => (await getChapter({ ...options, chapterId: chapterId! })).chapter.current_revision.body)
+        .toBe(SOURCE);
+      await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+        WHERE project_id = '${projectId}'::uuid`);
+    };
+    await createInlineChapter("Inline Rejection Chapter");
     const rejectBase = await getChapter({ ...options, chapterId });
     const second = await openInline();
     const secondCandidate = page.locator(`span[data-inline-proposal-id="${second.proposalId}"]`);
@@ -242,8 +245,21 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     assert.equal(sources?.length, 2);
     assert.deepEqual(sources?.map((source) => [source.owner.kind, source.source_text]),
       [["manuscript", SOURCE], ["proposal", "narrator tone"]]);
+    await editor.focus();
+    await secondCandidate.evaluate((element) => {
+      window.getSelection()?.setBaseAndExtent(element.firstChild!, 3, element.parentElement!.lastChild!, 8);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await page.keyboard.insertText("Preserve reverse mixed input.");
+    const preservedInputs = ["Preserve my complete mixed input.", "Preserve reverse mixed input."];
+    await expect(page.locator("[data-draft-replacement]")).toHaveText(preservedInputs);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
+    assert.deepEqual((await getProposal({ ...options, proposalId: second.proposalId })).proposal, second.proposal);
+    assert.deepEqual(mixedRequest?.author_edit_units[0]?.selection_snapshot.ordered_selection?.sources
+      .map((source) => [source.owner.kind, source.source_text]),
+      [["proposal", "narrator tone"], ["manuscript", SOURCE]]);
     await page.reload();
-    await expect(page.locator("[data-draft-replacement]")).toHaveText("Preserve my complete mixed input.");
+    await expect(page.locator("[data-draft-replacement]")).toHaveText(preservedInputs);
     await expect(secondCandidate).toHaveText("narrator tone");
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-mixed-preserved.png") });
     await page.locator(`[data-proposal-reject="${second.proposalId}"]`).click();
@@ -253,6 +269,34 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await expect(page.locator(`span[data-inline-proposal-id="${second.proposalId}"]`)).toHaveCount(0);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, rejectBase.chapter);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-rejected-reloaded.png") });
+    for (const edge of ["start", "end"] as const) {
+      await createInlineChapter(`Inline ${edge} edge Chapter`);
+      const edgeBase = await getChapter({ ...options, chapterId });
+      const opened = await openInline();
+      const edgeCandidate = page.locator(`span[data-inline-proposal-id="${opened.proposalId}"]`);
+      await expect(edgeCandidate).toHaveText("narrator tone");
+      await page.locator(`[data-proposal-id="${opened.proposalId}"][data-proposal-eligibility="eligible"]`).waitFor();
+      await editor.focus();
+      await edgeCandidate.evaluate((element, edge) => {
+        const offset = edge === "start" ? 0 : element.textContent!.length;
+        window.getSelection()?.setBaseAndExtent(element.firstChild!, offset, element.firstChild!, offset);
+        document.dispatchEvent(new Event("selectionchange"));
+      }, edge);
+      await page.keyboard.insertText("!");
+      const expectedText = edge === "start" ? "Guard the !narrator voice in this passage."
+        : "Guard the narrator voice! in this passage.";
+      await expect.poll(async () => (await getChapter({ ...options, chapterId })).chapter.current_revision.blocks)
+        .toEqual([{ ...edgeBase.chapter.current_revision.blocks[0]!, text: expectedText }]);
+      await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      const afterEdge = (await getProposal({ ...options, proposalId: opened.proposalId })).proposal;
+      assert.equal(afterEdge.revision_id, opened.proposal.revision_id);
+      assert.equal(afterEdge.candidate_text, "narrator tone");
+      await page.reload();
+      await expect(page.locator("[data-manuscript-editor] > p")).toHaveText(expectedText);
+      await expect(page.locator(`[data-proposal-id="${opened.proposalId}"] .block-proposal-text`)).toHaveText("narrator tone");
+      await expect(page.locator(`[data-proposal-accept="${opened.proposalId}"]`)).toHaveCount(0);
+      await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-reloaded.png`) });
+    }
     assert.deepEqual(errors, []);
   } catch (error) {
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-failure.png") });
