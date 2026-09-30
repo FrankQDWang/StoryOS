@@ -31,7 +31,7 @@ export function AssistantRunEvidence({ run, selection }: Readonly<{
       data-run-evidence-attempt-id={attempt.kind === "present" ? attempt.model_attempt_id : ""}
       aria-label="本次请求的输入与恢复说明">
       <strong>输入范围</strong>
-      <p>本次围绕所选章节，以下保留当时已纳入的输入。单项输入限额：{context.token_counting_profile.item_token_limit} token。</p>
+      <p>本次围绕所选章节，以下保留当时已纳入的输入。单项输入计数上限：{context.token_counting_profile.item_token_limit}。</p>
       {context.sufficiency.kind === "complete" ? <p>必需输入已完整纳入。</p> : (
         <p>必需输入未能完整纳入，本次没有据此生成结果。</p>
       )}
