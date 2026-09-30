@@ -411,6 +411,15 @@ test("createAgentRun admits one conversation and keeps query scope closed", asyn
     });
     assert.equal(queried.conversation_id, created.admitted.conversation_id);
     assert.equal(queried.memory_settings_revision, created.admitted.memory_settings_revision);
+    assert.deepEqual(
+      (queried as unknown as { captured_memory_settings?: unknown }).captured_memory_settings,
+      {
+        kind: "available",
+        memory_settings_revision: created.admitted.memory_settings_revision,
+        use_enabled: true,
+        contribution_enabled: true,
+      },
+    );
     assert.equal(queried.run_id, created.admitted.effect.run_id);
     assert.equal(queried.status, "queued");
     assert.equal(queried.context.purpose, "current_passage_assistance");
