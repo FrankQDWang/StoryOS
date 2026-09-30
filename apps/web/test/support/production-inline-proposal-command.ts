@@ -370,16 +370,14 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       });
       await page.locator(`[data-proposal-accept="${writerProposal.proposalId}"]`).click();
       await page.locator(`[data-proposal-id="${writerProposal.proposalId}"][data-proposal-session="ineligible"]`).waitFor();
-      assert.equal(refusedPosts, 1);
+      assert.equal(refusedPosts, 0, "the read-only Editor Session preflight must block the stale writer before submission");
       assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, writerBase.chapter);
       const refusedProposal = (await getProposal({ ...options, proposalId: writerProposal.proposalId })).proposal;
-      assert.equal(refusedProposal.revision_id, writerProposal.proposal.revision_id);
-      assert.equal(refusedProposal.candidate_text, "narrator tone");
-      assert.equal(refusedProposal.operation_resolution, "pending");
+      assert.deepEqual(refusedProposal, writerProposal.proposal);
       await page.reload();
       await expect(writerCandidate).toHaveText("narrator tone");
       await expect(page.locator(`[data-proposal-accept="${writerProposal.proposalId}"]`)).toHaveCount(0);
-      assert.equal(refusedPosts, 1, "reload must not submit a stale writer decision");
+      assert.equal(refusedPosts, 0, "reload must not submit a stale writer decision");
       await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-writer-refused-reloaded.png") });
     } finally { await observer.close(); }
     assert.deepEqual(errors, []);
