@@ -33,7 +33,7 @@ This report does **not**:
 
 The repository is the governing source for these constraints.
 
-1. [Authoritative State](../../CONTEXT.md) is the author-approved current truth of the project and already includes prose, established fictional-world truth, characters, relationships, timeline, and manuscript structure. Authority is binary and arises only through an explicit author-authorized domain action.
+1. [Authoritative State](../../GLOSSARY.md) is the author-approved current truth of the project and already includes prose, established fictional-world truth, characters, relationships, timeline, and manuscript structure. Authority is binary and arises only through an explicit author-authorized domain action.
 2. [ADR 0001](../adr/0001-separate-authoritative-state-artifacts-and-operational-records.md) separates Authoritative State, Artifacts, and Operational Records. An Artifact never becomes authoritative in place.
 3. The accepted [Artifact and Authoritative-State Domain Model](../foundation/artifact-domain-model.md) already defines immutable Artifact Revisions, exact revision references, typed Provenance Edges, source snapshots, Claims, Candidates, Supersession, Derivation, Proposals, Validation Receipts, and Acceptance.
 4. At the inspected baseline, a `Candidate` was one independently reviewable semantic fact or object with no authoritative change command, while the existing `MemoryCandidate` subtype had no settled fiction-domain meaning.

@@ -18,11 +18,12 @@ def main():
     repo = verification_tests.VerificationCommandTests()
     repo.setUp()
     root = Path(__file__).resolve().parents[1]
-    compose = ['docker', 'compose', '-p', 'storyos-observation-smoke', '-f',
-               str(root / 'scripts/observation/compose.yaml')]
     process = None
     (root / 'target/observation').mkdir(parents=True, exist_ok=True)
     temporary_directory = tempfile.TemporaryDirectory(dir=root / 'target/observation')
+    project = 'storyos-observation-smoke-' + Path(temporary_directory.name).name
+    compose = ['docker', 'compose', '-p', project, '-f',
+               str(root / 'scripts/observation/compose.yaml')]
     try:
         temporary = temporary_directory.name
         output = Path(temporary)

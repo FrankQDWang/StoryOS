@@ -27,7 +27,7 @@ ROUTE_CATALOG_PATH = ROOT / "docs/foundation/versioned-protocol-release-1-route-
 TYPESCRIPT_CLIENT_PATH = ROOT / "generated/typescript/storyos-public-release-1/client.d.mts"
 AUTHOR_ADMISSION_PATH = ROOT / "docs/foundation/author-command-admission.md"
 PROJECTIONS = (
-    ROOT / "CONTEXT.md",
+    ROOT / "GLOSSARY.md",
     ROOT / "docs/adr/0003-specify-manuscript-revision-and-proposal-state-machine.md",
     ROOT / "docs/foundation/manuscript-revision-proposal-state-machine.md",
     ROOT / "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md",

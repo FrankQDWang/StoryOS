@@ -44,7 +44,7 @@ The protocol preserves these fixed product boundaries:
   and where required Proposal plus explicit Acceptance, may change
   Authoritative State.
 
-Normative domain meaning remains in [CONTEXT.md](../../CONTEXT.md), the
+Normative domain meaning remains in [GLOSSARY.md](../../GLOSSARY.md), the
 accepted ADRs, and the existing Foundation specifications. Where a wire example
 and a domain contract appear to disagree, the domain contract wins and the
 wire schema must be corrected before generation.
@@ -3097,7 +3097,7 @@ This specification composes, rather than reopens:
 - the accepted Authoritative State, Artifact, Proposal, AgentRun/Subrun/Mailbox,
   Tool/MCP/Skill, Model Gateway, Memory/Research, Context/Disclosure,
   Transcript/App, PostgreSQL storage, and threat-model decisions recorded in
-  [CONTEXT.md](../../CONTEXT.md) and the Foundation issue history;
+  [GLOSSARY.md](../../GLOSSARY.md) and the Foundation issue history;
 - [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md);
 - [Artifact Domain Model](artifact-domain-model.md);
 - [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md);

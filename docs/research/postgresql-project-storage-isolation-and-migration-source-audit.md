@@ -4,7 +4,7 @@
 - Audited: 2026-07-21
 - Repository baseline: `76248569176974a9822187e70ff755feea13ab51`
 - Database documentation baseline: PostgreSQL 18 current documentation
-- Canonical domain source: [`CONTEXT.md`](../../CONTEXT.md)
+- Canonical domain source: [`GLOSSARY.md`](../../GLOSSARY.md)
 - Accepted architectural boundary: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 
 ## 1. Audit boundary
