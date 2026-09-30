@@ -17,6 +17,8 @@ import time
 import tempfile
 import uuid
 
+sys.dont_write_bytecode = True
+
 import verification_cache
 import verification_shared
 import verification_daily

@@ -256,6 +256,8 @@ class CandidateCommandTests(unittest.TestCase):
                 value = json.loads(status.stdout)
                 self.assertEqual((value['execution'], value['reasonCode']), ('lost', 'process-lost'))
                 self.repo.environment['CANDIDATE_CASE'] = 'changed'
+                changed = json.loads(self.repo.cli('status', '--attempt', value['run_id'], '--json').stdout)
+                self.assertEqual((changed['decision'], changed['nextAction']), ('blocked', None))
                 result = self.run_complete()
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('cleanup', result.stderr)

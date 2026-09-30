@@ -21,6 +21,16 @@ GitHub shares one number space across issues and pull requests. If an ambiguous 
 - Publish StoryOS tickets as GitHub issues in `FrankQDWang/StoryOS`.
 - Fetch a ticket by reading its current body, labels, assignees, native dependencies, exact `main` baseline, and tracked contracts named by the body.
 
+For daily dependency inspection, use `python3 scripts/tracker_query.py <number>`.
+Add `--format json`, `--relation blocking`, or `--page 2` as needed. The query
+reads all native relationship pages, then prints at most eight related tickets
+within 16 KiB and 80 lines. It reports exact totals and omitted counts. Long titles
+are clipped with their character count. Unknown states stay unknown; a failed read
+returns nonzero with unknown dependency state. Concurrent page drift requires a
+fresh query; this is not a transactional tracker snapshot. Bodies remain available
+through the printed contract command. This summary does not replace the real
+execution-contract reads or the Claim rules below.
+
 ## Ticket sizing and execution
 
 These repository constraints preserve Matt ticket publication and add StoryOS review-size and serial-execution limits:

@@ -9,6 +9,8 @@ import subprocess
 import sys
 import tomllib
 
+sys.dont_write_bytecode = True
+
 import verification
 import verification_cache
 import verification_daily
@@ -193,10 +195,13 @@ def execute_plan(root, plan):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("plan", "status", "run", "execute"))
+    parser.add_argument("action", choices=("plan", "summary", "status", "run", "execute"))
     parser.add_argument("--profile", choices=("daily", "complete"), default="daily")
     parser.add_argument("--format", choices=("json", "text"), default="json")
     parser.add_argument("--details", action="store_true")
+    parser.add_argument("--page", type=int, default=1)
+    parser.add_argument("--select", choices=("all", "blocked", "ready"), default="all")
+    parser.add_argument("--index", type=int)
     parser.add_argument("--issue", type=int)
     parser.add_argument("--pr", type=int)
     parser.add_argument("--base", default="origin/main")
@@ -223,21 +228,29 @@ def main():
                            "--expected", plan["digest"], "--workers", str(plan["workers"])]
                 return verification.run(root, command, plan=plan, no_cache=args.no_cache,
                                         context={"issue": args.issue, "pr": args.pr}, locked=True)
-        plan = build_plan(root, args.base, args.workers, allow_empty=args.action == "status")
+        plan = build_plan(root, args.base, args.workers, allow_empty=args.action in {"status", "summary"})
         if ((args.plan and json.loads(args.plan.read_text()) != plan)
                 or (args.expected and args.expected != plan["digest"])):
             raise ValueError("The verification plan is stale or has been changed")
-        if args.action in {"plan", "status"}:
+        if args.action in {"plan", "summary", "status"}:
             if args.action == "plan" and args.format == "json":
                 print(json.dumps(plan, indent=2))
-            elif args.action == "plan":
-                value = verification.verification_status.status(root, plan)
-                print(f"Status: {value['status']}")
-                for check in plan['checks']:
-                    print(f"  {check['group']}: {check['status']}; {'; '.join(check.get('reasons', []))}")
-                print(f"Next: {value['next_command']}")
             else:
-                verification.verification_status.display(verification.verification_status.status(root, plan), args.format == "json", args.details)
+                value = verification.verification_status.status(root, plan)
+                if args.index is not None:
+                    if not args.details or not 0 <= args.index < len(plan['checks']):
+                        raise ValueError('Use --details and a current check index')
+                    print(json.dumps(plan['checks'][args.index], indent=2))
+                else:
+                    if args.action != 'status' and value['decision'] == 'replan':
+                        value['observedStatus'] = value['status']
+                        value['status'] = 'unmet-prerequisites' if value.get('prerequisites') else 'pending'
+                        value['changedInputs'] = []
+                        value['next_command'] = ('make verify-changed BASE=' + plan['base'] if plan['changes']
+                                                 else 'make verify-targeted CHECK=verify-policy')
+                        verification.verification_status.guidance(value, [], complete=False)
+                    verification.verification_status.display(value, args.format == "json", args.details,
+                                                             page=args.page, selection=args.select)
             return 0
         if args.action == "execute":
             return execute_plan(root, plan)

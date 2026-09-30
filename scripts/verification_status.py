@@ -81,6 +81,10 @@ def status(root, plan):
         comparable = lambda p: {k: v for k, v in p.items() if k not in {'digest', 'historical_estimate_seconds'}}
         current = comparable(previous) == comparable(plan)
         result.update(status=report['status'] if current else 'stale', report=str(path), run_id=report.get('run_id'))
+        result['retainedStatus'] = report['status']
+        result['retainedResultCurrent'] = current
+        result['failed_stages'] = [s['stage'] for s in report.get('steps', [])
+                                   if current and s['status'] == 'failed']
         result['changedInputs'] = sorted(k for k in comparable(previous).keys() | comparable(plan).keys()
                                          if comparable(previous).get(k) != comparable(plan).get(k))
         if report['status'] == 'running':
@@ -105,20 +109,26 @@ def guidance(result, observe, *, complete):
     if result.get('execution') == 'active':
         decision, reason, action = 'observe', 'process-active', observe
         hint = 'Observe this run. Wait for it to finish before execution or recovery.'
+    elif result.get('execution') == 'lost':
+        recoverable = complete and not result.get('changedInputs')
+        decision, reason = ('recover' if recoverable else 'blocked'), 'process-lost'
+        if not recoverable:
+            action = None
+        hint = 'Confirm child-process cleanup before recovery or another run. Recovery rechecks admission.'
     elif result.get('changedInputs') or state in {'stale', 'source-changed', 'incomplete'}:
         decision, reason = 'replan', 'identity-changed' if result.get('changedInputs') else 'invalid-evidence'
         plan = result.get('plan', {})
         action = ['make', 'verify-plan', 'BASE=' + plan.get('base', result.get('base', 'origin/main'))]
         hint = 'Inspect a fresh plan and run applicable targeted checks. Refresh candidate reviews after source edits.'
-    elif result.get('execution') == 'lost':
-        decision, reason = ('recover' if complete else 'blocked'), 'process-lost'
-        if not complete:
-            action = None
-        hint = 'Confirm child-process cleanup before recovery or another run. Recovery rechecks admission.'
     elif state == 'unmet-prerequisites':
         dirty = result['plan']['source']['dirty']
-        decision, reason = 'blocked', 'dirty-package-inputs' if dirty else 'pending-obligations'
-        hint = 'Account for existing changes before package checks.' if dirty else 'Inspect pending obligations in the full plan.'
+        decision, reason = 'blocked', 'pending-obligations'
+        ready = sum(c['status'] == 'ready' for c in result['plan']['checks'])
+        if 'check' in result['plan'] and dirty:
+            reason = 'dirty-package-inputs'
+        action = (['make', 'verify-changed', 'BASE=' + result['plan']['base']]
+                  if ready and 'base' in result['plan'] else None)
+        hint = f'{ready} ready checks can run; pending checks remain unsatisfied. Inspect blocking reasons and check details.'
     elif state == 'passed':
         decision, reason, action = 'satisfied', 'current-pass', None
         hint = 'This verification scope passed. This status does not grant merge approval.'
@@ -135,31 +145,12 @@ def guidance(result, observe, *, complete):
     return result
 
 
-def display(value, as_json, details=False):
-    output = value
-    if not details:
-        output = {key: item for key, item in value.items() if key not in {'plan', 'prerequisites'}}
-        checks = value.get('plan', {}).get('checks', [])
-        output['checks'] = [{key: check[key] for key in ('group', 'status')} for check in checks[:8]]
-        output['omittedChecks'] = max(0, len(checks) - 8)
-        failures = value.get('failed_stages', [])
-        if failures:
-            output['failed_stages'] = failures[:8]
-            output['omittedFailedStages'] = max(0, len(failures) - 8)
-    if as_json:
-        print(json.dumps(output, indent=2))
+def display(value, as_json, details=False, *, page=1, selection='all'):
+    import verification_summary
+    if details:
+        print(json.dumps(value, indent=2))
     else:
-        print(f"Status: {output['status']}; decision: {output['decision']}; reason: {output['reasonCode']}")
-        if output.get('changedInputs'):
-            print('Changed inputs: ' + ', '.join(output['changedInputs'][:8]))
-        if output.get('run_id'):
-            print(f"Run: {output['run_id']}; report: {output.get('report', 'unknown')}")
-        for check in output.get('checks', []):
-            print(f"  {check['group']}: {check['status']}")
-        print(f"Next: {output['next_command'] or 'none'}")
-        print(output['agentHint'])
-        if details:
-            print(json.dumps(output, indent=2))
+        verification_summary.display(verification_summary.summary(value, page, selection), as_json)
 
 
 def attempt_status(root, attempt):
