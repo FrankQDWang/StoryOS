@@ -45,10 +45,17 @@ pub struct AgentRunContext {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CapturedMemorySettings {
+    pub use_enabled: bool,
+    pub contribution_enabled: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunRecord {
     pub project_agent_id: String,
     pub conversation_id: String,
     pub memory_settings_revision: String,
+    pub captured_memory_settings: Option<CapturedMemorySettings>,
     pub run_id: String,
     pub status: AgentRunStatus,
     pub context: AgentRunContext,

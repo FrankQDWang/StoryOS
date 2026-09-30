@@ -127,12 +127,12 @@ pub use create_agent_run::{
     ActiveCompactionInspect, ActiveCompactionInstallState, ActiveCompactionKnownInput,
     ActiveCompactionMappingKind, AgentRunContext, AgentRunContinuationAdmission,
     AgentRunDecisionInspect, AgentRunEvidence, AgentRunInputMapping, AgentRunModelInspect,
-    AgentRunRecord, AgentRunStatus, AgentRunStreamItem, ConversationSelection,
-    CreateAgentRunAdmission, CreateAgentRunCommand, CreateAgentRunError, CreateAgentRunStore,
-    EvidenceAvailability, OriginalResultRetrievalDisposition, OriginalResultRetrievalInspect,
-    ReferenceRecoveryDisposition, ReferenceRecoveryInspect, UnknownCreateSuccessorDisposition,
-    UnknownCreateSuccessorInspect, WorkingTargetAvailability, open_agent_run,
-    request_create_agent_run,
+    AgentRunRecord, AgentRunStatus, AgentRunStreamItem, CapturedMemorySettings,
+    ConversationSelection, CreateAgentRunAdmission, CreateAgentRunCommand, CreateAgentRunError,
+    CreateAgentRunStore, EvidenceAvailability, OriginalResultRetrievalDisposition,
+    OriginalResultRetrievalInspect, ReferenceRecoveryDisposition, ReferenceRecoveryInspect,
+    UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect, WorkingTargetAvailability,
+    open_agent_run, request_create_agent_run,
 };
 pub use create_chapter::{
     CreateChapterAuthority, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,
