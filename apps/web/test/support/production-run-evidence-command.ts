@@ -1,4 +1,4 @@
-import { existsSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -19,6 +19,8 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.setDefaultTimeout(10_000);
+  await page.setViewportSize({ width: 1487, height: 1058 });
+  mkdirSync(join(repositoryRoot, "target/issue-877/screens"), { recursive: true });
   try {
     let setup = await prepare(server.baseUrl, id("f87700"), "Run evidence acceptance", "f8771");
     await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
@@ -59,6 +61,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     await expect(evidence).toContainText(message);
     await expect(evidence).toContainText(original);
     await expect(evidence).toContainText("模型还记住了哪些内容，我们无法确认");
+    await page.screenshot({ path: join(repositoryRoot, "target/issue-877/screens/input-known.png") });
     assert.equal(await evidence.locator("button").count(), 0);
     assert.ok(!(await evidence.innerText()).includes(first.context.assembly_manifest_id));
     assert.ok(!(await evidence.innerText()).includes(first.run_id));
@@ -112,6 +115,9 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     await history.click();
     await expect(evidence).toHaveCount(0);
     await expect(page.locator('[data-assistant-memory-settings]')).toContainText("无法确认");
+    await page.reload();
+    await expect(page.locator('[data-run-evidence-status="unavailable"]')).toBeVisible();
+    await expect(evidence).toHaveCount(0);
     await page.unroute(oldQuery);
     await history.click();
     await expect(evidence).toHaveAttribute("data-run-evidence-run-id", firstId);
@@ -224,6 +230,60 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       .toContainText("找回的记录已保留，但请求已经结束，结果保持原状。");
     await page.reload();
     await expect(page.locator('[data-run-result-retrieval="evidence_only"]')).toBeVisible();
+    for (const [suffix, message, disposition, explanation] of [
+      ["a", "SCRIPT:successor-missing", "dispatched", "随后又开始了一次生成。"],
+      ["b", "SCRIPT:successor-budget", "paused", "后面的生成已暂停：可用额度不足。"],
+    ] as const) {
+      await openCase(suffix);
+      const runId = await submit(message);
+      await settleOnce();
+      const run = await inspect(runId);
+      await page.locator('[data-assistant-inspect]').click();
+      const later = page.locator(`[data-run-successor="${disposition}"]`);
+      await expect(later).toContainText(explanation);
+      await expect(later).toContainText("后来的成功不代表最初那次生成的结果已确认。");
+      if (disposition === "dispatched") {
+        assert.ok(run.model_attempt.kind === "present");
+        assert.equal(run.status, "completed");
+        await expect(evidence).toHaveAttribute("data-run-evidence-attempt-id", run.model_attempt.model_attempt_id);
+        await expect(evidence).toContainText("最初那次生成的结果仍无法确认。");
+        await page.screenshot({ path: join(repositoryRoot, "target/issue-877/screens/later-result.png") });
+      }
+      await page.reload();
+      await expect(later).toContainText(explanation);
+    }
+    await openCase("c");
+    const successorId = await submit("SCRIPT:successor-once");
+    const fenceHold = join(repositoryRoot, "target/issue-877/fence.hold");
+    writeFileSync(fenceHold, "hold");
+    const fenceWorker = settleOnce({ STORYOS_TEST_FAKE_SUCCESSOR_FENCE_HOLD_PATH: fenceHold });
+    void fenceWorker.catch(() => undefined);
+    try {
+      await expect.poll(async () => {
+        const successor = (await inspect(successorId)).unknown_create_successor;
+        return successor.kind === "present" ? successor.disposition : "absent";
+      }).toBe("fenced");
+      await page.locator('[data-assistant-inspect]').click();
+      await expect(page.locator('[data-run-successor="fenced"]')).toContainText("后面的生成尚未开始。");
+      assert.equal((await cancel(successorId, "c")).effect.kind, "applied");
+    } finally { if (existsSync(fenceHold)) unlinkSync(fenceHold); await fenceWorker; }
+    await page.locator('[data-assistant-inspect]').click();
+    await expect(page.locator('[data-run-successor="prohibited"]')).toContainText("请求已取消，后面的生成没有执行。");
+    await page.reload();
+    await expect(page.locator('[data-run-successor="prohibited"]')).toBeVisible();
+    await openCase("d");
+    const omitted = "This passage is outside the usable range. " + "a".repeat(10_001);
+    await editor.click();
+    await page.keyboard.insertText(omitted);
+    await saved.waitFor();
+    const blockedId = await submit("Help with this passage.");
+    await settleOnce();
+    assert.equal((await inspect(blockedId)).context.sufficiency.kind, "blocked");
+    await page.locator('[data-assistant-inspect]').click();
+    await expect(evidence).toContainText("内容过长，无法完整使用。");
+    assert.ok(!(await evidence.innerText()).includes("This passage is outside the usable range."));
+    await page.reload();
+    await expect(evidence).toContainText("因此没有开始生成。");
     assert.deepEqual(errors, []);
   } finally {
     await page.close();

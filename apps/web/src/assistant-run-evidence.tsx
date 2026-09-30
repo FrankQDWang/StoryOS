@@ -16,6 +16,12 @@ const sourceLabels: Record<ContextSourceClass, string> = {
 };
 
 const recoveryReasons: Readonly<Record<string, string>> = {
+  unresolved_effect: "先前生成可能产生的影响还不确定",
+  unsupported_absent_effect: "无法确认先前生成是否已产生影响",
+  changed_effective_model_context: "这次请求使用的内容已改变",
+  request_changed: "这次请求已改变",
+  route_changed: "处理请求的方式已改变",
+  authority_unavailable: "当前不能继续处理这次请求",
   missing_reference: "没有可用的结果引用",
   unsupported_retrieval: "目前无法查找原来的结果",
   unknown_bounds: "无法确认查找范围",
@@ -54,6 +60,7 @@ export function AssistantRunEvidence({ run, selection }: Readonly<{
   const compaction = run.active_compaction;
   const reference = run.reference_recovery;
   const retrieval = run.original_result_retrieval;
+  const successor = run.unknown_create_successor;
   return (
     <section data-run-evidence="" data-run-evidence-run-id={run.run_id}
       data-run-evidence-attempt-id={attempt.kind === "present" ? attempt.model_attempt_id : ""}
@@ -110,7 +117,7 @@ export function AssistantRunEvidence({ run, selection }: Readonly<{
             : reference.disposition === "blocked" ? `无法找回先前内容：${recoveryReason(reference.block_reason)}。`
               : "先前那次生成的结果仍无法确认，不能据此找回先前内容。"}</p>
           {!reference.lossless_provider_reconstruction ? <p>不能保证模型记住的内容被完整找回。</p> : null}
-          {!reference.semantic_erasure ? <p>引用失效不代表模型已经忘记先前内容。</p> : null}
+          {!reference.semantic_erasure ? <p>无法确认模型是否已经忘记先前内容。</p> : null}
           <p>{reference.opaque_reused ? "这次复用了模型内部保留的内容。" : "这次没有复用无法确认的模型内部内容。"}</p>
           {reference.covered_content_included ? <p>还能读取的先前内容已加入这次请求。</p>
             : <p>这次没有加入先前引用所指的内容。</p>}
@@ -123,8 +130,23 @@ export function AssistantRunEvidence({ run, selection }: Readonly<{
             : retrieval.disposition === "evidence_only" ? "找回的记录已保留，但请求已经结束，结果保持原状。"
               : `原来的结果仍无法确认：${recoveryReason(retrieval.keep_reason)}。`}</p>
           {!retrieval.repeats_original_create && !retrieval.resumes_stream
-            ? <p>没有重新生成，也没有继续原来的回复。</p> : null}
+            ? <p>查找原结果这一步没有重新生成，也没有继续原来的回复。</p> : null}
           {!retrieval.reservation_released ? <p>最初那次生成预留的额度还没有解除占用。</p> : null}
+        </div>
+      ) : null}
+      {successor.kind === "present" ? (
+        <div data-run-successor={successor.disposition}>
+          <strong>后面的生成</strong>
+          <p>{successor.disposition === "dispatched" ? "随后又开始了一次生成。"
+            : successor.disposition === "fenced" ? "先前的生成不再改变这次结果，后面的生成尚未开始。"
+              : successor.disposition === "paused" ? `后面的生成已暂停：${recoveryReason(successor.pause_reason)}。`
+                : run.status === "cancelled" ? "请求已取消，后面的生成没有执行。" : "后面的生成没有执行。"}</p>
+          {successor.lookup_unavailable_reason ? <p>无法找回原来的结果：{recoveryReason(successor.lookup_unavailable_reason)}。</p> : null}
+          {!successor.successor_settles_predecessor ? <p>后来的成功不代表最初那次生成的结果已确认。</p> : null}
+          {successor.predecessor_fenced ? <p>先前那次生成不会再改变这次结果。</p> : null}
+          {!successor.predecessor_reservation_released && retrieval.kind === "absent"
+            ? <p>最初那次生成预留的额度还没有解除占用。</p> : null}
+          {successor.predecessor_usage_kind === "unknown" ? <p>最初那次生成实际使用的额度仍无法确认。</p> : null}
         </div>
       ) : null}
     </section>
