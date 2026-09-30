@@ -330,6 +330,11 @@ export function storyosEditorProps(blockId: string) {
         if (!(event instanceof InputEvent) || event.isComposing
           || event.inputType !== "insertText" || event.data === null) return false;
         const transaction = view.state.tr.insertText(event.data);
+        if (routeInlineEdgeInsertion(transaction, view.state)) {
+          event.preventDefault();
+          view.dispatch(transaction);
+          return true;
+        }
         if (captureStructuredSelection(view.state, transaction) === undefined) return false;
         event.preventDefault();
         view.dispatch(transaction);

@@ -78,13 +78,19 @@ export function routeInlineEdgeInsertion(transaction: Transaction, state: Editor
   const [step] = transaction.steps;
   if (!(step instanceof ReplaceStep) || transaction.steps.length !== 1 || step.from !== step.to) return false;
   const position = state.doc.resolve(step.from);
-  if (position.parent.type.name !== "inlineProposal"
-    || position.parentOffset !== 0 && position.parentOffset !== position.parent.content.size) return false;
-  const outside = position.parentOffset === 0 ? position.before() : position.after();
-  transaction.replaceWith(0, transaction.doc.content.size, state.doc.content);
-  transaction.replaceWith(outside, outside, step.slice.content);
-  transaction.setSelection(TextSelection.create(transaction.doc, outside + step.slice.content.size));
-  transaction.setMeta("storyos.inlineEdgeHeads", position.parent.attrs.expectedHeads);
+  if (position.parent.type.name === "inlineProposal") {
+    if (position.parentOffset !== 0 && position.parentOffset !== position.parent.content.size) return false;
+    const outside = position.parentOffset === 0 ? position.before() : position.after();
+    transaction.replaceWith(0, transaction.doc.content.size, state.doc.content);
+    transaction.replaceWith(outside, outside, step.slice.content);
+    transaction.setSelection(TextSelection.create(transaction.doc, outside + step.slice.content.size));
+    transaction.setMeta("storyos.inlineEdgeHeads", position.parent.attrs.expectedHeads);
+  } else {
+    const candidate = position.nodeAfter?.type.name === "inlineProposal" ? position.nodeAfter
+      : position.nodeBefore?.type.name === "inlineProposal" ? position.nodeBefore : undefined;
+    if (candidate === undefined) return false;
+    transaction.setMeta("storyos.inlineEdgeHeads", candidate.attrs.expectedHeads);
+  }
   return true;
 }
 
