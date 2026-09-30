@@ -309,6 +309,8 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
       'validation', (SELECT to_jsonb(record) FROM storyos.validation_receipts AS record
         WHERE project_id='${prepared.projectId}'::uuid AND proposal_revision_id='${opened.proposal.revision_id}'::uuid))::text`));
     const originalHistory = await retainedHistory();
+    const beforeAcceptance = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
     const firstRequest = acceptRequest(
       opened, [firstOperation.operation_id], seeded.revisionId,
       seeded.session.editor_session.editor_session_id, id(`${ns}0351`),
@@ -349,11 +351,18 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
     });
-    assert.deepEqual(
-      afterFirst.proposal.operations.map((operation) => operation.resolution),
-      ["applied", "pending"],
-    );
+    assert.deepEqual(afterFirst.proposal, { ...opened.proposal,
+      operation_resolution: "applied", reservation_state: "resolved",
+      operations: opened.proposal.operations.map((operation) => operation.operation_id === firstOperation.operation_id
+        ? { ...operation, resolution: "applied", reservation_state: "resolved" } : operation),
+    });
     if (firstAccepted.effect.kind !== "applied") throw new Error("expected applied");
+    assert.deepEqual(firstAccepted.effect.authoritative_revision, {
+      ...beforeAcceptance.chapter.current_revision, revision_id: firstAccepted.effect.authoritative_revision.revision_id,
+      body: `${PROSE}\nWorld`,
+      blocks: beforeAcceptance.chapter.current_revision.blocks.map((block) =>
+        block.manuscript_block_id === firstOperation.manuscript_block_id ? { ...block, text: PROSE } : block),
+    });
     if (history === "legacy_overwritten") {
       await queryPostgres(`UPDATE storyos.proposal_revisions SET base_authoritative_revision_id=
         '${firstAccepted.effect.authoritative_revision.revision_id}'::uuid
