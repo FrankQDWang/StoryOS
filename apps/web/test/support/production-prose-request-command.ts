@@ -49,6 +49,8 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.setDefaultTimeout(10_000);
+  let releaseReloadRun = (): void => {};
+  let releaseReloadProposals = (): void => {};
   try {
     assert.equal((await page.goto(origin))?.status(), 200);
     await page.locator('#app[data-boot-state="protected-ready"]').waitFor();
@@ -302,11 +304,35 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.equal(await page.locator("[data-proposal-id]").count(), 2);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).evaluate(
       (element) => element.previousElementSibling?.textContent), secondBlock.text);
+    const heldReloadRun = new Promise<void>((resolve) => { releaseReloadRun = resolve; });
+    const heldReloadProposals = new Promise<void>((resolve) => { releaseReloadProposals = resolve; });
+    let reloadProposalReads = 0;
+    const reloadRunQuery = (url: URL) => url.pathname.endsWith(`/agent-runs/${secondRunId}`);
+    const reloadProposalQueries = (url: URL) => url.pathname.endsWith(`/proposals/${firstProposalId}`)
+      || url.pathname.endsWith(`/proposals/${secondProposalId}`);
+    await page.route(reloadRunQuery, async (route) => {
+      const response = await route.fetch();
+      await heldReloadRun;
+      await route.fulfill({ response });
+    });
+    await page.route(reloadProposalQueries, async (route) => {
+      reloadProposalReads += 1;
+      if (reloadProposalReads > 2) {
+        await heldReloadProposals;
+      }
+      await route.continue();
+    });
     await page.reload();
     await page.locator("[data-proposal-id]").first().waitFor();
-    assert.deepEqual((await page.locator("[data-proposal-id]").evaluateAll((elements) =>
-      elements.map((element) => element.getAttribute("data-proposal-id")))).sort(),
-    [firstProposalId, secondProposalId].sort());
+    const reloadRefresh = page.waitForRequest((request) => reloadProposalQueries(new URL(request.url())));
+    releaseReloadRun();
+    await reloadRefresh;
+    releaseReloadProposals();
+    await expect.poll(async () => (await page.locator("[data-proposal-id]").evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("data-proposal-id")))).sort())
+      .toEqual([firstProposalId, secondProposalId].sort());
+    await page.unroute(reloadRunQuery);
+    await page.unroute(reloadProposalQueries);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`)
       .getAttribute("data-proposal-revision-id"), secondProposal.revision_id);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`)
@@ -705,6 +731,8 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-851-plain-follow-up.png"), fullPage: true });
     assert.deepEqual(errors, []);
   } finally {
+    releaseReloadRun();
+    releaseReloadProposals();
     if (owned !== undefined) await stopStoryOSServer(owned.server);
     await page.close();
     await context.clearCookies({ name: "storyos_session" });

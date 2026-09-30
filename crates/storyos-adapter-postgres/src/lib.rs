@@ -170,6 +170,7 @@ mod update_chapter;
 mod update_project;
 mod update_project_assistance;
 mod update_volume;
+mod validation_history;
 mod volume_storage_order;
 mod withdraw_proposal;
 
