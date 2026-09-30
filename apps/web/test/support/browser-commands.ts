@@ -11,6 +11,7 @@ import {
   storyOSBrowserCommandNames,
 } from "./browser-command-contract";
 import { queryStoryOSPostgres } from "./node-integration";
+import { verifyProductionRunEvidence } from "./production-run-evidence-command";
 import { verifyProductionHostJourney } from "./production-host-command";
 import { verifyProductionInlineProposal } from "./production-inline-proposal-command";
 import { verifyProductionProseRequest } from "./production-prose-request-command";
@@ -44,6 +45,8 @@ export const storyOSBrowserCommands = {
       if (request.scenario === "inline_proposal") {
         if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
         await verifyProductionInlineProposal(context.context, process.env.STORYOS_DEV_SERVER);
+      } else if (request.scenario === "run_evidence") {
+        await verifyProductionRunEvidence(context.context);
       } else if (request.scenario === "captured_memory") {
         await verifyProductionCapturedMemory(context.context);
       } else if (request.scenario === "prose_request" || request.scenario === "refused_edit" || request.scenario === "restored_refused_edit" || request.scenario === "conflicted_proposal") {
