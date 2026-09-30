@@ -3,6 +3,23 @@
 Start with `make verify-status BASE=origin/main`; use `make verify-changed` after edits.
 For test lifecycle changes, run `make verify-policy` and inspect a new plan.
 
+## Parallel implementation
+
+Use [Issue tracker](issue-tracker.md) for ticket readiness, integration ownership,
+and final acceptance. Run each ticket's commands in its own worktree with its own
+`target/` outputs and checkout resources. Set `BASE` to the exact integration
+commit used by that ticket when selecting its changes. Attribute targeted runs
+to the child Issue; attribute aggregate candidate runs to the specification PR.
+
+Evidence belongs to its recorded source identity. A child PASS does not prove the
+combined integration tree. After integration, plan against the PR base and run
+applicable combined checks. Independent Standards and Spec reviews cover the full
+specification diff. Complete local runs remain required when the specification,
+ticket, or user requests them; parallel delivery does not create a new full-run gate.
+Do not share mutable build directories or reuse another worktree's local admission
+records. Coordinate host capacity before simultaneous resource-heavy commands;
+checkout locks do not enforce a host-wide budget.
+
 ## Candidate review and admission
 
 1. Open the PR and wait for current `verify` success. On the clean candidate, run `python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
