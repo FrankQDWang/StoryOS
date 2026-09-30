@@ -445,6 +445,11 @@ async fn load_proposal(
         inline_digest: row.get(17),
         inline_base_slice_matches: true,
     };
+    loaded.validated_target_matches_head &=
+        !crate::validation_history::unavailable_revisions(client, &command.project_scope)
+            .await
+            .map_err(accept_database_error)?
+            .contains(&loaded.current_revision_id);
     loaded.inline_base_slice_matches = loaded.inline_slice_matches();
     Ok(Some(loaded))
 }

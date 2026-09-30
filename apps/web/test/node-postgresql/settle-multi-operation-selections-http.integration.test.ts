@@ -1,17 +1,21 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { test } from "vitest";
 import {
   acceptProposal, applyAuthorEdit, createAgentRun, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestCreateAgentRun,
-  digestCreateEditorSession, getAgentRun, getChapter, getProposal,
+  digestCreateEditorSession, digestExportProjectArchive, digestReplanProposal,
+  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getProposal, replanProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
-  CreateEditorSessionRequest, GetProposalResponse,
+  CreateEditorSessionRequest, GetProposalResponse, ReplanProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
+import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, requireStoryOSProtocolError,
+  stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
+import { canonicalDraftValue } from "../../src/refused-edit-discard.ts";
+import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer } from "../support/acceptance.ts";
 
@@ -280,15 +284,17 @@ test("acceptProposal applies a reversed multi-operation set without using array 
   }
 });
 
-test("acceptProposal applies one domain Operation and leaves the other pending", async () => {
-  const started = await startRealServer();
+for (const history of ["retained", "legacy_overwritten"]) {
+test(`partial Acceptance preserves ${history} evidence and conflicts the remaining Operation`, async () => {
+  const ns = randomBytes(3).toString("hex");
+  let started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("f3820311"), "Subset Operation Novel", "f3826");
-    const seeded = await seedTwoBlocks(started.baseUrl, prepared.fetchImpl, prepared.projectId, "f3827");
+    const prepared = await prepare(started.baseUrl, id(`${ns}0311`), "Subset Operation Novel", `${ns}6`);
+    const seeded = await seedTwoBlocks(started.baseUrl, prepared.fetchImpl, prepared.projectId, `${ns}7`);
     const queried = await admitPassages(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId,
-      "Revise these passages: keep the voice.", id("f3820331"),
+      "Revise these passages: keep the voice.", id(`${ns}0331`),
     );
     const opened = await getProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
@@ -297,52 +303,259 @@ test("acceptProposal applies one domain Operation and leaves the other pending",
     const firstOperation = opened.proposal.operations[0];
     const secondOperation = opened.proposal.operations[1];
     if (!firstOperation || !secondOperation) throw new Error("expected two Operations");
+    const retainedHistory = async () => JSON.parse(await queryPostgres(`SELECT jsonb_build_object(
+      'revision', (SELECT to_jsonb(record) FROM storyos.proposal_revisions AS record
+        WHERE project_id='${prepared.projectId}'::uuid AND revision_id='${opened.proposal.revision_id}'::uuid),
+      'validation', (SELECT to_jsonb(record) FROM storyos.validation_receipts AS record
+        WHERE project_id='${prepared.projectId}'::uuid AND proposal_revision_id='${opened.proposal.revision_id}'::uuid))::text`));
+    const originalHistory = await retainedHistory();
+    const beforeAcceptance = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
     const firstRequest = acceptRequest(
       opened, [firstOperation.operation_id], seeded.revisionId,
-      seeded.session.editor_session.editor_session_id, id("f3820351"),
+      seeded.session.editor_session.editor_session_id, id(`${ns}0351`),
     );
-    const firstAccepted = await challenged(
+    let durableResponse: Awaited<ReturnType<typeof acceptProposal>> | undefined;
+    const lossyFetch: typeof fetch = async (input, init) => {
+      const response = await prepared.fetchImpl(input, init);
+      if (String(input).endsWith("/acceptances") && response.status === 200) {
+        durableResponse = await response.clone().json();
+        if (started.server.exitCode === null && started.server.signalCode === null) await stopRealServer(started.server);
+        throw new Error("Controlled acknowledgement loss");
+      }
+      return response;
+    };
+    let nonce = "";
+    await assert.rejects(challenged(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
-      firstRequest.command_schema, await digestAcceptProposal(firstRequest), id("f3820352"),
+      firstRequest.command_schema, await digestAcceptProposal(firstRequest), id(`${ns}0352`),
       (antiForgery) => acceptProposal({
         baseUrl: started.baseUrl, projectId: prepared.projectId,
-        proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("f3820352"), antiForgery, request: firstRequest,
+        proposalId: opened.proposal.proposal_id, fetchImpl: lossyFetch,
+        idempotencyKey: id(`${ns}0352`), antiForgery: (nonce = antiForgery), request: firstRequest,
       }),
-    );
+    ), /Controlled acknowledgement loss/);
+    const address = new URL(started.baseUrl);
+    started = await startRealServer(`${address.hostname}:${address.port}`);
+    const fetchImpl = browserFetch(started.baseUrl, "session-a");
+    const firstAccepted = await acceptProposal({
+      baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl,
+      idempotencyKey: id(`${ns}0352`), antiForgery: nonce, request: firstRequest,
+    });
+    assert.deepEqual(firstAccepted, durableResponse);
+    assert.deepEqual(await retainedHistory(), originalHistory);
     assert.equal(firstAccepted.effect.kind, "applied");
     const afterFirst = await getProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
     });
-    assert.deepEqual(
-      afterFirst.proposal.operations.map((operation) => operation.resolution),
-      ["applied", "pending"],
-    );
+    assert.deepEqual(afterFirst.proposal, { ...opened.proposal,
+      operation_resolution: "applied", reservation_state: "resolved",
+      operations: opened.proposal.operations.map((operation) => operation.operation_id === firstOperation.operation_id
+        ? { ...operation, resolution: "applied", reservation_state: "resolved" } : operation),
+    });
     if (firstAccepted.effect.kind !== "applied") throw new Error("expected applied");
+    assert.deepEqual(firstAccepted.effect.authoritative_revision, {
+      ...beforeAcceptance.chapter.current_revision, revision_id: firstAccepted.effect.authoritative_revision.revision_id,
+      body: `${PROSE}\nWorld`,
+      blocks: beforeAcceptance.chapter.current_revision.blocks.map((block) =>
+        block.manuscript_block_id === firstOperation.manuscript_block_id ? { ...block, text: PROSE } : block),
+    });
+    if (history === "legacy_overwritten") {
+      await queryPostgres(`UPDATE storyos.proposal_revisions SET base_authoritative_revision_id=
+        '${firstAccepted.effect.authoritative_revision.revision_id}'::uuid
+        WHERE project_id='${prepared.projectId}'::uuid AND revision_id='${opened.proposal.revision_id}'::uuid;
+        UPDATE storyos.validation_receipts SET base_authoritative_revision_id=
+        '${firstAccepted.effect.authoritative_revision.revision_id}'::uuid
+        WHERE project_id='${prepared.projectId}'::uuid AND proposal_revision_id='${opened.proposal.revision_id}'::uuid`);
+      await assert.rejects(getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        proposalId: opened.proposal.proposal_id, fetchImpl }),
+        (error) => requireStoryOSProtocolError(error).status === 503);
+    }
+    const unchangedHistory = await retainedHistory();
     const secondRequest = acceptRequest(
       afterFirst, [secondOperation.operation_id],
       firstAccepted.effect.authoritative_revision.revision_id,
-      seeded.session.editor_session.editor_session_id, id("f3820353"),
+      seeded.session.editor_session.editor_session_id, id(`${ns}0353`),
     );
-    const secondAccepted = await challenged(
+    let secondNonce = "";
+    const acceptRemaining = async () => secondNonce === "" ? challenged(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
-      secondRequest.command_schema, await digestAcceptProposal(secondRequest), id("f3820354"),
+      secondRequest.command_schema, await digestAcceptProposal(secondRequest), id(`${ns}0354`),
       (antiForgery) => acceptProposal({
         baseUrl: started.baseUrl, projectId: prepared.projectId,
         proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("f3820354"), antiForgery, request: secondRequest,
+        idempotencyKey: id(`${ns}0354`), antiForgery: (secondNonce = antiForgery), request: secondRequest,
       }),
-    );
-    assert.equal(secondAccepted.effect.kind, "applied");
-    if (secondAccepted.effect.kind !== "applied") throw new Error("expected applied");
-    assert.equal(secondAccepted.effect.authoritative_revision.body, `${PROSE}\n${SECOND_PROSE}`);
+    ) : acceptProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl,
+      idempotencyKey: id(`${ns}0354`), antiForgery: secondNonce, request: secondRequest,
+    });
+    if (history === "retained") {
+      const settlementState = async () => JSON.parse(await queryPostgres(`SELECT jsonb_build_object(${[
+        "authoritative_heads", "authoritative_revisions", "authoritative_commits", "author_action_entries",
+        "scope_counters", "proposal_heads", "proposal_revisions", "proposal_operations", "validation_receipts",
+        "domain_receipts", "acceptance_receipts", "proposal_validation_conditions",
+      ].map((table) => `'${table}', (SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)
+        FROM storyos.${table} AS record WHERE owner_user_id='${USER_A}'::uuid AND project_id='${prepared.projectId}'::uuid)`).join(",")})::text`));
+      const beforeFault = await settlementState();
+      const fault = `validation_fault_${ns}`;
+      await queryPostgres(`CREATE FUNCTION storyos.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN IF NEW.project_id='${prepared.projectId}'::uuid THEN RAISE EXCEPTION 'controlled condition fault'; END IF;
+        RETURN NEW; END $$; CREATE TRIGGER ${fault} BEFORE INSERT ON storyos.proposal_validation_conditions
+        FOR EACH ROW EXECUTE FUNCTION storyos.${fault}();`);
+      try {
+        await assert.rejects(acceptRemaining, (error) => requireStoryOSProtocolError(error).status === 503);
+        assert.deepEqual(await settlementState(), beforeFault);
+      } finally {
+        await queryPostgres(`DROP TRIGGER ${fault} ON storyos.proposal_validation_conditions; DROP FUNCTION storyos.${fault}()`);
+      }
+    }
+    const secondAccepted = await acceptRemaining();
+    assert.deepEqual(secondAccepted.effect, { kind: "conflicted", reason: "changed_head" });
+    assert.deepEqual(await retainedHistory(), unchangedHistory);
+    assert.deepEqual(await acceptProposal({
+      baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl,
+      idempotencyKey: id(`${ns}0352`), antiForgery: nonce, request: firstRequest,
+    }), firstAccepted);
+    const conflictRef = secondAccepted.receipt.condition_refs[0]!;
+    if (history === "retained") {
+      const afterConflict = await getProposal({
+      baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl,
+    });
+    assert.deepEqual(afterConflict.proposal, {
+      ...afterFirst.proposal, validation: "conflicted",
+      condition_refs: secondAccepted.receipt.condition_refs,
+      source_condition: { kind: "proposal_conflict", proposal_conflict_ref: secondAccepted.receipt.condition_refs[0]! },
+    });
+    }
+    const chapter = await getChapter({
+      baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl,
+    });
+    assert.deepEqual(chapter.chapter.current_revision, firstAccepted.effect.authoritative_revision);
+    const replanRequest: ReplanProposalRequest = {
+      command_schema: "storyos.command.replan-proposal.request.v1",
+      replan_proposal_input: {
+        ...BINDING, correlation_id: id(`${ns}0361`),
+        conflicted_proposal_revision_id: opened.proposal.revision_id,
+        expected_current_proposal_head: opened.proposal.revision_id,
+        expected_current_target_revisions: [chapter.chapter.current_revision.revision_id],
+        replacement_operations: [secondOperation.operation_id],
+        source_condition: { kind: "proposal_conflict", proposal_conflict_ref: conflictRef },
+        editor_session_id: seeded.session.editor_session.editor_session_id,
+      },
+    };
+    const replanned = await challenged(started.baseUrl, fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/proposals/{proposal_id}/replans", replanRequest.command_schema,
+      await digestReplanProposal(replanRequest), id(`${ns}0362`), (antiForgery) => replanProposal({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId: opened.proposal.proposal_id,
+        fetchImpl, idempotencyKey: id(`${ns}0362`), antiForgery, request: replanRequest,
+      }));
+    assert.equal(replanned.effect.kind, "resolved");
+    const afterReplan = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl });
+    assert.notEqual(afterReplan.proposal.revision_id, opened.proposal.revision_id);
+    assert.deepEqual(afterReplan.proposal, { ...afterFirst.proposal,
+      revision_id: afterReplan.proposal.revision_id, validation: "pending",
+      validation_receipt: { kind: "absent" },
+      base_authoritative_revision_id: chapter.chapter.current_revision.revision_id,
+      revision_comparison: afterReplan.proposal.revision_comparison,
+    });
+    const pendingRequest: AcceptProposalRequest = { ...secondRequest,
+      accept_proposal_input: { ...secondRequest.accept_proposal_input,
+        proposal_revision_id: afterReplan.proposal.revision_id, correlation_id: id(`${ns}0363`) } };
+    const pendingAcceptance = await challenged(started.baseUrl, fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", pendingRequest.command_schema,
+      await digestAcceptProposal(pendingRequest), id(`${ns}0364`), (antiForgery) => acceptProposal({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId: opened.proposal.proposal_id,
+        fetchImpl, idempotencyKey: id(`${ns}0364`), antiForgery, request: pendingRequest,
+      }));
+    assert.deepEqual(pendingAcceptance.effect, { kind: "refused", reason: "not_eligible" });
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl })).proposal, afterReplan.proposal);
+    assert.deepEqual(await retainedHistory(), unchangedHistory);
+    const foreign = browserFetch(started.baseUrl, "session-b");
+    await assert.rejects(getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: foreign }),
+      (error) => requireStoryOSProtocolError(error).status === 404);
+    const exportRequest = { command_schema: "storyos.command.export-project-archive.request.v1",
+      export_project_archive_input: { ...BINDING, correlation_id: id(`${ns}0371`),
+        archive_profile: "storyos.project-export.v1",
+        archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" } };
+    const archive = async (key = id(`${ns}0372`)) => challenged(started.baseUrl, fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/exports", exportRequest.command_schema,
+      await digestExportProjectArchive(exportRequest), key, (antiForgery) => exportProjectArchive({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl,
+        idempotencyKey: key, antiForgery, request: exportRequest,
+      }));
+    if (history === "legacy_overwritten") {
+      await assert.rejects(() => archive(), (error) => {
+        const problem = requireStoryOSProtocolError(error);
+        return problem.status === 422 && JSON.parse(problem.responseBody ?? "null").code === "invalid_provenance";
+      });
+      assert.deepEqual(await retainedHistory(), unchangedHistory);
+    } else {
+      const admitted = await archive();
+      if (admitted.effect.kind !== "admitted") throw new Error("expected archive Admission");
+      await settleOnce();
+      const exported = await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        exportId: admitted.effect.export_id, fetchImpl });
+      assert.equal(exported.status, "ready");
+      const download = await fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${admitted.effect.export_id}`,
+        { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+      assert.equal(download.status, 200);
+      const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+      for (const [table, expected] of [["proposal_revisions", originalHistory.revision], ["validation_receipts", originalHistory.validation]] as const) {
+        const records = JSON.parse(new TextDecoder().decode(files.get(`canonical/${table}.json`)));
+        assert.deepEqual(records.find((row: { proposal_revision_id?: string; revision_id?: string }) =>
+          (row.proposal_revision_id ?? row.revision_id) === opened.proposal.revision_id), expected);
+      }
+      const conditions = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_validation_conditions.json")));
+      assert.equal(conditions.length, 1);
+      assert.deepEqual(conditions, JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text
+        FROM storyos.proposal_validation_conditions AS record WHERE project_id='${prepared.projectId}'::uuid`)));
+      const historical = await archive(id(`${ns}0374`));
+      if (historical.effect.kind !== "admitted") throw new Error("expected historical archive Admission");
+      const exportId = historical.effect.export_id;
+      const facts = JSON.parse(await queryPostgres(`SELECT facts::text FROM storyos.pinned_export_sources
+        WHERE project_id='${prepared.projectId}'::uuid AND export_id='${exportId}'::uuid`));
+      let replacement = "facts";
+      for (const [familyIndex, family] of facts.families.entries()) {
+        if (!["proposal_revisions", "validation_receipts"].includes(family.table)) continue;
+        for (const [rowIndex, row] of family.rows.entries()) {
+          if ((row.proposal_revision_id ?? row.revision_id) === opened.proposal.revision_id) {
+            row.base_authoritative_revision_id = chapter.chapter.current_revision.revision_id;
+            replacement = `jsonb_set(${replacement}, '{families,${familyIndex},rows,${rowIndex},base_authoritative_revision_id}',
+              to_jsonb('${chapter.chapter.current_revision.revision_id}'::text))`;
+          }
+        }
+      }
+      const encoded = canonicalDraftValue(facts);
+      const digest = createHash("sha256").update(encoded).digest("hex");
+      await queryPostgres(`UPDATE storyos.pinned_export_sources SET facts=${replacement},
+        facts_sha256='${digest}' WHERE project_id='${prepared.projectId}'::uuid AND export_id='${exportId}'::uuid`);
+      await settleOnce();
+      const failed = await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        exportId, fetchImpl });
+      assert.equal(failed.status, "failed");
+      assert.equal("immutable_root" in failed, false);
+      const refused = await fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${exportId}`,
+        { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+      assert.equal(refused.status, 422);
+      assert.deepEqual(await retainedHistory(), originalHistory);
+    }
+
   } finally {
-    await stopRealServer(started.server);
+    if (started.server.exitCode === null && started.server.signalCode === null) await stopRealServer(started.server);
   }
 });
+}
 
 test("acceptProposal refuses incomplete atomic Bundle closure then applies the closed set", async () => {
   const started = await startRealServer();
