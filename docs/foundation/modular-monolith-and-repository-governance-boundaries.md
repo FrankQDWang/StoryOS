@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Wayfinder resolution: [Define the Modular-Monolith and Repository Governance Boundaries](https://github.com/FrankQDWang/StoryOS/issues/59)
-- Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
+- Canonical glossary: [`GLOSSARY.md`](../../GLOSSARY.md)
 - Repository-wide rules: [`AGENTS.md`](../../AGENTS.md)
 - Related decisions: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md), [ADR 0005](../adr/0005-require-ordered-context-assembly-before-destination-disclosure.md), [ADR 0006](../adr/0006-adopt-foundation-monorepo-governance.md), and [ADR 0007](../adr/0007-preserve-process-separable-server-worker-boundary.md)
 
@@ -354,7 +354,7 @@ writes the ADR and links the superseded decision when applicable.
 Do not create an ADR for a settled glossary definition, a local module split,
 a mechanical generated-file refresh, a routine test, a temporary prototype fix,
 an obvious implementation of an accepted contract, or a directory rename that
-preserves ownership/dependency rules. Those belong respectively in `CONTEXT.md`,
+preserves ownership/dependency rules. Those belong respectively in `GLOSSARY.md`,
 the Foundation specification, code review, or the relevant implementation plan.
 
 ### 7.3 Research, production, prototype, and reference isolation
@@ -362,7 +362,7 @@ the Foundation specification, code review, or the relevant implementation plan.
 | Area | Permitted role | Prohibited role |
 | --- | --- | --- |
 | `crates/**`, `apps/web/**`, generated packages | Production implementation and checked-in derived contracts | Prototype/reference source or unreviewed local state |
-| `docs/foundation/**`, `CONTEXT.md`, `docs/adr/**` | Accepted contracts, vocabulary, and hard-tradeoff rationale | Unpinned upstream source copy or implementation runtime |
+| `docs/foundation/**`, `GLOSSARY.md`, `docs/adr/**` | Accepted contracts, vocabulary, and hard-tradeoff rationale | Unpinned upstream source copy or implementation runtime |
 | `docs/research/**` | Source-backed observations and limitations | Accepted contract merely by existing; production dependency |
 | `prototypes/**` | Frozen reproducible risk evidence | Production source, test suite, workspace member, runtime, release artifact |
 | `.reference/**` | Read-only upstream evidence only when independently locatable | Workspace/dependency/build/test/package/release/runtime input or hidden source copy |

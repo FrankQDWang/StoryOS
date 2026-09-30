@@ -5,7 +5,7 @@
 - Evidence policy: official standards, official specifications, and first-party
   protocol repositories only
 - Authority: research evidence only; this note does not choose StoryOS domain
-  semantics or override `CONTEXT.md` or a foundation specification
+  semantics or override `GLOSSARY.md` or a foundation specification
 
 ## Facts
 

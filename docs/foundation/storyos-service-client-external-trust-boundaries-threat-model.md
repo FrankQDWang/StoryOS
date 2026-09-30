@@ -3,7 +3,7 @@
 - Status: accepted
 - Wayfinder resolution: [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57)
 - Repository baseline: `dd4775c982f903e04ea5a9cf047968d489808a01`
-- Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
+- Canonical glossary: [GLOSSARY.md](../../GLOSSARY.md)
 - Protected-client decision: [ADR 0013](../adr/0013-trust-the-storyos-web-client-for-author-command-admission.md)
 - Author-command admission: [Author Command Admission](author-command-admission.md)
 - Evidence classification: [Artifact and Authoritative-State Domain Model](artifact-domain-model.md)

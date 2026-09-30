@@ -3,7 +3,7 @@
 - Status: accepted
 - Contract revision: `release1-storage-contract-2026-09-14-generated-memory`
 - Wayfinder resolution: [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56)
-- Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
+- Canonical glossary: [`GLOSSARY.md`](../../GLOSSARY.md)
 - Deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Research input: [PostgreSQL Project Storage, Isolation, and Migration Source Audit](../research/postgresql-project-storage-isolation-and-migration-source-audit.md)
 - Parent semantic contracts: [Artifact domain model](artifact-domain-model.md), [Manuscript state machine](manuscript-revision-proposal-state-machine.md), [Fiction memory and research provenance](fiction-memory-and-research-provenance-semantics.md), and [Context assembly and disclosure](context-assembly-retrieval-and-outbound-disclosure-semantics.md)

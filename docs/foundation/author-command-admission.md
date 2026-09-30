@@ -2,7 +2,7 @@
 
 - Status: current
 - Canonical issue: [Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68)
-- Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
+- Canonical glossary: [GLOSSARY.md](../../GLOSSARY.md)
 - Trust boundary: [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md)
 - Public protocol: [Versioned Command, Query, Artifact, and Event Protocol](versioned-command-query-artifact-event-protocol.md)
 - Core state machine: [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md)
