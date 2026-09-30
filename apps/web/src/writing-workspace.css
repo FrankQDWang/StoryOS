@@ -376,7 +376,9 @@ input:focus-visible,
 .assistant-toggle svg { width: 20px; height: 20px; }
 
 .editor-recovery {
-  margin: 18px 0 0;
+  width: min(calc(100% - 118px), 732px);
+  box-sizing: border-box;
+  margin: 18px auto 0;
   border-left: 1px solid #9a958d;
   background: #f7f5f2;
   padding: 20px 24px 18px 28px;
@@ -388,6 +390,8 @@ input:focus-visible,
 .editor-recovery-heading { display: grid; gap: 7px; }
 .editor-recovery-heading > span, .editor-recovery-copy > span { color: #817d75; font-size: 11px; }
 .editor-recovery-heading h2 {
+  width: auto;
+  padding: 0;
   margin: 0;
   font-family: "Noto Serif SC", "Songti SC", serif;
   font-size: 17px;
