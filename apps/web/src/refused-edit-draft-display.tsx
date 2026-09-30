@@ -91,9 +91,19 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       const results: Record<string, string> = {};
       for (const group of snapshot.groups) {
         const source = group.frozen_request_body.retry_source;
-        if (source) results[source.source_draft_id] = group.settlement.kind === "applied_receipt_settled"
-          ? "authoritative_applied" : group.settlement.kind === "zero_authority_receipt_settled"
-            ? group.settlement.effect.kind : "Outcome unresolved. No new retry was submitted.";
+        if (!source) continue;
+        if (group.settlement.kind === "applied_receipt_settled") {
+          results[source.source_draft_id] = "The selected text was applied to the manuscript.";
+        } else if (group.settlement.kind === "zero_authority_receipt_settled") {
+          const messages = {
+            proposal_revised: "The selected text was applied to the proposal.",
+            refused_to_draft: "The retry was not applied. Its complete text was preserved in a new draft.",
+            no_effect: "The retry made no change.",
+            conflicted: "The text changed before this retry could apply. The draft remains available.",
+            refused: "The retry could not apply. The draft remains available.",
+          };
+          results[source.source_draft_id] = messages[group.settlement.effect.kind];
+        } else results[source.source_draft_id] = "The retry outcome is not yet confirmed. No new retry was submitted.";
       }
       setRetryResults(results);
       const next = await Promise.all(groups.map(async (group) => {
@@ -176,10 +186,15 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
     const id = settled.effect.draft_id;
     if (draft === undefined) return <p role="status" key={id} data-draft-unavailable={id}>Draft unavailable.</p>;
     const unit = draft.payload.author_edit_units[0]!;
-    return <section key={id} data-refused-edit-draft={id} aria-label="Preserved edit draft">
-      <p>Draft preserved. The manuscript and proposal remain unchanged.</p>
+    return <section className="editor-recovery" key={id} data-refused-edit-draft={id} aria-label="Preserved edit draft">
+      <header className="editor-recovery-heading">
+        <span>Preserved edit</span>
+        <h2>This edit was not applied</h2>
+        <p>The manuscript and proposal were not changed by this edit. Your complete text is preserved below.</p>
+      </header>
+      <div className="editor-recovery-copy"><span>Full edit</span>
       {unit.normalized_primitives.flatMap((primitive) => primitive.kind === "replace_structured_selection"
-        ? primitive.replacement.map((block, index) => <pre key={index} data-draft-replacement={block.block_kind}>{block.text}</pre>) : [])}
+        ? primitive.replacement.map((block, index) => <pre key={index} data-draft-replacement={block.block_kind}>{block.text}</pre>) : [])}</div>
       {draft.closure === "open" && observation === undefined && settledWriter
         ? <button type="button" data-draft-discard disabled={busy} onClick={() => { void discard(group); }}>Discard</button> : null}
       {draft.closure === "open" && observation === undefined && settledWriter
@@ -187,24 +202,18 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
           submit={(from, to, target, start, end, read) => retry(group, from, to, target, start, end, read)}
           expand={(target, start, end, read) => expand(group, target, start, end, read)} /> : null}
       {retryResults[id] ? <p role="status" data-draft-retry-result>{retryResults[id]}</p> : null}
-      {draft.replacement_provenance ? <p data-draft-replacement-source>Replacement of Draft {draft.replacement_provenance.source_draft_id}.
-        Closure event: {draft.replacement_provenance.closure_event_ref}.</p> : null}
-      {observation?.kind === "unresolved" ? <p role="status" data-discard-unresolved>Discard outcome unresolved. No new Discard was submitted.</p> : null}
+      {draft.replacement_provenance ? <p data-draft-replacement-source>This draft preserves the complete text of a retry from an earlier draft.</p> : null}
+      {observation?.kind === "unresolved" ? <p role="status" data-discard-unresolved>The discard outcome is not yet confirmed. No new discard was submitted.</p> : null}
       {observation?.kind === "settled" && observation.response.effect.kind !== "draft_closure_changed"
-        ? <p role="status" data-discard-settled>Discard {observation.response.effect.kind}. The Draft was not closed by this command.</p> : null}
+        ? <p role="status" data-discard-settled>This discard did not close the draft. Its full text remains available.</p> : null}
       {draft.closure === "closed" && draft.closure_event ? <p data-draft-closed>
-        Closed: {draft.closure_event.close_reason}. Event: {draft.closure_event.event_id}. {draft.closure_event.author_action_sequence === null
-          ? "This closure has no Author Action." : "Root Undo requires this exact latest action."}</p> : null}
-      {draft.reopen_event ? <p data-draft-reopened>Reopened. Event: {draft.reopen_event.event_id}.</p> : null}
+        {draft.closure_event.close_reason === "abandoned" ? "Discarded." : "Replaced by the retry result."} The full text remains available to copy.</p> : null}
+      {draft.reopen_event ? <p data-draft-reopened>Restored by Undo. This draft is available again.</p> : null}
       <button type="button" data-draft-copy onClick={() => { void copy(group); }}>Copy</button>
       {copied ? <p role="status">Copied</p> : null}
-      <details><summary>Source and draft identity</summary>
-        <p>Draft: {id}. Revision: {draft.draft_revision_id}. Creation: {draft.creation.creation_event_id}.</p>
-        <p>Command: {draft.creation.source.command_id}. Admission: {draft.creation.source.author_command_admission_id}. Idempotency key: {draft.creation.source.idempotency_key}.</p>
-        <p>Receipt: {draft.creation.source.receipt_id}. Digest: {draft.payload_digest}. Status: {draft.closure}, {draft.retention_state}.</p>
-        <p>Selection: {JSON.stringify(unit.selection_snapshot?.ordered_selection?.anchor)} to {JSON.stringify(unit.selection_snapshot?.ordered_selection?.head)}.</p>
+      <details><summary>Original selected text</summary>
         {unit.selection_snapshot?.ordered_selection?.sources.map((source, index) => <div key={index}>
-          <code>{JSON.stringify(source.owner)}; {source.block_kind}; {source.coordinate_profile}; {source.from}–{source.to}</code>
+          <p>{source.owner.kind === "proposal" ? "Proposal text" : "Manuscript text"}</p>
           <pre>{source.source_text}</pre></div>)}
       </details>
     </section>;
