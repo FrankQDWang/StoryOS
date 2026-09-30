@@ -66,6 +66,8 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.keyboard.insertText(SOURCE);
     await page.keyboard.press("Enter");
     await page.keyboard.insertText(SIBLING);
+    await expect.poll(async () => (await getChapter({ ...options, chapterId })).chapter.current_revision.blocks.map((block) => block.text))
+      .toEqual([SOURCE, SIBLING]);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const before = await getChapter({ ...options, chapterId });
     assert.deepEqual(before.chapter.current_revision.blocks.map((block) => block.text), [SOURCE, SIBLING]);
@@ -102,6 +104,38 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       "Guard the narrator tone in this passage.");
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-ready.png") });
+    await page.locator(`[data-proposal-id="${proposalId}"][data-proposal-eligibility="eligible"]`).waitFor();
+    await editor.waitFor();
+    await candidate.click();
+    await candidate.evaluate((element) => {
+      const range = document.createRange();
+      range.setStart(element.firstChild!, 5); range.collapse(true);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges(); selection.addRange(range);
+    });
+    await page.keyboard.insertText("xx");
+
+    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.candidate_text)
+      .toBe("narrxxator tone");
+    const edited = (await getProposal({ ...options, proposalId })).proposal;
+    assert.notEqual(edited.revision_id, proposal.revision_id);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
+    await page.reload();
+    await expect(candidate).toHaveText("narrxxator tone");
+    assert.equal(await candidate.getAttribute("data-proposal-revision-id"), edited.revision_id);
+    await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-edited-reloaded.png") });
+    await page.locator(`[data-proposal-accept="${proposalId}"]`).click();
+    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operation_resolution)
+      .toBe("applied");
+    const accepted = await getChapter({ ...options, chapterId });
+    assert.deepEqual(accepted.chapter.current_revision.blocks, [
+      { ...before.chapter.current_revision.blocks[0]!, text: "Guard the narrxxator tone in this passage." },
+      before.chapter.current_revision.blocks[1]!,
+    ]);
+    await expect(page.locator("[data-manuscript-editor] > p")).toHaveText([
+      "Guard the narrxxator tone in this passage.", SIBLING,
+    ]);
+    await expect(candidate).toHaveCount(0);
     assert.deepEqual(errors, []);
   } finally { await page.close(); }
 }

@@ -2079,3 +2079,40 @@ test("a complete source cannot prove a selection inside a UTF-16 surrogate pair"
     assert.deepEqual(await retainedState(prepared.projectId), before);
   } finally { await stopRealServer(started.server); }
 });
+
+test("explicit Inline candidate input binds the exact Operation and preserves source prose", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("d828011"), "Explicit Inline Novel", "d82802");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "d82803");
+    const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl };
+    const before = await getChapter({ ...options, chapterId: prepared.chapterId });
+    const operation = opened.proposal.operations[0]!;
+    const request = replaceUnit(5, 5, "xx", writer, "d82804", opened.proposal.revision_id);
+    request.proposal_target = { proposal_id: opened.proposal.proposal_id,
+      operation_id: operation.operation_id, revision_id: opened.proposal.revision_id,
+      manuscript_block_id: opened.proposal.manuscript_block_id };
+    const send = async (input: ApplyAuthorEditRequest, key: string) => challenged(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", input.command_schema,
+      await digestApplyAuthorEdit(input), key, (antiForgery) => applyAuthorEdit({
+        ...options, request: input, idempotencyKey: key, antiForgery }));
+    const wrong = structuredClone(request);
+    wrong.correlation_id = id("d828053");
+    wrong.completed_intent_record_id = id("d828055");
+    wrong.proposal_target!.operation_id = id("d828057");
+    const refused = await send(wrong, id("d828056"));
+    assert.equal(refused.effect.kind, "refused");
+    assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
+    assert.deepEqual((await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal,
+      opened.proposal);
+    const edited = await send(request, id("d828046"));
+    assert.equal(edited.effect.kind, "proposal_revised");
+    const revised = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+    assert.equal(revised.candidate_text, "narrxxator tone");
+    assert.notEqual(revised.revision_id, opened.proposal.revision_id);
+    assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
+  } finally { await stopRealServer(started.server); }
+});

@@ -379,14 +379,18 @@ export function ManuscriptEditor({
     const rendered = readManuscriptParagraphs(editor.state.doc);
     const renderedKey = rendered?.map((block) =>
       `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" ");
-    if (renderedKey !== identityKey) {
+    if (renderedKey !== identityKey || (rendered !== undefined
+      && !paragraphsEqual(rendered, blocks) && persistWorkspace?.pending.save_state === "saved"
+      && persistWorkspace.pending.unsettled_intent_count === 0)) {
       hydrateManuscriptBlocks(editor, blocks);
+      projectBlockProposals(editor, proposals);
     }
     observedBlocksRef.current = readManuscriptParagraphs(editor.state.doc)
       ?? blocks.map((block) => ({ ...block }));
     syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
   }, [blocks.map((block) =>
-    `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" "), editor]);
+    `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}:${block.text}`).join(" "),
+    persistWorkspace?.pending.save_state, editor]);
 
   useEffect(() => {
     if (editor === null || persistWorkspace === undefined) {
@@ -526,7 +530,8 @@ export function ManuscriptEditor({
       mixedCompositionRef.current = captureStructuredSelection(editor.state, editor.state.tr.deleteSelection());
       if (mixedCompositionRef.current !== undefined && !idle.canAcceptCandidateInput(true)) mixedCompositionRef.current = undefined;
       mixedCompositionStartRef.current = mixedCompositionRef.current === undefined ? null : editor.state.doc;
-      const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal";
+      const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal"
+        || editor.state.selection.$from.parent.type.name === "inlineProposal";
       candidateCompositionBlockedRef.current = candidateSelected
         && !idle.canAcceptCandidateInput(true);
       candidateCompositionStartRef.current = candidateSelected
