@@ -42,8 +42,12 @@ pub(super) async fn load_inline_target_ownership(
            JOIN storyos.proposal_revisions AS revision
              ON (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id) =
                 (head.owner_user_id, head.project_id, head.proposal_id, head.current_revision_id)
-           JOIN storyos.proposal_operations AS operation USING (owner_user_id, project_id, proposal_id)
-           JOIN storyos.proposal_anchors AS anchor USING (owner_user_id, project_id, proposal_id, operation_id)
+           JOIN storyos.proposal_operations AS operation
+             ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
+                (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+           JOIN storyos.proposal_anchors AS anchor
+             ON (anchor.owner_user_id, anchor.project_id, anchor.proposal_id, anchor.operation_id) =
+                (operation.owner_user_id, operation.project_id, operation.proposal_id, operation.operation_id)
            LEFT JOIN storyos.proposal_validation_conditions AS failure
              ON (failure.owner_user_id, failure.project_id, failure.proposal_id, failure.proposal_revision_id) =
                 (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)
