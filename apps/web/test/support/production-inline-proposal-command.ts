@@ -271,6 +271,14 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-rejected-reloaded.png") });
     for (const edge of ["start", "end"] as const) {
       await createInlineChapter(`Inline ${edge} edge Chapter`);
+      await editor.focus();
+      await page.keyboard.press("Enter");
+      await page.keyboard.insertText(SIBLING);
+      await expect.poll(async () => (await getChapter({ ...options, chapterId })).chapter.current_revision.blocks.map((block) => block.text))
+        .toEqual([SOURCE, SIBLING]);
+      await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+        WHERE project_id = '${projectId}'::uuid`);
       const edgeBase = await getChapter({ ...options, chapterId });
       const opened = await openInline();
       const edgeCandidate = page.locator(`span[data-inline-proposal-id="${opened.proposalId}"]`);
@@ -286,7 +294,8 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       const expectedText = edge === "start" ? "Guard the !narrator voice in this passage."
         : "Guard the narrator voice! in this passage.";
       await expect.poll(async () => (await getChapter({ ...options, chapterId })).chapter.current_revision.blocks)
-        .toEqual([{ ...edgeBase.chapter.current_revision.blocks[0]!, text: expectedText }]).catch((error) => {
+        .toEqual([{ ...edgeBase.chapter.current_revision.blocks[0]!, text: expectedText },
+          edgeBase.chapter.current_revision.blocks[1]!]).catch((error) => {
           throw new Error(`${error}\nEdge request and response: ${JSON.stringify({ mixedRequest, mixedResponse })}`);
         });
       await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
@@ -296,7 +305,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       assert.equal(afterEdge.revision_id, opened.proposal.revision_id);
       assert.equal(afterEdge.candidate_text, "narrator tone");
       await page.reload();
-      await expect(page.locator("[data-manuscript-editor] > p")).toHaveText(expectedText);
+      await expect(page.locator("[data-manuscript-editor] > p")).toHaveText([expectedText, SIBLING]);
       await expect(page.locator(`[data-proposal-id="${opened.proposalId}"] .block-proposal-text`)).toHaveText("narrator tone");
       await expect(page.locator(`[data-proposal-accept="${opened.proposalId}"]`)).toHaveCount(0);
       await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-reloaded.png`) });

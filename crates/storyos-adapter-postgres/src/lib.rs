@@ -107,6 +107,7 @@ mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_admission_recovery;
+mod author_edit_inline;
 mod author_edit_outcome;
 mod author_edit_proposal;
 mod author_edit_replay;

@@ -2,8 +2,8 @@
 
 use crate::{
     AuthorEditConflict, AuthorEditNoEffect, AuthorEditPrimitive, AuthorEditRefusal, AuthorEditUnit,
-    CurrentOwnershipFacts, UTF16_COORDINATE_PROFILE, replace_checked_utf16_range,
-    utf16_offset_to_byte,
+    CurrentOwnershipFacts, InlineInputOwner, UTF16_COORDINATE_PROFILE, classify_inline_input_owner,
+    replace_checked_utf16_range, utf16_offset_to_byte,
 };
 
 pub const MANUSCRIPT_SCHEMA_VERSION: u32 = 1;
@@ -56,6 +56,12 @@ pub enum ApplyVersionedAuthorEditResult {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VersionedTargetOwnership {
     Chapter,
+    /// An unresolved Inline reservation on one current paragraph Block.
+    InlineReservation {
+        manuscript_block_id: String,
+        proposal_head_revision_id: String,
+        reserved_ranges: Vec<(u32, u32)>,
+    },
     Block {
         manuscript_block_id: String,
         reservation: BlockReservation,
@@ -112,6 +118,59 @@ pub fn apply_versioned_author_edit(
     };
     let owns_target = match &command.current_target_ownership {
         VersionedTargetOwnership::Chapter => current_partition == "authoritative",
+        VersionedTargetOwnership::InlineReservation {
+            manuscript_block_id,
+            proposal_head_revision_id,
+            reserved_ranges,
+        } => {
+            let [unit] = command.author_edit_units.as_slice() else {
+                return ApplyVersionedAuthorEditResult::Conflicted {
+                    reason: AuthorEditConflict::OwnershipChanged,
+                };
+            };
+            let [
+                AuthorEditPrimitive::ReplaceBlockSelection {
+                    manuscript_block_id: target,
+                    from,
+                    to,
+                    ..
+                },
+            ] = unit.normalized_primitives.as_slice()
+            else {
+                return ApplyVersionedAuthorEditResult::Conflicted {
+                    reason: AuthorEditConflict::OwnershipChanged,
+                };
+            };
+            let [range] = reserved_ranges.as_slice() else {
+                return ApplyVersionedAuthorEditResult::Conflicted {
+                    reason: AuthorEditConflict::OwnershipChanged,
+                };
+            };
+            current_partition == "mixed"
+                && command.current_ownership.proposal_head_revision_ids
+                    == [proposal_head_revision_id.clone()]
+                && target == manuscript_block_id
+                && from == to
+                && (*from == range.0 || *from == range.1)
+                && unit.selection_snapshot.ordered_selection.is_none()
+                && unit.selection_snapshot.from == *from
+                && unit.selection_snapshot.to == *to
+                && classify_inline_input_owner(reserved_ranges, *from, *to)
+                    == InlineInputOwner::Authoritative
+                && command
+                    .current_payload
+                    .blocks
+                    .iter()
+                    .filter(|block| {
+                        block.manuscript_block_id == *manuscript_block_id
+                            && block.block_kind == ManuscriptBlockKind::Paragraph
+                            && range.0 < range.1
+                            && utf16_offset_to_byte(&block.text, range.0).is_some()
+                            && utf16_offset_to_byte(&block.text, range.1).is_some()
+                    })
+                    .count()
+                    == 1
+        }
         VersionedTargetOwnership::Block {
             manuscript_block_id,
             reservation,
