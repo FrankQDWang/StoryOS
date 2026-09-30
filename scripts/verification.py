@@ -485,6 +485,9 @@ def main():
                        ("base", "issue", "pr", "purpose", "trigger", "review_request", "executor_context")})
         return step(root, arguments.stage, command, node_id=arguments.node_id, node_only=arguments.node_only)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        if arguments.action == 'status' and not arguments.details:
+            import verification_summary
+            return verification_summary.query_error(error)
         parser.exit(1, f"{error}\n")
 
 

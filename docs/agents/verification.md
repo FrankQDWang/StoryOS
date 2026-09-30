@@ -481,7 +481,8 @@ verification scope; merge checks and reviews retain their separate authority.
 `VERIFY_ARGS='--format json'` returns the same summary as JSON. Daily status and
 plan summaries have a 16 KiB and 80-line limit, eight checks per page, and clipped
 text fields with original character counts. Failures and pending checks come first.
-Counts cover all checks; equal blocking reasons share a count. Partial readiness
+Counts cover all checks; equal blocking reasons share a count. Query errors also
+use a bounded summary; `--details` retains the full error. Partial readiness
 does not satisfy pending checks. Guidance does not authorize execution.
 
 Use `make verify-plan VERIFY_ARGS='--select blocked --page 2'` for another page.

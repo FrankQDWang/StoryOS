@@ -100,6 +100,23 @@ class WorkflowQueryTests(unittest.TestCase):
         self.assertIn('stale', rejected.stderr)
         self.assertEqual(list(target.glob('verification/*/report.json')), [report_path])
 
+    def test_large_unknown_input_errors_are_bounded_with_explicit_details(self):
+        fixture = verification_plan_tests.FilePlanTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        for index in range(120):
+            (fixture.root / (str(index) + 'x' * 180 + '.unknown')).touch()
+        for action in ('summary', 'status'):
+            result = fixture.cli(action)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertLessEqual(len(result.stdout.encode()) + len(result.stderr.encode()), 16384)
+            self.assertEqual(json.loads(result.stdout)['status'], 'unknown')
+        targeted = fixture.repo.cli('status', '--check', 'unknown', '--json')
+        self.assertEqual(json.loads(targeted.stdout)['status'], 'unknown')
+        details = fixture.cli('status', '--details')
+        self.assertGreater(len(details.stderr), 16384)
+        self.assertFalse((fixture.root / 'target').exists())
+
     def test_native_dependencies_cross_pages_fail_closed_and_keep_contract_separate(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

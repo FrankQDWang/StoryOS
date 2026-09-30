@@ -95,3 +95,11 @@ def display(output, as_json):
     if len((rendered + '\n').encode()) > MAX_BYTES or len(rendered.splitlines()) > MAX_LINES:
         raise ValueError('Summary exceeds its output limit; use the explicit --details query')
     print(rendered)
+
+
+def query_error(error):
+    print(json.dumps({'version': 2, 'status': 'unknown', 'decision': 'blocked',
+                      'reasonCode': 'query-failed', 'nextAction': None, 'error': short(error),
+                      'errorLines': len(str(error).splitlines()),
+                      'agentHint': 'Repeat this query with --details to read the full error.'}))
+    return 1

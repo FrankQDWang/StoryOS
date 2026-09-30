@@ -256,6 +256,10 @@ def main():
             return execute_plan(root, plan)
         raise ValueError("Unsupported verification action")
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
+        if not args.details and (args.action in {'summary', 'status'} or
+                                 args.action == 'plan' and args.format == 'text'):
+            import verification_summary
+            return verification_summary.query_error(error)
         parser.exit(1, f"{error}\n")
 
 
