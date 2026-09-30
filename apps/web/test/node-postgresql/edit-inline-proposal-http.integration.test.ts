@@ -2206,7 +2206,8 @@ test("canonical Inline boundary input preserves exact target and refuses wrong, 
         assert.deepEqual(result.effect, { kind: "refused", reason: "not_eligible" });
         assert.deepEqual((await getProposal({ ...options, proposalId: retained.proposal_id })).proposal, retained);
         assert.deepEqual(result.receipt.authoritative_commit_ids, []);
-        assert.deepEqual(result.receipt.proposal_revision_ids, []);
+        assert.equal(result.receipt.proposal_revision_id, retained.revision_id);
+        assert.deepEqual(result.receipt.resulting_authoritative_revision_ids, [after.chapter.current_revision.revision_id]);
         assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, after.chapter);
       }
     }
