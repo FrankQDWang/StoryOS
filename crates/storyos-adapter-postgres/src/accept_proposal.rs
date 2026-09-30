@@ -112,7 +112,6 @@ pub(super) struct LoadedProposal {
     current_head_revision_id: Option<String>,
     validated_target_matches_head: bool,
     kind: String,
-    chapter_body: String,
     chapter_blocks: Vec<storyos_core::ManuscriptBlock>,
     manuscript_block_id: String,
     inline_from: Option<u32>,
@@ -142,12 +141,22 @@ impl LoadedProposal {
                 std::io::Error::other("inline Acceptance needs exact Anchors"),
             )));
         };
-        storyos_core::splice_utf16_range(&self.chapter_body, from, to, &self.candidate_text)
+        let mut blocks = self.chapter_blocks.clone();
+        let Some(block) = blocks
+            .iter_mut()
+            .find(|block| block.manuscript_block_id == self.manuscript_block_id)
+        else {
+            return Err(AcceptProposalError::Unavailable(Box::new(
+                std::io::Error::other("inline Acceptance needs its canonical Block"),
+            )));
+        };
+        block.text = storyos_core::splice_utf16_range(&block.text, from, to, &self.candidate_text)
             .map_err(|error| {
                 AcceptProposalError::Unavailable(Box::new(std::io::Error::other(format!(
                     "{error:?}"
                 ))))
-            })
+            })?;
+        Ok(crate::manuscript_block::persist_canonical_bytes(&blocks))
     }
 
     fn composed_block_body(&self, selected_ids: &[String]) -> String {
@@ -184,15 +193,14 @@ impl LoadedProposal {
         ) else {
             return false;
         };
-        let block_text = crate::manuscript_block::blocks_from_stored_payload(
-            &self.chapter_body,
-            std::slice::from_ref(&self.manuscript_block_id),
-        )
-        .into_iter()
-        .next()
-        .map(|block| block.text)
-        .unwrap_or_else(|| self.chapter_body.clone());
-        let units: Vec<u16> = block_text.encode_utf16().collect();
+        let Some(block) = self
+            .chapter_blocks
+            .iter()
+            .find(|block| block.manuscript_block_id == self.manuscript_block_id)
+        else {
+            return false;
+        };
+        let units: Vec<u16> = block.text.encode_utf16().collect();
         let (Ok(start), Ok(end)) = (usize::try_from(from), usize::try_from(to)) else {
             return false;
         };
@@ -204,7 +212,10 @@ impl LoadedProposal {
         };
         storyos_core::proposal_anchor_base_slice_digest(
             &self.manuscript_block_id,
-            "paragraph",
+            match block.block_kind {
+                storyos_core::ManuscriptBlockKind::Paragraph => "paragraph",
+                storyos_core::ManuscriptBlockKind::Heading => "heading",
+            },
             1,
             storyos_core::PROSEMIRROR_TOKEN_UTF16_V1,
             from,
@@ -423,7 +434,6 @@ async fn load_proposal(
         validation_current: row.get(10),
         validated_target_matches_head: row.get(11),
         kind: row.get(12),
-        chapter_body,
         chapter_blocks,
         manuscript_block_id: row.get::<_, Option<String>>(14).unwrap_or_default(),
         inline_from: row
