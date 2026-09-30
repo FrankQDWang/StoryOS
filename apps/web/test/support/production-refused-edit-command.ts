@@ -67,6 +67,9 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   await page.reload();
   const draft = page.locator(`[data-refused-edit-draft="${effect.draft_id}"]`);
   await draft.locator("button[data-draft-copy]").waitFor();
+  await expect(draft.locator("[data-draft-chapter-source]"))
+    .toContainText(`Source chapter: ${chapter.chapter.title}`);
+  await expect(draft.locator("[data-draft-chapter-source]")).toContainText("This edit belongs to the chapter shown here.");
   assert.equal(posts, 1, "response loss and restart must not submit another command");
   await expect(draft.locator("[data-draft-replacement]")).toHaveText(["Complete mixed replacement"]);
   const screenshots = fileURLToPath(new URL("../../../../target/issue-824/screenshots/", import.meta.url));
