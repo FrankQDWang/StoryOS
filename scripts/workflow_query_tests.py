@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -52,12 +53,22 @@ class WorkflowQueryTests(unittest.TestCase):
         self.assertEqual(value['checks'][0]['status'], 'pending')
         self.assertEqual(value['counts'], {'pending': 7, 'ready': 4})
         self.assertEqual(sum(r['checks'] for r in value['blockedReasons']), 7)
-        self.assertEqual(value['nextAction']['argv'], ['make', 'verify-changed', 'BASE=' + fixture.base])
+        self.assertEqual(value['nextAction']['argv'], ['make', 'verify-changed', 'BASE=' + fixture.base,
+                         f"VERIFY_ARGS=--workers {plan['workers']}"])
         page2 = json.loads(fixture.cli('summary', '--page', '2').stdout)
         self.assertEqual(len(value['checks']) + len(page2['checks']), len(plan['checks']))
         for check in value['checks'] + page2['checks']:
             detail = fixture.cli('summary', '--index', str(check['index']), '--details')
             self.assertEqual(json.loads(detail.stdout), plan['checks'][check['index']])
+        single = json.loads(fixture.cli('summary', '--workers', '1').stdout)
+        self.assertEqual(single['nextAction']['argv'][-1], 'VERIFY_ARGS=--workers 1')
+        for name in ('checks', 'nextPage', 'check', 'export'):
+            command = single['inspect'][name].replace('<index>', '0')
+            followed = subprocess.run(shlex.split(command), cwd=fixture.root,
+                                      env=fixture.repo.environment, capture_output=True, text=True)
+            self.assertEqual(followed.returncode, 0, followed.stderr)
+            if name == 'export':
+                self.assertEqual(json.loads(followed.stdout)['digest'], single['planDigest'])
         blocked = json.loads(fixture.cli('summary', '--select', 'blocked').stdout)
         self.assertEqual(blocked['matchingChecks'], 7)
         self.assertNotEqual(fixture.cli('summary', '--page', '3').returncode, 0)

@@ -63,14 +63,15 @@ def summary(value, page=1, selection='all'):
     output['failed_stages'] = [short(v) for v in failures[:PAGE_SIZE]]
     output['omittedFailedStages'] = max(0, len(failures) - PAGE_SIZE)
     base = shlex.quote(output['base'] or 'origin/main')
-    query = f'python3 scripts/verification_plan.py summary --base {base}'
+    workers = f" --workers {plan['workers']}" if type(plan.get('workers')) is int else ''
+    query = f'python3 scripts/verification_plan.py summary --base {base}{workers}'
     if plan.get('digest'):
         query += ' --expected ' + plan['digest']
     output['inspect'] = {'checks': query + ' --select blocked --page 1',
                          'page': query + f' --select {selection} --page <page>',
                          'check': query + ' --index <index> --details',
                          'nextPage': query + f' --select {selection} --page {page + 1}' if page < pages else None,
-                         'export': f'python3 scripts/verification_plan.py plan --base {base} --format json'}
+                         'export': f'python3 scripts/verification_plan.py plan --base {base}{workers} --format json'}
     if 'check' in plan:
         output['inspect'] = {'details': 'python3 scripts/verification.py status --check ' +
                              shlex.quote(plan['check']) + ' --json --details'}

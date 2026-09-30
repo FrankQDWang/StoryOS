@@ -99,7 +99,8 @@ def status(root, plan):
         result['prerequisites'] = pending
         result['next_command'] = 'git status --short' if plan['source']['dirty'] else 'make verify-plan'
     observe = (['python3', 'scripts/verification.py', 'status', '--check', plan['check'], '--json']
-               if 'check' in plan else ['python3', 'scripts/verification_plan.py', 'status', '--base', plan['base']])
+               if 'check' in plan else ['python3', 'scripts/verification_plan.py', 'status', '--base', plan['base'],
+                                        '--workers', str(plan['workers'])])
     return guidance(result, observe, complete=False)
 
 
@@ -139,6 +140,9 @@ def guidance(result, observe, *, complete):
         decision, reason = 'run', ('missing-evidence' if state == 'pending' else
                                    ('targeted-' if 'check' in result['plan'] else 'daily-') + state)
         hint = 'Run the selected checks.' if state == 'pending' else 'Correct the failure, then run the selected checks.'
+    workers = result.get('plan', {}).get('workers')
+    if action and action[:2] in (['make', 'verify-plan'], ['make', 'verify-changed']) and type(workers) is int:
+        action.append(f'VERIFY_ARGS=--workers {workers}')
     result.update(version=2, decision=decision, reasonCode=reason,
                   nextAction={'argv': action} if action else None, agentHint=hint,
                   next_command=shlex.join(action) if action else None)
