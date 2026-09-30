@@ -301,9 +301,26 @@ input:focus-visible,
 .agent-header {
   display: flex;
   align-items: center;
-  padding: 0 29px;
+  padding: 0 52px 0 29px;
   border-bottom: 1px solid var(--line);
   font-family: "Noto Serif SC", "Songti SC", serif;
+}
+
+.agent-header button {
+  margin-left: auto;
+  border: 0;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agent-header button:disabled { opacity: .45; }
+
+.assistant-conversation-boundary {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 .assistant-status {
@@ -325,13 +342,14 @@ input:focus-visible,
 }
 
 .assistant-author-message {
+  margin-left: 20px;
   padding: 12px 14px;
   border-radius: 12px;
   background: var(--hover);
   white-space: pre-wrap;
 }
 
-.assistant-exchange [data-assistant-result] {
+.assistant-result {
   white-space: pre-wrap;
 }
 
