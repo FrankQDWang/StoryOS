@@ -8,7 +8,7 @@
 - Predecessor release-contract revision: `release-responses-memory-2026-09-14-v1`
 - Release baseline owner: [AI-Independent Editor-First Release Baseline and Handoff Criteria](ai-independent-editor-first-release-baseline-and-handoff-criteria.md)
 - Deterministic-method ADR: [ADR 0012](../adr/0012-adopt-deterministic-contract-verification.md)
-- Glossary: [CONTEXT.md](../../CONTEXT.md)
+- Glossary: [GLOSSARY.md](../../GLOSSARY.md)
 
 This document closes the deterministic proof-selection contract after the
 editor-first Release 1 baseline. It does not add product behavior. It names
@@ -222,8 +222,8 @@ that source.
 | `OWN-TOOL` | [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48), the ToolSpec/capability/approval owner, including [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md) for separate whole-operation hosted admission. Tool execution is explicitly absent from Stages 3 and 4. |
 | `OWN-MCP` | [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48), the MCP server trust owner. MCP execution is explicitly absent from Stages 3 and 4. |
 | `OWN-APP` | [Specify Transcript and MCP App Lifecycle Semantics](https://github.com/FrankQDWang/StoryOS/issues/53) and [ADR 0002](../adr/0002-specify-transcript-and-mcp-app-lifecycle-semantics.md), including resources, Instances, Prepared Receipts, actions, and safe replay. |
-| `OWN-SKILL` | [Specify SkillPackage and Task-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/49) and [CONTEXT.md](../../CONTEXT.md), including standard packages, exact snapshots, progressive loading, composition, and outcomes. |
-| `OWN-SUBRUN` | [Specify Subrun Control-Plane, Mailbox, and Observability Semantics](https://github.com/FrankQDWang/StoryOS/issues/63) and [CONTEXT.md](../../CONTEXT.md), including parent binding, budgets, Mailbox, joins, and recovery. |
+| `OWN-SKILL` | [Specify SkillPackage and Task-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/49) and [GLOSSARY.md](../../GLOSSARY.md), including standard packages, exact snapshots, progressive loading, composition, and outcomes. |
+| `OWN-SUBRUN` | [Specify Subrun Control-Plane, Mailbox, and Observability Semantics](https://github.com/FrankQDWang/StoryOS/issues/63) and [GLOSSARY.md](../../GLOSSARY.md), including parent binding, budgets, Mailbox, joins, and recovery. |
 | `OWN-ARTIFACT` | [Artifact Domain Model](artifact-domain-model.md), including typed Artifacts and the separate authority and operational-record boundaries. |
 | `OWN-STAGE` | Release-stage and handoff owner `OWN-REL`; this key is used when a row checks stage evidence sequencing rather than a domain transition. |
 | `OWN-MEASURE` | A named owner-adopted measurement contract, including [Measure the Representative Writing-Path Performance and Storage-Growth Envelope](https://github.com/FrankQDWang/StoryOS/issues/76) where applicable. No measurement row may invent a target value. |
@@ -1168,7 +1168,7 @@ selections and exclusions remain unchanged.
 
 This contract consumes the exact-baseline versions of:
 
-- [CONTEXT.md](../../CONTEXT.md), the live [Map the StoryOS Editor-First Product and Production Delivery Contract](https://github.com/FrankQDWang/StoryOS/issues/1), [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62), [Create and Lock the First Editor-First Implementation Issue](https://github.com/FrankQDWang/StoryOS/issues/77), and [issue-tracker instructions](../agents/issue-tracker.md);
+- [GLOSSARY.md](../../GLOSSARY.md), the live [Map the StoryOS Editor-First Product and Production Delivery Contract](https://github.com/FrankQDWang/StoryOS/issues/1), [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62), [Create and Lock the First Editor-First Implementation Issue](https://github.com/FrankQDWang/StoryOS/issues/77), and [issue-tracker instructions](../agents/issue-tracker.md);
 - [AI-Independent Editor-First Release Baseline and Handoff Criteria](ai-independent-editor-first-release-baseline-and-handoff-criteria.md);
 - [ADR 0012](../adr/0012-adopt-deterministic-contract-verification.md);
 - the owner contracts listed in section 4;

@@ -6,7 +6,7 @@
 - Exact planning baseline: `main@38552dd3ecaf76dace80ff8d7f80caa381972ac0`
 - Exact planning tree: `29753b24816dcfd3b778309836531bc25f998ed1`
 - Product goal: [GOAL.md](../../GOAL.md)
-- Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
+- Canonical glossary: [GLOSSARY.md](../../GLOSSARY.md)
 - Issue execution rules: [Issue-Tracker Execution Contract](../agents/issue-tracker.md)
 
 This document owns the Release 1 editor-first delivery baseline, the author

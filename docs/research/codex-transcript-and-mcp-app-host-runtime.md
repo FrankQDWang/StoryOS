@@ -39,7 +39,7 @@ This report uses three deliberately separated kinds of evidence:
   [MCP Apps overview](https://modelcontextprotocol.io/extensions/apps/overview).
 - **StoryOS conclusions** are design inferences, not claims about either upstream.
   They are checked against [ADR-0001](../adr/0001-separate-authoritative-state-artifacts-and-operational-records.md),
-  the [domain context](../../CONTEXT.md), and the already-audited
+  the [domain context](../../GLOSSARY.md), and the already-audited
   [MCP Apps host obligations report](mcp-apps-host-obligations.md) and its
   [source audit](mcp-apps-host-obligations-source-audit.md).
 

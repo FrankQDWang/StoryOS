@@ -3,7 +3,7 @@
 - Status: deferred; outside the MVP.
 - Contract revision: `eval-mvp-boundary-2026-08-29-v1`.
 - Owner: [Record the Deferred Eval Observation Boundary](https://github.com/FrankQDWang/StoryOS/issues/61).
-- Canonical glossary: [CONTEXT.md](../../CONTEXT.md).
+- Canonical glossary: [GLOSSARY.md](../../GLOSSARY.md).
 
 ## Current boundary
 
