@@ -65,6 +65,7 @@ async function writePassage(
   fetchImpl: typeof fetch,
   projectId: string,
   ns: string,
+  text = PROSE,
 ) {
   const sessionRequest: CreateEditorSessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1",
@@ -98,7 +99,7 @@ async function writePassage(
     completed_intent_record_id: id(`${ns}5`),
     local_intent_sequence: "1",
     author_edit_units: [{
-      normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text: PROSE }],
+      normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text }],
       selection_snapshot: {
         coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 0,
       },
@@ -1057,6 +1058,104 @@ test("inline Proposal uses exact Anchors, keeps source and candidate distinct, a
     );
   } finally {
     await stopRealServer(started.server);
+  }
+});
+
+test.each(["paragraph", "heading"] as const)("inline Acceptance preserves complete two-Block state with a %s sibling after response loss and restart", async (siblingKind) => {
+  let started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = siblingKind === "paragraph" ? "f865a" : "f865b";
+    const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Canonical Inline Acceptance", `${ns}2`);
+    const siblingText = "Second paragraph. 😀";
+    const writer = await writePassage(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, `${ns}3`, PROSE + siblingText);
+    const options = () => ({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    const initial = await getChapter(options());
+    const firstBlock = initial.chapter.current_revision.blocks[0]!;
+    const siblingId = id(`${ns}41`);
+    const split = replaceUnit(0, 0, "", writer, `${ns}4`, id(`${ns}ff1`));
+    split.expected_proposal_head_revision_ids = [];
+    split.observed_ownership_partition = "authoritative";
+    split.author_edit_units = [{ normalized_primitives: [
+      { kind: "split_block", manuscript_block_id: firstBlock.manuscript_block_id,
+        offset: PROSE.length, new_manuscript_block_id: siblingId },
+      { kind: "retype_block", manuscript_block_id: siblingId, block_kind: siblingKind },
+    ], selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+      from: PROSE.length, to: PROSE.length } }];
+    const divided = await sendMixed(started.baseUrl, prepared, split, id(`${ns}42`));
+    if (divided.effect.kind !== "authoritative_applied") throw new Error("expected split");
+    const before = await getChapter(options());
+    assert.deepEqual(before.chapter.current_revision.blocks, [
+      { ...firstBlock, text: PROSE },
+      { manuscript_block_id: siblingId, block_kind: siblingKind, text: siblingText },
+    ]);
+    const run = await admitPhrase(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, id(`${ns}51`));
+    if (run.decision.kind !== "prose_change" || run.decision.opened_proposal.kind !== "present")
+      throw new Error("expected inline Proposal");
+    const proposalId = run.decision.opened_proposal.proposal_id;
+    const opened = await getProposal({ ...options(), proposalId });
+    assert.equal(opened.proposal.manuscript_block_id, firstBlock.manuscript_block_id);
+    assert.equal(opened.proposal.validation, "valid");
+    if (opened.proposal.validation_receipt.kind !== "present") throw new Error("expected receipt");
+    const request: AcceptProposalRequest = {
+      command_schema: "storyos.command.accept-proposal.request.v1",
+      accept_proposal_input: { ...BINDING, correlation_id: id(`${ns}61`),
+        proposal_revision_id: opened.proposal.revision_id,
+        validation_receipt_id: opened.proposal.validation_receipt.validation_receipt_id,
+        selected_operation_ids: [opened.proposal.operation_id],
+        expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
+        editor_session_id: writer.session.editor_session.editor_session_id },
+    };
+    const digest = await digestAcceptProposal(request);
+    let originalNonce = "";
+    let original: Awaited<ReturnType<typeof acceptProposal>> | undefined;
+    const lossyFetch: typeof fetch = async (input, init) => {
+      const response = await prepared.fetchImpl(input, init);
+      if (init?.method === "POST" && String(input).endsWith("/acceptances")) {
+        assert.equal(response.status, 200, await response.clone().text());
+        original = await response.clone().json();
+        await stopRealServer(started.server);
+        throw new Error("Controlled Acceptance response loss");
+      }
+      return response;
+    };
+    await assert.rejects(() => challenged(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, "POST", "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
+      request.command_schema, digest, id(`${ns}62`), (antiForgery) => {
+        originalNonce = antiForgery;
+        return acceptProposal({ ...options(), proposalId, fetchImpl: lossyFetch,
+          idempotencyKey: id(`${ns}62`), antiForgery, request });
+      }), /Controlled Acceptance response loss/);
+    assert.equal(original?.effect.kind, "applied", "valid canonical two-Block inline Acceptance must apply");
+    if (original?.effect.kind !== "applied") throw new Error("expected applied");
+    const origin = new URL(started.baseUrl);
+    started = await startRealServer(`${origin.hostname}:${origin.port}`);
+    prepared.fetchImpl = browserFetch(started.baseUrl, "session-a");
+    const replay = () => acceptProposal({ ...options(), proposalId,
+      idempotencyKey: id(`${ns}62`), antiForgery: originalNonce, request });
+    assert.deepEqual(await replay(), original);
+    const after = await getChapter(options());
+    assert.deepEqual(after.chapter, { ...before.chapter, current_revision: {
+      ...original.effect.authoritative_revision,
+      body: "Guard the narrator tone in this passage.\nSecond paragraph. 😀",
+      blocks: [{ ...firstBlock, text: "Guard the narrator tone in this passage." },
+        { manuscript_block_id: siblingId, block_kind: siblingKind, text: siblingText }],
+    } });
+    assert.deepEqual(await Promise.all([replay(), replay()]), [original, original]);
+    assert.deepEqual((await getChapter(options())).chapter, after.chapter);
+    const settled = await getProposal({ ...options(), proposalId });
+    assert.equal(settled.proposal.operation_resolution, "applied");
+    assert.equal(settled.proposal.reservation_state, "resolved");
+    assert.equal(settled.proposal.revision_id, opened.proposal.revision_id);
+    await assert.rejects(() => getProposal({ ...options(), proposalId,
+      fetchImpl: browserFetch(started.baseUrl, "session-b") }),
+      (error) => requireStoryOSProtocolError(error).status === 404);
+  } finally {
+    if (started.server.exitCode === null && started.server.signalCode === null)
+      await stopRealServer(started.server);
   }
 });
 
