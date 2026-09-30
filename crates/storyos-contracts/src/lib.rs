@@ -90,6 +90,7 @@ mod stage1_handoff;
 mod stage1_provenance;
 mod stage1_selection;
 mod stage2_crosswalk;
+mod stage3_crosswalk;
 mod web_assets;
 
 pub use release1_project_activity::ProjectActivityKind;
@@ -380,6 +381,10 @@ pub use stage1_crosswalk::{
 pub use stage2_crosswalk::{
     GENERATED_STAGE2_CROSSWALK_PATH, check_stage2_crosswalk, generate_stage2_crosswalk,
     write_stage2_crosswalk,
+};
+pub use stage3_crosswalk::{
+    GENERATED_STAGE3_CROSSWALK_PATH, check_stage3_crosswalk, generate_stage3_crosswalk,
+    write_stage3_crosswalk,
 };
 
 pub use release1_refused_edit_draft::{
