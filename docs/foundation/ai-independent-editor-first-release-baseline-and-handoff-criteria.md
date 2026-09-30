@@ -345,7 +345,7 @@ the complete editable Proposal experience.
 
 **Entry condition.** Stage 1 has passed its author journey and mandatory
 evidence on one exact main. A later implementation issue may be created only
-from that resulting main through the serial Wayfinder process; this document
+from that resulting main through the approved [Issue tracker](../agents/issue-tracker.md) process; this document
 does not create it.
 
 **Author journey S2-JRN-001.**
@@ -683,7 +683,7 @@ ownership from cycling:
 | HND-003 | Stage implementation evidence | The applicable stage issue runs the evidence obligations against the exact implementation baseline and records complete, attributable evidence. | The stage is incomplete; the issue cannot claim release. |
 | HND-004 | Stage release | The stage author journey passes, every mandatory obligation passes, and the resulting main is the next stage's exact input. | The current stage remains the active implementation frontier; no next stage starts. |
 | HND-005 | Controlled-cloud deployment gate | After the first four stages, the same contracts pass deployment identity, security, operational recovery, cache refresh, same-release activation, and upgrade checks for the exact released local stage selected for the controlled domain. Later capabilities are not implicitly included. | Controlled-cloud deployment is blocked; local AI-independent editor claims do not become invalid solely because cloud deployment is later. |
-| HND-006 | Serial issue direction | Release requirements flow from this owner to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), then to the relevant stage specification and its approved child graph. The original first-implementation handoff stays closed as historical evidence. | This owner does not select proof mechanics; downstream owners cannot infer scope or bypass the approved graph. |
+| HND-006 | Issue handoff direction | Release requirements flow from this owner to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), then to the relevant stage specification and its approved child graph. The original first-implementation handoff stays closed as historical evidence. | This owner does not select proof mechanics; downstream owners cannot infer scope or bypass the approved graph. |
 
 Planning closure is not stage implementation evidence. A current contract can
 be ready for the implementation handoff while every future stage test remains
@@ -699,8 +699,10 @@ settings, restriction, cleanup, and restore obligations. Then `/to-spec` refresh
 the existing Stage 3, 4, 5, and 7 parent specifications, and `/to-tickets` presents
 any changed child breakdown and native blockers for approval before publication.
 Reuse current owners and stable Requirement IDs. No old child body can stand in
-for that alignment. All Stage 3 and later product implementation remains
-EXECUTION HOLD until the author explicitly resumes it after the gates pass.
+for that alignment. The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
+owns its accepted implementation handoff and pending final release evidence.
+Stage 4 and later remain on EXECUTION HOLD until their gates pass and the
+author explicitly resumes execution.
 
 ## 10. Explicit non-scope of this contract
 

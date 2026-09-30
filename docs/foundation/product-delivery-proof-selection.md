@@ -431,7 +431,9 @@ Before planning handoff, the planning owner and an independent reviewer:
    behavior or fixes a current defect. Remove speculative infrastructure.
    Preserve closed owners and their evidence when the existing contract fits.
 4. Check the proposed list against native parent/blocker state, actual input
-   dependencies, no cycles, and the published serial priority. A parent
+   dependencies, no cycles, and the applicable product stage release gates. Use
+   the [Issue tracker](../agents/issue-tracker.md) for parallel implementation
+   of independent dependency-ready tickets. A parent
    specification need not close before its own children can execute.
 5. Record approval of the exact breakdown, current body revisions, and the
    read-only audit. No new or split child is published as executable before
@@ -445,11 +447,12 @@ The current proof revision hands off to the existing [Stage 3](https://github.co
 [Stage 4](https://github.com/FrankQDWang/StoryOS/issues/362),
 [Stage 5](https://github.com/FrankQDWang/StoryOS/issues/363), and
 [Stage 7](https://github.com/FrankQDWang/StoryOS/issues/365) parent specifications.
-Their current bodies and children still require `/to-spec` alignment, then
-`/to-tickets` review of any changed breakdown and native blocking edges before
-publication. Reuse current owners and closed prerequisites. This proof decision
-does not claim that graph alignment, global planning closure, or any product
-stage has passed. Stage 3 and later implementation remains EXECUTION HOLD.
+The current Stage 3 specification owns its accepted implementation handoff
+and pending final release evidence. Any later change to a specification or
+child graph requires `/to-spec` alignment and `/to-tickets` review of the
+changed breakdown and native blocking edges before publication. Reuse current
+owners and closed prerequisites. Stage 4 and later remain on EXECUTION HOLD.
+This proof contract does not claim that any product stage has passed.
 
 Use the existing repository checks plus this bounded source/graph review.
 The historical Stage 1 checker keeps its original inputs and claim ceiling.
