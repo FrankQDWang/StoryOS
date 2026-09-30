@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Wayfinder resolution: [Define the Authoritative-State and Artifact Domain Vocabulary](https://github.com/FrankQDWang/StoryOS/issues/44)
-- Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
+- Canonical glossary: [`GLOSSARY.md`](../../GLOSSARY.md)
 - Related foundation specification: [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md)
 - Context and disclosure refinement: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Manuscript/Proposal refinement: [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md)

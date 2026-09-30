@@ -48,7 +48,7 @@ policy or prototype decisions.
 
 The audit treats these repository artifacts as settled local authority:
 
-- [`CONTEXT.md`](../../CONTEXT.md), especially `Authoritative Revision`,
+- [`GLOSSARY.md`](../../GLOSSARY.md), especially `Authoritative Revision`,
   `Authoritative Commit`, `Proposal`, `Proposal Operation`, `Acceptance`, and
   `Undo Acceptance`;
 - [ADR 0001](../adr/0001-separate-authoritative-state-artifacts-and-operational-records.md);

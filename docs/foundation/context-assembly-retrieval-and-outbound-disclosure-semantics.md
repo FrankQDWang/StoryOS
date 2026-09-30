@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Wayfinder resolution: [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54)
-- Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
+- Canonical glossary: [GLOSSARY.md](../../GLOSSARY.md)
 - Parent domain model: [Artifact and Authoritative-State Domain Model](artifact-domain-model.md)
 - Memory and evidence boundary: [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md)
 - Run boundary: [Persistent Agent Run and Orchestration Semantics](https://github.com/FrankQDWang/StoryOS/issues/47)

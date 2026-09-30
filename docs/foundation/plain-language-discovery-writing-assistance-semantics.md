@@ -3,7 +3,7 @@
 - Status: current
 - Canonical issue: [Define Plain-Language Discovery-Writing Assistance Semantics](https://github.com/FrankQDWang/StoryOS/issues/75)
 - Product goal: [GOAL.md](../../GOAL.md)
-- Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
+- Canonical glossary: [GLOSSARY.md](../../GLOSSARY.md)
 - Core and Proposal owner: [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md)
 - Editor continuity owner: [Web Editor Session, Synchronization, and Recovery Semantics](web-editor-session-synchronization-and-recovery-semantics.md)
 - Author-command owner: [Author Command Admission](author-command-admission.md)
