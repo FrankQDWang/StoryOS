@@ -290,7 +290,9 @@ export function BlockProposalDisplay({
     const inlineAnchor = proposal === undefined ? undefined
       : inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId);
     const conditionVisible = condition !== "absent" || proposal?.validation === "invalid"
-      || proposal?.validation === "pending";
+      || proposal?.validation === "pending"
+      || proposal?.kind === "inline_edit" && proposal.closure === "open"
+        && operation?.resolution === "pending" && operation.reservation_state === "unresolved";
     if (!anchored || proposal === undefined || operation === undefined
       || (!baseMatches && !conditionVisible)) {
       unavailable.push({ locator, proposal });
@@ -355,6 +357,16 @@ export function BlockProposalDisplay({
       localPending: candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`]
         !== undefined,
     });
+  }
+
+  const anchorWorkspace = editorProps.persistWorkspace;
+  if (anchorWorkspace !== undefined) {
+    anchorWorkspace.inlineProposalAnchors = reads.flatMap(({ proposal }) =>
+      proposal?.chapter_id === chapterId && proposal.kind === "inline_edit"
+        && expectedHeads.length === 1 && expectedHeads[0] === proposal.revision_id
+        && inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId) !== undefined
+        ? proposal.anchors.map(({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest }) =>
+          ({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest })) : []);
   }
 
   const acceptDisplayed = (target: {

@@ -459,3 +459,8 @@ input:focus-visible,
 
 .inline-proposal { background: var(--proposal-bg, #eeece5); border-bottom: 1px solid #b9b5a6; padding: 2px 0; }
 .inline-proposal-controls .block-proposal-text { display: none; }
+
+.manuscript-editor .inline-proposal-controls { display: flex; flex-wrap: wrap; column-gap: 24px; padding: 0; border: 0; background: transparent; }
+.manuscript-editor .inline-proposal-controls .block-proposal-label { flex-basis: 100%; }
+.manuscript-editor .inline-proposal-controls button { border: 0; background: transparent; display: inline-flex; align-items: center; gap: 7px; padding: 5px 4px; color: #5b5953; cursor: pointer; font-size: 14px; }
+.manuscript-editor .inline-proposal-controls button:hover:not(:disabled) { color: #171612; }

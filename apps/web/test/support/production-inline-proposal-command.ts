@@ -220,11 +220,18 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.locator(`[data-proposal-id="${second.proposalId}"][data-proposal-eligibility="eligible"]`).waitFor();
     let mixedRequest: ApplyAuthorEditRequest | undefined;
     let mixedResponse: unknown;
+    let edgeLossArmed = false;
+    const edgeRequests: { key: string | undefined; body: string | null }[] = [];
     await page.route((url) => url.pathname.endsWith("/author-edits"), async (route) => {
       mixedRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
       const response = await route.fetch();
       mixedResponse = await response.json();
-      await route.fulfill({ response });
+      if (edgeLossArmed || edgeRequests.length > 0) {
+        edgeRequests.push({ key: (await route.request().allHeaders())["idempotency-key"],
+          body: route.request().postData() });
+      }
+      if (edgeLossArmed) { edgeLossArmed = false; await route.abort("failed"); }
+      else await route.fulfill({ response });
     });
     await editor.focus();
     await secondCandidate.evaluate((element) => {
@@ -291,6 +298,8 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
         window.getSelection()?.setBaseAndExtent(element.firstChild!, offset, element.firstChild!, offset);
         document.dispatchEvent(new Event("selectionchange"));
       }, edge);
+      edgeRequests.length = 0;
+      edgeLossArmed = edge === "start";
       await page.keyboard.insertText("!");
       const expectedText = edge === "start" ? "Guard the !narrator voice in this passage."
         : "Guard the narrator voice! in this passage.";
@@ -321,12 +330,16 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
         const session = mixedRequest === undefined ? undefined : await getEditorSession({ ...options,
           editorSessionId: mixedRequest.editor_session_id });
         await writeFile(join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-facts.json`),
-          JSON.stringify({ request: mixedRequest, response: mixedResponse, session, journal }, null, 2));
+          JSON.stringify({ request: mixedRequest, response: mixedResponse, edgeRequests, session, journal }, null, 2));
       };
       await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor().catch(async (error) => {
         await retainEdgeFacts(); throw error;
       });
       await retainEdgeFacts();
+      if (edge === "start") {
+        assert.ok(edgeRequests.length >= 1);
+        assert.ok(edgeRequests.every((request) => JSON.stringify(request) === JSON.stringify(edgeRequests[0])));
+      }
       assert.deepEqual(mixedRequest?.expected_proposal_head_revision_ids, [opened.proposal.revision_id]);
       assert.equal(mixedRequest?.proposal_target, undefined);
       const afterEdge = (await getProposal({ ...options, proposalId: opened.proposalId })).proposal;
