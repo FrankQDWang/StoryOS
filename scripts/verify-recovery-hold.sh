@@ -201,16 +201,17 @@ docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
   -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
-STORYOS_VITEST_FILE_ORDER=test/node-postgresql/accept-proposal-http.integration.test.ts:test/node-postgresql/acceptance-refusal-http.integration.test.ts: \
+STORYOS_VITEST_FILE_ORDER=test/node-postgresql/accept-proposal-http.integration.test.ts:test/node-postgresql/acceptance-refusal-http.integration.test.ts:test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts: \
   pnpm --dir apps/web exec vitest run --project node-postgresql \
     test/node-postgresql/accept-proposal-http.integration.test.ts \
-    test/node-postgresql/acceptance-refusal-http.integration.test.ts
+    test/node-postgresql/acceptance-refusal-http.integration.test.ts \
+    test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts
 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
-# Fixture-only records three acceptProposal refusals. Mixed also records the production conflicted Proposal acceptance.
+# Both modes retain the two partial-Acceptance histories. Mixed also retains the production Conflict.
 if [ "$recovery_drill" = "mixed" ]; then
-  acceptance_condition_count=4
+  acceptance_condition_count=6
 else
-  acceptance_condition_count=3
+  acceptance_condition_count=5
 fi
 acceptance_before=$(node scripts/inspect-acceptance-conditions.mjs "$primary" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")
 stop_recovery_drill_server
