@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Wayfinder resolution: [Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51)
-- Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
+- Canonical glossary: [`GLOSSARY.md`](../../GLOSSARY.md)
 - Parent domain model: [Artifact and Authoritative-State Domain Model](artifact-domain-model.md)
 - Context and disclosure owner: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Authority decision: [ADR 0001](../adr/0001-separate-authoritative-state-artifacts-and-operational-records.md)

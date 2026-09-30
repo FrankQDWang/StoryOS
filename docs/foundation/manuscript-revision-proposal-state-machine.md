@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Wayfinder resolution: [Specify the Manuscript Revision and Proposal State Machine](https://github.com/FrankQDWang/StoryOS/issues/46)
-- Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
+- Canonical glossary: [`GLOSSARY.md`](../../GLOSSARY.md)
 - Parent domain model: [Artifact and Authoritative-State Domain Model](artifact-domain-model.md)
 - Ownership and deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Research input: [Manuscript revision and Proposal state-machine source audit](../research/manuscript-revision-proposal-state-machine-source-audit.md)
@@ -215,7 +215,7 @@ Physical inline-versus-blob placement is not part of this envelope.
 ### 4.2 Authoritative object identity
 
 Stable top-level manuscript block identity follows the canonical split, join,
-transfer, retype, and restoration rules in `CONTEXT.md`. Equality of text never
+transfer, retype, and restoration rules in `GLOSSARY.md`. Equality of text never
 proves object identity. Authoritative Revision identity and payload digest never
 replace the stable manuscript object or block identity.
 

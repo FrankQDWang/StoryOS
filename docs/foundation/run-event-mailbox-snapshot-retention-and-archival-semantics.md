@@ -3,7 +3,7 @@
 - Status: current
 - Contract revision: `release1-retention-contract-2026-09-14-generated-memory`
 - Wayfinder resolution: [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64)
-- Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
+- Canonical glossary: [GLOSSARY.md](../../GLOSSARY.md)
 - Storage and isolation boundary: [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md)
 - Persistence family source of truth: [Release 1 persistence catalog](postgresql-release-1-persistence-catalog.json)
 - Protocol boundary: [Versioned Command, Query, Artifact, and Event Protocol](versioned-command-query-artifact-event-protocol.md)
