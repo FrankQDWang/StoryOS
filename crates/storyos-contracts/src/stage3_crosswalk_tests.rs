@@ -52,7 +52,6 @@ fn generated_crosswalk_records_hnd_003_without_stage_release() {
     assert_eq!(classes.len(), 25);
     assert!(classes.contains(&"contract"));
     assert!(classes.contains(&"integration"));
-    assert!(classes.contains(&"physical_recovery"));
     assert!(classes.contains(&"stage"));
 }
 

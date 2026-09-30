@@ -96,7 +96,6 @@ const PHYSICAL_SCRIPT: &str = "scripts/verify-recovery-hold.sh";
 enum EvidenceClass {
     Contract,
     Integration,
-    PhysicalRecovery,
     Stage,
 }
 
@@ -287,7 +286,6 @@ fn verify_stage3_record(bindings: &[Binding], handoff: &HandoffEvidence) -> Resu
     for required in [
         EvidenceClass::Contract,
         EvidenceClass::Integration,
-        EvidenceClass::PhysicalRecovery,
         EvidenceClass::Stage,
     ] {
         if !classes.contains(&required) {

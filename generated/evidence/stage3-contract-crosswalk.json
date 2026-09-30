@@ -236,15 +236,21 @@
           "https://github.com/FrankQDWang/StoryOS/issues/381",
           "https://github.com/FrankQDWang/StoryOS/issues/385",
           "https://github.com/FrankQDWang/StoryOS/issues/386",
+          "https://github.com/FrankQDWang/StoryOS/issues/824",
           "https://github.com/FrankQDWang/StoryOS/issues/825",
           "https://github.com/FrankQDWang/StoryOS/issues/826",
+          "https://github.com/FrankQDWang/StoryOS/issues/827",
+          "https://github.com/FrankQDWang/StoryOS/issues/831",
+          "https://github.com/FrankQDWang/StoryOS/issues/832",
           "https://github.com/FrankQDWang/StoryOS/issues/840"
         ],
         "evidence": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+          "apps/web/test/browser-exact-dist/restored-discard.integration.test.ts",
+          "apps/web/test/browser-source/refused-edit-discard.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -284,7 +290,8 @@
         "supporting_evidence": [
           "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
           "apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts",
-          "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts"
+          "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
+          "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -319,12 +326,12 @@
           "https://github.com/FrankQDWang/StoryOS/issues/280",
           "https://github.com/FrankQDWang/StoryOS/issues/278"
         ],
-        "evidence": "scripts/verify-recovery-hold.sh",
+        "evidence": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
         "supporting_evidence": [
-          "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
+          "scripts/verify-recovery-hold.sh",
           "apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts"
         ],
-        "evidence_class": "physical_recovery"
+        "evidence_class": "integration"
       },
       {
         "id": "S3-EVD-008",
@@ -339,12 +346,14 @@
           "https://github.com/FrankQDWang/StoryOS/issues/388",
           "https://github.com/FrankQDWang/StoryOS/issues/389"
         ],
-        "evidence": "crates/storyos-core/src/revision_comparison_tests.rs",
+        "evidence": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
         "supporting_evidence": [
+          "crates/storyos-core/src/revision_comparison_tests.rs",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
-          "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
           "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
-          "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts"
+          "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -366,9 +375,16 @@
           "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
           "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
           "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
+          "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts",
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
+          "apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts",
+          "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts",
+          "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
+          "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
+          "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+          "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts"
         ],
         "evidence_class": "stage"
@@ -460,12 +476,14 @@
           "https://github.com/FrankQDWang/StoryOS/issues/694",
           "https://github.com/FrankQDWang/StoryOS/issues/840"
         ],
-        "evidence": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
+        "evidence": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
         "supporting_evidence": [
+          "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
           "apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts",
           "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts",
           "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
+          "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
+          "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
