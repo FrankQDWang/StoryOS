@@ -1,4 +1,5 @@
 import { RefusedEditRetryControls } from "./refused-edit-retry-controls.tsx";
+import { RefusedDraftChapterSource } from "./refused-draft-chapter-source.tsx";
 import { retryRefusedEdit, type RetryTargetRead } from "./refused-edit-retry.ts";
 import { expandWholeDraft } from "./refused-edit-expansion.ts";
 import type { DraftPayloadPosition } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -191,6 +192,11 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
         <span>Preserved edit</span>
         <h2>This edit was not applied</h2>
         <p>The manuscript and proposal were not changed by this edit. Your complete text is preserved below.</p>
+        <RefusedDraftChapterSource scope={scope} sourceChapterId={draft.payload.chapter_id}
+          currentChapterId={workspace?.session.project_scope.owner_user_id === scope.owner_user_id
+            && workspace.session.project_scope.project_id === scope.project_id
+            ? workspace.session.base_snapshot.chapter_id : undefined}
+          baseUrl={baseUrl} fetchImpl={fetchImpl} />
       </header>
       <div className="editor-recovery-copy"><span>Full edit</span>
       {unit.normalized_primitives.flatMap((primitive) => primitive.kind === "replace_structured_selection"
