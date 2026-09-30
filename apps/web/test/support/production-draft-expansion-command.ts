@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import type { ExpandRefusedEditDraftResponse, RefusedEditDraftInspect }
@@ -63,7 +64,12 @@ export async function verifyProductionDraftExpansion(page: Page, projectId: stri
     await restart(); await page.reload();
     await expect(proposal.locator("[data-proposal-structured-block]")).toHaveText(["mixed"]);
     assert.equal(posts, 2, "Recovery retries one frozen command identity");
+    const sourceText = await proposal.innerText();
+    assert.ok(!sourceText.includes(draft.draft_id) && !sourceText.includes(draft.draft_revision_id),
+      "The Proposal shows its preserved source without technical Draft bindings");
     assert.deepEqual((await readProductionJournal(page, projectId)).metadata!.find((row) => row.key === frozen!.key), frozen);
+    await proposal.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: fileURLToPath(new URL("../../../../target/issue-824/screenshots/draft-proposal.png", import.meta.url)) });
     const closed = await page.evaluate(async ({ projectId, draftId }) => {
       const reply = await fetch(`/api/v1/projects/${projectId}/refused-edit-drafts/${draftId}`);
       if (!reply.ok) throw new Error(`Expanded source read ${reply.status}`); return (await reply.json()).draft;

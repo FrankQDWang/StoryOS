@@ -4,6 +4,8 @@ import { verifyProductionRetryReservationRace } from "./production-draft-retry-r
 import { verifyProductionDraftExpansion } from "./production-draft-expansion-command.ts";
 import { queryStoryOSPostgres } from "./node-integration.ts";
 import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
 import { createHash } from "node:crypto";
 import type { BrowserContext, Page } from "playwright";
@@ -13,6 +15,7 @@ import type { ApplyAuthorEditRequest, ApplyAuthorEditResponse, BlockProposalInsp
 export async function verifyProductionRefusedEdit({ page, context, origin, projectId, chapter,
   proposal, restart }: { page: Page; context: BrowserContext; origin: string; projectId: string;
   chapter: GetChapterResponse; proposal: BlockProposalInspect; restart: () => Promise<void> }) {
+  await page.setViewportSize({ width: 1487, height: 1058 });
   const blocks = chapter.chapter.current_revision.blocks;
   const right = blocks[1]!;
   let posts = 0;
@@ -65,6 +68,19 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   const draft = page.locator(`[data-refused-edit-draft="${effect.draft_id}"]`);
   await draft.locator("button[data-draft-copy]").waitFor();
   assert.equal(posts, 1, "response loss and restart must not submit another command");
+  await expect(draft.locator("[data-draft-replacement]")).toHaveText(["Complete mixed replacement"]);
+  const screenshots = fileURLToPath(new URL("../../../../target/issue-824/screenshots/", import.meta.url));
+  await mkdir(screenshots, { recursive: true });
+  await draft.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${screenshots}/preserved-edit.png` });
+  await draft.locator("summary").click();
+  const recoveryText = await draft.innerText();
+  assert.ok(!recoveryText.includes(effect.draft_id) && !recoveryText.includes(key),
+    "Author recovery must show retained writing without Draft or command identity");
+  assert.ok(recoveryText.includes(proposal.candidate_text) && recoveryText.includes(right.text),
+    "The original selected source text remains readable in full");
+  await page.screenshot({ path: `${screenshots}/original-text.png` });
+  await draft.locator("summary").click();
   const read = async (): Promise<GetRefusedEditDraftResponse> => page.evaluate(async ({ projectId, draftId }) => {
     const result = await fetch(`/api/v1/projects/${projectId}/refused-edit-drafts/${draftId}`);
     if (!result.ok) throw new Error(`Draft read ${result.status}`);
@@ -165,7 +181,9 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   try {
   await draft.locator("button[data-draft-retry]").click();
   const range = draft.locator('textarea[name="draft-range-text"]');
-  await range.dblclick();
+  await range.click();
+  await range.evaluate((field) => (field as HTMLTextAreaElement).setSelectionRange(9, 14));
+  await page.evaluate(() => document.dispatchEvent(new Event("selectionchange")));
   assert.deepEqual(await range.evaluate((field) => ({
     from: (field as HTMLTextAreaElement).selectionStart, to: (field as HTMLTextAreaElement).selectionEnd,
     text: (field as HTMLTextAreaElement).value.slice((field as HTMLTextAreaElement).selectionStart,
@@ -204,6 +222,12 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   assert.deepEqual(replacement.draft.payload.author_edit_units, retryRequest.author_edit_units);
   assert.deepEqual(replacement.draft.replacement_provenance, retryResponse.effect.replacement_provenance);
   assert.equal(replacement.draft.closure, "open");
+  const replacementText = await next.innerText();
+  assert.ok(!replacementText.includes(retained.draft.draft_id)
+    && !replacementText.includes(retryResponse.effect.creation_event_id),
+    "Replacement recovery keeps source and creation identities internal");
+  await next.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${screenshots}/replacement-edit.png` });
   assert.deepEqual((await read()).draft.payload, retained.draft.payload);
   await next.locator("button[data-draft-copy]").click(); await next.getByText("Copied").waitFor();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "mixed");

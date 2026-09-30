@@ -758,8 +758,16 @@ export function BlockProposalDisplay({
         refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold} onProjection={editorProps.onProjection}
         onResult={() => setSettlementRefresh((value) => value + 1)} />
       {reads.flatMap(({ proposal }) => proposal?.source.kind === "refused_edit_draft" ? [
-        <section key={proposal.proposal_id} data-proposal-id={proposal.proposal_id} aria-label="Draft Proposal">
-          <p>Source Draft: {proposal.source.draft_id}. Revision: {proposal.source.draft_revision_id}. Status: {proposal.validation}, {proposal.closure}.</p>
+        <section className="editor-recovery" key={proposal.proposal_id} data-proposal-id={proposal.proposal_id} aria-label="Draft Proposal">
+          <header className="editor-recovery-heading">
+            <span>From a preserved edit</span>
+            <h2>Proposal from your draft</h2>
+            <p>{proposal.closure === "closed"
+              ? proposal.operation_resolution === "applied" ? "Accepted into the manuscript." : "This proposal is closed."
+              : proposal.validation === "valid" ? "The complete preserved text is ready for review. Accept it to change the manuscript."
+                : proposal.validation === "invalid" ? "The proposal needs review before it can be accepted."
+                  : "The proposal is waiting for validation before it can be accepted."}</p>
+          </header>
           {proposal.candidate_blocks?.map((block, index) => block.block_kind === "heading"
             ? <h3 key={index} data-proposal-structured-block style={{ whiteSpace: "pre-wrap" }}>{block.text}</h3>
             : <p key={index} data-proposal-structured-block style={{ whiteSpace: "pre-wrap" }}>{block.text}</p>)}

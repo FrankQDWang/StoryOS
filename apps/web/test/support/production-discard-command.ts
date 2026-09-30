@@ -107,12 +107,15 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   await completed;
   assert.ok(frozen && reply && reply.effect.kind === "draft_closure_changed");
   const closed = { ...draft, closure: "closed", closure_event: reply.effect.event };
-  assert.equal(await surface.locator("[data-draft-closed]").textContent(),
-    `Closed: abandoned. Event: ${reply.effect.event.event_id}. Root Undo requires this exact latest action.`);
+  const closedText = await surface.innerText();
+  assert.ok(!closedText.includes(reply.effect.event.event_id) && !closedText.includes("Root Undo"),
+    "Discard recovery keeps event identity internal");
   await restart(); await page.reload();
   await surface.locator("[data-draft-closed]").waitFor();
   assert.equal(posts, 1);
-  assert.equal(await surface.locator("button[data-draft-discard]").count(), 0);
+  assert.equal(await surface.locator("button[data-draft-discard], button[data-draft-retry]").count(), 0);
+  await surface.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: fileURLToPath(new URL("../../../../target/issue-824/screenshots/discarded-edit.png", import.meta.url)) });
   assert.deepEqual(await readObjects(page, projectId, chapterId, proposalId), before);
   assert.deepEqual((await readProductionJournal(page, projectId)).metadata!.find((record) => record.key === frozen!.key), frozen);
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
