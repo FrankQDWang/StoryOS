@@ -598,7 +598,7 @@ test("Run settings stay captured when a legacy current revision is restored or e
         to_jsonb(settings) || jsonb_build_object('memory_settings_revision', '${id("da17")}'))).*
         FROM storyos.conversation_memory_settings AS settings
        WHERE project_id = '${project.projectId}'::uuid AND is_current IS NULL;
-    `));
+    `), (error) => String(error).includes("conversation_memory_settings_one_current"));
     await queryPostgres(`
       CREATE POLICY issue_876_withheld_settings ON storyos.conversation_memory_settings
         AS RESTRICTIVE FOR SELECT TO storyos_runtime USING (

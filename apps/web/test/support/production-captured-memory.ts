@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
@@ -40,8 +40,13 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     serverBinary: join(repositoryRoot, "target/release-package/storyos-server"),
     sessions: { "session-a": USER },
   });
-  const page = await context.newPage();
+  const page = await context.newPage().catch(async (error: unknown) => {
+    await stopStoryOSServer(owned.server);
+    throw error;
+  });
   let releaseOld = (): void => {};
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   try {
     await page.setViewportSize({ width: 1487, height: 1058 });
     page.setDefaultTimeout(10_000);
@@ -160,14 +165,28 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     await page.locator(`[data-assistant-history-inspect="${first.effect.run_id}"]`).click();
     await expect(memory).toHaveText("本次请求记录的记忆设置使用记忆：开启参与后续记忆整理：开启");
     await page.screenshot({ path: join(evidence, "captured-history.png") });
+    assert.deepEqual(pageErrors, []);
+    const facts = await queryStoryOSPostgres(`
+      SELECT json_build_object(
+        'project_count', (SELECT count(*) FROM storyos.projects WHERE project_id = '${projectId}'::uuid),
+        'receipts', (SELECT json_object_agg(command_kind, count) FROM (
+          SELECT command_kind, count(*) FROM storyos.domain_receipts
+          WHERE project_id = '${projectId}'::uuid GROUP BY command_kind) AS receipts),
+        'author_action_count', (SELECT count(*) FROM storyos.author_action_entries
+          WHERE project_id = '${projectId}'::uuid))::text;
+    `);
+    await writeFile(join(evidence, "fixture-facts.json"), facts + "\n");
   } finally {
     releaseOld();
     try {
       await page.unrouteAll({ behavior: "ignoreErrors" });
       await page.close();
-      await queryStoryOSPostgres("DROP POLICY IF EXISTS issue_876_browser_withheld ON storyos.conversation_memory_settings");
     } finally {
-      await stopStoryOSServer(owned.server);
+      try {
+        await queryStoryOSPostgres("DROP POLICY IF EXISTS issue_876_browser_withheld ON storyos.conversation_memory_settings");
+      } finally {
+        await stopStoryOSServer(owned.server);
+      }
     }
   }
 }
