@@ -919,6 +919,39 @@ def author_admission_errors(admission_projection: str) -> list[str]:
     return errors
 
 
+def core_author_edit_result_errors(core_projection: str) -> list[str]:
+    core = visible_markdown(core_projection)
+    errors: list[str] = []
+    unions = re.findall(r"ApplyAuthorEditResult \{\n(.*?)\n\}", core, flags=re.DOTALL)
+    if len(unions) != 1:
+        errors.append("Core Author Edit result definition count drifted")
+    else:
+        variants = re.findall(r"^    (?:\| )?([A-Z][A-Za-z0-9]*) \{", unions[0],
+                              flags=re.MULTILINE)
+        if variants != ["AuthoritativeApplied", "ProposalRevised", "RefusedToDraft",
+                        "Refused", "Conflicted", "NoEffect"]:
+            errors.append("Core Author Edit exhaustive results drifted")
+        if "| Refused { reason: AuthorEditRefusal }" not in unions[0]:
+            errors.append("Core ordinary Refused shape drifted")
+    requirements = {
+        "classification": (
+            "Invalid selection, unsupported intent shape, or target mismatch returns",
+            "`Refused { reason: AuthorEditRefusal }`",
+            "no Revision, Authoritative Commit, Author Action, Project Activity, or Draft",
+        ),
+        "effect count": ("| `FreshEditorIntent` | any of the six effects |",),
+        "allocation": (
+            "| `ApplyAuthorEdit.Refused` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; "
+            "`DraftRetry` source is unchanged and creates no lifecycle event | 0 |",
+        ),
+    }
+    for label, required in requirements.items():
+        if any(value not in core for value in required):
+            errors.append(f"Core ordinary Refused {label} drifted")
+    rows = re.findall(r"^\| `ApplyAuthorEdit.Refused` \|.*$", core, flags=re.MULTILINE)
+    if len(rows) != 1:
+        errors.append("Core ordinary Refused allocation count drifted")
+    return errors
 def policy_errors(
     policy: dict,
     evidence: dict,
@@ -1044,6 +1077,9 @@ def policy_errors(
     errors.extend(apply_author_edit_outcome_web_errors(
         projections.get(PROJECTIONS[3].as_posix(), ""),
     ))
+    errors.extend(core_author_edit_result_errors(
+        projections.get(PROJECTIONS[2].as_posix(), ""),
+    ))
     errors.extend(author_admission_errors(
         projections.get(AUTHOR_ADMISSION_PATH.as_posix(), ""),
     ))
@@ -1057,6 +1093,31 @@ def self_test() -> None:
     assert apply_author_edit_outcome_contract_errors(
         outcome_schema, outcome_response_schema, route_catalog, typescript_client, web_projection
     ) == []
+    core = projections[PROJECTIONS[2].as_posix()]
+    refusal_row = next(row for row in core.splitlines()
+                       if row.startswith("| `ApplyAuthorEdit.Refused` |"))
+    for old, new, expected in (
+        ("    | Refused { reason: AuthorEditRefusal }\n", "",
+         "Core Author Edit exhaustive results drifted"),
+        ("| Refused { reason: AuthorEditRefusal }", "| Refused { refused_edit_draft_id }",
+         "Core ordinary Refused shape drifted"),
+        ("Invalid selection, unsupported intent shape, or target mismatch returns",
+         "Invalid selection returns NoEffect",
+         "Core ordinary Refused classification drifted"),
+        ("any of the six effects", "any of the five effects",
+         "Core ordinary Refused effect count drifted"),
+        (refusal_row, "", "Core ordinary Refused allocation drifted"),
+        (refusal_row, refusal_row.replace("| 0 | 0 | 0 |", "| 0 | 0 | exactly 1 Draft |"),
+         "Core ordinary Refused allocation drifted"),
+        (refusal_row, refusal_row.replace("`DomainReceipt`", "no Receipt"),
+         "Core ordinary Refused allocation drifted"),
+    ):
+        assert old in core, old
+        changed_projections = dict(projections)
+        changed_projections[PROJECTIONS[2].as_posix()] = core.replace(old, new, 1)
+        assert expected in policy_errors(
+            policy, evidence, candidate_metrics, response_schema, changed_projections
+        ), old
     for path, value in (
         (("selected", "max_author_edit_units"), 999),
         (("input_coverage", "new_workload_qualified_by_legacy_measurements"), True),
