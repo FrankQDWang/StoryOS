@@ -136,8 +136,13 @@ pub(super) async fn load_agent_run(
                     attempt.outbound_disclosure_event_id::text,
                     attempt.model_invocation_id::text, attempt.dispatch_state,
                     attempt.decision_id::text, attempt.continuation_binding_id::text,
-                    attempt.payload::text
+                    attempt.payload::text, settings.use_enabled, settings.contribution_enabled
                FROM storyos.agent_runs AS run
+               LEFT JOIN storyos.conversation_memory_settings AS settings
+                 ON (settings.owner_user_id, settings.project_id, settings.conversation_id,
+                     settings.memory_settings_revision) =
+                    (run.owner_user_id, run.project_id, run.conversation_id,
+                     run.memory_settings_revision)
                LEFT JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
@@ -219,6 +224,15 @@ pub(super) async fn load_agent_run(
         project_agent_id: row.get(0),
         conversation_id: row.get(1),
         memory_settings_revision: row.get(2),
+        captured_memory_settings: row
+            .get::<_, Option<bool>>(14)
+            .zip(row.get::<_, Option<bool>>(15))
+            .map(|(use_enabled, contribution_enabled)| {
+                storyos_application::CapturedMemorySettings {
+                    use_enabled,
+                    contribution_enabled,
+                }
+            }),
         run_id: row.get(3),
         status,
         context: super::context::load_assembled_context(client, scope, run_id).await?,

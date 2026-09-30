@@ -360,6 +360,17 @@ input:focus-visible,
   padding: 4px 0;
 }
 
+.assistant-run-details {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .composer { margin: 0; padding: 0 20px 14px; }
 
 .composer input {

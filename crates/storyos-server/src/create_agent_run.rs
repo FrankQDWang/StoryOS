@@ -203,6 +203,14 @@ pub(super) async fn get_agent_run(
         project_scope: contract_scope(&scope),
         project_agent_id: record.project_agent_id,
         conversation_id: record.conversation_id,
+        captured_memory_settings: match record.captured_memory_settings {
+            Some(settings) => contracts::CapturedMemorySettingsInspect::Available {
+                memory_settings_revision: record.memory_settings_revision.clone(),
+                use_enabled: settings.use_enabled,
+                contribution_enabled: settings.contribution_enabled,
+            },
+            None => contracts::CapturedMemorySettingsInspect::Unavailable,
+        },
         memory_settings_revision: record.memory_settings_revision,
         run_id: record.run_id,
         status: inspect_status(record.status),

@@ -140,7 +140,8 @@ async fn insert_existing_conversation_run(
                      conversation.conversation_id)
               WHERE conversation.owner_user_id = $1::text::uuid
                 AND conversation.project_id = $2::text::uuid
-                AND conversation.conversation_id = $3::text::uuid",
+                AND conversation.conversation_id = $3::text::uuid
+                AND COALESCE(settings.is_current, TRUE)",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
