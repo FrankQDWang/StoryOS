@@ -342,12 +342,14 @@ Then `/to-tickets` presents any changed child breakdown and actual native
 blocking edges for user approval before publication. Reuse current child
 owners and stable requirements, preserve Stage 1/2 historical evidence and
 unaffected Stage 6/8/9 promises, and audit forward/reverse coverage. Existing
-old bodies do not certify these changes. Stage 3 and later implementation
-remains EXECUTION HOLD until alignment passes and the author explicitly
-resumes execution; this decision creates no implementation ticket or stage release.
+old bodies do not certify these changes. The current Stage 3 specification
+owns its accepted implementation handoff and pending final release evidence.
+Stage 4 and later remain on EXECUTION HOLD until alignment passes and the
+author explicitly resumes execution. This contract creates no implementation
+ticket or stage release.
 
 The two conversation defaults are recorded in the release baseline. Concrete
 external services, accounts, spending, and destination authorization remain
 explicit prerequisites of the affected real-integration ticket. No Eval
 definition, evaluator, rubric, or API decision blocks MVP planning or delivery.
-The user's implementation-ticket publication and execution pause remains active.
+Publication and execution for Stage 4 and later remain paused.

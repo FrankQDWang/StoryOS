@@ -1522,9 +1522,10 @@ selected mode returns to the original semantic owner before acceptance.
 
 This document changes no runtime, persisted format, generated API, or security
 platform. Existing editor implementation remains the code truth; the new Agent
-obligations are not claimed as implemented or tested product behavior. Stage 3
-and later implementation stays on EXECUTION HOLD until the existing protocol,
-storage, retention, release, proof, specification, and ticket chain is aligned.
+obligations are not claimed as implemented or tested product behavior by this
+threat model. The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
+owns its accepted implementation handoff and pending final release evidence.
+Stage 4 and later remain on EXECUTION HOLD.
 
 No separate parallel security map or security runtime follows from this threat
 model. This contract owns trusted-computing boundaries, source-to-sink attack
@@ -1532,8 +1533,9 @@ analysis, structural mitigations, and residual risks. It does not re-own the
 evidence classification fixed by the Artifact contract, Admission
 identity/lifecycle/settlement, Core effects, editor recovery, versioned wire
 shapes, or deterministic gate selection owned by the linked contracts above. Those owners must close their assigned contracts and
-deterministic negative evidence in the map's single serial chain before the
-editor-first implementation handoff.
+deterministic negative evidence through the map's approved dependency graph
+before the applicable implementation handoff. Independent dependency-ready
+owners follow the parallel [Issue tracker](../agents/issue-tracker.md) process.
 
 # Source Index
 
