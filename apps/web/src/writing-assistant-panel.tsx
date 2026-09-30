@@ -25,6 +25,7 @@ type RequestReference = {
   idempotencyKey: string;
   snapshotId: string;
   runId?: string;
+  conversationId?: string;
 };
 
 export type AssistantContext = {
@@ -66,7 +67,8 @@ function readReference(scope: ProjectScope): RequestReference | undefined {
       || !UUID.test(ref.correlationId)
       || !UUID.test(ref.idempotencyKey)
       || !UUID.test(ref.snapshotId)
-      || (ref.runId !== undefined && !UUID.test(ref.runId))) return undefined;
+      || (ref.runId !== undefined && !UUID.test(ref.runId))
+      || (ref.conversationId !== undefined && !UUID.test(ref.conversationId))) return undefined;
     return ref;
   } catch {
     return undefined;
@@ -192,7 +194,12 @@ export function WritingAssistantPanel({
     if (!stillCurrent()) return;
     if (result.project_scope.owner_user_id !== current.scope.owner_user_id
       || result.project_scope.project_id !== current.scope.project_id
-      || result.run_id !== runId) throw new Error("Run Scope mismatch");
+      || result.run_id !== runId
+      || (current.conversationId !== undefined
+        && result.conversation_id !== current.conversationId)) throw new Error("Run Scope mismatch");
+    current = { ...current, conversationId: result.conversation_id };
+    saveReference(current);
+    setReference(current);
     setRun(result);
     if (result.decision.kind === "prose_change"
       && result.decision.opened_proposal.kind === "present") {
@@ -266,11 +273,13 @@ export function WritingAssistantPanel({
         correlationId: uuidV7(context.cryptoImpl),
         idempotencyKey: uuidV7(context.cryptoImpl),
         snapshotId: tree.snapshot.snapshot_id,
+        ...(previous?.conversationId === undefined ? {} : { conversationId: previous.conversationId }),
       };
       const request: CreateAgentRunRequest = {
         command_schema: "storyos.command.create-agent-run.request.v2",
         create_agent_run_input: {
-          conversation: { kind: "new" },
+          conversation: previous?.conversationId === undefined ? { kind: "new" }
+            : { kind: "existing", conversation_id: previous.conversationId },
           author_message: { text: current.message },
           working_target: { kind: "current_chapter", chapter_id: current.chapterId },
           instruction: { kind: "absent" },
@@ -322,7 +331,8 @@ export function WritingAssistantPanel({
         || admitted.project_scope.project_id !== current.scope.project_id) {
         throw new Error("Run admission Scope mismatch");
       }
-      const acknowledged = { ...current, runId: admitted.effect.run_id };
+      const acknowledged = { ...current, runId: admitted.effect.run_id,
+        conversationId: admitted.conversation_id };
       saveReference(acknowledged);
       setReference(acknowledged);
       input.value = "";
