@@ -8,7 +8,7 @@ import { expect } from "playwright/test";
 import { getAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { id, prepare, settleOnce, USER_A } from "./acceptance";
-import { startStoryOSServer, stopStoryOSServer } from "./node-integration";
+import { queryStoryOSPostgres, startStoryOSServer, stopStoryOSServer } from "./node-integration";
 
 export async function verifyProductionRunEvidence(context: BrowserContext): Promise<void> {
   const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -58,7 +58,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     await expect(evidence).toContainText("输入范围");
     await expect(evidence).toContainText(message);
     await expect(evidence).toContainText(original);
-    await expect(evidence).toContainText("提供方内部内容仍未知");
+    await expect(evidence).toContainText("模型还记住了哪些内容，我们无法确认");
     assert.equal(await evidence.locator("button").count(), 0);
     assert.ok(!(await evidence.innerText()).includes(first.context.assembly_manifest_id));
     assert.ok(!(await evidence.innerText()).includes(first.run_id));
@@ -135,7 +135,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
           return current.kind === "present" ? current.install_state : "absent";
         }).toBe("staged");
         await page.locator('[data-assistant-inspect]').click();
-        await expect(page.locator('[data-run-compaction="staged"]')).toContainText("尚未用于后续尝试");
+        await expect(page.locator('[data-run-compaction="staged"]')).toContainText("摘要已准备好，尚未使用");
         if (!installed) {
           await editor.click();
           await page.keyboard.insertText("A later change.");
@@ -145,11 +145,44 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       } finally { if (existsSync(hold)) unlinkSync(hold); await worker; }
       await page.locator('[data-assistant-inspect]').click();
       const summary = page.locator(`[data-run-compaction="${installed ? "installed" : "refused"}"]`);
-      await expect(summary).toContainText(installed ? "摘要已用于后续尝试。" : "输入已改变");
+      await expect(summary).toContainText(installed ? "后面的生成已使用这份摘要。" : "章节或请求内容已改变");
       await expect(summary).toContainText("Bounded later-request summary. Semantic preservation is unknown.");
-      await expect(summary).toContainText("摘要是否完整保留原文语义仍未知。");
+      await expect(summary).toContainText("无法确认摘要是否保留了原文的全部意思。");
       await page.reload();
       await expect(summary).toBeVisible();
+    }
+    for (const [suffix, disposition, explanation] of [
+      ["4", "rebuilt", "已用还能读取的内容重新准备这次请求。"],
+      ["5", "blocked", "无法找回先前内容：可用额度不足。"],
+      ["6", "unknown_create", "最初那次生成的结果还不确定，不能认定先前内容已经过期。"],
+    ] as const) {
+      await openCase(suffix);
+      const priorId = await submit("Help with this passage.");
+      await settleOnce();
+      await page.locator('[data-assistant-inspect]').click();
+      await expect(evidence).toHaveAttribute("data-run-evidence-run-id", priorId);
+      const prior = await inspect(priorId);
+      assert.equal(prior.model_attempt.kind, "present");
+      await queryStoryOSPostgres(`UPDATE storyos.model_attempts
+        SET payload = payload || jsonb_build_object('produced_binding',
+          COALESCE(payload->'produced_binding', '{}'::jsonb) ||
+          jsonb_build_object('reference_condition', 'confirmed_expired'
+            ${disposition === "blocked" ? ", 'budget_exhausted', true" : ""}))
+          ${disposition === "unknown_create" ? ", dispatch_state = 'uncertain'" : ""}
+        WHERE project_id = '${setup.projectId}'::uuid AND run_id = '${priorId}'::uuid
+          AND attempt_role = 'decision';`);
+      const runId = await submit("I changed my mind: keep the voice.");
+      await settleOnce();
+      assert.equal((await inspect(runId)).reference_recovery.kind, "present");
+      await page.locator('[data-assistant-inspect]').click();
+      const recovery = page.locator(`[data-run-reference-recovery="${disposition}"]`);
+      await expect(recovery).toContainText(explanation);
+      await expect(recovery).toContainText("不能保证模型记住的内容被完整找回。");
+      if (disposition === "unknown_create") {
+        assert.ok(!(await recovery.innerText()).includes("先前内容的引用已过期或无法使用。"));
+      }
+      await page.reload();
+      await expect(recovery).toContainText(explanation);
     }
     assert.deepEqual(errors, []);
   } finally {
