@@ -270,5 +270,7 @@ result intake. The trust owner assesses the admitted boundary and residual
 Provider uncertainty. The protocol owner versions the approval target and
 operation representation. Release and proof owners align the existing Stage
 specifications and verification gates. Exact Provider account qualification
-remains separate; Stage 3 and later product implementation stays on EXECUTION
-HOLD. This decision neither claims downstream completion nor releases Stage 5.
+remains separate. The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
+owns its accepted implementation handoff and pending final release evidence.
+Stage 4 and later remain on EXECUTION HOLD. This decision neither claims
+downstream completion nor releases Stage 5.

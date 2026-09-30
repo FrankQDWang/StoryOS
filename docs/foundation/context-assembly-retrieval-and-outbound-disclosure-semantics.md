@@ -1122,8 +1122,11 @@ remaining physical, security, protocol, verification, slice, and retention
 decision exposed by this contract.
 Their older contracts and stage tickets are not declared aligned by this
 revision. Release and proof revisions precede /to-spec and the user-approved
-/to-tickets refresh. Stage 3 and later product implementation remains on
-EXECUTION HOLD; exact Provider account/model qualification remains separate.
+/to-tickets refresh. The current
+[Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361) owns
+its accepted implementation handoff and pending final release evidence.
+Stage 4 and later remain on EXECUTION HOLD; exact Provider account/model
+qualification remains separate.
 
 ## 15. Required verification scenarios
 

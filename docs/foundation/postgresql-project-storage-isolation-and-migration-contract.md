@@ -209,8 +209,10 @@ The runner supports an exact already-active identity or an empty installation,
 not an upgrade of an existing deployment. Do not rewrite activation evidence,
 delete data, or invent a migration edge to make a mismatch pass. An existing
 deployment requires a separately authorized storage upgrade or reprovision
-path. This planning revision authorizes neither. Stage 3 and later product
-implementation remains on EXECUTION HOLD.
+path. This planning revision authorizes neither. The current
+[Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361) owns
+its accepted implementation handoff and pending final release evidence.
+Stage 4 and later remain on EXECUTION HOLD.
 
 ## 1. Scope and authority
 

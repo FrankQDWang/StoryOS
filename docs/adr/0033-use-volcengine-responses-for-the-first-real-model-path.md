@@ -302,8 +302,8 @@ the source and disclosure changes, including
 [ADR 0005](0005-require-ordered-context-assembly-before-destination-disclosure.md).
 The [Tool/MCP owner](https://github.com/FrankQDWang/StoryOS/issues/48) owns the
 hosted execution boundary through ADR 0034. Complete pending revisions through
-the existing serial tracker flow. This ADR is not a second specification for
-their domains.
+the approved dependency graph and parallel [Issue tracker](../agents/issue-tracker.md)
+process. This ADR is not a second specification for their domains.
 
 The inspected Codex snapshot is `c9ef7eff005c3299a5a5f0004c34c6a3eedf2564`.
 Its [turn loop](https://github.com/openai/codex/blob/c9ef7eff005c3299a5a5f0004c34c6a3eedf2564/codex-rs/core/src/session/turn.rs)
@@ -331,6 +331,7 @@ protocol downgrade. Current personal validation does not establish that the
 same subscription may supply a future multi-user service.
 
 The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)
-and [Stage 4 specification](https://github.com/FrankQDWang/StoryOS/issues/362)
-remain on EXECUTION HOLD. This decision resolves the Model owner only; it does
-not claim completed downstream alignment, API acceptance, or a stage release.
+owns its accepted implementation handoff and pending final release evidence.
+Stage 4 and later remain on EXECUTION HOLD. This decision resolves the Model
+owner only; it does not claim completed downstream alignment, API acceptance,
+or a stage release.
