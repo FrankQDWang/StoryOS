@@ -81,6 +81,17 @@ impl ProposalReader for PostgresProjectReader {
             )
             .await
             .map_err(read_error)?;
+        let unavailable = crate::validation_history::unavailable_revisions(&transaction, scope)
+            .await
+            .map_err(read_error)?;
+        if row
+            .as_ref()
+            .is_some_and(|row| unavailable.contains(&row.get::<_, String>(2)))
+        {
+            return Err(ProjectReadError::unavailable(std::io::Error::other(
+                "original validation history is unavailable; explicit replan is required",
+            )));
+        }
         let latest_acceptance_refusal =
             crate::acceptance_refusal::read_latest_refusal(&transaction, scope, proposal_id)
                 .await?;

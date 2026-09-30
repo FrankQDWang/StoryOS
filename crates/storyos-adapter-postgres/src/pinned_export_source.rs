@@ -239,7 +239,7 @@ fn archive_facts_json(
 
 /// Restores Archive families. `None` means the source is partial.
 fn families_from_facts_json(facts: &serde_json::Value) -> Option<Vec<PinnedArchiveFamily>> {
-    facts
+    let families: Vec<PinnedArchiveFamily> = facts
         .get("families")?
         .as_array()?
         .iter()
@@ -250,5 +250,10 @@ fn families_from_facts_json(facts: &serde_json::Value) -> Option<Vec<PinnedArchi
                 rows_json: canonical_json(family.get("rows")?),
             })
         })
-        .collect()
+        .collect::<Option<_>>()?;
+    crate::validation_history::archive_history_available(|table| {
+        let family = families.iter().find(|family| family.table == table)?;
+        serde_json::from_str(&family.rows_json).ok()
+    })
+    .then_some(families)
 }
