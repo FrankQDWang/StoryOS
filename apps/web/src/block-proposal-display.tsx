@@ -1,3 +1,4 @@
+import { inlineProjectionAnchor } from "./inline-proposal-decoration.ts";
 import { useEffect, useRef, useState } from "react";
 
 import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -282,10 +283,12 @@ export function BlockProposalDisplay({
       item.manuscript_block_id === proposal.manuscript_block_id);
     const condition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
     const anchored = proposal !== undefined
-      && (proposal.kind === "block_edit" || proposal.kind === "reversal")
+      && (proposal.kind === "block_edit" || proposal.kind === "reversal" || proposal.kind === "inline_edit")
       && operation !== undefined
       && blockCounts.get(proposal.manuscript_block_id) === 1 && safeToProject;
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
+    const inlineAnchor = proposal === undefined ? undefined
+      : inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId);
     const conditionVisible = condition !== "absent" || proposal?.validation === "invalid"
       || proposal?.validation === "pending";
     if (!anchored || proposal === undefined || operation === undefined
@@ -305,6 +308,7 @@ export function BlockProposalDisplay({
     const eligible = controlsReady && baseMatches
       && proposal.generation === "ready" && proposal.validation === "valid"
       && condition === "absent"
+      && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined)
       && proposal.closure === "open" && operation.resolution === "pending"
       && operation.reservation_state === "unresolved"
       && proposal.validation_receipt.kind === "present"
@@ -326,6 +330,7 @@ export function BlockProposalDisplay({
       pendingWithdraw: pendingWithdrawals.includes(proposal.proposal_id),
     });
     projections.push({
+      ...(baseMatches && inlineAnchor !== undefined ? { inlineAnchor } : {}),
       proposalId: proposal.proposal_id,
       operationId: operation.operation_id,
       revisionId: proposal.revision_id,

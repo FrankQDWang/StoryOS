@@ -445,3 +445,6 @@ input:focus-visible,
 .editor-recovery form { display: grid; gap: 8px; margin-top: 17px; }
 .editor-recovery label { display: grid; gap: 5px; }
 .editor-recovery textarea, .editor-recovery select { max-width: 100%; box-sizing: border-box; }
+
+.inline-proposal { background: var(--proposal-bg, #eeece5); border-bottom: 1px solid #b9b5a6; padding: 2px 0; }
+.inline-proposal-controls .block-proposal-text { display: none; }

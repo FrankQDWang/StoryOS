@@ -12,6 +12,7 @@ import {
 } from "./browser-command-contract";
 import { queryStoryOSPostgres } from "./node-integration";
 import { verifyProductionHostJourney } from "./production-host-command";
+import { verifyProductionInlineProposal } from "./production-inline-proposal-command";
 import { verifyProductionProseRequest } from "./production-prose-request-command";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
@@ -39,7 +40,10 @@ export const storyOSBrowserCommands = {
   [storyOSBrowserCommandNames.productionHost]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
       const request = parseProductionHostRequest(value);
-      if (request.scenario === "prose_request" || request.scenario === "refused_edit" || request.scenario === "restored_refused_edit" || request.scenario === "conflicted_proposal") {
+      if (request.scenario === "inline_proposal") {
+        if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
+        await verifyProductionInlineProposal(context.context, process.env.STORYOS_DEV_SERVER);
+      } else if (request.scenario === "prose_request" || request.scenario === "refused_edit" || request.scenario === "restored_refused_edit" || request.scenario === "conflicted_proposal") {
         await verifyProductionProseRequest(context.context, request.scenario);
       } else {
         await verifyProductionHostJourney(context.context);

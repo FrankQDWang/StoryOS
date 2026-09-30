@@ -350,7 +350,10 @@ export function ManuscriptEditor({
       const copyButton = target.closest<HTMLButtonElement>("button[data-proposal-copy]");
       const button = acceptButton ?? rejectButton ?? replanButton ?? withdrawButton ?? copyButton;
       const proposal = button?.closest<HTMLElement>("[data-proposal-id]");
-      const text = proposal?.querySelector(".block-proposal-text")?.textContent;
+      const proposalId = proposal?.dataset.proposalId;
+      const inline = proposalId === undefined ? null
+        : editor.view.dom.querySelector(`[data-inline-proposal-id="${proposalId}"]`);
+      const text = inline?.textContent ?? proposal?.querySelector(".block-proposal-text")?.textContent;
       if (button === null || button === undefined || proposal === null
         || proposal === undefined || text === null || text === undefined) return;
       const decision = {
