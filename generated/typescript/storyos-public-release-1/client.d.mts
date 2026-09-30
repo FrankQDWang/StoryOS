@@ -449,7 +449,9 @@ export type AgentRunUsageInspect = { kind: string, };
 
 export type GetAgentRunRequest = { model_attempt_id?: string | null, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
+export type CapturedMemorySettingsInspect = { "kind": "available", memory_settings_revision: string, use_enabled: boolean, contribution_enabled: boolean, } | { "kind": "unavailable" };
+
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
 
 export type OriginalResultRetrievalDisposition = "kept_unknown" | "evidence_only" | "settled";
 

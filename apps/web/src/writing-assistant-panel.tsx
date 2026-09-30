@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
   activityStream, createAgentRun, createProjectCommandChallenge, digestCreateAgentRun,
@@ -13,12 +13,14 @@ import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
+import { AssistantRunDetails, type SelectedRunDetails } from "./assistant-run-details.tsx";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type TranscriptExchange = {
   requestId: string;
+  runId?: string;
   conversationId: string;
   message: string;
   status: GetAgentRunResponse["status"];
@@ -36,6 +38,7 @@ type RequestReference = {
   conversationId?: string;
   conversationChoice?: "new";
   history?: TranscriptExchange[];
+  selectedRequestId?: string;
 };
 
 export type AssistantContext = {
@@ -80,9 +83,11 @@ function readReference(scope: ProjectScope): RequestReference | undefined {
       || (ref.runId !== undefined && !UUID.test(ref.runId))
       || (ref.conversationId !== undefined && !UUID.test(ref.conversationId))
       || (ref.conversationChoice !== undefined && ref.conversationChoice !== "new")
+      || (ref.selectedRequestId !== undefined && !UUID.test(ref.selectedRequestId))
       || (ref.history !== undefined && (!Array.isArray(ref.history)
         || !ref.history.every((exchange) => exchange !== null && typeof exchange === "object"
           && UUID.test(exchange.requestId) && UUID.test(exchange.conversationId)
+          && (exchange.runId === undefined || UUID.test(exchange.runId))
           && typeof exchange.message === "string" && Object.hasOwn(runLabels, exchange.status)
           && (exchange.result === undefined || typeof exchange.result === "string"))))) return undefined;
     return ref;
@@ -159,6 +164,8 @@ export function WritingAssistantPanel({
   const [status, setStatus] = useState("");
   const [sending, setSending] = useState(false);
   const [refused, setRefused] = useState(false);
+  const [details, setDetails] = useState<SelectedRunDetails>({ kind: "loading" });
+  const detailSequence = useRef(0);
 
   useEffect(() => {
     if (context === undefined) {
@@ -182,7 +189,7 @@ export function WritingAssistantPanel({
     return () => { active = false; };
   }, [context?.baseUrl, context?.fetchImpl, context?.scope.owner_user_id, context?.scope.project_id]);
 
-  const inspect = async (current: RequestReference): Promise<void> => {
+  const inspect = async (current: RequestReference): Promise<GetAgentRunResponse | undefined> => {
     if (context === undefined) return;
     const stillCurrent = () =>
       readReference(current.scope)?.correlationId === current.correlationId;
@@ -199,7 +206,7 @@ export function WritingAssistantPanel({
         setStatus("请求结果仍待确认。请稍后检查。");
         return;
       }
-      current = { ...current, runId };
+      current = { ...(readReference(current.scope) ?? current), runId };
       saveReference(current);
       setReference(current);
     }
@@ -226,11 +233,52 @@ export function WritingAssistantPanel({
       });
     }
     setStatus("");
+    return result;
+  };
+
+  const inspectDetails = async (requestId: string): Promise<void> => {
+    if (context === undefined) return;
+    const cached = readReference(context.scope);
+    if (cached === undefined) return;
+    const exchange = cached.history?.find((entry) => entry.requestId === requestId);
+    const latest = requestId === cached.correlationId;
+    if (!latest && exchange === undefined) return;
+    const chosen = { ...cached, selectedRequestId: requestId };
+    const expectedRunId = latest ? cached.runId : exchange?.runId;
+    const expectedConversationId = latest ? cached.conversationId : exchange?.conversationId;
+    const sequence = ++detailSequence.current;
+    const stillSelected = () => sequence === detailSequence.current
+      && readReference(context.scope)?.selectedRequestId === requestId;
+    saveReference(chosen);
+    setReference(chosen);
+    setDetails({ kind: "loading" });
+    try {
+      const result = latest ? await inspect(chosen) : expectedRunId === undefined ? undefined
+        : await getAgentRun({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
+          projectId: context.scope.project_id, runId: expectedRunId });
+      if (!stillSelected()) return;
+      if (result === undefined
+        || result.project_scope.owner_user_id !== context.scope.owner_user_id
+        || result.project_scope.project_id !== context.scope.project_id
+        || (expectedRunId !== undefined && result.run_id !== expectedRunId)
+        || (expectedConversationId !== undefined && result.conversation_id !== expectedConversationId)) {
+        setDetails({ kind: "unavailable" });
+        return;
+      }
+      setDetails({ kind: "known", run: result, selection: { projectScope: context.scope,
+        runId: result.run_id, conversationId: result.conversation_id } });
+    } catch {
+      if (stillSelected()) setDetails({ kind: "unavailable" });
+    }
   };
 
   useEffect(() => {
     if (reference === undefined || context === undefined) return;
-    void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
+    if (reference.selectedRequestId !== undefined) void inspectDetails(reference.selectedRequestId);
+    if (reference.selectedRequestId !== reference.correlationId) {
+      void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
+    }
+    return () => { detailSequence.current += 1; };
   }, [context?.scope.owner_user_id, context?.scope.project_id]);
 
   const terminal = run !== undefined
@@ -298,6 +346,7 @@ export function WritingAssistantPanel({
         history: previous === undefined || previousRun === undefined ? [] : [
           ...(previous.history ?? []), {
             requestId: previous.correlationId, conversationId: previousRun.conversation_id,
+            runId: previousRun.run_id,
             message: previous.message, status: previousRun.status,
             ...(resultText(previousRun) === undefined ? {} : { result: resultText(previousRun)! }),
           },
@@ -409,6 +458,11 @@ export function WritingAssistantPanel({
               <p className="assistant-author-message">{exchange.message}</p>
               <p>{runLabels[exchange.status]}</p>
               {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
+              <button type="button" data-assistant-history-inspect={exchange.runId ?? ""}
+                aria-expanded={reference.selectedRequestId === exchange.requestId}
+                onClick={() => { void inspectDetails(exchange.requestId); }}>检查结果</button>
+              {reference.selectedRequestId === exchange.requestId
+                ? <AssistantRunDetails details={details} /> : null}
             </section>
           ))}
           {reference === undefined ? null : (
@@ -419,9 +473,12 @@ export function WritingAssistantPanel({
               <p className="assistant-author-message">{reference.message}</p>
               <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p>
               {run === undefined ? null : <p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>}
-              <button type="button" data-assistant-inspect="" onClick={() => {
-                void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
+              <button type="button" data-assistant-inspect=""
+                aria-expanded={reference.selectedRequestId === reference.correlationId} onClick={() => {
+                void inspectDetails(reference.correlationId);
               }}>检查结果</button>
+              {reference.selectedRequestId === reference.correlationId
+                ? <AssistantRunDetails details={details} /> : null}
             </section>
           )}
           {reference?.conversationChoice === "new"

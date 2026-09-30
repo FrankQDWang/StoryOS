@@ -14,6 +14,7 @@ import { queryStoryOSPostgres } from "./node-integration";
 import { verifyProductionRunEvidence } from "./production-run-evidence-command";
 import { verifyProductionHostJourney } from "./production-host-command";
 import { verifyProductionProseRequest } from "./production-prose-request-command";
+import { verifyProductionCapturedMemory } from "./production-captured-memory.ts";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
 
@@ -42,6 +43,8 @@ export const storyOSBrowserCommands = {
       const request = parseProductionHostRequest(value);
       if (request.scenario === "run_evidence") {
         await verifyProductionRunEvidence(context.context);
+      } else if (request.scenario === "captured_memory") {
+        await verifyProductionCapturedMemory(context.context);
       } else if (request.scenario === "prose_request" || request.scenario === "refused_edit" || request.scenario === "restored_refused_edit" || request.scenario === "conflicted_proposal") {
         await verifyProductionProseRequest(context.context, request.scenario);
       } else {

@@ -622,6 +622,18 @@ pub struct AgentRunUsageInspect {
     pub kind: String,
 }
 
+/// Settings evidence from the exact revision captured by this Run.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CapturedMemorySettingsInspect {
+    Available {
+        memory_settings_revision: String,
+        use_enabled: bool,
+        contribution_enabled: bool,
+    },
+    Unavailable,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct GetAgentRunResponse {
@@ -631,6 +643,7 @@ pub struct GetAgentRunResponse {
     pub project_agent_id: String,
     pub conversation_id: String,
     pub memory_settings_revision: String,
+    pub captured_memory_settings: CapturedMemorySettingsInspect,
     pub run_id: String,
     pub status: AgentRunStatus,
     pub context: AgentRunContextInspect,
