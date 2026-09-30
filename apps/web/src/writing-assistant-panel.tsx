@@ -17,6 +17,14 @@ import type { ProposalLocator } from "./block-proposal-display.tsx";
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+type TranscriptExchange = {
+  requestId: string;
+  conversationId: string;
+  message: string;
+  status: GetAgentRunResponse["status"];
+  result?: string;
+};
+
 type RequestReference = {
   scope: ProjectScope;
   message: string;
@@ -26,6 +34,8 @@ type RequestReference = {
   snapshotId: string;
   runId?: string;
   conversationId?: string;
+  conversationChoice?: "new";
+  history?: TranscriptExchange[];
 };
 
 export type AssistantContext = {
@@ -68,7 +78,13 @@ function readReference(scope: ProjectScope): RequestReference | undefined {
       || !UUID.test(ref.idempotencyKey)
       || !UUID.test(ref.snapshotId)
       || (ref.runId !== undefined && !UUID.test(ref.runId))
-      || (ref.conversationId !== undefined && !UUID.test(ref.conversationId))) return undefined;
+      || (ref.conversationId !== undefined && !UUID.test(ref.conversationId))
+      || (ref.conversationChoice !== undefined && ref.conversationChoice !== "new")
+      || (ref.history !== undefined && (!Array.isArray(ref.history)
+        || !ref.history.every((exchange) => exchange !== null && typeof exchange === "object"
+          && UUID.test(exchange.requestId) && UUID.test(exchange.conversationId)
+          && typeof exchange.message === "string" && Object.hasOwn(runLabels, exchange.status)
+          && (exchange.result === undefined || typeof exchange.result === "string"))))) return undefined;
     return ref;
   } catch {
     return undefined;
@@ -197,7 +213,7 @@ export function WritingAssistantPanel({
       || result.run_id !== runId
       || (current.conversationId !== undefined
         && result.conversation_id !== current.conversationId)) throw new Error("Run Scope mismatch");
-    current = { ...current, conversationId: result.conversation_id };
+    current = { ...(readReference(current.scope) ?? current), conversationId: result.conversation_id };
     saveReference(current);
     setReference(current);
     setRun(result);
@@ -217,6 +233,10 @@ export function WritingAssistantPanel({
     void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
   }, [context?.scope.owner_user_id, context?.scope.project_id]);
 
+  const terminal = run !== undefined
+    && (run.status === "completed" || run.status === "refused" || run.status === "cancelled");
+  const unresolved = reference !== undefined && (!terminal || reference.conversationId === undefined);
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (availability === "unavailable") {
@@ -225,7 +245,7 @@ export function WritingAssistantPanel({
     }
     if (context === undefined || context.chapterId === undefined
       || !context.canSubmit || availability !== "available" || sending
-      || (reference !== undefined && reference.runId === undefined)) return;
+      || unresolved) return;
     const input = event.currentTarget.elements.namedItem("assistant-message");
     if (!(input instanceof HTMLInputElement)) return;
     const message = input.value.trim();
@@ -273,13 +293,21 @@ export function WritingAssistantPanel({
         correlationId: uuidV7(context.cryptoImpl),
         idempotencyKey: uuidV7(context.cryptoImpl),
         snapshotId: tree.snapshot.snapshot_id,
-        ...(previous?.conversationId === undefined ? {} : { conversationId: previous.conversationId }),
+        ...(previous?.conversationId === undefined || previous.conversationChoice === "new"
+          ? {} : { conversationId: previous.conversationId }),
+        history: previous === undefined || previousRun === undefined ? [] : [
+          ...(previous.history ?? []), {
+            requestId: previous.correlationId, conversationId: previousRun.conversation_id,
+            message: previous.message, status: previousRun.status,
+            ...(resultText(previousRun) === undefined ? {} : { result: resultText(previousRun)! }),
+          },
+        ],
       };
       const request: CreateAgentRunRequest = {
         command_schema: "storyos.command.create-agent-run.request.v2",
         create_agent_run_input: {
-          conversation: previous?.conversationId === undefined ? { kind: "new" }
-            : { kind: "existing", conversation_id: previous.conversationId },
+          conversation: current.conversationId === undefined ? { kind: "new" }
+            : { kind: "existing", conversation_id: current.conversationId },
           author_message: { text: current.message },
           working_target: { kind: "current_chapter", chapter_id: current.chapterId },
           instruction: { kind: "absent" },
@@ -328,7 +356,8 @@ export function WritingAssistantPanel({
         throw error;
       }
       if (admitted.project_scope.owner_user_id !== current.scope.owner_user_id
-        || admitted.project_scope.project_id !== current.scope.project_id) {
+        || admitted.project_scope.project_id !== current.scope.project_id
+        || (current.conversationId !== undefined && admitted.conversation_id !== current.conversationId)) {
         throw new Error("Run admission Scope mismatch");
       }
       const acknowledged = { ...current, runId: admitted.effect.run_id,
@@ -357,21 +386,46 @@ export function WritingAssistantPanel({
       data-assistant-request-id={reference?.correlationId ?? ""}
       aria-label={collapsed ? "写作助手已收起" : "写作助手对话"}>
       <div className="assistant-body" hidden={collapsed}>
-        <header className="agent-header"><strong>写作助手</strong></header>
+        <header className="agent-header">
+          <strong>写作助手</strong>
+          <button type="button" data-assistant-new-conversation=""
+            disabled={reference === undefined || unresolved || sending || reference.conversationChoice === "new"}
+            onClick={() => {
+              if (reference === undefined || unresolved || sending) return;
+              const selected = { ...reference, conversationChoice: "new" as const };
+              saveReference(selected);
+              setReference(selected);
+              setStatus("");
+            }}>新对话</button>
+        </header>
         <div className="assistant-conversation" aria-live="polite">
           {availability === "unavailable" ? (
             <p className="assistant-status">写作助手当前不可用。你仍可以直接写作。</p>
           ) : null}
+          {reference?.history?.map((exchange, index, history) => (
+            <section className="assistant-exchange" key={exchange.requestId}>
+              {index > 0 && history[index - 1]?.conversationId !== exchange.conversationId
+                ? <p className="assistant-conversation-boundary">新对话</p> : null}
+              <p className="assistant-author-message">{exchange.message}</p>
+              <p>{runLabels[exchange.status]}</p>
+              {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
+            </section>
+          ))}
           {reference === undefined ? null : (
             <section className="assistant-exchange">
+              {(reference.history?.length ?? 0) > 0
+                && reference.history?.at(-1)?.conversationId !== reference.conversationId
+                ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <p className="assistant-author-message">{reference.message}</p>
               <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p>
-              {run === undefined ? null : <p data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>}
+              {run === undefined ? null : <p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>}
               <button type="button" data-assistant-inspect="" onClick={() => {
                 void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
               }}>检查结果</button>
             </section>
           )}
+          {reference?.conversationChoice === "new"
+            ? <p className="assistant-status">下一条消息将开始新对话。</p> : null}
           {status.length > 0 ? <p role="status">{status}</p> : null}
         </div>
         <form className="composer" data-writing-assistant-composer="" onSubmit={submit}>
@@ -379,7 +433,7 @@ export function WritingAssistantPanel({
             placeholder="描述想修改的当前章节文字" />
           <button type="submit" disabled={availability !== "available" || !context?.canSubmit
             || context.chapterId === undefined || sending
-            || (reference !== undefined && reference.runId === undefined)}>发送</button>
+            || unresolved}>发送</button>
         </form>
       </div>
     </aside>
