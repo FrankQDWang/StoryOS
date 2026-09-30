@@ -249,6 +249,7 @@ export interface EditorReadOnlyState {
 export type EditorState = EditorReadyState | EditorReadOnlyState;
 
 export interface ReplaceSelectionEdit {
+  expectedProposalHeads?: string[];
   from: number;
   to: number;
   text: string;

@@ -852,6 +852,7 @@ export async function persistReplaceSelection(
     },
     expectedBody: flattenChapterBody(expectedBlocks),
     expectedBlocks,
+    ...(edit.expectedProposalHeads === undefined ? {} : { expectedProposalHeads: edit.expectedProposalHeads }),
     extraUtf8: edit.text,
     resultingBody: edit.resultingBody,
     inputOrigin: edit.inputOrigin ?? "typing",

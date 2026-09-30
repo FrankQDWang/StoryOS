@@ -84,6 +84,7 @@ export function routeInlineEdgeInsertion(transaction: Transaction, state: Editor
   transaction.replaceWith(0, transaction.doc.content.size, state.doc.content);
   transaction.replaceWith(outside, outside, step.slice.content);
   transaction.setSelection(TextSelection.create(transaction.doc, outside + step.slice.content.size));
+  transaction.setMeta("storyos.inlineEdgeHeads", position.parent.attrs.expectedHeads);
   return true;
 }
 

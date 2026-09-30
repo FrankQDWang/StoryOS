@@ -278,7 +278,9 @@ export function ManuscriptEditor({
                 primitive.kind === "replace_block_selection")?.text ?? "",
             }
             : edit);
-      void idleRef.current?.persist(edit, origin, createdAt);
+      const edgeHeads = transaction.getMeta("storyos.inlineEdgeHeads") as string[] | undefined;
+      void idleRef.current?.persist(edgeHeads === undefined ? edit
+        : { ...edit, expectedProposalHeads: edgeHeads }, origin, createdAt);
     },
   }, []);
 

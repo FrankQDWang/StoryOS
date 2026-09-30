@@ -286,8 +286,12 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       const expectedText = edge === "start" ? "Guard the !narrator voice in this passage."
         : "Guard the narrator voice! in this passage.";
       await expect.poll(async () => (await getChapter({ ...options, chapterId })).chapter.current_revision.blocks)
-        .toEqual([{ ...edgeBase.chapter.current_revision.blocks[0]!, text: expectedText }]);
+        .toEqual([{ ...edgeBase.chapter.current_revision.blocks[0]!, text: expectedText }]).catch((error) => {
+          throw new Error(`${error}\nEdge request and response: ${JSON.stringify({ mixedRequest, mixedResponse })}`);
+        });
       await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+      assert.deepEqual(mixedRequest?.expected_proposal_head_revision_ids, [opened.proposal.revision_id]);
+      assert.equal(mixedRequest?.proposal_target, undefined);
       const afterEdge = (await getProposal({ ...options, proposalId: opened.proposalId })).proposal;
       assert.equal(afterEdge.revision_id, opened.proposal.revision_id);
       assert.equal(afterEdge.candidate_text, "narrator tone");
@@ -297,6 +301,37 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await expect(page.locator(`[data-proposal-accept="${opened.proposalId}"]`)).toHaveCount(0);
       await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", `inline-${edge}-edge-reloaded.png`) });
     }
+    await createInlineChapter("Inline writer refusal Chapter");
+    const writerBase = await getChapter({ ...options, chapterId });
+    const writerProposal = await openInline();
+    const writerCandidate = page.locator(`span[data-inline-proposal-id="${writerProposal.proposalId}"]`);
+    await expect(writerCandidate).toHaveText("narrator tone");
+    await page.locator(`[data-proposal-id="${writerProposal.proposalId}"][data-proposal-eligibility="eligible"]`).waitFor();
+    const observer = await context.newPage();
+    try {
+      await observer.setViewportSize({ width: 1487, height: 1058 });
+      assert.equal((await observer.goto(`${origin}/projects/${projectId}`))?.status(), 200);
+      await observer.locator("[data-take-over-writer]").click();
+      await observer.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+      let refusedPosts = 0;
+      await page.route((url) => url.pathname.endsWith(`/proposals/${writerProposal.proposalId}/acceptances`), async (route) => {
+        refusedPosts += 1;
+        await route.continue();
+      });
+      await page.locator(`[data-proposal-accept="${writerProposal.proposalId}"]`).click();
+      await page.locator(`[data-proposal-id="${writerProposal.proposalId}"][data-proposal-session="ineligible"]`).waitFor();
+      assert.equal(refusedPosts, 1);
+      assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, writerBase.chapter);
+      const refusedProposal = (await getProposal({ ...options, proposalId: writerProposal.proposalId })).proposal;
+      assert.equal(refusedProposal.revision_id, writerProposal.proposal.revision_id);
+      assert.equal(refusedProposal.candidate_text, "narrator tone");
+      assert.equal(refusedProposal.operation_resolution, "pending");
+      await page.reload();
+      await expect(writerCandidate).toHaveText("narrator tone");
+      await expect(page.locator(`[data-proposal-accept="${writerProposal.proposalId}"]`)).toHaveCount(0);
+      assert.equal(refusedPosts, 1, "reload must not submit a stale writer decision");
+      await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-writer-refused-reloaded.png") });
+    } finally { await observer.close(); }
     assert.deepEqual(errors, []);
   } catch (error) {
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-failure.png") });
