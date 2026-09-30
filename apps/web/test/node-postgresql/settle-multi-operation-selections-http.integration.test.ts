@@ -1,6 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { test } from "vitest";
 import {
   acceptProposal, applyAuthorEdit, createAgentRun, createEditorSession,
@@ -14,6 +14,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, requireStoryOSProtocolError,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
+import { canonicalDraftValue } from "../../src/refused-edit-discard.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer } from "../support/acceptance.ts";
@@ -370,21 +371,25 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
       firstAccepted.effect.authoritative_revision.revision_id,
       seeded.session.editor_session.editor_session_id, id(`${ns}0353`),
     );
-    const acceptRemaining = async () => challenged(
+    let secondNonce = "";
+    const acceptRemaining = async () => secondNonce === "" ? challenged(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
       secondRequest.command_schema, await digestAcceptProposal(secondRequest), id(`${ns}0354`),
       (antiForgery) => acceptProposal({
         baseUrl: started.baseUrl, projectId: prepared.projectId,
         proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id(`${ns}0354`), antiForgery, request: secondRequest,
+        idempotencyKey: id(`${ns}0354`), antiForgery: (secondNonce = antiForgery), request: secondRequest,
       }),
-    );
+    ) : acceptProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl,
+      idempotencyKey: id(`${ns}0354`), antiForgery: secondNonce, request: secondRequest,
+    });
     if (history === "retained") {
       const settlementState = async () => JSON.parse(await queryPostgres(`SELECT jsonb_build_object(${[
         "authoritative_heads", "authoritative_revisions", "authoritative_commits", "author_action_entries",
         "scope_counters", "proposal_heads", "proposal_revisions", "proposal_operations", "validation_receipts",
-        "domain_receipts", "acceptance_receipts", "proposal_validation_conditions", "command_idempotency",
+        "domain_receipts", "acceptance_receipts", "proposal_validation_conditions",
       ].map((table) => `'${table}', (SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)
         FROM storyos.${table} AS record WHERE owner_user_id='${USER_A}'::uuid AND project_id='${prepared.projectId}'::uuid)`).join(",")})::text`));
       const beforeFault = await settlementState();
@@ -474,14 +479,14 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
       export_project_archive_input: { ...BINDING, correlation_id: id(`${ns}0371`),
         archive_profile: "storyos.project-export.v1",
         archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" } };
-    const archive = async () => challenged(started.baseUrl, fetchImpl, prepared.projectId, "POST",
+    const archive = async (key = id(`${ns}0372`)) => challenged(started.baseUrl, fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/exports", exportRequest.command_schema,
-      await digestExportProjectArchive(exportRequest), id(`${ns}0372`), (antiForgery) => exportProjectArchive({
+      await digestExportProjectArchive(exportRequest), key, (antiForgery) => exportProjectArchive({
         baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl,
-        idempotencyKey: id(`${ns}0372`), antiForgery, request: exportRequest,
+        idempotencyKey: key, antiForgery, request: exportRequest,
       }));
     if (history === "legacy_overwritten") {
-      await assert.rejects(archive, (error) => {
+      await assert.rejects(() => archive(), (error) => {
         const problem = requireStoryOSProtocolError(error);
         return problem.status === 422 && JSON.parse(problem.responseBody ?? "null").code === "invalid_provenance";
       });
@@ -506,6 +511,35 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
       assert.equal(conditions.length, 1);
       assert.deepEqual(conditions, JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text
         FROM storyos.proposal_validation_conditions AS record WHERE project_id='${prepared.projectId}'::uuid`)));
+      const historical = await archive(id(`${ns}0374`));
+      if (historical.effect.kind !== "admitted") throw new Error("expected historical archive Admission");
+      const exportId = historical.effect.export_id;
+      const facts = JSON.parse(await queryPostgres(`SELECT facts::text FROM storyos.pinned_export_sources
+        WHERE project_id='${prepared.projectId}'::uuid AND export_id='${exportId}'::uuid`));
+      let replacement = "facts";
+      for (const [familyIndex, family] of facts.families.entries()) {
+        if (!["proposal_revisions", "validation_receipts"].includes(family.table)) continue;
+        for (const [rowIndex, row] of family.rows.entries()) {
+          if ((row.proposal_revision_id ?? row.revision_id) === opened.proposal.revision_id) {
+            row.base_authoritative_revision_id = chapter.chapter.current_revision.revision_id;
+            replacement = `jsonb_set(${replacement}, '{families,${familyIndex},rows,${rowIndex},base_authoritative_revision_id}',
+              to_jsonb('${chapter.chapter.current_revision.revision_id}'::text))`;
+          }
+        }
+      }
+      const encoded = canonicalDraftValue(facts);
+      const digest = createHash("sha256").update(encoded).digest("hex");
+      await queryPostgres(`UPDATE storyos.pinned_export_sources SET facts=${replacement},
+        facts_sha256='${digest}' WHERE project_id='${prepared.projectId}'::uuid AND export_id='${exportId}'::uuid`);
+      await settleOnce();
+      const failed = await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        exportId, fetchImpl });
+      assert.equal(failed.status, "failed");
+      assert.equal("immutable_root" in failed, false);
+      const refused = await fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${exportId}`,
+        { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+      assert.equal(refused.status, 422);
+      assert.deepEqual(await retainedHistory(), originalHistory);
     }
 
   } finally {

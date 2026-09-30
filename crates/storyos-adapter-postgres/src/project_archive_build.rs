@@ -487,6 +487,13 @@ fn archive_root_facts(
     created_at: &str,
     sources: &[ArchiveEntrySource],
 ) -> Result<ProjectArchiveRootFacts, ProjectArchiveBuildRefusal> {
+    if !crate::validation_history::archive_history_available(|table| {
+        let path = format!("canonical/{table}.json");
+        let source = sources.iter().find(|source| source.path == path)?;
+        serde_json::from_slice(&source.bytes).ok()
+    }) {
+        return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
+    }
     let known_purged_gaps = super::project_archive_draft::withheld_payload_gaps(sources)?;
     Ok(ProjectArchiveRootFacts {
         archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),

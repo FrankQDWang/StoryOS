@@ -30,3 +30,48 @@ pub(super) async fn unavailable_revisions(
         .await?;
     Ok(rows.iter().map(|row| row.get(0)).collect())
 }
+
+pub(super) fn archive_history_available(
+    load_rows: impl Fn(&str) -> Option<Vec<serde_json::Value>>,
+) -> bool {
+    let available = || -> Option<()> {
+        let key = |row: &serde_json::Value, field: &str| {
+            Some((
+                row.get("owner_user_id")?.as_str()?.to_owned(),
+                row.get("project_id")?.as_str()?.to_owned(),
+                row.get(field)?.as_str()?.to_owned(),
+            ))
+        };
+        let index = |rows: Vec<serde_json::Value>, field: &str| {
+            let count = rows.len();
+            let indexed = rows
+                .into_iter()
+                .map(|row| Some((key(&row, field)?, row)))
+                .collect::<Option<std::collections::BTreeMap<_, _>>>()?;
+            (indexed.len() == count).then_some(indexed)
+        };
+        let revisions = index(load_rows("proposal_revisions")?, "revision_id")?;
+        let validations = index(load_rows("validation_receipts")?, "validation_receipt_id")?;
+        let domains = index(load_rows("domain_receipts")?, "receipt_id")?;
+        for acceptance in load_rows("acceptance_receipts")? {
+            if acceptance.get("result")?.as_str()? != "authoritative_applied" {
+                continue;
+            }
+            let revision = revisions.get(&key(&acceptance, "proposal_revision_id")?)?;
+            let validation = validations.get(&key(&acceptance, "validation_receipt_id")?)?;
+            let domain = domains.get(&key(&acceptance, "acceptance_receipt_id")?)?;
+            let base = revision.get("base_authoritative_revision_id")?.as_str()?;
+            if domain.get("prior_heads")? != &serde_json::json!([base])
+                || validation.get("base_authoritative_revision_id")?.as_str()? != base
+                || validation.get("reservation_state")?.as_str()? != "unresolved"
+                || validation.get("proposal_revision_id")?
+                    != acceptance.get("proposal_revision_id")?
+                || validation.get("proposal_id")? != acceptance.get("proposal_id")?
+            {
+                return None;
+            }
+        }
+        Some(())
+    };
+    available().is_some()
+}
