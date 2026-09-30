@@ -432,7 +432,7 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         )
         require_union_variant_shape(
             errors, settlement, "ZeroAuthorityReceiptSettled", "OtherEditorReceiptSettled",
-            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | NoEffect | Conflicted | Refused"),
+            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused"),
             ("project_activity_position",),
         )
         require_union_variant_shape(
@@ -460,7 +460,7 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         require_union_variant_shape(
             errors, convergence_union, "ZeroAuthorityReceiptVisible",
             "OtherEditorReceiptConverged",
-            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | NoEffect | Conflicted | Refused"),
+            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused"),
             ("project_activity_position",),
         )
         require_union_variant_shape(
@@ -499,8 +499,8 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         require_union_variant_shape(
             errors, observation_union, "ApplyAuthorEditZeroAuthorityObservation",
             "OtherEditorCommittedObservation",
-            ("receipt: DomainReceipt { result: ProposalRevised | NoEffect | Conflicted | Refused }",
-             "effect: ProposalRevised | NoEffect | Conflicted | Refused"),
+            ("receipt: DomainReceipt { result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused }",
+             "effect: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused"),
             ("project_activity_position",),
         )
         require_union_variant_shape(
@@ -509,12 +509,26 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
             ("receipt_ref: ReceiptRef", "project_activity_position"),
         )
     for required in (
-        "| HTTP `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` |",
-        "| outcome Query returns `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` |",
+        "| HTTP `applyAuthorEdit` v2 `ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, or `Refused` |",
+        "| outcome Query returns `applyAuthorEdit` v2 `ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, or `Refused` |",
         "| `ProposalRevised` | `ZeroAuthorityReceiptVisible`",
+        "| `RefusedToDraft` | `ZeroAuthorityReceiptVisible` shows the exact `draft_id`, "
+        "`draft_revision_id`, and `creation_event_id`",
+        "`RefusedToDraft` retains one Refused Edit Draft and one typed Receipt; it creates",
+        "no Authoritative or Proposal Revision, Authoritative Commit, Author Action, or",
+        "Project Activity. It is not ordinary `Refused` or `ProposalRevised`.",
+        "The exact `draft_id`, `draft_revision_id`, and `creation_event_id` remain bound",
+        "Fresh input preserves `FreshEditorIntent` provenance; retry replacement preserves",
+        "`DraftRetryReplacement` provenance and the exact `source_draft_disposition`.",
+        "`ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, and `Refused` use",
+        "`RefusedToDraft`, `Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action",
+        "Receipt has no matching Project Activity Event",
+        "`ZeroAuthorityReceiptSettled` covers `ProposalRevised`, `RefusedToDraft`,",
+        "no Authoritative or Proposal Revision, Authoritative Commit, Author Action, "
+        "Project Activity, checkpoint, authoritative projection, or active-base advance;",
     ):
         if required not in visible_web:
-            errors.append(f"Web ProposalRevised result mapping missing {required}")
+            errors.append(f"Web Author Edit result mapping missing {required}")
     return errors
 
 
@@ -884,6 +898,14 @@ def author_admission_errors(admission_projection: str) -> list[str]:
         visible_admission,
         flags=re.MULTILINE,
     )
+    draft_rows = re.findall(
+        r"^\|\s*`RefusedToDraft`\s*\|.*$", visible_admission, flags=re.MULTILINE,
+    )
+    if len(draft_rows) != 1 or any(required not in draft_rows[0] for required in (
+        "`ReceiptOnly`", "one typed Receipt", "one retained Draft", "immutable Draft Revision",
+        "creation Event", "no Authoritative Commit", "no Author Action", "zero Project Activity",
+    )) or "ActivityBacked" in draft_rows[0]:
+        errors.append("Admission RefusedToDraft Receipt-only mapping drifted")
     zero_row = re.findall(
         r"^\|\s*`NoEffect`, `Conflicted`, or `Refused`\s*\|.*$",
         visible_admission,
@@ -1301,20 +1323,20 @@ def self_test() -> None:
     assert "outcome Query bootstrap drifted" in "\n".join(policy_errors(
         policy, evidence, candidate_metrics, response_schema, changed_projections))
     for old, new, expected_error in (
-        ("receipt_ref: DomainReceiptRef\n      result: ProposalRevised | NoEffect | Conflicted | Refused",
+        ("receipt_ref: DomainReceiptRef\n      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused",
          "receipt_ref: DomainReceiptRef\n      project_activity_position\n"
-         "      result: ProposalRevised | NoEffect | Conflicted | Refused",
+         "      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused",
          "ZeroAuthorityReceiptSettled shape drifted"),
         ("  | AppliedReceiptConverged {", "  | LostAppliedReceiptConverged {",
          "AppliedReceiptConverged shape drifted"),
         ("      receipt_ref: DomainReceiptRef\n      project_activity_position",
          "      project_activity_position", "AppliedReceiptSettled shape drifted"),
-        ("      result: ProposalRevised | NoEffect | Conflicted | Refused\n      committed_at",
+        ("      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused\n      committed_at",
          "      committed_at", "ZeroAuthorityReceiptSettled shape drifted"),
-        ("      result: ProposalRevised | NoEffect | Conflicted | Refused\n      committed_at",
+        ("      result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused\n      committed_at",
          "      result: NoEffect | Conflicted | Refused\n      committed_at",
          "ZeroAuthorityReceiptSettled shape drifted"),
-        ("      receipt: DomainReceipt { result: ProposalRevised | NoEffect | Conflicted | Refused }",
+        ("      receipt: DomainReceipt { result: ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused }",
          "      receipt: DomainReceipt { result: NoEffect | Conflicted | Refused }",
          "ApplyAuthorEditZeroAuthorityObservation shape drifted"),
         ("  | ZeroAuthorityReceiptSettled {",
@@ -1326,7 +1348,61 @@ def self_test() -> None:
         changed_projections[web] = changed_projections[web].replace(old, new, 1)
         assert expected_error in "\n".join(policy_errors(
             policy, evidence, candidate_metrics, response_schema, changed_projections))
+    zero_results = "ProposalRevised | RefusedToDraft | NoEffect | Conflicted | Refused"
+    for union_name, next_union, expected_error in (
+        ("GroupSettlement", "AuthorSurfaceConvergence",
+         "ZeroAuthorityReceiptSettled shape drifted"),
+        ("AuthorSurfaceConvergence", "AuthorAttention",
+         "ZeroAuthorityReceiptVisible shape drifted"),
+        ("BrowserProtocolObservation", None,
+         "ApplyAuthorEditZeroAuthorityObservation shape drifted"),
+    ):
+        end = rf"(?=\n\n{next_union}\s*=)" if next_union else r"(?=\n```)"
+        union = re.search(rf"{union_name}\s*=.*?{end}", projections[web], flags=re.DOTALL)
+        assert union and zero_results in union.group(0), union_name
+        for result in zero_results.split(" | "):
+            incomplete = " | ".join(value for value in zero_results.split(" | ")
+                                    if value != result)
+            changed_projections = dict(projections)
+            changed_projections[web] = projections[web].replace(
+                union.group(0), union.group(0).replace(zero_results, incomplete), 1
+            )
+            assert expected_error in "\n".join(policy_errors(
+                policy, evidence, candidate_metrics, response_schema, changed_projections))
+    draft_row = next(row for row in projections[web].splitlines()
+                     if row.startswith("| `RefusedToDraft` |"))
+    for old, new in (
+        (draft_row, ""),
+        (draft_row, draft_row.replace("Author Action, Project Activity", "Project Activity")),
+        (draft_row, draft_row.replace("Project Activity, checkpoint", "checkpoint")),
+        ("`draft_revision_id`, and `creation_event_id`", "`draft_revision_id`"),
+        ("Fresh input preserves `FreshEditorIntent` provenance; retry replacement preserves",
+         "Fresh input preserves `DraftRetryReplacement` provenance; retry replacement preserves"),
+        ("`RefusedToDraft`, `Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action",
+         "`Refused`, `Conflicted`, or `NoEffect` result allocates no Author Action"),
+        ("`ProposalRevised`, `RefusedToDraft`, `NoEffect`, `Conflicted`, and `Refused` use",
+         "`ProposalRevised`, `NoEffect`, `Conflicted`, and `Refused` use"),
+    ):
+        assert old in projections[web], old
+        changed_projections = dict(projections)
+        changed_projections[web] = projections[web].replace(old, new, 1)
+        assert "Web Author Edit result mapping missing" in "\n".join(policy_errors(
+            policy, evidence, candidate_metrics, response_schema, changed_projections)), old
     admission = AUTHOR_ADMISSION_PATH.as_posix()
+    draft_row = next(row for row in projections[admission].splitlines()
+                     if row.startswith("| `RefusedToDraft` |"))
+    for changed_row in (
+        "", draft_row.replace("`RefusedToDraft`", "`Refused`"),
+        draft_row.replace("`ReceiptOnly`", "`ActivityBacked { project_activity_position }`"),
+        draft_row.replace("one retained Draft", "no Draft"),
+        draft_row.replace("creation Event", "no event"),
+        draft_row.replace("no Author Action", "one Forward Author Action"),
+    ):
+        changed_projections = dict(projections)
+        changed_projections[admission] = projections[admission].replace(draft_row, changed_row, 1)
+        assert "Admission RefusedToDraft Receipt-only mapping drifted" in "\n".join(
+            policy_errors(policy, evidence, candidate_metrics, response_schema,
+                          changed_projections))
     for old, new, expected_error in (
         ("    receipt_ref,\n", "", "Admission ReceiptSettled branch shape drifted"),
         ("      | ReceiptOnly,\n",
