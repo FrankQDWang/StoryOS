@@ -456,3 +456,13 @@ input:focus-visible,
 .editor-recovery form { display: grid; gap: 8px; margin-top: 17px; }
 .editor-recovery label { display: grid; gap: 5px; }
 .editor-recovery textarea, .editor-recovery select { max-width: 100%; box-sizing: border-box; }
+
+.inline-proposal { background: var(--proposal-bg, #eeece5); border-bottom: 1px solid #b9b5a6; padding: 2px 0; }
+.inline-proposal-controls .block-proposal-text { display: none; }
+
+.manuscript-editor .inline-proposal-controls { display: flex; flex-wrap: wrap; column-gap: 24px; padding: 0; border: 0; background: transparent; }
+.manuscript-editor :is(.inline-proposal-controls, .inline-proposal-stale) .block-proposal-label { flex-basis: 100%; }
+.manuscript-editor :is(.inline-proposal-controls, .inline-proposal-stale) button { border: 0; background: transparent; display: inline-flex; align-items: center; gap: 7px; padding: 5px 4px; color: #5b5953; cursor: pointer; font-size: 14px; }
+.manuscript-editor :is(.inline-proposal-controls, .inline-proposal-stale) button:hover:not(:disabled) { color: #171612; }
+.manuscript-editor .inline-proposal-stale { display: flex; flex-wrap: wrap; column-gap: 24px; }
+.manuscript-editor .inline-proposal-stale .block-proposal-text { flex-basis: 100%; }

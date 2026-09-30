@@ -278,7 +278,9 @@ export function ManuscriptEditor({
                 primitive.kind === "replace_block_selection")?.text ?? "",
             }
             : edit);
-      void idleRef.current?.persist(edit, origin, createdAt);
+      const edgeHeads = transaction.getMeta("storyos.inlineEdgeHeads") as string[] | undefined;
+      void idleRef.current?.persist(edgeHeads === undefined ? edit
+        : { ...edit, expectedProposalHeads: edgeHeads }, origin, createdAt);
     },
   }, []);
 
@@ -350,7 +352,10 @@ export function ManuscriptEditor({
       const copyButton = target.closest<HTMLButtonElement>("button[data-proposal-copy]");
       const button = acceptButton ?? rejectButton ?? replanButton ?? withdrawButton ?? copyButton;
       const proposal = button?.closest<HTMLElement>("[data-proposal-id]");
-      const text = proposal?.querySelector(".block-proposal-text")?.textContent;
+      const proposalId = proposal?.dataset.proposalId;
+      const inline = proposalId === undefined ? null
+        : editor.view.dom.querySelector(`[data-inline-proposal-id="${proposalId}"]`);
+      const text = inline?.textContent ?? proposal?.querySelector(".block-proposal-text")?.textContent;
       if (button === null || button === undefined || proposal === null
         || proposal === undefined || text === null || text === undefined) return;
       const decision = {
@@ -376,14 +381,18 @@ export function ManuscriptEditor({
     const rendered = readManuscriptParagraphs(editor.state.doc);
     const renderedKey = rendered?.map((block) =>
       `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" ");
-    if (renderedKey !== identityKey) {
+    if (renderedKey !== identityKey || (rendered !== undefined
+      && !paragraphsEqual(rendered, blocks) && persistWorkspace?.pending.save_state === "saved"
+      && persistWorkspace.pending.unsettled_intent_count === 0)) {
       hydrateManuscriptBlocks(editor, blocks);
+      projectBlockProposals(editor, proposals);
     }
     observedBlocksRef.current = readManuscriptParagraphs(editor.state.doc)
       ?? blocks.map((block) => ({ ...block }));
     syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
   }, [blocks.map((block) =>
-    `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" "), editor]);
+    `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}:${block.text}`).join(" "),
+    persistWorkspace?.pending.save_state, editor]);
 
   useEffect(() => {
     if (editor === null || persistWorkspace === undefined) {
@@ -523,7 +532,8 @@ export function ManuscriptEditor({
       mixedCompositionRef.current = captureStructuredSelection(editor.state, editor.state.tr.deleteSelection());
       if (mixedCompositionRef.current !== undefined && !idle.canAcceptCandidateInput(true)) mixedCompositionRef.current = undefined;
       mixedCompositionStartRef.current = mixedCompositionRef.current === undefined ? null : editor.state.doc;
-      const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal";
+      const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal"
+        || editor.state.selection.$from.parent.type.name === "inlineProposal";
       candidateCompositionBlockedRef.current = candidateSelected
         && !idle.canAcceptCandidateInput(true);
       candidateCompositionStartRef.current = candidateSelected

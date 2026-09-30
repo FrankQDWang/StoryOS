@@ -1,3 +1,4 @@
+import { inlineProjectionAnchor } from "./inline-proposal-decoration.ts";
 import { useEffect, useRef, useState } from "react";
 
 import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -282,12 +283,16 @@ export function BlockProposalDisplay({
       item.manuscript_block_id === proposal.manuscript_block_id);
     const condition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
     const anchored = proposal !== undefined
-      && (proposal.kind === "block_edit" || proposal.kind === "reversal")
+      && (proposal.kind === "block_edit" || proposal.kind === "reversal" || proposal.kind === "inline_edit")
       && operation !== undefined
       && blockCounts.get(proposal.manuscript_block_id) === 1 && safeToProject;
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
+    const inlineAnchor = proposal === undefined ? undefined
+      : inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId);
     const conditionVisible = condition !== "absent" || proposal?.validation === "invalid"
-      || proposal?.validation === "pending";
+      || proposal?.validation === "pending"
+      || proposal?.kind === "inline_edit" && proposal.closure === "open"
+        && operation?.resolution === "pending" && operation.reservation_state === "unresolved";
     if (!anchored || proposal === undefined || operation === undefined
       || (!baseMatches && !conditionVisible)) {
       unavailable.push({ locator, proposal });
@@ -305,6 +310,7 @@ export function BlockProposalDisplay({
     const eligible = controlsReady && baseMatches
       && proposal.generation === "ready" && proposal.validation === "valid"
       && condition === "absent"
+      && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined)
       && proposal.closure === "open" && operation.resolution === "pending"
       && operation.reservation_state === "unresolved"
       && proposal.validation_receipt.kind === "present"
@@ -326,6 +332,8 @@ export function BlockProposalDisplay({
       pendingWithdraw: pendingWithdrawals.includes(proposal.proposal_id),
     });
     projections.push({
+      inlineProposal: proposal.kind === "inline_edit",
+      ...(baseMatches && inlineAnchor !== undefined ? { inlineAnchor } : {}),
       proposalId: proposal.proposal_id,
       operationId: operation.operation_id,
       revisionId: proposal.revision_id,
@@ -350,6 +358,16 @@ export function BlockProposalDisplay({
       localPending: candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`]
         !== undefined,
     });
+  }
+
+  const anchorWorkspace = editorProps.persistWorkspace;
+  if (anchorWorkspace !== undefined) {
+    anchorWorkspace.inlineProposalAnchors = reads.flatMap(({ proposal }) =>
+      proposal?.chapter_id === chapterId && proposal.kind === "inline_edit"
+        && expectedHeads.length === 1 && expectedHeads[0] === proposal.revision_id
+        && inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId) !== undefined
+        ? proposal.anchors.map(({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest }) =>
+          ({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest })) : []);
   }
 
   const acceptDisplayed = (target: {

@@ -2079,3 +2079,137 @@ test("a complete source cannot prove a selection inside a UTF-16 surrogate pair"
     assert.deepEqual(await retainedState(prepared.projectId), before);
   } finally { await stopRealServer(started.server); }
 });
+
+test("explicit Inline candidate input binds the exact Operation and preserves source prose", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("d828011"), "Explicit Inline Novel", "d82802");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "d82803");
+    const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl };
+    const before = await getChapter({ ...options, chapterId: prepared.chapterId });
+    const operation = opened.proposal.operations[0]!;
+    const request = replaceUnit(5, 5, "xx", writer, "d82804", opened.proposal.revision_id);
+    request.proposal_target = { proposal_id: opened.proposal.proposal_id,
+      operation_id: operation.operation_id, revision_id: opened.proposal.revision_id,
+      manuscript_block_id: opened.proposal.manuscript_block_id };
+    const send = async (input: ApplyAuthorEditRequest, key: string) => challenged(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", input.command_schema,
+      await digestApplyAuthorEdit(input), key, (antiForgery) => applyAuthorEdit({
+        ...options, request: input, idempotencyKey: key, antiForgery }));
+    const wrong = structuredClone(request);
+    wrong.correlation_id = id("d828053");
+    wrong.completed_intent_record_id = id("d828055");
+    wrong.proposal_target!.operation_id = id("d828057");
+    const refused = await send(wrong, id("d828056"));
+    assert.equal(refused.effect.kind, "refused");
+    assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
+    assert.deepEqual((await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal,
+      opened.proposal);
+    const edited = await send(request, id("d828046"));
+    assert.equal(edited.effect.kind, "proposal_revised");
+    const revised = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+    assert.equal(revised.candidate_text, "narraxxtor tone");
+    assert.notEqual(revised.revision_id, opened.proposal.revision_id);
+    assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("canonical Inline boundary input preserves exact target and refuses wrong, stale, or interior ownership", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    for (const [index, offset] of [10, 24].entries()) {
+      const ns = `d829${index}`;
+      const prepared = await prepare(started.baseUrl, id(`${ns}011`), "Canonical Inline Edge", `${ns}02`);
+      const siblingText = "Second paragraph. 😀";
+      const writer = await writePassage(started.baseUrl, prepared.fetchImpl,
+        prepared.projectId, `${ns}03`, PROSE + siblingText);
+      const initial = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+      const firstBlock = initial.chapter.current_revision.blocks[0]!;
+      const split = replaceUnit(PROSE.length, PROSE.length, "", writer, `${ns}07`, id(`${ns}079`));
+      split.expected_proposal_head_revision_ids = [];
+      split.observed_ownership_partition = "authoritative";
+      split.author_edit_units[0]!.normalized_primitives = [{ kind: "split_block",
+        manuscript_block_id: firstBlock.manuscript_block_id, offset: PROSE.length,
+        new_manuscript_block_id: id(`${ns}077`) }];
+      const divided = await sendMixed(started.baseUrl, prepared, split, id(`${ns}076`));
+      if (divided.effect.kind !== "authoritative_applied") throw new Error("expected split");
+      writer.authoritativeRevisionId = divided.effect.authoritative_revision.revision_id;
+      writer.nextSequence = "3";
+      const run = await admitPhrase(started.baseUrl, prepared.fetchImpl,
+        prepared.projectId, prepared.chapterId, id(`${ns}038`));
+      if (run.decision.kind !== "prose_change" || run.decision.opened_proposal.kind !== "present")
+        throw new Error("expected Inline Proposal");
+      const opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        proposalId: run.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl });
+      if (index === 0) {
+        await queryPostgres(`UPDATE storyos.proposal_revisions SET validation='invalid'
+          WHERE project_id='${prepared.projectId}'::uuid AND revision_id='${opened.proposal.revision_id}'::uuid`);
+        opened.proposal = (await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal;
+        assert.equal(opened.proposal.validation, "invalid");
+      }
+      const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl };
+      const before = await getChapter({ ...options, chapterId: prepared.chapterId });
+      const request = replaceUnit(offset, offset, "!", writer, `${ns}04`, opened.proposal.revision_id);
+      request.author_edit_units[0]!.normalized_primitives = [{ kind: "replace_block_selection",
+        manuscript_block_id: opened.proposal.manuscript_block_id, from: offset, to: offset, text: "!" }];
+      const send = async (input: ApplyAuthorEditRequest, key: string) => challenged(
+        started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/manuscript/author-edits", input.command_schema,
+        await digestApplyAuthorEdit(input), key, (antiForgery) => applyAuthorEdit({
+          ...options, request: input, idempotencyKey: key, antiForgery }));
+      for (const [negativeIndex, shape] of ["wrong_block", "stale_head", "interior"].entries()) {
+        const refused = structuredClone(request);
+        refused.correlation_id = id(`${ns}05${negativeIndex}3`);
+        refused.completed_intent_record_id = id(`${ns}05${negativeIndex}5`);
+        const primitive = refused.author_edit_units[0]!.normalized_primitives[0]!;
+        assert.ok(primitive.kind === "replace_block_selection");
+        if (shape === "wrong_block") primitive.manuscript_block_id = id(`${ns}0577`);
+        if (shape === "stale_head") refused.expected_proposal_head_revision_ids = [id(`${ns}0578`)];
+        if (shape === "interior") {
+          primitive.from = 15; primitive.to = 15;
+          refused.author_edit_units[0]!.selection_snapshot.from = 15;
+          refused.author_edit_units[0]!.selection_snapshot.to = 15;
+        }
+        assert.equal((await send(refused, id(`${ns}05${negativeIndex}6`))).effect.kind, "conflicted");
+        assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
+        assert.deepEqual((await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal, opened.proposal);
+      }
+      assert.equal((await send(request, id(`${ns}046`))).effect.kind, "authoritative_applied");
+      const after = await getChapter({ ...options, chapterId: prepared.chapterId });
+      assert.deepEqual(after.chapter.current_revision.blocks, before.chapter.current_revision.blocks.map((block) => ({
+        ...block, text: block.manuscript_block_id === opened.proposal.manuscript_block_id
+          ? block.text.slice(0, offset) + "!" + block.text.slice(offset) : block.text })));
+      const retained = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+      assert.equal(retained.revision_id, opened.proposal.revision_id);
+      assert.equal(retained.candidate_text, INLINE_CANDIDATE);
+      if (index === 0) {
+        assert.equal(retained.validation, "invalid");
+        if (retained.validation_receipt.kind !== "present") throw new Error("expected receipt");
+        const acceptance: AcceptProposalRequest = { command_schema: "storyos.command.accept-proposal.request.v1",
+          accept_proposal_input: { ...BINDING, correlation_id: id(`${ns}081`),
+            proposal_revision_id: retained.revision_id,
+            validation_receipt_id: retained.validation_receipt.validation_receipt_id,
+            selected_operation_ids: [retained.operation_id],
+            expected_authoritative_revision_id: after.chapter.current_revision.revision_id,
+            editor_session_id: writer.session.editor_session.editor_session_id } };
+        const result = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+          "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", acceptance.command_schema,
+          await digestAcceptProposal(acceptance), id(`${ns}082`), (antiForgery) => acceptProposal({
+            ...options, proposalId: retained.proposal_id, request: acceptance, antiForgery,
+            idempotencyKey: id(`${ns}082`) }));
+        assert.deepEqual(result.effect, { kind: "refused", reason: "not_eligible" });
+        assert.deepEqual((await getProposal({ ...options, proposalId: retained.proposal_id })).proposal, retained);
+        assert.deepEqual(result.receipt.authoritative_commit_ids, []);
+        assert.equal(result.receipt.proposal_revision_id, retained.revision_id);
+        assert.deepEqual(result.receipt.resulting_authoritative_revision_ids, [after.chapter.current_revision.revision_id]);
+        assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, after.chapter);
+      }
+    }
+  } finally { await stopRealServer(started.server); }
+});

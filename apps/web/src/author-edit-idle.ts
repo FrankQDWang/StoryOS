@@ -26,7 +26,7 @@ import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
 
 type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
 
-export type IdlePersistEdit = ReplaceSelectionEdit | CapturedManuscriptEdit
+export type IdlePersistEdit = ReplaceSelectionEdit | (CapturedManuscriptEdit & { expectedProposalHeads?: string[] })
   | CandidateSelectionEdit | StructuredSelectionEdit;
 
 export interface AuthorEditIdleController {
@@ -232,6 +232,8 @@ export function createAuthorEditIdleController({
                 text: edit.text,
                 resultingBody: edit.resultingBody,
                 manuscript_block_id: edit.manuscript_block_id,
+                ...("expectedProposalHeads" in edit && edit.expectedProposalHeads !== undefined
+                  ? { expectedProposalHeads: edit.expectedProposalHeads } : {}),
                 ...persistFields,
               }, cryptoImpl);
         workspace.pending = projection;

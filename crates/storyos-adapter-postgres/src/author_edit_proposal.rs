@@ -124,7 +124,7 @@ pub(super) async fn load_chapter_proposal_heads(
                 && row.get::<_, Option<String>>(6).as_deref() == Some(target.operation_id.as_str())
                 && row.get::<_, Option<String>>(7).as_deref() == Some("pending")
                 && row.get::<_, Option<String>>(8).as_deref() == Some("unresolved")
-                && kind == "block_edit"
+                && matches!(kind.as_str(), "block_edit" | "inline_edit")
         });
         let inline_target = !structured
             && command.proposal_target.is_none()
@@ -282,6 +282,23 @@ pub(super) fn route_inline_author_edit(
     let Some((from, to)) = first_replace_range(&author_edit_units) else {
         return Err(AuthorEditRefusal::UnsupportedIntentShape);
     };
+    if context.operation_id.is_some() {
+        if context.structured_candidate {
+            return Err(AuthorEditRefusal::UnsupportedIntentShape);
+        }
+        let candidate_to = u32::try_from(context.candidate_text.encode_utf16().count())
+            .map_err(|_| AuthorEditRefusal::InvalidSelection)?;
+        if classify_inline_input_owner(&[(0, candidate_to)], from, to) != InlineInputOwner::Proposal
+        {
+            return Err(AuthorEditRefusal::InvalidSelection);
+        }
+        return Ok(RoutedInlineAuthorEdit {
+            current_body: loaded.edit_body.clone(),
+            author_edit_units,
+            disposition: InlineEditDisposition::Unspecified,
+            proposal_context: Some(context),
+        });
+    }
     match classify_inline_input_owner(&context.ranges, from, to) {
         InlineInputOwner::Proposal => {
             if context.structured_candidate {
