@@ -10,11 +10,16 @@
 - Preserve unrelated user changes. Do not rewrite, discard, or clean them up as part of another task.
 - Write all repository artifacts in ASD-STE100 Simplified Technical English: code, comments, documentation, commit messages, GitHub Issues, and pull requests. Talk to the user in Simplified Chinese. Always read `GLOSSARY.md` files, and use their ubiquitous language.
 
+## Agent skills
+
+- For issue publication, claims, and delivery, use GitHub and [Issue tracker](docs/agents/issue-tracker.md).
+- For triage, map the upstream roles with [Triage labels](docs/agents/triage-labels.md).
+- Before domain exploration or design, follow the single-context [Domain docs](docs/agents/domain.md) for the glossary and ADRs.
+
 ## GitHub Issue and pull-request execution
 
 ### Parallel specification delivery
 
-- Follow [Issue tracker](docs/agents/issue-tracker.md) for the upstream Matt `implement-spec` workflow, ticket publication, native dependencies, claims, integration, and final resolutions.
 - Use one integration branch per specification and a separate branch and worktree per implementation ticket. Run independent dependency-ready tickets in parallel. Preserve real product release gates.
 - Push the integration branch for one aggregate pull request; do not push implementation commits directly to `origin/main`. Merge into `main` only after current required checks and independent Standards and Spec reviews pass. Use an ordinary merge commit unless the specification requires another method.
 

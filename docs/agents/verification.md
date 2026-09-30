@@ -5,6 +5,9 @@ For test lifecycle changes, run `make verify-policy` and inspect a new plan.
 
 ## Parallel implementation
 
+Before starting database or observation commands in parallel worktrees, read
+[Parallel resources](parallel-resources.md) for checkout isolation and lifecycle rules.
+
 Use [Issue tracker](issue-tracker.md) for ticket readiness, integration ownership,
 and final acceptance. Run each ticket's commands in its own worktree with its own
 `target/` outputs and checkout resources. Set `BASE` to the exact integration
