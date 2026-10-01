@@ -570,7 +570,7 @@ test("a fresh instruction revises the exact pending candidate through the real W
         index === 1 ? id("ca91") : invalid.operation_id, id(`ca9${index + 2}`)), { status: index === 0 ? 422 : 409 });
     }
     await assert.rejects(() => admitCandidateRevision(started.baseUrl, browserFetch(started.baseUrl, "session-b"), projectId,
-      revised.proposal, revised.proposal.operation_id, id("ca99")), { status: 403 });
+      revised.proposal, revised.proposal.operation_id, id("ca99")), { status: 404 });
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, revised.proposal);
     assert.deepEqual(run.context.candidate_target, { proposal_id: proposalId,
       operation_id: before.proposal.operation_id, revision_id: before.proposal.revision_id });
