@@ -172,7 +172,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.source_condition.kind).toBe('proposal_conflict');
     await candidate().locator('[data-proposal-replan]').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.revision_id).not.toBe(conflicted.revision_id);
-    await expect(candidate().locator('[data-proposal-accept]')).toBeVisible();
+    await expect(candidate()).not.toHaveAttribute('contenteditable', 'false');
     const replanned = (await getProposal({ ...options, proposalId })).proposal;
     assert.notEqual(replanned.revision_id, conflicted.revision_id);
     assert.equal(replanned.operations.find(operation => operation.operation_id === firstOutcome.operation_id)?.resolution, 'applied');

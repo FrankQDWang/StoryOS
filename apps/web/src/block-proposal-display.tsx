@@ -344,6 +344,9 @@ export function BlockProposalDisplay({
       text: candidateTexts[`${proposal.proposal_id}:${operation.operation_id}:${proposal.revision_id}`]
         ?? operation.candidate_text,
       eligible,
+      candidateEditable: rejectEligible && baseMatches && condition === "absent"
+        && proposal.generation === "ready" && proposal.validation !== "invalid"
+        && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined) && !pendingAcceptance,
       retryPending: pendingAcceptance && knownProblems[proposal.proposal_id] === undefined
         && accepting !== proposal.proposal_id,
       rejectEligible,

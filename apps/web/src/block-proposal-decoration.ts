@@ -15,6 +15,7 @@ export type BlockProposalProjection = {
   sourceDecisionId: string;
   text: string;
   eligible: boolean;
+  candidateEditable?: boolean;
   retryPending?: boolean;
   rejectEligible?: boolean;
   retryRejection?: boolean;
@@ -35,7 +36,7 @@ export const PROPOSAL_ATTRIBUTES = [
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
   "rejectEligible", "retryRejection", "replanEligible", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
-  "focused", "pendingOperationIds", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
+  "candidateEditable", "focused", "pendingOperationIds", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
@@ -104,7 +105,7 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
       priorText: node.textContent,
       ...replacement,
     };
-    if (!changed.proposal.eligible) return { valid: false as const };
+    if (!(node.attrs.candidateEditable ?? node.attrs.eligible)) return { valid: false as const };
   }
   return { valid: true as const, edit: changed };
 }
@@ -138,6 +139,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         sourceRunId: proposal.sourceRunId,
         sourceDecisionId: proposal.sourceDecisionId,
         eligible: proposal.eligible,
+        candidateEditable: proposal.candidateEditable ?? proposal.eligible,
         retryPending: proposal.retryPending ?? false,
         rejectEligible: proposal.rejectEligible ?? false,
         retryRejection: proposal.retryRejection ?? false,
@@ -208,7 +210,7 @@ export const blockProposalDecoration = TiptapNode.create({
       role: "group",
       "aria-label": eligible || rejectEligible ? "候选文字，尚未成为正文"
         : "候选文字，暂不可操作",
-      ...(eligible ? {} : { contenteditable: "false" }),
+      ...(node.attrs.candidateEditable === true ? {} : { contenteditable: "false" }),
     }, ["span", { class: "block-proposal-label", contenteditable: "false" },
       eligible || rejectEligible ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可操作"],
     ["p", { class: "block-proposal-text" }, 0],
