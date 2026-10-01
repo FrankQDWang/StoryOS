@@ -169,7 +169,7 @@ test("one request produces explained exact locations and keeps them after restar
     assert.equal(locations?.length, 2);
     assert.deepEqual(locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id,
       candidate_text, explanation }) => ({ chapter_id, manuscript_block_id, base_authoritative_revision_id, candidate_text, explanation })),
-      before.chapter.current_revision.blocks.map((block, index) => ({ chapter_id,
+      before.chapter.current_revision.blocks.map((block, index) => ({ chapter_id: chapterId,
         manuscript_block_id: block.manuscript_block_id,
         base_authoritative_revision_id: before.chapter.current_revision.revision_id,
         candidate_text: index === 0 ? PROSE : SECOND_PROSE,
