@@ -52,6 +52,7 @@ pub struct CreateChapterInput {
         skip_serializing_if = "Option::is_none",
         deserialize_with = "placement"
     )]
+    #[ts(optional)]
     pub placement: Option<CreateChapterPlacement>,
     pub client_contract_revision: String,
     pub security_policy_revision: String,

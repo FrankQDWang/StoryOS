@@ -125,7 +125,7 @@ export type DeleteVolumeResponse = { schema_id: string, correlation_id: string, 
 
 export type CreateChapterPlacement = { "kind": "before", chapter_id: string, } | { "kind": "after", chapter_id: string, };
 
-export type CreateChapterInput = { title: string, expected_tree_revision: string, placement?: CreateChapterPlacement | null, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type CreateChapterInput = { title: string, expected_tree_revision: string, placement?: CreateChapterPlacement, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type CreateChapterRequest = { command_schema: string, create_chapter_input: CreateChapterInput, };
 

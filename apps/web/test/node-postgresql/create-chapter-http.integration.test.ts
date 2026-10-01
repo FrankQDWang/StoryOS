@@ -210,7 +210,8 @@ test("createChapter places a new Chapter atomically beside its exact live anchor
     const volume = await postVolume(baseUrl, fetchImpl, projectId, id(), volumeRequest("Volume", "1", id()));
     assert.ok(volume.created.effect.kind === "authoritative_applied");
     const volumeId = volume.created.effect.volume_id;
-    const tree = () => getManuscriptTree({ baseUrl, projectId, fetchImpl });
+    const tree = () => getManuscriptTree({ baseUrl, projectId, fetchImpl })
+      .then(({ correlation_id: _correlationId, ...facts }) => facts);
     const add = async (title: string, placement?: { kind: "before" | "after"; chapter_id: string }) => {
       const request = chapterRequest(title, (await tree()).tree_revision, id());
       if (placement !== undefined) Object.assign(request.create_chapter_input, { placement });

@@ -20,16 +20,11 @@ pub enum CreateChapterCurrent {
     PreserveExisting,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CreateChapterPlacement {
-    #[default]
     Append,
-    Before {
-        chapter_id: String,
-    },
-    After {
-        chapter_id: String,
-    },
+    Before { chapter_id: String },
+    After { chapter_id: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

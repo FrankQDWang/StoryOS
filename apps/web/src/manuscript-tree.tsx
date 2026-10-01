@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 
 import type { GetManuscriptTreeResponse, CreateChapterPlacement } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { ChapterTreeActions } from "./chapter-tree-actions.tsx";
@@ -97,9 +97,11 @@ export function ManuscriptTree({
   onRemoveChapter?: (chapterId: string) => void;
   onRemoveVolume?: (volumeId: string) => void;
 }) {
+  const pendingCreation = useRef(false);
   const [creation, setCreation] = useState<{ volumeId: string; revision: string; placement?: CreateChapterPlacement }>();
   const [menu, setMenu] = useState<{ volumeId: string; chapterId?: string; x: number; y: number }>();
   const begin = (volumeId: string, placement?: CreateChapterPlacement) => {
+    if (pendingCreation.current) return;
     setMenu(undefined);
     setCreation({ volumeId, revision: tree.tree_revision, ...(placement === undefined ? {} : { placement }) });
     setCollapsedVolumes((current) => new Set([...current].filter((id) => id !== volumeId)));
@@ -118,6 +120,7 @@ export function ManuscriptTree({
   const renderCreation = () => creation === undefined ? null : <InlineCreateChapter
     projectId={projectId} volumeId={creation.volumeId} treeRevision={creation.revision}
     placement={creation.placement} baseUrl={baseUrl} fetchImpl={fetchImpl} cryptoImpl={cryptoImpl}
+    onPendingChanged={(pending) => { pendingCreation.current = pending; }}
     onCancel={() => setCreation(undefined)} onCreated={() => { setCreation(undefined); onChapterCreated(); }} />;
   return (
     <nav aria-label="稿件目录" onContextMenu={(event) => {

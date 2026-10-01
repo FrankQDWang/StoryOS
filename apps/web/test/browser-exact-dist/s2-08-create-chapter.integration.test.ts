@@ -74,8 +74,11 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
-  await expect.poll(() => frame.contentDocument?.querySelector("[data-add-chapter]")?.tagName).toBe("BUTTON");
-  frame.contentDocument?.querySelector<HTMLButtonElement>("[data-add-chapter]")?.click();
+  await expect.poll(() => frame.contentDocument?.querySelectorAll("li[data-volume-id]").length).toBe(1);
+  volumeTitle.value = "Volume B"; volumeForm.requestSubmit();
+  await expect.poll(() => frame.contentDocument?.querySelectorAll("li[data-volume-id]").length).toBe(2);
+  await beginInlineChapterCreation(frame.contentDocument,
+    frame.contentDocument!.querySelector("li[data-volume-id]")!.getAttribute("data-volume-id")!);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter] input[name="chapter-title"]')
       ?.tagName
@@ -112,7 +115,7 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
     await expect.poll(() => documentRoot.querySelector(".chapter-creation-menu")?.tagName).toBe("DIV");
     const menu = documentRoot.querySelector<HTMLElement>(".chapter-creation-menu")!;
     const rect = trigger.getBoundingClientRect();
-    expect([menu.getBoundingClientRect().left, menu.getBoundingClientRect().top])
+    await expect.poll(() => [menu.getBoundingClientRect().left, menu.getBoundingClientRect().top])
       .toEqual(pointer ? [180, 240] : [rect.left, rect.bottom + 4]);
     expect(documentRoot.defaultView!.getComputedStyle(menu).fontSize).toBe("12px");
     return [...menu.querySelectorAll<HTMLButtonElement>("button")].map((button) => button.dataset.chapterPlacement);
@@ -121,6 +124,7 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
   await page.screenshot({ element: frame, path: "../../../../target/issue-254/chapter-pointer-menu.png" });
   documentRoot.querySelector<HTMLButtonElement>('[data-chapter-placement="after"]')!.click();
   const create = async (name: string, titles: string[]) => {
+    await expect.poll(() => documentRoot.querySelector("form[data-create-chapter] input")?.tagName).toBe("INPUT");
     const input = documentRoot.querySelector<HTMLInputElement>('form[data-create-chapter] input')!;
     input.value = name;
     input.form!.requestSubmit();
@@ -131,6 +135,7 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
   expect(await open(1)).toEqual(["before"]);
   await page.screenshot({ element: frame, path: "../../../../target/issue-254/chapter-overflow-menu.png" });
   documentRoot.querySelector<HTMLButtonElement>('[data-chapter-placement="before"]')!.click();
+  await expect.poll(() => documentRoot.querySelector(".inline-chapter-creation")?.tagName).toBe("LI");
   const inline = documentRoot.querySelector(".inline-chapter-creation")!;
   expect(inline.previousElementSibling?.querySelector("[data-chapter-title]")?.textContent).toBe("Chapter A");
   expect(inline.nextElementSibling?.querySelector("[data-chapter-title]")?.textContent).toBe("Chapter B");
@@ -139,19 +144,19 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
   expect(await open(0)).toEqual(["after"]);
   expect(await open(1)).toEqual(["before", "after"]);
   documentRoot.querySelector<HTMLButtonElement>('[data-chapter-placement="after"]')!.click();
+  await expect.poll(() => documentRoot.querySelector("form[data-create-chapter] input")?.tagName).toBe("INPUT");
   documentRoot.querySelector<HTMLInputElement>('form[data-create-chapter] input')!
     .dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
   await expect.poll(() => documentRoot.querySelector("form[data-create-chapter]")).toBeNull();
   expect(chapterTitles(documentRoot.querySelector("#app"))).toEqual(["Chapter A", "Chapter C", "Chapter B"]);
-  const volume = documentRoot.querySelector<HTMLInputElement>('form[data-create-volume] input')!;
-  volume.value = "Volume B"; volume.form!.requestSubmit();
-  await expect.poll(() => documentRoot.querySelectorAll("li[data-volume-id]").length).toBe(2);
+
   await beginInlineChapterCreation(documentRoot);
   expect(documentRoot.querySelector("form[data-create-chapter]")?.closest("li[data-volume-id]")?.querySelector("[data-volume-title]")?.textContent).toBe("Volume B");
   await create("Chapter D", ["Chapter A", "Chapter C", "Chapter B", "Chapter D"]);
   const volumeA = documentRoot.querySelector("li[data-volume-id]")!;
   await beginInlineChapterCreation(documentRoot, volumeA.getAttribute("data-volume-id")!);
   await create("Chapter E", ["Chapter A", "Chapter C", "Chapter B", "Chapter E", "Chapter D"]);
+
   const root = frame.contentDocument?.querySelector("#app");
   const chapterItems = [...(root?.querySelectorAll('nav[aria-label="稿件目录"] > ul > li > ul > li') ?? [])];
   expect(chapterItems).toHaveLength(5);

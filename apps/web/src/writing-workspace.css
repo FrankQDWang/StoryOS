@@ -475,3 +475,5 @@ input:focus-visible,
 .inline-chapter-creation { padding: 3px 0 3px 22px; }
 .inline-chapter-creation input { box-sizing: border-box; width: 100%; min-width: 0; padding: 4px 6px; border: 1px solid #b9b4a9; border-radius: 3px; font: inherit; background: transparent; }
 .inline-chapter-creation [data-create-chapter-error] { font-size: 12px; margin: 4px 0; }
+li[data-chapter-id] { position: relative; }
+li[data-chapter-id] > [data-chapter-menu] { position: absolute; right: 8px; top: 4px; }
