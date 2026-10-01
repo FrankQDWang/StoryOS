@@ -360,7 +360,7 @@ export function ManuscriptEditor({
         focusedProposalRef.current = identity;
         onCandidateFocusRef.current?.(focusProposal);
         editor.commands.setTextSelection(position + 1);
-        editor.commands.focus();
+        editor.view.focus();
       }
       const candidate = editor.view.nodeDOM(position);
       if (candidate instanceof HTMLElement) {

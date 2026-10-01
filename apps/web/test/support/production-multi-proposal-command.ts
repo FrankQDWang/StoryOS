@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -123,8 +124,11 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.locator(`[data-proposal-location="${secondaryOutcome.operation_id}"]`).click();
     const candidate = () => page.locator(`[data-proposal-id="${proposalId}"][data-proposal-operation-id="${secondaryOutcome.operation_id}"]`);
     await expect(candidate()).toHaveAttribute('data-proposal-focused', 'true');
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.anchorNode?.parentElement
+      ?.closest('[data-proposal-operation-id]')?.getAttribute('data-proposal-operation-id'))).toBe(secondaryOutcome.operation_id);
     await page.keyboard.press('End');
     await page.keyboard.insertText(' Manual candidate edit.');
+    await expect(candidate().locator('.block-proposal-text')).toHaveText(`${secondary.candidate_text} Manual candidate edit.`);
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text)
       .toBe(`${secondary.candidate_text} Manual candidate edit.`);
@@ -145,7 +149,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await primary.locator('[data-proposal-accept]:not([data-proposal-all])').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === firstOutcome.operation_id)?.resolution).toBe('applied');
-    const authorBlock = page.locator(`[data-manuscript-editor] > p[data-manuscript-block-id="${first.manuscript_block_id}"]`);
+    const authorBlock = page.locator(`[data-manuscript-editor] > p[data-id="${first.manuscript_block_id}"]`);
     await authorBlock.click();
     await page.keyboard.press('End');
     await page.keyboard.insertText(' Author continues writing.');
@@ -209,5 +213,15 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.screenshot({ path: join(repositoryRoot, 'target/382-multi-settled.png') });
     await page.screenshot({path:join(repositoryRoot,'target/382-multi-pending.png')});
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
+  } catch (error) {
+    await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify(await page.evaluate(() => ({
+      active: document.activeElement?.outerHTML,
+      anchor: window.getSelection()?.anchorNode?.parentElement?.outerHTML,
+      offset: window.getSelection()?.anchorOffset,
+      focus: window.getSelection()?.focusNode?.parentElement?.outerHTML,
+      editor: document.querySelector('[data-manuscript-editor]')?.outerHTML,
+    })), null, 2));
+    await page.screenshot({ path: join(repositoryRoot, 'target/382-ui-stop.png') });
+    throw error;
   } finally { await page.close(); }
 }
