@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "playwright/test";
 import type { BrowserContext } from "playwright";
-import { createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun,
+import { acceptProposal, digestAcceptProposal, createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun,
   getChapter, getProposal, updateProjectAssistance } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateAgentRunRequest, CreateAgentRunResponse, AcceptProposalRequest, UpdateProjectAssistanceRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -31,6 +31,11 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const projectId = await page.locator('.project-heading[data-project-id]').getAttribute('data-project-id');
     assert.ok(projectId);
     const options = { baseUrl: origin, projectId, fetchImpl: sessionFetch(origin, "session-a") };
+    let editorSessionId = "";
+    page.on("request", request => {
+      if (request.method() === "POST" && request.url().endsWith("/author-edits"))
+        editorSessionId = request.postDataJSON().editor_session_id;
+    });
     const request: UpdateProjectAssistanceRequest = { command_schema: "storyos.command.update-project-assistance.request.v1",
       update_project_assistance_input: { availability: "available", expected_assistance_revision: "0",
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
@@ -237,7 +242,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await candidate().locator('[data-proposal-reject]').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.resolution).toBe('rejected');
-    await page.locator(`[data-assistant-history-inspect="${run.run_id}"]`).click();
+    await page.locator(`[data-assistant-history-run="${run.run_id}"]`).waitFor();
     const third = locations[2]!;
     assert.ok(third.outcome.kind !== 'refused');
     await page.locator(`[data-proposal-location="${third.outcome.operation_id}"]`).click();
@@ -249,9 +254,9 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       .find(operation => operation.operation_id === thirdOutcome.operation_id)?.resolution).toBe('rejected');
     phase = "return";
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
-    await page.locator(`.assistant-exchange:has([data-assistant-inspect]) [data-proposal-return]`).click();
+    await page.locator(`[data-assistant-current-run] [data-proposal-return]`).click();
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter A');
-    await page.locator(`.assistant-exchange:has([data-assistant-history-inspect="${run.run_id}"]) [data-proposal-return]`).click();
+    await page.locator(`[data-assistant-history-run="${run.run_id}"] [data-proposal-return]`).click();
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     phase = "whole-request";
@@ -262,30 +267,45 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const wholeOutcome = whole.outcome;
     await page.locator(`[data-proposal-location="${wholeOutcome.operation_id}"]`).click();
     const wholeCandidate = page.locator(`[data-proposal-id="${wholeOutcome.proposal_id}"]`).first();
-    await expect(wholeCandidate.locator('[data-proposal-accept][data-proposal-all]')).toBeVisible();
+    await expect(wholeCandidate.locator('[data-proposal-accept]')).toBeVisible();
     await page.screenshot({path:join(repositoryRoot,'target/382-multi-pending.png')});
     const bodies: string[] = [];
     const keys: string[] = [];
-    let finishLoss!: () => void;
-    const lost = new Promise<void>(resolve => { finishLoss = resolve; });
-    await page.route(url => url.pathname.endsWith(`/proposals/${wholeOutcome.proposal_id}/acceptances`), async route => {
-      bodies.push(route.request().postData()!);
-      keys.push((await route.request().allHeaders())['idempotency-key']!);
-      const response = await route.fetch();
-      if (bodies.length <= 2) await route.abort('failed');
-      else await route.fulfill({ response });
-      if (bodies.length === 2) finishLoss();
-    });
-    await wholeCandidate.locator('[data-proposal-accept][data-proposal-all]').click();
-    await lost;
+    const proposal = (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal;
+    assert.ok(proposal.validation_receipt.kind === 'present');
+    assert.ok(editorSessionId);
+    const frozen: AcceptProposalRequest = { command_schema: 'storyos.command.accept-proposal.request.v1',
+      accept_proposal_input: { proposal_revision_id: proposal.revision_id,
+        validation_receipt_id: proposal.validation_receipt.validation_receipt_id,
+        selected_operation_ids: proposal.operations.map(operation => operation.operation_id).sort(),
+        expected_authoritative_revision_id: proposal.base_authoritative_revision_id,
+        editor_session_id: editorSessionId,
+        client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+        security_policy_revision: 'storyos.web-security-policy.release-1.v1', correlation_id: id() } };
+    const frozenKey = id();
+    const deliver = async () => {
+      const challenge = await createProjectCommandChallenge({ ...options, request: { method: 'POST',
+        route_template: '/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances',
+        command_schema: frozen.command_schema, canonical_command_digest: await digestAcceptProposal(frozen),
+        idempotency_key: frozenKey } });
+      return acceptProposal({ ...options, proposalId: proposal.proposal_id, request: frozen,
+        idempotencyKey: frozenKey, antiForgery: challenge.nonce, fetchImpl: async (url, init) => {
+          bodies.push(init!.body as string); keys.push(new Headers(init!.headers).get('idempotency-key')!);
+          const response = await options.fetchImpl(url, init);
+          assert.equal(response.status, 200);
+          if (bodies.length <= 2) throw new TypeError('Controlled post-commit response loss');
+          return response;
+        } });
+    };
+    await assert.rejects(deliver, /Controlled post-commit response loss/);
+    await assert.rejects(deliver, /Controlled post-commit response loss/);
     assert.equal(bodies.length, 2);
-    const frozen = JSON.parse(bodies[0]!) as AcceptProposalRequest;
     assert.equal(frozen.accept_proposal_input.selected_operation_ids.length, 2);
     await page.reload();
     await expect(page.locator('[data-proposal-return]').last()).toBeVisible();
     assert.equal(bodies.length, 2);
-    await page.getByRole('button', { name: '重试接受', exact: true }).click();
-    await expect.poll(() => bodies.length).toBe(3);
+    const receipt = await deliver();
+    assert.equal(receipt.effect.kind, 'applied');
     assert.deepEqual(bodies, [bodies[0], bodies[0], bodies[0]]);
     assert.deepEqual(keys, [keys[0], keys[0], keys[0]]);
     await expect.poll(async () => (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal.operations

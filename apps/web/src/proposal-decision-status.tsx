@@ -29,10 +29,10 @@ export function ProposalDecisionStatus({
   const message = pendingRejection
     ? "拒绝结果尚未确认。请重试同一操作。"
     : proposal?.operation_resolution === "rejected"
-      ? "已拒绝，正文保持不变。"
+      ? undefined
       : rejectionResult !== undefined
         ? {
-          resolved: "已拒绝，正文保持不变。",
+          resolved: undefined,
           conflicted: "正文已变化，拒绝结果请检查。",
           refused: "此次拒绝未生效，请检查当前候选文字。",
         }[rejectionResult]
@@ -47,8 +47,9 @@ export function ProposalDecisionStatus({
                   ? "正文已变化；此次接受结果尚未确认。请重试同一操作。"
                   : decisionMessage ?? "接受结果尚未确认。请重试同一操作。"
                 : proposal?.operation_resolution === "applied"
+                  && proposal.operations.every(operation => operation.resolution !== "pending")
                   ? !acceptanceChecked ? "正在同步正文。"
-                    : decisionMessage?.includes("请刷新") ? decisionMessage : "已接受，正文已更新。"
+                    : decisionMessage?.includes("请刷新") ? decisionMessage : undefined
                   : proposal === undefined ? decisionMessage
                     : (recoveryStatus(proposal, posture) ?? decisionMessage);
   if (message === undefined) return null;

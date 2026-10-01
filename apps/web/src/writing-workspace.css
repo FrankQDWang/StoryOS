@@ -201,36 +201,44 @@ input:focus-visible {
 }
 
 .manuscript-editor .block-proposal {
-  margin: 19px 0 23px;
-  padding: 15px 20px 17px;
-  border-left: 2px solid #8e8a83;
-  background: #f2f0ed;
+  margin: 0 0 26px;
   color: #34322e;
   cursor: default;
   user-select: text;
 }
 
-.manuscript-editor .block-proposal-label {
-  display: block;
-  margin-bottom: 7px;
-  color: #77736c;
-  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.manuscript-editor .block-proposal p {
-  white-space: pre-wrap;
-}
-
 .manuscript-editor .block-proposal-text {
-  min-height: 1.6em;
+  position: relative;
+  margin: 0 -37px 0 -33px;
+  padding: 12px 33px 13px;
+  min-height: 1.9em;
+  background: #eeece7;
+  white-space: pre-wrap;
   outline: none;
   cursor: text;
 }
 
-.manuscript-editor .block-proposal:focus-within .block-proposal-text {
-  box-shadow: 0 2px #746b60;
+.manuscript-editor .block-proposal-text::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #aaa59b;
+}
+
+.manuscript-editor [data-proposal-focused="true"] .block-proposal-text::before {
+  background: #5d5951;
+}
+
+.proposal-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 9px 0 0;
+  margin-left: -16px;
+  min-height: 40px;
 }
 
 .block-proposal-unavailable, [data-proposal-decision] {
@@ -301,40 +309,28 @@ input:focus-visible {
 }
 
 .assistant-exchange {
-  padding: 16px 20px;
-  font-size: 13px;
-  line-height: 1.6;
+  padding: 26px 28px 8px;
+  font: 13px/1.9 "PingFang SC", sans-serif;
+  color: #3c3a35;
 }
 
 .assistant-author-message {
-  margin-left: 20px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  margin: 0 0 34px;
+  padding: 15px 18px;
+  border-radius: 14px;
   background: var(--hover);
   white-space: pre-wrap;
 }
 
-.assistant-result {
-  white-space: pre-wrap;
-}
-
-.assistant-exchange button {
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-  padding: 4px 0;
-}
-
-.assistant-run-details {
-  display: grid;
-  gap: 4px;
-  margin-top: 8px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: var(--hover);
-  color: var(--muted);
-  font-size: 12px;
-}
+.assistant-result { margin: 0; white-space: pre-wrap; }
+.assistant-exchange button { border: 0; background: transparent; padding: 0; color: #88837a; font: inherit; cursor: pointer; }
+.proposal-locations { margin-top: 22px; }
+.proposal-locations p { margin: 0 0 21px; }
+.proposal-location { display: block; width: 100%; text-align: left; }
+.location-title { display: block; color: #47443e; line-height: 1.8; }
+.location-title > span { float: right; color: #a29d94; }
+.proposal-location:hover .location-title { text-decoration: underline; text-underline-offset: 4px; }
+.location-reason { display: block; margin-top: 3px; color: #88837a; font-size: 12px; }
 
 .composer { margin: 0; padding: 0 20px 14px; }
 
@@ -426,10 +422,8 @@ input:focus-visible {
 .inline-proposal-controls .block-proposal-text { display: none; }
 
 .manuscript-editor .inline-proposal-controls { display: flex; flex-wrap: wrap; column-gap: 24px; padding: 0; border: 0; background: transparent; }
-.manuscript-editor :is(.inline-proposal-controls, .inline-proposal-stale) .block-proposal-label { flex-basis: 100%; }
-.manuscript-editor .block-proposal button, [data-proposal-decision] button { border: 0; background: transparent; display: inline-flex; align-items: center; gap: 7px; padding: 5px 4px; color: #5b5953; cursor: pointer; font: 13px "Noto Sans SC", "PingFang SC", sans-serif; }
+.manuscript-editor .block-proposal button, [data-proposal-decision] button { border: 0; background: transparent; display: inline-flex; align-items: center; gap: 7px; padding: 5px 4px; color: #5b5953; cursor: pointer; font: 12px "PingFang SC", sans-serif; }
 .manuscript-editor .block-proposal button:hover:not(:disabled), [data-proposal-decision] button:hover:not(:disabled) { color: #171612; }
-.manuscript-editor .block-proposal:not(.inline-proposal-controls):not(.inline-proposal-stale) button { margin-right: 20px; }
 .manuscript-editor .inline-proposal-stale { display: flex; flex-wrap: wrap; column-gap: 24px; }
 .manuscript-editor .inline-proposal-stale .block-proposal-text { flex-basis: 100%; }
 
