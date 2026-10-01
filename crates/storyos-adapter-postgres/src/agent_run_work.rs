@@ -318,7 +318,8 @@ async fn settle_one_phase(
         .await?;
         return Ok(next);
     }
-    if stream_batch_plan(&author_message).is_some()
+    if payload.pointer("/decision/locations").is_none()
+        && stream_batch_plan(&author_message).is_some()
         && let Some(decision) = decision_id.as_deref()
     {
         let (_proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(

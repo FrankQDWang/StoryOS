@@ -11,7 +11,7 @@ import {
   acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createChapter, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun, digestCreateAgentRun, digestCreateChapter,
   digestCreateEditorSession, digestExportProjectArchive, digestReplanProposal,
-  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getProposal, replanProposal, setCurrentChapter, digestSetCurrentChapter,
+  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, replanProposal, setCurrentChapter, digestSetCurrentChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CreateAgentRunRequest,
@@ -32,13 +32,14 @@ async function seedTwoBlocks(
   projectId: string,
   ns: string,
   singleText?: string,
+  currentSession?: Awaited<ReturnType<typeof createEditorSession>>,
 ) {
   const sessionRequest: CreateEditorSessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1",
     ...BINDING,
     correlation_id: id(`${ns}1`),
   };
-  const session = await challenged(
+  const session = currentSession ?? await challenged(
     baseUrl, fetchImpl, projectId, "POST",
     "/api/v1/projects/{project_id}/editor-sessions",
     sessionRequest.command_schema, await digestCreateEditorSession(sessionRequest),
@@ -63,7 +64,7 @@ async function seedTwoBlocks(
     editor_contract_revision: "storyos.editor-contract.release-1.v3",
     undo_group_id: id(`${ns}4`),
     completed_intent_record_id: id(`${ns}5`),
-    local_intent_sequence: "1",
+    local_intent_sequence: currentSession ? "3" : "1",
     author_edit_units: [{
       normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text: singleText ?? "Hello World" }],
       selection_snapshot: {
@@ -163,44 +164,52 @@ async function admitPassages(
   return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
 }
 
+async function collectionSetup(baseUrl: string, ns: string) {
+  const { fetchImpl, projectId, chapterId } = await prepare(baseUrl, id(`${ns}11`), "Chapter collection", `${ns}2`);
+  const first = await seedTwoBlocks(baseUrl, fetchImpl, projectId, `${ns}3`);
+  const tree = await getManuscriptTree({ baseUrl: baseUrl, projectId, fetchImpl });
+  const volumeId = tree.volumes[0]!.volume_id;
+  const request = { command_schema: "storyos.command.create-chapter.request.v1",
+    create_chapter_input: { title: "Second target", expected_tree_revision: tree.tree_revision,
+    ...BINDING, correlation_id: id(`${ns}41`) } };
+  const created = await challenged(baseUrl, fetchImpl, projectId, "POST",
+    "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", request.command_schema,
+    await digestCreateChapter(request), id(`${ns}42`), (antiForgery) => createChapter({
+    baseUrl: baseUrl, projectId, volumeId, fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}42`) }));
+  if (created.effect.kind !== "authoritative_applied") throw new Error("expected second Chapter");
+  const switchChapter = async (from: string, to: string, sessionId: string, key: string) => {
+    const target = await getChapter({ baseUrl: baseUrl, projectId, chapterId: to, fetchImpl });
+    const request = { command_schema: "storyos.command.set-current-chapter.request.v1",
+    set_current_chapter_input: { chapter_id: to, expected_current_chapter_id: from,
+      expected_target_revision_id: target.chapter.current_revision.revision_id, editor_session_id: sessionId,
+      ...BINDING, correlation_id: key } };
+    await challenged(baseUrl, fetchImpl, projectId, "PUT",
+    "/api/v1/projects/{project_id}/current-chapter", request.command_schema,
+    await digestSetCurrentChapter(request), key, (antiForgery) => setCurrentChapter({
+      baseUrl: baseUrl, projectId, fetchImpl, request, antiForgery, idempotencyKey: key }));
+  };
+  await switchChapter(chapterId, created.effect.chapter_id, first.session.editor_session.editor_session_id, id(`${ns}44`));
+  const current = await getEditorSession({ baseUrl: baseUrl, projectId, fetchImpl,
+    editorSessionId: first.session.editor_session.editor_session_id });
+  const second = await seedTwoBlocks(baseUrl, fetchImpl, projectId, `${ns}5`, "A lantern crossed the river.", current);
+  await switchChapter(created.effect.chapter_id, chapterId, second.session.editor_session.editor_session_id, id(`${ns}45`));
+  const chapters = await Promise.all([chapterId, created.effect.chapter_id].map((chapterId) =>
+    getChapter({ baseUrl: baseUrl, projectId, chapterId, fetchImpl })));
+  const target = { kind: "passage_collection", source_chapter_id: chapterId,
+    targets: chapters.map(({ chapter }) => ({ chapter_id: chapter.chapter_id,
+    base_authoritative_revision_id: chapter.current_revision.revision_id,
+    manuscript_block_ids: chapter.current_revision.blocks.map((block) => block.manuscript_block_id) }))
+  } satisfies CreateAgentRunRequest["create_agent_run_input"]["working_target"];
+  return { fetchImpl, projectId, chapterId, chapters, target,
+    editorSessionId: first.session.editor_session.editor_session_id };
+}
+
 test("one collection request produces three exact locations across two Chapters", async () => {
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
-    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Chapter collection", `${ns}2`);
-    const first = await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
-    const tree = await getManuscriptTree({ baseUrl: started.baseUrl, projectId, fetchImpl });
-    const volumeId = tree.volumes[0]!.volume_id;
-    const request = { command_schema: "storyos.command.create-chapter.request.v1",
-      create_chapter_input: { title: "Second target", expected_tree_revision: tree.tree_revision,
-        ...BINDING, correlation_id: id(`${ns}41`) } };
-    const created = await challenged(started.baseUrl, fetchImpl, projectId, "POST",
-      "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", request.command_schema,
-      await digestCreateChapter(request), id(`${ns}42`), (antiForgery) => createChapter({
-        baseUrl: started.baseUrl, projectId, volumeId, fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}42`) }));
-    if (created.effect.kind !== "authoritative_applied") throw new Error("expected second Chapter");
-    const switchChapter = async (from: string, to: string, sessionId: string, key: string) => {
-      const target = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId: to, fetchImpl });
-      const request = { command_schema: "storyos.command.set-current-chapter.request.v1",
-        set_current_chapter_input: { chapter_id: to, expected_current_chapter_id: from,
-          expected_target_revision_id: target.chapter.current_revision.revision_id, editor_session_id: sessionId,
-          ...BINDING, correlation_id: key } };
-      await challenged(started.baseUrl, fetchImpl, projectId, "PUT",
-        "/api/v1/projects/{project_id}/current-chapter", request.command_schema,
-        await digestSetCurrentChapter(request), key, (antiForgery) => setCurrentChapter({
-          baseUrl: started.baseUrl, projectId, fetchImpl, request, antiForgery, idempotencyKey: key }));
-    };
-    await switchChapter(chapterId, created.effect.chapter_id, first.session.editor_session.editor_session_id, id(`${ns}44`));
-    const second = await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}5`, "A lantern crossed the river.");
-    await switchChapter(created.effect.chapter_id, chapterId, second.session.editor_session.editor_session_id, id(`${ns}45`));
-    const chapters = await Promise.all([chapterId, created.effect.chapter_id].map((chapterId) =>
-      getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })));
-    const target = { kind: "passage_collection", source_chapter_id: chapterId,
-      targets: chapters.map(({ chapter }) => ({ chapter_id: chapter.chapter_id,
-        base_authoritative_revision_id: chapter.current_revision.revision_id,
-        manuscript_block_ids: chapter.current_revision.blocks.map((block) => block.manuscript_block_id) }))
-    } as unknown as CreateAgentRunRequest["create_agent_run_input"]["working_target"];
+    const { fetchImpl, projectId, chapterId, chapters, target } = await collectionSetup(started.baseUrl, ns);
     const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       "Revise these passages: keep the voice.", id(`${ns}43`), undefined, true, target);
     if (run.decision.kind !== "prose_change") throw new Error("expected collection Decision");
@@ -211,6 +220,28 @@ test("one collection request produces three exact locations across two Chapters"
         manuscript_block_id: block.manuscript_block_id, base_authoritative_revision_id: chapter.current_revision.revision_id }))));
     for (const before of chapters) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId,
       chapterId: before.chapter.chapter_id, fetchImpl })).chapter, before.chapter);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("collection refuses a deleted Chapter before destination dispatch", async () => {
+  const started = await startRealServer();
+  try {
+    const ns = randomBytes(3).toString("hex");
+    const setup = await collectionSetup(started.baseUrl, ns);
+    const tree = await getManuscriptTree({ baseUrl: started.baseUrl, ...setup });
+    const request = { command_schema: "storyos.command.delete-chapter.request.v1",
+      delete_chapter_input: { expected_tree_revision: tree.tree_revision, ...BINDING, correlation_id: id(`${ns}61`) } };
+    await challenged(started.baseUrl, setup.fetchImpl, setup.projectId, "DELETE",
+      "/api/v1/projects/{project_id}/chapters/{chapter_id}", request.command_schema,
+      await digestDeleteChapter(request), id(`${ns}62`), (antiForgery) => deleteChapter({
+        baseUrl: started.baseUrl, projectId: setup.projectId, chapterId: setup.target.targets[1]!.chapter_id,
+        fetchImpl: setup.fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}62`) }));
+    const run = await admitPassages(started.baseUrl, setup.fetchImpl, setup.projectId, setup.chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}63`), undefined, true, setup.target);
+    assert.equal(run.context.sufficiency.kind, "blocked");
+    assert.deepEqual(run.model_attempt, { kind: "absent" });
+    assert.deepEqual(run.evidence, []);
+    assert.equal(run.context.selected.some((source) => source.content === "A lantern crossed the river."), false);
   } finally { await stopRealServer(started.server); }
 });
 
@@ -256,7 +287,8 @@ test("one request produces explained exact locations and keeps them after restar
   } finally { await stopRealServer(started.server); }
 });
 
-test.each(["stream", "decision", "cancelled"])("typed result recovers the %s boundary without revival", async (phase) => {
+test.each(["stream", "decision", "cancelled", "collection_rejected"])("typed result recovers the %s boundary without revival", async (scenario) => {
+  const phase = scenario === "collection_rejected" ? "decision" : scenario;
   let started = await startRealServer();
   const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
   let child: ReturnType<typeof execFile> | undefined;
@@ -264,11 +296,12 @@ test.each(["stream", "decision", "cancelled"])("typed result recovers the %s bou
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
-    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Recovered locations", `${ns}2`);
-    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+    const collection = scenario === "collection_rejected" ? await collectionSetup(started.baseUrl, ns) : undefined;
+    const { fetchImpl, projectId, chapterId } = collection ?? await prepare(started.baseUrl, id(`${ns}11`), "Recovered locations", `${ns}2`);
+    if (!collection) await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
     const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
     const admitted = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
-      "Revise these passages: keep the voice.", id(`${ns}41`), undefined, false);
+      collection ? "Stream this passage:" : "Revise these passages: keep the voice.", id(`${ns}41`), undefined, false, collection?.target);
     const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
     writeFileSync(hold, "hold");
     child = execFile(join(repositoryRoot, "target/release-package/storyos-worker"), ["--once"], {
@@ -284,6 +317,28 @@ test.each(["stream", "decision", "cancelled"])("typed result recovers the %s bou
     }, { timeout: 10_000, interval: 10 });
     const frozen = await queryPostgres(`SELECT payload->'decision' FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid;`);
     const raw = held.items;
+    const readProposals = async () => Promise.all((JSON.parse(await queryPostgres(
+      `SELECT coalesce(jsonb_agg(proposal_id::text ORDER BY proposal_id), '[]'::jsonb)::text FROM storyos.proposals WHERE source_run_id='${admitted.run_id}'::uuid;`
+    )) as string[]).map(async (proposalId) => (await getProposal({ baseUrl: started.baseUrl,
+      projectId, fetchImpl, proposalId })).proposal));
+    let priorProposals: Awaited<ReturnType<typeof readProposals>> | undefined;
+    if (collection) {
+      const opened = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl, proposalId: openedProposal(held) });
+      const request = { command_schema: "storyos.command.reject-proposal-operations.request.v1",
+        reject_proposal_operations_input: { proposal_revision_id: opened.proposal.revision_id,
+          selected_pending_operation_ids: opened.proposal.operations.map((operation) => operation.operation_id),
+          expected_target_revisions: [before.chapter.current_revision.revision_id],
+          rejection_reason: { kind: "author_declined" as const, note: { kind: "omitted" as const } },
+          editor_session_id: collection.editorSessionId, ...BINDING, correlation_id: id(`${ns}55`) } };
+      const rejected = await challenged(started.baseUrl, fetchImpl, projectId, "POST",
+        "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections", request.command_schema,
+        await digestRejectProposalOperations(request), id(`${ns}56`), (antiForgery) => rejectProposalOperations({
+          baseUrl: started.baseUrl, projectId, proposalId: opened.proposal.proposal_id, fetchImpl,
+          request, antiForgery, idempotencyKey: id(`${ns}56`) }));
+      assert.equal(rejected.effect.kind, "resolved");
+      held = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
+      priorProposals = await readProposals();
+    }
     if (phase === "cancelled") {
       const request: CancelAgentRunRequest = { command_schema: "storyos.command.cancel-agent-run.request.v1",
         cancel_agent_run_input: { ...BINDING, correlation_id: id(`${ns}51`) } };
@@ -313,19 +368,20 @@ test.each(["stream", "decision", "cancelled"])("typed result recovers the %s bou
     await settleOnce();
     const after = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
     assert.deepEqual(after.items, raw);
+    if (priorProposals) assert.deepEqual(await readProposals(), priorProposals);
     assert.deepEqual(after.model_attempt, phase === "cancelled" ? held.model_attempt : { ...held.model_attempt, dispatch_state: "settled" });
     if (phase === "cancelled") {
       assert.equal(after.status, "cancelled");
       assert.deepEqual(after.decision, { kind: "absent" });
     } else {
       if (after.decision.kind !== "prose_change") throw new Error("expected typed decision");
-      assert.equal(after.decision.locations?.length, 2);
+      assert.equal(after.decision.locations?.length, collection ? 3 : 2);
       if (phase === "decision") {
         assert.equal(await queryPostgres(`SELECT payload->'decision' FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid;`), frozen);
         assert.deepEqual(after.decision.locations, held.decision.kind === "prose_change" ? held.decision.locations : undefined);
       }
     }
-    const count = phase === "cancelled" ? "0" : "1";
+    const count = phase === "cancelled" ? "0" : collection ? "2" : "1";
     assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id='${admitted.run_id}'::uuid;`), count);
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
     await settleOnce();

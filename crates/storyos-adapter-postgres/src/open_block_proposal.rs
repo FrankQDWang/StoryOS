@@ -19,30 +19,20 @@ pub(crate) async fn open_selected_prose_change(
     produced: Option<&[storyos_core::ProseChangeCandidate]>,
 ) -> Result<ProseOpening, CompleteAgentRunError> {
     let targets = load_admitted_targets(client, claim, chapter_id).await?;
-    let mut chapters = Vec::new();
-    for target in &targets {
-        if !chapters.contains(&target.chapter_id) {
-            chapters.push(target.chapter_id.clone());
-        }
-    }
     let mut opening = ProseOpening {
         proposal_id: None,
         locations: produced.map(|_| Vec::new()),
     };
-    for chapter in chapters {
-        let members: Vec<_> = targets
-            .iter()
-            .filter(|target| target.chapter_id == chapter)
-            .collect();
+    for chapter in targets.chunk_by(|left, right| left.chapter_id == right.chapter_id) {
         let result = open_chapter(
             client,
             claim,
-            &chapter,
+            &chapter[0].chapter_id,
             decision_id,
             candidate_text,
             author_message,
             produced,
-            &members,
+            chapter,
         )
         .await?;
         if opening.proposal_id.is_none() {
@@ -64,14 +54,14 @@ async fn open_chapter(
     candidate_text: &str,
     author_message: &str,
     produced: Option<&[storyos_core::ProseChangeCandidate]>,
-    targets: &[&crate::admitted_proposal_target::AdmittedTarget],
+    targets: &[crate::admitted_proposal_target::AdmittedTarget],
 ) -> Result<ProseOpening, CompleteAgentRunError> {
     use storyos_contracts::{ProseChangeLocationInspect, ProseChangeLocationOutcome};
     let multiple = produced.is_some();
     let selected: Vec<_> = if multiple {
-        targets.to_vec()
+        targets.iter().collect()
     } else {
-        targets.iter().copied().take(1).collect()
+        targets.iter().take(1).collect()
     };
     let candidates = produced.unwrap_or_default();
     let candidate_by_block: std::collections::BTreeMap<_, _> = candidates
