@@ -524,8 +524,10 @@ export function WritingAssistantPanel({
             ? <p className="assistant-status">下一条消息将开始新对话。</p> : null}
           {status.length > 0 ? <p role="status">{status}</p> : null}
         </div>
-        <AssistantComposer enabled={availability === "available" && context?.canSubmit === true
-          && context.chapterId !== undefined && !sending && !unresolved} onSend={submit} />
+        <AssistantComposer key={context === undefined ? "none" : `${context.scope.owner_user_id}:${context.scope.project_id}`}
+          context={context} available={availability === "available"} sending={sending} current={reference} run={run}
+          onSend={submit} onRefresh={async () => { if (reference !== undefined) await inspect(reference); }}
+          onStatus={setStatus} />
       </div>
     </aside>
   );
