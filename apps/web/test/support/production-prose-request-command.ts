@@ -179,15 +179,19 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.equal(queued.context.selected.find((item) =>
       item.source_class === "working_target")?.content, before.chapter.current_revision.body);
     assert.equal(queued.context.current_availability.working_target.kind, "current");
-    await page.evaluate(() => {
-      document.body.dataset.authorInputEvents = "0";
+    const observeAuthorInput = () => {
+      const initialize = () => { document.body.dataset.authorInputEvents = "0"; };
+      if (document.body) initialize();
+      else document.addEventListener("DOMContentLoaded", initialize, { once: true });
       document.addEventListener("beforeinput", (event) => {
         if (!(event.target instanceof HTMLElement)
           || event.target.closest("[data-manuscript-editor]") === null) return;
         document.body.dataset.authorInputEvents = String(
           Number(document.body.dataset.authorInputEvents) + 1);
       }, { capture: true });
-    });
+    };
+    await page.addInitScript(observeAuthorInput);
+    await page.evaluate(observeAuthorInput);
 
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const current = await getAgentRun({ ...options, runId });
