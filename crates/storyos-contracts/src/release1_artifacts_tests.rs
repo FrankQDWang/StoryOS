@@ -162,7 +162,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,getAgentRun,getRefusedEditDraft,closeEditorFlowDraft,expandRefusedEditDraftToProposal,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,replanProposal,withdrawProposal,reopenWithdrawnProposal,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,steerAgentRun,getAgentRun,getRefusedEditDraft,closeEditorFlowDraft,expandRefusedEditDraftToProposal,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,replanProposal,withdrawProposal,reopenWithdrawnProposal,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
     ));
 
     let client = String::from_utf8(
@@ -309,6 +309,7 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
             "updateProjectAssistance",
             "createAgentRun",
             "pauseAgentRun",
+            "steerAgentRun",
             "cancelAgentRun"
         ])
     );
@@ -490,6 +491,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_agent_run_control_artifacts::PAUSE_RESPONSE_SCHEMA_PATH,
         crate::release1_agent_run_control_artifacts::CANCEL_REQUEST_SCHEMA_PATH,
         crate::release1_agent_run_control_artifacts::CANCEL_RESPONSE_SCHEMA_PATH,
+        crate::release1_agent_run_control_artifacts::STEER_REQUEST_SCHEMA_PATH,
+        crate::release1_agent_run_control_artifacts::STEER_RESPONSE_SCHEMA_PATH,
         crate::release1_proposal_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_accept_proposal_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_accept_proposal_artifacts::RESPONSE_SCHEMA_PATH,
