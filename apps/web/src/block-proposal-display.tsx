@@ -244,7 +244,8 @@ export function BlockProposalDisplay({
       if (proposal === undefined) return await hasPendingDisplayedAcceptance(workspace,
         locator.proposalId) ? locator.proposalId : undefined;
       const result = await reconcileDisplayedAcceptance(workspace, proposal);
-      if (active && result === "applied" && !refreshedAcceptance.current.has(proposal.proposal_id)) {
+      if (active && !acceptingRef.current && result === "applied"
+        && !refreshedAcceptance.current.has(proposal.proposal_id)) {
         refreshedAcceptance.current.add(proposal.proposal_id);
         await onAccepted();
       }
@@ -495,7 +496,9 @@ export function BlockProposalDisplay({
           || response.receipt.proposal_id !== proposalId) {
           throw new Error("Acceptance result identity changed");
         }
-        await onAccepted();
+        const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(proposalId);
+        if (response.effect.kind === "applied") refreshedAcceptance.current.add(proposalId);
+        if (refresh) await onAccepted();
         setSettlementRefresh((value) => value + 1);
       } catch {
         setDecisionMessages((current) => ({ ...current,
