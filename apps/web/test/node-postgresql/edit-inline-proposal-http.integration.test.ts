@@ -24,6 +24,8 @@ import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, UUID_V7, challenged, drainLeftoverWork, id,
   prepare, settleOnce, startRealServer } from "../support/acceptance.ts";
 
+import { admitCandidateRevision } from "../support/candidate-revision.ts";
+
 const INLINE_CANDIDATE = "narrator tone";
 const SOURCE_SLICE = "narrator voice";
 const GOLDEN_DIGEST =
@@ -973,9 +975,19 @@ test("inline Proposal uses exact Anchors, keeps source and candidate distinct, a
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e08111"), "Inline Proposal Novel", "e082");
-    const { opened, writer } = await openInline(
+    let { opened, writer } = await openInline(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, "e083",
     );
+    await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      opened.proposal, opened.proposal.operation_id, id("e0832"), "revise the candidate consistently.");
+    await settleOnce();
+    const prior = opened.proposal;
+    opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: prior.proposal_id, fetchImpl: prepared.fetchImpl });
+    assert.notEqual(opened.proposal.revision_id, prior.revision_id);
+    assert.deepEqual(opened.proposal.anchors, prior.anchors);
+    const INTERIOR_CANDIDATE = "narrxxr tone Keep the voice consistent.";
+    const ACCEPTED_BODY = "Guard the narrxxr tone Keep the voice consistent. in this passage.";
     const before = await getChapter({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
@@ -1491,8 +1503,13 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e0d111"), "Draft Lifecycle Export", "e0d2");
-    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+    let { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
       prepared.projectId, prepared.chapterId, "e0d3");
+    await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      opened.proposal, opened.proposal.operation_id, id("e0d32"), "revise the candidate consistently.");
+    await settleOnce();
+    opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl });
     const drafts: Awaited<ReturnType<typeof getRefusedEditDraft>>[] = [];
     const results: Awaited<ReturnType<typeof applyAuthorEdit>>[] = [];
     for (const [index, text] of ["Closed alternate", "Archived alternate ✨", "Restricted erased alternative 🌘"].entries()) {

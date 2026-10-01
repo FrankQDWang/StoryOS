@@ -23,6 +23,7 @@ pub(crate) async fn prepare(
         crate::admitted_proposal_target::load_admitted_targets(client, claim, chapter_id).await?;
     let candidate_record = crate::candidate_revision_target::admitted(client, claim).await?;
     if candidate_record.is_some()
+        && storyos_core::is_fake_candidate_revision_request(author_message)
         && let FakeAttemptOutcome::Decision { kind, .. } = &mut outcome
         && let FakeDecisionKind::Advisory { text } = kind
     {

@@ -106,3 +106,14 @@ pub fn produce_fake_candidate_revision(
     }
     changes
 }
+
+/// Recognize an explicit candidate revision request in the finite fake profile.
+pub fn is_fake_candidate_revision_request(author_message: &str) -> bool {
+    let message = author_message.trim().to_ascii_lowercase();
+    let message = message.trim_start_matches("please ");
+    [
+        "make ", "revise ", "rewrite ", "tighten ", "change ", "shorten ", "expand ",
+    ]
+    .iter()
+    .any(|verb| message.starts_with(verb))
+}

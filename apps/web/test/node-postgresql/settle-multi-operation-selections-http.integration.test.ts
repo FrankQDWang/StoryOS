@@ -345,8 +345,8 @@ test("one request produces explained exact locations and keeps them after restar
   } finally { await stopRealServer(started.server); }
 });
 
-test.each(["stream", "decision", "cancelled", "collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected"])("typed result recovers the %s boundary without revival", async (scenario) => {
-  const phase = scenario === "collection_rejected" ? "decision" : scenario.replace("collection_", "");
+test.each(["stream", "decision", "cancelled", "collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected", "candidate_stream", "candidate_decision", "candidate_cancelled", "candidate_paused"])("typed result recovers the %s boundary without revival", async (scenario) => {
+  const phase = scenario === "collection_rejected" ? "decision" : scenario.replace("collection_", "").replace("candidate_", "");
   const terminal = phase === "cancelled" || phase === "paused";
   let started = await startRealServer();
   const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
@@ -359,8 +359,17 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
     const { fetchImpl, projectId, chapterId } = collection ?? await prepare(started.baseUrl, id(`${ns}11`), "Recovered locations", `${ns}2`);
     if (!collection) await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
     const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
-    const admitted = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+    let admitted = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       collection ? "Stream this passage:" : "Revise these passages: keep the voice.", id(`${ns}41`), undefined, false, collection?.target);
+    const candidateMode = scenario.startsWith("candidate_");
+    if (candidateMode) {
+      await settleOnce();
+      admitted = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
+      const proposal = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl, proposalId: openedProposal(admitted) });
+      const fresh = await admitCandidateRevision(started.baseUrl, fetchImpl, projectId, proposal.proposal,
+        proposal.proposal.operations[1]!.operation_id, id(`${ns}43`), "revise the candidate consistently.");
+      admitted = await getAgentRun({ baseUrl: started.baseUrl, projectId, fetchImpl, runId: fresh.created.effect.run_id });
+    }
     const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
     writeFileSync(hold, "hold");
     child = execFile(join(repositoryRoot, "target/release-package/storyos-worker"), ["--once"], {
@@ -381,6 +390,8 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
     )) as string[]).map(async (proposalId) => (await getProposal({ baseUrl: started.baseUrl,
       projectId, fetchImpl, proposalId })).proposal));
     let priorProposals: Awaited<ReturnType<typeof readProposals>> | undefined;
+    const candidateSnapshot = candidateMode ? (await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl,
+      proposalId: held.context.candidate_target!.proposal_id })).proposal : undefined;
     if (scenario === "collection_rejected" && collection) {
       const opened = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl, proposalId: openedProposal(held) });
       const request = { command_schema: "storyos.command.reject-proposal-operations.request.v1",
@@ -440,13 +451,15 @@ test.each(["stream", "decision", "cancelled", "collection_stream", "collection_d
       assert.deepEqual(after.decision, { kind: "absent" });
     } else {
       if (after.decision.kind !== "prose_change") throw new Error("expected typed decision");
-      assert.equal(after.decision.locations?.length, collection ? 3 : 2);
+      assert.equal(after.decision.locations?.length, candidateMode ? 1 : collection ? 3 : 2);
       if (phase === "decision") {
         assert.equal(await queryPostgres(`SELECT payload->'decision' FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid;`), frozen);
         assert.deepEqual(after.decision.locations, held.decision.kind === "prose_change" ? held.decision.locations : undefined);
       }
     }
-    const count = terminal ? "0" : collection ? "2" : "1";
+    if (candidateSnapshot && (terminal || phase === "decision")) assert.deepEqual((await getProposal({
+      baseUrl: started.baseUrl, projectId, fetchImpl, proposalId: candidateSnapshot.proposal_id })).proposal, candidateSnapshot);
+    const count = terminal || candidateMode ? "0" : collection ? "2" : "1";
     assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id='${admitted.run_id}'::uuid;`), count);
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
     for (const original of collection?.chapters ?? []) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl,

@@ -264,7 +264,8 @@ pub(crate) async fn persist_batch(
            FROM storyos.proposals AS proposal
            JOIN storyos.proposal_operations AS operation USING (owner_user_id,project_id,proposal_id)
           WHERE proposal.owner_user_id=$1::text::uuid AND proposal.project_id=$2::text::uuid
-            AND proposal.proposal_id=$3::text::uuid ORDER BY operation.operation_id LIMIT 1",
+            AND proposal.proposal_id=$3::text::uuid
+            AND operation.manuscript_block_id=proposal.manuscript_block_id",
         &[&owner, &project, &loaded.proposal_id, &operation_id, &text],
     ).await.map_err(stream_err)?;
     let summary_text: &str = summary.get(1);
