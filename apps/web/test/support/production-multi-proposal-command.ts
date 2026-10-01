@@ -120,6 +120,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       const candidate=page.locator(`[data-proposal-id="${location.outcome.proposal_id}"][data-proposal-operation-id="${location.outcome.operation_id}"]`);
       await expect(candidate).toHaveAttribute('data-proposal-focused','true');
       await expect(candidate.locator('.block-proposal-text')).toHaveText(location.candidate_text);
+      if (location === run.decision.locations?.[0]) await page.screenshot({
+        path: join(repositoryRoot, 'target/382-approved-pending.png') });
     }
     const locations = run.decision.locations!;
     const first = locations[0]!;
