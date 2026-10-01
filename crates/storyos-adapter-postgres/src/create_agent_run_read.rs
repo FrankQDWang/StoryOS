@@ -126,7 +126,12 @@ pub(super) async fn load_agent_run(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     run_id: &str,
+    selection: &storyos_application::AgentRunReadSelection,
 ) -> Result<Option<AgentRunRecord>, CreateAgentRunError> {
+    let requested_attempt = match selection {
+        storyos_application::AgentRunReadSelection::Current => None,
+        storyos_application::AgentRunReadSelection::ModelAttempt(id) => Some(id),
+    };
     let row = client
         .query_opt(
             "SELECT run.project_agent_id::text, run.conversation_id::text,
@@ -136,7 +141,7 @@ pub(super) async fn load_agent_run(
                     attempt.outbound_disclosure_event_id::text,
                     attempt.model_invocation_id::text, attempt.dispatch_state,
                     attempt.decision_id::text, attempt.continuation_binding_id::text,
-                    attempt.payload::text, settings.use_enabled, settings.contribution_enabled
+                    attempt.payload::text, settings.use_enabled, settings.contribution_enabled, COALESCE(attempt.decision_position,run.active_decision_position)::text
                FROM storyos.agent_runs AS run
                LEFT JOIN storyos.conversation_memory_settings AS settings
                  ON (settings.owner_user_id, settings.project_id, settings.conversation_id,
@@ -147,6 +152,7 @@ pub(super) async fn load_agent_run(
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
                 AND attempt.attempt_role = 'decision'
+                AND (($4::text IS NULL AND attempt.decision_position=run.active_decision_position) OR attempt.model_attempt_id=$4::text::uuid)
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
@@ -154,6 +160,7 @@ pub(super) async fn load_agent_run(
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &run_id,
+                &requested_attempt,
             ],
         )
         .await
@@ -161,6 +168,9 @@ pub(super) async fn load_agent_run(
     let Some(row) = row else {
         return Ok(None);
     };
+    if requested_attempt.is_some() && row.get::<_, Option<String>>(6).is_none() {
+        return Ok(None);
+    }
     let status = parse_run_status(&row.get::<_, String>(4))?;
     let settlement = row
         .get::<_, Option<String>>(5)
@@ -235,9 +245,19 @@ pub(super) async fn load_agent_run(
             }),
         run_id: row.get(3),
         status,
-        context: super::context::load_assembled_context(client, scope, run_id).await?,
+        steering_inputs: crate::agent_run_steering::inspect(client, scope, run_id).await?,
+        context: super::context::load_assembled_context(
+            client,
+            scope,
+            run_id,
+            &row.get::<_, String>(16),
+        )
+        .await?,
         decision: inspect_decision(
-            settlement.as_ref(),
+            requested_attempt
+                .is_none()
+                .then_some(settlement.as_ref())
+                .flatten(),
             payload.as_ref(),
             row.get::<_, Option<String>>(12),
         ),
@@ -257,8 +277,9 @@ pub(super) async fn load_agent_run(
         )
         .await?,
     };
-    if let Some(selection) =
-        crate::agent_run_successor::load_successor_selection(client, scope, run_id).await?
+    if row.get::<_, String>(16) == "0"
+        && let Some(selection) =
+            crate::agent_run_successor::load_successor_selection(client, scope, run_id).await?
         && let Some(model) = record.model.as_mut()
     {
         record.decision = inspect_decision(

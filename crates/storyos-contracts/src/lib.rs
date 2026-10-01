@@ -125,10 +125,10 @@ pub use release1_accept_proposal::{
 };
 pub use release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
-    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
-    AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
-    CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH,
-    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunSteeringInspect,
+    AgentRunStreamItemInspect, AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget,
+    AttemptEvidence, AuthorMessage, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD,
+    CREATE_AGENT_RUN_PATH, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
     CapturedMemorySettingsInspect, ContextBlockReason, ContextProjectionInspect, ContextPurpose,
     ContextRejectionInspect, ContextRejectionReason, ContextSourceClass, ContextSourceInspect,
     ContextSufficiency, ContinuationAdmissionInspect, ContinuationInputMappingInspect,

@@ -64,7 +64,8 @@ async fn copy_successor_context(
                    FROM storyos.operation_requirements
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                     AND run_id = $3::text::uuid
-                    AND requirement_role = 'primary'"
+                    AND requirement_role = 'primary'
+                    AND decision_position=(SELECT active_decision_position FROM storyos.agent_runs WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND run_id=$3::text::uuid)"
             ),
             &[
                 &scope.owner_user_id.as_ref(),
@@ -96,7 +97,8 @@ async fn copy_successor_context(
                    FROM storyos.context_assembly_manifests
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                     AND run_id = $3::text::uuid
-                    AND manifest_role = 'decision'"
+                    AND manifest_role = 'decision'
+                    AND decision_position=(SELECT active_decision_position FROM storyos.agent_runs WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND run_id=$3::text::uuid)"
             ),
             &[
                 &scope.owner_user_id.as_ref(),

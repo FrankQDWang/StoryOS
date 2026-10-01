@@ -267,9 +267,13 @@ fn response_schema_bytes<T: schemars::JsonSchema>(schema_id: &str, title: &str) 
         scope["properties"]["owner_user_id"]["format"] = json!("uuid");
         scope["properties"]["project_id"]["format"] = json!("uuid");
     }
-    for name in ["PauseAgentRunEffect", "CancelAgentRunEffect"] {
+    for name in [
+        "PauseAgentRunEffect",
+        "CancelAgentRunEffect",
+        "SteerAgentRunEffect",
+    ] {
         if let Some(effect) = schema["$defs"].get_mut(name) {
-            constrain_uuid_fields(effect, &["run_id"]);
+            constrain_uuid_fields(effect, &["run_id", "steering_input_id"]);
         }
     }
     json_bytes(&schema)

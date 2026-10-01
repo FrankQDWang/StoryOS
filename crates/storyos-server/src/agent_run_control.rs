@@ -532,6 +532,11 @@ fn canonical_json(value: serde_json::Value) -> serde_json::Value {
 
 fn control_error(error: AgentRunControlError) -> ApiError {
     match error {
+        AgentRunControlError::InputLimit => problem(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "steering_input_limit",
+            "The correction exceeds the admitted Context input limit.",
+        ),
         AgentRunControlError::BindingConflict => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",

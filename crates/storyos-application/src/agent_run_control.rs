@@ -89,6 +89,7 @@ pub enum AgentRunControlConflict {
 #[derive(Debug)]
 pub enum AgentRunControlError {
     BindingConflict,
+    InputLimit,
     HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
@@ -99,6 +100,9 @@ pub enum AgentRunControlError {
 impl std::fmt::Display for AgentRunControlError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::InputLimit => {
+                formatter.write_str("The effective author input exceeds the Context item bound")
+            }
             Self::BindingConflict => formatter.write_str("The AgentRun control binding conflicts"),
             Self::HistoricalAcknowledgementUnavailable => formatter
                 .write_str("The original AgentRun control acknowledgement cannot be recovered"),
@@ -118,7 +122,8 @@ impl std::error::Error for AgentRunControlError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict
+            Self::InputLimit
+            | Self::BindingConflict
             | Self::HistoricalAcknowledgementUnavailable
             | Self::InvalidChallenge
             | Self::MissingProject
@@ -176,7 +181,7 @@ pub async fn control_agent_run(
     };
     if (command.intent == AgentRunControlIntent::Steer) != command.steering_input.is_some()
         || command.steering_input.as_ref().is_some_and(|input| {
-            input.author_message.is_empty() || input.author_message.chars().count() > 8000
+            input.author_message.is_empty() || input.author_message.len() > 8000
         })
         || challenge.project_scope != command.project_scope
         || challenge.client_session_binding_digest != command.client_binding.binding_ref

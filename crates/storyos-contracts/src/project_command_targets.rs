@@ -190,6 +190,12 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.create-agent-run.request.v2",
     ),
     target(
+        "steerAgentRun",
+        "POST",
+        "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs",
+        "storyos.command.steer-agent-run.request.v1",
+    ),
+    target(
         "pauseAgentRun",
         "POST",
         "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause",

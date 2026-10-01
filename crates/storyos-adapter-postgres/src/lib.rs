@@ -101,6 +101,7 @@ mod agent_run_continuation;
 mod agent_run_control;
 mod agent_run_expiry;
 mod agent_run_retrieval;
+mod agent_run_steering;
 mod agent_run_successor;
 mod agent_run_work;
 mod archive_project;

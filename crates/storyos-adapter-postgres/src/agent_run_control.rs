@@ -93,7 +93,7 @@ async fn persist_control(
     };
     let run = client
         .query_opt(
-            "SELECT status, conversation_id::text
+            "SELECT status, conversation_id::text, author_message
                FROM storyos.agent_runs
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -134,6 +134,15 @@ async fn persist_control(
                 | AgentRunLifecycle::Claimed
                 | AgentRunLifecycle::Waiting
                 | AgentRunLifecycle::Paused => {
+                    let retained: String = client.query_one("SELECT COALESCE(sum(char_length(payload->>'author_message')+1),0)::text FROM storyos.project_activity_event_payloads WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND event_kind='agent_run_steering_retained' AND payload->>'run_id'=$3", &[&command.project_scope.owner_user_id.as_ref(), &command.project_scope.project_id.as_ref(), &command.run_id]).await.map_err(control_database_error)?.get(0);
+                    if run.get::<_, String>(2).chars().count() as u64
+                        + retained.parse::<u64>().map_err(control_parse_error)?
+                        + input.author_message.chars().count() as u64
+                        + 1
+                        > storyos_core::CONTEXT_ITEM_TOKEN_LIMIT
+                    {
+                        return Err(AgentRunControlError::InputLimit);
+                    }
                     let position: String = client.query_one(
                         "SELECT (COALESCE(max((payload->>'input_position')::numeric), 0) + 1)::text FROM storyos.project_activity_event_payloads WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND event_kind='agent_run_steering_retained' AND payload->>'run_id'=$3",
                         &[&command.project_scope.owner_user_id.as_ref(), &command.project_scope.project_id.as_ref(), &command.run_id],

@@ -73,6 +73,7 @@ impl CreateAgentRunStore for PostgresProjectReader {
         &self,
         scope: &ProjectScope,
         run_id: &str,
+        selection: &storyos_application::AgentRunReadSelection,
     ) -> Result<Option<AgentRunRecord>, CreateAgentRunError> {
         let client = self
             .connect_challenge()
@@ -86,7 +87,7 @@ impl CreateAgentRunStore for PostgresProjectReader {
             set_challenge_scope_on_client(&client, scope)
                 .await
                 .map_err(agent_run_challenge_error)?;
-            read::load_agent_run(&client, scope, run_id).await
+            read::load_agent_run(&client, scope, run_id, selection).await
         }
         .await;
         match &result {
@@ -227,7 +228,14 @@ async fn persist_create_agent_run(
     .await?;
     context::persist_current_passage_assembly(
         client,
-        command,
+        &context::PassageContextInput {
+            project_scope: &command.project_scope,
+            run_id: &command.run_id,
+            chapter_id: &command.chapter_id,
+            author_message: &command.author_message,
+            receipt_id: &command.ids.receipt_id,
+            decision_position: "0",
+        },
         &assistance_record.processing_destination_identity,
     )
     .await?;

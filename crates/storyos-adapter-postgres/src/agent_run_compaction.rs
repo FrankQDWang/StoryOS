@@ -109,11 +109,11 @@ async fn load_decision_source(
                JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
-                AND attempt.attempt_role = 'decision'
+                AND attempt.attempt_role = 'decision' AND attempt.decision_position = 0
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
-                AND assembly.manifest_role = 'decision'
+                AND assembly.manifest_role = 'decision' AND assembly.decision_position = 0
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid

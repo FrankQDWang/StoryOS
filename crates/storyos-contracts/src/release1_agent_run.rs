@@ -636,6 +636,16 @@ pub enum CapturedMemorySettingsInspect {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
+pub struct AgentRunSteeringInspect {
+    pub steering_input_id: String,
+    pub input_position: String,
+    pub author_message: String,
+    pub input_snapshot_id: Option<String>,
+    pub model_attempt_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct GetAgentRunResponse {
     pub schema_id: String,
     pub correlation_id: String,
@@ -644,6 +654,7 @@ pub struct GetAgentRunResponse {
     pub conversation_id: String,
     pub memory_settings_revision: String,
     pub captured_memory_settings: CapturedMemorySettingsInspect,
+    pub steering_inputs: Vec<AgentRunSteeringInspect>,
     pub run_id: String,
     pub status: AgentRunStatus,
     pub context: AgentRunContextInspect,
