@@ -155,7 +155,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
           body: JSON.stringify({ code: "historical_acknowledgement_unavailable" }) });
       }
     });
-    await page.locator('input[name="assistant-message"]').fill(MESSAGE);
+    await page.locator('[name="assistant-message"]').fill(MESSAGE);
     await page.locator(".composer button").click();
     await page.locator('[data-assistant-dispatch="uncertain"]').waitFor();
     assert.ok(admitted !== undefined && admitted.effect.kind === "admitted");
@@ -256,13 +256,13 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       WHERE owner_user_id = '${USER}'::uuid AND project_id = '${projectId}'::uuid
     `);
     delivery = "refused";
-    await page.locator('input[name="assistant-message"]').fill(CORRECTION);
+    await page.locator('[name="assistant-message"]').fill(CORRECTION);
     await page.locator(".composer button").click();
     await page.getByText("本次请求未被接收。请检查当前章节和写作助手状态。").waitFor();
     assert.equal(await page.locator("[data-assistant-run-id]").getAttribute("data-assistant-run-id"), runId);
     assert.equal(posted, 1, "safe refusal must not admit duplicate work");
     delivery = "historical";
-    await page.locator('input[name="assistant-message"]').fill(CORRECTION);
+    await page.locator('[name="assistant-message"]').fill(CORRECTION);
     await page.locator(".composer button").click();
     await page.getByText("原始回复无法恢复。请刷新后查看当前结果。").waitFor();
     assert.ok(admitted !== undefined && admitted.effect.kind === "admitted");
@@ -670,7 +670,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.getByText("下一条消息将开始新对话。").waitFor();
     const newResponse = page.waitForResponse((response) =>
       new URL(response.url()).pathname.endsWith("/agent-runs") && response.request().method() === "POST");
-    await page.locator('input[name="assistant-message"]').fill("Help with this passage.");
+    await page.locator('[name="assistant-message"]').fill("Help with this passage.");
     await page.locator(".composer button").click();
     const newAcknowledgement = await (await newResponse).json() as CreateAgentRunResponse;
     assert.notEqual(newAcknowledgement.conversation_id, completed.conversation_id);
@@ -705,7 +705,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     const followUpResponse = page.waitForResponse((response) =>
       new URL(response.url()).pathname.endsWith("/agent-runs") && response.request().method() === "POST");
     const followUp = "Keep the voice in this current passage.";
-    await page.locator('input[name="assistant-message"]').fill(followUp);
+    await page.locator('[name="assistant-message"]').fill(followUp);
     await page.locator(".composer button").click();
     const followUpAcknowledgement = await (await followUpResponse).json() as CreateAgentRunResponse;
     assert.equal(followUpAcknowledgement.conversation_id, separate.conversation_id);

@@ -354,7 +354,8 @@ export function BlockProposalDisplay({
         && accepting !== proposal.proposal_id,
       replanEligible,
       withdrawEligible,
-      copyEligible: operation.candidate_text.length > 0,
+      copyEligible: operation.candidate_text.length > 0
+        && (condition !== "absent" || proposal.validation === "invalid" || !writerOpen || sessionBlocked),
       conditionKind: condition,
       validity: proposal.validation,
       sessionEligible: writerOpen && !sessionBlocked,
@@ -823,7 +824,8 @@ export function BlockProposalDisplay({
           onRetryReplan={() => retryReplan(locator.proposalId)}
           onRetryWithdraw={() => retryWithdraw(locator.proposalId)} />
       ))}
-      {unavailable.map(({ locator, proposal }) => (
+      {unavailable.filter(({ locator, proposal }) => proposal?.operation_resolution !== "applied"
+        || !acceptanceChecked || pendingAcceptances.includes(locator.proposalId)).map(({ locator, proposal }) => (
         <p className="block-proposal-unavailable" data-proposal-unavailable={locator.proposalId}
           data-proposal-revision-id={proposal?.revision_id ?? ""}
           data-proposal-operation-id={proposal?.operation_id ?? ""}

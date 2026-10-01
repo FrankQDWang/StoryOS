@@ -6,7 +6,7 @@ import {
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, ProjectScope,
+  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -16,7 +16,7 @@ import { AssistantComposer } from "./assistant-composer.tsx";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
-import { AssistantRunDetails, type SelectedRunDetails } from "./assistant-run-details.tsx";
+import { type SelectedRunDetails } from "./assistant-run-details.tsx";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -29,6 +29,7 @@ type TranscriptExchange = {
   message: string;
   status: GetAgentRunResponse["status"];
   result?: string;
+  run?: GetAgentRunResponse;
 };
 
 type RequestReference = {
@@ -49,6 +50,7 @@ export type AssistantContext = {
   scope: ProjectScope;
   chapterId?: string;
   candidateTarget?: ProposalFocus | undefined;
+  tree?: GetManuscriptTreeResponse | undefined;
   canSubmit: boolean;
   baseUrl: string;
   fetchImpl: typeof fetch;
@@ -136,7 +138,8 @@ function resultText(run: GetAgentRunResponse): string | undefined {
       return run.decision.text;
     case "prose_change":
       return (run.decision.locations?.length ?? 0) > 0
-        ? `已生成 ${run.decision.locations!.length} 处候选文字。` : run.decision.text;
+        ? `这次修改涉及 ${new Set(run.decision.locations!.map(location => location.chapter_id)).size} 个章节、${run.decision.locations!.length} 处文字，具体建议在下方。`
+        : "本次修改建议已生成，可以在正文中查看。";
     case "clarification":
       return run.decision.question;
     case "execution_refused":
@@ -379,7 +382,7 @@ export function WritingAssistantPanel({
         history: previous === undefined || previousRun === undefined ? [] : [
           ...(previous.history ?? []), {
             requestId: previous.correlationId, chapterId: previous.chapterId, conversationId: previousRun.conversation_id,
-            runId: previousRun.run_id,
+            runId: previousRun.run_id, run: previousRun,
             message: previous.message, status: previousRun.status,
             ...(resultText(previousRun) === undefined ? {} : { result: resultText(previousRun)! }),
           },
@@ -488,36 +491,32 @@ export function WritingAssistantPanel({
             <p className="assistant-status">写作助手当前不可用。你仍可以直接写作。</p>
           ) : null}
           {reference?.history?.map((exchange, index, history) => (
-            <section className="assistant-exchange" key={exchange.requestId}>
+            <section className="assistant-exchange" key={exchange.requestId} data-assistant-history-run={exchange.runId}>
               {index > 0 && history[index - 1]?.conversationId !== exchange.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <p className="assistant-author-message">{exchange.message}</p>
-              <p>{runLabels[exchange.status]}</p>
+              {exchange.run?.steering_inputs?.map(input => <p className="assistant-author-message"
+                key={input.steering_input_id}>{input.author_message}</p>)}
               {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
-              <button type="button" data-assistant-history-inspect={exchange.runId ?? ""}
-                aria-expanded={reference.selectedRequestId === exchange.requestId}
-                onClick={() => { void inspectDetails(exchange.requestId); }}>检查结果</button>
-              {reference.selectedRequestId === exchange.requestId
-                ? <><AssistantRunDetails details={details} />
-                  {details.kind === "known" ? <ProposalLocationLinks run={details.run}
-                    sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} /> : null}</> : null}
+              {exchange.run === undefined ? null : <ProposalLocationLinks run={exchange.run} tree={context?.tree}
+                sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
             </section>
           ))}
           {reference === undefined ? null : (
-            <section className="assistant-exchange">
+            <section className="assistant-exchange" data-assistant-current-run="">
               {(reference.history?.length ?? 0) > 0
                 && reference.history?.at(-1)?.conversationId !== reference.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <p className="assistant-author-message">{reference.message}</p>
-              <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p>
+              {run?.steering_inputs?.map(input => <p className="assistant-author-message"
+                key={input.steering_input_id}>{input.author_message}</p>)}
+              {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
               {run === undefined ? null : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
-                <ProposalLocationLinks run={run} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
-              <button type="button" data-assistant-inspect=""
-                aria-expanded={reference.selectedRequestId === reference.correlationId} onClick={() => {
+                <ProposalLocationLinks run={run} tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
+              {!terminal ? <button type="button" data-assistant-inspect="" onClick={() => {
                 void inspectDetails(reference.correlationId);
-              }}>检查结果</button>
-              {reference.selectedRequestId === reference.correlationId
-                ? <AssistantRunDetails details={details} /> : null}
+              }}>检查结果</button> : null}
+              {details.kind === "unavailable" ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
             </section>
           )}
           {reference?.conversationChoice === "new"

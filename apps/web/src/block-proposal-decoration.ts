@@ -211,27 +211,18 @@ export const blockProposalDecoration = TiptapNode.create({
       "aria-label": eligible || rejectEligible ? "候选文字，尚未成为正文"
         : "候选文字，暂不可操作",
       ...(node.attrs.candidateEditable === true ? {} : { contenteditable: "false" }),
-    }, ["span", { class: "block-proposal-label", contenteditable: "false" },
-      eligible || rejectEligible ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可操作"],
-    ["p", { class: "block-proposal-text" }, 0],
+    }, ["p", { class: "block-proposal-text" }, 0],
+    ["div", { class: "proposal-actions", contenteditable: "false" },
     ...(eligible || retryPending ? [["button", {
       type: "button",
       class: "block-proposal-accept",
       "data-proposal-accept": node.attrs.proposalId,
       contenteditable: "false",
-    }, retryPending ? "重试接受" : "接受"]] : []),
+    }, retryPending ? "重试接受" : "✓ 接受"]] : []),
     ...(rejectEligible || retryRejection ? [["button", {
       type: "button", class: "block-proposal-reject",
       "data-proposal-reject": node.attrs.proposalId, contenteditable: "false",
-    }, retryRejection ? "重试拒绝" : "拒绝"]] : []),
-    ...(eligible && node.attrs.pendingOperationIds?.length > 1 ? [["button", {
-      type: "button", "data-proposal-accept": node.attrs.proposalId,
-      "data-proposal-all": "", contenteditable: "false",
-    }, "接受全部"]] : []),
-    ...(rejectEligible && node.attrs.pendingOperationIds?.length > 1 ? [["button", {
-      type: "button", "data-proposal-reject": node.attrs.proposalId,
-      "data-proposal-all": "", contenteditable: "false",
-    }, "拒绝全部"]] : []),
+    }, retryRejection ? "重试拒绝" : "× 拒绝"]] : []),
     ...(replanEligible ? [["button", {
       type: "button", class: "block-proposal-replan",
       "data-proposal-replan": node.attrs.proposalId, contenteditable: "false",
@@ -243,6 +234,6 @@ export const blockProposalDecoration = TiptapNode.create({
     ...(copyEligible ? [["button", {
       type: "button", class: "block-proposal-copy",
       "data-proposal-copy": node.attrs.proposalId, contenteditable: "false",
-    }, "复制"]] : [])];
+    }, "复制"]] : [])]];
   },
 });
