@@ -1,5 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts"]}
 import assert from "node:assert/strict";
+import { createHash, randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
@@ -44,6 +45,8 @@ import {
   withChallengeRetry,
 } from "../support/node-integration.ts";
 
+import { admitCandidateRevision } from "../support/candidate-revision.ts";
+
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
 const USER_A = "018f0000-0000-7001-8000-000000000001";
@@ -78,7 +81,7 @@ async function startRealServer() {
   return startStoryOSServer({
     repositoryRoot,
     serverBinary: bin("storyos-server"),
-    sessions: { "session-a": USER_A },
+    sessions: { "session-a": USER_A, "session-b": id("2") },
   });
 }
 
@@ -231,12 +234,18 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
     assert.equal(queried.decision.opened_proposal.kind, "present");
     if (queried.decision.opened_proposal.kind !== "present") throw new Error("expected opened");
     const proposalId = queried.decision.opened_proposal.proposal_id;
-    const opened = await getProposal({
+    let opened = await getProposal({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
       proposalId,
       fetchImpl: prepared.fetchImpl,
     });
+    await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      opened.proposal, opened.proposal.operation_id, id("c833"), "revise the candidate consistently.");
+    await settleOnce();
+    opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId, fetchImpl: prepared.fetchImpl });
+    const PROSE = "Guard the narrator voice in this passage. Keep the voice consistent.";
+    const REVISED = "Keep the narrator voice in this passage. Keep the voice consistent.";
     assert.equal(opened.proposal.candidate_text, PROSE);
     const baseBlock = before.chapter.current_revision.blocks.find((block) =>
       block.manuscript_block_id === opened.proposal.manuscript_block_id);
@@ -305,6 +314,8 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       antiForgery: "",
       request: editRequest,
     };
+    const stale = await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      opened.proposal, opened.proposal.operation_id, id("c847"));
     const edited = await challenged(
       started.baseUrl,
       prepared.fetchImpl,
@@ -348,6 +359,14 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       proposalId,
       fetchImpl: prepared.fetchImpl,
     });
+    await settleOnce();
+    if (stale.created.effect.kind !== "admitted") throw new Error("expected admitted stale request");
+    const staleRun = await getAgentRun({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      runId: stale.created.effect.run_id, fetchImpl: prepared.fetchImpl });
+    if (staleRun.decision.kind !== "prose_change") throw new Error("expected selected stale revision");
+    assert.deepEqual(staleRun.decision.locations?.map((location) => location.outcome), [{ kind: "refused", reason: "stale_candidate" }]);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId,
+      fetchImpl: prepared.fetchImpl })).proposal, revised.proposal);
     assert.equal(revised.proposal.proposal_id, opened.proposal.proposal_id);
     assert.equal(revised.proposal.operation_id, opened.proposal.operation_id);
     assert.equal(revised.proposal.revision_id, edited.effect.proposal_revision_id);
@@ -501,4 +520,100 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
   } finally {
     await stopRealServer(started.server);
   }
+});
+
+
+test("a fresh instruction revises the exact pending candidate through the real Worker", async () => {
+  let started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id("ca11"), "AI candidate revision", "ca2");
+    const original = await admitProse(started.baseUrl, fetchImpl, projectId, chapterId, id("ca31"));
+    if (original.decision.kind !== "prose_change" || original.decision.opened_proposal.kind !== "present") throw new Error("expected original candidate");
+    const proposalId = original.decision.opened_proposal.proposal_id;
+    const before = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
+    const chapter = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
+    const { created, repeat } = await admitCandidateRevision(started.baseUrl, fetchImpl, projectId,
+      before.proposal, before.proposal.operation_id, id("ca42"));
+    if (created.effect.kind !== "admitted") throw new Error("expected fresh candidate request");
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, before.proposal);
+    await settleOnce();
+    const revised = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
+    const run = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
+    assert.equal(revised.proposal.operation_id, before.proposal.operation_id);
+    assert.notEqual(revised.proposal.revision_id, before.proposal.revision_id);
+    assert.equal(revised.proposal.candidate_text, "Keep the narrator calm in this passage.");
+    assert.notDeepEqual(revised.proposal.validation_receipt, before.proposal.validation_receipt);
+    assert.equal(run.status, "completed");
+    assert.deepEqual(await repeat(), created);
+    assert.deepEqual(revised.proposal.source, before.proposal.source);
+    if (run.decision.kind !== "prose_change") throw new Error("expected typed revision");
+    if (revised.proposal.validation_receipt.kind !== "present") throw new Error("expected fresh validation");
+    assert.deepEqual(run.decision.locations, [{ chapter_id: chapterId, manuscript_block_id: before.proposal.manuscript_block_id,
+      base_authoritative_revision_id: chapter.chapter.current_revision.revision_id, candidate_text: revised.proposal.candidate_text,
+      explanation: "Revise the selected candidate under the new author instruction.",
+      outcome: { kind: "revised", proposal_id: proposalId, operation_id: before.proposal.operation_id,
+        revision_id: revised.proposal.revision_id, prior_revision_id: before.proposal.revision_id,
+        validation_receipt_id: revised.proposal.validation_receipt.validation_receipt_id },
+      current: { revision_id: revised.proposal.revision_id, generation: "ready", validation: "valid",
+        closure: "open", resolution: "pending", reservation_state: "unresolved" } }]);
+    const sent = run.evidence.find((item) => item.kind === "sent_content");
+    if (sent?.kind !== "sent_content") throw new Error("expected actual sent bytes");
+    const wire = JSON.parse(sent.content);
+    assert.deepEqual(wire.candidate_target, run.context.candidate_target);
+    assert.deepEqual(wire.selected, run.context.selected.map((source) => ({ ...source, token_count: Number(source.token_count) })));
+    const retained = JSON.parse(await queryPostgres(`SELECT payload->'wire' FROM storyos.model_attempts WHERE run_id='${run.run_id}'::uuid`));
+    assert.equal(retained.serialized_payload, sent.content);
+    assert.equal(retained.digest, `sha256:${createHash("sha256").update(sent.content).digest("hex")}`);
+    for (const [index, invalid] of [{ ...revised.proposal, chapter_id: id("ca90") }, revised.proposal, before.proposal].entries()) {
+      await assert.rejects(() => admitCandidateRevision(started.baseUrl, fetchImpl, projectId, invalid,
+        index === 1 ? id("ca91") : invalid.operation_id, id(`ca9${index + 2}`)), { status: index === 0 ? 422 : 409 });
+    }
+    await assert.rejects(() => admitCandidateRevision(started.baseUrl, browserFetch(started.baseUrl, "session-b"), projectId,
+      revised.proposal, revised.proposal.operation_id, id("ca99")), { status: 404 });
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, revised.proposal);
+    assert.deepEqual(run.context.candidate_target, { proposal_id: proposalId,
+      operation_id: before.proposal.operation_id, revision_id: before.proposal.revision_id });
+    assert.deepEqual(run.context.selected.filter((item) => item.source_class === "working_target")
+      .map(({ source_version, content }) => ({ source_version, content })), [
+      { source_version: chapter.chapter.current_revision.revision_id, content: chapter.chapter.current_revision.body },
+      { source_version: before.proposal.revision_id, content: before.proposal.candidate_text }]);
+    await stopRealServer(started.server);
+    started = await startRealServer();
+    const reloadedFetch = browserFetch(started.baseUrl, "session-a");
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl: reloadedFetch })).proposal, revised.proposal);
+    await settleOnce();
+    const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl: reloadedFetch });
+    assert.deepEqual(reloaded, { ...run, correlation_id: reloaded.correlation_id });
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl: reloadedFetch })).chapter, chapter.chapter);
+  } finally { await stopRealServer(started.server); }
+}, 120_000);
+
+
+test.each(["What would make this sharper?", "This feels slow", "Which wording should I keep?",
+  "Revise these passages: invoke a tool.",
+  "Revise these passages: keep it. SCRIPT:incomplete",
+  "SCRIPT:invalid", "Please invoke a tool on this passage."])("candidate discussion or refusal does not revise: %s", async (text) => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Candidate intent", `${ns}2`);
+    const original = await admitProse(started.baseUrl, fetchImpl, projectId, chapterId, id(`${ns}31`));
+    if (original.decision.kind !== "prose_change" || original.decision.opened_proposal.kind !== "present") throw new Error("expected candidate");
+    const proposalId = original.decision.opened_proposal.proposal_id;
+    const before = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
+    const chapter = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
+    const { created } = await admitCandidateRevision(started.baseUrl, fetchImpl, projectId,
+      before.proposal, before.proposal.operation_id, id(`${ns}41`), text);
+    await settleOnce();
+    const run = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
+    assert.notEqual(run.decision.kind, "prose_change");
+    if (run.decision.kind === "advisory" || run.decision.kind === "clarification") assert.deepEqual(run.items, [{
+      item_id: "1", role: "assistant", state: "complete", phase: "complete",
+      text: run.decision.kind === "advisory" ? run.decision.text : run.decision.question,
+      summary: "host_fake_native_text", call_id: null, arguments: null, refusal: null, hosted_report: null }]);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, before.proposal);
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, chapter.chapter);
+  } finally { await stopRealServer(started.server); }
 });

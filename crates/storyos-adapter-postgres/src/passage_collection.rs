@@ -74,14 +74,25 @@ pub(crate) async fn bind_wire(
         serde_json::from_str(&row.get::<_, String>(0)).map_err(|error| {
             storyos_application::CompleteAgentRunError::Unavailable(Box::new(error))
         })?;
-    if let Some(targets) = record.pointer("/operation_requirement/passage_targets") {
-        let bytes = storyos_core::canonical_json(&serde_json::json!({
+    if record
+        .pointer("/operation_requirement/candidate_target")
+        .is_some()
+        || record
+            .pointer("/operation_requirement/passage_targets")
+            .is_some()
+    {
+        let targets = &record["operation_requirement"]["passage_targets"];
+        let mut wire = serde_json::json!({
             "author_message": author_message,
             "source_chapter_id": record["operation_requirement"]["chapter_id"],
             "targets": targets,
             "selected": record["selected"],
             "mapping_revision": storyos_core::HOST_FAKE_MAPPING_REVISION,
-        }));
+        });
+        if let Some(target) = record.pointer("/operation_requirement/candidate_target") {
+            wire["candidate_target"] = target.clone();
+        }
+        let bytes = storyos_core::canonical_json(&wire);
         payload["wire"]["serialized_payload"] = serde_json::json!(bytes);
         payload["wire"]["digest"] = serde_json::json!(format!(
             "sha256:{}",

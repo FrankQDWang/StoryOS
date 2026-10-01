@@ -30,6 +30,7 @@ fn command() -> CreateAgentRunCommand {
     };
     CreateAgentRunCommand {
         passage_targets: None,
+        candidate_target: None,
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: "binding".to_owned(),

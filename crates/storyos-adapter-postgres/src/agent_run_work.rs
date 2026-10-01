@@ -444,7 +444,17 @@ async fn persist_stream_and_decision(
                 ..
             },
         ) => {
-            if produced.is_none() && author_message.starts_with("Revise this phrase:") {
+            if let Some(record) = crate::candidate_revision_target::admitted(client, claim).await? {
+                let revised = crate::revise_candidate_generation::apply(
+                    client,
+                    claim,
+                    &record,
+                    produced.as_deref().unwrap_or_default(),
+                )
+                .await?;
+                locations = revised.locations;
+                revised.proposal_id
+            } else if produced.is_none() && author_message.starts_with("Revise this phrase:") {
                 crate::open_inline_proposal::open_selected_inline_change(
                     client,
                     claim,
