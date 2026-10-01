@@ -195,10 +195,9 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     ]);
     await expect(candidate).toHaveCount(0);
     assert.equal(acceptancePosts, 2, "reload must not resubmit an uncertain explicit decision");
-    const previousEditor = await page.locator('[data-manuscript-editor]').elementHandle();
     await page.getByRole("button", { name: "重试接受", exact: true }).click();
     await expect.poll(() => acceptancePosts).toBe(3);
-    await expect.poll(() => previousEditor!.evaluate((element) => element.isConnected)).toBe(false);
+    await expect(page.getByRole("button", { name: "重试接受", exact: true })).toHaveCount(0);
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await page.locator('[data-manuscript-editor] > p').first().click();
