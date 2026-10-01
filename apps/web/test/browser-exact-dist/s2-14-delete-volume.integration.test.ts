@@ -94,8 +94,7 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
       frame.contentDocument?.querySelector('#app form[data-create-volume] input[name="volume-title"]')
         ?.tagName
     ).toBe("INPUT");
-    await beginInlineVolumeCreation(frame.contentDocument);
-  const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
+    const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
       '#app form[data-create-volume] input[name="volume-title"]',
     );
     const volumeForm = volumeTitle?.form;

@@ -242,12 +242,11 @@ input:focus-visible,
   font-size: 13px;
 }
 
-.editor-panel h2 { margin-top: 91px; margin-bottom: 38px; font-family: "Noto Serif SC", "Songti SC", serif; font-size: clamp(27px, 2.1vw, 32px); font-weight: 600; }
 .editor-status { position: sticky; bottom: 0; margin-top: auto; min-height: 40px; display: flex; align-items: center; gap: 8px; background: var(--canvas); color: var(--muted); font-size: 12px; }
 .editor-status [data-manuscript-statistics] { margin-left: auto; order: 3; }
 
 
-.agent-panel { width: var(--assistant-rail-width); }
+.workspace.agent-is-collapsed .agent-panel { width: var(--assistant-rail-width); }
 
 .agent-panel {
   height: 100%;
