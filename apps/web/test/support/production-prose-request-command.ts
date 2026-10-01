@@ -3,7 +3,6 @@ import { expect } from "playwright/test";
 import { webcrypto } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { writeFile } from "node:fs/promises";
 import type { BrowserContext } from "playwright";
 
 import {
@@ -457,7 +456,6 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       fullPage: true });
     const missingBlockId = uuidV7();
     let readMode: "invalid" | "missing" = "invalid";
-    const missingReads: unknown[] = [];
     await page.route((url) => url.pathname.endsWith(`/proposals/${firstProposalId}`),
       async (route) => {
         const response = await route.fetch();
@@ -470,7 +468,6 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
             ...operation, manuscript_block_id: missingBlockId,
           }));
         }
-        if (readMode === "missing") missingReads.push(body);
         await route.fulfill({ response, body: JSON.stringify(body) });
       });
     await page.reload();
@@ -481,12 +478,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.equal(await ineligible.getAttribute("data-proposal-revision-id"), restored.revision_id);
     readMode = "missing";
     await page.reload();
-    await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor().catch(async (error: unknown) => {
-      await writeFile(join(repositoryRoot, "target", "382-missing-block-stop.json"), JSON.stringify({
-        firstProposalId, missingBlockId, missingReads, html: await page.content(),
-      }, null, 2));
-      throw error;
-    });
+    await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor();
     assert.equal(await page.locator(`[data-proposal-id="${firstProposalId}"]`).count(), 0);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).count(), 1);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
@@ -638,7 +630,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.ok(locatorCache);
     await page.reload();
     await page.locator('[data-unsettled-intent-count="1"]').waitFor();
-    const retry = page.locator(`[data-proposal-unavailable="${firstProposalId}"]`);
+    const retry = page.locator(`[data-proposal-decision="${firstProposalId}"]`).getByRole("button", { name: "重试接受", exact: true });
     await retry.waitFor();
     assert.equal(await page.locator(".tiptap").getAttribute("contenteditable"), "false");
     await page.locator(`[data-proposal-decision="${firstProposalId}"] button`).click();

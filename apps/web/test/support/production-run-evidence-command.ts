@@ -223,7 +223,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       }).toBe("fenced");
       const fenced = (await inspect(successorId)).unknown_create_successor;
       assert.ok(fenced.kind === "present");
-      assert.equal(fenced.successor_model_attempt_id, null);
+      assert.ok(!fenced.successor_model_attempt_id);
       assert.equal((await cancel(successorId, "c")).effect.kind, "applied");
     } finally { if (existsSync(fenceHold)) unlinkSync(fenceHold); await fenceWorker; }
     const prohibited = await inspect(successorId);
