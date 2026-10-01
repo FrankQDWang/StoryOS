@@ -9,7 +9,7 @@ import {
   createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun,
   getChapter, getEditorSession, getProposal, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunResponse, UpdateProjectAssistanceRequest }
+import type { AcceptProposalRequest, ApplyAuthorEditRequest, AssistanceWorkingTarget, CreateAgentRunResponse, UpdateProjectAssistanceRequest }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch } from "./node-integration.ts";
@@ -77,8 +77,10 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     const before = await getChapter({ ...options, chapterId });
     assert.deepEqual(before.chapter.current_revision.blocks.map((block) => block.text), [SOURCE, SIBLING]);
     let admitted: CreateAgentRunResponse | undefined;
+    let requestTarget: AssistanceWorkingTarget | undefined;
     await page.route((url) => url.pathname.endsWith("/agent-runs"), async (route) => {
       if (route.request().method() !== "POST") return route.continue();
+      requestTarget = route.request().postDataJSON().create_agent_run_input.working_target;
       const response = await route.fetch();
       admitted = await response.json() as CreateAgentRunResponse;
       await route.fulfill({ response });
@@ -142,7 +144,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.candidate_text)
       .toBe("narraxxtor tone");
     await candidateLost;
-    const edited = (await getProposal({ ...options, proposalId })).proposal;
+    let edited = (await getProposal({ ...options, proposalId })).proposal;
     assert.notEqual(edited.revision_id, proposal.revision_id);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
     await page.reload();
@@ -158,6 +160,33 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     });
     await page.unroute(editRoute);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-edited-reloaded.png") });
+    await candidate.click();
+    admitted = undefined;
+    await page.locator('[name="assistant-message"]').fill("Revise the selected candidate and preserve its meaning.");
+    await page.locator(".composer button").click();
+    await expect.poll(() => admitted?.effect.kind).toBe("admitted");
+    assert.deepEqual(requestTarget, { kind: "proposal_candidate", source_chapter_id: chapterId,
+      target: { proposal_id: proposalId, operation_id: edited.operations[0]!.operation_id,
+        revision_id: edited.revision_id } });
+    const revisionAdmission = admitted as CreateAgentRunResponse | undefined;
+    assert.ok(revisionAdmission?.effect.kind === "admitted");
+    const revisionRunId = revisionAdmission.effect.run_id;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      if ((await getAgentRun({ ...options, runId: revisionRunId })).status === "completed") break;
+      await runStoryOSWorker({ repositoryRoot, workerBinary: join(repositoryRoot,
+        "target", "release-package", "storyos-worker"), args: ["--once"] });
+    }
+    const revisionRun = await getAgentRun({ ...options, runId: revisionRunId });
+    assert.equal(revisionRun.status, "completed");
+    assert.ok(revisionRun.decision.kind === "prose_change"
+      && revisionRun.decision.locations?.[0]?.outcome.kind === "revised");
+    const aiEdited = (await getProposal({ ...options, proposalId })).proposal;
+    assert.notEqual(aiEdited.revision_id, edited.revision_id);
+    assert.equal(aiEdited.operations[0]!.operation_id, edited.operations[0]!.operation_id);
+    edited = aiEdited;
+    await expect(candidate).toHaveText("narraxxtor tone Keep the voice consistent.");
+    await expect(candidate).toHaveAttribute("data-proposal-revision-id", edited.revision_id);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
     let acceptanceRequest: AcceptProposalRequest | undefined;
     let acceptancePosts = 0;
     let finishAcceptanceLoss = () => {};
@@ -187,11 +216,11 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.reload();
     const accepted = await getChapter({ ...options, chapterId });
     assert.deepEqual(accepted.chapter.current_revision.blocks, [
-      { ...before.chapter.current_revision.blocks[0]!, text: "Guard the narraxxtor tone in this passage." },
+      { ...before.chapter.current_revision.blocks[0]!, text: "Guard the narraxxtor tone Keep the voice consistent. in this passage." },
       before.chapter.current_revision.blocks[1]!,
     ]);
     await expect(page.locator("[data-manuscript-editor] > p")).toHaveText([
-      "Guard the narraxxtor tone in this passage.", SIBLING,
+      "Guard the narraxxtor tone Keep the voice consistent. in this passage.", SIBLING,
     ]);
     await expect(candidate).toHaveCount(0);
     assert.equal(acceptancePosts, 2, "reload must not resubmit an uncertain explicit decision");
