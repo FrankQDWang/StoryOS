@@ -27,7 +27,7 @@
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:e99b950b8f713a20359dff39f614032a8cbac9ad1131fcd5e9d84d09e1608691",
+      "route_catalog_sha256": "sha256:724246c75a29c503e9deee608707399dbd7277928724854d23418b63093a7595",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -740,7 +740,7 @@
       "head": "run_lane_and_worker_fence",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "run_and_outbox_fences_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_reconcile_outcome_unknown", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "operational_persistence", "operation_ids": ["createAgentRun", "pauseAgentRun", "resumeAgentRun", "cancelAgentRun", "resolveWait", "decideApproval", "getAgentRun", "updateConversationMemorySettings", "getConversationMemory"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "operational_persistence", "operation_ids": ["createAgentRun", "pauseAgentRun", "steerAgentRun", "resumeAgentRun", "cancelAgentRun", "resolveWait", "decideApproval", "getAgentRun", "updateConversationMemorySettings", "getConversationMemory"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-context-disclosure",

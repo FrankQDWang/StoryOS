@@ -247,6 +247,8 @@ async fn persist_create_agent_run(
             author_message: &command.author_message,
             receipt_id: &command.ids.receipt_id,
             decision_position: "0",
+            passage_targets: command.passage_targets.as_deref(),
+            candidate_target: command.candidate_target.as_ref(),
         },
         &assistance_record.processing_destination_identity,
     )

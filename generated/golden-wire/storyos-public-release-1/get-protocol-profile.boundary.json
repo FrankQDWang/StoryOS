@@ -11,10 +11,10 @@
   "release_identity": {
     "activity_profile": "storyos.project-activity.v1",
     "api_major": 1,
-    "contract_graph_digest": "sha256:b4aba633cf21b903c57f9c7a7b42ee3409301458e8a1094ec878c6f289b6a696",
+    "contract_graph_digest": "sha256:5bf2f580f40b5d8b3d8843f22aaed10b97b99e44043b096cac70e6d4ea9e125e",
     "contract_graph_revision": "release1-wire-catalog-2026-09-27-expiry-rebuild",
     "envelope_profile": "storyos.public.envelope.v1",
-    "fixture_corpus_digest": "sha256:d67d66940c8649865fbabab6819b08284c11811c2559586e3f4affdc9c4a000e",
+    "fixture_corpus_digest": "sha256:e01495e4fe34f5650417340724e302bfeba85172bad84ca52d8ae4f74385a23c",
     "generated_client_revision": "storyos.typescript-client.release-0.v1",
     "json_schema_catalog_digest": "sha256:5397dd87b05b8a3f210b8292cab81aa2448e8ba85f6cc77c3abc422d4a5b1ed4",
     "limit_profile_revision": "storyos.foundation.absolute.v1",

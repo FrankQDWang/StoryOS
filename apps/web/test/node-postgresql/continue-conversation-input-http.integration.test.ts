@@ -1,11 +1,14 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { expect, test } from "vitest";
+import { writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   createAgentRun,
   digestCreateAgentRun,
-  getAgentRun,
+  getAgentRun, getProposal, steerAgentRun, digestSteerAgentRun,
   type CreateAgentRunRequest,
   type GetAgentRunResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -31,7 +34,7 @@ const CORRECTION = "I changed my mind: keep the voice.";
 const FULL = "Submit the complete current request. Keep the voice.";
 const EDITED = "Edited passage text.";
 
-async function admit(
+async function admitQueued(
   baseUrl: string,
   prepared: Awaited<ReturnType<typeof prepare>>,
   key: string,
@@ -69,8 +72,30 @@ async function admit(
     }),
   );
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
+  return created;
+}
+async function admit(...args: Parameters<typeof admitQueued>) {
+  const created = await admitQueued(...args);
   await settleOnce();
   return created;
+}
+async function retain(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, runId: string,
+  conversationId: string, text: string, key: string, position: string) {
+  const request = { command_schema: "storyos.command.steer-agent-run.request.v1" as const,
+    steer_agent_run_input: { conversation_id: conversationId, author_message: { text },
+      ...BINDING, correlation_id: key } };
+  return challenged(baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+    "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs", request.command_schema,
+    await digestSteerAgentRun(request), key, async (antiForgery) => {
+      const options = { baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl,
+        idempotencyKey: key, antiForgery, request };
+      const retained = await steerAgentRun(options);
+      assert.equal(retained.effect.kind, "retained");
+      if (retained.effect.kind !== "retained") throw new Error("expected retained input");
+      assert.equal(retained.effect.input_position, position);
+      assert.deepEqual(await steerAgentRun(options), retained);
+      return retained;
+    });
 }
 async function inspect(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, runId: string): Promise<GetAgentRunResponse> {
   return getAgentRun({ baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl });
@@ -103,63 +128,71 @@ async function rewriteChapter(projectId: string, chapterId: string, body: string
   `);
 }
 
-test("ordered guidance is consumed by the same active Run with exact replay", async () => {
+test.each([FIRST, "Compact active context between calls."])("ordered guidance is consumed by the same active Run with exact replay: %s", async (original) => {
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("d411"), "Guidance Novel", "d42");
-    const request: CreateAgentRunRequest = {
-      command_schema: "storyos.command.create-agent-run.request.v2",
-      create_agent_run_input: {
-        conversation: { kind: "new" }, author_message: { text: FIRST },
-        working_target: { kind: "current_chapter", chapter_id: prepared.chapterId },
-        instruction: { kind: "absent" }, cause: { kind: "author_request" },
-        ...BINDING, correlation_id: id("d431"),
-      },
-    };
-    const created = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId,
-      "POST", "/api/v1/projects/{project_id}/agent-runs", request.command_schema,
-      await digestCreateAgentRun(request), id("d432"), (antiForgery) => createAgentRun({
-        baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("d432"), antiForgery, request,
-      }));
-    if (created.effect.kind !== "admitted") throw new Error("expected admitted");
+    const created = await admitQueued(started.baseUrl, prepared, id("d432"), original);
     const runId = created.effect.run_id;
-    const corrections = [CORRECTION, "Keep the ending open."];
+    const corrections = original.startsWith("Compact") ? [CORRECTION] : [CORRECTION, "Keep the ending open."];
     for (const [index, text] of corrections.entries()) {
-      const guidance = {
-        command_schema: "storyos.command.steer-agent-run.request.v1",
-        steer_agent_run_input: { conversation_id: created.conversation_id,
-          author_message: { text }, ...BINDING, correlation_id: id(`d44${index}`) },
-      };
-      const digest = { ...await digestCreateAgentRun(guidance as unknown as CreateAgentRunRequest),
-        profile: "storyos.command.steerAgentRun.jcs.v1" };
-      await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId,
-        "POST", "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs",
-        guidance.command_schema, digest, id(`d45${index}`), async (antiForgery) => {
-          const send = () => prepared.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/agent-runs/${runId}/steering-inputs`, {
-            method: "POST", headers: { "content-type": "application/json",
-              "idempotency-key": id(`d45${index}`), "x-storyos-anti-forgery": antiForgery },
-            body: JSON.stringify(guidance),
-          });
-          const response = await send();
-          assert.equal(response.status, 200, await response.clone().text());
-          const retained = await response.json();
-          assert.equal(retained.effect.kind, "retained");
-          assert.equal(retained.effect.input_position, String(index + 1));
-          assert.deepEqual(await (await send()).json(), retained);
-        });
+      await retain(started.baseUrl, prepared, runId, created.conversation_id, text, id(`d45${index}`), String(index + 1));
     }
     await settleOnce();
     const queried = await inspect(started.baseUrl, prepared, runId);
     assert.equal(queried.status, "completed");
     assert.equal(queried.conversation_id, created.conversation_id);
-    assert.equal(selected(queried, "author_instruction"), [FIRST, ...corrections].join("\n"));
+    assert.deepEqual(queried.steering_inputs.map((item) => [item.input_position, item.author_message, item.model_attempt_id !== null]),
+      corrections.map((text, index) => [String(index + 1), text, true]));
+    if (original.startsWith("Compact")) {
+      assert.equal(queried.active_compaction.kind, "present");
+      if (queried.active_compaction.kind !== "present") throw new Error("expected active compaction");
+      assert.equal(queried.active_compaction.prior_model_attempt_id, attempt(queried).model_attempt_id);
+    }
+    assert.equal(selected(queried, "author_instruction"), [original, ...corrections].join("\n"));
     assert.deepEqual(queried.evidence.find((item) => item.kind === "sent_content"), {
       kind: "sent_content", attempt_id: attempt(queried).model_attempt_id,
-      availability: "current", content: [FIRST, ...corrections].join("\n"),
+      availability: "current", content: [original, ...corrections].join("\n"),
     });
   } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+test("guidance after a visible stream keeps the Proposal bound to its original Decision", async () => {
+  const started = await startRealServer();
+  const hold = join(tmpdir(), `storyos-guidance-stream-${process.pid}`);
+  let worker: Promise<void> | undefined;
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("d511"), "Stream Guidance", "d52");
+    const created = await admitQueued(started.baseUrl, prepared, id("d532"), "Stream this passage: keep the voice.");
+    writeFileSync(hold, "hold");
+    worker = settleOnce({ STORYOS_TEST_FAKE_STREAM_HOLD_PATH: hold });
+    void worker.catch(() => undefined);
+    await expect.poll(async () => (await inspect(started.baseUrl, prepared, created.effect.run_id)).decision.kind).toBe("prose_change");
+    const original = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    if (original.decision.kind !== "prose_change" || original.decision.opened_proposal.kind !== "present") throw new Error("expected streamed Proposal");
+    const proposalId = original.decision.opened_proposal.proposal_id;
+    const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, runId: created.effect.run_id, fetchImpl: prepared.fetchImpl };
+    await retain(started.baseUrl, prepared, created.effect.run_id, created.conversation_id, CORRECTION, id("d541"), "1");
+    rmSync(hold); await worker;
+    const current = await getAgentRun(options);
+    const historical = await getAgentRun({ ...options, modelAttemptId: attempt(original).model_attempt_id });
+    assert.equal(current.status, "completed");
+    assert.equal(current.decision.kind, "prose_change");
+    if (current.decision.kind !== "prose_change") throw new Error("expected new prose Decision");
+    assert.notEqual(current.decision.decision_id, original.decision.decision_id);
+    assert.deepEqual(current.decision.opened_proposal, { kind: "absent" });
+    assert.equal(attempt(historical).model_attempt_id, attempt(original).model_attempt_id);
+    assert.equal(selected(historical, "author_instruction"), "Stream this passage: keep the voice.");
+    const proposal = await getProposal({ ...options, proposalId });
+    assert.deepEqual(proposal.proposal.source, { kind: "agent_run_decision", run_id: created.effect.run_id,
+      decision_id: original.decision.decision_id });
+  } finally {
+    rmSync(hold, { force: true });
+    await worker?.catch(() => undefined);
     await stopRealServer(started.server);
   }
 });

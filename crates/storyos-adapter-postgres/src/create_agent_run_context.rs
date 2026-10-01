@@ -15,6 +15,8 @@ pub(crate) struct PassageContextInput<'a> {
     pub author_message: &'a str,
     pub receipt_id: &'a str,
     pub decision_position: &'a str,
+    pub passage_targets: Option<&'a [storyos_core::PassageContextTarget]>,
+    pub candidate_target: Option<&'a storyos_core::ProposalCandidateTarget>,
 }
 
 pub(crate) async fn persist_current_passage_assembly(

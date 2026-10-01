@@ -33,7 +33,7 @@ export const RELEASE_1_PROTOCOL_PROFILE = Object.freeze({
     "public_protocol_release": "storyos.public.release.1",
     "envelope_profile": "storyos.public.envelope.v1",
     "contract_graph_revision": "release1-wire-catalog-2026-09-27-expiry-rebuild",
-    "contract_graph_digest": "sha256:b4aba633cf21b903c57f9c7a7b42ee3409301458e8a1094ec878c6f289b6a696",
+    "contract_graph_digest": "sha256:5bf2f580f40b5d8b3d8843f22aaed10b97b99e44043b096cac70e6d4ea9e125e",
     "web_client_contract_revision": "storyos.web-client.release-1.v3",
     "server_contract_revision": "storyos.server.release-1.v7",
     "worker_contract_revision": "storyos.worker.release-1.v6",
@@ -41,7 +41,7 @@ export const RELEASE_1_PROTOCOL_PROFILE = Object.freeze({
     "openapi_digest": "sha256:0fb010537c187e8772d85a93954265738c22d50fb54793d4ae7ab4307f8824d7",
     "json_schema_catalog_digest": "sha256:5397dd87b05b8a3f210b8292cab81aa2448e8ba85f6cc77c3abc422d4a5b1ed4",
     "typescript_artifact_digest": "sha256:6f131419e993a9e077b75d620e43505ce488a7c87a43d080e920788eb77cc664",
-    "fixture_corpus_digest": "sha256:d67d66940c8649865fbabab6819b08284c11811c2559586e3f4affdc9c4a000e",
+    "fixture_corpus_digest": "sha256:e01495e4fe34f5650417340724e302bfeba85172bad84ca52d8ae4f74385a23c",
     "activity_profile": "storyos.project-activity.v1",
     "limit_profile_revision": "storyos.foundation.absolute.v1"
   }

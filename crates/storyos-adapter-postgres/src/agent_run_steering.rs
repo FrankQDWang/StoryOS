@@ -51,6 +51,8 @@ pub(crate) async fn advance(
             author_message: &effective,
             receipt_id: &row.get::<_, String>(2),
             decision_position: &position,
+            passage_targets: None,
+            candidate_target: None,
         },
         &assistance.processing_destination_identity,
     )
