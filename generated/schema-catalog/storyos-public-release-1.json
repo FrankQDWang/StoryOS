@@ -276,7 +276,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/agent-run-response.schema.json",
       "schema_id": "storyos.query.agent-run.response.v2",
-      "sha256": "sha256:629c8aed9d07a34e4fd7b827036c1fac591116659f02c7e2d0e3819bf2595b47"
+      "sha256": "sha256:caed832106ac0e591b8c31bd7138046f8dd6883268b0922f5210a05799a41f44"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/pause-agent-run-request.schema.json",

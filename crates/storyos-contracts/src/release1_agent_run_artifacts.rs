@@ -187,6 +187,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         "OptionalContinuationInspect",
         "OptionalOpenedProposalInspect",
         "ProseChangeLocationInspect",
+        "PassageTarget",
         "ProseChangeLocationOutcome",
         "ProseChangeLocationCurrent",
         "ContinuationAdmissionInspect",
@@ -237,6 +238,8 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
             );
         }
     }
+    schema["$defs"]["PassageTarget"]["properties"]["manuscript_block_ids"]["items"]["format"] =
+        json!("uuid");
     json_bytes(&schema)
 }
 

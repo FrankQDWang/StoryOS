@@ -98,6 +98,21 @@ fn agent_run_query_rejects_malformed_captured_settings_revision() {
         "contribution_enabled": false
     });
     assert!(validator.is_valid(&response));
+    response["context"]["passage_targets"] = serde_json::json!([{
+        "chapter_id": response["run_id"],
+        "base_authoritative_revision_id": response["run_id"],
+        "manuscript_block_ids": [response["run_id"]]
+    }]);
+    assert!(validator.is_valid(&response));
+    for path in [
+        "/context/passage_targets/0/chapter_id",
+        "/context/passage_targets/0/base_authoritative_revision_id",
+        "/context/passage_targets/0/manuscript_block_ids/0",
+    ] {
+        let mut malformed = response.clone();
+        *malformed.pointer_mut(path).expect("target ID exists") = serde_json::json!("not-a-uuid");
+        assert!(!validator.is_valid(&malformed));
+    }
     response["captured_memory_settings"]["memory_settings_revision"] =
         serde_json::json!("not-a-uuid");
     assert!(!validator.is_valid(&response));

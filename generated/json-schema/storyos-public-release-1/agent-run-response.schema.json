@@ -1545,13 +1545,16 @@
       "additionalProperties": false,
       "properties": {
         "base_authoritative_revision_id": {
+          "format": "uuid",
           "type": "string"
         },
         "chapter_id": {
+          "format": "uuid",
           "type": "string"
         },
         "manuscript_block_ids": {
           "items": {
+            "format": "uuid",
             "type": "string"
           },
           "maxItems": 10001,

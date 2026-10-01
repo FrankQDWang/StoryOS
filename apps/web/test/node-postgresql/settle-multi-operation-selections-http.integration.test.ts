@@ -213,7 +213,6 @@ test.each(["", " SCRIPT:reverse_locations"])("one collection request produces th
     const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       `Revise these passages: keep the voice.${script}`, id(`${ns}43`), undefined, true, target);
     if (run.decision.kind !== "prose_change") throw new Error("expected collection Decision");
-    assert.equal(run.decision.locations?.length, 3);
     assert.deepEqual(run.decision.locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id }) =>
       ({ chapter_id, manuscript_block_id, base_authoritative_revision_id })), chapters.flatMap(({ chapter }) =>
       chapter.current_revision.blocks.map((block) => ({ chapter_id: chapter.chapter_id,
@@ -249,7 +248,7 @@ test.each(["", " SCRIPT:reverse_locations"])("one collection request produces th
     for (const proposal of proposals) assert.deepEqual((await getProposal({ baseUrl: started.baseUrl,
       projectId, proposalId: proposal.proposal_id, fetchImpl: reloadedFetch })).proposal, proposal);
     for (const before of chapters) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId,
-      chapterId: before.chapter.chapter_id, fetchImpl })).chapter, before.chapter);
+      chapterId: before.chapter.chapter_id, fetchImpl: reloadedFetch })).chapter, before.chapter);
   } finally { await stopRealServer(started.server); }
 });
 
