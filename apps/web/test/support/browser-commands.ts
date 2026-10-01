@@ -17,6 +17,8 @@ import { verifyProductionInlineProposal } from "./production-inline-proposal-com
 import { verifyProductionProseRequest } from "./production-prose-request-command";
 import { verifyProductionCapturedMemory } from "./production-captured-memory.ts";
 
+import { verifyProductionComposerControls } from "./production-composer-controls.ts";
+
 import { verifyProductionMultiProposal } from "./production-multi-proposal-command.ts";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
@@ -44,7 +46,10 @@ export const storyOSBrowserCommands = {
   [storyOSBrowserCommandNames.productionHost]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
       const request = parseProductionHostRequest(value);
-      if (request.scenario === "multi_proposal") {
+      if (request.scenario === "composer_controls") {
+        if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
+        await verifyProductionComposerControls(context.context, process.env.STORYOS_DEV_SERVER);
+      } else if (request.scenario === "multi_proposal") {
         if (process.env.STORYOS_DEV_SERVER === undefined) throw new Error("Packaged Server required");
         await verifyProductionMultiProposal(context.context, process.env.STORYOS_DEV_SERVER);
       } else if (request.scenario === "inline_proposal") {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   activityStream, createAgentRun, createProjectCommandChallenge, digestCreateAgentRun,
@@ -12,6 +12,7 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyo
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
+import { AssistantComposer } from "./assistant-composer.tsx";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
@@ -311,8 +312,7 @@ export function WritingAssistantPanel({
     && (run.status === "completed" || run.status === "refused" || run.status === "cancelled");
   const unresolved = reference !== undefined && (!terminal || reference.conversationId === undefined);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submit = (message: string, onAdmitted: () => void) => {
     if (availability === "unavailable") {
       setRefused(true);
       return;
@@ -320,9 +320,6 @@ export function WritingAssistantPanel({
     if (context === undefined || context.chapterId === undefined
       || !context.canSubmit || availability !== "available" || sending
       || unresolved) return;
-    const input = event.currentTarget.elements.namedItem("assistant-message");
-    if (!(input instanceof HTMLInputElement)) return;
-    const message = input.value.trim();
     if (message.length === 0) return;
     const previous = reference;
     const previousRun = run;
@@ -455,7 +452,7 @@ export function WritingAssistantPanel({
         conversationId: admitted.conversation_id };
       saveReference(acknowledged);
       setReference(acknowledged);
-      input.value = "";
+      onAdmitted();
       await inspect(acknowledged);
     })().catch(() => {
       if (!commandSent) {
@@ -526,13 +523,10 @@ export function WritingAssistantPanel({
             ? <p className="assistant-status">下一条消息将开始新对话。</p> : null}
           {status.length > 0 ? <p role="status">{status}</p> : null}
         </div>
-        <form className="composer" data-writing-assistant-composer="" onSubmit={submit}>
-          <input name="assistant-message" aria-label="给写作助手的消息" maxLength={4000}
-            placeholder="描述想修改的当前章节文字" />
-          <button type="submit" disabled={availability !== "available" || !context?.canSubmit
-            || context.chapterId === undefined || sending
-            || unresolved}>发送</button>
-        </form>
+        <AssistantComposer key={context === undefined ? "none" : `${context.scope.owner_user_id}:${context.scope.project_id}`}
+          context={context} available={availability === "available"} sending={sending} current={reference} run={run}
+          onSend={submit} onRefresh={async () => { if (reference !== undefined) await inspect(reference); }}
+          onStatus={setStatus} />
       </div>
     </aside>
   );

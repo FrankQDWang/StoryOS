@@ -332,18 +332,14 @@ input:focus-visible {
 .proposal-location:hover .location-title { text-decoration: underline; text-underline-offset: 4px; }
 .location-reason { display: block; margin-top: 3px; color: #88837a; font-size: 12px; }
 
-.composer { margin: 0; padding: 0 20px 14px; }
-
-.composer input {
-  width: 100%;
-  border: 1px solid #dfdcd7;
-  border-radius: 14px;
-  padding: 10px 14px;
-}
-
-.composer button {
-  margin-top: 8px;
-}
+.composer-dock { position: relative; padding: 0 20px 14px; background: var(--assistant-panel); }
+.composer-dock::before { content: ""; position: absolute; right: 0; bottom: 100%; left: 0; height: 32px; background: linear-gradient(to bottom, rgba(249, 248, 247, 0), var(--assistant-panel)); pointer-events: none; }
+.composer { margin: 0; border: 1px solid #dfdcd7; border-radius: 14px; background: rgba(255, 255, 255, 0.72); box-shadow: 0 10px 30px rgba(54, 51, 46, 0.07), 0 1px 2px rgba(54, 51, 46, 0.04); overflow: hidden; }
+.composer textarea { width: 100%; box-sizing: border-box; field-sizing: content; min-block-size: calc(2lh + 14px); max-block-size: calc(10lh + 14px); resize: none; overflow-y: auto; border: 0; background: transparent; padding: 10px 14px 4px; outline: none; color: #3f3d38; font-size: 13px; line-height: 1.6; }
+.composer textarea::placeholder { color: #aaa7a0; }
+.composer-controls { display: flex; justify-content: flex-end; padding: 1px 8px 8px; }
+.composer-controls .send-button { width: 28px; height: 28px; margin: 0; padding: 0; border: 1px solid #aaa7a0; border-radius: 50%; background: #aaa7a0; color: white; font-size: 19px; }
+.composer-controls .send-button:disabled { opacity: 0.5; cursor: default; }
 
 .assistant-toggle {
   position: absolute;
