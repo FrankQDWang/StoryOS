@@ -15,11 +15,16 @@ pub(crate) async fn hydrate_locations(
         return Ok(());
     };
     for location in locations {
-        let ProseChangeLocationOutcome::Opened {
+        let (ProseChangeLocationOutcome::Opened {
             proposal_id,
             operation_id,
             ..
-        } = &location.outcome
+        }
+        | ProseChangeLocationOutcome::Revised {
+            proposal_id,
+            operation_id,
+            ..
+        }) = &location.outcome
         else {
             continue;
         };
@@ -36,7 +41,15 @@ pub(crate) async fn hydrate_locations(
                  (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
               WHERE proposal.owner_user_id = $1::text::uuid AND proposal.project_id = $2::text::uuid
                 AND proposal.proposal_id = $3::text::uuid AND operation.operation_id = $4::text::uuid
-                AND proposal.source_decision_id = $5::text::uuid AND proposal.chapter_id = $6::text::uuid
+                AND (proposal.source_decision_id = $5::text::uuid OR EXISTS (
+                  SELECT 1 FROM storyos.proposal_generations AS generation
+                  JOIN storyos.proposal_stream_events AS event USING (owner_user_id,project_id,generation_id)
+                  JOIN storyos.model_attempts AS attempt USING (owner_user_id,project_id,run_id)
+                  JOIN storyos.operation_requirements AS requirement USING (owner_user_id,project_id,run_id)
+                  WHERE generation.proposal_id=proposal.proposal_id AND attempt.decision_id=$5::text::uuid
+                    AND event.revision_id=(attempt.payload #>> '{decision,locations,0,outcome,revision_id}')::uuid
+                    AND requirement.payload #>> '{operation_requirement,candidate_target,operation_id}'=operation.operation_id::text
+                )) AND proposal.chapter_id = $6::text::uuid
                 AND operation.manuscript_block_id = $7::text::uuid",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref(), &proposal_id, &operation_id,
               &decision_id.as_str(), &location.chapter_id, &location.manuscript_block_id],

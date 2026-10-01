@@ -261,7 +261,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/create-agent-run-request.schema.json",
       "schema_id": "storyos.command.create-agent-run.request.v2",
-      "sha256": "sha256:b2f76d15eed96f0f58a4262f6b6d3f5485deb0a6e4ee4e87390da513e3349c97"
+      "sha256": "sha256:1eccb2d536677dbdc637a81367f5c5c9b55c97bbdbbb0e3d19f7ef306adc0ed7"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/create-agent-run-response.schema.json",
@@ -276,7 +276,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/agent-run-response.schema.json",
       "schema_id": "storyos.query.agent-run.response.v2",
-      "sha256": "sha256:caed832106ac0e591b8c31bd7138046f8dd6883268b0922f5210a05799a41f44"
+      "sha256": "sha256:055812c7d24af0047984efa976ef9323561622023ca34b1bcab028885ec9d7a1"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/pause-agent-run-request.schema.json",

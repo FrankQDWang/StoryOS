@@ -57,11 +57,30 @@ pub(super) async fn persist_current_passage_assembly(
         instruction: InstructionBindingInput::Absent,
         destination_identity: destination_identity.to_owned(),
     };
-    let record = match &command.passage_targets {
-        Some(targets) => {
-            crate::passage_collection::assemble(client, command, &source, targets).await?
+    let record = if let Some(target) = &command.candidate_target {
+        let candidate = crate::candidate_revision_target::load(
+            client,
+            &command.project_scope,
+            &command.chapter_id,
+            target,
+        )
+        .await?
+        .ok_or(CreateAgentRunError::BindingConflict)?;
+        storyos_core::assemble_candidate_context(
+            &CurrentPassageAssembly {
+                proposal_target_block_ids: Some(vec![candidate.block_id]),
+                ..source
+            },
+            target,
+            &candidate.text,
+        )
+    } else {
+        match &command.passage_targets {
+            Some(targets) => {
+                crate::passage_collection::assemble(client, command, &source, targets).await?
+            }
+            None => assemble_current_passage_context(&source),
         }
-        None => assemble_current_passage_context(&source),
     };
     let payload = encode_assembly_record(&record).to_string();
     client
