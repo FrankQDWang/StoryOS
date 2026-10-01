@@ -392,49 +392,19 @@ async fn persist_stream_and_decision(
     include_decision: bool,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let mut outcome = outcome.clone();
-    let mut items = items.to_vec();
-    let producer_output = if author_message.starts_with("Revise these passages") {
-        let targets =
-            crate::admitted_proposal_target::load_admitted_targets(client, claim, chapter_id)
-                .await?;
-        let declared: Vec<_> = targets
-            .iter()
-            .map(|target| (target.block_id.clone(), target.revision_id.clone()))
-            .collect();
-        let candidates =
-            storyos_core::produce_fake_prose_changes(chapter_id, &declared, author_message);
-        let incomplete = author_message.ends_with("SCRIPT:incomplete");
-        let unselected = author_message.ends_with("SCRIPT:unselected");
-        if !storyos_core::prose_changes_match_targets(chapter_id, &declared, &candidates)
-            || incomplete
-        {
-            outcome = FakeAttemptOutcome::NoDecision {
-                reason: if incomplete {
-                    storyos_core::NoDecisionReason::Incomplete
-                } else {
-                    storyos_core::NoDecisionReason::Invalid
-                },
-            };
-            if incomplete && let Some(item) = items.first_mut() {
-                item.state = StreamItemState::Incomplete;
-            }
-        } else if let FakeAttemptOutcome::Decision {
-            kind: FakeDecisionKind::ProseChange { locations, .. },
-            selected,
-            advances_continuation,
-        } = &mut outcome
-        {
-            *locations = Some(candidates.clone());
-            if unselected {
-                *selected = false;
-                *advances_continuation = false;
-            }
-        }
-        Some(candidates)
-    } else {
-        None
-    };
+    let crate::prose_change_decision::PreparedProseChange {
+        outcome,
+        items,
+        output: producer_output,
+    } = crate::prose_change_decision::prepare(
+        client,
+        claim,
+        chapter_id,
+        author_message,
+        items,
+        outcome,
+    )
+    .await?;
     let (decision_id, status, hold) = match (include_decision, &outcome) {
         (false, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
         (false, FakeAttemptOutcome::Decision { .. }) => (None, "claimed", Some("stream")),
@@ -580,7 +550,7 @@ fn encode_payload(
     locations: Option<&[storyos_contracts::ProseChangeLocationInspect]>,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> serde_json::Value {
-    let mut encoded_items: Vec<serde_json::Value> = items
+    let encoded_items: Vec<serde_json::Value> = items
         .iter()
         .map(|item| {
             let phase = match item.state {
@@ -609,12 +579,6 @@ fn encode_payload(
             })
         })
         .collect();
-    if let Some(output) = producer_output
-        && let Some(item) = encoded_items.first_mut()
-    {
-        item["text"] = serde_json::json!(storyos_core::canonical_json(&serde_json::json!(output)));
-        item["summary"] = serde_json::json!("host_fake_native_prose_changes");
-    }
     let decision = match (outcome, decision_id) {
         (
             FakeAttemptOutcome::Decision {
@@ -636,28 +600,22 @@ fn encode_payload(
                 text,
                 producer_input,
                 ..
-            } => {
-                let mut decision = serde_json::json!({
-                    "kind": "prose_change",
-                    "decision_id": decision_id,
-                    "selected": selected,
-                    "text": text,
-                    "producer_input": producer_output.map(|output| storyos_core::canonical_json(&serde_json::json!(output))).unwrap_or_else(|| (*producer_input).to_owned()),
-                    "authoritative": false,
-                    "advances_continuation": advances_continuation,
-                    "opened_proposal": match opened_proposal {
-                        Some(proposal_id) => serde_json::json!({
-                            "kind": "present",
-                            "proposal_id": proposal_id
-                        }),
-                        None => serde_json::json!({ "kind": "absent" }),
-                    }
-                });
-                if let Some(locations) = locations {
-                    decision["locations"] = serde_json::json!(locations);
+            } => serde_json::json!({
+                "kind": "prose_change",
+                "decision_id": decision_id,
+                "selected": selected,
+                "text": text,
+                "producer_input": producer_input,
+                "authoritative": false,
+                "advances_continuation": advances_continuation,
+                "opened_proposal": match opened_proposal {
+                    Some(proposal_id) => serde_json::json!({
+                        "kind": "present",
+                        "proposal_id": proposal_id
+                    }),
+                    None => serde_json::json!({ "kind": "absent" }),
                 }
-                decision
-            }
+            }),
             FakeDecisionKind::Clarification { question } => serde_json::json!({
                 "kind": "clarification",
                 "decision_id": decision_id,
@@ -670,7 +628,7 @@ fn encode_payload(
         }),
         _ => None,
     };
-    serde_json::json!({
+    let mut payload = serde_json::json!({
         "execution_profile": {
             "profile_revision": HOST_FAKE_EXECUTION_PROFILE,
             "mapping_revision": HOST_FAKE_MAPPING_REVISION,
@@ -693,7 +651,9 @@ fn encode_payload(
             assembly_manifest_id,
             continuation.and_then(|wire| wire.known_prior_binding_id.as_deref()),
         )
-    })
+    });
+    crate::prose_change_decision::encode(&mut payload, producer_output, locations);
+    payload
 }
 
 pub(crate) fn evidence_values(
