@@ -808,3 +808,6 @@ async fn set_scope(
 pub(crate) fn read_error(source: tokio_postgres::Error) -> ProjectReadError {
     ProjectReadError::unavailable(source)
 }
+
+mod candidate_revision_target;
+mod revise_candidate_generation;

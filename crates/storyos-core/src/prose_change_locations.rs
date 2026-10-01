@@ -87,3 +87,22 @@ pub fn prose_changes_match_targets(
                     <= crate::assemble_context::CONTEXT_ITEM_TOKEN_LIMIT
         })
 }
+
+/// Revise the exact fresh candidate through the fake destination's bounded result contract.
+pub fn produce_fake_candidate_revision(
+    targets: &[(String, String, String)],
+    author_message: &str,
+    candidate: &str,
+) -> Vec<ProseChangeCandidate> {
+    let mut changes = produce_fake_prose_changes(targets, author_message);
+    for change in &mut changes {
+        change.candidate_text = if author_message.contains("calmer") {
+            candidate.replace("Guard the narrator voice", "Keep the narrator calm")
+        } else {
+            format!("{candidate} Keep the voice consistent.")
+        };
+        change.explanation =
+            "Revise the selected candidate under the new author instruction.".to_owned();
+    }
+    changes
+}

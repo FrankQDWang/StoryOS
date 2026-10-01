@@ -37,6 +37,7 @@ fn requirement(input: &CurrentPassageAssembly) -> OperationRequirementRecord {
         chapter_revision_id: input.chapter_revision_id.clone(),
         proposal_target_block_ids: input.proposal_target_block_ids.clone(),
         passage_targets: None,
+        candidate_target: None,
         instruction: input.instruction.clone(),
         destination_identity: input.destination_identity.clone(),
         item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,

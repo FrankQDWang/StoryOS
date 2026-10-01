@@ -41,6 +41,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
     if let Some(targets) = &record.operation_requirement.passage_targets {
         payload["operation_requirement"]["passage_targets"] = serde_json::json!(targets);
     }
+    if let Some(target) = &record.operation_requirement.candidate_target {
+        payload["operation_requirement"]["candidate_target"] = serde_json::json!(target);
+    }
     payload
 }
 
@@ -91,6 +94,10 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                         .collect::<Option<Vec<_>>>()?,
                 ),
                 Some(_) => return None,
+            },
+            candidate_target: match requirement.get("candidate_target") {
+                Some(value) => Some(serde_json::from_value(value.clone()).ok()?),
+                None => None,
             },
             passage_targets: requirement
                 .get("passage_targets")

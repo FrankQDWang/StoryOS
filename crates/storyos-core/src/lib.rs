@@ -614,5 +614,9 @@ pub use close_editor_flow_draft::{
 
 mod prose_change_locations;
 pub use prose_change_locations::{
-    ProseChangeCandidate, produce_fake_prose_changes, prose_changes_match_targets,
+    ProseChangeCandidate, produce_fake_candidate_revision, produce_fake_prose_changes,
+    prose_changes_match_targets,
 };
+
+mod assemble_candidate_context;
+pub use assemble_candidate_context::{ProposalCandidateTarget, assemble_candidate_context};

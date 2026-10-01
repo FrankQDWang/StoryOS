@@ -518,8 +518,8 @@ test("a fresh instruction revises the exact pending candidate through the real W
     request.create_agent_run_input.conversation = { kind: "existing", conversation_id: original.conversation_id };
     request.create_agent_run_input.author_message.text = "Revise this passage: make the candidate calmer.";
     request.create_agent_run_input.working_target = { kind: "proposal_candidate", source_chapter_id: chapterId,
-      proposal_id: proposalId, operation_id: before.proposal.operation_id,
-      revision_id: before.proposal.revision_id } as unknown as CreateAgentRunRequest["create_agent_run_input"]["working_target"];
+      target: { proposal_id: proposalId, operation_id: before.proposal.operation_id,
+      revision_id: before.proposal.revision_id } };
     const created = await challenged(started.baseUrl, fetchImpl, projectId, "POST",
       "/api/v1/projects/{project_id}/agent-runs", request.command_schema,
       await digestCreateAgentRun(request), id("ca42"), (antiForgery) => createAgentRun({

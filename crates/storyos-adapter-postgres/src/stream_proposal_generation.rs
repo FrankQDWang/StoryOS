@@ -92,6 +92,7 @@ pub(crate) async fn apply_streamed_proposal(
                 stream_seq,
                 text,
                 !batches.iter().any(|(seq, _)| *seq > stream_seq),
+                /*operation_id*/ None,
             )
             .await?;
         }
@@ -240,14 +241,15 @@ async fn open_generating(
     }))
 }
 
-async fn persist_batch(
+pub(crate) async fn persist_batch(
     client: &Client,
     claim: &ClaimedAgentRun,
     loaded: &LoadedGeneration,
     stream_seq: u64,
     text: &str,
     complete: bool,
-) -> Result<(), CompleteAgentRunError> {
+    operation_id: Option<&str>,
+) -> Result<(String, Option<String>), CompleteAgentRunError> {
     let owner = claim.project_scope.owner_user_id.as_ref();
     let project = claim.project_scope.project_id.as_ref();
     let revision_id = Uuid::now_v7().to_string();
@@ -275,8 +277,9 @@ async fn persist_batch(
             "UPDATE storyos.proposal_operations
                 SET candidate_text = $4
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND proposal_id = $3::text::uuid AND reservation_state = 'unresolved'",
-            &[&owner, &project, &loaded.proposal_id, &text],
+                AND proposal_id = $3::text::uuid AND reservation_state = 'unresolved'
+                AND ($5::text IS NULL OR operation_id=$5::text::uuid)",
+            &[&owner, &project, &loaded.proposal_id, &text, &operation_id],
         )
         .await
         .map_err(stream_err)?;
@@ -310,7 +313,8 @@ async fn persist_batch(
         )
         .await
         .map_err(stream_err)?;
-    if complete {
+    let validation_id = complete.then(|| Uuid::now_v7().to_string());
+    if let Some(validation_id) = validation_id.as_deref() {
         client
             .execute(
                 "INSERT INTO storyos.validation_receipts
@@ -322,7 +326,7 @@ async fn persist_batch(
                 &[
                     &owner,
                     &project,
-                    &Uuid::now_v7().to_string(),
+                    &validation_id,
                     &loaded.proposal_id,
                     &revision_id,
                     &loaded.base_revision_id,
@@ -333,7 +337,7 @@ async fn persist_batch(
             .await
             .map_err(stream_err)?;
     }
-    Ok(())
+    Ok((revision_id, validation_id))
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -19,9 +19,9 @@ use crate::release1_agent_run::{
     OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
     OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
-    ProjectionMode, ProseChangeLocationCurrent, ProseChangeLocationInspect,
-    ProseChangeLocationOutcome, ReferenceRecoveryDisposition, SourceAvailability,
-    TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
+    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
+    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
+    SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 
 pub(super) const CREATE_REQUEST_SCHEMA_PATH: &str =
@@ -66,6 +66,9 @@ pub(super) fn create_request_schema_bytes() -> Vec<u8> {
     if let Some(target) = schema["$defs"].get_mut("PassageTarget") {
         constrain_uuid_fields(target, &["chapter_id", "base_authoritative_revision_id"]);
         target["properties"]["manuscript_block_ids"]["items"]["format"] = json!("uuid");
+    }
+    if let Some(target) = schema["$defs"].get_mut("ProposalCandidateTarget") {
+        constrain_uuid_fields(target, &["proposal_id", "operation_id", "revision_id"]);
     }
     json_bytes(&schema)
 }
@@ -188,6 +191,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         "OptionalOpenedProposalInspect",
         "ProseChangeLocationInspect",
         "PassageTarget",
+        "ProposalCandidateTarget",
         "ProseChangeLocationOutcome",
         "ProseChangeLocationCurrent",
         "ContinuationAdmissionInspect",
@@ -287,11 +291,12 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
         PassageTarget::decl(&config),
+        ProposalCandidateTarget::decl(&config),
         InstructionBinding::decl(&config),
         AssistanceCause::decl(&config),
         CreateAgentRunInput::decl(&config),

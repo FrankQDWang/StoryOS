@@ -41,6 +41,28 @@
           "additionalProperties": false,
           "properties": {
             "kind": {
+              "const": "proposal_candidate",
+              "type": "string"
+            },
+            "source_chapter_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "target": {
+              "$ref": "#/$defs/ProposalCandidateTarget"
+            }
+          },
+          "required": [
+            "kind",
+            "source_chapter_id",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
               "const": "passage_collection",
               "type": "string"
             },
@@ -198,6 +220,29 @@
         "chapter_id",
         "base_authoritative_revision_id",
         "manuscript_block_ids"
+      ],
+      "type": "object"
+    },
+    "ProposalCandidateTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "operation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "proposal_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "revision_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_id",
+        "operation_id",
+        "revision_id"
       ],
       "type": "object"
     }

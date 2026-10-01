@@ -91,11 +91,23 @@ pub enum AssistanceWorkingTarget {
     CurrentChapter {
         chapter_id: String,
     },
+    ProposalCandidate {
+        source_chapter_id: String,
+        target: ProposalCandidateTarget,
+    },
     PassageCollection {
         source_chapter_id: String,
         #[schemars(length(min = 1, max = 10_001))]
         targets: Vec<PassageTarget>,
     },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProposalCandidateTarget {
+    pub proposal_id: String,
+    pub operation_id: String,
+    pub revision_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -321,6 +333,9 @@ pub struct AgentRunContextInspect {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub passage_targets: Option<Vec<PassageTarget>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub candidate_target: Option<ProposalCandidateTarget>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -384,6 +399,13 @@ pub struct ProseChangeLocationInspect {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProseChangeLocationOutcome {
+    Revised {
+        proposal_id: String,
+        operation_id: String,
+        revision_id: String,
+        prior_revision_id: String,
+        validation_receipt_id: String,
+    },
     Opened {
         proposal_id: String,
         operation_id: String,
