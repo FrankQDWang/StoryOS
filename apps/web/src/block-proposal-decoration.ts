@@ -198,6 +198,7 @@ export const blockProposalDecoration = TiptapNode.create({
         : node.attrs.inlineProposal === true ? "block-proposal inline-proposal-stale" : "block-proposal",
       "data-proposal-focused": node.attrs.focused === true ? "true" : "false",
       "data-proposal-id": node.attrs.proposalId,
+      "data-candidate-proposal-id": node.attrs.proposalId,
       "data-proposal-operation-id": node.attrs.operationId,
       "data-proposal-revision-id": node.attrs.revisionId,
       "data-proposal-source-run-id": node.attrs.sourceRunId,
