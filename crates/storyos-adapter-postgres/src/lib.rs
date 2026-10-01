@@ -135,6 +135,7 @@ mod manuscript_search;
 mod manuscript_tree;
 mod open_block_proposal;
 mod open_inline_proposal;
+mod ordinary_passage_targets;
 mod passage_collection;
 mod pinned_export_source;
 mod project_archive_build;
@@ -808,3 +809,6 @@ async fn set_scope(
 pub(crate) fn read_error(source: tokio_postgres::Error) -> ProjectReadError {
     ProjectReadError::unavailable(source)
 }
+
+mod candidate_revision_target;
+mod revise_candidate_generation;

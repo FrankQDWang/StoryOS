@@ -365,9 +365,11 @@ export type ConversationSelection = { "kind": "new" } | { "kind": "existing", co
 
 export type AuthorMessage = { text: string, };
 
-export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, } | { "kind": "passage_collection", source_chapter_id: string, targets: Array<PassageTarget>, };
+export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, } | { "kind": "proposal_candidate", source_chapter_id: string, target: ProposalCandidateTarget, } | { "kind": "passage_collection", source_chapter_id: string, targets: Array<PassageTarget>, };
 
 export type PassageTarget = { chapter_id: string, base_authoritative_revision_id: string, manuscript_block_ids: Array<string>, };
+
+export type ProposalCandidateTarget = { proposal_id: string, operation_id: string, revision_id: string, };
 
 export type InstructionBinding = { "kind": "absent" };
 
@@ -415,7 +417,7 @@ export type HostControlInspect = { distinct_from_destination: boolean, destinati
 
 export type CurrentAvailabilityInspect = { working_target: SourceAvailability, };
 
-export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, passage_targets?: Array<PassageTarget>, };
+export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, passage_targets?: Array<PassageTarget>, candidate_target?: ProposalCandidateTarget, };
 
 export type EvidenceAvailability = "current" | "unknown";
 
@@ -427,7 +429,7 @@ export type OptionalOpenedProposalInspect = { "kind": "absent" } | { "kind": "pr
 
 export type ProseChangeLocationInspect = { chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, candidate_text: string, explanation: string, outcome: ProseChangeLocationOutcome, current: ProseChangeLocationCurrent | null, };
 
-export type ProseChangeLocationOutcome = { "kind": "opened", proposal_id: string, operation_id: string, revision_id: string, validation_receipt_id: string, } | { "kind": "refused", reason: string, };
+export type ProseChangeLocationOutcome = { "kind": "revised", proposal_id: string, operation_id: string, revision_id: string, prior_revision_id: string, validation_receipt_id: string, } | { "kind": "opened", proposal_id: string, operation_id: string, revision_id: string, validation_receipt_id: string, } | { "kind": "refused", reason: string, };
 
 export type ProseChangeLocationCurrent = { revision_id: string, generation: string, validation: string, closure: string, resolution: string, reservation_state: string, };
 

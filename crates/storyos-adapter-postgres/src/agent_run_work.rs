@@ -5,7 +5,7 @@ use storyos_application::{
 use storyos_core::{
     ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
     HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, StreamItemRole, StreamItemState,
-    host_fake_wire_digest, plan_fake_model_decision, stream_batch_plan,
+    host_fake_wire_digest, plan_resolved_fake_decision, stream_batch_plan,
 };
 use uuid::Uuid;
 
@@ -127,7 +127,7 @@ async fn settle_one_phase(
                     assembly.destination_context_manifest_id::text,
                     attempt.model_attempt_id::text, attempt.decision_id::text,
                     attempt.continuation_binding_id::text, attempt.dispatch_state,
-                    attempt.payload::text
+                    attempt.payload::text, assembly.payload::text
                FROM storyos.agent_runs AS run
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
@@ -173,7 +173,17 @@ async fn settle_one_phase(
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let plan = plan_fake_model_decision(&author_message);
+    let record: serde_json::Value = serde_json::from_str(&run.get::<_, String>(13))
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let resolution = storyos_core::decode_assembly_record(&record)
+        .ok_or_else(|| {
+            CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+                "Invalid retained Context",
+            )))
+        })?
+        .operation_requirement
+        .ordinary_resolution;
+    let plan = plan_resolved_fake_decision(&author_message, resolution);
     let blocked = sufficiency != "complete"
         || !matches!(
             assistance.as_ref().map(|record| record.availability),
@@ -240,6 +250,7 @@ async fn settle_one_phase(
                 )))
             })?,
             rebuild.as_ref(),
+            &record,
         )
         .await?;
         if let Some(dispatch) = rebuild.as_ref() {
@@ -314,6 +325,7 @@ async fn settle_one_phase(
             &outcome,
             /*include_decision*/ !items_empty,
             crate::agent_run_continuation::parse_wire(&payload).as_ref(),
+            &payload,
         )
         .await?;
         return Ok(next);
@@ -392,6 +404,7 @@ async fn persist_stream_and_decision(
     outcome: &FakeAttemptOutcome,
     include_decision: bool,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
+    retained_payload: &serde_json::Value,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let crate::prose_change_decision::PreparedProseChange {
         outcome,
@@ -444,7 +457,17 @@ async fn persist_stream_and_decision(
                 ..
             },
         ) => {
-            if produced.is_none() && author_message.starts_with("Revise this phrase:") {
+            if let Some(record) = crate::candidate_revision_target::admitted(client, claim).await? {
+                let revised = crate::revise_candidate_generation::apply(
+                    client,
+                    claim,
+                    &record,
+                    produced.as_deref().unwrap_or_default(),
+                )
+                .await?;
+                locations = revised.locations;
+                revised.proposal_id
+            } else if produced.is_none() && author_message.starts_with("Revise this phrase:") {
                 crate::open_inline_proposal::open_selected_inline_change(
                     client,
                     claim,
@@ -495,7 +518,7 @@ async fn persist_stream_and_decision(
         locations.as_deref(),
         continuation,
     );
-    crate::passage_collection::retain_wire(client, claim, &mut payload).await?;
+    crate::passage_collection::retain_wire(retained_payload, &mut payload);
     client
         .execute(
             "UPDATE storyos.model_attempts

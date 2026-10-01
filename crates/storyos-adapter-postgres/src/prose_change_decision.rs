@@ -21,8 +21,30 @@ pub(crate) async fn prepare(
     let mut items = items.to_vec();
     let targets =
         crate::admitted_proposal_target::load_admitted_targets(client, claim, chapter_id).await?;
-    let producer_output = if author_message.starts_with("Revise these passages")
-        || (targets.first().is_some_and(|target| target.collection)
+    let candidate_record = crate::candidate_revision_target::admitted(client, claim).await?;
+    if candidate_record.is_some()
+        && storyos_core::is_fake_candidate_revision_request(author_message)
+        && let FakeAttemptOutcome::Decision { kind, .. } = &mut outcome
+        && let FakeDecisionKind::Advisory { text } = kind
+    {
+        *kind = FakeDecisionKind::ProseChange {
+            text,
+            producer_input: text,
+            locations: None,
+        };
+    }
+    let candidate_change = candidate_record.is_some()
+        && matches!(
+            outcome,
+            FakeAttemptOutcome::Decision {
+                kind: FakeDecisionKind::ProseChange { .. },
+                ..
+            }
+        );
+    let producer_output = if candidate_change
+        || (candidate_record.is_none() && author_message.starts_with("Revise these passages"))
+        || (candidate_record.is_none()
+            && targets.first().is_some_and(|target| target.collection)
             && matches!(
                 outcome,
                 FakeAttemptOutcome::Decision {
@@ -40,7 +62,23 @@ pub(crate) async fn prepare(
                 )
             })
             .collect();
-        let candidates = storyos_core::produce_fake_prose_changes(&declared, author_message);
+        let candidates = match candidate_record.as_ref() {
+            Some(record) => {
+                let target = record
+                    .operation_requirement
+                    .candidate_target
+                    .as_ref()
+                    .expect("candidate binding");
+                let candidate = record
+                    .selected
+                    .iter()
+                    .find(|source| source.source_version == target.revision_id)
+                    .map(|source| source.content.as_str())
+                    .unwrap_or_default();
+                storyos_core::produce_fake_candidate_revision(&declared, author_message, candidate)
+            }
+            None => storyos_core::produce_fake_prose_changes(&declared, author_message),
+        };
         let incomplete = author_message.ends_with("SCRIPT:incomplete");
         let unselected = author_message.ends_with("SCRIPT:unselected");
         if !storyos_core::prose_changes_match_targets(&declared, &candidates) || incomplete {

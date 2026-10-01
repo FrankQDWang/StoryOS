@@ -41,6 +41,17 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
     if let Some(targets) = &record.operation_requirement.passage_targets {
         payload["operation_requirement"]["passage_targets"] = serde_json::json!(targets);
     }
+    if let Some(target) = &record.operation_requirement.candidate_target {
+        payload["operation_requirement"]["candidate_target"] = serde_json::json!(target);
+    }
+    if let Some(resolution) = record.operation_requirement.ordinary_resolution {
+        payload["operation_requirement"]["ordinary_resolution"] = serde_json::json!({
+            "profile_revision": crate::ORDINARY_PASSAGE_PROFILE, "disposition": resolution,
+            "metadata_limit_profile": "storyos.foundation.absolute.v1",
+            "position_limit": super::super::ordinary_passage_request::ORDINARY_REFERENCE_POSITION_LIMIT,
+            "reference_limit": super::super::ordinary_passage_request::ORDINARY_REFERENCE_CLAUSE_LIMIT,
+        });
+    }
     payload
 }
 
@@ -92,11 +103,22 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 ),
                 Some(_) => return None,
             },
+            candidate_target: match requirement.get("candidate_target") {
+                Some(value) => Some(serde_json::from_value(value.clone()).ok()?),
+                None => None,
+            },
             passage_targets: requirement
                 .get("passage_targets")
                 .map(|value| serde_json::from_value(value.clone()))
                 .transpose()
                 .ok()?,
+            ordinary_resolution: match requirement.get("ordinary_resolution") {
+                Some(value) if value["profile_revision"] == crate::ORDINARY_PASSAGE_PROFILE => {
+                    Some(serde_json::from_value(value["disposition"].clone()).ok()?)
+                }
+                Some(_) => return None,
+                None => None,
+            },
             instruction,
             destination_identity: requirement
                 .get("destination_identity")?

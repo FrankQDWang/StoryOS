@@ -83,6 +83,16 @@
           "format": "uuid",
           "type": "string"
         },
+        "candidate_target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProposalCandidateTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "considered": {
           "items": {
             "$ref": "#/$defs/ContextSourceInspect"
@@ -1593,6 +1603,29 @@
       ],
       "type": "string"
     },
+    "ProposalCandidateTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "operation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "proposal_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "revision_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_id",
+        "operation_id",
+        "revision_id"
+      ],
+      "type": "object"
+    },
     "ProseChangeLocationCurrent": {
       "additionalProperties": false,
       "properties": {
@@ -1673,6 +1706,44 @@
     },
     "ProseChangeLocationOutcome": {
       "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "revised",
+              "type": "string"
+            },
+            "operation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "prior_revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "proposal_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "validation_receipt_id": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_id",
+            "operation_id",
+            "revision_id",
+            "prior_revision_id",
+            "validation_receipt_id"
+          ],
+          "type": "object"
+        },
         {
           "additionalProperties": false,
           "properties": {

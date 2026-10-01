@@ -57,11 +57,63 @@ pub(super) async fn persist_current_passage_assembly(
         instruction: InstructionBindingInput::Absent,
         destination_identity: destination_identity.to_owned(),
     };
-    let record = match &command.passage_targets {
-        Some(targets) => {
-            crate::passage_collection::assemble(client, command, &source, targets).await?
+    let record = if let Some(target) = &command.candidate_target {
+        let candidate = crate::candidate_revision_target::load(
+            client,
+            &command.project_scope,
+            &command.chapter_id,
+            target,
+        )
+        .await?
+        .ok_or(CreateAgentRunError::BindingConflict)?;
+        storyos_core::assemble_candidate_context(
+            &CurrentPassageAssembly {
+                proposal_target_block_ids: Some(vec![candidate.block_id]),
+                ..source
+            },
+            target,
+            &candidate.text,
+        )
+    } else {
+        match &command.passage_targets {
+            Some(targets) => {
+                crate::passage_collection::assemble(client, command, &source, targets).await?
+            }
+            None => match storyos_core::parse_ordinary_passage_request(&command.author_message) {
+                None => assemble_current_passage_context(&source),
+                Some(request) => {
+                    let targets = match request {
+                        Ok(references) => {
+                            crate::ordinary_passage_targets::resolve(client, command, &references)
+                                .await?
+                        }
+                        Err(()) => None,
+                    };
+                    let resolved = targets.is_some();
+                    let mut record = match targets {
+                        Some(targets) => {
+                            crate::passage_collection::assemble(client, command, &source, &targets)
+                                .await?
+                        }
+                        None => assemble_current_passage_context(&CurrentPassageAssembly {
+                            chapter_body: String::new(),
+                            ..source.clone()
+                        }),
+                    };
+                    if !resolved {
+                        record.selected.retain(|item| {
+                            item.source_class != storyos_core::ContextSourceClass::WorkingTarget
+                        });
+                    }
+                    record.operation_requirement.ordinary_resolution = Some(if resolved {
+                        storyos_core::OrdinaryPassageResolution::Resolved
+                    } else {
+                        storyos_core::OrdinaryPassageResolution::Clarification
+                    });
+                    record
+                }
+            },
         }
-        None => assemble_current_passage_context(&source),
     };
     let payload = encode_assembly_record(&record).to_string();
     client

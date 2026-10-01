@@ -17,6 +17,7 @@ pub(crate) async fn persist_uncertain_attempt(
     assembly_manifest_id: &str,
     assistance: &ProjectAssistanceRecord,
     rebuild: Option<&RebuildDispatch>,
+    record: &serde_json::Value,
 ) -> Result<String, CompleteAgentRunError> {
     let model_attempt_id = Uuid::now_v7().to_string();
     let destination_attempt_id = Uuid::now_v7().to_string();
@@ -65,7 +66,7 @@ pub(crate) async fn persist_uncertain_attempt(
             continuation.known_prior_binding_id.as_deref(),
         )
     });
-    crate::passage_collection::bind_wire(client, claim, author_message, &mut payload).await?;
+    crate::passage_collection::bind_wire(record, author_message, &mut payload);
     if let Some(prepared) = crate::agent_run_successor::prepare_subject(
         author_message,
         &crate::agent_run_successor::SuccessorOrigin {

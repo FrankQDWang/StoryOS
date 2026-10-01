@@ -51,37 +51,30 @@ pub(crate) async fn assemble(
     ))
 }
 
-pub(crate) async fn bind_wire(
-    client: &tokio_postgres::Client,
-    claim: &storyos_application::ClaimedAgentRun,
+pub(crate) fn bind_wire(
+    record: &serde_json::Value,
     author_message: &str,
     payload: &mut serde_json::Value,
-) -> Result<(), storyos_application::CompleteAgentRunError> {
-    let row = client
-        .query_one(
-            "SELECT payload::text FROM storyos.operation_requirements
-          WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
-            AND run_id=$3::text::uuid AND requirement_role='primary'",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-            ],
-        )
-        .await
-        .map_err(super::agent_run_work::complete_database_error)?;
-    let record: serde_json::Value =
-        serde_json::from_str(&row.get::<_, String>(0)).map_err(|error| {
-            storyos_application::CompleteAgentRunError::Unavailable(Box::new(error))
-        })?;
-    if let Some(targets) = record.pointer("/operation_requirement/passage_targets") {
-        let bytes = storyos_core::canonical_json(&serde_json::json!({
+) {
+    if record
+        .pointer("/operation_requirement/candidate_target")
+        .is_some()
+        || record
+            .pointer("/operation_requirement/passage_targets")
+            .is_some()
+    {
+        let targets = &record["operation_requirement"]["passage_targets"];
+        let mut wire = serde_json::json!({
             "author_message": author_message,
             "source_chapter_id": record["operation_requirement"]["chapter_id"],
             "targets": targets,
             "selected": record["selected"],
             "mapping_revision": storyos_core::HOST_FAKE_MAPPING_REVISION,
-        }));
+        });
+        if let Some(target) = record.pointer("/operation_requirement/candidate_target") {
+            wire["candidate_target"] = target.clone();
+        }
+        let bytes = storyos_core::canonical_json(&wire);
         payload["wire"]["serialized_payload"] = serde_json::json!(bytes);
         payload["wire"]["digest"] = serde_json::json!(format!(
             "sha256:{}",
@@ -89,34 +82,11 @@ pub(crate) async fn bind_wire(
         ));
         payload["evidence"][0]["content"] = serde_json::json!(bytes);
     }
-    Ok(())
 }
 
-pub(crate) async fn retain_wire(
-    client: &tokio_postgres::Client,
-    claim: &storyos_application::ClaimedAgentRun,
-    payload: &mut serde_json::Value,
-) -> Result<(), storyos_application::CompleteAgentRunError> {
-    let row = client
-        .query_one(
-            "SELECT payload::text FROM storyos.model_attempts
-          WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
-            AND run_id=$3::text::uuid AND attempt_role='decision'",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-            ],
-        )
-        .await
-        .map_err(super::agent_run_work::complete_database_error)?;
-    let original: serde_json::Value =
-        serde_json::from_str(&row.get::<_, String>(0)).map_err(|error| {
-            storyos_application::CompleteAgentRunError::Unavailable(Box::new(error))
-        })?;
+pub(crate) fn retain_wire(original: &serde_json::Value, payload: &mut serde_json::Value) {
     if original["wire"].get("serialized_payload").is_some() {
         payload["wire"] = original["wire"].clone();
         payload["evidence"] = original["evidence"].clone();
     }
-    Ok(())
 }

@@ -26,6 +26,11 @@ mod manuscript_payload;
 mod refused_edit;
 pub use draft_retry::select_draft_replacement;
 pub use refused_edit::{CurrentOrderedSourceFacts, ProposalEditSourceFacts};
+mod ordinary_passage_request;
+pub use ordinary_passage_request::{
+    HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
+    OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
+};
 mod open_block_proposal;
 mod open_inline_proposal;
 mod pause_proposal_generation;
@@ -87,7 +92,8 @@ pub use complete_fake_decision::{
     HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
     INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, NoDecisionReason, PROSE_CHANGE_TEXT,
     SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole,
-    StreamItemState, host_fake_wire_digest, plan_fake_model_decision, stream_batch_plan,
+    StreamItemState, host_fake_wire_digest, plan_fake_model_decision, plan_resolved_fake_decision,
+    stream_batch_plan,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
@@ -614,5 +620,9 @@ pub use close_editor_flow_draft::{
 
 mod prose_change_locations;
 pub use prose_change_locations::{
-    ProseChangeCandidate, produce_fake_prose_changes, prose_changes_match_targets,
+    ProseChangeCandidate, is_fake_candidate_revision_request, produce_fake_candidate_revision,
+    produce_fake_prose_changes, prose_changes_match_targets,
 };
+
+mod assemble_candidate_context;
+pub use assemble_candidate_context::{ProposalCandidateTarget, assemble_candidate_context};
