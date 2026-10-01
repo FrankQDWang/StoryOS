@@ -214,13 +214,21 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.screenshot({path:join(repositoryRoot,'target/382-multi-pending.png')});
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
   } catch (error) {
-    await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify(await page.evaluate(() => ({
+    await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify(await page.evaluate(() => {
+      const surface = document.querySelector('[data-manuscript-editor]') as HTMLElement & { editor?: import('@tiptap/core').Editor };
+      const editor = surface.editor;
+      const candidates: unknown[] = [];
+      editor?.state.doc.descendants((node, position) => {
+        if (node.type.name === 'blockProposal') candidates.push({ position, attrs: node.attrs });
+      });
+      return { selection: editor?.state.selection.toJSON(), candidates,
+      attached: editor?.view.dom.isConnected, destroyed: editor?.isDestroyed,
       active: document.activeElement?.outerHTML,
       anchor: window.getSelection()?.anchorNode?.parentElement?.outerHTML,
       offset: window.getSelection()?.anchorOffset,
       focus: window.getSelection()?.focusNode?.parentElement?.outerHTML,
       editor: document.querySelector('[data-manuscript-editor]')?.outerHTML,
-    })), null, 2));
+    }; }), null, 2));
     await page.screenshot({ path: join(repositoryRoot, 'target/382-ui-stop.png') });
     throw error;
   } finally { await page.close(); }

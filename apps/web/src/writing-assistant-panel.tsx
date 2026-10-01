@@ -132,8 +132,10 @@ function runFromActivity(body: string, ref: RequestReference): string | undefine
 function resultText(run: GetAgentRunResponse): string | undefined {
   switch (run.decision.kind) {
     case "advisory":
-    case "prose_change":
       return run.decision.text;
+    case "prose_change":
+      return (run.decision.locations?.length ?? 0) > 0
+        ? `已生成 ${run.decision.locations!.length} 处候选文字。` : run.decision.text;
     case "clarification":
       return run.decision.question;
     case "execution_refused":

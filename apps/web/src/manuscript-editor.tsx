@@ -350,17 +350,18 @@ export function ManuscriptEditor({
   useEffect(() => {
     if (editor === null) return;
     projectBlockProposals(editor, proposals);
-    if (focusProposal === undefined || !editable) return;
+    if (!editable) { focusedProposalRef.current = undefined; return; }
+    if (focusProposal === undefined) return;
     editor.state.doc.descendants((node, position) => {
       if (node.type.name !== "blockProposal" || node.attrs.proposalId !== focusProposal.proposalId
         || node.attrs.operationId !== focusProposal.operationId || node.attrs.revisionId !== focusProposal.revisionId
         || node.attrs.blockId !== focusProposal.blockId) return;
       const identity = `${focusProposal.proposalId}:${focusProposal.operationId}:${focusProposal.revisionId}`;
       if (focusedProposalRef.current !== identity) {
-        focusedProposalRef.current = identity;
-        onCandidateFocusRef.current?.(focusProposal);
         editor.commands.setTextSelection(position + 1);
         editor.view.focus();
+        focusedProposalRef.current = identity;
+        onCandidateFocusRef.current?.(focusProposal);
       }
       const candidate = editor.view.nodeDOM(position);
       if (candidate instanceof HTMLElement) {
