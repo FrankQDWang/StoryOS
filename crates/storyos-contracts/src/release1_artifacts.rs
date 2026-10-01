@@ -33,7 +33,7 @@ use crate::release1_accept_proposal::ACCEPT_PROPOSAL;
 use crate::release1_accept_proposal_artifacts as accept_proposal_artifacts;
 use crate::release1_agent_run::{CREATE_AGENT_RUN, GET_AGENT_RUN};
 use crate::release1_agent_run_artifacts as agent_run_artifacts;
-use crate::release1_agent_run_control::{CANCEL_AGENT_RUN, PAUSE_AGENT_RUN};
+use crate::release1_agent_run_control::{CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, STEER_AGENT_RUN};
 use crate::release1_agent_run_control_artifacts as agent_run_control_artifacts;
 use crate::release1_archive_project::ARCHIVE_PROJECT;
 use crate::release1_archive_project_artifacts as archive_project_artifacts;
@@ -178,9 +178,9 @@ const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
 ];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
-    "sha256:e99b950b8f713a20359dff39f614032a8cbac9ad1131fcd5e9d84d09e1608691";
+    "sha256:724246c75a29c503e9deee608707399dbd7277928724854d23418b63093a7595";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:725ce743409804f9354f200ed9fa5d43f5727b7365b526b951e604cbdbba8c35";
+    "sha256:5bf2f580f40b5d8b3d8843f22aaed10b97b99e44043b096cac70e6d4ea9e125e";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -295,6 +295,8 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let create_agent_run_response_schema = agent_run_artifacts::create_response_schema_bytes();
     let get_agent_run_request_schema = agent_run_artifacts::get_request_schema_bytes();
     let get_agent_run_response_schema = agent_run_artifacts::get_response_schema_bytes();
+    let steer_request = agent_run_control_artifacts::steer_request_schema_bytes();
+    let steer_response = agent_run_control_artifacts::steer_response_schema_bytes();
     let pause_agent_run_request_schema = agent_run_control_artifacts::pause_request_schema_bytes();
     let pause_agent_run_response_schema =
         agent_run_control_artifacts::pause_response_schema_bytes();
@@ -571,6 +573,16 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             crate::GET_AGENT_RUN_RESPONSE_SCHEMA_ID,
             agent_run_artifacts::GET_RESPONSE_SCHEMA_PATH,
             get_agent_run_response_schema,
+        ),
+        (
+            crate::STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
+            agent_run_control_artifacts::STEER_REQUEST_SCHEMA_PATH,
+            steer_request,
+        ),
+        (
+            crate::STEER_AGENT_RUN_RESPONSE_SCHEMA_ID,
+            agent_run_control_artifacts::STEER_RESPONSE_SCHEMA_PATH,
+            steer_response,
         ),
         (
             crate::PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
@@ -1027,6 +1039,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             command_operation_graph(&UPDATE_PROJECT_ASSISTANCE, &["server_derived_project_scope", "expected_assistance_revision", "project_active"]),
             command_operation_graph(&CREATE_AGENT_RUN, &["server_derived_project_scope", "operation_requirement", "working_target_or_explicit_not_applicable", "capability_and_destination_grant"]),
             command_operation_graph(&PAUSE_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_pauseable", "current_fence_generation"]),
+            command_operation_graph(&STEER_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "exact_conversation", "nonterminal_run", "bounded_author_input"]),
             command_operation_graph(&CANCEL_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_cancellable", "current_fence_generation"]),
             operation_graph(&GET_AGENT_RUN, &["run_scope_join", "run_projection_watermark_or_snapshot"]),
             command_operation_graph(&CLOSE_EDITOR_FLOW_DRAFT, &["exact_scope", "current_writer", "exact_retained_open_source", "explicit_editor_command"]),
@@ -1369,6 +1382,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         CREATE_AGENT_RUN.operation_id,
         PAUSE_AGENT_RUN.operation_id,
         CANCEL_AGENT_RUN.operation_id,
+        STEER_AGENT_RUN.operation_id,
         GET_AGENT_RUN.operation_id,
         GET_REFUSED_EDIT_DRAFT.operation_id,
         CLOSE_EDITOR_FLOW_DRAFT.operation_id,

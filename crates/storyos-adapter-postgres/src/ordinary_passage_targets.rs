@@ -1,9 +1,10 @@
-use storyos_application::{CreateAgentRunCommand, CreateAgentRunError};
+use crate::create_agent_run::context::PassageContextInput;
+use storyos_application::CreateAgentRunError;
 use storyos_core::{HumanChapterReference, HumanPassageReference, PassageContextTarget};
 
 pub(crate) async fn resolve(
     client: &tokio_postgres::Client,
-    command: &CreateAgentRunCommand,
+    command: &PassageContextInput<'_>,
     references: &[HumanPassageReference],
 ) -> Result<Option<Vec<PassageContextTarget>>, CreateAgentRunError> {
     let mut targets: Vec<PassageContextTarget> = Vec::new();
@@ -18,7 +19,7 @@ pub(crate) async fn resolve(
         let (title, chapter, offset) = match &reference.chapter {
             HumanChapterReference::Title(title) => (Some(title.as_str()), None, 0),
             HumanChapterReference::Ordinal(ordinal) => (None, None, (*ordinal - 1) as i64),
-            HumanChapterReference::Current => (None, Some(command.chapter_id.as_str()), 0),
+            HumanChapterReference::Current => (None, Some(command.chapter_id), 0),
         };
         let rows = client
             .query(

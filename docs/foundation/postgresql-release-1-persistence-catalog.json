@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:dca35e192064e8f6cc1c1090cc2832c42327a7ab30f103c2f5cadcdd38e68b67",
+    "migration_chain_digest": "sha256:6acd1aaf1b82d9b42f8e39a6763cdd197f80c92af82b6390cca1bb7feec23b49",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -27,7 +27,7 @@
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:e99b950b8f713a20359dff39f614032a8cbac9ad1131fcd5e9d84d09e1608691",
+      "route_catalog_sha256": "sha256:724246c75a29c503e9deee608707399dbd7277928724854d23418b63093a7595",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:6fb6e5a426ec280de77d48cc2d18227eb42cd50a5daecc91d178a42aa788f90c",
+      "manifest_sha256": "sha256:0cb82b630d48264abf368a98415ce4e3cab569a7c37e07f6e7627038c736d5ec",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -545,6 +545,10 @@
           "lf_sha256": "sha256:6348f19ce0082c42f82c0747b54194d04d3ad816dc3c5223fffbc2e94a97387b"
         },
         {
+          "path": "crates/storyos-adapter-postgres/migrations/0078_active_run_guidance.sql",
+          "lf_sha256": "sha256:97998b1cbcb316dadd7116b51e892f74142be7786a5f8d24d8aa8178df224d8f"
+        },
+        {
           "path": "crates/storyos-adapter-postgres/migrations/0079_create_chapter_relative_placement.sql",
           "lf_sha256": "sha256:9fd8c92530a7bc5e4e9d744ee25f9630dc6bb6920398503f7325458648b3c8e2"
         }
@@ -736,7 +740,7 @@
       "head": "run_lane_and_worker_fence",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "run_and_outbox_fences_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_reconcile_outcome_unknown", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "operational_persistence", "operation_ids": ["createAgentRun", "pauseAgentRun", "resumeAgentRun", "cancelAgentRun", "resolveWait", "decideApproval", "getAgentRun", "updateConversationMemorySettings", "getConversationMemory"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "operational_persistence", "operation_ids": ["createAgentRun", "pauseAgentRun", "steerAgentRun", "resumeAgentRun", "cancelAgentRun", "resolveWait", "decideApproval", "getAgentRun", "updateConversationMemorySettings", "getConversationMemory"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-context-disclosure",

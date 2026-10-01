@@ -112,7 +112,7 @@ pub use accept_proposal::{
 pub use agent_run_control::{
     AgentRunControlCommand, AgentRunControlConflict, AgentRunControlEffect, AgentRunControlError,
     AgentRunControlIntent, AgentRunControlNoEffect, AgentRunControlSettlement,
-    AgentRunControlStatus, AgentRunControlStore, control_agent_run,
+    AgentRunControlStatus, AgentRunControlStore, AgentRunSteeringInput, control_agent_run,
 };
 pub use agent_run_work::{
     AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
@@ -127,12 +127,13 @@ pub use create_agent_run::{
     ActiveCompactionInspect, ActiveCompactionInstallState, ActiveCompactionKnownInput,
     ActiveCompactionMappingKind, AgentRunContext, AgentRunContinuationAdmission,
     AgentRunDecisionInspect, AgentRunEvidence, AgentRunInputMapping, AgentRunModelInspect,
-    AgentRunRecord, AgentRunStatus, AgentRunStreamItem, CapturedMemorySettings,
-    ConversationSelection, CreateAgentRunAdmission, CreateAgentRunCommand, CreateAgentRunError,
-    CreateAgentRunStore, EvidenceAvailability, OriginalResultRetrievalDisposition,
-    OriginalResultRetrievalInspect, ReferenceRecoveryDisposition, ReferenceRecoveryInspect,
-    UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect, WorkingTargetAvailability,
-    open_agent_run, request_create_agent_run,
+    AgentRunReadSelection, AgentRunRecord, AgentRunStatus, AgentRunSteeringInspect,
+    AgentRunStreamItem, CapturedMemorySettings, ConversationSelection, CreateAgentRunAdmission,
+    CreateAgentRunCommand, CreateAgentRunError, CreateAgentRunStore, EvidenceAvailability,
+    OriginalResultRetrievalDisposition, OriginalResultRetrievalInspect,
+    ReferenceRecoveryDisposition, ReferenceRecoveryInspect, UnknownCreateSuccessorDisposition,
+    UnknownCreateSuccessorInspect, WorkingTargetAvailability, inspect_agent_run, open_agent_run,
+    request_create_agent_run,
 };
 pub use create_chapter::{
     CreateChapterAuthority, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,

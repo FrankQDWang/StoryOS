@@ -3604,6 +3604,89 @@
       "notes": "Stage 3 planned v2: closed conversation selection new or existing with exact conversation_id; atomic new identity/settings and Run admission; accepted response and getAgentRun return conversation_id and captured memory_settings_revision; exact retries reuse all identities. See protocol section 13.9. Foreground admission serializes with settings changes."
     },
     {
+      "operation_id": "steerAgentRun",
+      "kind": "command",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs",
+      "shape": "agent-run:steer",
+      "semantic_owner": "context",
+      "wire_owner": "protocol",
+      "schemas": {
+        "request": "storyos.command.steer-agent-run.request.v1",
+        "response": "storyos.command.steer-agent-run.response.v1",
+        "request_source": "protocol",
+        "response_source": "protocol",
+        "semantic_source": "context"
+      },
+      "action_class": "agent_run_control",
+      "admission": "producer_cause",
+      "editor": {
+        "session": "optional",
+        "writer_generation": "not-applicable",
+        "takeover": "no"
+      },
+      "idempotency": "header_and_operation_record",
+      "preconditions": [
+        "server_derived_project_scope",
+        "run_scope_join",
+        "exact_conversation",
+        "nonterminal_run",
+        "bounded_author_input"
+      ],
+      "settlement": {
+        "mode": "sync",
+        "acknowledgements": [
+          "committed"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "settlement_query": null,
+        "operation_ref": null
+      },
+      "error_profile": "command_sync",
+      "activity": {
+        "success": [
+          "storyos.event.agent-run-steering-retained.v1"
+        ],
+        "no_effect": [],
+        "pre_admission": "none",
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "fixtures": {
+        "positive": "storyos.golden.steerAgentRun.positive.v1",
+        "negative": [
+          "storyos.golden.steerAgentRun.invalid.v1",
+          "storyos.golden.steerAgentRun.boundary.v1"
+        ]
+      },
+      "generated": {
+        "openapi_operation_id": "steerAgentRun",
+        "typescript_operation": "steerAgentRun",
+        "json_schema_ids": [
+          "storyos.command.steer-agent-run.request.v1",
+          "storyos.command.steer-agent-run.response.v1"
+        ],
+        "schema_catalog": "storyos.schema-catalog.v1",
+        "openapi": true,
+        "typescript_client": true,
+        "golden_wire_corpus": true
+      }
+    },
+    {
       "operation_id": "pauseAgentRun",
       "kind": "command",
       "method": "POST",
@@ -6244,6 +6327,15 @@
       "description": "",
       "positive_fixture": "storyos.golden.storyos.event.agent-run-created.v1.positive.v1",
       "negative_fixture": "storyos.golden.storyos.event.agent-run-created.v1.negative.v1"
+    },
+    {
+      "schema_id": "storyos.event.agent-run-steering-retained.v1",
+      "event_kind": "agent_run_steering_retained",
+      "semantic_owner": "context",
+      "wire_profile": "storyos.project-activity.v1",
+      "description": "Ordered author input retained for the next safe decision.",
+      "positive_fixture": "storyos.golden.storyos.event.agent-run-steering-retained.v1.positive.v1",
+      "negative_fixture": "storyos.golden.storyos.event.agent-run-steering-retained.v1.negative.v1"
     },
     {
       "schema_id": "storyos.event.agent-run-paused.v1",

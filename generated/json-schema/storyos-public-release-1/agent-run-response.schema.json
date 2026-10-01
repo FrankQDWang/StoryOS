@@ -183,6 +183,41 @@
       ],
       "type": "string"
     },
+    "AgentRunSteeringInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "author_message": {
+          "type": "string"
+        },
+        "input_position": {
+          "type": "string"
+        },
+        "input_snapshot_id": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_attempt_id": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "steering_input_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "steering_input_id",
+        "input_position",
+        "author_message"
+      ],
+      "type": "object"
+    },
     "AgentRunStreamItemInspect": {
       "additionalProperties": false,
       "properties": {
@@ -1953,6 +1988,12 @@
     "status": {
       "$ref": "#/$defs/AgentRunStatus"
     },
+    "steering_inputs": {
+      "items": {
+        "$ref": "#/$defs/AgentRunSteeringInspect"
+      },
+      "type": "array"
+    },
     "unknown_create_successor": {
       "$ref": "#/$defs/OptionalUnknownCreateSuccessorInspect"
     },
@@ -1968,6 +2009,7 @@
     "conversation_id",
     "memory_settings_revision",
     "captured_memory_settings",
+    "steering_inputs",
     "run_id",
     "status",
     "context",

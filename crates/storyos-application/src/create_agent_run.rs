@@ -53,6 +53,21 @@ pub struct CapturedMemorySettings {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AgentRunReadSelection {
+    Current,
+    ModelAttempt(String),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentRunSteeringInspect {
+    pub steering_input_id: String,
+    pub input_position: String,
+    pub author_message: String,
+    pub input_snapshot_id: Option<String>,
+    pub model_attempt_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunRecord {
     pub project_agent_id: String,
     pub conversation_id: String,
@@ -60,6 +75,7 @@ pub struct AgentRunRecord {
     pub captured_memory_settings: Option<CapturedMemorySettings>,
     pub run_id: String,
     pub status: AgentRunStatus,
+    pub steering_inputs: Vec<AgentRunSteeringInspect>,
     pub context: AgentRunContext,
     pub decision: AgentRunDecisionInspect,
     pub model: Option<AgentRunModelInspect>,
@@ -397,6 +413,7 @@ pub trait CreateAgentRunStore: Sync {
         &self,
         scope: &ProjectScope,
         run_id: &str,
+        selection: &AgentRunReadSelection,
     ) -> impl Future<Output = Result<Option<AgentRunRecord>, CreateAgentRunError>> + Send;
 }
 
@@ -439,7 +456,18 @@ pub async fn open_agent_run(
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<Option<AgentRunRecord>, CreateAgentRunError> {
-    store.read_agent_run(scope, run_id).await
+    store
+        .read_agent_run(scope, run_id, &AgentRunReadSelection::Current)
+        .await
+}
+
+pub async fn inspect_agent_run(
+    store: &impl CreateAgentRunStore,
+    scope: &ProjectScope,
+    run_id: &str,
+    selection: &AgentRunReadSelection,
+) -> Result<Option<AgentRunRecord>, CreateAgentRunError> {
+    store.read_agent_run(scope, run_id, selection).await
 }
 
 #[cfg(test)]

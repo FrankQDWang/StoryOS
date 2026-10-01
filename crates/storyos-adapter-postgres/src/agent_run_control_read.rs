@@ -41,7 +41,8 @@ pub(super) async fn read_control_settlement(
                         payload.payload->>'fence_generation',
                         payload.project_activity_position::text,
                         idempotency.acknowledgement_format,
-                        idempotency.response_project::text
+                        idempotency.response_project::text,
+                        payload.payload->>'steering_input_id', payload.payload->>'input_position'
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -85,6 +86,9 @@ pub(super) async fn read_control_settlement(
                     .get::<_, Option<String>>(6)
                     .ok_or(AgentRunControlError::BindingConflict)?,
                 status: match intent {
+                    AgentRunControlIntent::Steer => {
+                        return Err(AgentRunControlError::BindingConflict);
+                    }
                     AgentRunControlIntent::Pause => AgentRunControlStatus::Paused,
                     AgentRunControlIntent::Cancel => AgentRunControlStatus::Cancelled,
                 },
@@ -94,6 +98,21 @@ pub(super) async fn read_control_settlement(
                     .parse::<u64>()
                     .map_err(control_parse_error)?,
             },
+            ("no_effect", Some("steering_retained"), AgentRunControlIntent::Steer) => {
+                AgentRunControlEffect::Retained {
+                    run_id: row
+                        .get::<_, Option<String>>(6)
+                        .ok_or(AgentRunControlError::BindingConflict)?,
+                    steering_input_id: row
+                        .get::<_, Option<String>>(11)
+                        .ok_or(AgentRunControlError::BindingConflict)?,
+                    input_position: row
+                        .get::<_, Option<String>>(12)
+                        .ok_or(AgentRunControlError::BindingConflict)?
+                        .parse()
+                        .map_err(control_parse_error)?,
+                }
+            }
             ("no_effect", Some("already_paused"), AgentRunControlIntent::Pause) => {
                 AgentRunControlEffect::NoEffect {
                     reason: AgentRunControlNoEffect::AlreadyPaused,

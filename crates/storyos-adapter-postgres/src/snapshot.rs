@@ -553,6 +553,7 @@ fn payload_aggregate(
             id: field("export_id")?,
         },
         ProjectActivityKind::AgentRunCreated
+        | ProjectActivityKind::AgentRunSteeringRetained
         | ProjectActivityKind::AgentRunPaused
         | ProjectActivityKind::AgentRunCancelled => ActivityAggregateRef {
             kind: "agent_run".to_owned(),

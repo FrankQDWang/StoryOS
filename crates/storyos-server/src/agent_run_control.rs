@@ -13,6 +13,62 @@ use super::project_command_challenge::{
 };
 use super::*;
 
+pub(super) async fn steer_agent_run(
+    State(state): State<Arc<ServerState>>,
+    Path((project_id, run_id)): Path<(String, String)>,
+    request: Request,
+) -> Result<Json<contracts::SteerAgentRunResponse>, ApiError> {
+    let settled = settle_control(
+        &state,
+        &project_id,
+        &run_id,
+        request,
+        AgentRunControlIntent::Steer,
+    )
+    .await?;
+    let (effect, result) = match &settled.settlement.effect {
+        AgentRunControlEffect::Retained {
+            run_id,
+            steering_input_id,
+            input_position,
+        } => (
+            contracts::SteerAgentRunEffect::Retained {
+                run_id: run_id.clone(),
+                steering_input_id: steering_input_id.clone(),
+                input_position: input_position.to_string(),
+            },
+            contracts::DomainReceiptResult::NoEffect,
+        ),
+        AgentRunControlEffect::Conflicted { .. } => (
+            contracts::SteerAgentRunEffect::Conflicted {
+                reason: contracts::PauseAgentRunConflictReason::TerminalRun,
+            },
+            contracts::DomainReceiptResult::Conflicted,
+        ),
+        AgentRunControlEffect::Applied { .. } | AgentRunControlEffect::NoEffect { .. } => {
+            return Err(invalid_request());
+        }
+    };
+    Ok(Json(contracts::SteerAgentRunResponse {
+        schema_id: contracts::STEER_AGENT_RUN_RESPONSE_SCHEMA_ID.to_owned(),
+        correlation_id: settled.correlation_id,
+        project_scope: contract_scope(&settled.scope),
+        command_id: settled.settlement.ids.command_id.clone(),
+        author_command_admission_id: settled.settlement.ids.author_command_admission_id.clone(),
+        receipt: control_receipt(
+            &settled.scope,
+            contracts::DomainReceiptCommandKind::SteerAgentRun,
+            contracts::STEER_AGENT_RUN_DIGEST_PROFILE,
+            &settled.digest_hex,
+            &settled.idempotency_key,
+            result,
+            &settled.settlement,
+        ),
+        project: contract_project(&settled.settlement.response_project),
+        effect,
+    }))
+}
+
 pub(super) async fn pause_agent_run(
     State(state): State<Arc<ServerState>>,
     Path((project_id, run_id)): Path<(String, String)>,
@@ -151,7 +207,26 @@ async fn settle_control(
         client_contract_revision,
         security_policy_revision,
         canonical_command_bytes,
+        steering_input,
     ) = match intent {
+        AgentRunControlIntent::Steer => {
+            let body = serde_json::from_slice::<contracts::SteerAgentRunRequest>(&bytes)
+                .map_err(|_| invalid_request_shape())?;
+            let canonical = canonical_body_bytes(&body)?;
+            valid_uuid(&body.steer_agent_run_input.conversation_id)?;
+            let input = body.steer_agent_run_input;
+            (
+                body.command_schema,
+                input.correlation_id,
+                input.client_contract_revision,
+                input.security_policy_revision,
+                canonical,
+                Some(storyos_application::AgentRunSteeringInput {
+                    conversation_id: input.conversation_id,
+                    author_message: input.author_message.text,
+                }),
+            )
+        }
         AgentRunControlIntent::Pause => {
             let body = serde_json::from_slice::<contracts::PauseAgentRunRequest>(&bytes)
                 .map_err(|_| invalid_request_shape())?;
@@ -162,6 +237,7 @@ async fn settle_control(
                 body.pause_agent_run_input.client_contract_revision,
                 body.pause_agent_run_input.security_policy_revision,
                 canonical_command_bytes,
+                None,
             )
         }
         AgentRunControlIntent::Cancel => {
@@ -174,6 +250,7 @@ async fn settle_control(
                 body.cancel_agent_run_input.client_contract_revision,
                 body.cancel_agent_run_input.security_policy_revision,
                 canonical_command_bytes,
+                None,
             )
         }
     };
@@ -182,6 +259,7 @@ async fn settle_control(
         .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
     let expected_schema = match intent {
+        AgentRunControlIntent::Steer => contracts::STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
         AgentRunControlIntent::Pause => contracts::PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
         AgentRunControlIntent::Cancel => contracts::CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
     };
@@ -211,6 +289,12 @@ async fn settle_control(
     let binding_ref = session_binding_ref(secret, session_handle);
     let digest_hex = hex_bytes(&Sha256::digest(&canonical_command_bytes));
     let (command_kind, method, route, digest_profile) = match intent {
+        AgentRunControlIntent::Steer => (
+            "steerAgentRun",
+            "POST",
+            contracts::STEER_AGENT_RUN_PATH,
+            contracts::STEER_AGENT_RUN_DIGEST_PROFILE,
+        ),
         AgentRunControlIntent::Pause => (
             "pauseAgentRun",
             contracts::PAUSE_AGENT_RUN_METHOD,
@@ -261,6 +345,7 @@ async fn settle_control(
                 receipt_id: Uuid::now_v7().to_string(),
             },
             intent,
+            steering_input,
         },
     )
     .await
@@ -305,7 +390,8 @@ fn pause_wire(settled: &SettledControl) -> Result<PauseWire, ApiError> {
                 reason: contracts::PauseAgentRunConflictReason::TerminalRun,
             },
         ),
-        AgentRunControlEffect::NoEffect {
+        AgentRunControlEffect::Retained { .. }
+        | AgentRunControlEffect::NoEffect {
             reason: AgentRunControlNoEffect::AlreadyCancelled,
         } => {
             return Err(control_error(AgentRunControlError::BindingConflict));
@@ -351,7 +437,8 @@ fn cancel_wire(settled: &SettledControl) -> Result<CancelWire, ApiError> {
                 reason: contracts::CancelAgentRunConflictReason::TerminalRun,
             },
         ),
-        AgentRunControlEffect::NoEffect {
+        AgentRunControlEffect::Retained { .. }
+        | AgentRunControlEffect::NoEffect {
             reason: AgentRunControlNoEffect::AlreadyPaused,
         } => {
             return Err(control_error(AgentRunControlError::BindingConflict));
@@ -445,6 +532,11 @@ fn canonical_json(value: serde_json::Value) -> serde_json::Value {
 
 fn control_error(error: AgentRunControlError) -> ApiError {
     match error {
+        AgentRunControlError::InputLimit => problem(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "steering_input_limit",
+            "The correction exceeds the admitted Context input limit.",
+        ),
         AgentRunControlError::BindingConflict => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",

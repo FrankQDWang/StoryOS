@@ -210,6 +210,17 @@ export async function cancelAgentRun({ projectId, runId, request, idempotencyKey
   return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/cancel`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
+export async function digestSteerAgentRun(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestSteerAgentRun requires request");
+  const bytes = new TextEncoder().encode(JSON.stringify(canonicalJson(request)));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.steerAgentRun.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+export async function steerAgentRun({ projectId, runId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || typeof runId !== "string" || !request || typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("steerAgentRun requires Scope, input and security bindings");
+  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}/steering-inputs`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+}
+
 export async function getProposal({ projectId, proposalId, ...options } = {}) {
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getProposal requires projectId");
   if (typeof proposalId !== "string" || proposalId.length === 0) throw new TypeError("getProposal requires proposalId");

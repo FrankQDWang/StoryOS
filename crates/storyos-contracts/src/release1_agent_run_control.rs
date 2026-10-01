@@ -14,6 +14,68 @@ pub const CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID: &str =
     "storyos.command.cancel-agent-run.response.v1";
 pub const CANCEL_AGENT_RUN_DIGEST_PROFILE: &str = "storyos.command.cancelAgentRun.jcs.v1";
 
+pub const STEER_AGENT_RUN_REQUEST_SCHEMA_ID: &str = "storyos.command.steer-agent-run.request.v1";
+pub const STEER_AGENT_RUN_RESPONSE_SCHEMA_ID: &str = "storyos.command.steer-agent-run.response.v1";
+pub const STEER_AGENT_RUN_DIGEST_PROFILE: &str = "storyos.command.steerAgentRun.jcs.v1";
+pub const STEER_AGENT_RUN_PATH: &str =
+    "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs";
+pub(super) const STEER_AGENT_RUN: QueryOperation = QueryOperation {
+    operation_id: "steerAgentRun",
+    method: "POST",
+    path: STEER_AGENT_RUN_PATH,
+    request_schema: STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
+    response_schema: STEER_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    responses: CONTROL_STATUSES,
+    fixtures: &[
+        "storyos.golden.steerAgentRun.positive.v1",
+        "storyos.golden.steerAgentRun.invalid.v1",
+        "storyos.golden.steerAgentRun.boundary.v1",
+    ],
+};
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SteerAgentRunInput {
+    pub conversation_id: String,
+    pub author_message: crate::release1_agent_run::AuthorMessage,
+    pub client_contract_revision: String,
+    pub security_policy_revision: String,
+    pub correlation_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SteerAgentRunRequest {
+    pub command_schema: String,
+    pub steer_agent_run_input: SteerAgentRunInput,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SteerAgentRunEffect {
+    Retained {
+        run_id: String,
+        steering_input_id: String,
+        input_position: String,
+    },
+    Conflicted {
+        reason: PauseAgentRunConflictReason,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SteerAgentRunResponse {
+    pub schema_id: String,
+    pub correlation_id: String,
+    pub project_scope: crate::release1::ProjectScope,
+    pub command_id: String,
+    pub author_command_admission_id: String,
+    pub receipt: DomainReceipt,
+    pub project: ControlledProject,
+    pub effect: SteerAgentRunEffect,
+}
+
 const CONTROL_STATUSES: &[(u16, &str)] = &[
     (200, "AgentRun control settled"),
     (400, "Invalid request"),

@@ -21,6 +21,7 @@ import {
   digestCreateVolume,
   digestUndoLatestAuthorAction,
   digestUpdateProjectAssistance,
+  pauseAgentRun, digestPauseAgentRun, steerAgentRun, digestSteerAgentRun,
   getAgentRun,
   getApplyAuthorEditOutcome,
   getChapter,
@@ -537,6 +538,22 @@ test("a fresh instruction revises the exact pending candidate through the real W
       before.proposal, before.proposal.operation_id, id("ca42"));
     if (created.effect.kind !== "admitted") throw new Error("expected fresh candidate request");
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, before.proposal);
+    const runId = created.effect.run_id;
+    const pause = { command_schema: "storyos.command.pause-agent-run.request.v1" as const,
+      pause_agent_run_input: { ...BINDING, correlation_id: id("ca45") } };
+    await challenged(started.baseUrl, fetchImpl, projectId, "POST",
+      "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause", pause.command_schema,
+      await digestPauseAgentRun(pause), id("ca45"), (antiForgery) => pauseAgentRun({
+        baseUrl: started.baseUrl, projectId, runId, fetchImpl, request: pause,
+        idempotencyKey: id("ca45"), antiForgery }));
+    const guidance = { command_schema: "storyos.command.steer-agent-run.request.v1" as const,
+      steer_agent_run_input: { conversation_id: created.conversation_id,
+        author_message: { text: "Keep the narrator calm in this passage." }, ...BINDING, correlation_id: id("ca46") } };
+    await challenged(started.baseUrl, fetchImpl, projectId, "POST",
+      "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs", guidance.command_schema,
+      await digestSteerAgentRun(guidance), id("ca46"), (antiForgery) => steerAgentRun({
+        baseUrl: started.baseUrl, projectId, runId, fetchImpl, request: guidance,
+        idempotencyKey: id("ca46"), antiForgery }));
     await settleOnce();
     const revised = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
     const run = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
