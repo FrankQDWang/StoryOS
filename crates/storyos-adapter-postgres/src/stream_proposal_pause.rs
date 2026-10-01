@@ -63,7 +63,6 @@ pub(crate) async fn pause_generating_proposals(
                     .map_err(|error| AuthorEditError::Unavailable(Box::new(error)))?,
                 generation_state: "generating".to_owned(),
                 existing_fence: row.get(5),
-                block_id: String::new(),
                 base_revision_id: String::new(),
             },
         )

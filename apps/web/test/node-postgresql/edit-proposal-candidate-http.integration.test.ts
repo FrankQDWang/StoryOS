@@ -44,6 +44,8 @@ import {
   withChallengeRetry,
 } from "../support/node-integration.ts";
 
+import { admitCandidateRevision } from "../support/candidate-revision.ts";
+
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
 const USER_A = "018f0000-0000-7001-8000-000000000001";
@@ -505,7 +507,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
 
 
 test("a fresh instruction revises the exact pending candidate through the real Worker", async () => {
-  const started = await startRealServer();
+  let started = await startRealServer();
   try {
     await drainLeftoverWork();
     const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id("ca11"), "AI candidate revision", "ca2");
@@ -514,17 +516,8 @@ test("a fresh instruction revises the exact pending candidate through the real W
     const proposalId = original.decision.opened_proposal.proposal_id;
     const before = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
     const chapter = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
-    const request = runRequest(chapterId, id("ca41"));
-    request.create_agent_run_input.conversation = { kind: "existing", conversation_id: original.conversation_id };
-    request.create_agent_run_input.author_message.text = "Revise this passage: make the candidate calmer.";
-    request.create_agent_run_input.working_target = { kind: "proposal_candidate", source_chapter_id: chapterId,
-      target: { proposal_id: proposalId, operation_id: before.proposal.operation_id,
-      revision_id: before.proposal.revision_id } };
-    const created = await challenged(started.baseUrl, fetchImpl, projectId, "POST",
-      "/api/v1/projects/{project_id}/agent-runs", request.command_schema,
-      await digestCreateAgentRun(request), id("ca42"), (antiForgery) => createAgentRun({
-        baseUrl: started.baseUrl, projectId, fetchImpl, idempotencyKey: id("ca42"), antiForgery, request,
-      }));
+    const { created, repeat } = await admitCandidateRevision(started.baseUrl, fetchImpl, projectId,
+      before.proposal, before.proposal.operation_id, id("ca42"));
     if (created.effect.kind !== "admitted") throw new Error("expected fresh candidate request");
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, before.proposal);
     await settleOnce();
@@ -535,6 +528,22 @@ test("a fresh instruction revises the exact pending candidate through the real W
     assert.equal(revised.proposal.candidate_text, "Keep the narrator calm in this passage.");
     assert.notDeepEqual(revised.proposal.validation_receipt, before.proposal.validation_receipt);
     assert.equal(run.status, "completed");
-    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, chapter.chapter);
+    assert.deepEqual(await repeat(), created);
+    assert.deepEqual(revised.proposal.source, before.proposal.source);
+    if (run.decision.kind !== "prose_change") throw new Error("expected typed revision");
+    assert.deepEqual(run.context.candidate_target, { proposal_id: proposalId,
+      operation_id: before.proposal.operation_id, revision_id: before.proposal.revision_id });
+    assert.deepEqual(run.context.selected.filter((item) => item.source_class === "working_target")
+      .map(({ source_version, content }) => ({ source_version, content })), [
+      { source_version: chapter.chapter.current_revision.revision_id, content: chapter.chapter.current_revision.body },
+      { source_version: before.proposal.revision_id, content: before.proposal.candidate_text }]);
+    await stopRealServer(started.server);
+    started = await startRealServer();
+    const reloadedFetch = browserFetch(started.baseUrl, "session-a");
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl: reloadedFetch })).proposal, revised.proposal);
+    await settleOnce();
+    const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl: reloadedFetch });
+    assert.deepEqual(reloaded, { ...run, correlation_id: reloaded.correlation_id });
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl: reloadedFetch })).chapter, chapter.chapter);
   } finally { await stopRealServer(started.server); }
 }, 120_000);

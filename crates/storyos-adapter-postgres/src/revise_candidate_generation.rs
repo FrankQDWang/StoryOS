@@ -88,7 +88,6 @@ pub(crate) async fn apply(
                     last_seq: 0,
                     generation_state: "generating".to_owned(),
                     existing_fence: false,
-                    block_id: loaded.block_id,
                     base_revision_id: loaded.base_revision_id,
                 },
                 1,

@@ -21,7 +21,6 @@ pub(crate) struct LoadedGeneration {
     pub(crate) last_seq: u64,
     pub(crate) generation_state: String,
     pub(crate) existing_fence: bool,
-    pub(crate) block_id: String,
     pub(crate) base_revision_id: String,
 }
 
@@ -236,7 +235,6 @@ async fn open_generating(
         last_seq: 0,
         generation_state: "generating".to_owned(),
         existing_fence: false,
-        block_id: first.block_id.clone(),
         base_revision_id: first.revision_id.clone(),
     }))
 }
@@ -259,6 +257,17 @@ pub(crate) async fn persist_batch(
     } else {
         ("generating", "pending")
     };
+    let summary = client.query_one(
+        "SELECT proposal.manuscript_block_id::text,
+                CASE WHEN $4::text IS NULL OR operation.operation_id=$4::text::uuid
+                     THEN $5 ELSE operation.candidate_text END
+           FROM storyos.proposals AS proposal
+           JOIN storyos.proposal_operations AS operation USING (owner_user_id,project_id,proposal_id)
+          WHERE proposal.owner_user_id=$1::text::uuid AND proposal.project_id=$2::text::uuid
+            AND proposal.proposal_id=$3::text::uuid ORDER BY operation.operation_id LIMIT 1",
+        &[&owner, &project, &loaded.proposal_id, &operation_id, &text],
+    ).await.map_err(stream_err)?;
+    let summary_text: &str = summary.get(1);
     append_revision(
         client,
         owner,
@@ -267,7 +276,7 @@ pub(crate) async fn persist_batch(
         &revision_id,
         generation,
         validation,
-        text,
+        summary_text,
         &loaded.revision_id,
         Some(&loaded.base_revision_id),
     )
@@ -330,8 +339,8 @@ pub(crate) async fn persist_batch(
                     &loaded.proposal_id,
                     &revision_id,
                     &loaded.base_revision_id,
-                    &loaded.block_id,
-                    &text,
+                    &summary.get::<_, &str>(0),
+                    &summary_text,
                 ],
             )
             .await
@@ -413,7 +422,6 @@ async fn load_generation(
                     generation.last_applied_stream_seq, head.current_revision_id::text,
                     revision.candidate_text, revision.generation,
                     fence.editor_input_fence_id IS NOT NULL,
-                    proposal.manuscript_block_id::text,
                     revision.base_authoritative_revision_id::text
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_generation_heads AS generation_head
@@ -461,8 +469,7 @@ async fn load_generation(
             candidate_text: row.get(4),
             generation_state: row.get(5),
             existing_fence: row.get(6),
-            block_id: row.get(7),
-            base_revision_id: row.get(8),
+            base_revision_id: row.get(7),
         }),
         None => None,
     })

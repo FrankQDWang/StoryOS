@@ -22,6 +22,16 @@ pub(crate) async fn prepare(
     let targets =
         crate::admitted_proposal_target::load_admitted_targets(client, claim, chapter_id).await?;
     let candidate_record = crate::candidate_revision_target::admitted(client, claim).await?;
+    if candidate_record.is_some()
+        && let FakeAttemptOutcome::Decision { kind, .. } = &mut outcome
+        && let FakeDecisionKind::Advisory { text } = kind
+    {
+        *kind = FakeDecisionKind::ProseChange {
+            text,
+            producer_input: text,
+            locations: None,
+        };
+    }
     let producer_output = if candidate_record.is_some()
         || author_message.starts_with("Revise these passages")
         || (targets.first().is_some_and(|target| target.collection)

@@ -25,13 +25,6 @@ pub fn assemble_candidate_context(
         chapter_body: candidate_text.to_owned(),
         ..source.clone()
     });
-    let mut reasons = match &record.sufficiency {
-        ContextSufficiency::Complete => Vec::new(),
-        ContextSufficiency::Blocked { reasons } => reasons.clone(),
-    };
-    if let ContextSufficiency::Blocked { reasons: unmet } = candidate.sufficiency {
-        reasons.extend(unmet);
-    }
     record.considered.extend(
         candidate
             .considered
@@ -51,7 +44,7 @@ pub fn assemble_candidate_context(
             .filter(|item| item.source_class == ContextSourceClass::WorkingTarget),
     );
     if record
-        .selected
+        .considered
         .iter()
         .filter(|item| item.source_class == ContextSourceClass::WorkingTarget)
         .map(|item| item.token_count)
@@ -61,15 +54,15 @@ pub fn assemble_candidate_context(
         record
             .selected
             .retain(|item| item.source_class != ContextSourceClass::WorkingTarget);
+        let mut reasons = match record.sufficiency {
+            ContextSufficiency::Complete => Vec::new(),
+            ContextSufficiency::Blocked { reasons } => reasons,
+        };
         reasons.push(ContextBlockReason::ExactRequiredOverLimit {
             source_class: ContextSourceClass::WorkingTarget,
         });
+        record.sufficiency = ContextSufficiency::Blocked { reasons };
     }
     record.operation_requirement.candidate_target = Some(target.clone());
-    record.sufficiency = if reasons.is_empty() {
-        ContextSufficiency::Complete
-    } else {
-        ContextSufficiency::Blocked { reasons }
-    };
     record
 }
