@@ -24,6 +24,7 @@ export function ChapterTreeActions({
   fetchImpl,
   cryptoImpl,
   onUpdated,
+  onCreationMenu,
 }: {
   projectId: string;
   chapterId: string;
@@ -42,6 +43,7 @@ export function ChapterTreeActions({
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   onUpdated: () => void;
+  onCreationMenu?: (event: React.MouseEvent) => void;
 }) {
   const [pendingRemoval, setPendingRemoval] = useState(false);
   const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
@@ -100,6 +102,8 @@ export function ChapterTreeActions({
       ) : null}
       {createEnabled ? (
         <>
+          <button type="button" data-chapter-menu={chapterId} aria-label="章菜单"
+            onClick={onCreationMenu}>⋯</button>
           <form
             data-rename-chapter={chapterId}
             onSubmit={(event) => {

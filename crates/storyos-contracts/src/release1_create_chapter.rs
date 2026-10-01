@@ -47,9 +47,28 @@ pub const CREATE_CHAPTER_METHOD: &str = CREATE_CHAPTER.method;
 pub struct CreateChapterInput {
     pub title: String,
     pub expected_tree_revision: String,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "placement"
+    )]
+    pub placement: Option<CreateChapterPlacement>,
     pub client_contract_revision: String,
     pub security_policy_revision: String,
     pub correlation_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CreateChapterPlacement {
+    Before { chapter_id: String },
+    After { chapter_id: String },
+}
+
+fn placement<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<CreateChapterPlacement>, D::Error> {
+    CreateChapterPlacement::deserialize(deserializer).map(Some)
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -71,6 +90,7 @@ pub enum CreateChapterRefusalReason {
     ArchivedProject,
     InvalidTitle,
     InvalidVolumeJoin,
+    InvalidPlacement,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

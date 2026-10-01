@@ -301,6 +301,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     let chapter = create_chapter(
         &store,
         &CreateChapterCommand {
+            placement: storyos_core::CreateChapterPlacement::Append,
             project_scope: scope.clone(),
             client_binding: EditorClientBinding {
                 binding_ref: chapter_issue.binding.client_session_binding_digest.clone(),

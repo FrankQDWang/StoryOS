@@ -221,6 +221,7 @@ async fn apply_chapter(
     let settlement = create_chapter(
         store,
         &CreateChapterCommand {
+            placement: storyos_core::CreateChapterPlacement::Append,
             project_scope: issue.binding.project_scope.clone(),
             client_binding: client_binding(&issue.binding),
             challenge_binding: issue.binding,

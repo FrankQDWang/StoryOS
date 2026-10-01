@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { expect, it } from "vitest";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -152,6 +153,7 @@ it("explains a historical Create Chapter acknowledgement and does not retry it",
       cryptoImpl: crypto,
     });
     mountStage1View(loaded.root, loaded);
+    await beginInlineChapterCreation(loaded.root);
     await expect.poll(() =>
       loaded.root.querySelector<HTMLInputElement>(`form[data-create-chapter="${VOLUME}"] input[name="chapter-title"]`)
         !== null

@@ -18,6 +18,8 @@ export async function verifyProductionDraftChapterSource(page: Page, projectId: 
     && new URL(reply.url()).pathname.startsWith(`/api/v1/projects/${projectId}/`)
     && new URL(reply.url()).pathname.endsWith("/chapters"));
   const volume = page.locator(`li[data-volume-id]:has(li[data-chapter-id="${chapter.chapter.chapter_id}"])`);
+  await volume.locator("[data-create-chapter-menu]").click();
+  await page.locator('[data-chapter-placement="append"]').click();
   const title = volume.locator('form[data-create-chapter] input[name="chapter-title"]');
   await title.fill("Other Chapter"); await title.press("Enter");
   const creation = await (await created.catch((error: unknown) => {

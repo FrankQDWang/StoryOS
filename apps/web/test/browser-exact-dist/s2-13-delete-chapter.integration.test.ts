@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -125,6 +126,7 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter] input[name="chapter-title"]')
       ?.tagName
@@ -148,11 +150,13 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
     ["Chapter B", "Chapter A\nChapter B"],
     ["Chapter C", "Chapter A\nChapter B\nChapter C"],
   ] as const) {
+    await beginInlineChapterCreation(frame.contentDocument);
     await expect.poll(() =>
       frame.contentDocument?.querySelector(
         '#app form[data-create-chapter] input[name="chapter-title"]',
       )?.tagName
     ).toBe("INPUT");
+    await beginInlineChapterCreation(frame.contentDocument);
     const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
       '#app form[data-create-chapter] input[name="chapter-title"]',
     );

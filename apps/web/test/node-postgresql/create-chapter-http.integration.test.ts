@@ -244,9 +244,17 @@ test("createChapter places a new Chapter atomically beside its exact live anchor
       assert.deepEqual(refused.created.effect, { kind: "refused", reason: "invalid_placement" });
       assert.deepEqual(await tree(), placed);
     }
+    const otherVolume = await postVolume(baseUrl, fetchImpl, projectId, id(), volumeRequest("Other Volume", placed.tree_revision, id()));
+    assert.ok(otherVolume.created.effect.kind === "authoritative_applied");
+    const foreignAnchor = chapterRequest("Wrong Volume anchor", (await tree()).tree_revision, id());
+    Object.assign(foreignAnchor.create_chapter_input, { placement: { kind: "after", chapter_id: firstId } });
+    const unchanged = await tree();
+    const foreign = await postChapter(baseUrl, fetchImpl, projectId, otherVolume.created.effect.volume_id, id(), foreignAnchor);
+    assert.deepEqual(foreign.created.effect, { kind: "refused", reason: "invalid_placement" });
+    assert.deepEqual(await tree(), unchanged);
     const stale = await postChapter(baseUrl, fetchImpl, projectId, volumeId, id(), before.request);
     assert.deepEqual(stale.created.effect, { kind: "conflicted", reason: "stale_tree_revision" });
-    assert.deepEqual(await tree(), placed);
+    assert.deepEqual(await tree(), unchanged);
   } finally { await stopRealServer(server); }
 });
 

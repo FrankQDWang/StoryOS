@@ -123,13 +123,15 @@ export type DeleteVolumeEffect = { "kind": "authoritative_applied", volume_id: s
 
 export type DeleteVolumeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: DeleteVolumeEffect, };
 
-export type CreateChapterInput = { title: string, expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type CreateChapterPlacement = { "kind": "before", chapter_id: string, } | { "kind": "after", chapter_id: string, };
+
+export type CreateChapterInput = { title: string, expected_tree_revision: string, placement?: CreateChapterPlacement | null, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type CreateChapterRequest = { command_schema: string, create_chapter_input: CreateChapterInput, };
 
 export type CreateChapterConflictReason = "stale_tree_revision";
 
-export type CreateChapterRefusalReason = "archived_project" | "invalid_title" | "invalid_volume_join";
+export type CreateChapterRefusalReason = "archived_project" | "invalid_title" | "invalid_volume_join" | "invalid_placement";
 
 export type CreateChapterEffect = { "kind": "authoritative_applied", volume_id: string, chapter_id: string, title: string, tree_revision: string, order: string, current_chapter_id: string, project_activity_position: string, } | { "kind": "conflicted", reason: CreateChapterConflictReason, } | { "kind": "refused", reason: CreateChapterRefusalReason, };
 

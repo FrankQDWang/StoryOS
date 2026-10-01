@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -55,6 +56,7 @@ async function createNamedVolume(root: Document, title: string): Promise<void> {
 }
 
 async function createNamedChapter(root: Document, title: string): Promise<void> {
+  await beginInlineChapterCreation(root);
   const chapterTitle = root.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -105,6 +107,7 @@ it("the author renames and reorders Chapters from the canonical tree and they su
     throw new Error("the empty Project document is missing");
   }
   await createNamedVolume(createdRoot, "Volume A");
+  await beginInlineChapterCreation(createdRoot);
   await expect.poll(() =>
     createdRoot.querySelector('#app form[data-create-chapter] input[name="chapter-title"]')
       ?.tagName

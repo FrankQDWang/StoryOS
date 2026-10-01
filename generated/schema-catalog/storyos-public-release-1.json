@@ -461,12 +461,12 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/create-chapter-request.schema.json",
       "schema_id": "storyos.command.create-chapter.request.v1",
-      "sha256": "sha256:868dc85ac488ea68e4df224cfe9f1d6ba84960c614efc65622b054db3014bc90"
+      "sha256": "sha256:c63a61de2faeff99871c3697a45ad06f84d8efe7f7474d0eae9bae1a49c06ba5"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/create-chapter-response.schema.json",
       "schema_id": "storyos.command.create-chapter.response.v1",
-      "sha256": "sha256:1abf2e3b5ccbeb8e71b392a1041e5861c0190990156026370e870d9709c754b7"
+      "sha256": "sha256:976798060add243c0cfcf32ed83c5e4f9bff8f11e13bd8e2ae5be341e02d00bc"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/set-current-chapter-request.schema.json",

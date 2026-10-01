@@ -53,6 +53,21 @@ pub(super) async fn create_chapter(
         return Err(invalid_request());
     }
     valid_uuid(&input.correlation_id)?;
+    let placement = match &input.placement {
+        None => storyos_core::CreateChapterPlacement::Append,
+        Some(contracts::CreateChapterPlacement::Before { chapter_id }) => {
+            valid_uuid(chapter_id)?;
+            storyos_core::CreateChapterPlacement::Before {
+                chapter_id: chapter_id.clone(),
+            }
+        }
+        Some(contracts::CreateChapterPlacement::After { chapter_id }) => {
+            valid_uuid(chapter_id)?;
+            storyos_core::CreateChapterPlacement::After {
+                chapter_id: chapter_id.clone(),
+            }
+        }
+    };
     let idempotency_key = exact_header(&headers, "idempotency-key")?;
     let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
     if !valid_uuid_v7(idempotency_key)
@@ -106,6 +121,7 @@ pub(super) async fn create_chapter(
         correlation_id: input.correlation_id.clone(),
         volume_id: volume_id.clone(),
         title: input.title.clone(),
+        placement,
         expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: Uuid::now_v7().to_string(),
@@ -192,6 +208,9 @@ fn create_chapter_response(
                     }
                     storyos_core::CreateChapterRefusal::InvalidVolumeJoin => {
                         contracts::CreateChapterRefusalReason::InvalidVolumeJoin
+                    }
+                    storyos_core::CreateChapterRefusal::InvalidPlacement => {
+                        contracts::CreateChapterRefusalReason::InvalidPlacement
                     }
                     storyos_core::CreateChapterRefusal::MissingProject => {
                         return Err(create_chapter_error(CreateChapterError::MissingProject));

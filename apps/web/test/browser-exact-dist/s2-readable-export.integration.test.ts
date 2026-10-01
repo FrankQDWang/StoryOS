@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -137,9 +138,11 @@ it("exports a durable human-readable manuscript through the Worker", { timeout: 
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
   ).toBe(true);
+  await beginInlineChapterCreation(frame.contentDocument);
   const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -162,6 +165,7 @@ it("exports a durable human-readable manuscript through the Worker", { timeout: 
     .toBe("# Volume A\n\n## Chapter A\n\nHello world\n");
   expect(root.querySelector("[data-readable-export-bytes]")?.textContent)
     .not.toContain("Chapter B");
+  await beginInlineChapterCreation(frame.contentDocument);
   const secondChapter = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
