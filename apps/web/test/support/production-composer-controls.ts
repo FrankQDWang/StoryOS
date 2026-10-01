@@ -4,7 +4,7 @@ import type { BrowserContext } from "playwright";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { uuidV7 } from "../../src/acceptance-journal.ts";
-import { createProjectCommandChallenge, digestUpdateProjectAssistance, getChapter,
+import { createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun, getChapter,
   updateProjectAssistance } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { sessionFetch } from "./node-integration.ts";
@@ -63,6 +63,23 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-875", "composer-ten-lines.png") });
     await composer.fill(Array.from({ length: 14 }, () => "Another line").join("\n"));
     assert.equal((await composer.boundingBox())?.height, long.height);
+    let admitted: import("../../../../generated/typescript/storyos-public-release-1/client.mjs").CreateAgentRunResponse | undefined;
+    await page.route((url) => url.pathname.endsWith("/agent-runs"), async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      const response = await route.fetch();
+      assert.equal(response.status(), 200);
+      admitted = await response.json();
+      await route.fulfill({ response });
+    });
+    await composer.fill("Revise this passage: keep the voice.");
+    await page.getByRole("button", { name: "发送", exact: true }).click();
+    await expect.poll(() => admitted?.effect.kind).toBe("admitted");
+    assert.ok(admitted?.effect.kind === "admitted");
+    const runId = admitted.effect.run_id;
+    const created = await getAgentRun({ ...options, runId });
+    assert.equal(created.conversation_id, admitted.conversation_id);
+    await expect(composer).toHaveValue("");
+    await expect(page.getByRole("button", { name: "暂停", exact: true })).toBeEnabled();
   } finally {
     await page.close();
   }
