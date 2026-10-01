@@ -49,9 +49,7 @@ export function ProjectActivityStatus({
       data-activity-resync={resync}
     >
       {result?.kind === "unavailable" ? "活动流无法同步"
-        : ingest === undefined ? ""
-        : resync === "applied" ? `活动流已按世代 ${ingest.replay_generation} 快照同步`
-        : `活动流世代 ${ingest.replay_generation}`}
+        : ""}
     </small>
   );
 }

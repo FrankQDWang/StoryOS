@@ -1,3 +1,4 @@
+import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { expect, it } from "vitest";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -103,6 +104,7 @@ it("explains a historical Delete Volume acknowledgement and does not retry it", 
       cryptoImpl: crypto,
     });
     mountStage1View(loaded.root, loaded);
+    await beginTreeAction(loaded.root, `li[data-volume-id="${VOLUME}"]`, "[data-delete-volume]");
     await expect.poll(() =>
       loaded.root.querySelector<HTMLButtonElement>(`[data-delete-volume="${VOLUME}"]`) !== null
     ).toBe(true);
@@ -159,6 +161,7 @@ it("explains a historical Delete Chapter acknowledgement and does not retry it",
       cryptoImpl: crypto,
     });
     mountStage1View(loaded.root, loaded);
+    await beginTreeAction(loaded.root, `li[data-chapter-id="${CHAPTER}"]`, "[data-delete-chapter]");
     await expect.poll(() =>
       loaded.root.querySelector<HTMLButtonElement>(`[data-delete-chapter="${CHAPTER}"]`) !== null
     ).toBe(true);

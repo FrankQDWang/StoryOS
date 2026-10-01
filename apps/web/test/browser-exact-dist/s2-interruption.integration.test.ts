@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -113,6 +113,7 @@ it("recovers Local Edit Journal text after reload without a second Author Edit",
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -151,7 +152,7 @@ it("recovers Local Edit Journal text after reload without a second Author Edit",
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(SETTLED);
   await waitSaved(root);
 
-  const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
+  const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
   const chapterId = root.querySelector<HTMLButtonElement>(
     'nav[aria-label="稿件目录"] button[data-chapter-id]',
   )?.getAttribute("data-chapter-id");

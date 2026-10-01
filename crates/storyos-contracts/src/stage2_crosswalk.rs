@@ -213,7 +213,7 @@ const BINDINGS: &[Binding] = &[
             "https://github.com/FrankQDWang/StoryOS/issues/269",
             "https://github.com/FrankQDWang/StoryOS/issues/270",
         ],
-        evidence: "apps/web/test/browser-exact-dist/s2-replace.integration.test.ts",
+        evidence: "apps/web/test/browser-exact-dist/s2-search.integration.test.ts",
         evidence_class: EvidenceClass::Integration,
     },
     Binding {

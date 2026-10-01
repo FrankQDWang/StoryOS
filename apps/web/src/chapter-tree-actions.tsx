@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
   historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
+import { ChapterCreationMenu } from "./chapter-creation-menu.tsx";
 import { updateOwnedChapter } from "./update-chapter.ts";
 
 export function ChapterTreeActions({
@@ -24,7 +25,7 @@ export function ChapterTreeActions({
   fetchImpl,
   cryptoImpl,
   onUpdated,
-  onCreationMenu,
+  creationActions,
 }: {
   projectId: string;
   chapterId: string;
@@ -43,13 +44,25 @@ export function ChapterTreeActions({
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   onUpdated: () => void;
-  onCreationMenu?: (event: React.MouseEvent) => void;
+  creationActions?: ReactNode;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number }>();
+  const pending = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const openMenu = (event: React.MouseEvent) => {
+    event.preventDefault(); event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setMenu({ x: event.type === "contextmenu" ? event.clientX : rect.left,
+      y: event.type === "contextmenu" ? event.clientY : rect.bottom + 4 });
+  };
   const [pendingRemoval, setPendingRemoval] = useState(false);
   const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
   const currentOrder = Number(order);
   const canMove = Number.isInteger(currentOrder) && currentOrder >= 1;
   const submitUpdate = (nextTitle: string, nextOrder: string) => {
+    if (pending.current || !nextTitle.trim()) return;
+    pending.current = true; setSaving(true);
     void updateOwnedChapter({
       baseUrl,
       fetchImpl,
@@ -67,43 +80,16 @@ export function ChapterTreeActions({
       ) {
         return;
       }
-      onUpdated();
+      setEditing(false); setMenu(undefined); onUpdated();
     }).catch((error: unknown) => {
       if (historicalAcknowledgementUnavailable(error)) {
         setHistoricalUnavailable(true);
       }
-    });
+    }).finally(() => { pending.current = false; setSaving(false); });
   };
   return (
-    <li data-chapter-id={chapterId} data-chapter-order={order}>
-      {onSelectChapter === undefined ? (
-        <span data-chapter-title>{title}</span>
-      ) : (
-        <button
-          type="button"
-          data-chapter-id={chapterId}
-          data-chapter-title
-          aria-current={chapterId === selectedChapterId}
-          onClick={() => { onSelectChapter(chapterId); }}
-        >
-          {title}
-        </button>
-      )}
-      {makeCurrentEnabled === true && onMakeCurrent !== undefined && chapterId !== currentChapterId ? (
-        <button
-          type="button"
-          data-make-current-chapter={chapterId}
-          onClick={() => {
-            onMakeCurrent(chapterId);
-          }}
-        >
-          设为当前章节
-        </button>
-      ) : null}
-      {createEnabled ? (
-        <>
-          <button type="button" data-chapter-menu={chapterId} aria-label="章菜单"
-            onClick={onCreationMenu}>⋯</button>
+    <li data-chapter-id={chapterId} data-chapter-order={order} onContextMenu={createEnabled ? openMenu : undefined}>
+      {editing ? (
           <form
             data-rename-chapter={chapterId}
             onSubmit={(event) => {
@@ -114,14 +100,25 @@ export function ChapterTreeActions({
             }}
           >
             <label>
-              章标题
-              <input name="chapter-title" required maxLength={1024} defaultValue={title} />
+              <input autoFocus name="chapter-title" aria-label="章标题" required maxLength={1024} defaultValue={title}
+            readOnly={saving} onBlur={(event) => submitUpdate(event.currentTarget.value.trim(), order)}
+            onKeyDown={(event) => { if (event.key === "Escape" && !pending.current) setEditing(false); }} />
             </label>
-            <button type="submit">重命名</button>
-            {historicalUnavailable
-              ? <p data-rename-chapter-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
-              : null}
+
           </form>
+      ) : onSelectChapter === undefined ? <span data-chapter-title>{title}</span> : (
+        <button type="button" data-chapter-id={chapterId} data-chapter-title
+          aria-current={chapterId === selectedChapterId} onClick={() => onSelectChapter(chapterId)}>{title}</button>
+      )}
+      {createEnabled ? <button type="button" data-chapter-menu={chapterId} aria-label="章菜单" onClick={openMenu}>⋯</button> : null}
+      {menu === undefined ? null : <ChapterCreationMenu point={menu} onClose={() => setMenu(undefined)}>
+        {creationActions}
+        {makeCurrentEnabled === true && onMakeCurrent !== undefined && chapterId !== currentChapterId ? (
+          <button type="button" data-make-current-chapter={chapterId}
+            onClick={() => { setMenu(undefined); onMakeCurrent(chapterId); }}>设为当前章节</button>
+        ) : null}
+        <button type="button" data-begin-rename-chapter={chapterId}
+          onClick={() => { setMenu(undefined); setEditing(true); }}>重命名</button>
           <button
             type="button"
             data-chapter-move="up"
@@ -144,6 +141,12 @@ export function ChapterTreeActions({
           >
             下移
           </button>
+        {onRemoveChapter !== undefined ? <button type="button" data-delete-chapter={chapterId}
+          onClick={() => { setMenu(undefined); setPendingRemoval(true); }}>删除章节</button> : null}
+      </ChapterCreationMenu>}
+            {historicalUnavailable
+              ? <p data-rename-chapter-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
+              : null}
           {onRemoveChapter !== undefined ? (
             pendingRemoval ? (
               <>
@@ -165,18 +168,9 @@ export function ChapterTreeActions({
                   取消
                 </button>
               </>
-            ) : (
-              <button
-                type="button"
-                data-delete-chapter={chapterId}
-                onClick={() => setPendingRemoval(true)}
-              >
-                删除章节
-              </button>
-            )
+            ) : null
           ) : null}
-        </>
-      ) : null}
+
     </li>
   );
 }

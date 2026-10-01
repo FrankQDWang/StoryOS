@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
   historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
+import { ChapterCreationMenu } from "./chapter-creation-menu.tsx";
 import { updateOwnedVolume } from "./update-volume.ts";
 
 export function VolumeTreeActions({
@@ -18,6 +19,7 @@ export function VolumeTreeActions({
   cryptoImpl,
   onUpdated,
   onRemoveVolume,
+  creationActions,
 }: {
   projectId: string;
   volumeId: string;
@@ -30,12 +32,25 @@ export function VolumeTreeActions({
   cryptoImpl: Crypto;
   onUpdated: () => void;
   onRemoveVolume?: ((volumeId: string) => void) | undefined;
+  creationActions?: ReactNode;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number }>();
+  const pending = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const openMenu = (event: React.MouseEvent) => {
+    event.preventDefault(); event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setMenu({ x: event.type === "contextmenu" ? event.clientX : rect.left,
+      y: event.type === "contextmenu" ? event.clientY : rect.bottom + 4 });
+  };
   const [pendingRemoval, setPendingRemoval] = useState(false);
   const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
   const currentOrder = Number(order);
   const canMove = Number.isInteger(currentOrder) && currentOrder >= 1;
   const submitUpdate = (nextTitle: string, nextOrder: string) => {
+    if (pending.current || !nextTitle.trim()) return;
+    pending.current = true; setSaving(true);
     void updateOwnedVolume({
       baseUrl,
       fetchImpl,
@@ -53,16 +68,16 @@ export function VolumeTreeActions({
       ) {
         return;
       }
-      onUpdated();
+      setEditing(false); setMenu(undefined); onUpdated();
     }).catch((error: unknown) => {
       if (historicalAcknowledgementUnavailable(error)) {
         setHistoricalUnavailable(true);
       }
-    });
+    }).finally(() => { pending.current = false; setSaving(false); });
   };
   return (
-    <>
-      <form
+    <div className="volume-row-actions" onContextMenu={openMenu}>
+      {editing ? <form
         data-rename-volume={volumeId}
         onSubmit={(event) => {
           event.preventDefault();
@@ -72,14 +87,17 @@ export function VolumeTreeActions({
         }}
       >
         <label>
-          卷标题
-          <input name="volume-title" required maxLength={1024} defaultValue={title} />
+          <input autoFocus name="volume-title" aria-label="卷标题" required maxLength={1024} defaultValue={title}
+            readOnly={saving} onBlur={(event) => submitUpdate(event.currentTarget.value.trim(), order)}
+            onKeyDown={(event) => { if (event.key === "Escape" && !pending.current) setEditing(false); }} />
         </label>
-        <button type="submit">重命名</button>
-        {historicalUnavailable
-          ? <p data-rename-volume-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
-          : null}
-      </form>
+
+      </form> : <span data-volume-title>{title}</span>}
+      <button type="button" data-create-chapter-menu={volumeId} aria-label="卷菜单" onClick={openMenu}>⋯</button>
+      {menu === undefined ? null : <ChapterCreationMenu point={menu} onClose={() => setMenu(undefined)}>
+        {creationActions}
+        <button type="button" data-begin-rename-volume={volumeId}
+          onClick={() => { setMenu(undefined); setEditing(true); }}>重命名</button>
       <button
         type="button"
         data-volume-move="up"
@@ -102,6 +120,12 @@ export function VolumeTreeActions({
       >
         下移
       </button>
+        {onRemoveVolume !== undefined ? <button type="button" data-delete-volume={volumeId}
+          onClick={() => { setMenu(undefined); setPendingRemoval(true); }}>删除卷</button> : null}
+      </ChapterCreationMenu>}
+        {historicalUnavailable
+          ? <p data-rename-volume-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
+          : null}
       {onRemoveVolume !== undefined ? (
         pendingRemoval ? (
           <>
@@ -123,16 +147,8 @@ export function VolumeTreeActions({
               取消
             </button>
           </>
-        ) : (
-          <button
-            type="button"
-            data-delete-volume={volumeId}
-            onClick={() => setPendingRemoval(true)}
-          >
-            删除卷
-          </button>
-        )
+        ) : null
       ) : null}
-    </>
+    </div>
   );
 }

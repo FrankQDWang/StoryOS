@@ -36,7 +36,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.locator('input[name="title"]').fill(`Inline Proposal ${uuidV7()}`);
     await page.locator('input[name="title"]').press("Enter");
     await page.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
-    const projectId = await page.locator("form[data-rename]").getAttribute("data-rename");
+    const projectId = await page.locator("[data-project-id]").getAttribute("data-project-id");
     assert.ok(projectId);
     const options = { baseUrl: origin, projectId, fetchImpl: sessionFetch(origin, "session-a") };
     const request: UpdateProjectAssistanceRequest = {
@@ -52,9 +52,12 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       idempotency_key: idempotencyKey,
     } });
     await updateProjectAssistance({ ...options, request, idempotencyKey, antiForgery: challenge.nonce });
+    await page.locator("[data-add-chapter]").click();
+    await page.locator("[data-create-volume-action]").click();
     await page.locator('input[name="volume-title"]').fill("Inline Volume");
     await page.locator('input[name="volume-title"]').press("Enter");
     await page.locator("[data-add-chapter]").click();
+    await page.locator('[data-chapter-placement="append"]').click();
     await page.locator('form[data-create-chapter] input[name="chapter-title"]').fill("Inline Chapter");
     await page.locator('input[name="chapter-title"]').press("Enter");
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
@@ -200,12 +203,14 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
         WHERE project_id = '${projectId}'::uuid`);
       await page.locator("[data-add-chapter]").click();
+      await page.locator('[data-chapter-placement="append"]').click();
       await page.locator('form[data-create-chapter] input[name="chapter-title"]').fill(title);
       await page.locator('form[data-create-chapter] input[name="chapter-title"]').press("Enter");
       await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]').filter({ hasText: title }).click();
       chapterId = (await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]').filter({ hasText: title })
         .getAttribute("data-chapter-id"))!;
       assert.ok(chapterId);
+      await page.locator(`li[data-chapter-id="${chapterId}"] [data-chapter-menu]`).click();
       await page.locator(`[data-make-current-chapter="${chapterId}"]`).click();
       await editor.waitFor(); await editor.click(); await page.keyboard.insertText(SOURCE);
       await expect.poll(async () => (await getChapter({ ...options, chapterId: chapterId! })).chapter.current_revision.body)

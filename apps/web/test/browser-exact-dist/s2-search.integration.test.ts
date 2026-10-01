@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -145,6 +145,7 @@ it("searches the current Chapter and manuscript with bounded Snapshot identity",
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -189,6 +190,7 @@ it("searches the current Chapter and manuscript with bounded Snapshot identity",
     || chapterBId === null || chapterBId === undefined) {
     throw new Error("the Chapter identity is missing");
   }
+  await beginTreeAction(root, `li[data-chapter-id="${chapterBId}"]`, "[data-make-current-chapter]");
   root.querySelector<HTMLButtonElement>(`[data-make-current-chapter="${chapterBId}"]`)?.click();
   await expect.poll(() => {
     const nextRoot = appRoot(frame);
@@ -226,6 +228,8 @@ it("searches the current Chapter and manuscript with bounded Snapshot identity",
 
   const row = [...(frame.contentDocument?.querySelectorAll("li[data-chapter-id]") ?? [])]
     .find((item) => item.getAttribute("data-chapter-id") === chapterBId);
+  row?.querySelector<HTMLButtonElement>("[data-chapter-menu]")?.click();
+  await expect.poll(() => row?.querySelector("button[data-delete-chapter]")?.tagName).toBe("BUTTON");
   row?.querySelector<HTMLButtonElement>("button[data-delete-chapter]")?.click();
   await expect.poll(() =>
     row?.querySelector("button[data-confirm-delete-chapter]")?.tagName

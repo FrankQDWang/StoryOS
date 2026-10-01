@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -95,6 +95,7 @@ it("shows pending, saving, and saved without calling local input saved, across C
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -154,7 +155,7 @@ it("shows pending, saving, and saved without calling local input saved, across C
   await waitSaved(root);
   expect(saveNode(root)?.textContent).toContain("已保存");
 
-  const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
+  const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
   const chapterAId = chapterButton(root, "Chapter A")?.getAttribute("data-chapter-id");
   const chapterBId = chapterButton(root, "Chapter B")?.getAttribute("data-chapter-id");
   if (projectId === null || projectId === undefined

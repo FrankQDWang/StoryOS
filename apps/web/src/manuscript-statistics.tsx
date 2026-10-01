@@ -90,11 +90,7 @@ export function ManuscriptStatisticsPanel({
       data-statistics-manuscript-words={page.manuscript.word_count}
       data-statistics-manuscript-characters={page.manuscript.character_count}
     >
-      <p>
-        本章 {chapter === null || chapter === undefined ? "—" : `${chapter.word_count} 词 / ${chapter.character_count} 字`}
-        {" · "}
-        全书 {page.manuscript.chapter_count} 章 / {page.manuscript.word_count} 词 / {page.manuscript.character_count} 字
-      </p>
+      <span>本章 {chapter === null || chapter === undefined ? "—" : chapter.character_count} 字</span>
     </section>
   );
 }

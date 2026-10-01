@@ -1,3 +1,4 @@
+import { beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { expect, it } from "vitest";
 
@@ -96,6 +97,7 @@ it("explains a historical Create Volume acknowledgement and does not retry it", 
       cryptoImpl: crypto,
     });
     mountStage1View(loaded.root, loaded);
+    await beginInlineVolumeCreation(loaded.root);
     await expect.poll(() =>
       loaded.root.querySelector<HTMLInputElement>('form[data-create-volume] input[name="volume-title"]')
         !== null

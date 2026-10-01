@@ -1,3 +1,4 @@
+import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { expect, it } from "vitest";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -58,6 +59,8 @@ it("explains a historical Update Project acknowledgement and does not retry it",
       cryptoImpl: crypto,
     });
     mountStage1View(loaded.root, loaded);
+    await beginTreeAction(loaded.root, "div[data-project-id]", "[data-begin-rename-project]");
+    loaded.root.querySelector<HTMLButtonElement>("[data-begin-rename-project]")?.click();
     await expect.poll(() =>
       loaded.root.querySelector<HTMLInputElement>('form[data-rename] input[name="rename-title"]')
         ?.disabled

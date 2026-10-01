@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -102,6 +102,7 @@ it("writes in two Chapters, switches current Chapter, and reopens the current Ch
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -141,7 +142,7 @@ it("writes in two Chapters, switches current Chapter, and reopens the current Ch
   const root = appRoot(frame);
   expect(root.querySelector("h2")?.textContent).toBe("Chapter A");
   await typeIntoCurrent(frame, "Alpha prose");
-  const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
+  const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
   const chapterAId = chapterButton(root, "Chapter A")?.getAttribute("data-chapter-id");
   const chapterBId = chapterButton(root, "Chapter B")?.getAttribute("data-chapter-id");
   if (projectId === null || projectId === undefined
@@ -149,6 +150,7 @@ it("writes in two Chapters, switches current Chapter, and reopens the current Ch
     || chapterBId === null || chapterBId === undefined) {
     throw new Error("the Project or Chapter identity is missing");
   }
+  await beginTreeAction(root, `li[data-chapter-id="${chapterBId}"]`, "[data-make-current-chapter]");
   const makeCurrent = root.querySelector<HTMLButtonElement>(
     `[data-make-current-chapter="${chapterBId}"]`,
   );
@@ -197,6 +199,7 @@ it("writes in two Chapters, switches current Chapter, and reopens the current Ch
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("project-ready");
+  await beginTreeAction(appRoot(frame), `li[data-chapter-id="${chapterAId}"]`, "[data-make-current-chapter]");
   await expect.poll(() =>
     appRoot(frame).querySelector(`[data-make-current-chapter="${chapterAId}"]`) !== null,
     { timeout: 10_000 },

@@ -1,5 +1,5 @@
 import { page } from "vitest/browser";
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -64,6 +64,7 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
 
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -167,7 +168,7 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
   expect(root?.textContent).not.toContain("模型");
   expect(root?.textContent).not.toContain("Agent");
   const reloaded = nextFrameLoad(frame);
-  frame.src = `/projects/${root!.querySelector("form[data-rename]")!.getAttribute("data-rename")}`;
+  frame.src = `/projects/${root!.querySelector("[data-project-id]")!.getAttribute("data-project-id")}`;
   await reloaded;
   await expect.poll(() => chapterTitles(frame.contentDocument?.querySelector("#app")))
     .toEqual(["Chapter A", "Chapter C", "Chapter B", "Chapter E", "Chapter D"]);
