@@ -528,15 +528,20 @@ test.each(["undeclared_location", "stale_location_base"])("scalar requests do no
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
     const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Scalar compatibility", `${ns}2`);
+    const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
     const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       `Revise this passage SCRIPT:${script}`, id(`${ns}41`));
-    assert.equal(run.decision.kind, "advisory");
+    assert.ok(run.decision.kind === "clarification");
+    assert.equal(run.decision.question, "Which unique Chapter and paragraph numbers should I revise?");
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id='${run.run_id}'::uuid;`), "0");
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
     const normal = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       `Revise this passage: SCRIPT:${script}`, id(`${ns}51`));
     if (normal.decision.kind !== "prose_change") throw new Error("expected legacy prose");
     assert.equal(normal.decision.locations, undefined);
     assert.equal((await getProposal({ baseUrl: started.baseUrl, projectId,
       proposalId: openedProposal(normal), fetchImpl })).proposal.candidate_text, PROSE);
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
   } finally { await stopRealServer(started.server); }
 });
 
