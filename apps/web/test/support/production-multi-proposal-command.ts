@@ -90,7 +90,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       admitted = undefined;
       await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
       await page.locator('[data-assistant-availability="available"]').waitFor();
-      await page.locator('input[name="assistant-message"]').fill(message);
+      await page.locator('[name="assistant-message"]').fill(message);
       await page.locator('.composer button').click();
       await expect.poll(() => admitted?.effect.kind).toBe('admitted');
       const result = admitted as CreateAgentRunResponse | undefined;
