@@ -79,7 +79,9 @@ pub(crate) async fn admitted(
         .query_one(
             "SELECT payload::text FROM storyos.operation_requirements
           WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
-            AND run_id=$3::text::uuid AND requirement_role='primary'",
+            AND run_id=$3::text::uuid AND requirement_role='primary'
+            AND decision_position=(SELECT active_decision_position FROM storyos.agent_runs
+              WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND run_id=$3::text::uuid)",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
