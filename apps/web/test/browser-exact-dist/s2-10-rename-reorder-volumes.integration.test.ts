@@ -1,3 +1,4 @@
+import { beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -41,6 +42,7 @@ function volumeTitles(root: Element | null | undefined): string[] {
 }
 
 async function createNamedVolume(root: Document, title: string): Promise<void> {
+  await beginInlineVolumeCreation(root);
   const volumeTitle = root.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -87,6 +89,9 @@ it("the author renames and reorders Volumes from the canonical tree and they sur
     "Volume B",
   ]);
 
+  await beginTreeAction(createdRoot, "li[data-volume-id]", "[data-begin-rename-volume]");
+  createdRoot.querySelector<HTMLButtonElement>("[data-begin-rename-volume]")?.click();
+  await expect.poll(() => createdRoot.querySelector('input[name="volume-title"]')?.tagName).toBe("INPUT");
   const renameInput = createdRoot.querySelector<HTMLInputElement>(
     '#app form[data-rename-volume] input[name="volume-title"]',
   );
@@ -121,6 +126,7 @@ it("the author renames and reorders Volumes from the canonical tree and they sur
   expect(libraryRoot.textContent).not.toContain("模型");
   expect(libraryRoot.textContent).not.toContain("Agent");
 
+  await beginTreeAction(libraryRoot, 'li[data-volume-order="1"]', '[data-volume-move="down"]');
   const moveDown = libraryRoot.querySelector<HTMLButtonElement>(
     'nav[aria-label="稿件目录"] li[data-volume-order="1"] button[data-volume-move="down"]',
   );

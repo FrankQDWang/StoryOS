@@ -55,7 +55,7 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     await page.locator('input[name="title"]').fill(`Captured Memory acceptance ${uuidV7()}`);
     await page.locator('input[name="title"]').press("Enter");
     await page.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
-    const projectId = await page.locator("form[data-rename]").getAttribute("data-rename");
+    const projectId = await page.locator("[data-project-id]").getAttribute("data-project-id");
     assert.ok(projectId);
     const options = { baseUrl: owned.baseUrl, projectId, fetchImpl: sessionFetch(owned.baseUrl, "session-a") };
     const assistance: UpdateProjectAssistanceRequest = {
@@ -71,8 +71,12 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     } });
     await updateProjectAssistance({ ...options, request: assistance,
       idempotencyKey: assistanceKey, antiForgery: assistanceChallenge.nonce });
+    await page.locator("[data-add-chapter]").click();
+    await page.locator("[data-create-volume-action]").click();
     await page.locator('input[name="volume-title"]').fill("Memory Volume");
     await page.locator('input[name="volume-title"]').press("Enter");
+    await page.locator("[data-add-chapter]").click();
+    await page.locator('[data-chapter-placement="append"]').click();
     await page.locator('input[name="chapter-title"]').fill("Memory Chapter");
     await page.locator('input[name="chapter-title"]').press("Enter");
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();

@@ -27,6 +27,7 @@ export async function verifyProductionDraftChapterSource(page: Page, projectId: 
   })).json() as CreateChapterResponse;
   page.off("response", observe);
   assert.ok(creation.effect.kind === "authoritative_applied");
+  await page.locator(`li[data-chapter-id="${creation.effect.chapter_id}"] [data-chapter-menu]`).click();
   await page.locator(`[data-make-current-chapter="${creation.effect.chapter_id}"]`).click();
   await expect(page.getByRole("heading", { name: "Other Chapter", exact: true })).toBeVisible();
   await expect(source).toContainText(`Source chapter: ${chapter.chapter.title}`);
@@ -83,6 +84,7 @@ export async function verifyProductionDraftChapterSource(page: Page, projectId: 
     const rename = page.locator(`form[data-rename-chapter="${chapter.chapter.chapter_id}"] input`);
     await rename.fill("Renamed source chapter"); await rename.press("Enter");
     assert.equal((await renamed).status(), 200);
+    await page.locator(`li[data-chapter-id="${chapter.chapter.chapter_id}"] [data-chapter-menu]`).click();
     await page.locator(`[data-make-current-chapter="${chapter.chapter.chapter_id}"]`).click();
     await expect(source).toContainText("Source chapter: Renamed source chapter.");
     release(); await completed; await page.unroute(match);
@@ -96,6 +98,7 @@ export async function verifyProductionDraftChapterSource(page: Page, projectId: 
 export async function verifyRemovedDraftChapterSource(page: Page, projectId: string,
   draft: RefusedEditDraftInspect, screenshots: string) {
   const surface = page.locator(`[data-refused-edit-draft="${draft.draft_id}"]`);
+  await page.locator(`li[data-chapter-id="${draft.payload.chapter_id}"] [data-chapter-menu]`).click();
   await page.locator(`[data-delete-chapter="${draft.payload.chapter_id}"]`).click();
   await page.locator(`[data-confirm-delete-chapter="${draft.payload.chapter_id}"]`).click();
   await expect(page.getByRole("heading", { name: "Other Chapter", exact: true })).toBeVisible();

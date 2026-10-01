@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -54,6 +54,7 @@ async function createThreeChapterProject(frame: HTMLIFrameElement): Promise<void
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -125,7 +126,7 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
   expect(chapterAEditor === null || chapterAEditor === undefined
     ? undefined : manuscriptBody(chapterAEditor)).toBe("");
 
-  const projectId = root?.querySelector("form[data-rename]")?.getAttribute("data-rename");
+  const projectId = root?.querySelector("[data-project-id]")?.getAttribute("data-project-id");
   const chapterBId = chapterButton(root, "Chapter B")?.getAttribute("data-chapter-id");
   const childWindow = frame.contentWindow;
   if (root === null || root === undefined

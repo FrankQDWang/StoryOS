@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -98,6 +98,7 @@ it("hydrates production Tiptap for one paragraph Block without a textarea write 
   expect(appRoot(frame).querySelector("textarea")).toBeNull();
   expect(appRoot(frame).querySelector(MANUSCRIPT_EDITOR_SELECTOR)).toBeNull();
 
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -139,7 +140,7 @@ it("hydrates production Tiptap for one paragraph Block without a textarea write 
     root.querySelector("[data-save-state]")?.getAttribute("data-unsettled-intent-count")
   ).toBe("0");
   await expect.poll(() => {
-    const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
+    const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
     const chapterId = root.querySelector(
       'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
     )?.getAttribute("data-chapter-id");
@@ -149,7 +150,7 @@ it("hydrates production Tiptap for one paragraph Block without a textarea write 
       && UUID.test(chapterId);
   }, { timeout: 10_000 }).toBe(true);
 
-  const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
+  const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
   const chapterId = root.querySelector(
     'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
   )?.getAttribute("data-chapter-id");
