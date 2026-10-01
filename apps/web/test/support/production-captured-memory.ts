@@ -3,7 +3,6 @@ import { webcrypto } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect } from "playwright/test";
 import type { BrowserContext } from "playwright";
 
 import { cancelAgentRun, createProjectCommandChallenge, digestCancelAgentRun,
@@ -81,7 +80,7 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await page.goto(`${owned.baseUrl}/projects/${projectId}`);
     const admitted = async (message: string): Promise<CreateAgentRunResponse> => {
-      await page.locator('.composer button:not([disabled])').waitFor();
+      await page.locator('[name="assistant-message"]').waitFor();
       const response = page.waitForResponse((value) => value.request().method() === "POST"
         && value.url().endsWith("/agent-runs"));
       await page.locator('[name="assistant-message"]').fill(message);

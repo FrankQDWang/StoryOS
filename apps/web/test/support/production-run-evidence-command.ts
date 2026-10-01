@@ -7,7 +7,7 @@ import { expect } from "playwright/test";
 
 import { cancelAgentRun, digestCancelAgentRun, getAgentRun } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CancelAgentRunRequest, CreateAgentRunResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { BINDING, challenged, id, prepare, settleOnce, USER_A } from "./acceptance";
+import { BINDING, challenged, drainLeftoverWork, id, prepare, settleOnce, USER_A } from "./acceptance";
 import { queryStoryOSPostgres, startStoryOSServer, stopStoryOSServer } from "./node-integration";
 
 export async function verifyProductionRunEvidence(context: BrowserContext): Promise<void> {
@@ -22,11 +22,12 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
   await page.setViewportSize({ width: 1487, height: 1058 });
   mkdirSync(join(repositoryRoot, "target/issue-877/screens"), { recursive: true });
   try {
+    await drainLeftoverWork();
     let setup = await prepare(server.baseUrl, id("f87700"), "Run evidence acceptance", "f8771");
     await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
     await page.locator(`button[data-chapter-id="${setup.chapterId}"]`).click();
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
-    await page.locator(".composer button:not([disabled])").waitFor();
+    await page.locator('[name="assistant-message"]').waitFor();
     const editor = page.locator('[data-manuscript-editor][contenteditable="true"]');
     const saved = page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]');
     const original = "The lantern stayed lit.";
@@ -80,7 +81,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
       await page.locator(`button[data-chapter-id="${setup.chapterId}"]`).click();
       await editor.waitFor();
-      await page.locator(".composer button:not([disabled])").waitFor();
+      await page.locator('[name="assistant-message"]').waitFor();
     };
     for (const [suffix, installed] of [["2", true], ["3", false]] as const) {
       await openCase(suffix);
