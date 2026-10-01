@@ -43,7 +43,12 @@ export function AssistantComposer({ context, available, sending, current, run, o
       if (!alive.current) return;
       setPending(undefined);
       if (response.effect.kind !== "conflicted" && intent.kind === "guidance") setMessage("");
-      await onRefresh();
+      try {
+        await onRefresh();
+      } catch {
+        if (alive.current) onStatus("操作已确认，任务状态暂不可读取。请稍后检查。");
+        return;
+      }
       if (!alive.current) return;
       onStatus(response.effect.kind === "conflicted" ? "任务已结束，这次操作未执行。"
         : intent.kind === "pause" ? "任务已暂停，候选文字保持原样。" : "要求已收到，将用于当前任务。");

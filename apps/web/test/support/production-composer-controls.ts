@@ -7,7 +7,7 @@ import type { BrowserContext } from "playwright";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { uuidV7 } from "../../src/acceptance-journal.ts";
-import { createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun, getChapter, getProposal, cancelAgentRun, digestCancelAgentRun,
+import { createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun, getChapter, getProposal, cancelAgentRun, digestCancelAgentRun, pauseAgentRun, digestPauseAgentRun,
   updateProjectAssistance } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { runStoryOSWorker, queryStoryOSPostgres, sessionFetch } from "./node-integration.ts";
@@ -108,6 +108,7 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     await expect.poll(async () => (await getAgentRun({ ...options, runId })).model_attempt.kind).toBe("present");
     await expect(composer).toHaveValue("");
     await expect(page.getByRole("button", { name: "暂停", exact: true })).toBeEnabled();
+    await page.screenshot({ path: join(repositoryRoot, "target", "issue-875", "composer-active-empty.png") });
     await composer.fill("Keep the voice.");
     await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
     await composer.fill("");
@@ -185,6 +186,32 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     assert.deepEqual((await getProposal({ ...options, proposalId })).proposal, proposal);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter.current_revision, revision);
     await expect(page.getByRole("button", { name: "暂停", exact: true })).toHaveCount(0);
+    const pauseRequest = { command_schema: "storyos.command.pause-agent-run.request.v1" as const,
+      pause_agent_run_input: { ...cancel.cancel_agent_run_input, correlation_id: id() } };
+    const pauseKey = id();
+    const refusedChallenge = await createProjectCommandChallenge({ ...cancelOptions, request: { method: "POST",
+      route_template: "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause", command_schema: pauseRequest.command_schema,
+      canonical_command_digest: await digestPauseAgentRun(pauseRequest), idempotency_key: pauseKey } });
+    const refused = await pauseAgentRun({ ...cancelOptions, runId: cancelledId, request: pauseRequest,
+      idempotencyKey: pauseKey, antiForgery: refusedChallenge.nonce });
+    assert.deepEqual(refused.effect, { kind: "conflicted", reason: "terminal_run" });
+    assert.equal((await getAgentRun({ ...options, runId: cancelledId })).status, "cancelled");
+    const observer = await context.newPage();
+    try {
+      await observer.goto(`${origin}/projects/${projectId}`);
+      await observer.locator('[data-take-over-writer]').click();
+      await observer.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+      await page.reload();
+      await page.locator('[data-manuscript-editor][contenteditable="false"]').waitFor();
+      await composer.fill("Guidance from the old writer.");
+      await expect(page.getByRole("button", { name: "发送", exact: true })).toBeDisabled();
+      assert.equal(admitted.effect.run_id, cancelledId);
+      assert.deepEqual((await getProposal({ ...options, proposalId })).proposal, proposal);
+      assert.deepEqual((await getChapter({ ...options, chapterId })).chapter.current_revision, revision);
+    } finally {
+      await observer.close();
+    }
+
   } finally {
     if (existsSync(hold)) unlinkSync(hold);
     if (held !== undefined) await Promise.allSettled([held]);
