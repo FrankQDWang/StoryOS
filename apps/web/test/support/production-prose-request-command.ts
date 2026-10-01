@@ -482,7 +482,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.equal(await page.locator(`[data-proposal-id="${firstProposalId}"]`).count(), 0);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).count(), 1);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
-    await page.unrouteAll();
+    await page.unrouteAll({ behavior: "wait" });
     await page.reload();
     const ready = page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="eligible"]`);
     await ready.waitFor();
@@ -500,7 +500,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       "Acceptance challenge_invalid (HTTP 422): The Acceptance challenge is invalid.",
     ).waitFor();
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
-    await page.unrouteAll();
+    await page.unrouteAll({ behavior: "wait" });
     let rejectionPosts = 0;
     let rejectionRequest: string | undefined;
     let rejectionKey: string | undefined;
@@ -566,7 +566,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       .count(), 0);
     assert.equal(rejectionPosts, 3);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
-    await page.unrouteAll();
+    await page.unrouteAll({ behavior: "wait" });
     let acceptancePosts = 0;
     let firstAcceptanceRequest: string | undefined;
     let firstAcceptanceKey: string | undefined;

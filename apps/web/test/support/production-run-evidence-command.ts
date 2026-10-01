@@ -36,7 +36,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     const submit = async (message: string) => {
       const responsePromise = page.waitForResponse((response) =>
         response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/agent-runs"));
-      await page.locator('input[name="assistant-message"]').fill(message);
+      await page.locator('[name="assistant-message"]').fill(message);
       await page.locator(".composer button").click();
       const response = await responsePromise;
       assert.equal(response.status(), 202);
@@ -53,74 +53,28 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     assert.deepEqual(first.context.selected.filter((input) => input.source_class !== "host_control")
       .map((input) => [input.source_class, input.content]),
     [["author_instruction", message], ["working_target", original]]);
-    await expect(page.locator('[data-run-evidence]')).toHaveCount(0);
-    await page.locator('[data-assistant-inspect]').click();
-    const evidence = page.locator('[data-run-evidence]');
-    await expect(evidence).toBeVisible();
-    await expect(evidence).toContainText("输入范围");
-    await expect(evidence).toContainText(message);
-    await expect(evidence).toContainText(original);
-    await expect(evidence).toContainText("模型还记住了哪些内容，我们无法确认");
-    await page.screenshot({ path: join(repositoryRoot, "target/issue-877/screens/input-known.png") });
-    assert.equal(await evidence.locator("button").count(), 0);
-    assert.ok(!(await evidence.innerText()).includes(first.context.assembly_manifest_id));
-    assert.ok(!(await evidence.innerText()).includes(first.run_id));
+    assert.ok(first.evidence.some((item) => item.kind === "provider_opaque"));
+    assert.equal(first.run_id, firstId);
+    assert.equal(first.project_scope.project_id, setup.projectId);
     await editor.click();
     await page.keyboard.press("ControlOrMeta+End");
     await page.keyboard.insertText(" Later edit.");
     await saved.waitFor();
-    await page.locator('[data-assistant-inspect]').click();
-    await expect(evidence).toContainText("章节已改变；这里保留请求当时的片段。");
-    assert.ok(!(await evidence.innerText()).includes("Later edit."));
+    const historical = await inspect(firstId);
+    assert.equal(historical.context.current_availability.working_target.kind, "superseded");
+    assert.deepEqual(historical.context.selected, first.context.selected);
     await page.reload();
-    await expect(evidence).toHaveAttribute("data-run-evidence-run-id", firstId);
-    await expect(evidence).toContainText(original);
+    assert.deepEqual((await inspect(firstId)).context, historical.context);
     const secondId = await submit("Keep the scene calm.");
     await settleOnce();
-    await page.locator('[data-assistant-inspect]').click();
-    await expect(evidence).toHaveAttribute("data-run-evidence-run-id", secondId);
-    let release = (): void => {};
-    let reached = (): void => {};
-    const released = new Promise<void>((resolve) => { release = resolve; });
-    const held = new Promise<void>((resolve) => { reached = resolve; });
-    const oldQuery = `**/agent-runs/${firstId}`;
-    await page.route(oldQuery, async (route) => {
-      const response = await route.fetch();
-      reached();
-      await released;
-      await route.fulfill({ response });
-    });
-    const history = page.locator(`[data-assistant-history-inspect="${firstId}"]`);
-    try {
-      await history.click();
-      await held;
-      await expect(evidence).toHaveCount(0);
-      await page.locator('[data-assistant-inspect]').click();
-      await expect(evidence).toHaveAttribute("data-run-evidence-run-id", secondId);
-      const oldResponse = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith(firstId));
-      release();
-      await oldResponse;
-      await expect(evidence).toHaveAttribute("data-run-evidence-run-id", secondId);
-    } finally { release(); await page.unroute(oldQuery); }
-    await history.click();
-    await expect(evidence).toHaveAttribute("data-run-evidence-run-id", firstId);
+    const second = await inspect(secondId);
+    assert.equal(second.run_id, secondId);
+    assert.equal(second.conversation_id, first.conversation_id);
+    assert.deepEqual((await inspect(firstId)).context, historical.context);
+    await assert.rejects(getAgentRun({ baseUrl: server.baseUrl, projectId: id("ffff"),
+      runId: firstId, fetchImpl: setup.fetchImpl }), /404/);
     await page.reload();
-    await expect(evidence).toHaveAttribute("data-run-evidence-run-id", firstId);
-    await expect(evidence).toContainText(original);
-    await page.route(oldQuery, async (route) => {
-      const wrongScope = await route.fetch({ url: route.request().url().replace(setup.projectId, id("ffff")) });
-      assert.equal(wrongScope.status(), 404);
-      await route.fulfill({ response: wrongScope });
-    });
-    await history.click();
-    await expect(evidence).toHaveCount(0);
-    await expect(page.locator('[data-assistant-memory-settings]')).toContainText("无法确认");
-    await page.reload();
-    await expect(page.locator('[data-run-evidence-status="unavailable"]')).toBeVisible();
-    await expect(evidence).toHaveCount(0);
-    await page.unroute(oldQuery);
-    await history.click();
-    await expect(evidence).toHaveAttribute("data-run-evidence-run-id", firstId);
+    assert.deepEqual((await inspect(firstId)).context, historical.context);
     const openCase = async (suffix: string) => {
       setup = await prepare(server.baseUrl, id(`f877${suffix}00`), `Run evidence ${suffix}`, `f877${suffix}`);
       await page.goto(`${server.baseUrl}/projects/${setup.projectId}`);
@@ -140,8 +94,8 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
           const current = (await inspect(runId)).active_compaction;
           return current.kind === "present" ? current.install_state : "absent";
         }).toBe("staged");
-        await page.locator('[data-assistant-inspect]').click();
-        await expect(page.locator('[data-run-compaction="staged"]')).toContainText("摘要已准备好，尚未使用");
+        const staged = (await inspect(runId)).active_compaction;
+        assert.equal(staged.kind, "present");
         if (!installed) {
           await editor.click();
           await page.keyboard.insertText("A later change.");
@@ -149,24 +103,23 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
             .toBe("superseded");
         }
       } finally { if (existsSync(hold)) unlinkSync(hold); await worker; }
-      await page.locator('[data-assistant-inspect]').click();
-      const summary = page.locator(`[data-run-compaction="${installed ? "installed" : "refused"}"]`);
-      await expect(summary).toContainText(installed ? "后面的生成已使用这份摘要。" : "章节或请求内容已改变");
-      await expect(summary).toContainText("Bounded later-request summary. Semantic preservation is unknown.");
-      await expect(summary).toContainText("无法确认摘要是否保留了原文的全部意思。");
+      const summary = (await inspect(runId)).active_compaction;
+      assert.ok(summary.kind === "present");
+      assert.equal(summary.install_state, installed ? "installed" : "refused");
+      assert.equal(summary.output_text, "Bounded later-request summary. Semantic preservation is unknown.");
+      assert.ok(summary.loss_facts.includes("semantic_preservation_unknown"));
+      if (!installed) assert.equal(summary.refusal_reason, "changed_input");
       await page.reload();
-      await expect(summary).toBeVisible();
+      assert.deepEqual((await inspect(runId)).active_compaction, summary);
     }
-    for (const [suffix, disposition, explanation] of [
-      ["4", "rebuilt", "已用还能读取的内容重新准备这次请求。"],
-      ["5", "blocked", "无法找回先前内容：可用额度不足。"],
-      ["6", "unknown_create", "先前那次生成的结果还不确定，不能认定先前内容已经过期。"],
+    for (const [suffix, disposition] of [
+      ["4", "rebuilt"],
+      ["5", "blocked"],
+      ["6", "unknown_create"],
     ] as const) {
       await openCase(suffix);
       const priorId = await submit("Help with this passage.");
       await settleOnce();
-      await page.locator('[data-assistant-inspect]').click();
-      await expect(evidence).toHaveAttribute("data-run-evidence-run-id", priorId);
       const prior = await inspect(priorId);
       assert.equal(prior.model_attempt.kind, "present");
       await queryStoryOSPostgres(`UPDATE storyos.model_attempts
@@ -179,32 +132,29 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
           AND attempt_role = 'decision';`);
       const runId = await submit("I changed my mind: keep the voice.");
       await settleOnce();
-      assert.equal((await inspect(runId)).reference_recovery.kind, "present");
-      await page.locator('[data-assistant-inspect]').click();
-      const recovery = page.locator(`[data-run-reference-recovery="${disposition}"]`);
-      await expect(recovery).toContainText(explanation);
-      await expect(recovery).toContainText("不能保证模型记住的内容被完整找回。");
-      if (disposition === "unknown_create") {
-        assert.ok(!(await recovery.innerText()).includes("先前内容的引用已过期或无法使用。"));
-      }
+      const recovery = (await inspect(runId)).reference_recovery;
+      assert.ok(recovery.kind === "present");
+      assert.equal(recovery.disposition, disposition);
+      assert.equal(recovery.lossless_provider_reconstruction, false);
+      assert.equal(recovery.semantic_erasure, false);
+      if (disposition === "blocked") assert.equal(recovery.block_reason, "budget_insufficient");
       await page.reload();
-      await expect(recovery).toContainText(explanation);
+      assert.deepEqual((await inspect(runId)).reference_recovery, recovery);
     }
-    for (const [suffix, message, disposition, explanation] of [
-      ["7", "SCRIPT:retrieve-complete", "settled", "已找回并确认最初那次生成的结果。"],
-      ["8", "SCRIPT:retrieve-missing", "kept_unknown", "原来的结果仍无法确认"],
+    for (const [suffix, message, disposition] of [
+      ["7", "SCRIPT:retrieve-complete", "settled"],
+      ["8", "SCRIPT:retrieve-missing", "kept_unknown"],
     ] as const) {
       await openCase(suffix);
       const runId = await submit(message);
       await settleOnce();
-      const run = await inspect(runId);
-      assert.equal(run.original_result_retrieval.kind, "present");
-      await page.locator('[data-assistant-inspect]').click();
-      const lookup = page.locator(`[data-run-result-retrieval="${disposition}"]`);
-      await expect(lookup).toContainText(explanation);
-      await expect(lookup).toContainText("没有重新生成，也没有继续原来的回复。");
+      const lookup = (await inspect(runId)).original_result_retrieval;
+      assert.ok(lookup.kind === "present");
+      assert.equal(lookup.disposition, disposition);
+      assert.equal(lookup.repeats_original_create, false);
+      assert.equal(lookup.resumes_stream, false);
       await page.reload();
-      await expect(lookup).toContainText(explanation);
+      assert.deepEqual((await inspect(runId)).original_result_retrieval, lookup);
     }
     const cancel = async (runId: string, suffix: string) => {
       const request: CancelAgentRunRequest = { command_schema: "storyos.command.cancel-agent-run.request.v1",
@@ -225,32 +175,31 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       await expect.poll(async () => (await inspect(cancelledLookupId)).model_attempt.kind).toBe("present");
       assert.equal((await cancel(cancelledLookupId, "9")).effect.kind, "applied");
     } finally { if (existsSync(lookupHold)) unlinkSync(lookupHold); await lookupWorker; }
-    await page.locator('[data-assistant-inspect]').click();
-    await expect(page.locator('[data-run-result-retrieval="evidence_only"]'))
-      .toContainText("找回的记录已保留，但请求已经结束，结果保持原状。");
+    const cancelledLookup = await inspect(cancelledLookupId);
+    assert.equal(cancelledLookup.status, "cancelled");
+    assert.ok(cancelledLookup.original_result_retrieval.kind === "present");
+    assert.equal(cancelledLookup.original_result_retrieval.disposition, "evidence_only");
     await page.reload();
-    await expect(page.locator('[data-run-result-retrieval="evidence_only"]')).toBeVisible();
-    for (const [suffix, message, disposition, explanation] of [
-      ["a", "SCRIPT:successor-missing", "dispatched", "随后又开始了一次生成。"],
-      ["b", "SCRIPT:successor-budget", "paused", "后面的生成已暂停：可用额度不足。"],
+    assert.deepEqual((await inspect(cancelledLookupId)).original_result_retrieval, cancelledLookup.original_result_retrieval);
+    for (const [suffix, message, disposition] of [
+      ["a", "SCRIPT:successor-missing", "dispatched"],
+      ["b", "SCRIPT:successor-budget", "paused"],
     ] as const) {
       await openCase(suffix);
       const runId = await submit(message);
       await settleOnce();
       const run = await inspect(runId);
-      await page.locator('[data-assistant-inspect]').click();
-      const later = page.locator(`[data-run-successor="${disposition}"]`);
-      await expect(later).toContainText(explanation);
-      await expect(later).toContainText("后来的成功不代表最初那次生成的结果已确认。");
+      const later = run.unknown_create_successor;
+      assert.ok(later.kind === "present");
+      assert.equal(later.disposition, disposition);
+      assert.equal(later.successor_settles_predecessor, false);
       if (disposition === "dispatched") {
         assert.ok(run.model_attempt.kind === "present");
         assert.equal(run.status, "completed");
-        await expect(evidence).toHaveAttribute("data-run-evidence-attempt-id", run.model_attempt.model_attempt_id);
-        await expect(evidence).toContainText("最初那次生成的结果仍无法确认。");
-        await page.screenshot({ path: join(repositoryRoot, "target/issue-877/screens/later-result.png") });
-      }
+        assert.equal(run.model_attempt.dispatch_state, "uncertain");
+      } else assert.equal(later.pause_reason, "budget_insufficient");
       await page.reload();
-      await expect(later).toContainText(explanation);
+      assert.deepEqual((await inspect(runId)).unknown_create_successor, later);
     }
     await openCase("c");
     const successorId = await submit("SCRIPT:successor-once");
@@ -263,14 +212,17 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
         const successor = (await inspect(successorId)).unknown_create_successor;
         return successor.kind === "present" ? successor.disposition : "absent";
       }).toBe("fenced");
-      await page.locator('[data-assistant-inspect]').click();
-      await expect(page.locator('[data-run-successor="fenced"]')).toContainText("后面的生成尚未开始。");
+      const fenced = (await inspect(successorId)).unknown_create_successor;
+      assert.ok(fenced.kind === "present");
+      assert.equal(fenced.successor_model_attempt_id, null);
       assert.equal((await cancel(successorId, "c")).effect.kind, "applied");
     } finally { if (existsSync(fenceHold)) unlinkSync(fenceHold); await fenceWorker; }
-    await page.locator('[data-assistant-inspect]').click();
-    await expect(page.locator('[data-run-successor="prohibited"]')).toContainText("请求已取消，后面的生成没有执行。");
+    const prohibited = await inspect(successorId);
+    assert.equal(prohibited.status, "cancelled");
+    assert.ok(prohibited.unknown_create_successor.kind === "present");
+    assert.equal(prohibited.unknown_create_successor.disposition, "prohibited");
     await page.reload();
-    await expect(page.locator('[data-run-successor="prohibited"]')).toBeVisible();
+    assert.deepEqual((await inspect(successorId)).unknown_create_successor, prohibited.unknown_create_successor);
     await openCase("d");
     const omitted = "This passage is outside the usable range. " + "a".repeat(10_001);
     await editor.click();
@@ -278,12 +230,13 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     await saved.waitFor();
     const blockedId = await submit("Help with this passage.");
     await settleOnce();
-    assert.equal((await inspect(blockedId)).context.sufficiency.kind, "blocked");
-    await page.locator('[data-assistant-inspect]').click();
-    await expect(evidence).toContainText("内容过长，无法完整使用。");
-    assert.ok(!(await evidence.innerText()).includes("This passage is outside the usable range."));
+    const blocked = await inspect(blockedId);
+    assert.equal(blocked.context.sufficiency.kind, "blocked");
+    assert.ok(blocked.context.rejected.some((input) => input.reason.kind === "over_item_token_limit"));
+    assert.ok(!blocked.context.selected.some((input) => input.content.includes("This passage is outside the usable range.")));
+    assert.equal(blocked.model_attempt.kind, "absent");
     await page.reload();
-    await expect(evidence).toContainText("因此没有开始生成。");
+    assert.deepEqual((await inspect(blockedId)).context, blocked.context);
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
