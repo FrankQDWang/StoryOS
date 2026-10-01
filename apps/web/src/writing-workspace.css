@@ -466,3 +466,14 @@ input:focus-visible,
 .manuscript-editor :is(.inline-proposal-controls, .inline-proposal-stale) button:hover:not(:disabled) { color: #171612; }
 .manuscript-editor .inline-proposal-stale { display: flex; flex-wrap: wrap; column-gap: 24px; }
 .manuscript-editor .inline-proposal-stale .block-proposal-text { flex-basis: 100%; }
+
+.chapter-creation-menu { position: fixed; z-index: 50; min-width: 144px; padding: 4px; background: var(--paper, #fff); border: 1px solid #dedbd4; border-radius: 6px; box-shadow: 0 4px 16px #0002; font-size: 12px; }
+.chapter-creation-menu button { display: block; width: 100%; padding: 7px 10px; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.chapter-creation-menu button:hover { background: #f0ede7; }
+.tree-heading [data-add-chapter] { margin-left: auto; border: 0; background: transparent; color: inherit; cursor: pointer; }
+[data-create-chapter-menu], [data-chapter-menu] { border: 0; background: transparent; cursor: pointer; }
+.inline-chapter-creation { padding: 3px 0 3px 22px; }
+.inline-chapter-creation input { box-sizing: border-box; width: 100%; min-width: 0; padding: 4px 6px; border: 1px solid #b9b4a9; border-radius: 3px; font: inherit; background: transparent; }
+.inline-chapter-creation [data-create-chapter-error] { font-size: 12px; margin: 4px 0; }
+li[data-chapter-id] { position: relative; }
+li[data-chapter-id] > [data-chapter-menu] { position: absolute; right: 8px; top: 4px; }

@@ -201,6 +201,64 @@ async function postChapter(
   return { challenge, created };
 }
 
+test("createChapter places a new Chapter atomically beside its exact live anchor", async () => {
+  const { baseUrl, server } = await startRealServer();
+  let sequence = 0x25400;
+  const id = () => `018f0000-0000-7001-8000-${(++sequence).toString(16).padStart(12, "0")}`;
+  try {
+    const { projectId, fetchImpl } = await createEmpty(baseUrl, "session-a", id(), "Chapter placement", id());
+    const volume = await postVolume(baseUrl, fetchImpl, projectId, id(), volumeRequest("Volume", "1", id()));
+    assert.ok(volume.created.effect.kind === "authoritative_applied");
+    const volumeId = volume.created.effect.volume_id;
+    const tree = () => getManuscriptTree({ baseUrl, projectId, fetchImpl })
+      .then(({ correlation_id: _correlationId, ...facts }) => facts);
+    const add = async (title: string, placement?: { kind: "before" | "after"; chapter_id: string }) => {
+      const request = chapterRequest(title, (await tree()).tree_revision, id());
+      if (placement !== undefined) Object.assign(request.create_chapter_input, { placement });
+      const key = id();
+      return { request, key, ...await postChapter(baseUrl, fetchImpl, projectId, volumeId, key, request) };
+    };
+    const first = await add("First");
+    assert.ok(first.created.effect.kind === "authoritative_applied");
+    const firstId = first.created.effect.chapter_id;
+    const source = await getChapter({ baseUrl, projectId, chapterId: firstId, fetchImpl });
+    const last = await add("Last");
+    assert.ok(last.created.effect.kind === "authoritative_applied");
+    const before = await add("Before last", { kind: "before", chapter_id: last.created.effect.chapter_id });
+    assert.ok(before.created.effect.kind === "authoritative_applied");
+    assert.equal(before.created.effect.order, "2");
+    const after = await add("After first", { kind: "after", chapter_id: firstId });
+    assert.ok(after.created.effect.kind === "authoritative_applied");
+    assert.equal(after.created.effect.order, "2");
+    const placed = await tree();
+    assert.deepEqual(placed.volumes[0]?.chapters.map((chapter) => [chapter.title, chapter.order]),
+      [["First", "1"], ["After first", "2"], ["Before last", "3"], ["Last", "4"]]);
+    const replay = await createChapter({ baseUrl, projectId, volumeId, fetchImpl,
+      request: before.request, idempotencyKey: before.key, antiForgery: before.challenge.nonce });
+    assert.deepEqual(replay, before.created);
+    assert.deepEqual(await tree(), placed);
+    const preserved = await getChapter({ baseUrl, projectId, chapterId: firstId, fetchImpl });
+    assert.deepEqual(preserved.chapter, source.chapter);
+    assert.deepEqual((await getProject({ baseUrl, projectId, fetchImpl })).project, first.created.project);
+    for (const anchor of [MISSING_VOLUME, volumeId]) {
+      const refused = await add("Invalid anchor", { kind: "before", chapter_id: anchor });
+      assert.deepEqual(refused.created.effect, { kind: "refused", reason: "invalid_placement" });
+      assert.deepEqual(await tree(), placed);
+    }
+    const otherVolume = await postVolume(baseUrl, fetchImpl, projectId, id(), volumeRequest("Other Volume", placed.tree_revision, id()));
+    assert.ok(otherVolume.created.effect.kind === "authoritative_applied");
+    const foreignAnchor = chapterRequest("Wrong Volume anchor", (await tree()).tree_revision, id());
+    Object.assign(foreignAnchor.create_chapter_input, { placement: { kind: "after", chapter_id: firstId } });
+    const unchanged = await tree();
+    const foreign = await postChapter(baseUrl, fetchImpl, projectId, otherVolume.created.effect.volume_id, id(), foreignAnchor);
+    assert.deepEqual(foreign.created.effect, { kind: "refused", reason: "invalid_placement" });
+    assert.deepEqual(await tree(), unchanged);
+    const stale = await postChapter(baseUrl, fetchImpl, projectId, volumeId, id(), before.request);
+    assert.deepEqual(stale.created.effect, { kind: "conflicted", reason: "stale_tree_revision" });
+    assert.deepEqual(await tree(), unchanged);
+  } finally { await stopRealServer(server); }
+});
+
 test("Editor Sessions capture nonzero Activity and preserve legacy Snapshot evidence", async () => {
   const { baseUrl, server } = await startRealServer();
   try {

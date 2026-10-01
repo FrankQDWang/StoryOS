@@ -98,7 +98,7 @@ pub use create_agent_run::{
 };
 pub use create_chapter::{
     CreateChapter, CreateChapterConflict, CreateChapterCurrent, CreateChapterOpen,
-    CreateChapterRefusal, CreateChapterResult, VolumeJoin, create_chapter,
+    CreateChapterPlacement, CreateChapterRefusal, CreateChapterResult, VolumeJoin, create_chapter,
 };
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 pub use create_volume::{

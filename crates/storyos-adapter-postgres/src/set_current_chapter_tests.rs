@@ -167,6 +167,7 @@ fn chapter_command(
     bytes: &[u8],
 ) -> CreateChapterCommand {
     CreateChapterCommand {
+        placement: storyos_core::CreateChapterPlacement::Append,
         project_scope: binding.project_scope.clone(),
         client_binding: client_binding(&binding),
         challenge_binding: binding,

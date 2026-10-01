@@ -3,7 +3,7 @@ import {
   createProjectCommandChallenge,
   digestCreateChapter,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { CreateChapterResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { CreateChapterResponse, CreateChapterPlacement } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 
@@ -22,8 +22,9 @@ function createChapterIdentity(options: {
   volumeId: string;
   title: string;
   expectedTreeRevision: string;
+  placement?: CreateChapterPlacement | undefined;
 }): string {
-  return `${options.projectId}\n${options.volumeId}\n${options.expectedTreeRevision}\n${options.title}`;
+  return `${options.projectId}\n${options.volumeId}\n${options.expectedTreeRevision}\n${options.title}\n${JSON.stringify(options.placement)}`;
 }
 
 function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
@@ -46,6 +47,7 @@ export async function createOwnedChapter(options: {
   volumeId: string;
   title: string;
   expectedTreeRevision: string;
+  placement?: CreateChapterPlacement | undefined;
 }): Promise<CreateChapterResponse> {
   const identity = createChapterIdentity(options);
   let flight = inFlightCreates.get(identity);
@@ -79,6 +81,7 @@ async function submitCreateChapter(
     volumeId: string;
     title: string;
     expectedTreeRevision: string;
+  placement?: CreateChapterPlacement | undefined;
   },
   flight: InFlightCreateChapter,
 ): Promise<CreateChapterResponse> {
@@ -86,6 +89,7 @@ async function submitCreateChapter(
     command_schema: "storyos.command.create-chapter.request.v1",
     create_chapter_input: {
       title: options.title,
+      ...(options.placement === undefined ? {} : { placement: options.placement }),
       expected_tree_revision: options.expectedTreeRevision,
       client_contract_revision:
         RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,

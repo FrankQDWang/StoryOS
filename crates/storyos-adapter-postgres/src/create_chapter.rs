@@ -131,6 +131,16 @@ async fn persist_create_chapter(
     } else {
         VolumeJoin::Invalid
     };
+    let mut ordered_chapter_ids = client.query(
+        "SELECT manuscript_object_id::text FROM storyos.manuscript_objects AS chapter
+          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+            AND object_kind = 'chapter' AND parent_volume_id = $3::text::uuid
+            AND NOT EXISTS (SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+              WHERE removal.owner_user_id = chapter.owner_user_id AND removal.project_id = chapter.project_id
+                AND removal.chapter_id = chapter.manuscript_object_id)
+          ORDER BY tree_order FOR UPDATE",
+        &[&command.project_scope.owner_user_id.as_ref(), &command.project_scope.project_id.as_ref(), &command.volume_id],
+    ).await.map_err(create_chapter_database_error)?.iter().map(|row| row.get::<_, String>(0)).collect::<Vec<_>>();
     let classified = classify_create_chapter(&CoreCreateChapter {
         presence: ProjectPresence::Present,
         volume_join,
@@ -142,43 +152,34 @@ async fn persist_create_chapter(
             Some(_) => CreateChapterOpen::CurrentChapter,
         },
         title: command.title.clone(),
+        placement: command.placement.clone(),
+        ordered_chapter_ids: ordered_chapter_ids.clone(),
     });
     let effect = match classified {
         CreateChapterResult::Applied {
             tree_revision,
             current,
+            order,
         } => {
             let tree_order = next_chapter_order(client, command).await?;
             let chapter_id = Uuid::now_v7().to_string();
             insert_created_chapter_object(client, command, &chapter_id, tree_order).await?;
-            let canonical_sibling_order = client
-                .query_one(
-                    "SELECT count(*)::text
-                       FROM storyos.manuscript_objects AS chapter
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                        AND object_kind = 'chapter' AND parent_volume_id = $3::text::uuid
-                        AND NOT EXISTS (
-                          SELECT 1 FROM storyos.chapter_removal_decisions AS removal
-                           WHERE removal.owner_user_id = chapter.owner_user_id
-                             AND removal.project_id = chapter.project_id
-                             AND removal.chapter_id = chapter.manuscript_object_id
-                        )",
-                    &[
-                        &command.project_scope.owner_user_id.as_ref(),
-                        &command.project_scope.project_id.as_ref(),
-                        &command.volume_id,
-                    ],
+            if command.placement != storyos_core::CreateChapterPlacement::Append {
+                ordered_chapter_ids.insert((order - 1) as usize, chapter_id.clone());
+                crate::update_chapter::sibling_order::write_chapter_order(
+                    client,
+                    &command.project_scope,
+                    &command.volume_id,
+                    &ordered_chapter_ids,
                 )
                 .await
-                .map_err(create_chapter_database_error)?
-                .get::<_, String>(0)
-                .parse::<u64>()
-                .map_err(create_chapter_parse_error)?;
+                .map_err(create_chapter_database_error)?;
+            }
             CreateChapterSettlementEffect::Applied {
                 tree_revision,
                 chapter_id,
                 current,
-                order: CreateChapterPublicOrder::CanonicalSiblingOrder(canonical_sibling_order),
+                order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
             }
         }
         CreateChapterResult::Conflicted { reason } => {
@@ -228,6 +229,7 @@ async fn persist_create_chapter(
                 storyos_core::CreateChapterRefusal::ArchivedProject => "archived_project",
                 storyos_core::CreateChapterRefusal::InvalidTitle => "invalid_title",
                 storyos_core::CreateChapterRefusal::InvalidVolumeJoin => "invalid_volume_join",
+                storyos_core::CreateChapterRefusal::InvalidPlacement => "invalid_placement",
                 storyos_core::CreateChapterRefusal::MissingProject => {
                     return Err(CreateChapterError::MissingProject);
                 }
@@ -567,6 +569,9 @@ async fn read_create_chapter_settlement(
             },
             ("refused", Some("invalid_volume_join")) => CreateChapterSettlementEffect::Refused {
                 reason: storyos_core::CreateChapterRefusal::InvalidVolumeJoin,
+            },
+            ("refused", Some("invalid_placement")) => CreateChapterSettlementEffect::Refused {
+                reason: storyos_core::CreateChapterRefusal::InvalidPlacement,
             },
             _ => return Err(CreateChapterError::BindingConflict),
         };

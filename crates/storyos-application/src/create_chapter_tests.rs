@@ -41,6 +41,7 @@ fn command() -> CreateChapterCommand {
         security_policy_revision: "security".to_owned(),
     };
     CreateChapterCommand {
+        placement: storyos_core::CreateChapterPlacement::Append,
         project_scope: project_scope.clone(),
         client_binding: client_binding.clone(),
         challenge_binding: ProjectCommandChallengeBinding {

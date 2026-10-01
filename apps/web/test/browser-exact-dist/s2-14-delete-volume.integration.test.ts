@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -106,6 +107,7 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
     }).toBe(true);
   }
 
+  await beginInlineChapterCreation(frame.contentDocument, volumeRow(frame, "Volume B")?.getAttribute("data-volume-id") ?? undefined);
   const chapterTitle = volumeRow(frame, "Volume B")
     ?.querySelector<HTMLInputElement>('form[data-create-chapter] input[name="chapter-title"]');
   const chapterForm = chapterTitle?.form;
