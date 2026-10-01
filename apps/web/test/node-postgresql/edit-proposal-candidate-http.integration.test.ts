@@ -1,6 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
@@ -81,7 +81,7 @@ async function startRealServer() {
   return startStoryOSServer({
     repositoryRoot,
     serverBinary: bin("storyos-server"),
-    sessions: { "session-a": USER_A },
+    sessions: { "session-a": USER_A, "session-b": id("2") },
   });
 }
 
@@ -314,6 +314,8 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       antiForgery: "",
       request: editRequest,
     };
+    const stale = await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      opened.proposal, opened.proposal.operation_id, id("c847"));
     const edited = await challenged(
       started.baseUrl,
       prepared.fetchImpl,
@@ -357,6 +359,14 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       proposalId,
       fetchImpl: prepared.fetchImpl,
     });
+    await settleOnce();
+    if (stale.created.effect.kind !== "admitted") throw new Error("expected admitted stale request");
+    const staleRun = await getAgentRun({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      runId: stale.created.effect.run_id, fetchImpl: prepared.fetchImpl });
+    if (staleRun.decision.kind !== "prose_change") throw new Error("expected selected stale revision");
+    assert.deepEqual(staleRun.decision.locations?.map((location) => location.outcome), [{ kind: "refused", reason: "stale_candidate" }]);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId,
+      fetchImpl: prepared.fetchImpl })).proposal, revised.proposal);
     assert.equal(revised.proposal.proposal_id, opened.proposal.proposal_id);
     assert.equal(revised.proposal.operation_id, opened.proposal.operation_id);
     assert.equal(revised.proposal.revision_id, edited.effect.proposal_revision_id);
@@ -538,6 +548,30 @@ test("a fresh instruction revises the exact pending candidate through the real W
     assert.deepEqual(await repeat(), created);
     assert.deepEqual(revised.proposal.source, before.proposal.source);
     if (run.decision.kind !== "prose_change") throw new Error("expected typed revision");
+    if (revised.proposal.validation_receipt.kind !== "present") throw new Error("expected fresh validation");
+    assert.deepEqual(run.decision.locations, [{ chapter_id: chapterId, manuscript_block_id: before.proposal.manuscript_block_id,
+      base_authoritative_revision_id: chapter.chapter.current_revision.revision_id, candidate_text: revised.proposal.candidate_text,
+      explanation: "Revise the selected candidate under the new author instruction.",
+      outcome: { kind: "revised", proposal_id: proposalId, operation_id: before.proposal.operation_id,
+        revision_id: revised.proposal.revision_id, prior_revision_id: before.proposal.revision_id,
+        validation_receipt_id: revised.proposal.validation_receipt.validation_receipt_id },
+      current: { revision_id: revised.proposal.revision_id, generation: "ready", validation: "valid",
+        closure: "open", resolution: "pending", reservation_state: "unresolved" } }]);
+    const sent = run.evidence.find((item) => item.kind === "sent_content");
+    if (sent?.kind !== "sent_content") throw new Error("expected actual sent bytes");
+    const wire = JSON.parse(sent.content);
+    assert.deepEqual(wire.candidate_target, run.context.candidate_target);
+    assert.deepEqual(wire.selected, run.context.selected.map((source) => ({ ...source, token_count: Number(source.token_count) })));
+    const retained = JSON.parse(await queryPostgres(`SELECT payload->'wire' FROM storyos.model_attempts WHERE run_id='${run.run_id}'::uuid`));
+    assert.equal(retained.serialized_payload, sent.content);
+    assert.equal(retained.digest, `sha256:${createHash("sha256").update(sent.content).digest("hex")}`);
+    for (const [index, invalid] of [{ ...revised.proposal, chapter_id: id("ca90") }, revised.proposal, before.proposal].entries()) {
+      await assert.rejects(() => admitCandidateRevision(started.baseUrl, fetchImpl, projectId, invalid,
+        index === 1 ? id("ca91") : invalid.operation_id, id(`ca9${index + 2}`)), new RegExp(`failed with status ${index === 0 ? 422 : 409}`));
+    }
+    await assert.rejects(() => admitCandidateRevision(started.baseUrl, browserFetch(started.baseUrl, "session-b"), projectId,
+      revised.proposal, revised.proposal.operation_id, id("ca99")), /failed with status 403/);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, revised.proposal);
     assert.deepEqual(run.context.candidate_target, { proposal_id: proposalId,
       operation_id: before.proposal.operation_id, revision_id: before.proposal.revision_id });
     assert.deepEqual(run.context.selected.filter((item) => item.source_class === "working_target")

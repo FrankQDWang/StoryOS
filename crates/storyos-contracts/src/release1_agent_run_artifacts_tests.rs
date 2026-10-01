@@ -127,6 +127,8 @@ fn agent_run_query_rejects_malformed_captured_settings_revision() {
     response["decision"]["locations"][0]["outcome"]["prior_revision_id"] =
         serde_json::json!("not-a-uuid");
     assert!(!validator.is_valid(&response));
+    response["decision"]["locations"][0]["outcome"]["prior_revision_id"] =
+        response["run_id"].clone();
     response["captured_memory_settings"]["memory_settings_revision"] =
         serde_json::json!("not-a-uuid");
     assert!(!validator.is_valid(&response));

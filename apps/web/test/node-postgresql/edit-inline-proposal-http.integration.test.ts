@@ -1786,6 +1786,14 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
     assert.equal(download.status, 200);
     const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+    for (const table of ["agent_runs", "operation_requirements", "context_assembly_manifests", "model_attempts",
+      "proposal_generations", "proposal_stream_events", "proposal_revisions", "validation_receipts"]) {
+      const expected = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text)
+        FROM storyos.${table} AS record WHERE project_id='${prepared.projectId}'::uuid`));
+      const exported = JSON.parse(new TextDecoder().decode(files.get(`canonical/${table}.json`)));
+      assert.deepEqual(exported.sort((a: object, b: object) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+        expected.sort((a: object, b: object) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+    }
     const revisionGap = { kind: "refused_edit_revision_payload", reason: "withheld_due_to_tombstone",
       entry_path: "canonical/draft_artifact_revisions.json", record_id: tombstoned.draft.draft_revision_id,
       payload_field: "payload", draft_id: tombstoned.draft.draft_id, retention_state: "tombstoned",
