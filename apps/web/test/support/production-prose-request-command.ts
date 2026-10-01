@@ -107,7 +107,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       .getAttribute("data-chapter-id");
     assert.ok(chapterId !== null && UUID.test(chapterId));
     await page.locator('[data-assistant-availability="available"]').waitFor();
-    await page.locator(".composer button:not([disabled])").waitFor();
+    await page.locator('[name="assistant-message"]').waitFor();
     await editor.click();
     await page.keyboard.insertText("The lantern went dark.");
     await page.keyboard.press("Enter");
