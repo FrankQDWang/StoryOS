@@ -1718,6 +1718,7 @@
               "type": "string"
             },
             "prior_revision_id": {
+              "format": "uuid",
               "type": "string"
             },
             "proposal_id": {

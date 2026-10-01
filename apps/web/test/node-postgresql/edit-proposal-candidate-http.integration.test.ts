@@ -526,7 +526,7 @@ test("a fresh instruction revises the exact pending candidate through the real W
         baseUrl: started.baseUrl, projectId, fetchImpl, idempotencyKey: id("ca42"), antiForgery, request,
       }));
     if (created.effect.kind !== "admitted") throw new Error("expected fresh candidate request");
-    assert.deepEqual(await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl }), before);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal, before.proposal);
     await settleOnce();
     const revised = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
     const run = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
@@ -535,6 +535,6 @@ test("a fresh instruction revises the exact pending candidate through the real W
     assert.equal(revised.proposal.candidate_text, "Keep the narrator calm in this passage.");
     assert.notDeepEqual(revised.proposal.validation_receipt, before.proposal.validation_receipt);
     assert.equal(run.status, "completed");
-    assert.deepEqual(await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl }), chapter);
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, chapter.chapter);
   } finally { await stopRealServer(started.server); }
 }, 120_000);

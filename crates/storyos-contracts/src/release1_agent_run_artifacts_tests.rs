@@ -113,6 +113,20 @@ fn agent_run_query_rejects_malformed_captured_settings_revision() {
         *malformed.pointer_mut(path).expect("target ID exists") = serde_json::json!("not-a-uuid");
         assert!(!validator.is_valid(&malformed));
     }
+    response["decision"] = serde_json::json!({
+        "kind": "prose_change", "decision_id": response["run_id"],
+        "opened_proposal": {"kind": "absent"}, "producer_input": "new candidate", "selected": true,
+        "text": "new candidate", "continuation": {"kind": "absent"}, "authoritative": false,
+        "locations": [{"chapter_id": response["run_id"], "manuscript_block_id": response["run_id"],
+          "base_authoritative_revision_id": response["run_id"], "candidate_text": "new candidate",
+          "explanation": "Revise the selected candidate.", "current": null,
+          "outcome": {"kind": "revised", "proposal_id": response["run_id"], "operation_id": response["run_id"],
+            "revision_id": response["run_id"], "prior_revision_id": response["run_id"], "validation_receipt_id": response["run_id"]}}]
+    });
+    assert!(validator.is_valid(&response));
+    response["decision"]["locations"][0]["outcome"]["prior_revision_id"] =
+        serde_json::json!("not-a-uuid");
+    assert!(!validator.is_valid(&response));
     response["captured_memory_settings"]["memory_settings_revision"] =
         serde_json::json!("not-a-uuid");
     assert!(!validator.is_valid(&response));

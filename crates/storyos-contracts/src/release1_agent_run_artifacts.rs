@@ -233,6 +233,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
                     "base_authoritative_revision_id",
                     "operation_id",
                     "revision_id",
+                    "prior_revision_id",
                     "validation_receipt_id",
                     "processing_destination_identity",
                     "model_registration_revision",

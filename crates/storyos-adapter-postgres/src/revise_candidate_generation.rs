@@ -67,8 +67,8 @@ pub(crate) async fn apply(
         } else {
             client.execute(
                 "INSERT INTO storyos.proposal_generations
-                 (owner_user_id,project_id,generation_id,proposal_id,generation_state,last_applied_stream_seq,run_id)
-                 VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,'generating',0,$5::text::uuid)",
+                 (owner_user_id,project_id,generation_id,proposal_id,last_applied_stream_seq,run_id)
+                 VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,0,$5::text::uuid)",
                 &[&owner,&project,&generation_id,&target.proposal_id,&claim.run_id],
             ).await.map_err(database_error)?;
             client.execute(
@@ -97,9 +97,6 @@ pub(crate) async fn apply(
                 Some(&target.operation_id),
             )
             .await?;
-            client.execute("UPDATE storyos.proposal_generations SET generation_state='ready',last_applied_stream_seq=1
-                WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND generation_id=$3::text::uuid",
-                &[&owner,&project,&generation_id]).await.map_err(database_error)?;
             result.proposal_id = Some(target.proposal_id.clone());
             ProseChangeLocationOutcome::Revised {
                 proposal_id: target.proposal_id.clone(),
