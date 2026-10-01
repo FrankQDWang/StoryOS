@@ -5,9 +5,9 @@
   "execution_contract": {
     "issue": "https://github.com/FrankQDWang/StoryOS/issues/391",
     "parent": "https://github.com/FrankQDWang/StoryOS/issues/361",
-    "revision": "refused-edit-draft-expand-contract-2026-09-26-v2-journey",
-    "baseline_commit": "2fa13fa2c21b81b8e727b4553cb92cba55cfa19e",
-    "baseline_tree": "49179c6a7c5a5b29e8c1f29220081a71153fcc02"
+    "revision": "stage3-production-repair-2026-09-30-v1",
+    "baseline_commit": "06d451329e6e64beffdd4ab7ee3539753f47e097",
+    "baseline_tree": "bc2ec8fb5054c24b520f9734591de54072613211"
   },
   "declarations": {
     "bindings": [
@@ -34,7 +34,9 @@
           "OWN-WEB"
         ],
         "implementation_issues": [
-          "https://github.com/FrankQDWang/StoryOS/issues/374"
+          "https://github.com/FrankQDWang/StoryOS/issues/374",
+          "https://github.com/FrankQDWang/StoryOS/issues/373",
+          "https://github.com/FrankQDWang/StoryOS/issues/875"
         ],
         "evidence": "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
         "supporting_evidence": [
@@ -50,10 +52,15 @@
           "OWN-MODEL"
         ],
         "implementation_issues": [
-          "https://github.com/FrankQDWang/StoryOS/issues/376"
+          "https://github.com/FrankQDWang/StoryOS/issues/376",
+          "https://github.com/FrankQDWang/StoryOS/issues/377",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
-        "supporting_evidence": [],
+        "supporting_evidence": [
+          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
+        ],
         "evidence_class": "integration"
       },
       {
@@ -69,11 +76,18 @@
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/374",
           "https://github.com/FrankQDWang/StoryOS/issues/689",
-          "https://github.com/FrankQDWang/StoryOS/issues/690"
+          "https://github.com/FrankQDWang/StoryOS/issues/690",
+          "https://github.com/FrankQDWang/StoryOS/issues/375",
+          "https://github.com/FrankQDWang/StoryOS/issues/851",
+          "https://github.com/FrankQDWang/StoryOS/issues/876",
+          "https://github.com/FrankQDWang/StoryOS/issues/877"
         ],
         "evidence": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
         "supporting_evidence": [
-          "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts"
+          "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
+          "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -88,13 +102,18 @@
           "https://github.com/FrankQDWang/StoryOS/issues/377",
           "https://github.com/FrankQDWang/StoryOS/issues/378",
           "https://github.com/FrankQDWang/StoryOS/issues/379",
-          "https://github.com/FrankQDWang/StoryOS/issues/380"
+          "https://github.com/FrankQDWang/StoryOS/issues/380",
+          "https://github.com/FrankQDWang/StoryOS/issues/382",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
-          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts"
+          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
+          "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -130,7 +149,9 @@
           "https://github.com/FrankQDWang/StoryOS/issues/693",
           "https://github.com/FrankQDWang/StoryOS/issues/694",
           "https://github.com/FrankQDWang/StoryOS/issues/390",
-          "https://github.com/FrankQDWang/StoryOS/issues/376"
+          "https://github.com/FrankQDWang/StoryOS/issues/376",
+          "https://github.com/FrankQDWang/StoryOS/issues/875",
+          "https://github.com/FrankQDWang/StoryOS/issues/877"
         ],
         "evidence": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
         "supporting_evidence": [
@@ -138,7 +159,9 @@
           "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
           "apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts",
           "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts",
-          "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts"
+          "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -175,7 +198,9 @@
           "https://github.com/FrankQDWang/StoryOS/issues/384",
           "https://github.com/FrankQDWang/StoryOS/issues/387",
           "https://github.com/FrankQDWang/StoryOS/issues/388",
-          "https://github.com/FrankQDWang/StoryOS/issues/389"
+          "https://github.com/FrankQDWang/StoryOS/issues/389",
+          "https://github.com/FrankQDWang/StoryOS/issues/378",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
         "supporting_evidence": [
@@ -185,7 +210,9 @@
           "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
           "crates/storyos-core/src/revision_comparison_tests.rs",
-          "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -198,11 +225,14 @@
         ],
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/376",
-          "https://github.com/FrankQDWang/StoryOS/issues/374"
+          "https://github.com/FrankQDWang/StoryOS/issues/374",
+          "https://github.com/FrankQDWang/StoryOS/issues/373",
+          "https://github.com/FrankQDWang/StoryOS/issues/875"
         ],
         "evidence": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
         "supporting_evidence": [
-          "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts"
+          "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -219,11 +249,18 @@
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/689",
           "https://github.com/FrankQDWang/StoryOS/issues/374",
-          "https://github.com/FrankQDWang/StoryOS/issues/690"
+          "https://github.com/FrankQDWang/StoryOS/issues/690",
+          "https://github.com/FrankQDWang/StoryOS/issues/375",
+          "https://github.com/FrankQDWang/StoryOS/issues/851",
+          "https://github.com/FrankQDWang/StoryOS/issues/876",
+          "https://github.com/FrankQDWang/StoryOS/issues/877"
         ],
         "evidence": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
         "supporting_evidence": [
-          "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts"
+          "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
+          "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -245,7 +282,10 @@
           "https://github.com/FrankQDWang/StoryOS/issues/827",
           "https://github.com/FrankQDWang/StoryOS/issues/831",
           "https://github.com/FrankQDWang/StoryOS/issues/832",
-          "https://github.com/FrankQDWang/StoryOS/issues/840"
+          "https://github.com/FrankQDWang/StoryOS/issues/840",
+          "https://github.com/FrankQDWang/StoryOS/issues/378",
+          "https://github.com/FrankQDWang/StoryOS/issues/382",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
         "supporting_evidence": [
@@ -253,7 +293,10 @@
           "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
           "apps/web/test/browser-exact-dist/restored-discard.integration.test.ts",
-          "apps/web/test/browser-source/refused-edit-discard.integration.test.ts"
+          "apps/web/test/browser-source/refused-edit-discard.integration.test.ts",
+          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
+          "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -266,12 +309,16 @@
         ],
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/379",
-          "https://github.com/FrankQDWang/StoryOS/issues/380"
+          "https://github.com/FrankQDWang/StoryOS/issues/380",
+          "https://github.com/FrankQDWang/StoryOS/issues/382",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
-          "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+          "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -287,14 +334,19 @@
           "https://github.com/FrankQDWang/StoryOS/issues/692",
           "https://github.com/FrankQDWang/StoryOS/issues/693",
           "https://github.com/FrankQDWang/StoryOS/issues/694",
-          "https://github.com/FrankQDWang/StoryOS/issues/390"
+          "https://github.com/FrankQDWang/StoryOS/issues/390",
+          "https://github.com/FrankQDWang/StoryOS/issues/690",
+          "https://github.com/FrankQDWang/StoryOS/issues/875",
+          "https://github.com/FrankQDWang/StoryOS/issues/877"
         ],
         "evidence": "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
           "apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts",
           "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
-          "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts"
+          "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -308,12 +360,16 @@
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/376",
           "https://github.com/FrankQDWang/StoryOS/issues/690",
-          "https://github.com/FrankQDWang/StoryOS/issues/691"
+          "https://github.com/FrankQDWang/StoryOS/issues/691",
+          "https://github.com/FrankQDWang/StoryOS/issues/875",
+          "https://github.com/FrankQDWang/StoryOS/issues/877"
         ],
         "evidence": "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
-          "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts"
+          "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -348,7 +404,9 @@
           "https://github.com/FrankQDWang/StoryOS/issues/383",
           "https://github.com/FrankQDWang/StoryOS/issues/384",
           "https://github.com/FrankQDWang/StoryOS/issues/388",
-          "https://github.com/FrankQDWang/StoryOS/issues/389"
+          "https://github.com/FrankQDWang/StoryOS/issues/389",
+          "https://github.com/FrankQDWang/StoryOS/issues/378",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
         "supporting_evidence": [
@@ -359,7 +417,9 @@
           "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
-          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts"
+          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -375,7 +435,18 @@
         ],
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/391",
-          "https://github.com/FrankQDWang/StoryOS/issues/384"
+          "https://github.com/FrankQDWang/StoryOS/issues/384",
+          "https://github.com/FrankQDWang/StoryOS/issues/373",
+          "https://github.com/FrankQDWang/StoryOS/issues/375",
+          "https://github.com/FrankQDWang/StoryOS/issues/377",
+          "https://github.com/FrankQDWang/StoryOS/issues/378",
+          "https://github.com/FrankQDWang/StoryOS/issues/382",
+          "https://github.com/FrankQDWang/StoryOS/issues/690",
+          "https://github.com/FrankQDWang/StoryOS/issues/851",
+          "https://github.com/FrankQDWang/StoryOS/issues/875",
+          "https://github.com/FrankQDWang/StoryOS/issues/876",
+          "https://github.com/FrankQDWang/StoryOS/issues/877",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
         "supporting_evidence": [
@@ -396,7 +467,13 @@
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
-          "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts"
+          "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
+          "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],
         "evidence_class": "stage"
       },
@@ -408,11 +485,13 @@
           "OWN-PG"
         ],
         "implementation_issues": [
-          "https://github.com/FrankQDWang/StoryOS/issues/280"
+          "https://github.com/FrankQDWang/StoryOS/issues/280",
+          "https://github.com/FrankQDWang/StoryOS/issues/373"
         ],
         "evidence": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
         "supporting_evidence": [
-          "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts"
+          "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -424,11 +503,18 @@
           "OWN-CTX"
         ],
         "implementation_issues": [
-          "https://github.com/FrankQDWang/StoryOS/issues/374"
+          "https://github.com/FrankQDWang/StoryOS/issues/374",
+          "https://github.com/FrankQDWang/StoryOS/issues/373",
+          "https://github.com/FrankQDWang/StoryOS/issues/377",
+          "https://github.com/FrankQDWang/StoryOS/issues/382",
+          "https://github.com/FrankQDWang/StoryOS/issues/875",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
         "supporting_evidence": [
-          "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts"
+          "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+          "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -443,12 +529,19 @@
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/689",
           "https://github.com/FrankQDWang/StoryOS/issues/690",
-          "https://github.com/FrankQDWang/StoryOS/issues/376"
+          "https://github.com/FrankQDWang/StoryOS/issues/376",
+          "https://github.com/FrankQDWang/StoryOS/issues/375",
+          "https://github.com/FrankQDWang/StoryOS/issues/851",
+          "https://github.com/FrankQDWang/StoryOS/issues/876",
+          "https://github.com/FrankQDWang/StoryOS/issues/877"
         ],
         "evidence": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
-          "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts"
+          "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
+          "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -462,12 +555,17 @@
         "implementation_issues": [
           "https://github.com/FrankQDWang/StoryOS/issues/378",
           "https://github.com/FrankQDWang/StoryOS/issues/379",
-          "https://github.com/FrankQDWang/StoryOS/issues/380"
+          "https://github.com/FrankQDWang/StoryOS/issues/380",
+          "https://github.com/FrankQDWang/StoryOS/issues/382",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
         "supporting_evidence": [
           "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
-          "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts"
+          "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
+          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
+          "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -485,7 +583,10 @@
           "https://github.com/FrankQDWang/StoryOS/issues/692",
           "https://github.com/FrankQDWang/StoryOS/issues/693",
           "https://github.com/FrankQDWang/StoryOS/issues/694",
-          "https://github.com/FrankQDWang/StoryOS/issues/840"
+          "https://github.com/FrankQDWang/StoryOS/issues/840",
+          "https://github.com/FrankQDWang/StoryOS/issues/690",
+          "https://github.com/FrankQDWang/StoryOS/issues/875",
+          "https://github.com/FrankQDWang/StoryOS/issues/877"
         ],
         "evidence": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
         "supporting_evidence": [
@@ -494,7 +595,8 @@
           "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts",
           "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
           "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
-          "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts"
+          "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -511,7 +613,9 @@
           "https://github.com/FrankQDWang/StoryOS/issues/383",
           "https://github.com/FrankQDWang/StoryOS/issues/384",
           "https://github.com/FrankQDWang/StoryOS/issues/388",
-          "https://github.com/FrankQDWang/StoryOS/issues/389"
+          "https://github.com/FrankQDWang/StoryOS/issues/389",
+          "https://github.com/FrankQDWang/StoryOS/issues/378",
+          "https://github.com/FrankQDWang/StoryOS/issues/879"
         ],
         "evidence": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
         "supporting_evidence": [
@@ -521,7 +625,10 @@
           "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
           "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
           "crates/storyos-core/src/revision_comparison_tests.rs",
-          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts"
+          "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
+          "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+          "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
+          "apps/web/test/browser-exact-dist/production-host.integration.test.ts"
         ],
         "evidence_class": "integration"
       },
@@ -546,21 +653,21 @@
   },
   "verifications": {
     "baseline": {
-      "commit": "2fa13fa2c21b81b8e727b4553cb92cba55cfa19e",
-      "tree": "49179c6a7c5a5b29e8c1f29220081a71153fcc02"
+      "commit": "06d451329e6e64beffdd4ab7ee3539753f47e097",
+      "tree": "bc2ec8fb5054c24b520f9734591de54072613211"
     },
     "sources": [
       {
         "path": "docs/foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md",
-        "sha256": "sha256:c690baa01b2f28b14dfcc85f128b6ba3876c4e9a31de283a4d86a487791a75f9"
+        "sha256": "sha256:fd050430627b2d4bfa17fef341183685e62514c50a857277ae4e576cac9939fa"
       },
       {
         "path": "docs/foundation/deterministic-verification-and-failure-recovery-gates.md",
-        "sha256": "sha256:1849ba1bd6eb414cc0e6bbbaf2e59958205f6ca9fea5ed75686f56fd37c3aab9"
+        "sha256": "sha256:a8d8e848d3552d9c8b215d3b3182fb6a0f20c689e3a62f15c273ad7ba9b42442"
       },
       {
         "path": "docs/foundation/product-delivery-proof-selection.md",
-        "sha256": "sha256:a305b34a15b25304022a832b11e2e013c2c5840619cfb0f04c8380f04b8bce52"
+        "sha256": "sha256:62d53cc9c4af32cbd961ad04d28939b4bee452e76159ae539cde79ea25c017e0"
       }
     ],
     "handoff_evidence": {

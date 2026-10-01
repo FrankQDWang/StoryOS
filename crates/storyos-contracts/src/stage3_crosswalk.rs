@@ -15,11 +15,11 @@ const SCHEMA_ID: &str = "storyos.evidence.stage3-contract-crosswalk.v1";
 const CLAIM_CEILING: &str = "implementation-evidence-completeness; no EV-SR; no PASS-STAGE";
 const EVALUATED_STAGE: &str = "Stage 3";
 const MANDATORY_MAP: &str = "SMAP-STAGE-3";
-const CONTRACT_REVISION: &str = "refused-edit-draft-expand-contract-2026-09-26-v2-journey";
+const CONTRACT_REVISION: &str = "stage3-production-repair-2026-09-30-v1";
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/361";
 const TICKET_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/391";
-const BASELINE_COMMIT: &str = "2fa13fa2c21b81b8e727b4553cb92cba55cfa19e";
-const BASELINE_TREE: &str = "49179c6a7c5a5b29e8c1f29220081a71153fcc02";
+const BASELINE_COMMIT: &str = "06d451329e6e64beffdd4ab7ee3539753f47e097";
+const BASELINE_TREE: &str = "bc2ec8fb5054c24b520f9734591de54072613211";
 const FORBIDDEN_EMISSIONS: &[&str] = &["EV-SR", "PASS-STAGE", "PASS-CLOUD"];
 const REQUIRED_IDS: &[&str] = &[
     "REL-007",
@@ -94,6 +94,16 @@ const UNDO: &str = "apps/web/test/node-postgresql/undo-acceptance-http.integrati
 const WITHDRAW: &str = "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts";
 const COMPARISON: &str = "crates/storyos-core/src/revision_comparison_tests.rs";
 const PHYSICAL_SCRIPT: &str = "scripts/verify-recovery-hold.sh";
+const ADMITTED_TARGET: &str =
+    "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts";
+const CANDIDATE_EDIT: &str =
+    "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts";
+const INLINE_PRODUCTION: &str =
+    "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts";
+const CAPTURED_MEMORY: &str =
+    "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts";
+const RUN_EVIDENCE: &str =
+    "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts";
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
