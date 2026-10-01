@@ -365,7 +365,9 @@ export type ConversationSelection = { "kind": "new" } | { "kind": "existing", co
 
 export type AuthorMessage = { text: string, };
 
-export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, };
+export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, } | { "kind": "passage_collection", source_chapter_id: string, targets: Array<PassageTarget>, };
+
+export type PassageTarget = { chapter_id: string, base_authoritative_revision_id: string, manuscript_block_ids: Array<string>, };
 
 export type InstructionBinding = { "kind": "absent" };
 
@@ -413,7 +415,7 @@ export type HostControlInspect = { distinct_from_destination: boolean, destinati
 
 export type CurrentAvailabilityInspect = { working_target: SourceAvailability, };
 
-export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, };
+export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, passage_targets?: Array<PassageTarget>, };
 
 export type EvidenceAvailability = "current" | "unknown";
 

@@ -43,7 +43,7 @@ pub(super) async fn persist_current_passage_assembly(
         .map_err(agent_run_database_error)?;
     let operation_requirement_id = uuid::Uuid::now_v7().to_string();
     let input_snapshot_id = uuid::Uuid::now_v7().to_string();
-    let record = assemble_current_passage_context(&CurrentPassageAssembly {
+    let source = CurrentPassageAssembly {
         operation_requirement_id: operation_requirement_id.clone(),
         input_snapshot_id: input_snapshot_id.clone(),
         run_id: command.run_id.clone(),
@@ -56,7 +56,13 @@ pub(super) async fn persist_current_passage_assembly(
         chapter_body,
         instruction: InstructionBindingInput::Absent,
         destination_identity: destination_identity.to_owned(),
-    });
+    };
+    let record = match &command.passage_targets {
+        Some(targets) => {
+            crate::passage_collection::assemble(client, command, &source, targets).await?
+        }
+        None => assemble_current_passage_context(&source),
+    };
     let payload = encode_assembly_record(&record).to_string();
     client
         .execute(

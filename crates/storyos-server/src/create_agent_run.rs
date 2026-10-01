@@ -73,7 +73,50 @@ pub(super) async fn create_agent_run(
             conversation_id.clone()
         }
     };
-    let contracts::AssistanceWorkingTarget::CurrentChapter { chapter_id } = &input.working_target;
+    let (chapter_id, passage_targets) = match &input.working_target {
+        contracts::AssistanceWorkingTarget::CurrentChapter { chapter_id } => (chapter_id, None),
+        contracts::AssistanceWorkingTarget::PassageCollection {
+            source_chapter_id,
+            targets,
+        } => {
+            let mut chapters = std::collections::BTreeSet::new();
+            let mut blocks = std::collections::BTreeSet::new();
+            if targets.is_empty() {
+                return Err(invalid_request_shape());
+            }
+            for target in targets {
+                valid_uuid(&target.chapter_id)?;
+                valid_uuid(&target.base_authoritative_revision_id)?;
+                if !chapters.insert(&target.chapter_id) || target.manuscript_block_ids.is_empty() {
+                    return Err(invalid_request_shape());
+                }
+                for block in &target.manuscript_block_ids {
+                    valid_uuid(block)?;
+                    if !blocks.insert(block) {
+                        return Err(invalid_request_shape());
+                    }
+                }
+            }
+            if blocks.len() > storyos_core::CONTEXT_ITEM_TOKEN_LIMIT as usize + 1 {
+                return Err(invalid_request_shape());
+            }
+            (
+                source_chapter_id,
+                Some(
+                    targets
+                        .iter()
+                        .map(|target| storyos_core::PassageContextTarget {
+                            chapter_id: target.chapter_id.clone(),
+                            base_authoritative_revision_id: target
+                                .base_authoritative_revision_id
+                                .clone(),
+                            manuscript_block_ids: target.manuscript_block_ids.clone(),
+                        })
+                        .collect(),
+                ),
+            )
+        }
+    };
     valid_uuid(chapter_id)?;
     let store = project_reader(&state).await?;
     let admission = request_create_agent_run(
@@ -115,6 +158,7 @@ pub(super) async fn create_agent_run(
             },
             author_message: input.author_message.text.clone(),
             chapter_id: chapter_id.clone(),
+            passage_targets,
             ids: AuthorCommandAdmissionIds {
                 command_id: Uuid::now_v7().to_string(),
                 author_command_admission_id: Uuid::now_v7().to_string(),
@@ -674,6 +718,22 @@ fn inspect_context(
             .clone(),
         input_snapshot_id: record.operation_requirement.input_snapshot_id.clone(),
         purpose: contracts::ContextPurpose::CurrentPassageAssistance,
+        passage_targets: record
+            .operation_requirement
+            .passage_targets
+            .as_ref()
+            .map(|targets| {
+                targets
+                    .iter()
+                    .map(|target| contracts::PassageTarget {
+                        chapter_id: target.chapter_id.clone(),
+                        base_authoritative_revision_id: target
+                            .base_authoritative_revision_id
+                            .clone(),
+                        manuscript_block_ids: target.manuscript_block_ids.clone(),
+                    })
+                    .collect()
+            }),
         token_counting_profile: contracts::TokenCountingProfileInspect {
             profile_revision: record.token_counting_profile_revision.clone(),
             algorithm_revision: record.token_counting_algorithm_revision.clone(),

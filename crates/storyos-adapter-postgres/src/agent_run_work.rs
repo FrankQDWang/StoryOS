@@ -443,7 +443,7 @@ async fn persist_stream_and_decision(
                 ..
             },
         ) => {
-            if author_message.starts_with("Revise this phrase:") {
+            if produced.is_none() && author_message.starts_with("Revise this phrase:") {
                 crate::open_inline_proposal::open_selected_inline_change(
                     client,
                     claim,
@@ -452,7 +452,7 @@ async fn persist_stream_and_decision(
                     text,
                 )
                 .await?
-            } else if stream_batch_plan(author_message).is_some() {
+            } else if produced.is_none() && stream_batch_plan(author_message).is_some() {
                 let (proposal_id, work) =
                     crate::stream_proposal_generation::apply_streamed_proposal(
                         client,
@@ -481,7 +481,7 @@ async fn persist_stream_and_decision(
         }
         _ => None,
     };
-    let payload = encode_payload(
+    let mut payload = encode_payload(
         author_message,
         chapter_id,
         assembly_manifest_id,
@@ -494,6 +494,7 @@ async fn persist_stream_and_decision(
         locations.as_deref(),
         continuation,
     );
+    crate::passage_collection::retain_wire(client, claim, &mut payload).await?;
     client
         .execute(
             "UPDATE storyos.model_attempts

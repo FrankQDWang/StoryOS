@@ -18,13 +18,60 @@ pub(crate) async fn open_selected_prose_change(
     author_message: &str,
     produced: Option<&[storyos_core::ProseChangeCandidate]>,
 ) -> Result<ProseOpening, CompleteAgentRunError> {
-    use storyos_contracts::{ProseChangeLocationInspect, ProseChangeLocationOutcome};
     let targets = load_admitted_targets(client, claim, chapter_id).await?;
+    let mut chapters = Vec::new();
+    for target in &targets {
+        if !chapters.contains(&target.chapter_id) {
+            chapters.push(target.chapter_id.clone());
+        }
+    }
+    let mut opening = ProseOpening {
+        proposal_id: None,
+        locations: produced.map(|_| Vec::new()),
+    };
+    for chapter in chapters {
+        let members: Vec<_> = targets
+            .iter()
+            .filter(|target| target.chapter_id == chapter)
+            .collect();
+        let result = open_chapter(
+            client,
+            claim,
+            &chapter,
+            decision_id,
+            candidate_text,
+            author_message,
+            produced,
+            &members,
+        )
+        .await?;
+        if opening.proposal_id.is_none() {
+            opening.proposal_id = result.proposal_id;
+        }
+        if let (Some(locations), Some(changes)) = (&mut opening.locations, result.locations) {
+            locations.extend(changes);
+        }
+    }
+    Ok(opening)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn open_chapter(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    chapter_id: &str,
+    decision_id: &str,
+    candidate_text: &str,
+    author_message: &str,
+    produced: Option<&[storyos_core::ProseChangeCandidate]>,
+    targets: &[&crate::admitted_proposal_target::AdmittedTarget],
+) -> Result<ProseOpening, CompleteAgentRunError> {
+    use storyos_contracts::{ProseChangeLocationInspect, ProseChangeLocationOutcome};
     let multiple = produced.is_some();
     let selected: Vec<_> = if multiple {
-        targets
+        targets.to_vec()
     } else {
-        targets.into_iter().take(1).collect()
+        targets.iter().copied().take(1).collect()
     };
     let candidates = produced.unwrap_or_default();
     let candidate_by_block: std::collections::BTreeMap<_, _> = candidates
@@ -160,7 +207,7 @@ struct PersistAppliedProposal<'a> {
     decision_id: &'a str,
     candidate_text: &'a str,
     author_message: &'a str,
-    targets: &'a [crate::admitted_proposal_target::AdmittedTarget],
+    targets: &'a [&'a crate::admitted_proposal_target::AdmittedTarget],
     validation_result: &'a str,
     candidates: Option<&'a [storyos_core::ProseChangeCandidate]>,
 }

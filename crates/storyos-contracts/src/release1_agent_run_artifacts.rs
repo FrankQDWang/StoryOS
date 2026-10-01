@@ -18,10 +18,10 @@ use crate::release1_agent_run::{
     OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
     OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
-    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, ProjectionMode,
-    ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
-    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
-    UnknownCreateSuccessorDisposition,
+    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
+    ProjectionMode, ProseChangeLocationCurrent, ProseChangeLocationInspect,
+    ProseChangeLocationOutcome, ReferenceRecoveryDisposition, SourceAvailability,
+    TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 
 pub(super) const CREATE_REQUEST_SCHEMA_PATH: &str =
@@ -61,7 +61,19 @@ pub(super) fn create_request_schema_bytes() -> Vec<u8> {
         constrain_uuid_fields(existing, &["conversation_id"]);
     }
     if let Some(target) = schema["$defs"].get_mut("AssistanceWorkingTarget") {
-        constrain_uuid_fields(target, &["chapter_id"]);
+        constrain_uuid_fields(target, &["chapter_id", "source_chapter_id"]);
+        for variant in target["oneOf"].as_array_mut().expect("target variants") {
+            if let Some(targets) = variant["properties"].get_mut("targets") {
+                targets["minItems"] = json!(1);
+                targets["maxItems"] = json!(10_001);
+            }
+        }
+    }
+    if let Some(target) = schema["$defs"].get_mut("PassageTarget") {
+        constrain_uuid_fields(target, &["chapter_id", "base_authoritative_revision_id"]);
+        target["properties"]["manuscript_block_ids"]["items"]["format"] = json!("uuid");
+        target["properties"]["manuscript_block_ids"]["minItems"] = json!(1);
+        target["properties"]["manuscript_block_ids"]["maxItems"] = json!(10_001);
     }
     json_bytes(&schema)
 }
@@ -280,10 +292,11 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
+        PassageTarget::decl(&config),
         InstructionBinding::decl(&config),
         AssistanceCause::decl(&config),
         CreateAgentRunInput::decl(&config),

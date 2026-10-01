@@ -38,6 +38,9 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
             .expect("encoded requirement object")
             .remove("proposal_target_block_ids");
     }
+    if let Some(targets) = &record.operation_requirement.passage_targets {
+        payload["operation_requirement"]["passage_targets"] = serde_json::json!(targets);
+    }
     payload
 }
 
@@ -89,6 +92,11 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 ),
                 Some(_) => return None,
             },
+            passage_targets: requirement
+                .get("passage_targets")
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+                .ok()?,
             instruction,
             destination_identity: requirement
                 .get("destination_identity")?

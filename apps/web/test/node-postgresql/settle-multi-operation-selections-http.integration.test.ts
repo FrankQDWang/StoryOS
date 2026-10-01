@@ -11,7 +11,7 @@ import {
   acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createChapter, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun, digestCreateAgentRun, digestCreateChapter,
   digestCreateEditorSession, digestExportProjectArchive, digestReplanProposal,
-  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getProposal, replanProposal,
+  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getProposal, replanProposal, setCurrentChapter, digestSetCurrentChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CreateAgentRunRequest,
@@ -31,6 +31,7 @@ async function seedTwoBlocks(
   fetchImpl: typeof fetch,
   projectId: string,
   ns: string,
+  singleText?: string,
 ) {
   const sessionRequest: CreateEditorSessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1",
@@ -64,7 +65,7 @@ async function seedTwoBlocks(
     completed_intent_record_id: id(`${ns}5`),
     local_intent_sequence: "1",
     author_edit_units: [{
-      normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text: "Hello World" }],
+      normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text: singleText ?? "Hello World" }],
       selection_snapshot: {
         coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 0,
       },
@@ -82,6 +83,8 @@ async function seedTwoBlocks(
   if (inserted.effect.kind !== "authoritative_applied") {
     throw new Error("expected inserted passage");
   }
+  if (singleText !== undefined) return { session, revisionId: inserted.effect.authoritative_revision.revision_id,
+    secondBlockId: inserted.effect.authoritative_revision.blocks[0]!.manuscript_block_id };
   const firstBlock = inserted.effect.authoritative_revision.blocks[0];
   if (!firstBlock) throw new Error("expected first Block");
   const splitRequest: ApplyAuthorEditRequest = {
@@ -166,7 +169,7 @@ test("one collection request produces three exact locations across two Chapters"
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
     const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Chapter collection", `${ns}2`);
-    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+    const first = await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
     const tree = await getManuscriptTree({ baseUrl: started.baseUrl, projectId, fetchImpl });
     const volumeId = tree.volumes[0]!.volume_id;
     const request = { command_schema: "storyos.command.create-chapter.request.v1",
@@ -177,6 +180,20 @@ test("one collection request produces three exact locations across two Chapters"
       await digestCreateChapter(request), id(`${ns}42`), (antiForgery) => createChapter({
         baseUrl: started.baseUrl, projectId, volumeId, fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}42`) }));
     if (created.effect.kind !== "authoritative_applied") throw new Error("expected second Chapter");
+    const switchChapter = async (from: string, to: string, sessionId: string, key: string) => {
+      const target = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId: to, fetchImpl });
+      const request = { command_schema: "storyos.command.set-current-chapter.request.v1",
+        set_current_chapter_input: { chapter_id: to, expected_current_chapter_id: from,
+          expected_target_revision_id: target.chapter.current_revision.revision_id, editor_session_id: sessionId,
+          ...BINDING, correlation_id: key } };
+      await challenged(started.baseUrl, fetchImpl, projectId, "PUT",
+        "/api/v1/projects/{project_id}/current-chapter", request.command_schema,
+        await digestSetCurrentChapter(request), key, (antiForgery) => setCurrentChapter({
+          baseUrl: started.baseUrl, projectId, fetchImpl, request, antiForgery, idempotencyKey: key }));
+    };
+    await switchChapter(chapterId, created.effect.chapter_id, first.session.editor_session.editor_session_id, id(`${ns}44`));
+    const second = await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}5`, "A lantern crossed the river.");
+    await switchChapter(created.effect.chapter_id, chapterId, second.session.editor_session.editor_session_id, id(`${ns}45`));
     const chapters = await Promise.all([chapterId, created.effect.chapter_id].map((chapterId) =>
       getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })));
     const target = { kind: "passage_collection", source_chapter_id: chapterId,
