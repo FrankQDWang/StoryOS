@@ -57,6 +57,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await page.locator('input[name="volume-title"]').fill("Inline Volume");
     await page.locator('input[name="volume-title"]').press("Enter");
     await page.locator("[data-add-chapter]").click();
+    await page.locator('[data-chapter-placement="append"]').click();
     await page.locator('form[data-create-chapter] input[name="chapter-title"]').fill("Inline Chapter");
     await page.locator('input[name="chapter-title"]').press("Enter");
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
@@ -202,6 +203,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
         WHERE project_id = '${projectId}'::uuid`);
       await page.locator("[data-add-chapter]").click();
+      await page.locator('[data-chapter-placement="append"]').click();
       await page.locator('form[data-create-chapter] input[name="chapter-title"]').fill(title);
       await page.locator('form[data-create-chapter] input[name="chapter-title"]').press("Enter");
       await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]').filter({ hasText: title }).click();

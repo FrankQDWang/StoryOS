@@ -95,6 +95,8 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.locator("[data-create-volume-action]").click();
     await page.locator('input[name="volume-title"]').fill("Request Volume");
     await page.locator('input[name="volume-title"]').press("Enter");
+    await page.locator("[data-add-chapter]").click();
+    await page.locator('[data-chapter-placement="append"]').click();
     await page.locator('input[name="chapter-title"]').fill("Request Chapter");
     await page.locator('input[name="chapter-title"]').press("Enter");
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();

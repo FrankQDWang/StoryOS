@@ -43,6 +43,7 @@ function volumeRow(frame: HTMLIFrameElement, title: string): Element | undefined
 }
 
 async function confirmDeleteVolume(frame: HTMLIFrameElement, title: string): Promise<void> {
+  await expect.poll(() => volumeRow(frame, title)?.querySelector("[data-create-chapter-menu]")?.tagName).toBe("BUTTON");
   const row = volumeRow(frame, title);
   row?.querySelector<HTMLButtonElement>("[data-create-chapter-menu], [data-chapter-menu]")?.click();
   await expect.poll(() => row?.querySelector("button[data-delete-volume], button[data-delete-chapter]")?.tagName).toBe("BUTTON");

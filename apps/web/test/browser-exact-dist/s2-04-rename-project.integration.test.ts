@@ -60,6 +60,7 @@ it("the author renames one exact Project and the library plus opened title conve
   ).toBe("empty-project-ready");
   await beginTreeAction(created.contentDocument, "[data-project-id]", "[data-begin-rename-project]");
   created.contentDocument?.querySelector<HTMLButtonElement>("[data-begin-rename-project]")?.click();
+  await expect.poll(() => created.contentDocument?.querySelector('input[name="rename-title"]')?.tagName).toBe("INPUT");
   const renameInput = created.contentDocument?.querySelector<HTMLInputElement>(
     '#app input[name="rename-title"]',
   );

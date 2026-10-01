@@ -75,6 +75,8 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     await page.locator("[data-create-volume-action]").click();
     await page.locator('input[name="volume-title"]').fill("Memory Volume");
     await page.locator('input[name="volume-title"]').press("Enter");
+    await page.locator("[data-add-chapter]").click();
+    await page.locator('[data-chapter-placement="append"]').click();
     await page.locator('input[name="chapter-title"]').fill("Memory Chapter");
     await page.locator('input[name="chapter-title"]').press("Enter");
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();

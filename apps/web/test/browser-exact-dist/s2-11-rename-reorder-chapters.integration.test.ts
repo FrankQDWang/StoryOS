@@ -127,6 +127,7 @@ it("the author renames and reorders Chapters from the canonical tree and they su
 
   await beginTreeAction(createdRoot, "li[data-chapter-id]", "[data-begin-rename-chapter]");
   createdRoot.querySelector<HTMLButtonElement>("[data-begin-rename-chapter]")?.click();
+  await expect.poll(() => createdRoot.querySelector('input[name="chapter-title"]')?.tagName).toBe("INPUT");
   const renameInput = createdRoot.querySelector<HTMLInputElement>(
     '#app form[data-rename-chapter] input[name="chapter-title"]',
   );

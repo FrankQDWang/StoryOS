@@ -170,6 +170,8 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator("[data-create-volume-action]").click();
     await writer.locator('input[name="volume-title"]').fill("Production Volume");
     await writer.locator('input[name="volume-title"]').press("Enter");
+    await writer.locator("[data-add-chapter]").click();
+    await writer.locator('[data-chapter-placement="append"]').click();
     await writer.locator('input[name="chapter-title"]').fill("Production Chapter");
     await writer.locator('input[name="chapter-title"]').press("Enter");
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
