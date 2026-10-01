@@ -12,7 +12,7 @@ pub(crate) async fn assemble(
     for target in targets {
         let (revision, body) = super::create_agent_run::context::load_working_target(
             client,
-            &command.project_scope,
+            command.project_scope,
             &target.chapter_id,
         )
         .await?;

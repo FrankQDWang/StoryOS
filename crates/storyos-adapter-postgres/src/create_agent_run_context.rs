@@ -25,7 +25,7 @@ pub(crate) async fn persist_current_passage_assembly(
     destination_identity: &str,
 ) -> Result<AgentRunContext, CreateAgentRunError> {
     let (chapter_revision_id, chapter_body) =
-        load_working_target(client, &command.project_scope, &command.chapter_id).await?;
+        load_working_target(client, command.project_scope, command.chapter_id).await?;
     let selected = client
         .query(
             "SELECT member.manuscript_block_id::text
@@ -70,8 +70,8 @@ pub(crate) async fn persist_current_passage_assembly(
     let record = if let Some(target) = &command.candidate_target {
         let candidate = crate::candidate_revision_target::load(
             client,
-            &command.project_scope,
-            &command.chapter_id,
+            command.project_scope,
+            command.chapter_id,
             target,
         )
         .await?
@@ -89,7 +89,7 @@ pub(crate) async fn persist_current_passage_assembly(
             Some(targets) => {
                 crate::passage_collection::assemble(client, command, &source, targets).await?
             }
-            None => match storyos_core::parse_ordinary_passage_request(&command.author_message) {
+            None => match storyos_core::parse_ordinary_passage_request(command.author_message) {
                 None => assemble_current_passage_context(&source),
                 Some(request) => {
                     let targets = match request {
