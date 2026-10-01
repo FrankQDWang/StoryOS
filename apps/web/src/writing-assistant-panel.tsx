@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
   activityStream, createAgentRun, createProjectCommandChallenge, digestCreateAgentRun,
-  getAgentRun, getManuscriptTree, getProjectAssistance,
+  getAgentRun, getProposal, getManuscriptTree, getProjectAssistance,
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
@@ -12,6 +12,8 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyo
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
+import { ProposalLocationLinks } from "./proposal-location-links.tsx";
+import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { AssistantRunDetails, type SelectedRunDetails } from "./assistant-run-details.tsx";
 
@@ -20,6 +22,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type TranscriptExchange = {
   requestId: string;
+  chapterId?: string;
   runId?: string;
   conversationId: string;
   message: string;
@@ -44,6 +47,7 @@ type RequestReference = {
 export type AssistantContext = {
   scope: ProjectScope;
   chapterId?: string;
+  candidateTarget?: ProposalFocus | undefined;
   canSubmit: boolean;
   baseUrl: string;
   fetchImpl: typeof fetch;
@@ -150,8 +154,9 @@ const runLabels: Record<GetAgentRunResponse["status"], string> = {
 };
 
 export function WritingAssistantPanel({
-  collapsed, context, onOpenedProposal,
+  collapsed, context, onOpenedProposal, onNavigateProposal,
 }: {
+  onNavigateProposal?: ((destination: ProposalDestination) => void) | undefined;
   collapsed: boolean;
   context?: AssistantContext | undefined;
   onOpenedProposal?: ((locator: ProposalLocator) => void) | undefined;
@@ -224,13 +229,18 @@ export function WritingAssistantPanel({
     saveReference(current);
     setReference(current);
     setRun(result);
-    if (result.decision.kind === "prose_change"
-      && result.decision.opened_proposal.kind === "present") {
-      onOpenedProposal?.({
-        proposalId: result.decision.opened_proposal.proposal_id,
-        runId: result.run_id,
-        decisionId: result.decision.decision_id,
-      });
+    if (result.decision.kind === "prose_change") {
+      for (const location of result.decision.locations ?? []) {
+        if (location.outcome.kind === "opened") onOpenedProposal?.({
+          proposalId: location.outcome.proposal_id, runId: result.run_id,
+          decisionId: result.decision.decision_id,
+        });
+      }
+      if ((result.decision.locations?.length ?? 0) === 0
+        && result.decision.opened_proposal.kind === "present") onOpenedProposal?.({
+          proposalId: result.decision.opened_proposal.proposal_id, runId: result.run_id,
+          decisionId: result.decision.decision_id,
+        });
     }
     setStatus("");
     return result;
@@ -336,6 +346,18 @@ export function WritingAssistantPanel({
         || tree.snapshot.project_scope.project_id !== context.scope.project_id) {
         throw new Error("Working Target Scope mismatch");
       }
+      const selected = context.candidateTarget;
+      if (selected !== undefined) {
+        const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
+          projectId: context.scope.project_id, proposalId: selected.proposalId });
+        if (response.project_scope.owner_user_id !== context.scope.owner_user_id
+          || response.project_scope.project_id !== context.scope.project_id
+          || response.proposal.chapter_id !== context.chapterId
+          || !response.proposal.operations.some((operation) => operation.operation_id === selected.operationId
+            && operation.manuscript_block_id === selected.blockId && operation.resolution === "pending"
+            && operation.reservation_state === "unresolved")) throw new Error("候选位置已变化。");
+        selected.revisionId = response.proposal.revision_id;
+      }
       const current: RequestReference = {
         scope: context.scope, message, chapterId: context.chapterId!,
         correlationId: uuidV7(context.cryptoImpl),
@@ -345,7 +367,7 @@ export function WritingAssistantPanel({
           ? {} : { conversationId: previous.conversationId }),
         history: previous === undefined || previousRun === undefined ? [] : [
           ...(previous.history ?? []), {
-            requestId: previous.correlationId, conversationId: previousRun.conversation_id,
+            requestId: previous.correlationId, chapterId: previous.chapterId, conversationId: previousRun.conversation_id,
             runId: previousRun.run_id,
             message: previous.message, status: previousRun.status,
             ...(resultText(previousRun) === undefined ? {} : { result: resultText(previousRun)! }),
@@ -358,7 +380,10 @@ export function WritingAssistantPanel({
           conversation: current.conversationId === undefined ? { kind: "new" }
             : { kind: "existing", conversation_id: current.conversationId },
           author_message: { text: current.message },
-          working_target: { kind: "current_chapter", chapter_id: current.chapterId },
+          working_target: selected === undefined ? { kind: "current_chapter", chapter_id: current.chapterId }
+            : { kind: "proposal_candidate", source_chapter_id: current.chapterId, target: {
+              proposal_id: selected.proposalId, operation_id: selected.operationId, revision_id: selected.revisionId,
+            } },
           instruction: { kind: "absent" },
           cause: { kind: "author_request" },
           client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
@@ -462,7 +487,9 @@ export function WritingAssistantPanel({
                 aria-expanded={reference.selectedRequestId === exchange.requestId}
                 onClick={() => { void inspectDetails(exchange.requestId); }}>检查结果</button>
               {reference.selectedRequestId === exchange.requestId
-                ? <AssistantRunDetails details={details} /> : null}
+                ? <><AssistantRunDetails details={details} />
+                  {details.kind === "known" ? <ProposalLocationLinks run={details.run}
+                    sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} /> : null}</> : null}
             </section>
           ))}
           {reference === undefined ? null : (
@@ -472,7 +499,8 @@ export function WritingAssistantPanel({
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <p className="assistant-author-message">{reference.message}</p>
               <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p>
-              {run === undefined ? null : <p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>}
+              {run === undefined ? null : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
+                <ProposalLocationLinks run={run} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
               <button type="button" data-assistant-inspect=""
                 aria-expanded={reference.selectedRequestId === reference.correlationId} onClick={() => {
                 void inspectDetails(reference.correlationId);

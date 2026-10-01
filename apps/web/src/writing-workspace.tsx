@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 
 import type { EditorWriterProjection } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { WritingAssistantPanel, type AssistantContext } from "./writing-assistant-panel.tsx";
+import type { ProposalDestination } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 
 function writerGeneration(writer: EditorWriterProjection | undefined): string | undefined {
@@ -16,12 +17,13 @@ export function WritingWorkspace({
   editor,
   writer,
   assistant,
-  onOpenedProposal,
+  onOpenedProposal, onNavigateProposal,
 }: {
   tree: ReactNode;
   editor: ReactNode;
   writer?: EditorWriterProjection | undefined;
   assistant?: AssistantContext;
+  onNavigateProposal?: (destination: ProposalDestination) => void;
   onOpenedProposal?: (locator: ProposalLocator) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -39,6 +41,7 @@ export function WritingWorkspace({
         collapsed={collapsed}
         context={assistant}
         onOpenedProposal={onOpenedProposal}
+        onNavigateProposal={onNavigateProposal}
       />
       <button
         type="button"

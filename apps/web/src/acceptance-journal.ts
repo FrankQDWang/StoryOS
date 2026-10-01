@@ -2,6 +2,15 @@ import { digestAcceptProposal, digestRejectProposalOperations } from "../../../g
 import type { AcceptProposalRequest, AcceptProposalResponse, BlockProposalInspect, DigestValue, ProjectScope, RejectProposalOperationsRequest, RejectProposalOperationsResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
 
+export function decisionMembers(decision: { operation_id: string; operation_ids?: string[] }): string[] {
+  return decision.operation_ids ?? [decision.operation_id];
+}
+
+export function decisionReference(proposalId: string, revisionId: string, operationIds: string[]) {
+  return { proposal_id: proposalId, operation_id: operationIds[0]!, revision_id: revisionId,
+    ...(operationIds.length > 1 ? { operation_ids: operationIds } : {}) };
+}
+
 export type AcceptanceFlight = {
   key: string;
   kind: "explicit_editor_command";
@@ -13,7 +22,7 @@ export type AcceptanceFlight = {
   editor_session_id: string;
   writer_generation: string;
   command_kind: "acceptProposal";
-  author_visible_decision_ref: { proposal_id: string; operation_id: string; revision_id: string };
+  author_visible_decision_ref: { proposal_id: string; operation_id: string; revision_id: string; operation_ids?: string[] };
   frozen_request_digest: DigestValue;
   settlement: "frozen" | "delivery_unknown" | "known_problem";
   problem?: { status: number; code: string; responseBody: string;
@@ -181,12 +190,8 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
       || record.editor_contract_revision !== "storyos.editor-contract.release-1.v3"
       || record.exact_semantic_payload_ref !== group.journal_submission_group_id
       || group.frozen_request_body_ref !== group.journal_submission_group_id
-      || JSON.stringify(record.author_visible_decision_ref) !== JSON.stringify({
-        proposal_id: group.proposal_id,
-        operation_id: input?.selected_operation_ids?.[0],
-        revision_id: input?.proposal_revision_id,
-      })
-      || input?.selected_operation_ids?.length !== 1
+      || JSON.stringify(record.author_visible_decision_ref) !== JSON.stringify(decisionReference(group.proposal_id as string, input?.proposal_revision_id ?? "", input?.selected_operation_ids ?? []))
+      || (input?.selected_operation_ids?.length ?? 0) < 1
       || record.proposal_id !== group.proposal_id
       || JSON.stringify(record.exact_target_head_anchor_bindings) !== JSON.stringify(
         kind === "acceptProposal" ? {
@@ -371,8 +376,7 @@ export async function reconcileDisplayedAcceptance(workspace: EditorReadyState,
     || flight.editor_session_id !== workspace.partition.editor_session_id
     || flight.writer_generation !== workspace.partition.writer_generation) return "pending";
   if (proposal.revision_id === flight.request.accept_proposal_input.proposal_revision_id
-    && proposal.operation_id === flight.author_visible_decision_ref.operation_id
-    && proposal.operation_resolution === "applied") return "applied";
+    && decisionMembers(flight.author_visible_decision_ref).every((id) => proposal.operations.some((operation) => operation.operation_id === id && operation.resolution === "applied"))) return "applied";
   if (proposal.latest_acceptance_refusal.kind === "present"
     && proposal.latest_acceptance_refusal.correlation_id
       === flight.request.accept_proposal_input.correlation_id) {
@@ -419,12 +423,12 @@ export async function createFlight(workspace: EditorReadyState,
   const requestDigest = await digestDecision(flight as DecisionFlight, workspace.cryptoImpl);
   const input = decisionInput(flight as DecisionFlight);
   if (JSON.stringify(requestDigest) !== JSON.stringify(flight.frozen_request_digest)
-    || flight.key !== `${decisionPrefix(flight as DecisionFlight)}:${flight.journal_partition_id}:${flight.proposalId}:${flight.author_visible_decision_ref.revision_id}:${flight.author_visible_decision_ref.operation_id}`
+    || flight.key !== `${decisionPrefix(flight as DecisionFlight)}:${flight.journal_partition_id}:${flight.proposalId}:${flight.author_visible_decision_ref.revision_id}:${decisionMembers(flight.author_visible_decision_ref).join(",")}`
     || flight.request.command_schema !== decisionSchema(flight.command_kind)
-    || input.selected_operation_ids.length !== 1
+    || input.selected_operation_ids.length === 0
     || flight.author_visible_decision_ref.proposal_id !== flight.proposalId
-    || flight.author_visible_decision_ref.operation_id
-      !== input.selected_operation_ids[0]
+    || JSON.stringify(decisionMembers(flight.author_visible_decision_ref))
+      !== JSON.stringify(input.selected_operation_ids)
     || flight.author_visible_decision_ref.revision_id
       !== input.proposal_revision_id) {
     throw new Error("Acceptance decision does not match the frozen command");

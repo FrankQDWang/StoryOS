@@ -66,7 +66,7 @@ pub(super) async fn load_chapter_proposal_heads(
             )
         })
     });
-    let row_limit = if versioned {
+    let row_limit = if versioned || command.proposal_target.is_some() {
         None
     } else {
         structured.then(|| command.expected_proposal_head_revision_ids.len() as i64 + 1)
@@ -74,10 +74,10 @@ pub(super) async fn load_chapter_proposal_heads(
     let rows = client
         .query(
             "SELECT head.current_revision_id::text, proposal.proposal_id::text,
-                    CASE WHEN $5 THEN '' ELSE revision.candidate_text END, proposal.manuscript_block_id::text,
+                    CASE WHEN $4 THEN '' ELSE operation.candidate_text END, operation.manuscript_block_id::text,
                     revision.base_authoritative_revision_id::text, proposal.kind,
                     operation.operation_id::text, operation.resolution,
-                    operation.reservation_state, revision.candidate_blocks IS NOT NULL
+                    operation.reservation_state, operation.candidate_blocks IS NOT NULL
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -87,23 +87,20 @@ pub(super) async fn load_chapter_proposal_heads(
                      revision.revision_id) =
                     (head.owner_user_id, head.project_id, head.proposal_id,
                      head.current_revision_id)
-              LEFT JOIN storyos.proposal_operations AS operation
-                ON (operation.owner_user_id, operation.project_id, operation.proposal_id,
-                    operation.operation_id, operation.manuscript_block_id) =
-                   (proposal.owner_user_id, proposal.project_id, proposal.proposal_id,
-                    $4::text::uuid, proposal.manuscript_block_id)
+              JOIN storyos.proposal_operations AS operation
+                ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
+                   (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND proposal.chapter_id = $3::text::uuid
-              ORDER BY head.current_revision_id LIMIT $6",
+                AND revision.closure = 'open'
+                AND operation.resolution = 'pending'
+                AND operation.reservation_state = 'unresolved'
+              ORDER BY head.current_revision_id, operation.operation_id LIMIT $5",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &command.chapter_id,
-                &command
-                    .proposal_target
-                    .as_ref()
-                    .map(|target| target.operation_id.as_str()),
                 &structured,
                 &row_limit,
             ],
@@ -197,6 +194,8 @@ pub(super) async fn load_chapter_proposal_heads(
         }
         heads.push(revision_id);
     }
+    heads.sort();
+    heads.dedup();
     let (mut context, edit_body) = match selected {
         Some((context, candidate)) => (Some(context), Some(candidate)),
         None => (None, None),
@@ -445,7 +444,14 @@ pub(super) async fn append_proposal_revision(
                 closure, candidate_text, base_authoritative_revision_id, parent_revision_id,
                 candidate_blocks)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'ready',
-                     $5, 'open', $6, $7::text::uuid, $8::text::uuid,
+                     $5, 'open', (SELECT CASE WHEN proposal.manuscript_block_id=$9::text::uuid
+                       THEN $6 ELSE prior.candidate_text END
+                       FROM storyos.proposals AS proposal
+                       JOIN storyos.proposal_revisions AS prior
+                         USING (owner_user_id, project_id, proposal_id)
+                      WHERE proposal.owner_user_id=$1::text::uuid AND proposal.project_id=$2::text::uuid
+                        AND proposal.proposal_id=$3::text::uuid AND prior.revision_id=$8::text::uuid),
+                     $7::text::uuid, $8::text::uuid,
                      (SELECT candidate_blocks FROM storyos.proposal_revisions
                        WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
                          AND proposal_id=$3::text::uuid AND revision_id=$8::text::uuid))",
@@ -458,6 +464,7 @@ pub(super) async fn append_proposal_revision(
                 &candidate_text,
                 &context.base_authoritative_revision_id,
                 &context.prior_revision_id,
+                &context.manuscript_block_id,
             ],
         )
         .await

@@ -26,6 +26,7 @@ export type BlockProposalProjection = {
   sessionEligible?: boolean;
   expectedHeads: string[];
   localPending?: boolean;
+  pendingOperationIds?: string[];
 };
 
 export const PROPOSAL_ATTRIBUTES = [
@@ -33,7 +34,7 @@ export const PROPOSAL_ATTRIBUTES = [
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
   "rejectEligible", "retryRejection", "replanEligible", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
-  "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
+  "pendingOperationIds", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
@@ -64,12 +65,12 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
   const after = candidateNodes(next);
   if (before.length !== after.length || !candidateAnchorsValid(previous)
     || !candidateAnchorsValid(next)) return { valid: false as const };
-  const currentById = new Map(after.map((node) => [node.attrs.proposalId as string, node]));
+  const currentById = new Map(after.map((node) => [`${node.attrs.proposalId}:${node.attrs.operationId}`, node]));
   if (currentById.size !== after.length) return { valid: false as const };
   let changed: { proposal: BlockProposalProjection; priorText: string;
     from: number; to: number; text: string; resultingBody: string } | undefined;
   for (const node of before) {
-    const current = currentById.get(node.attrs.proposalId as string);
+    const current = currentById.get(`${node.attrs.proposalId}:${node.attrs.operationId}`);
     if (current === undefined || PROPOSAL_ATTRIBUTES.some((key) =>
       JSON.stringify(node.attrs[key]) !== JSON.stringify(current.attrs[key]))) {
       return { valid: false as const };
@@ -112,7 +113,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
   const candidateType = schema.nodes.blockProposal;
   if (candidateType === undefined) return;
   const existing = new Map(candidateNodes(editor.state.doc).map((node) =>
-    [node.attrs.proposalId as string, node]));
+    [`${node.attrs.proposalId}:${node.attrs.operationId}`, node]));
   const byBlock = new Map<string, BlockProposalProjection[]>();
   for (const proposal of proposals) {
     const items = byBlock.get(proposal.blockId) ?? [];
@@ -125,7 +126,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
     node = restoreInlineSource(node);
     next.push(node);
     for (const proposal of byBlock.get(node.attrs.id as string) ?? []) {
-      const current = existing.get(proposal.proposalId);
+      const current = existing.get(`${proposal.proposalId}:${proposal.operationId}`);
       const text = !proposal.localPending && current?.attrs.revisionId === proposal.revisionId
         ? current.textContent : proposal.text;
       const attrs = {
@@ -146,6 +147,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         validity: proposal.validity ?? "",
         sessionEligible: proposal.sessionEligible ?? false,
         expectedHeads: proposal.expectedHeads,
+        pendingOperationIds: proposal.pendingOperationIds ?? [],
         inlineProposal: proposal.inlineProposal ?? false,
         inlineFrom: proposal.inlineAnchor?.from ?? null,
         inlineTo: proposal.inlineAnchor?.to ?? null,
@@ -217,6 +219,14 @@ export const blockProposalDecoration = TiptapNode.create({
       type: "button", class: "block-proposal-reject",
       "data-proposal-reject": node.attrs.proposalId, contenteditable: "false",
     }, retryRejection ? "重试拒绝" : "拒绝"]] : []),
+    ...(eligible && node.attrs.pendingOperationIds?.length > 1 ? [["button", {
+      type: "button", "data-proposal-accept": node.attrs.proposalId,
+      "data-proposal-all": "", contenteditable: "false",
+    }, "接受全部"]] : []),
+    ...(rejectEligible && node.attrs.pendingOperationIds?.length > 1 ? [["button", {
+      type: "button", "data-proposal-reject": node.attrs.proposalId,
+      "data-proposal-all": "", contenteditable: "false",
+    }, "拒绝全部"]] : []),
     ...(replanEligible ? [["button", {
       type: "button", class: "block-proposal-replan",
       "data-proposal-replan": node.attrs.proposalId, contenteditable: "false",

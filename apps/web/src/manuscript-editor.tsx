@@ -37,7 +37,11 @@ import {
 } from "./block-proposal-decoration.ts";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 
+import type { ProposalFocus } from "./proposal-navigation.ts";
+
 export interface ManuscriptEditorProps {
+  focusProposal?: ProposalFocus | undefined;
+  onCandidateFocus?: ((focus: ProposalFocus | undefined) => void) | undefined;
   blocks: readonly ManuscriptParagraph[];
   proposals?: readonly BlockProposalProjection[];
   editable: boolean;
@@ -54,12 +58,14 @@ export interface ManuscriptEditorProps {
     operationId: string;
     revisionId: string;
     text: string;
+    operationIds?: readonly string[] | undefined;
   }) => void;
   onRejectProposal?: (target: {
     proposalId: string;
     operationId: string;
     revisionId: string;
     text: string;
+    operationIds?: readonly string[] | undefined;
   }) => void;
   onReplanProposal?: (target: {
     proposalId: string;
@@ -136,7 +142,7 @@ export function ManuscriptEditor({
   controllerRef,
   onProjection,
   onFailure,
-  onCandidateSettled,
+  onCandidateSettled, focusProposal, onCandidateFocus,
   onAcceptProposal,
   onRejectProposal,
   onReplanProposal,
@@ -145,6 +151,7 @@ export function ManuscriptEditor({
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
+  const focusedProposalRef = useRef<string | undefined>(undefined);
   const mixedCompositionRef = useRef<StructuredSelectionEdit | undefined>(undefined);
   const mixedCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionStartRef = useRef<ProseMirrorNode | null>(null);
@@ -154,6 +161,10 @@ export function ManuscriptEditor({
   const onProjectionRef = useRef(onProjection);
   const onFailureRef = useRef(onFailure);
   const onCandidateSettledRef = useRef(onCandidateSettled);
+  const onCandidateFocusRef = useRef(onCandidateFocus);
+  onCandidateFocusRef.current = onCandidateFocus;
+  const proposalsRef = useRef(proposals);
+  proposalsRef.current = proposals;
   const onAcceptProposalRef = useRef(onAcceptProposal);
   const onRejectProposalRef = useRef(onRejectProposal);
   const onReplanProposalRef = useRef(onReplanProposal);
@@ -337,14 +348,37 @@ export function ManuscriptEditor({
   }, [editable, editor]);
 
   useEffect(() => {
-    if (editor !== null) projectBlockProposals(editor, proposals);
-  }, [editor, proposals]);
+    if (editor === null) return;
+    projectBlockProposals(editor, proposals);
+    if (focusProposal === undefined || !editable) return;
+    editor.state.doc.descendants((node, position) => {
+      if (node.type.name !== "blockProposal" || node.attrs.proposalId !== focusProposal.proposalId
+        || node.attrs.operationId !== focusProposal.operationId || node.attrs.revisionId !== focusProposal.revisionId
+        || node.attrs.blockId !== focusProposal.blockId) return;
+      const identity = `${focusProposal.proposalId}:${focusProposal.operationId}:${focusProposal.revisionId}`;
+      if (focusedProposalRef.current !== identity) {
+        focusedProposalRef.current = identity;
+        editor.commands.setTextSelection(position + 1);
+        editor.commands.focus();
+      }
+      const candidate = editor.view.nodeDOM(position);
+      if (candidate instanceof HTMLElement) {
+        candidate.dataset.proposalFocused = "true";
+        candidate.scrollIntoView({ block: "nearest" });
+      }
+    });
+  }, [editor, proposals, focusProposal, editable]);
 
   useEffect(() => {
     if (editor === null) return;
     const onClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const focused = target.closest<HTMLElement>("[data-proposal-id]");
+      onCandidateFocusRef.current?.(focused === null ? undefined : {
+        proposalId: focused.dataset.proposalId!, operationId: focused.dataset.proposalOperationId!,
+        revisionId: focused.dataset.proposalRevisionId!, blockId: focused.dataset.proposalTargetId!,
+      });
       const acceptButton = target.closest<HTMLButtonElement>("button[data-proposal-accept]");
       const rejectButton = target.closest<HTMLButtonElement>("button[data-proposal-reject]");
       const replanButton = target.closest<HTMLButtonElement>("button[data-proposal-replan]");
@@ -363,6 +397,8 @@ export function ManuscriptEditor({
         operationId: proposal.dataset.proposalOperationId ?? "",
         revisionId: proposal.dataset.proposalRevisionId ?? "",
         text,
+        ...(button.hasAttribute("data-proposal-all") ? { operationIds: proposalsRef.current.find((item) =>
+          item.proposalId === proposal.dataset.proposalId && item.operationId === proposal.dataset.proposalOperationId)?.pendingOperationIds } : {}),
       };
       if (copyButton !== null) onCopyProposalRef.current?.(decision.proposalId);
       else if (replanButton !== null) onReplanProposalRef.current?.(decision);
