@@ -20,20 +20,13 @@ pub(crate) async fn open_selected_prose_change(
 ) -> Result<ProseOpening, CompleteAgentRunError> {
     use storyos_contracts::{ProseChangeLocationInspect, ProseChangeLocationOutcome};
     let targets = load_admitted_targets(client, claim, chapter_id).await?;
-    let multiple = author_message.starts_with("Revise these passages");
+    let multiple = produced.is_some();
     let selected: Vec<_> = if multiple {
         targets
     } else {
         targets.into_iter().take(1).collect()
     };
-    let declared: Vec<_> = selected
-        .iter()
-        .map(|target| (target.block_id.clone(), target.revision_id.clone()))
-        .collect();
-    let candidates = produced.map_or_else(
-        || storyos_core::produce_fake_prose_changes(chapter_id, &declared, author_message),
-        <[storyos_core::ProseChangeCandidate]>::to_vec,
-    );
+    let candidates = produced.unwrap_or_default();
     let candidate_by_block: std::collections::BTreeMap<_, _> = candidates
         .iter()
         .map(|candidate| (candidate.manuscript_block_id.as_str(), candidate))
@@ -41,9 +34,7 @@ pub(crate) async fn open_selected_prose_change(
     let mut locations = Vec::new();
     let mut validation_result = "invalid";
     for target in &selected {
-        let candidate = candidate_by_block
-            .get(target.block_id.as_str())
-            .expect("the selected complete Decision covers its declared targets");
+        let candidate = candidate_by_block.get(target.block_id.as_str());
         let current = load_current_target(client, claim, chapter_id, &target.block_id).await?;
         let result = open_block_proposal(&OpenBlockProposal {
             scope_matches: true,
@@ -71,15 +62,20 @@ pub(crate) async fn open_selected_prose_change(
             } => "conflicting_reservation",
         };
         locations.push(ProseChangeLocationInspect {
-            chapter_id: candidate.chapter_id.clone(),
-            manuscript_block_id: candidate.manuscript_block_id.clone(),
-            base_authoritative_revision_id: candidate.base_authoritative_revision_id.clone(),
+            chapter_id: chapter_id.to_owned(),
+            manuscript_block_id: target.block_id.clone(),
+            base_authoritative_revision_id: target.revision_id.clone(),
             candidate_text: if multiple {
-                candidate.candidate_text.clone()
+                candidate
+                    .expect("validated producer target")
+                    .candidate_text
+                    .clone()
             } else {
                 candidate_text.to_owned()
             },
-            explanation: candidate.explanation.clone(),
+            explanation: candidate
+                .map(|value| value.explanation.clone())
+                .unwrap_or_default(),
             current: None,
             outcome: ProseChangeLocationOutcome::Refused {
                 reason: reason.to_owned(),
@@ -123,7 +119,7 @@ pub(crate) async fn open_selected_prose_change(
                     author_message,
                     targets: &eligible,
                     validation_result,
-                    candidates: multiple.then_some(candidates.as_slice()),
+                    candidates: produced,
                 },
             )
             .await?,

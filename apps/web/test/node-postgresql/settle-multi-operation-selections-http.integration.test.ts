@@ -1,15 +1,20 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { test } from "vitest";
+import { test, vi } from "vitest";
+import { execFile } from "node:child_process";
+import { existsSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
-  acceptProposal, applyAuthorEdit, createAgentRun, createEditorSession,
-  digestAcceptProposal, digestApplyAuthorEdit, digestCreateAgentRun,
+  acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createEditorSession,
+  digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun, digestCreateAgentRun,
   digestCreateEditorSession, digestExportProjectArchive, digestReplanProposal,
   exportProjectArchive, getAgentRun, getChapter, getExportOperation, getProposal, replanProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
+  AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CreateAgentRunRequest,
   CreateEditorSessionRequest, GetProposalResponse, ReplanProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { queryStoryOSPostgres as queryPostgres, sessionFetch as browserFetch, requireStoryOSProtocolError,
@@ -165,7 +170,8 @@ test("one request produces explained exact locations and keeps them after restar
     const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
       "Revise these passages: keep the voice.", id(`${ns}41`));
     assert.equal(run.decision.kind, "prose_change");
-    const locations = (run.decision as unknown as { locations?: Array<Record<string, unknown>> }).locations;
+    if (run.decision.kind !== "prose_change") throw new Error("expected prose change");
+    const locations = run.decision.locations;
     assert.equal(locations?.length, 2);
     assert.deepEqual(locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id,
       candidate_text, explanation }) => ({ chapter_id, manuscript_block_id, base_authoritative_revision_id, candidate_text, explanation })),
@@ -178,7 +184,7 @@ test("one request produces explained exact locations and keeps them after restar
     const opened = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl,
       proposalId: openedProposal(run) });
     assert.deepEqual(opened.proposal.operations.map((operation) =>
-      (operation as unknown as { candidate_text: string }).candidate_text), [PROSE, SECOND_PROSE]);
+      operation.candidate_text), [PROSE, SECOND_PROSE]);
     assert.equal(opened.proposal.validation_receipt.kind, "present");
     const after = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
     assert.deepEqual(after.chapter, before.chapter);
@@ -192,6 +198,106 @@ test("one request produces explained exact locations and keeps them after restar
     await settleOnce();
     assert.deepEqual((await getAgentRun({ baseUrl: started.baseUrl, projectId,
       runId: run.run_id, fetchImpl: reloadedFetch })).decision, run.decision);
+  } finally { await stopRealServer(started.server); }
+});
+
+test.each(["stream", "decision", "cancelled"])("typed result recovers the %s boundary without revival", async (phase) => {
+  let started = await startRealServer();
+  const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
+  let child: ReturnType<typeof execFile> | undefined;
+  let exited: Promise<void> | undefined;
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Recovered locations", `${ns}2`);
+    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+    const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
+    const admitted = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}41`), undefined, false);
+    const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
+    writeFileSync(hold, "hold");
+    child = execFile(join(repositoryRoot, "target/release-package/storyos-worker"), ["--once"], {
+      cwd: repositoryRoot, env: { ...process.env, STORYOS_DATABASE_URL: process.env.STORYOS_TEST_DATABASE_URL,
+        [phase === "decision" ? "STORYOS_TEST_FAKE_DECISION_HOLD_PATH" : "STORYOS_TEST_FAKE_STREAM_HOLD_PATH"]: hold },
+      timeout: 60_000, killSignal: "SIGKILL",
+    });
+    exited = new Promise<void>((resolve) => child!.once("exit", () => resolve()));
+    let held = admitted;
+    await vi.waitUntil(async () => {
+      held = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
+      return phase === "decision" ? held.decision.kind === "prose_change" : held.items.length > 0;
+    }, { timeout: 10_000, interval: 10 });
+    const frozen = await queryPostgres(`SELECT payload->'decision' FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid;`);
+    const raw = held.items;
+    if (phase === "cancelled") {
+      const request: CancelAgentRunRequest = { command_schema: "storyos.command.cancel-agent-run.request.v1",
+        cancel_agent_run_input: { ...BINDING, correlation_id: id(`${ns}51`) } };
+      await challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
+        request.command_schema, await digestCancelAgentRun(request), id(`${ns}52`), (antiForgery) => cancelAgentRun({
+          baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}52`) }));
+    } else {
+      child.kill("SIGKILL");
+      await exited;
+      child = undefined;
+      await queryPostgres(`UPDATE storyos.agent_runs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE run_id='${admitted.run_id}'::uuid;`);
+      if (phase === "decision") {
+        const lossy: typeof fetch = async (input, init) => {
+          const response = await fetchImpl(input, init);
+          assert.equal(response.status, 200);
+          await response.arrayBuffer();
+          throw new Error("Controlled result response loss");
+        };
+        await assert.rejects(getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl: lossy }), /Controlled result response loss/);
+      }
+      const address = new URL(started.baseUrl);
+      await stopRealServer(started.server);
+      started = await startRealServer(`${address.hostname}:${address.port}`);
+    }
+    unlinkSync(hold);
+    if (child) { await exited; child = undefined; }
+    await settleOnce();
+    const after = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
+    assert.deepEqual(after.items, raw);
+    assert.deepEqual(after.model_attempt, phase === "cancelled" ? held.model_attempt : { ...held.model_attempt, dispatch_state: "settled" });
+    if (phase === "cancelled") {
+      assert.equal(after.status, "cancelled");
+      assert.deepEqual(after.decision, { kind: "absent" });
+    } else {
+      if (after.decision.kind !== "prose_change") throw new Error("expected typed decision");
+      assert.equal(after.decision.locations?.length, 2);
+      if (phase === "decision") {
+        assert.equal(await queryPostgres(`SELECT payload->'decision' FROM storyos.model_attempts WHERE run_id='${admitted.run_id}'::uuid;`), frozen);
+        assert.deepEqual(after.decision.locations, held.decision.kind === "prose_change" ? held.decision.locations : undefined);
+      }
+    }
+    const count = phase === "cancelled" ? "0" : "1";
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id='${admitted.run_id}'::uuid;`), count);
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
+    await settleOnce();
+    const repeated = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
+    assert.deepEqual(repeated, { ...after, correlation_id: repeated.correlation_id });
+  } finally {
+    if (existsSync(hold)) unlinkSync(hold);
+    if (child) { child.kill("SIGKILL"); await exited; }
+    await stopRealServer(started.server);
+  }
+});
+
+test.each(["undeclared_location", "stale_location_base"])("scalar requests do not enter the typed script %s", async (script) => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Scalar compatibility", `${ns}2`);
+    const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      `Revise this passage SCRIPT:${script}`, id(`${ns}41`));
+    assert.equal(run.decision.kind, "advisory");
+    const normal = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      `Revise this passage: SCRIPT:${script}`, id(`${ns}51`));
+    if (normal.decision.kind !== "prose_change") throw new Error("expected legacy prose");
+    assert.equal(normal.decision.locations, undefined);
+    assert.equal((await getProposal({ baseUrl: started.baseUrl, projectId,
+      proposalId: openedProposal(normal), fetchImpl })).proposal.candidate_text, PROSE);
   } finally { await stopRealServer(started.server); }
 });
 
@@ -213,7 +319,8 @@ test.each(["malformed_locations", "undeclared_location", "stale_location_base", 
       assert.equal(run.items[0]!.state, script === "incomplete" ? "incomplete" : "complete");
       assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "0");
       assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
-      assert.deepEqual(await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl }), run);
+      const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl });
+      assert.deepEqual(reloaded, { ...run, correlation_id: reloaded.correlation_id });
     } finally { await stopRealServer(started.server); }
   });
 
@@ -589,6 +696,13 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
         assert.deepEqual(records.find((row: { proposal_revision_id?: string; revision_id?: string }) =>
           (row.proposal_revision_id ?? row.revision_id) === opened.proposal.revision_id), expected);
       }
+      const archivedAttempts = JSON.parse(new TextDecoder().decode(files.get("canonical/model_attempts.json")));
+      const storedAttempts = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text FROM storyos.model_attempts AS record WHERE project_id='${prepared.projectId}'::uuid;`));
+      assert.deepEqual(archivedAttempts, storedAttempts);
+      const originalOutput = archivedAttempts.find((attempt: { run_id: string }) => attempt.run_id === queried.run_id).payload;
+      assert.deepEqual(originalOutput.decision.locations.map((location: { current: unknown }) => location.current), [null, null]);
+      assert.deepEqual(originalOutput.decision.locations, queried.decision.kind === "prose_change"
+        ? queried.decision.locations?.map((location) => ({ ...location, current: null })) : undefined);
       const conditions = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_validation_conditions.json")));
       assert.equal(conditions.length, 1);
       assert.deepEqual(conditions, JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text
