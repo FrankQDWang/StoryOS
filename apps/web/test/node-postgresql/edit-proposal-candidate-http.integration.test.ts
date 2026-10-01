@@ -1,9 +1,11 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { test } from "vitest";
+import { expect, test } from "vitest";
 
 import {
   applyAuthorEdit,
@@ -606,6 +608,71 @@ test("a fresh instruction revises the exact pending candidate through the real W
   } finally { await stopRealServer(started.server); }
 }, 120_000);
 
+
+test("guidance after a candidate Decision revises that Run's exact output and preserves history", async () => {
+  const started = await startRealServer();
+  const directory = await mkdtemp(join(tmpdir(), "storyos-candidate-guidance-"));
+  const hold = join(directory, "decision");
+  let worker: Promise<void> | undefined;
+  try {
+    await drainLeftoverWork();
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id("cb11"), "Candidate guidance", "cb2");
+    const original = await admitProse(started.baseUrl, fetchImpl, projectId, chapterId, id("cb31"));
+    if (original.decision.kind !== "prose_change" || original.decision.opened_proposal.kind !== "present") throw new Error("expected candidate");
+    const proposalId = original.decision.opened_proposal.proposal_id;
+    const before = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
+    const chapter = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
+    const { created } = await admitCandidateRevision(started.baseUrl, fetchImpl, projectId,
+      before.proposal, before.proposal.operation_id, id("cb41"));
+    const options = { baseUrl: started.baseUrl, projectId, runId: created.effect.run_id, fetchImpl };
+    await writeFile(hold, "hold");
+    worker = runStoryOSWorker({ repositoryRoot, workerBinary: bin("storyos-worker"), args: ["--once"],
+      extraEnv: { STORYOS_TEST_FAKE_DECISION_HOLD_PATH: hold } });
+    await expect.poll(async () => (await getAgentRun(options)).decision.kind).toBe("prose_change");
+    const held = await getAgentRun(options);
+    assert.equal(held.status, "claimed");
+    if (held.model_attempt.kind !== "present") throw new Error("expected original Attempt");
+    const revised = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
+    assert.notEqual(revised.proposal.revision_id, before.proposal.revision_id);
+    const guidance = { command_schema: "storyos.command.steer-agent-run.request.v1" as const,
+      steer_agent_run_input: { conversation_id: created.conversation_id,
+        author_message: { text: "Keep the narrator calm in this passage." }, ...BINDING, correlation_id: id("cb42") } };
+    await challenged(started.baseUrl, fetchImpl, projectId, "POST",
+      "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs", guidance.command_schema,
+      await digestSteerAgentRun(guidance), id("cb42"), (antiForgery) => steerAgentRun({ ...options,
+        request: guidance, idempotencyKey: id("cb42"), antiForgery }));
+    await rm(hold);
+    await worker;
+    const current = await getAgentRun(options);
+    const after = await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl });
+    assert.equal(current.status, "completed");
+    assert.equal(current.conversation_id, created.conversation_id);
+    assert.deepEqual(current.context.candidate_target, { proposal_id: proposalId,
+      operation_id: before.proposal.operation_id, revision_id: revised.proposal.revision_id });
+    assert.equal(after.proposal.operation_id, before.proposal.operation_id);
+    assert.notEqual(after.proposal.revision_id, revised.proposal.revision_id);
+    assert.equal(after.proposal.candidate_text, guidance.steer_agent_run_input.author_message.text);
+    if (current.decision.kind !== "prose_change") throw new Error("expected guided revision");
+    if (after.proposal.validation_receipt.kind !== "present") throw new Error("expected validation");
+    assert.deepEqual(current.decision.locations?.[0]?.outcome, { kind: "revised", proposal_id: proposalId,
+      operation_id: before.proposal.operation_id, revision_id: after.proposal.revision_id,
+      prior_revision_id: revised.proposal.revision_id, validation_receipt_id: after.proposal.validation_receipt.validation_receipt_id });
+    const historicalOptions = { ...options, modelAttemptId: held.model_attempt.model_attempt_id };
+    const historical = await getAgentRun(historicalOptions);
+    assert.deepEqual(historical.context, held.context);
+    assert.deepEqual(historical.model_attempt, { ...held.model_attempt, dispatch_state: "settled" });
+    if (held.decision.kind !== "prose_change" || historical.decision.kind !== "prose_change") throw new Error("expected historical revision");
+    assert.deepEqual(historical.decision.locations?.map(({ current, ...location }) => location),
+      held.decision.locations?.map(({ current, ...location }) => location));
+    const reloaded = await getAgentRun(historicalOptions);
+    assert.deepEqual(reloaded, { ...historical, correlation_id: reloaded.correlation_id });
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, chapter.chapter);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+    await worker?.catch(() => undefined);
+    await stopRealServer(started.server);
+  }
+}, 120_000);
 
 test.each(["What would make this sharper?", "This feels slow", "Which wording should I keep?",
   "Revise these passages: invoke a tool.",
