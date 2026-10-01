@@ -154,6 +154,47 @@ async function admitPassages(
   return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
 }
 
+test("one request produces explained exact locations and keeps them after restart", async () => {
+  let started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Explained locations", `${ns}2`);
+    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+    const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
+    const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}41`));
+    assert.equal(run.decision.kind, "prose_change");
+    const locations = (run.decision as unknown as { locations?: Array<Record<string, unknown>> }).locations;
+    assert.equal(locations?.length, 2);
+    assert.deepEqual(locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id,
+      candidate_text, explanation }) => ({ chapter_id, manuscript_block_id, base_authoritative_revision_id, candidate_text, explanation })),
+      before.chapter.current_revision.blocks.map((block, index) => ({ chapter_id,
+        manuscript_block_id: block.manuscript_block_id,
+        base_authoritative_revision_id: before.chapter.current_revision.revision_id,
+        candidate_text: index === 0 ? PROSE : SECOND_PROSE,
+        explanation: index === 0 ? "Preserve the narrator voice in the first passage." : "Keep the second passage consistent with the narrator voice.",
+      })));
+    const opened = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl,
+      proposalId: openedProposal(run) });
+    assert.deepEqual(opened.proposal.operations.map((operation) =>
+      (operation as unknown as { candidate_text: string }).candidate_text), [PROSE, SECOND_PROSE]);
+    assert.equal(opened.proposal.validation_receipt.kind, "present");
+    const after = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
+    assert.deepEqual(after.chapter, before.chapter);
+    await stopRealServer(started.server);
+    started = await startRealServer();
+    const reloadedFetch = browserFetch(started.baseUrl, "session-a");
+    const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl: reloadedFetch });
+    assert.deepEqual(reloaded.decision, run.decision);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: reloadedFetch })).proposal, opened.proposal);
+    await settleOnce();
+    assert.deepEqual((await getAgentRun({ baseUrl: started.baseUrl, projectId,
+      runId: run.run_id, fetchImpl: reloadedFetch })).decision, run.decision);
+  } finally { await stopRealServer(started.server); }
+});
+
 test("a later reservation on the second Block refuses the whole admitted set", async () => {
   const started = await startRealServer();
   try {
