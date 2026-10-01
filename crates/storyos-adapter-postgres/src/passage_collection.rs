@@ -1,9 +1,10 @@
-use storyos_application::{CreateAgentRunCommand, CreateAgentRunError};
+use crate::create_agent_run::context::PassageContextInput;
+use storyos_application::CreateAgentRunError;
 use storyos_core::{CurrentPassageAssembly, CurrentPassageAssemblyRecord, PassageContextTarget};
 
 pub(crate) async fn assemble(
     client: &tokio_postgres::Client,
-    command: &CreateAgentRunCommand,
+    command: &PassageContextInput<'_>,
     source: &CurrentPassageAssembly,
     targets: &[PassageContextTarget],
 ) -> Result<CurrentPassageAssemblyRecord, CreateAgentRunError> {
@@ -11,7 +12,7 @@ pub(crate) async fn assemble(
     for target in targets {
         let (revision, body) = super::create_agent_run::context::load_working_target(
             client,
-            &command.project_scope,
+            command.project_scope,
             &target.chapter_id,
         )
         .await?;

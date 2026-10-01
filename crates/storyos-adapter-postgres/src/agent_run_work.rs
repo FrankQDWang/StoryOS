@@ -31,12 +31,24 @@ impl AgentRunWorkStore for PostgresProjectReader {
         &self,
         claim: &ClaimedAgentRun,
     ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
+        let lease_seconds = i64::try_from(self.readable_export_lease_ttl.as_secs())
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
         loop {
             let transaction = self
                 .begin_serializable_project_command_transaction(&claim.project_scope)
                 .await
                 .map_err(complete_challenge_error)?;
-            let phase = settle_one_phase(&transaction.client, claim).await;
+            let phase = async {
+                let phase = settle_one_phase(&transaction.client, claim, lease_seconds).await?;
+                if let WorkPhase::Done(CompleteAgentRun::Settled) = phase
+                    && crate::agent_run_steering::advance(&transaction.client, claim, lease_seconds)
+                        .await?
+                {
+                    return Ok(WorkPhase::Hold("steering"));
+                }
+                Ok(phase)
+            }
+            .await;
             match phase {
                 Ok(WorkPhase::Done(result)) => {
                     transaction
@@ -118,25 +130,26 @@ async fn claim_agent_run_row(
 async fn settle_one_phase(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    lease_seconds: i64,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let Some(run) = client
         .query_opt(
-            "SELECT run.status, run.author_message, run.chapter_id::text,
+            "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'),run.author_message), run.chapter_id::text,
                     run.conversation_id::text, run.settlement,
                     assembly.sufficiency, assembly.context_assembly_manifest_id::text,
                     assembly.destination_context_manifest_id::text,
                     attempt.model_attempt_id::text, attempt.decision_id::text,
                     attempt.continuation_binding_id::text, attempt.dispatch_state,
-                    attempt.payload::text, assembly.payload::text
+                    attempt.payload::text, run.active_decision_position::text, assembly.payload::text
                FROM storyos.agent_runs AS run
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
-                AND assembly.manifest_role = 'decision'
+                AND assembly.manifest_role = 'decision' AND assembly.decision_position=run.active_decision_position
                LEFT JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
-                AND attempt.attempt_role = 'decision'
+                AND attempt.attempt_role = 'decision' AND attempt.decision_position=run.active_decision_position
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid
@@ -168,12 +181,18 @@ async fn settle_one_phase(
     let assembly_manifest_id: String = run.get(6);
     let destination_manifest: Option<String> = run.get(7);
     let attempt_id: Option<String> = run.get(8);
+    if attempt_id.is_none()
+        && run.get::<_, String>(13) == "0"
+        && crate::agent_run_steering::advance(client, claim, lease_seconds).await?
+    {
+        return Ok(WorkPhase::Hold("steering"));
+    }
     let decision_id: Option<String> = run.get(9);
     let continuation_id: Option<String> = run.get(10);
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let record: serde_json::Value = serde_json::from_str(&run.get::<_, String>(13))
+    let record: serde_json::Value = serde_json::from_str(&run.get::<_, String>(14))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let resolution = storyos_core::decode_assembly_record(&record)
         .ok_or_else(|| {
@@ -250,6 +269,7 @@ async fn settle_one_phase(
                 )))
             })?,
             rebuild.as_ref(),
+            &run.get::<_, String>(13),
             &record,
         )
         .await?;
@@ -528,7 +548,7 @@ async fn persist_stream_and_decision(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'decision'",
+                AND attempt_role = 'decision' AND model_attempt_id=$7::text::uuid",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -540,6 +560,7 @@ async fn persist_stream_and_decision(
                     "settled"
                 },
                 &payload.to_string(),
+                &attempt_id,
             ],
         )
         .await

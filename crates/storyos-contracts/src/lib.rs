@@ -125,10 +125,10 @@ pub use release1_accept_proposal::{
 };
 pub use release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
-    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
-    AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
-    CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH,
-    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunSteeringInspect,
+    AgentRunStreamItemInspect, AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget,
+    AttemptEvidence, AuthorMessage, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD,
+    CREATE_AGENT_RUN_PATH, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
     CapturedMemorySettingsInspect, ContextBlockReason, ContextProjectionInspect, ContextPurpose,
     ContextRejectionInspect, ContextRejectionReason, ContextSourceClass, ContextSourceInspect,
     ContextSufficiency, ContinuationAdmissionInspect, ContinuationInputMappingInspect,
@@ -154,6 +154,9 @@ pub use release1_agent_run_control::{
     PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID, PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
     PauseAgentRunConflictReason, PauseAgentRunEffect, PauseAgentRunInput,
     PauseAgentRunNoEffectReason, PauseAgentRunRequest, PauseAgentRunResponse,
+    STEER_AGENT_RUN_DIGEST_PROFILE, STEER_AGENT_RUN_PATH, STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
+    STEER_AGENT_RUN_RESPONSE_SCHEMA_ID, SteerAgentRunEffect, SteerAgentRunInput,
+    SteerAgentRunRequest, SteerAgentRunResponse,
 };
 pub use release1_archive_project::{
     ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,

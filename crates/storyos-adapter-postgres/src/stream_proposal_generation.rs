@@ -34,7 +34,7 @@ pub(crate) async fn apply_streamed_proposal(
     let Some(batches) = stream_batch_plan(author_message) else {
         return Ok((None, StreamWork::Continue));
     };
-    let loaded = match load_generation(client, claim).await? {
+    let loaded = match load_generation(client, claim, decision_id).await? {
         Some(current) => current,
         None => {
             let Some(first) = load_admitted_targets(client, claim, chapter_id)
@@ -416,6 +416,7 @@ pub(crate) async fn append_revision(
 async fn load_generation(
     client: &Client,
     claim: &ClaimedAgentRun,
+    decision_id: &str,
 ) -> Result<Option<LoadedGeneration>, CompleteAgentRunError> {
     let row = client
         .query_opt(
@@ -447,8 +448,12 @@ async fn load_generation(
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND (
-                  generation.run_id = $3::text::uuid
-                  OR proposal.source_run_id = $3::text::uuid
+                  proposal.source_decision_id = $4::text::uuid
+                  OR EXISTS (SELECT 1 FROM storyos.proposal_generation_transitions AS transition
+                    JOIN storyos.agent_runs AS run USING (owner_user_id, project_id)
+                    WHERE (transition.owner_user_id, transition.project_id, transition.resulting_generation_id, transition.resulting_run_id) =
+                          (generation.owner_user_id, generation.project_id, generation.generation_id, $3::text::uuid)
+                      AND run.run_id=transition.resulting_run_id AND run.active_decision_position=0)
                 )
               ORDER BY (generation.run_id = $3::text::uuid) DESC, generation.generation_id
               LIMIT 1",
@@ -456,6 +461,7 @@ async fn load_generation(
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &decision_id,
             ],
         )
         .await

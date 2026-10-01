@@ -18,6 +18,7 @@ impl super::CreateAgentRunStore for RejectStore {
         &self,
         _scope: &ProjectScope,
         _run_id: &str,
+        _selection: &super::AgentRunReadSelection,
     ) -> Result<Option<super::AgentRunRecord>, CreateAgentRunError> {
         unreachable!("binding conflict must fail before the store")
     }

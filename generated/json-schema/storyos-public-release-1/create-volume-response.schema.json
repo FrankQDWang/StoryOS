@@ -263,6 +263,7 @@
         "updateProjectAssistance",
         "createAgentRun",
         "pauseAgentRun",
+        "steerAgentRun",
         "cancelAgentRun"
       ],
       "type": "string"

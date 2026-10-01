@@ -162,6 +162,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         constrain_count_fields(inspect);
     }
     for name in [
+        "AgentRunSteeringInspect",
         "TokenCountingProfileInspect",
         "ContextSourceInspect",
         "ContextProjectionInspect",
@@ -178,6 +179,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         constrain_uuid_fields(availability, &["current_revision_id"]);
     }
     for name in [
+        "AgentRunSteeringInspect",
         "AttemptEvidence",
         "OptionalDecisionInspect",
         "OptionalModelAttemptInspect",
@@ -200,6 +202,9 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
             constrain_uuid_fields(
                 definition,
                 &[
+                    "steering_input_id",
+                    "input_snapshot_id",
+                    "model_attempt_id",
                     "attempt_id",
                     "decision_id",
                     "model_attempt_id",
@@ -292,7 +297,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
@@ -344,6 +349,7 @@ pub(super) fn typescript_type_declarations() -> String {
         AgentRunUsageInspect::decl(&config),
         GetAgentRunRequest::decl(&config),
         CapturedMemorySettingsInspect::decl(&config),
+        crate::release1_agent_run::AgentRunSteeringInspect::decl(&config),
         GetAgentRunResponse::decl(&config),
         OriginalResultRetrievalDisposition::decl(&config),
         OptionalOriginalResultRetrievalInspect::decl(&config),
@@ -475,6 +481,7 @@ fn get_fixture() -> Value {
         "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",
         "run_id": "018f0000-0000-7001-8000-000000000a34",
         "status": "queued",
+        "steering_inputs": [],
         "captured_memory_settings": {
             "kind": "available",
             "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",

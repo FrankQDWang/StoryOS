@@ -66,6 +66,7 @@ activity_kinds! {
     HumanReadableManuscriptExportSettled => ("human_readable_manuscript_export_settled", "storyos.event.human-readable-manuscript-export-settled.v1"),
     ProjectExportSettled => ("project_export_settled", "storyos.event.project-export-settled.v1"),
     AgentRunCreated => ("agent_run_created", "storyos.event.agent-run-created.v1"),
+    AgentRunSteeringRetained => ("agent_run_steering_retained", "storyos.event.agent-run-steering-retained.v1"),
     AgentRunPaused => ("agent_run_paused", "storyos.event.agent-run-paused.v1"),
     AgentRunCancelled => ("agent_run_cancelled", "storyos.event.agent-run-cancelled.v1"),
 }

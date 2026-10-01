@@ -203,6 +203,12 @@
       ],
       "type": "string"
     },
+    "PauseAgentRunConflictReason": {
+      "enum": [
+        "terminal_run"
+      ],
+      "type": "string"
+    },
     "ProjectOpenState": {
       "oneOf": [
         {
@@ -241,9 +247,11 @@
       "additionalProperties": false,
       "properties": {
         "owner_user_id": {
+          "format": "uuid",
           "type": "string"
         },
         "project_id": {
+          "format": "uuid",
           "type": "string"
         }
       },
@@ -253,61 +261,32 @@
       ],
       "type": "object"
     },
-    "UpdateVolumeConflictReason": {
-      "enum": [
-        "stale_tree_revision"
-      ],
-      "type": "string"
-    },
-    "UpdateVolumeEffect": {
+    "SteerAgentRunEffect": {
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
+            "input_position": {
+              "type": "string"
+            },
             "kind": {
-              "const": "authoritative_applied",
+              "const": "retained",
               "type": "string"
             },
-            "order": {
+            "run_id": {
+              "format": "uuid",
               "type": "string"
             },
-            "project_activity_position": {
-              "type": "string"
-            },
-            "title": {
-              "type": "string"
-            },
-            "tree_revision": {
-              "type": "string"
-            },
-            "volume_id": {
+            "steering_input_id": {
+              "format": "uuid",
               "type": "string"
             }
           },
           "required": [
             "kind",
-            "volume_id",
-            "title",
-            "tree_revision",
-            "order",
-            "project_activity_position"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "no_effect",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/UpdateVolumeNoEffectReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
+            "run_id",
+            "steering_input_id",
+            "input_position"
           ],
           "type": "object"
         },
@@ -319,24 +298,7 @@
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/UpdateVolumeConflictReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "refused",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/UpdateVolumeRefusalReason"
+              "$ref": "#/$defs/PauseAgentRunConflictReason"
             }
           },
           "required": [
@@ -346,24 +308,9 @@
           "type": "object"
         }
       ]
-    },
-    "UpdateVolumeNoEffectReason": {
-      "enum": [
-        "unchanged"
-      ],
-      "type": "string"
-    },
-    "UpdateVolumeRefusalReason": {
-      "enum": [
-        "archived_project",
-        "invalid_title",
-        "invalid_order",
-        "invalid_volume_join"
-      ],
-      "type": "string"
     }
   },
-  "$id": "storyos.command.update-volume.response.v1",
+  "$id": "storyos.command.steer-agent-run.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -380,7 +327,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/UpdateVolumeEffect"
+      "$ref": "#/$defs/SteerAgentRunEffect"
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -392,7 +339,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.update-volume.response.v1",
+      "const": "storyos.command.steer-agent-run.response.v1",
       "type": "string"
     }
   },
@@ -406,6 +353,6 @@
     "project",
     "effect"
   ],
-  "title": "StoryOS Update Volume Response",
+  "title": "StoryOS Steering Input Response",
   "type": "object"
 }

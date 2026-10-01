@@ -17,6 +17,7 @@ pub struct AgentRunControlCommand {
     pub run_id: String,
     pub ids: AuthorCommandAdmissionIds,
     pub intent: AgentRunControlIntent,
+    pub steering_input: Option<AgentRunSteeringInput>,
 }
 
 /// Distinguishes pause from cancel at the Application boundary.
@@ -24,6 +25,13 @@ pub struct AgentRunControlCommand {
 pub enum AgentRunControlIntent {
     Pause,
     Cancel,
+    Steer,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentRunSteeringInput {
+    pub conversation_id: String,
+    pub author_message: String,
 }
 
 /// Settlement of one pause or cancel command.
@@ -39,6 +47,11 @@ pub struct AgentRunControlSettlement {
 /// Observable effect of one pause or cancel command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AgentRunControlEffect {
+    Retained {
+        run_id: String,
+        steering_input_id: String,
+        input_position: u64,
+    },
     Applied {
         run_id: String,
         status: AgentRunControlStatus,
@@ -76,6 +89,7 @@ pub enum AgentRunControlConflict {
 #[derive(Debug)]
 pub enum AgentRunControlError {
     BindingConflict,
+    InputLimit,
     HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
@@ -86,6 +100,9 @@ pub enum AgentRunControlError {
 impl std::fmt::Display for AgentRunControlError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::InputLimit => {
+                formatter.write_str("The effective author input exceeds the Context item bound")
+            }
             Self::BindingConflict => formatter.write_str("The AgentRun control binding conflicts"),
             Self::HistoricalAcknowledgementUnavailable => formatter
                 .write_str("The original AgentRun control acknowledgement cannot be recovered"),
@@ -105,7 +122,8 @@ impl std::error::Error for AgentRunControlError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict
+            Self::InputLimit
+            | Self::BindingConflict
             | Self::HistoricalAcknowledgementUnavailable
             | Self::InvalidChallenge
             | Self::MissingProject
@@ -135,6 +153,13 @@ pub async fn control_agent_run(
             "storyos.command.pause-agent-run.request.v1",
             "storyos.command.pauseAgentRun.jcs.v1",
         ),
+        AgentRunControlIntent::Steer => (
+            "steerAgentRun",
+            "POST",
+            "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs",
+            "storyos.command.steer-agent-run.request.v1",
+            "storyos.command.steerAgentRun.jcs.v1",
+        ),
         AgentRunControlIntent::Cancel => (
             "cancelAgentRun",
             "POST",
@@ -154,7 +179,11 @@ pub async fn control_agent_run(
             });
         format!("sha256:{digest_profile}:{value}")
     };
-    if challenge.project_scope != command.project_scope
+    if (command.intent == AgentRunControlIntent::Steer) != command.steering_input.is_some()
+        || command.steering_input.as_ref().is_some_and(|input| {
+            input.author_message.is_empty() || input.author_message.len() > 8000
+        })
+        || challenge.project_scope != command.project_scope
         || challenge.client_session_binding_digest != command.client_binding.binding_ref
         || challenge.client_session_generation != command.client_binding.session_generation
         || challenge.client_contract_revision != command.client_binding.client_contract_revision

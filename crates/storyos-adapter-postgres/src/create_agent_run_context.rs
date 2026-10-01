@@ -1,6 +1,5 @@
 use storyos_application::{
-    AgentRunContext, CreateAgentRunCommand, CreateAgentRunError, ProjectScope,
-    WorkingTargetAvailability,
+    AgentRunContext, CreateAgentRunError, ProjectScope, WorkingTargetAvailability,
 };
 use storyos_core::{
     CurrentPassageAssembly, InstructionBindingInput, assemble_current_passage_context,
@@ -9,13 +8,24 @@ use storyos_core::{
 
 use super::{agent_run_database_error, agent_run_parse_error};
 
-pub(super) async fn persist_current_passage_assembly(
+pub(crate) struct PassageContextInput<'a> {
+    pub project_scope: &'a ProjectScope,
+    pub run_id: &'a str,
+    pub chapter_id: &'a str,
+    pub author_message: &'a str,
+    pub receipt_id: &'a str,
+    pub decision_position: &'a str,
+    pub passage_targets: Option<&'a [storyos_core::PassageContextTarget]>,
+    pub candidate_target: Option<&'a storyos_core::ProposalCandidateTarget>,
+}
+
+pub(crate) async fn persist_current_passage_assembly(
     client: &tokio_postgres::Client,
-    command: &CreateAgentRunCommand,
+    command: &PassageContextInput<'_>,
     destination_identity: &str,
 ) -> Result<AgentRunContext, CreateAgentRunError> {
     let (chapter_revision_id, chapter_body) =
-        load_working_target(client, &command.project_scope, &command.chapter_id).await?;
+        load_working_target(client, command.project_scope, command.chapter_id).await?;
     let selected = client
         .query(
             "SELECT member.manuscript_block_id::text
@@ -46,11 +56,11 @@ pub(super) async fn persist_current_passage_assembly(
     let source = CurrentPassageAssembly {
         operation_requirement_id: operation_requirement_id.clone(),
         input_snapshot_id: input_snapshot_id.clone(),
-        run_id: command.run_id.clone(),
+        run_id: command.run_id.to_owned(),
         owner_user_id: command.project_scope.owner_user_id.as_ref().to_owned(),
         project_id: command.project_scope.project_id.as_ref().to_owned(),
-        author_message: command.author_message.clone(),
-        chapter_id: command.chapter_id.clone(),
+        author_message: command.author_message.to_owned(),
+        chapter_id: command.chapter_id.to_owned(),
         chapter_revision_id: chapter_revision_id.clone(),
         proposal_target_block_ids: Some(selected.into_iter().map(|row| row.get(0)).collect()),
         chapter_body,
@@ -60,8 +70,8 @@ pub(super) async fn persist_current_passage_assembly(
     let record = if let Some(target) = &command.candidate_target {
         let candidate = crate::candidate_revision_target::load(
             client,
-            &command.project_scope,
-            &command.chapter_id,
+            command.project_scope,
+            command.chapter_id,
             target,
         )
         .await?
@@ -79,7 +89,7 @@ pub(super) async fn persist_current_passage_assembly(
             Some(targets) => {
                 crate::passage_collection::assemble(client, command, &source, targets).await?
             }
-            None => match storyos_core::parse_ordinary_passage_request(&command.author_message) {
+            None => match storyos_core::parse_ordinary_passage_request(command.author_message) {
                 None => assemble_current_passage_context(&source),
                 Some(request) => {
                     let targets = match request {
@@ -120,17 +130,18 @@ pub(super) async fn persist_current_passage_assembly(
         .execute(
             "INSERT INTO storyos.operation_requirements
                (owner_user_id, project_id, operation_requirement_id, run_id,
-                input_snapshot_id, receipt_id, payload)
+                input_snapshot_id, receipt_id, payload, decision_position)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::jsonb)",
+                     $5::text::uuid, $6::text::uuid, $7::text::jsonb, $8::text::numeric)",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &operation_requirement_id,
                 &command.run_id,
                 &input_snapshot_id,
-                &command.ids.receipt_id,
+                &command.receipt_id,
                 &payload,
+                &command.decision_position,
             ],
         )
         .await
@@ -146,10 +157,10 @@ pub(super) async fn persist_current_passage_assembly(
                (owner_user_id, project_id, context_assembly_manifest_id,
                 operation_requirement_id, run_id, sufficiency,
                 destination_context_manifest_id, outbound_disclosure_manifest_id,
-                payload, receipt_id)
+                payload, receipt_id, decision_position)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
                      $4::text::uuid, $5::text::uuid, $6,
-                     $7::text::uuid, $8::text::uuid, $9::text::jsonb, $10::text::uuid)",
+                     $7::text::uuid, $8::text::uuid, $9::text::jsonb, $10::text::uuid, $11::text::numeric)",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -160,7 +171,8 @@ pub(super) async fn persist_current_passage_assembly(
                 &None::<&str>,
                 &None::<&str>,
                 &payload,
-                &command.ids.receipt_id,
+                &command.receipt_id,
+                &command.decision_position,
             ],
         )
         .await
@@ -181,6 +193,7 @@ pub(super) async fn load_assembled_context(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     run_id: &str,
+    decision_position: &str,
 ) -> Result<AgentRunContext, CreateAgentRunError> {
     let row = client
         .query_opt(
@@ -197,11 +210,12 @@ pub(super) async fn load_assembled_context(
               WHERE assembly.owner_user_id = $1::text::uuid
                 AND assembly.project_id = $2::text::uuid
                 AND assembly.run_id = $3::text::uuid
-                AND assembly.manifest_role = 'decision'",
+                AND assembly.manifest_role = 'decision' AND assembly.decision_position=$4::text::numeric",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &run_id,
+                &decision_position,
             ],
         )
         .await

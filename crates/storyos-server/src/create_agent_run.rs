@@ -3,7 +3,8 @@ use axum::extract::Query;
 use sha2::{Digest, Sha256};
 use storyos_application::{
     AuthorCommandAdmissionIds, ConversationSelection, CreateAgentRunCommand, CreateAgentRunError,
-    EditorClientBinding, ProjectCommandChallengeBinding, open_agent_run, request_create_agent_run,
+    EditorClientBinding, ProjectCommandChallengeBinding, inspect_agent_run,
+    request_create_agent_run,
 };
 
 use super::editor_session::{exact_header, session_binding_ref};
@@ -212,21 +213,16 @@ pub(super) async fn get_agent_run(
         valid_uuid(model_attempt_id)?;
     }
     let reader = project_reader(&state).await?;
-    let Some(record) = open_agent_run(&reader, &scope, &run_id)
+    let selection = query
+        .model_attempt_id
+        .map(storyos_application::AgentRunReadSelection::ModelAttempt)
+        .unwrap_or(storyos_application::AgentRunReadSelection::Current);
+    let Some(record) = inspect_agent_run(&reader, &scope, &run_id, &selection)
         .await
         .map_err(create_agent_run_error)?
     else {
         return Err(resource_unavailable());
     };
-    if let Some(model_attempt_id) = query.model_attempt_id.as_deref() {
-        let matches = record
-            .model
-            .as_ref()
-            .is_some_and(|model| model.model_attempt_id == model_attempt_id);
-        if !matches {
-            return Err(resource_unavailable());
-        }
-    }
     Ok(Json(contracts::GetAgentRunResponse {
         schema_id: contracts::GET_AGENT_RUN_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: Uuid::now_v7().to_string(),
@@ -243,6 +239,17 @@ pub(super) async fn get_agent_run(
         },
         memory_settings_revision: record.memory_settings_revision,
         run_id: record.run_id,
+        steering_inputs: record
+            .steering_inputs
+            .into_iter()
+            .map(|input| contracts::AgentRunSteeringInspect {
+                steering_input_id: input.steering_input_id,
+                input_position: input.input_position,
+                author_message: input.author_message,
+                input_snapshot_id: input.input_snapshot_id,
+                model_attempt_id: input.model_attempt_id,
+            })
+            .collect(),
         status: inspect_status(record.status),
         context: inspect_context(&record.context),
         decision: inspect_decision(&record.decision),
