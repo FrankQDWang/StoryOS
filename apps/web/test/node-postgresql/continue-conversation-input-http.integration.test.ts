@@ -103,6 +103,67 @@ async function rewriteChapter(projectId: string, chapterId: string, body: string
   `);
 }
 
+test("ordered guidance is consumed by the same active Run with exact replay", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("d411"), "Guidance Novel", "d42");
+    const request: CreateAgentRunRequest = {
+      command_schema: "storyos.command.create-agent-run.request.v2",
+      create_agent_run_input: {
+        conversation: { kind: "new" }, author_message: { text: FIRST },
+        working_target: { kind: "current_chapter", chapter_id: prepared.chapterId },
+        instruction: { kind: "absent" }, cause: { kind: "author_request" },
+        ...BINDING, correlation_id: id("d431"),
+      },
+    };
+    const created = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      "POST", "/api/v1/projects/{project_id}/agent-runs", request.command_schema,
+      await digestCreateAgentRun(request), id("d432"), (antiForgery) => createAgentRun({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
+        idempotencyKey: id("d432"), antiForgery, request,
+      }));
+    if (created.effect.kind !== "admitted") throw new Error("expected admitted");
+    const runId = created.effect.run_id;
+    const corrections = [CORRECTION, "Keep the ending open."];
+    for (const [index, text] of corrections.entries()) {
+      const guidance = {
+        command_schema: "storyos.command.steer-agent-run.request.v1",
+        steer_agent_run_input: { conversation_id: created.conversation_id,
+          author_message: { text }, ...BINDING, correlation_id: id(`d44${index}`) },
+      };
+      const digest = { ...await digestCreateAgentRun(guidance as unknown as CreateAgentRunRequest),
+        profile: "storyos.command.steerAgentRun.jcs.v1" };
+      await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+        "POST", "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs",
+        guidance.command_schema, digest, id(`d45${index}`), async (antiForgery) => {
+          const send = () => prepared.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/agent-runs/${runId}/steering-inputs`, {
+            method: "POST", headers: { "content-type": "application/json",
+              "idempotency-key": id(`d45${index}`), "x-storyos-anti-forgery": antiForgery },
+            body: JSON.stringify(guidance),
+          });
+          const response = await send();
+          assert.equal(response.status, 200, await response.clone().text());
+          const retained = await response.json();
+          assert.equal(retained.effect.kind, "retained");
+          assert.equal(retained.effect.input_position, String(index + 1));
+          assert.deepEqual(await (await send()).json(), retained);
+        });
+    }
+    await settleOnce();
+    const queried = await inspect(started.baseUrl, prepared, runId);
+    assert.equal(queried.status, "completed");
+    assert.equal(queried.conversation_id, created.conversation_id);
+    assert.equal(selected(queried, "author_instruction"), [FIRST, ...corrections].join("\n"));
+    assert.deepEqual(queried.evidence.find((item) => item.kind === "sent_content"), {
+      kind: "sent_content", attempt_id: attempt(queried).model_attempt_id,
+      availability: "current", content: [FIRST, ...corrections].join("\n"),
+    });
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
 test("continuation consumes an eligible prior binding and keeps current input inspectable", async () => {
   const started = await startRealServer();
   try {
