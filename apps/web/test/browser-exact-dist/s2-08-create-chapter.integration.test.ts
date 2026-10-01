@@ -166,4 +166,12 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
   expect(editor === null || editor === undefined ? undefined : manuscriptBody(editor)).toBe("");
   expect(root?.textContent).not.toContain("模型");
   expect(root?.textContent).not.toContain("Agent");
+  const reloaded = nextFrameLoad(frame);
+  frame.src = `/projects/${root!.querySelector("form[data-rename]")!.getAttribute("data-rename")}`;
+  await reloaded;
+  await expect.poll(() => chapterTitles(frame.contentDocument?.querySelector("#app")))
+    .toEqual(["Chapter A", "Chapter C", "Chapter B", "Chapter E", "Chapter D"]);
+  await expect.poll(() => frame.contentDocument?.querySelector("#app h2")?.textContent).toBe("Chapter A");
+  expect(manuscriptBody(frame.contentDocument!.querySelector(MANUSCRIPT_EDITOR_SELECTOR)!)).toBe("");
+  await page.screenshot({ element: frame, path: "../../../../target/issue-254/chapter-relative-reloaded.png" });
 });
