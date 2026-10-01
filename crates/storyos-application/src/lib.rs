@@ -112,7 +112,7 @@ pub use accept_proposal::{
 pub use agent_run_control::{
     AgentRunControlCommand, AgentRunControlConflict, AgentRunControlEffect, AgentRunControlError,
     AgentRunControlIntent, AgentRunControlNoEffect, AgentRunControlSettlement,
-    AgentRunControlStatus, AgentRunControlStore, control_agent_run,
+    AgentRunControlStatus, AgentRunControlStore, AgentRunSteeringInput, control_agent_run,
 };
 pub use agent_run_work::{
     AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,

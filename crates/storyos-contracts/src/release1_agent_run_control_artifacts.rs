@@ -10,7 +10,10 @@ use crate::release1_agent_run_control::{
     CancelAgentRunResponse, PAUSE_AGENT_RUN, PAUSE_AGENT_RUN_DIGEST_PROFILE,
     PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID, PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
     PauseAgentRunConflictReason, PauseAgentRunEffect, PauseAgentRunInput,
-    PauseAgentRunNoEffectReason, PauseAgentRunRequest, PauseAgentRunResponse,
+    PauseAgentRunNoEffectReason, PauseAgentRunRequest, PauseAgentRunResponse, STEER_AGENT_RUN,
+    STEER_AGENT_RUN_DIGEST_PROFILE, STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
+    STEER_AGENT_RUN_RESPONSE_SCHEMA_ID, SteerAgentRunEffect, SteerAgentRunInput,
+    SteerAgentRunRequest, SteerAgentRunResponse,
 };
 
 pub(super) const PAUSE_REQUEST_SCHEMA_PATH: &str =
@@ -62,7 +65,7 @@ pub(super) fn cancel_response_schema_bytes() -> Vec<u8> {
 
 pub(super) fn openapi() -> String {
     format!(
-        "{}{}",
+        "{}{}{}",
         operation_openapi(
             &PAUSE_AGENT_RUN,
             "Pause one AgentRun without cancelling it",
@@ -74,13 +77,19 @@ pub(super) fn openapi() -> String {
             "Cancel one AgentRun after a durable fence",
             CANCEL_REQUEST_SCHEMA_PATH,
             CANCEL_RESPONSE_SCHEMA_PATH,
+        ),
+        operation_openapi(
+            &STEER_AGENT_RUN,
+            "Retain guidance for the next safe decision",
+            STEER_REQUEST_SCHEMA_PATH,
+            STEER_RESPONSE_SCHEMA_PATH
         )
     )
 }
 
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
-    format!(
+    let declarations = format!(
         "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         PauseAgentRunInput::decl(&config),
         PauseAgentRunRequest::decl(&config),
@@ -94,11 +103,18 @@ pub(super) fn typescript_type_declarations() -> String {
         CancelAgentRunConflictReason::decl(&config),
         CancelAgentRunEffect::decl(&config),
         CancelAgentRunResponse::decl(&config),
+    );
+    format!(
+        "{declarations}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        SteerAgentRunInput::decl(&config),
+        SteerAgentRunRequest::decl(&config),
+        SteerAgentRunEffect::decl(&config),
+        SteerAgentRunResponse::decl(&config)
     )
 }
 
 pub(super) fn typescript_client_source() -> String {
-    format!(
+    let existing = format!(
         concat!(
             "\nexport async function digestPauseAgentRun(request, cryptoImpl = globalThis.crypto) {{\n",
             "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestPauseAgentRun requires request\");\n",
@@ -135,11 +151,27 @@ pub(super) fn typescript_client_source() -> String {
             .path
             .replace("{project_id}", "${encodeURIComponent(projectId)}")
             .replace("{run_id}", "${encodeURIComponent(runId)}"),
+    );
+    format!(
+        r#"{existing}
+export async function digestSteerAgentRun(request, cryptoImpl = globalThis.crypto) {{
+  if (!request || typeof request !== "object") throw new TypeError("digestSteerAgentRun requires request");
+  const bytes = new TextEncoder().encode(JSON.stringify(canonicalJson(request)));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return {{ algorithm: "sha256", profile: "{STEER_AGENT_RUN_DIGEST_PROFILE}", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") }};
+}}
+export async function steerAgentRun({{ projectId, runId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{
+  if (typeof projectId !== "string" || typeof runId !== "string" || !request || typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("steerAgentRun requires Scope, input and security bindings");
+  return commandJson({{ ...options, path: `/api/v1/projects/${{encodeURIComponent(projectId)}}/agent-runs/${{encodeURIComponent(runId)}}/steering-inputs`, body: request, commandHeaders: {{ "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery }} }});
+}}
+"#
     )
 }
 
 pub(super) fn typescript_declarations() -> &'static str {
     concat!(
+        "export declare function digestSteerAgentRun(request: SteerAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
+        "export declare function steerAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: SteerAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<SteerAgentRunResponse>;\n",
         "export declare function digestPauseAgentRun(request: PauseAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
         "export declare function pauseAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: PauseAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<PauseAgentRunResponse>;\n",
         "export declare function digestCancelAgentRun(request: CancelAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
@@ -403,4 +435,52 @@ fn json_bytes(value: &Value) -> Vec<u8> {
     let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
     bytes.push(b'\n');
     bytes
+}
+
+pub(super) const STEER_REQUEST_SCHEMA_PATH: &str =
+    "generated/json-schema/storyos-public-release-1/steer-agent-run-request.schema.json";
+pub(super) const STEER_RESPONSE_SCHEMA_PATH: &str =
+    "generated/json-schema/storyos-public-release-1/steer-agent-run-response.schema.json";
+pub(super) const STEER_FIXTURE_PATHS: [&str; 3] = [
+    "generated/golden-wire/storyos-public-release-1/steer-agent-run.json",
+    "generated/golden-wire/storyos-public-release-1/steer-agent-run.invalid.json",
+    "generated/golden-wire/storyos-public-release-1/steer-agent-run.boundary.json",
+];
+pub(super) fn steer_request_schema_bytes() -> Vec<u8> {
+    let mut schema = schema_value::<SteerAgentRunRequest>(
+        STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
+        "StoryOS Steering Input Request",
+    );
+    schema["properties"]["command_schema"]["const"] = json!(STEER_AGENT_RUN_REQUEST_SCHEMA_ID);
+    for field in ["conversation_id", "correlation_id"] {
+        schema["$defs"]["SteerAgentRunInput"]["properties"][field]["format"] = json!("uuid");
+    }
+    schema["$defs"]["AuthorMessage"]["properties"]["text"]["minLength"] = json!(1);
+    schema["$defs"]["AuthorMessage"]["properties"]["text"]["maxLength"] = json!(8000);
+    json_bytes(&schema)
+}
+pub(super) fn steer_response_schema_bytes() -> Vec<u8> {
+    response_schema_bytes::<SteerAgentRunResponse>(
+        STEER_AGENT_RUN_RESPONSE_SCHEMA_ID,
+        "StoryOS Steering Input Response",
+    )
+}
+pub(super) fn steer_fixture_bytes() -> Vec<u8> {
+    let mut value: Value =
+        serde_json::from_slice(&pause_fixture_bytes()).expect("control fixture is JSON");
+    value["schema_id"] = json!(STEER_AGENT_RUN_RESPONSE_SCHEMA_ID);
+    value["receipt"]["command_kind"] = json!("steerAgentRun");
+    value["receipt"]["command_digest"]["profile"] = json!(STEER_AGENT_RUN_DIGEST_PROFILE);
+    value["receipt"]["result"] = json!("no_effect");
+    value["effect"] = json!({"kind": "retained", "run_id": "018f0000-0000-7001-8000-000000000b01", "steering_input_id": "018f0000-0000-7001-8000-000000000b02", "input_position": "1"});
+    json_bytes(&value)
+}
+pub(super) fn steer_invalid_fixture_bytes() -> Vec<u8> {
+    let mut value: Value =
+        serde_json::from_slice(&steer_fixture_bytes()).expect("control fixture is JSON");
+    value
+        .as_object_mut()
+        .expect("fixture is an object")
+        .remove("effect");
+    json_bytes(&value)
 }

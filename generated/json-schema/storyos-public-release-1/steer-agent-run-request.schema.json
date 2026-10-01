@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "AuthorMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "SteerAgentRunInput": {
+      "additionalProperties": false,
+      "properties": {
+        "author_message": {
+          "$ref": "#/$defs/AuthorMessage"
+        },
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "conversation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "conversation_id",
+        "author_message",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.steer-agent-run.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.steer-agent-run.request.v1",
+      "type": "string"
+    },
+    "steer_agent_run_input": {
+      "$ref": "#/$defs/SteerAgentRunInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "steer_agent_run_input"
+  ],
+  "title": "StoryOS Steering Input Request",
+  "type": "object"
+}

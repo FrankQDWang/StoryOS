@@ -9,6 +9,9 @@ export const IMPLEMENTED_PROJECT_ACTIVITY_EVENTS = Object.freeze({
   "agent_run_paused": [
     "storyos.event.agent-run-paused.v1"
   ],
+  "agent_run_steering_retained": [
+    "storyos.event.agent-run-steering-retained.v1"
+  ],
   "authoritative_author_edit_applied": [
     "storyos.event.authoritative-author-edit-applied.v1"
   ],

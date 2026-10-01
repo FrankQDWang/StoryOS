@@ -93,7 +93,7 @@ async fn persist_control(
     };
     let run = client
         .query_opt(
-            "SELECT status
+            "SELECT status, conversation_id::text
                FROM storyos.agent_runs
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -116,6 +116,36 @@ async fn persist_control(
         )))
     })?;
     let effect = match command.intent {
+        AgentRunControlIntent::Steer => {
+            let input = command
+                .steering_input
+                .as_ref()
+                .ok_or(AgentRunControlError::BindingConflict)?;
+            if input.conversation_id != run.get::<_, String>(1) {
+                return Err(AgentRunControlError::MissingRun);
+            }
+            match lifecycle {
+                AgentRunLifecycle::Completed
+                | AgentRunLifecycle::Refused
+                | AgentRunLifecycle::Cancelled => AgentRunControlEffect::Conflicted {
+                    reason: AgentRunControlConflict::TerminalRun,
+                },
+                AgentRunLifecycle::Queued
+                | AgentRunLifecycle::Claimed
+                | AgentRunLifecycle::Waiting
+                | AgentRunLifecycle::Paused => {
+                    let position: String = client.query_one(
+                        "SELECT (COALESCE(max((payload->>'input_position')::numeric), 0) + 1)::text FROM storyos.project_activity_event_payloads WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND event_kind='agent_run_steering_retained' AND payload->>'run_id'=$3",
+                        &[&command.project_scope.owner_user_id.as_ref(), &command.project_scope.project_id.as_ref(), &command.run_id],
+                    ).await.map_err(control_database_error)?.get(0);
+                    AgentRunControlEffect::Retained {
+                        run_id: command.run_id.clone(),
+                        steering_input_id: command.ids.author_command_admission_id.clone(),
+                        input_position: position.parse().map_err(control_parse_error)?,
+                    }
+                }
+            }
+        }
         AgentRunControlIntent::Pause => match classify_pause_agent_run(lifecycle) {
             PauseAgentRunResult::Applied => {
                 apply_control(client, command, AgentRunControlStatus::Paused).await?
@@ -157,6 +187,9 @@ async fn persist_control(
     };
     insert_control_admission(client, command).await?;
     let (result_kind, result_payload) = match &effect {
+        AgentRunControlEffect::Retained { .. } => {
+            ("no_effect", r#"{"reason":"steering_retained"}"#.to_owned())
+        }
         AgentRunControlEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
         AgentRunControlEffect::NoEffect { reason } => (
             "no_effect",
@@ -220,11 +253,9 @@ async fn persist_control(
         .await
         .map_err(control_database_error)?;
     let project_activity_position = match &effect {
-        AgentRunControlEffect::Applied {
-            status,
-            fence_generation,
-            ..
-        } => write_control_activity(client, command, *status, *fence_generation).await?,
+        AgentRunControlEffect::Retained { .. } | AgentRunControlEffect::Applied { .. } => {
+            write_control_activity(client, command, &effect).await?
+        }
         AgentRunControlEffect::NoEffect { .. } | AgentRunControlEffect::Conflicted { .. } => 0,
     };
     let encoded_project = encode_command_response_project(&response_project);
@@ -354,8 +385,7 @@ async fn insert_control_admission(
 async fn write_control_activity(
     client: &tokio_postgres::Client,
     command: &AgentRunControlCommand,
-    status: AgentRunControlStatus,
-    fence_generation: u64,
+    effect: &AgentRunControlEffect,
 ) -> Result<u64, AgentRunControlError> {
     let project_activity_position = client
         .query_one(
@@ -376,23 +406,53 @@ async fn write_control_activity(
         .get::<_, String>(0)
         .parse::<u64>()
         .map_err(control_parse_error)?;
-    let event_kind = match status {
-        AgentRunControlStatus::Paused => "agent_run_paused",
-        AgentRunControlStatus::Cancelled => "agent_run_cancelled",
+    let (event_kind, result_kind, payload) = match effect {
+        AgentRunControlEffect::Retained {
+            steering_input_id,
+            input_position,
+            ..
+        } => {
+            let input = command
+                .steering_input
+                .as_ref()
+                .ok_or(AgentRunControlError::BindingConflict)?;
+            (
+                "agent_run_steering_retained",
+                "no_effect",
+                serde_json::json!({
+                    "kind": "agent_run_steering_retained", "run_id": command.run_id,
+                    "conversation_id": input.conversation_id, "steering_input_id": steering_input_id,
+                    "input_position": input_position.to_string(), "author_message": input.author_message,
+                }),
+            )
+        }
+        AgentRunControlEffect::Applied {
+            status,
+            fence_generation,
+            ..
+        } => {
+            let kind = match status {
+                AgentRunControlStatus::Paused => "agent_run_paused",
+                AgentRunControlStatus::Cancelled => "agent_run_cancelled",
+            };
+            (
+                kind,
+                "authoritative_applied",
+                serde_json::json!({"kind": kind, "run_id": command.run_id, "fence_generation": fence_generation.to_string()}),
+            )
+        }
+        AgentRunControlEffect::NoEffect { .. } | AgentRunControlEffect::Conflicted { .. } => {
+            return Err(AgentRunControlError::BindingConflict);
+        }
     };
-    let payload = serde_json::json!({
-        "kind": event_kind,
-        "run_id": command.run_id,
-        "fence_generation": fence_generation.to_string(),
-    })
-    .to_string();
+    let payload = payload.to_string();
     client
         .execute(
             "INSERT INTO storyos.project_activity_event_payloads
                (owner_user_id, project_id, project_activity_position, project_activity_event_id,
                 event_kind, receipt_id, receipt_result_kind, payload)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                     $5, $6::text::uuid, 'authoritative_applied', $7::text::jsonb)",
+                     $5, $6::text::uuid, $8, $7::text::jsonb)",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -401,6 +461,7 @@ async fn write_control_activity(
                 &event_kind,
                 &command.ids.receipt_id,
                 &payload,
+                &result_kind,
             ],
         )
         .await
@@ -412,6 +473,7 @@ pub(super) fn command_kind(intent: AgentRunControlIntent) -> &'static str {
     match intent {
         AgentRunControlIntent::Pause => "pauseAgentRun",
         AgentRunControlIntent::Cancel => "cancelAgentRun",
+        AgentRunControlIntent::Steer => "steerAgentRun",
     }
 }
 
