@@ -71,6 +71,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       await expect.poll(async () => (await getChapter({...options,chapterId})).chapter.current_revision.blocks.map(b=>b.text)).toEqual([...lines]);
       await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     }
+    await page.goto(`${origin}/projects/${projectId}`);
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     let admitted: CreateAgentRunResponse | undefined;
     let requestTarget: CreateAgentRunRequest["create_agent_run_input"]["working_target"] | undefined;
     await page.route(url=>url.pathname.endsWith('/agent-runs'),async route=>{
@@ -197,10 +199,12 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect(candidate()).toHaveAttribute('data-proposal-revision-id', ai.revision_id);
     const primary = page.locator(`[data-proposal-id="${proposalId}"][data-proposal-operation-id="${firstOutcome.operation_id}"]`);
     phase = "accept-primary";
+    const previousEditor = await page.locator('[data-manuscript-editor]').elementHandle();
     await primary.locator('[data-proposal-accept]:not([data-proposal-all])').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === firstOutcome.operation_id)?.resolution).toBe('applied');
     await expect(primary).toHaveCount(0);
+    await expect.poll(() => previousEditor!.evaluate((element) => element.isConnected)).toBe(false);
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await expect(candidate().locator('[data-proposal-accept]')).toBeVisible();
@@ -289,9 +293,9 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.screenshot({ path: join(repositoryRoot, 'target/382-multi-settled.png') });
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
   } catch (error) {
-    await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify({ phase, observed: await page.evaluate(() => {
+    await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify({ phase, error: String(error), observed: await page.evaluate(() => {
       const surface = document.querySelector('[data-manuscript-editor]') as HTMLElement & { editor?: import('@tiptap/core').Editor };
-      const editor = surface.editor;
+      const editor = surface?.editor;
       const candidates: unknown[] = [];
       editor?.state.doc.descendants((node, position) => {
         if (node.type.name === 'blockProposal') candidates.push({ position, attrs: node.attrs });

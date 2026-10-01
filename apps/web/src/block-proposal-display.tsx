@@ -143,7 +143,6 @@ export function BlockProposalDisplay({
 
   useEffect(() => {
     let active = true;
-    setReads([]);
     void Promise.all(effectiveLocators.map(async (locator): Promise<ProposalRead> => {
       try {
         const response = await getProposal({
@@ -171,7 +170,7 @@ export function BlockProposalDisplay({
         return { locator };
       }
     })).then((result) => {
-      if (active) setReads(result);
+      if (active) setReads((current) => canonical(current) === canonical(result) ? current : result);
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, locatorKey, refreshKey,
