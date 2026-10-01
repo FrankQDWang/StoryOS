@@ -67,7 +67,7 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     await page.route((url) => url.pathname.endsWith("/agent-runs"), async (route) => {
       if (route.request().method() !== "POST") return route.continue();
       const response = await route.fetch();
-      assert.equal(response.status(), 200);
+      assert.equal(response.status(), 202);
       admitted = await response.json();
       await route.fulfill({ response });
     });
