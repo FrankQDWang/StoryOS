@@ -452,6 +452,7 @@ export function BlockProposalDisplay({
           conflicted: "正文已变化，候选文字尚未接受。",
           refused: "此次接受已被拒绝，候选文字仍保留。",
         }[response.effect.kind];
+        if (response.effect.kind === "applied") refreshedAcceptance.current.add(target.proposalId);
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
         setSettlementRefresh((value) => value + 1);
         try { await onAccepted(); } catch {

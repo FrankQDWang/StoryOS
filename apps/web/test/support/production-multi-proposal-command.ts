@@ -120,6 +120,38 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const firstOutcome = first.outcome;
     const secondaryOutcome = secondary.outcome;
     const proposalId = secondaryOutcome.proposal_id;
+    const proposalRoute = (url: URL) => url.pathname.endsWith(`/proposals/${proposalId}`);
+    for (const fault of ['stale', 'deleted', 'wrong_scope']) {
+      await page.route(proposalRoute, async route => {
+        const response = await route.fetch();
+        const body = await response.json();
+        if (fault === 'stale') body.proposal.revision_id = id();
+        if (fault === 'wrong_scope') body.project_scope.project_id = id();
+        await route.fulfill(fault === 'deleted' ? { status: 404, json: { code: 'not_found' } } : { response, json: body });
+      });
+      await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
+      await expect(page.locator('.editor-panel [role="alert"]')).toBeVisible();
+      await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
+      await page.unroute(proposalRoute);
+      await page.locator('[data-proposal-return]').click();
+      await expect(page.locator('.editor-panel [role="alert"]')).toHaveCount(0);
+    }
+    let releaseHeld!: () => void;
+    let observedHeld!: () => void;
+    const held = new Promise<void>(resolve => { releaseHeld = resolve; });
+    const observed = new Promise<void>(resolve => { observedHeld = resolve; });
+    await page.route(proposalRoute, async route => {
+      const response = await route.fetch();
+      observedHeld(); await held;
+      await route.fulfill({ response });
+    });
+    await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
+    await observed;
+    assert.ok(locations[2]!.outcome.kind !== 'refused');
+    await page.locator(`[data-proposal-location="${locations[2]!.outcome.operation_id}"]`).click();
+    releaseHeld(); await page.unroute(proposalRoute, undefined);
+    await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
+    await expect(page.locator(`[data-proposal-operation-id="${locations[2]!.outcome.operation_id}"]`)).toHaveAttribute('data-proposal-focused', 'true');
     const before = (await getProposal({ ...options, proposalId })).proposal;
     const retainedHistory = async () => JSON.parse(await queryStoryOSPostgres(`SELECT jsonb_build_object(
       'revision', (SELECT to_jsonb(record) FROM storyos.proposal_revisions AS record
@@ -159,6 +191,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const authorBlock = page.locator(`[data-manuscript-editor] > p[data-id="${first.manuscript_block_id}"]`);
+    await expect(authorBlock).toHaveText(ai.operations.find(operation => operation.operation_id === firstOutcome.operation_id)!.candidate_text);
     await authorBlock.click();
     await expect.poll(() => page.evaluate(() => document.activeElement?.hasAttribute('data-manuscript-editor'))).toBe(true);
     await page.keyboard.press('End');
