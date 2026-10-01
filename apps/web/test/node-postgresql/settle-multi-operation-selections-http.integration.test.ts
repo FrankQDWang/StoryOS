@@ -8,10 +8,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createEditorSession,
-  digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun, digestCreateAgentRun,
+  acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createChapter, createEditorSession,
+  digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun, digestCreateAgentRun, digestCreateChapter,
   digestCreateEditorSession, digestExportProjectArchive, digestReplanProposal,
-  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getProposal, replanProposal,
+  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getProposal, replanProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CreateAgentRunRequest,
@@ -132,13 +132,14 @@ async function admitPassages(
   key: string,
   beforeSettle?: () => Promise<void>,
   settle = true,
+  target?: CreateAgentRunRequest["create_agent_run_input"]["working_target"],
 ) {
   const request: CreateAgentRunRequest = {
     command_schema: "storyos.command.create-agent-run.request.v2",
     create_agent_run_input: {
       conversation: { kind: "new" },
       author_message: { text },
-      working_target: { kind: "current_chapter", chapter_id: chapterId },
+      working_target: target ?? { kind: "current_chapter", chapter_id: chapterId },
       instruction: { kind: "absent" },
       cause: { kind: "author_request" },
       ...BINDING,
@@ -158,6 +159,43 @@ async function admitPassages(
   if (settle) await settleOnce();
   return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
 }
+
+test("one collection request produces three exact locations across two Chapters", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Chapter collection", `${ns}2`);
+    await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+    const tree = await getManuscriptTree({ baseUrl: started.baseUrl, projectId, fetchImpl });
+    const volumeId = tree.volumes[0]!.volume_id;
+    const request = { command_schema: "storyos.command.create-chapter.request.v1",
+      create_chapter_input: { title: "Second target", expected_tree_revision: tree.tree_revision,
+        ...BINDING, correlation_id: id(`${ns}41`) } };
+    const created = await challenged(started.baseUrl, fetchImpl, projectId, "POST",
+      "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", request.command_schema,
+      await digestCreateChapter(request), id(`${ns}42`), (antiForgery) => createChapter({
+        baseUrl: started.baseUrl, projectId, volumeId, fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}42`) }));
+    if (created.effect.kind !== "authoritative_applied") throw new Error("expected second Chapter");
+    const chapters = await Promise.all([chapterId, created.effect.chapter_id].map((chapterId) =>
+      getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })));
+    const target = { kind: "passage_collection", source_chapter_id: chapterId,
+      targets: chapters.map(({ chapter }) => ({ chapter_id: chapter.chapter_id,
+        base_authoritative_revision_id: chapter.current_revision.revision_id,
+        manuscript_block_ids: chapter.current_revision.blocks.map((block) => block.manuscript_block_id) }))
+    } as unknown as CreateAgentRunRequest["create_agent_run_input"]["working_target"];
+    const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}43`), undefined, true, target);
+    if (run.decision.kind !== "prose_change") throw new Error("expected collection Decision");
+    assert.equal(run.decision.locations?.length, 3);
+    assert.deepEqual(run.decision.locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id }) =>
+      ({ chapter_id, manuscript_block_id, base_authoritative_revision_id })), chapters.flatMap(({ chapter }) =>
+      chapter.current_revision.blocks.map((block) => ({ chapter_id: chapter.chapter_id,
+        manuscript_block_id: block.manuscript_block_id, base_authoritative_revision_id: chapter.current_revision.revision_id }))));
+    for (const before of chapters) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId,
+      chapterId: before.chapter.chapter_id, fetchImpl })).chapter, before.chapter);
+  } finally { await stopRealServer(started.server); }
+});
 
 test("one request produces explained exact locations and keeps them after restart", async () => {
   let started = await startRealServer();
