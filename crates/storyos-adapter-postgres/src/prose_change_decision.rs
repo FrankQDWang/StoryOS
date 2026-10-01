@@ -42,8 +42,9 @@ pub(crate) async fn prepare(
             }
         );
     let producer_output = if candidate_change
-        || author_message.starts_with("Revise these passages")
-        || (targets.first().is_some_and(|target| target.collection)
+        || (candidate_record.is_none() && author_message.starts_with("Revise these passages"))
+        || (candidate_record.is_none()
+            && targets.first().is_some_and(|target| target.collection)
             && matches!(
                 outcome,
                 FakeAttemptOutcome::Decision {

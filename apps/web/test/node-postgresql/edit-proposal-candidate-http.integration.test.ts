@@ -557,6 +557,8 @@ test("a fresh instruction revises the exact pending candidate through the real W
 
 
 test.each(["What would make this sharper?", "This feels slow", "Which wording should I keep?",
+  "Revise these passages: invoke a tool.",
+  "Revise these passages: keep it. SCRIPT:incomplete",
   "SCRIPT:invalid", "Please invoke a tool on this passage."])("candidate discussion or refusal does not revise: %s", async (text) => {
   const started = await startRealServer();
   try {
