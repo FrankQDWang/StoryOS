@@ -11,7 +11,7 @@ import {
   acceptProposal, applyAuthorEdit, cancelAgentRun, createAgentRun, createChapter, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestCancelAgentRun, digestCreateAgentRun, digestCreateChapter,
   digestCreateEditorSession, digestExportProjectArchive, digestReplanProposal,
-  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, replanProposal, setCurrentChapter, digestSetCurrentChapter,
+  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getManuscriptTree, getEditorSession, getProposal, pauseAgentRun, digestPauseAgentRun, deleteChapter, digestDeleteChapter, rejectProposalOperations, digestRejectProposalOperations, replanProposal, setCurrentChapter, digestSetCurrentChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CancelAgentRunRequest, CreateAgentRunRequest,
@@ -164,7 +164,7 @@ async function admitPassages(
   return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
 }
 
-async function collectionSetup(baseUrl: string, ns: string) {
+async function collectionSetup(baseUrl: string, ns: string, secondText = "A lantern crossed the river.") {
   const { fetchImpl, projectId, chapterId } = await prepare(baseUrl, id(`${ns}11`), "Chapter collection", `${ns}2`);
   const first = await seedTwoBlocks(baseUrl, fetchImpl, projectId, `${ns}3`);
   const tree = await getManuscriptTree({ baseUrl: baseUrl, projectId, fetchImpl });
@@ -191,7 +191,7 @@ async function collectionSetup(baseUrl: string, ns: string) {
   await switchChapter(chapterId, created.effect.chapter_id, first.session.editor_session.editor_session_id, id(`${ns}44`));
   const current = await getEditorSession({ baseUrl: baseUrl, projectId, fetchImpl,
     editorSessionId: first.session.editor_session.editor_session_id });
-  const second = await seedTwoBlocks(baseUrl, fetchImpl, projectId, `${ns}5`, "A lantern crossed the river.", current);
+  const second = await seedTwoBlocks(baseUrl, fetchImpl, projectId, `${ns}5`, secondText, current);
   await switchChapter(created.effect.chapter_id, chapterId, second.session.editor_session.editor_session_id, id(`${ns}45`));
   const chapters = await Promise.all([chapterId, created.effect.chapter_id].map((chapterId) =>
     getChapter({ baseUrl: baseUrl, projectId, chapterId, fetchImpl })));
@@ -204,30 +204,61 @@ async function collectionSetup(baseUrl: string, ns: string) {
     editorSessionId: first.session.editor_session.editor_session_id };
 }
 
-test("one collection request produces three exact locations across two Chapters", async () => {
-  const started = await startRealServer();
+test.each(["", " SCRIPT:reverse_locations"])("one collection request produces three exact locations across two Chapters%s", async (script) => {
+  let started = await startRealServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
     const { fetchImpl, projectId, chapterId, chapters, target } = await collectionSetup(started.baseUrl, ns);
     const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
-      "Revise these passages: keep the voice.", id(`${ns}43`), undefined, true, target);
+      `Revise these passages: keep the voice.${script}`, id(`${ns}43`), undefined, true, target);
     if (run.decision.kind !== "prose_change") throw new Error("expected collection Decision");
     assert.equal(run.decision.locations?.length, 3);
     assert.deepEqual(run.decision.locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id }) =>
       ({ chapter_id, manuscript_block_id, base_authoritative_revision_id })), chapters.flatMap(({ chapter }) =>
       chapter.current_revision.blocks.map((block) => ({ chapter_id: chapter.chapter_id,
         manuscript_block_id: block.manuscript_block_id, base_authoritative_revision_id: chapter.current_revision.revision_id }))));
+    assert.deepEqual(run.context.passage_targets, target.targets);
+    const sent = run.evidence.find((evidence) => evidence.kind === "sent_content");
+    if (sent?.kind !== "sent_content") throw new Error("expected actual sent content");
+    const wire = JSON.parse(sent.content);
+    assert.deepEqual(wire.targets, target.targets);
+    assert.equal(wire.source_chapter_id, chapterId);
+    assert.deepEqual(wire.selected, run.context.selected.map((source) => ({ ...source, token_count: Number(source.token_count) })));
+    assert.equal(wire.selected.some((source: { content: string }) => source.content === "A lantern crossed the river."), true);
+    const retained = JSON.parse(await queryPostgres(`SELECT payload->'wire' FROM storyos.model_attempts WHERE run_id='${run.run_id}'::uuid;`));
+    assert.equal(retained.serialized_payload, sent.content);
+    assert.equal(retained.digest, `sha256:${createHash("sha256").update(sent.content).digest("hex")}`);
+    const proposals = await Promise.all([...new Set(run.decision.locations!.map((location) => {
+      if (location.outcome.kind !== "opened") throw new Error("expected eligible location");
+      return location.outcome.proposal_id;
+    }))].map(async (proposalId) => (await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl, proposalId })).proposal));
+    for (const [index, location] of run.decision.locations!.entries()) {
+      assert.equal(location.candidate_text, index === 0 ? PROSE : SECOND_PROSE);
+      assert.equal(location.explanation, index === 0 ? "Preserve the narrator voice in the first passage." : "Keep the second passage consistent with the narrator voice.");
+      if (location.outcome.kind !== "opened") throw new Error("expected opened location");
+      const outcome = location.outcome;
+      assert.equal(proposals.find((proposal) => proposal.proposal_id === outcome.proposal_id)?.operations
+        .find((operation) => operation.operation_id === outcome.operation_id)?.candidate_text, location.candidate_text);
+    }
+    await stopRealServer(started.server);
+    started = await startRealServer();
+    const reloadedFetch = browserFetch(started.baseUrl, "session-a");
+    const reloaded = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl: reloadedFetch });
+    assert.deepEqual(reloaded, { ...run, correlation_id: reloaded.correlation_id });
+    for (const proposal of proposals) assert.deepEqual((await getProposal({ baseUrl: started.baseUrl,
+      projectId, proposalId: proposal.proposal_id, fetchImpl: reloadedFetch })).proposal, proposal);
     for (const before of chapters) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId,
       chapterId: before.chapter.chapter_id, fetchImpl })).chapter, before.chapter);
   } finally { await stopRealServer(started.server); }
 });
 
-test("collection refuses a deleted Chapter before destination dispatch", async () => {
+test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reservation"])("collection refuses %s before destination dispatch", async (boundary) => {
   const started = await startRealServer();
   try {
     const ns = randomBytes(3).toString("hex");
-    const setup = await collectionSetup(started.baseUrl, ns);
+    const setup = await collectionSetup(started.baseUrl, ns, boundary === "over_budget" ? "a".repeat(10_000) : undefined);
+    if (boundary === "deleted") {
     const tree = await getManuscriptTree({ baseUrl: started.baseUrl, ...setup });
     const request = { command_schema: "storyos.command.delete-chapter.request.v1",
       delete_chapter_input: { expected_tree_revision: tree.tree_revision, ...BINDING, correlation_id: id(`${ns}61`) } };
@@ -236,12 +267,38 @@ test("collection refuses a deleted Chapter before destination dispatch", async (
       await digestDeleteChapter(request), id(`${ns}62`), (antiForgery) => deleteChapter({
         baseUrl: started.baseUrl, projectId: setup.projectId, chapterId: setup.target.targets[1]!.chapter_id,
         fetchImpl: setup.fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}62`) }));
+    } else if (boundary === "foreign") {
+      const foreign = await prepare(started.baseUrl, id(`${ns}71`), "Foreign target", `${ns}72`);
+      await seedTwoBlocks(started.baseUrl, foreign.fetchImpl, foreign.projectId, `${ns}74`, "Private foreign prose.");
+      const chapter = await getChapter({ baseUrl: started.baseUrl, ...foreign });
+      setup.target.targets[1] = { chapter_id: foreign.chapterId,
+        base_authoritative_revision_id: chapter.chapter.current_revision.revision_id,
+        manuscript_block_ids: chapter.chapter.current_revision.blocks.map((block) => block.manuscript_block_id) };
+    } else if (boundary === "stale") {
+      setup.target.targets[1]!.base_authoritative_revision_id = setup.target.targets[0]!.base_authoritative_revision_id;
+    } else if (boundary === "missing_block") {
+      setup.target.targets[1]!.manuscript_block_ids = [id(`${ns}73`)];
+    }
+    if (boundary === "reservation") await admitPassages(started.baseUrl, setup.fetchImpl, setup.projectId, setup.chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}64`), undefined, true, { ...setup.target, targets: [setup.target.targets[1]!] });
     const run = await admitPassages(started.baseUrl, setup.fetchImpl, setup.projectId, setup.chapterId,
       "Revise these passages: keep the voice.", id(`${ns}63`), undefined, true, setup.target);
-    assert.equal(run.context.sufficiency.kind, "blocked");
-    assert.deepEqual(run.model_attempt, { kind: "absent" });
-    assert.deepEqual(run.evidence, []);
-    assert.equal(run.context.selected.some((source) => source.content === "A lantern crossed the river."), false);
+    if (boundary === "reservation") {
+      if (run.decision.kind !== "prose_change") throw new Error("expected truthful location outcomes");
+      assert.deepEqual(run.decision.locations?.map((location) => location.outcome.kind === "opened"
+        ? { kind: "opened" } : location.outcome), [{ kind: "opened" }, { kind: "opened" }, { kind: "refused", reason: "conflicting_reservation" }]);
+    } else {
+      assert.equal(run.context.sufficiency.kind, "blocked");
+      assert.deepEqual(run.model_attempt, { kind: "absent" });
+      assert.deepEqual(run.evidence, []);
+      if (boundary === "over_budget") assert.equal(run.context.selected.some((source) => source.source_class === "working_target"), false);
+      else assert.equal(run.context.selected.some((source) => source.content === "A lantern crossed the river."), false);
+      assert.equal(run.context.selected.some((source) => source.content === "Private foreign prose."), false);
+    }
+    assert.deepEqual(run.context.passage_targets, setup.target.targets);
+    await settleOnce();
+    const repeated = await getAgentRun({ baseUrl: started.baseUrl, ...setup, runId: run.run_id });
+    assert.deepEqual(repeated, { ...run, correlation_id: repeated.correlation_id });
   } finally { await stopRealServer(started.server); }
 });
 
@@ -287,8 +344,9 @@ test("one request produces explained exact locations and keeps them after restar
   } finally { await stopRealServer(started.server); }
 });
 
-test.each(["stream", "decision", "cancelled", "collection_rejected"])("typed result recovers the %s boundary without revival", async (scenario) => {
-  const phase = scenario === "collection_rejected" ? "decision" : scenario;
+test.each(["stream", "decision", "cancelled", "collection_stream", "collection_decision", "collection_cancelled", "collection_paused", "collection_rejected"])("typed result recovers the %s boundary without revival", async (scenario) => {
+  const phase = scenario === "collection_rejected" ? "decision" : scenario.replace("collection_", "");
+  const terminal = phase === "cancelled" || phase === "paused";
   let started = await startRealServer();
   const hold = join(tmpdir(), `storyos-377-${randomBytes(6).toString("hex")}.hold`);
   let child: ReturnType<typeof execFile> | undefined;
@@ -296,7 +354,7 @@ test.each(["stream", "decision", "cancelled", "collection_rejected"])("typed res
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
-    const collection = scenario === "collection_rejected" ? await collectionSetup(started.baseUrl, ns) : undefined;
+    const collection = scenario.startsWith("collection_") ? await collectionSetup(started.baseUrl, ns) : undefined;
     const { fetchImpl, projectId, chapterId } = collection ?? await prepare(started.baseUrl, id(`${ns}11`), "Recovered locations", `${ns}2`);
     if (!collection) await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
     const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
@@ -322,7 +380,7 @@ test.each(["stream", "decision", "cancelled", "collection_rejected"])("typed res
     )) as string[]).map(async (proposalId) => (await getProposal({ baseUrl: started.baseUrl,
       projectId, fetchImpl, proposalId })).proposal));
     let priorProposals: Awaited<ReturnType<typeof readProposals>> | undefined;
-    if (collection) {
+    if (scenario === "collection_rejected" && collection) {
       const opened = await getProposal({ baseUrl: started.baseUrl, projectId, fetchImpl, proposalId: openedProposal(held) });
       const request = { command_schema: "storyos.command.reject-proposal-operations.request.v1",
         reject_proposal_operations_input: { proposal_revision_id: opened.proposal.revision_id,
@@ -339,7 +397,13 @@ test.each(["stream", "decision", "cancelled", "collection_rejected"])("typed res
       held = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
       priorProposals = await readProposals();
     }
-    if (phase === "cancelled") {
+    if (phase === "paused") {
+      const request = { command_schema: "storyos.command.pause-agent-run.request.v1",
+        pause_agent_run_input: { ...BINDING, correlation_id: id(`${ns}51`) } };
+      await challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause",
+        request.command_schema, await digestPauseAgentRun(request), id(`${ns}52`), (antiForgery) => pauseAgentRun({
+          baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl, request, antiForgery, idempotencyKey: id(`${ns}52`) }));
+    } else if (phase === "cancelled") {
       const request: CancelAgentRunRequest = { command_schema: "storyos.command.cancel-agent-run.request.v1",
         cancel_agent_run_input: { ...BINDING, correlation_id: id(`${ns}51`) } };
       await challenged(started.baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
@@ -369,9 +433,9 @@ test.each(["stream", "decision", "cancelled", "collection_rejected"])("typed res
     const after = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
     assert.deepEqual(after.items, raw);
     if (priorProposals) assert.deepEqual(await readProposals(), priorProposals);
-    assert.deepEqual(after.model_attempt, phase === "cancelled" ? held.model_attempt : { ...held.model_attempt, dispatch_state: "settled" });
-    if (phase === "cancelled") {
-      assert.equal(after.status, "cancelled");
+    assert.deepEqual(after.model_attempt, terminal ? held.model_attempt : { ...held.model_attempt, dispatch_state: "settled" });
+    if (terminal) {
+      assert.equal(after.status, phase);
       assert.deepEqual(after.decision, { kind: "absent" });
     } else {
       if (after.decision.kind !== "prose_change") throw new Error("expected typed decision");
@@ -381,9 +445,11 @@ test.each(["stream", "decision", "cancelled", "collection_rejected"])("typed res
         assert.deepEqual(after.decision.locations, held.decision.kind === "prose_change" ? held.decision.locations : undefined);
       }
     }
-    const count = phase === "cancelled" ? "0" : collection ? "2" : "1";
+    const count = terminal ? "0" : collection ? "2" : "1";
     assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id='${admitted.run_id}'::uuid;`), count);
     assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
+    for (const original of collection?.chapters ?? []) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl,
+      projectId, chapterId: original.chapter.chapter_id, fetchImpl })).chapter, original.chapter);
     await settleOnce();
     const repeated = await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: admitted.run_id, fetchImpl });
     assert.deepEqual(repeated, { ...after, correlation_id: repeated.correlation_id });
@@ -575,17 +641,20 @@ test("acceptProposal applies a reversed multi-operation set without using array 
   }
 });
 
-for (const history of ["retained", "legacy_overwritten"]) {
+for (const history of ["retained", "legacy_overwritten", "collection"]) {
 test(`partial Acceptance preserves ${history} evidence and conflicts the remaining Operation`, async () => {
   const ns = randomBytes(3).toString("hex");
   let started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id(`${ns}0311`), "Subset Operation Novel", `${ns}6`);
-    const seeded = await seedTwoBlocks(started.baseUrl, prepared.fetchImpl, prepared.projectId, `${ns}7`);
+    const collection = history === "collection" ? await collectionSetup(started.baseUrl, ns) : undefined;
+    const prepared = collection ?? await prepare(started.baseUrl, id(`${ns}0311`), "Subset Operation Novel", `${ns}6`);
+    const seeded = collection ? { revisionId: collection.target.targets[0]!.base_authoritative_revision_id,
+      session: await getEditorSession({ baseUrl: started.baseUrl, ...prepared, editorSessionId: collection.editorSessionId }) }
+      : await seedTwoBlocks(started.baseUrl, prepared.fetchImpl, prepared.projectId, `${ns}7`);
     const queried = await admitPassages(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId,
-      "Revise these passages: keep the voice.", id(`${ns}0331`),
+      "Revise these passages: keep the voice.", id(`${ns}0331`), undefined, true, collection?.target,
     );
     const opened = await getProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
@@ -685,7 +754,7 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
       proposalId: opened.proposal.proposal_id, fetchImpl,
       idempotencyKey: id(`${ns}0354`), antiForgery: secondNonce, request: secondRequest,
     });
-    if (history === "retained") {
+    if (history !== "legacy_overwritten") {
       const settlementState = async () => JSON.parse(await queryPostgres(`SELECT jsonb_build_object(${[
         "authoritative_heads", "authoritative_revisions", "authoritative_commits", "author_action_entries",
         "scope_counters", "proposal_heads", "proposal_revisions", "proposal_operations", "validation_receipts",
@@ -714,7 +783,7 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
       idempotencyKey: id(`${ns}0352`), antiForgery: nonce, request: firstRequest,
     }), firstAccepted);
     const conflictRef = secondAccepted.receipt.condition_refs[0]!;
-    if (history === "retained") {
+    if (history !== "legacy_overwritten") {
       const afterConflict = await getProposal({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: opened.proposal.proposal_id, fetchImpl,
@@ -811,9 +880,14 @@ test(`partial Acceptance preserves ${history} evidence and conflicts the remaini
       const storedAttempts = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text FROM storyos.model_attempts AS record WHERE project_id='${prepared.projectId}'::uuid;`));
       assert.deepEqual(archivedAttempts, storedAttempts);
       const originalOutput = archivedAttempts.find((attempt: { run_id: string }) => attempt.run_id === queried.run_id).payload;
-      assert.deepEqual(originalOutput.decision.locations.map((location: { current: unknown }) => location.current), [null, null]);
+      assert.deepEqual(originalOutput.decision.locations.map((location: { current: unknown }) => location.current), collection ? [null, null, null] : [null, null]);
       assert.deepEqual(originalOutput.decision.locations, queried.decision.kind === "prose_change"
         ? queried.decision.locations?.map((location) => ({ ...location, current: null })) : undefined);
+      if (collection) {
+        assert.equal(originalOutput.wire.digest, `sha256:${createHash("sha256").update(originalOutput.wire.serialized_payload).digest("hex")}`);
+        assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, ...prepared,
+          chapterId: collection.chapters[1]!.chapter.chapter_id, fetchImpl })).chapter, collection.chapters[1]!.chapter);
+      }
       const conditions = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_validation_conditions.json")));
       assert.equal(conditions.length, 1);
       assert.deepEqual(conditions, JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record))::text

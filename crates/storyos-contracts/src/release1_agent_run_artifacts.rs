@@ -62,18 +62,10 @@ pub(super) fn create_request_schema_bytes() -> Vec<u8> {
     }
     if let Some(target) = schema["$defs"].get_mut("AssistanceWorkingTarget") {
         constrain_uuid_fields(target, &["chapter_id", "source_chapter_id"]);
-        for variant in target["oneOf"].as_array_mut().expect("target variants") {
-            if let Some(targets) = variant["properties"].get_mut("targets") {
-                targets["minItems"] = json!(1);
-                targets["maxItems"] = json!(10_001);
-            }
-        }
     }
     if let Some(target) = schema["$defs"].get_mut("PassageTarget") {
         constrain_uuid_fields(target, &["chapter_id", "base_authoritative_revision_id"]);
         target["properties"]["manuscript_block_ids"]["items"]["format"] = json!("uuid");
-        target["properties"]["manuscript_block_ids"]["minItems"] = json!(1);
-        target["properties"]["manuscript_block_ids"]["maxItems"] = json!(10_001);
     }
     json_bytes(&schema)
 }

@@ -32,7 +32,7 @@ pub(crate) async fn open_selected_prose_change(
             candidate_text,
             author_message,
             produced,
-            chapter,
+            chapter.iter().collect(),
         )
         .await?;
         if opening.proposal_id.is_none() {
@@ -54,14 +54,14 @@ async fn open_chapter(
     candidate_text: &str,
     author_message: &str,
     produced: Option<&[storyos_core::ProseChangeCandidate]>,
-    targets: &[crate::admitted_proposal_target::AdmittedTarget],
+    targets: Vec<&crate::admitted_proposal_target::AdmittedTarget>,
 ) -> Result<ProseOpening, CompleteAgentRunError> {
     use storyos_contracts::{ProseChangeLocationInspect, ProseChangeLocationOutcome};
     let multiple = produced.is_some();
     let selected: Vec<_> = if multiple {
-        targets.iter().collect()
+        targets
     } else {
-        targets.iter().take(1).collect()
+        targets.into_iter().take(1).collect()
     };
     let candidates = produced.unwrap_or_default();
     let candidate_by_block: std::collections::BTreeMap<_, _> = candidates

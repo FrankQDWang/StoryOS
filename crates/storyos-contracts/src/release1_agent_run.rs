@@ -93,6 +93,7 @@ pub enum AssistanceWorkingTarget {
     },
     PassageCollection {
         source_chapter_id: String,
+        #[schemars(length(min = 1, max = 10_001))]
         targets: Vec<PassageTarget>,
     },
 }
@@ -102,6 +103,7 @@ pub enum AssistanceWorkingTarget {
 pub struct PassageTarget {
     pub chapter_id: String,
     pub base_authoritative_revision_id: String,
+    #[schemars(length(min = 1, max = 10_001))]
     pub manuscript_block_ids: Vec<String>,
 }
 

@@ -57,7 +57,6 @@ pub(crate) async fn bind_wire(
     author_message: &str,
     payload: &mut serde_json::Value,
 ) -> Result<(), storyos_application::CompleteAgentRunError> {
-    use sha2::{Digest, Sha256};
     let row = client
         .query_one(
             "SELECT payload::text FROM storyos.operation_requirements
@@ -86,10 +85,7 @@ pub(crate) async fn bind_wire(
         payload["wire"]["serialized_payload"] = serde_json::json!(bytes);
         payload["wire"]["digest"] = serde_json::json!(format!(
             "sha256:{}",
-            Sha256::digest(bytes.as_bytes())
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
+            storyos_core::hex_sha256(bytes.as_bytes())
         ));
         payload["evidence"][0]["content"] = serde_json::json!(bytes);
     }

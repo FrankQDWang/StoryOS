@@ -78,44 +78,10 @@ pub(super) async fn create_agent_run(
         contracts::AssistanceWorkingTarget::PassageCollection {
             source_chapter_id,
             targets,
-        } => {
-            let mut chapters = std::collections::BTreeSet::new();
-            let mut blocks = std::collections::BTreeSet::new();
-            if targets.is_empty() {
-                return Err(invalid_request_shape());
-            }
-            for target in targets {
-                valid_uuid(&target.chapter_id)?;
-                valid_uuid(&target.base_authoritative_revision_id)?;
-                if !chapters.insert(&target.chapter_id) || target.manuscript_block_ids.is_empty() {
-                    return Err(invalid_request_shape());
-                }
-                for block in &target.manuscript_block_ids {
-                    valid_uuid(block)?;
-                    if !blocks.insert(block) {
-                        return Err(invalid_request_shape());
-                    }
-                }
-            }
-            if blocks.len() > storyos_core::CONTEXT_ITEM_TOKEN_LIMIT as usize + 1 {
-                return Err(invalid_request_shape());
-            }
-            (
-                source_chapter_id,
-                Some(
-                    targets
-                        .iter()
-                        .map(|target| storyos_core::PassageContextTarget {
-                            chapter_id: target.chapter_id.clone(),
-                            base_authoritative_revision_id: target
-                                .base_authoritative_revision_id
-                                .clone(),
-                            manuscript_block_ids: target.manuscript_block_ids.clone(),
-                        })
-                        .collect(),
-                ),
-            )
-        }
+        } => (
+            source_chapter_id,
+            Some(super::passage_targets::resolve(targets)?),
+        ),
     };
     valid_uuid(chapter_id)?;
     let store = project_reader(&state).await?;

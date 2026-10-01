@@ -33,7 +33,7 @@ pub fn assemble_passage_collection(
         .map(|input| count_context_item_tokens(&input.chapter_body))
         .sum();
     for passage in passages.iter().skip(1) {
-        let mut assembled = assemble_current_passage_context(passage);
+        let assembled = assemble_current_passage_context(passage);
         record.considered.extend(
             assembled
                 .considered
@@ -49,7 +49,7 @@ pub fn assemble_passage_collection(
         record.selected.extend(
             assembled
                 .selected
-                .drain(..)
+                .into_iter()
                 .filter(|item| item.source_class == ContextSourceClass::WorkingTarget),
         );
         if let ContextSufficiency::Blocked { reasons: unmet } = assembled.sufficiency {

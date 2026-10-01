@@ -1554,6 +1554,8 @@
           "items": {
             "type": "string"
           },
+          "maxItems": 10001,
+          "minItems": 1,
           "type": "array"
         }
       },
