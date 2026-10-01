@@ -362,6 +362,7 @@
               "type": "string"
             },
             "memory_settings_revision": {
+              "format": "uuid",
               "type": "string"
             },
             "use_enabled": {
