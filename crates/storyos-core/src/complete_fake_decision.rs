@@ -201,6 +201,36 @@ pub fn host_fake_wire_digest(author_message: &str, chapter_id: &str) -> String {
     )
 }
 
+/// Consume the captured ordinary resolution without rewriting the author message.
+pub fn plan_resolved_fake_decision(
+    author_message: &str,
+    resolution: Option<crate::OrdinaryPassageResolution>,
+) -> FakeDispatchPlan {
+    let legacy = plan_fake_model_decision(author_message);
+    if matches!(legacy, FakeDispatchPlan::RefuseWithoutDispatch { .. }) {
+        return legacy;
+    }
+    match resolution {
+        None => legacy,
+        Some(crate::OrdinaryPassageResolution::Resolved) => complete_decision(
+            FakeDecisionKind::ProseChange {
+                text: PROSE_CHANGE_TEXT,
+                producer_input: PROSE_CHANGE_TEXT,
+                locations: None,
+            },
+            /*selected*/ true,
+            /*advances_continuation*/ true,
+        ),
+        Some(crate::OrdinaryPassageResolution::Clarification) => complete_decision(
+            FakeDecisionKind::Clarification {
+                question: crate::PASSAGE_REFERENCE_QUESTION,
+            },
+            /*selected*/ true,
+            /*advances_continuation*/ false,
+        ),
+    }
+}
+
 fn complete_decision(
     kind: FakeDecisionKind,
     selected: bool,

@@ -79,7 +79,40 @@ pub(super) async fn persist_current_passage_assembly(
             Some(targets) => {
                 crate::passage_collection::assemble(client, command, &source, targets).await?
             }
-            None => assemble_current_passage_context(&source),
+            None => match storyos_core::parse_ordinary_passage_request(&command.author_message) {
+                None => assemble_current_passage_context(&source),
+                Some(request) => {
+                    let targets = match request {
+                        Ok(references) => {
+                            crate::ordinary_passage_targets::resolve(client, command, &references)
+                                .await?
+                        }
+                        Err(()) => None,
+                    };
+                    let resolved = targets.is_some();
+                    let mut record = match targets {
+                        Some(targets) => {
+                            crate::passage_collection::assemble(client, command, &source, &targets)
+                                .await?
+                        }
+                        None => assemble_current_passage_context(&CurrentPassageAssembly {
+                            chapter_body: String::new(),
+                            ..source.clone()
+                        }),
+                    };
+                    if !resolved {
+                        record.selected.retain(|item| {
+                            item.source_class != storyos_core::ContextSourceClass::WorkingTarget
+                        });
+                    }
+                    record.operation_requirement.ordinary_resolution = Some(if resolved {
+                        storyos_core::OrdinaryPassageResolution::Resolved
+                    } else {
+                        storyos_core::OrdinaryPassageResolution::Clarification
+                    });
+                    record
+                }
+            },
         }
     };
     let payload = encode_assembly_record(&record).to_string();
