@@ -19,21 +19,31 @@ pub(crate) async fn prepare(
 ) -> Result<PreparedProseChange, CompleteAgentRunError> {
     let mut outcome = outcome.clone();
     let mut items = items.to_vec();
-    let producer_output = if author_message.starts_with("Revise these passages") {
-        let targets =
-            crate::admitted_proposal_target::load_admitted_targets(client, claim, chapter_id)
-                .await?;
+    let targets =
+        crate::admitted_proposal_target::load_admitted_targets(client, claim, chapter_id).await?;
+    let producer_output = if author_message.starts_with("Revise these passages")
+        || (targets.first().is_some_and(|target| target.collection)
+            && matches!(
+                outcome,
+                FakeAttemptOutcome::Decision {
+                    kind: FakeDecisionKind::ProseChange { .. },
+                    ..
+                }
+            )) {
         let declared: Vec<_> = targets
             .iter()
-            .map(|target| (target.block_id.clone(), target.revision_id.clone()))
+            .map(|target| {
+                (
+                    target.chapter_id.clone(),
+                    target.block_id.clone(),
+                    target.revision_id.clone(),
+                )
+            })
             .collect();
-        let candidates =
-            storyos_core::produce_fake_prose_changes(chapter_id, &declared, author_message);
+        let candidates = storyos_core::produce_fake_prose_changes(&declared, author_message);
         let incomplete = author_message.ends_with("SCRIPT:incomplete");
         let unselected = author_message.ends_with("SCRIPT:unselected");
-        if !storyos_core::prose_changes_match_targets(chapter_id, &declared, &candidates)
-            || incomplete
-        {
+        if !storyos_core::prose_changes_match_targets(&declared, &candidates) || incomplete {
             outcome = FakeAttemptOutcome::NoDecision {
                 reason: if incomplete {
                     storyos_core::NoDecisionReason::Incomplete

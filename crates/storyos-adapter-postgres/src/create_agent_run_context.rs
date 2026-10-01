@@ -43,7 +43,7 @@ pub(super) async fn persist_current_passage_assembly(
         .map_err(agent_run_database_error)?;
     let operation_requirement_id = uuid::Uuid::now_v7().to_string();
     let input_snapshot_id = uuid::Uuid::now_v7().to_string();
-    let record = assemble_current_passage_context(&CurrentPassageAssembly {
+    let source = CurrentPassageAssembly {
         operation_requirement_id: operation_requirement_id.clone(),
         input_snapshot_id: input_snapshot_id.clone(),
         run_id: command.run_id.clone(),
@@ -56,7 +56,13 @@ pub(super) async fn persist_current_passage_assembly(
         chapter_body,
         instruction: InstructionBindingInput::Absent,
         destination_identity: destination_identity.to_owned(),
-    });
+    };
+    let record = match &command.passage_targets {
+        Some(targets) => {
+            crate::passage_collection::assemble(client, command, &source, targets).await?
+        }
+        None => assemble_current_passage_context(&source),
+    };
     let payload = encode_assembly_record(&record).to_string();
     client
         .execute(
@@ -233,7 +239,13 @@ async fn current_chapter_payload(
               WHERE object.owner_user_id = $1::text::uuid
                 AND object.project_id = $2::text::uuid
                 AND object.manuscript_object_id = $3::text::uuid
-                AND object.object_kind = 'chapter'",
+                AND object.object_kind = 'chapter'
+                AND NOT EXISTS (
+                    SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                     WHERE removal.owner_user_id = object.owner_user_id
+                       AND removal.project_id = object.project_id
+                       AND removal.chapter_id = object.manuscript_object_id
+                )",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),

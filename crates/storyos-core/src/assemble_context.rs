@@ -96,6 +96,7 @@ pub struct OperationRequirementRecord {
     pub chapter_id: String,
     pub chapter_revision_id: Option<String>,
     pub proposal_target_block_ids: Option<Vec<String>>,
+    pub passage_targets: Option<Vec<PassageContextTarget>>,
     pub instruction: InstructionBindingInput,
     pub destination_identity: String,
     pub item_token_limit: u64,
@@ -248,6 +249,7 @@ pub fn assemble_current_passage_context(
             chapter_id: input.chapter_id.clone(),
             chapter_revision_id: input.chapter_revision_id.clone(),
             proposal_target_block_ids: input.proposal_target_block_ids.clone(),
+            passage_targets: None,
             instruction: input.instruction.clone(),
             destination_identity: input.destination_identity.clone(),
             item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,
@@ -307,3 +309,7 @@ pub use assemble_context_codec::{decode_assembly_record, encode_assembly_record}
 #[cfg(test)]
 #[path = "assemble_context_tests.rs"]
 mod tests;
+
+#[path = "assemble_passage_collection.rs"]
+mod assemble_passage_collection;
+pub use assemble_passage_collection::{PassageContextTarget, assemble_passage_collection};

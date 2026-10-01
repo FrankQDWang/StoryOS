@@ -39,6 +39,7 @@ mod list_projects;
 mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
+mod passage_targets;
 mod project_command_challenge;
 mod project_export;
 mod proposal_generation_decision;

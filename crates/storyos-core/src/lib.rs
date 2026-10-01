@@ -71,9 +71,10 @@ pub use archive_project::{
     ArchiveProjectResult, ProjectLifecycle, archive_project,
 };
 pub use assemble_context::{
-    ContextBlockReason, ContextSourceClass, ContextSufficiency, CurrentPassageAssembly,
-    CurrentPassageAssemblyRecord, DestinationIo, InstructionBindingInput, RejectionReason,
-    assemble_current_passage_context, decode_assembly_record, encode_assembly_record,
+    CONTEXT_ITEM_TOKEN_LIMIT, ContextBlockReason, ContextSourceClass, ContextSufficiency,
+    CurrentPassageAssembly, CurrentPassageAssemblyRecord, DestinationIo, InstructionBindingInput,
+    PassageContextTarget, RejectionReason, assemble_current_passage_context,
+    assemble_passage_collection, decode_assembly_record, encode_assembly_record,
 };
 pub use compact_active_context::{
     ACTIVE_COMPACTION_REQUEST_PREFIX, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,

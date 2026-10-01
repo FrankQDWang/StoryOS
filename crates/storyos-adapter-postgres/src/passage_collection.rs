@@ -1,0 +1,122 @@
+use storyos_application::{CreateAgentRunCommand, CreateAgentRunError};
+use storyos_core::{CurrentPassageAssembly, CurrentPassageAssemblyRecord, PassageContextTarget};
+
+pub(crate) async fn assemble(
+    client: &tokio_postgres::Client,
+    command: &CreateAgentRunCommand,
+    source: &CurrentPassageAssembly,
+    targets: &[PassageContextTarget],
+) -> Result<CurrentPassageAssemblyRecord, CreateAgentRunError> {
+    let mut passages = Vec::new();
+    for target in targets {
+        let (revision, body) = super::create_agent_run::context::load_working_target(
+            client,
+            &command.project_scope,
+            &target.chapter_id,
+        )
+        .await?;
+        let members = client
+            .query(
+                "SELECT manuscript_block_id::text FROM storyos.manuscript_revision_members
+              WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
+                AND manuscript_object_id=$3::text::uuid AND revision_id=$4::text::uuid",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &target.chapter_id,
+                    &revision,
+                ],
+            )
+            .await
+            .map_err(super::create_agent_run::agent_run_database_error)?;
+        let ids: std::collections::BTreeSet<String> =
+            members.iter().map(|row| row.get(0)).collect();
+        let available = revision.as_deref() == Some(&target.base_authoritative_revision_id)
+            && target
+                .manuscript_block_ids
+                .iter()
+                .all(|id| ids.contains(id));
+        passages.push(CurrentPassageAssembly {
+            chapter_id: target.chapter_id.clone(),
+            chapter_revision_id: revision.filter(|_| available),
+            chapter_body: if available { body } else { String::new() },
+            proposal_target_block_ids: Some(target.manuscript_block_ids.clone()),
+            ..source.clone()
+        });
+    }
+    Ok(storyos_core::assemble_passage_collection(
+        source,
+        targets.to_vec(),
+        &passages,
+    ))
+}
+
+pub(crate) async fn bind_wire(
+    client: &tokio_postgres::Client,
+    claim: &storyos_application::ClaimedAgentRun,
+    author_message: &str,
+    payload: &mut serde_json::Value,
+) -> Result<(), storyos_application::CompleteAgentRunError> {
+    let row = client
+        .query_one(
+            "SELECT payload::text FROM storyos.operation_requirements
+          WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
+            AND run_id=$3::text::uuid AND requirement_role='primary'",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(super::agent_run_work::complete_database_error)?;
+    let record: serde_json::Value =
+        serde_json::from_str(&row.get::<_, String>(0)).map_err(|error| {
+            storyos_application::CompleteAgentRunError::Unavailable(Box::new(error))
+        })?;
+    if let Some(targets) = record.pointer("/operation_requirement/passage_targets") {
+        let bytes = storyos_core::canonical_json(&serde_json::json!({
+            "author_message": author_message,
+            "source_chapter_id": record["operation_requirement"]["chapter_id"],
+            "targets": targets,
+            "selected": record["selected"],
+            "mapping_revision": storyos_core::HOST_FAKE_MAPPING_REVISION,
+        }));
+        payload["wire"]["serialized_payload"] = serde_json::json!(bytes);
+        payload["wire"]["digest"] = serde_json::json!(format!(
+            "sha256:{}",
+            storyos_core::hex_sha256(bytes.as_bytes())
+        ));
+        payload["evidence"][0]["content"] = serde_json::json!(bytes);
+    }
+    Ok(())
+}
+
+pub(crate) async fn retain_wire(
+    client: &tokio_postgres::Client,
+    claim: &storyos_application::ClaimedAgentRun,
+    payload: &mut serde_json::Value,
+) -> Result<(), storyos_application::CompleteAgentRunError> {
+    let row = client
+        .query_one(
+            "SELECT payload::text FROM storyos.model_attempts
+          WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
+            AND run_id=$3::text::uuid AND attempt_role='decision'",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(super::agent_run_work::complete_database_error)?;
+    let original: serde_json::Value =
+        serde_json::from_str(&row.get::<_, String>(0)).map_err(|error| {
+            storyos_application::CompleteAgentRunError::Unavailable(Box::new(error))
+        })?;
+    if original["wire"].get("serialized_payload").is_some() {
+        payload["wire"] = original["wire"].clone();
+        payload["evidence"] = original["evidence"].clone();
+    }
+    Ok(())
+}

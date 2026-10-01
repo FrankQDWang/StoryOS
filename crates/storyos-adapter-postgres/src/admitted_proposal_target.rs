@@ -2,6 +2,8 @@ use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{ContextSourceClass, ContextSufficiency, decode_assembly_record};
 
 pub(crate) struct AdmittedTarget {
+    pub chapter_id: String,
+    pub collection: bool,
     pub block_id: String,
     pub revision_id: String,
     pub block_text: String,
@@ -41,6 +43,40 @@ pub(crate) async fn load_admitted_targets(
     let Some(record) = decode_assembly_record(&payload) else {
         return Ok(Vec::new());
     };
+    if let Some(collection) = &record.operation_requirement.passage_targets {
+        if record.operation_requirement.chapter_id != chapter_id {
+            return Ok(Vec::new());
+        }
+        let mut admitted = Vec::new();
+        for target in collection {
+            let mut chapter_record = record.clone();
+            chapter_record.operation_requirement.chapter_id = target.chapter_id.clone();
+            chapter_record.operation_requirement.chapter_revision_id =
+                Some(target.base_authoritative_revision_id.clone());
+            chapter_record
+                .operation_requirement
+                .proposal_target_block_ids = Some(target.manuscript_block_ids.clone());
+            let members =
+                load_record_targets(client, claim, &target.chapter_id, &chapter_record).await?;
+            if members.len() != target.manuscript_block_ids.len() {
+                return Ok(Vec::new());
+            }
+            admitted.extend(members.into_iter().map(|mut member| {
+                member.collection = true;
+                member
+            }));
+        }
+        return Ok(admitted);
+    }
+    load_record_targets(client, claim, chapter_id, &record).await
+}
+
+async fn load_record_targets(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    chapter_id: &str,
+    record: &storyos_core::CurrentPassageAssemblyRecord,
+) -> Result<Vec<AdmittedTarget>, CompleteAgentRunError> {
     let requirement = &record.operation_requirement;
     let Some(revision_id) = requirement.chapter_revision_id.as_deref() else {
         return Ok(Vec::new());
@@ -97,6 +133,8 @@ pub(crate) async fn load_admitted_targets(
         .into_iter()
         .zip(blocks)
         .map(|(block_id, block)| AdmittedTarget {
+            chapter_id: chapter_id.to_owned(),
+            collection: false,
             block_id,
             revision_id: revision_id.to_owned(),
             block_text: block.text,
@@ -105,19 +143,15 @@ pub(crate) async fn load_admitted_targets(
     let Some(selected_ids) = requirement.proposal_target_block_ids.as_ref() else {
         return Ok(if all.len() == 1 { all } else { Vec::new() });
     };
-    let selected: Vec<AdmittedTarget> = all
+    let mut by_id: std::collections::BTreeMap<_, _> = all
         .into_iter()
-        .filter(|target| selected_ids.contains(&target.block_id))
+        .map(|target| (target.block_id.clone(), target))
         .collect();
-    if selected.len() != selected_ids.len()
-        || !selected
-            .iter()
-            .map(|target| &target.block_id)
-            .eq(selected_ids.iter())
-    {
-        return Ok(Vec::new());
-    }
-    Ok(selected)
+    Ok(selected_ids
+        .iter()
+        .map(|id| by_id.remove(id))
+        .collect::<Option<Vec<_>>>()
+        .unwrap_or_default())
 }
 
 pub(crate) async fn load_current_target(

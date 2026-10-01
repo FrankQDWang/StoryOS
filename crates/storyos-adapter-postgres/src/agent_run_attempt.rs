@@ -65,6 +65,7 @@ pub(crate) async fn persist_uncertain_attempt(
             continuation.known_prior_binding_id.as_deref(),
         )
     });
+    crate::passage_collection::bind_wire(client, claim, author_message, &mut payload).await?;
     if let Some(prepared) = crate::agent_run_successor::prepare_subject(
         author_message,
         &crate::agent_run_successor::SuccessorOrigin {

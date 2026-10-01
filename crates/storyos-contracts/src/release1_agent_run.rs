@@ -88,7 +88,23 @@ pub struct AuthorMessage {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AssistanceWorkingTarget {
-    CurrentChapter { chapter_id: String },
+    CurrentChapter {
+        chapter_id: String,
+    },
+    PassageCollection {
+        source_chapter_id: String,
+        #[schemars(length(min = 1, max = 10_001))]
+        targets: Vec<PassageTarget>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PassageTarget {
+    pub chapter_id: String,
+    pub base_authoritative_revision_id: String,
+    #[schemars(length(min = 1, max = 10_001))]
+    pub manuscript_block_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -302,6 +318,9 @@ pub struct AgentRunContextInspect {
     pub outbound_disclosure_manifest: OptionalManifestRef,
     pub destination_io: DestinationIo,
     pub current_availability: CurrentAvailabilityInspect,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub passage_targets: Option<Vec<PassageTarget>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

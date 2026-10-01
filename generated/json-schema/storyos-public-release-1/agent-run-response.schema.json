@@ -112,6 +112,15 @@
         "outbound_disclosure_manifest": {
           "$ref": "#/$defs/OptionalManifestRef"
         },
+        "passage_targets": {
+          "items": {
+            "$ref": "#/$defs/PassageTarget"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "purpose": {
           "$ref": "#/$defs/ContextPurpose"
         },
@@ -1531,6 +1540,34 @@
         "settled"
       ],
       "type": "string"
+    },
+    "PassageTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "base_authoritative_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "chapter_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "manuscript_block_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 10001,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "chapter_id",
+        "base_authoritative_revision_id",
+        "manuscript_block_ids"
+      ],
+      "type": "object"
     },
     "ProjectScope": {
       "additionalProperties": false,
