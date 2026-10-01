@@ -459,7 +459,7 @@ async fn write_control_activity(
         .execute(
             "WITH resumed AS (UPDATE storyos.agent_runs SET status='queued', wakeup_pending=true
                WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
-                 AND run_id=($7::jsonb->>'run_id')::uuid AND status='paused'
+                 AND run_id=($7::text::jsonb->>'run_id')::uuid AND status='paused'
                  AND $5='agent_run_steering_retained')
              INSERT INTO storyos.project_activity_event_payloads
                (owner_user_id, project_id, project_activity_position, project_activity_event_id,

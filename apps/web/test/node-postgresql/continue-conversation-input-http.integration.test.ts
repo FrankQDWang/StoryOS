@@ -129,8 +129,9 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("d411"), "Guidance Novel", "d42");
-    const created = await admitQueued(started.baseUrl, prepared, id("d432"), original);
+    const ns = original.startsWith("Compact") ? "d6" : "d4";
+    const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Guidance Novel", `${ns}2`);
+    const created = await admitQueued(started.baseUrl, prepared, id(`${ns}32`), original);
     const runId = created.effect.run_id;
     if (original === FIRST) {
       const request = { command_schema: "storyos.command.pause-agent-run.request.v1" as const,
@@ -144,7 +145,7 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
     }
     const corrections = original.startsWith("Compact") ? [CORRECTION] : [CORRECTION, "Keep the ending open."];
     for (const [index, text] of corrections.entries()) {
-      await retain(started.baseUrl, prepared, runId, created.conversation_id, text, id(`d45${index}`), String(index + 1));
+      await retain(started.baseUrl, prepared, runId, created.conversation_id, text, id(`${ns}5${index}`), String(index + 1));
     }
     await settleOnce();
     const queried = await inspect(started.baseUrl, prepared, runId);
