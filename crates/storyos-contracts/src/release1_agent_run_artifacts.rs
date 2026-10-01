@@ -81,13 +81,6 @@ pub(super) fn create_response_schema_bytes() -> Vec<u8> {
         schema["properties"][field]["format"] = json!("uuid");
     }
     schema["properties"]["memory_settings_revision"]["format"] = json!("uuid");
-    if let Some(settings) = schema["$defs"].get_mut("CapturedMemorySettingsInspect") {
-        for variant in settings["oneOf"].as_array_mut().into_iter().flatten() {
-            if let Some(revision) = variant["properties"].get_mut("memory_settings_revision") {
-                revision["format"] = json!("uuid");
-            }
-        }
-    }
     if let Some(effect) = schema["$defs"].get_mut("CreateAgentRunEffect") {
         constrain_uuid_fields(
             effect,
@@ -138,6 +131,13 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         schema["properties"][field]["format"] = json!("uuid");
     }
     schema["properties"]["memory_settings_revision"]["format"] = json!("uuid");
+    if let Some(settings) = schema["$defs"].get_mut("CapturedMemorySettingsInspect") {
+        for variant in settings["oneOf"].as_array_mut().into_iter().flatten() {
+            if let Some(revision) = variant["properties"].get_mut("memory_settings_revision") {
+                revision["format"] = json!("uuid");
+            }
+        }
+    }
     if let Some(scope) = schema["$defs"].get_mut("ProjectScope") {
         scope["properties"]["owner_user_id"]["format"] = json!("uuid");
         scope["properties"]["project_id"]["format"] = json!("uuid");
