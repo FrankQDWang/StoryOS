@@ -142,6 +142,8 @@ mod project_archive_draft_copies;
 mod project_export;
 mod project_export_work;
 mod proposal_generation_decision;
+mod prose_change_decision;
+mod prose_change_location_read;
 mod readable_export;
 mod readable_export_work;
 mod refused_edit_draft;

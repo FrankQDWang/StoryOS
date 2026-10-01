@@ -141,6 +141,7 @@ pub use release1_agent_run::{
     OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
     OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, ProjectionMode,
+    ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
     ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
     UnknownCreateSuccessorDisposition,
 };

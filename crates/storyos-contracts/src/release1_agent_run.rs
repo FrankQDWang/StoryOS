@@ -351,6 +351,43 @@ pub enum OptionalOpenedProposalInspect {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProseChangeLocationInspect {
+    pub chapter_id: String,
+    pub manuscript_block_id: String,
+    pub base_authoritative_revision_id: String,
+    pub candidate_text: String,
+    pub explanation: String,
+    pub outcome: ProseChangeLocationOutcome,
+    pub current: Option<ProseChangeLocationCurrent>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProseChangeLocationOutcome {
+    Opened {
+        proposal_id: String,
+        operation_id: String,
+        revision_id: String,
+        validation_receipt_id: String,
+    },
+    Refused {
+        reason: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProseChangeLocationCurrent {
+    pub revision_id: String,
+    pub generation: String,
+    pub validation: String,
+    pub closure: String,
+    pub resolution: String,
+    pub reservation_state: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OptionalDecisionInspect {
     Absent,
@@ -368,6 +405,9 @@ pub enum OptionalDecisionInspect {
         selected: bool,
         text: String,
         producer_input: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        locations: Option<Vec<ProseChangeLocationInspect>>,
         continuation: OptionalContinuationInspect,
         authoritative: bool,
         opened_proposal: OptionalOpenedProposalInspect,

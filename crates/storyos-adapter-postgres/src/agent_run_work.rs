@@ -392,7 +392,20 @@ async fn persist_stream_and_decision(
     include_decision: bool,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let (decision_id, status, hold) = match (include_decision, outcome) {
+    let crate::prose_change_decision::PreparedProseChange {
+        outcome,
+        items,
+        output: producer_output,
+    } = crate::prose_change_decision::prepare(
+        client,
+        claim,
+        chapter_id,
+        author_message,
+        items,
+        outcome,
+    )
+    .await?;
+    let (decision_id, status, hold) = match (include_decision, &outcome) {
         (false, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
         (false, FakeAttemptOutcome::Decision { .. }) => (None, "claimed", Some("stream")),
         (true, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
@@ -415,11 +428,17 @@ async fn persist_stream_and_decision(
         }
     };
     let mut stream_hold = false;
-    let opened_proposal = match (decision_id.as_deref(), outcome) {
+    let mut locations = None;
+    let opened_proposal = match (decision_id.as_deref(), &outcome) {
         (
             Some(decision_id),
             FakeAttemptOutcome::Decision {
-                kind: FakeDecisionKind::ProseChange { text, .. },
+                kind:
+                    FakeDecisionKind::ProseChange {
+                        text,
+                        locations: produced,
+                        ..
+                    },
                 selected: true,
                 ..
             },
@@ -446,15 +465,18 @@ async fn persist_stream_and_decision(
                 stream_hold = matches!(work, crate::stream_proposal_generation::StreamWork::Hold);
                 proposal_id
             } else {
-                crate::open_block_proposal::open_selected_prose_change(
+                let opened = crate::open_block_proposal::open_selected_prose_change(
                     client,
                     claim,
                     chapter_id,
                     decision_id,
                     text,
                     author_message,
+                    produced.as_deref(),
                 )
-                .await?
+                .await?;
+                locations = opened.locations;
+                opened.proposal_id
             }
         }
         _ => None,
@@ -464,10 +486,12 @@ async fn persist_stream_and_decision(
         chapter_id,
         assembly_manifest_id,
         attempt_id,
-        items,
-        outcome,
+        &items,
+        &outcome,
+        producer_output.as_deref(),
         decision_id.as_deref(),
         opened_proposal.as_deref(),
+        locations.as_deref(),
         continuation,
     );
     client
@@ -520,8 +544,10 @@ fn encode_payload(
     attempt_id: &str,
     items: &[storyos_core::NativeStreamItem],
     outcome: &FakeAttemptOutcome,
+    producer_output: Option<&[storyos_core::ProseChangeCandidate]>,
     decision_id: Option<&str>,
     opened_proposal: Option<&str>,
+    locations: Option<&[storyos_contracts::ProseChangeLocationInspect]>,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> serde_json::Value {
     let encoded_items: Vec<serde_json::Value> = items
@@ -573,6 +599,7 @@ fn encode_payload(
             FakeDecisionKind::ProseChange {
                 text,
                 producer_input,
+                ..
             } => serde_json::json!({
                 "kind": "prose_change",
                 "decision_id": decision_id,
@@ -601,7 +628,7 @@ fn encode_payload(
         }),
         _ => None,
     };
-    serde_json::json!({
+    let mut payload = serde_json::json!({
         "execution_profile": {
             "profile_revision": HOST_FAKE_EXECUTION_PROFILE,
             "mapping_revision": HOST_FAKE_MAPPING_REVISION,
@@ -624,7 +651,9 @@ fn encode_payload(
             assembly_manifest_id,
             continuation.and_then(|wire| wire.known_prior_binding_id.as_deref()),
         )
-    })
+    });
+    crate::prose_change_decision::encode(&mut payload, producer_output, locations);
+    payload
 }
 
 pub(crate) fn evidence_values(

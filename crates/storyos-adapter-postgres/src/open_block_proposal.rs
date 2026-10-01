@@ -1,8 +1,13 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
-use storyos_core::{OpenBlockProposal, SECOND_PROSE_CHANGE_TEXT, open_block_proposal};
+use storyos_core::{OpenBlockProposal, open_block_proposal};
 use uuid::Uuid;
 
 use crate::admitted_proposal_target::{load_admitted_targets, load_current_target};
+
+pub(crate) struct ProseOpening {
+    pub proposal_id: Option<String>,
+    pub locations: Option<Vec<storyos_contracts::ProseChangeLocationInspect>>,
+}
 
 pub(crate) async fn open_selected_prose_change(
     client: &tokio_postgres::Client,
@@ -11,47 +16,143 @@ pub(crate) async fn open_selected_prose_change(
     decision_id: &str,
     candidate_text: &str,
     author_message: &str,
-) -> Result<Option<String>, CompleteAgentRunError> {
+    produced: Option<&[storyos_core::ProseChangeCandidate]>,
+) -> Result<ProseOpening, CompleteAgentRunError> {
+    use storyos_contracts::{ProseChangeLocationInspect, ProseChangeLocationOutcome};
     let targets = load_admitted_targets(client, claim, chapter_id).await?;
-    let selected = if author_message.starts_with("Revise these passages") {
+    let multiple = produced.is_some();
+    let selected: Vec<_> = if multiple {
         targets
     } else {
         targets.into_iter().take(1).collect()
     };
-    if selected.is_empty() {
-        return Ok(None);
-    }
-    let mut validation_result = None;
+    let candidates = produced.unwrap_or_default();
+    let candidate_by_block: std::collections::BTreeMap<_, _> = candidates
+        .iter()
+        .map(|candidate| (candidate.manuscript_block_id.as_str(), candidate))
+        .collect();
+    let mut locations = Vec::new();
+    let mut validation_result = "invalid";
     for target in &selected {
+        let candidate = candidate_by_block.get(target.block_id.as_str());
         let current = load_current_target(client, claim, chapter_id, &target.block_id).await?;
-        let Some(result) = open_block_proposal(&OpenBlockProposal {
+        let result = open_block_proposal(&OpenBlockProposal {
             scope_matches: true,
             target_block_present: current.revision_id.is_some(),
             expected_base_revision_id: target.revision_id.clone(),
             current_base_revision_id: current.revision_id,
             conflicting_reservation: current.reserved,
-        })
-        .validation_receipt_result() else {
-            return Ok(None);
+        });
+        if let Some(receipt_result) = result.validation_receipt_result() {
+            validation_result = receipt_result;
+        }
+        let reason = match result {
+            storyos_core::OpenBlockProposalResult::Applied => "eligible",
+            storyos_core::OpenBlockProposalResult::Refused {
+                reason: storyos_core::OpenBlockProposalRefusal::WrongScope,
+            } => "wrong_scope",
+            storyos_core::OpenBlockProposalResult::Refused {
+                reason: storyos_core::OpenBlockProposalRefusal::UnavailableTarget,
+            } => "unavailable_target",
+            storyos_core::OpenBlockProposalResult::Conflicted {
+                reason: storyos_core::OpenBlockProposalConflict::ChangedHead,
+            } => "changed_head",
+            storyos_core::OpenBlockProposalResult::Conflicted {
+                reason: storyos_core::OpenBlockProposalConflict::ConflictingReservation,
+            } => "conflicting_reservation",
         };
-        validation_result = Some(result);
+        locations.push(ProseChangeLocationInspect {
+            chapter_id: chapter_id.to_owned(),
+            manuscript_block_id: target.block_id.clone(),
+            base_authoritative_revision_id: target.revision_id.clone(),
+            candidate_text: if multiple {
+                candidate
+                    .expect("validated producer target")
+                    .candidate_text
+                    .clone()
+            } else {
+                candidate_text.to_owned()
+            },
+            explanation: candidate
+                .map(|value| value.explanation.clone())
+                .unwrap_or_default(),
+            current: None,
+            outcome: ProseChangeLocationOutcome::Refused {
+                reason: reason.to_owned(),
+            },
+        });
     }
-    let Some(validation_result) = validation_result else {
-        return Ok(None);
+    let grouped = author_message.contains("as a bundle") || author_message.contains("in order");
+    if grouped && locations.iter().any(|location| !matches!(&location.outcome, ProseChangeLocationOutcome::Refused { reason } if reason == "eligible")) {
+        for location in &mut locations {
+            if matches!(&location.outcome, ProseChangeLocationOutcome::Refused { reason } if reason == "eligible") {
+                location.outcome = ProseChangeLocationOutcome::Refused { reason: "group_precondition_failed".to_owned() };
+            }
+        }
+    }
+    let eligible_ids: std::collections::BTreeSet<_> = locations.iter().filter_map(|location|
+        matches!(&location.outcome, ProseChangeLocationOutcome::Refused { reason } if reason == "eligible")
+            .then_some(location.manuscript_block_id.as_str())).collect();
+    let eligible: Vec<_> = selected
+        .into_iter()
+        .filter(|target| eligible_ids.contains(target.block_id.as_str()))
+        .collect();
+    let persisted = if eligible.is_empty() {
+        None
+    } else {
+        Some(
+            persist_applied_proposal(
+                client,
+                claim,
+                &PersistAppliedProposal {
+                    chapter_id,
+                    decision_id,
+                    candidate_text: if multiple {
+                        candidate_by_block
+                            .get(eligible[0].block_id.as_str())
+                            .expect("validated producer target")
+                            .candidate_text
+                            .as_str()
+                    } else {
+                        candidate_text
+                    },
+                    author_message,
+                    targets: &eligible,
+                    validation_result,
+                    candidates: produced,
+                },
+            )
+            .await?,
+        )
     };
-    persist_applied_proposal(
-        client,
-        claim,
-        &PersistAppliedProposal {
-            chapter_id,
-            decision_id,
-            candidate_text,
-            author_message,
-            targets: &selected,
-            validation_result,
-        },
-    )
-    .await
+    if let Some(persisted) = &persisted {
+        let operations: std::collections::BTreeMap<_, _> = persisted
+            .operations
+            .iter()
+            .map(|(block, operation)| (block.as_str(), operation))
+            .collect();
+        for location in &mut locations {
+            if let Some(operation_id) = operations.get(location.manuscript_block_id.as_str()) {
+                location.outcome = ProseChangeLocationOutcome::Opened {
+                    proposal_id: persisted.proposal_id.clone(),
+                    operation_id: (*operation_id).clone(),
+                    revision_id: persisted.revision_id.clone(),
+                    validation_receipt_id: persisted.validation_receipt_id.clone(),
+                };
+            }
+        }
+    }
+    Ok(ProseOpening {
+        proposal_id: persisted.map(|value| value.proposal_id),
+        locations: multiple.then_some(locations),
+    })
+}
+
+struct PersistedProposal {
+    proposal_id: String,
+    revision_id: String,
+    validation_receipt_id: String,
+    operations: Vec<(String, String)>,
 }
 
 struct PersistAppliedProposal<'a> {
@@ -61,16 +162,15 @@ struct PersistAppliedProposal<'a> {
     author_message: &'a str,
     targets: &'a [crate::admitted_proposal_target::AdmittedTarget],
     validation_result: &'a str,
+    candidates: Option<&'a [storyos_core::ProseChangeCandidate]>,
 }
 
 async fn persist_applied_proposal(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     persist: &PersistAppliedProposal<'_>,
-) -> Result<Option<String>, CompleteAgentRunError> {
-    let Some(first) = persist.targets.first() else {
-        return Ok(None);
-    };
+) -> Result<PersistedProposal, CompleteAgentRunError> {
+    let first = &persist.targets[0];
     let proposal_id = Uuid::now_v7().to_string();
     let proposal_revision_id = Uuid::now_v7().to_string();
     let validation_receipt_id = Uuid::now_v7().to_string();
@@ -130,12 +230,25 @@ async fn persist_applied_proposal(
         .await
         .map_err(database_error)?;
     let mut predecessor_ids: Vec<String> = Vec::new();
-    for (index, target) in persist.targets.iter().enumerate() {
+    let mut operations = Vec::new();
+    let candidates: std::collections::BTreeMap<_, _> = persist
+        .candidates
+        .unwrap_or_default()
+        .iter()
+        .map(|candidate| {
+            (
+                candidate.manuscript_block_id.as_str(),
+                candidate.candidate_text.as_str(),
+            )
+        })
+        .collect();
+    for target in persist.targets {
         let operation_id = Uuid::now_v7().to_string();
-        let operation_candidate = if index == 0 {
-            persist.candidate_text
-        } else {
-            SECOND_PROSE_CHANGE_TEXT
+        let operation_candidate = match persist.candidates {
+            Some(_) => *candidates
+                .get(target.block_id.as_str())
+                .expect("validated producer target"),
+            None => persist.candidate_text,
         };
         let predecessors: Vec<&str> = if ordered {
             predecessor_ids.iter().map(String::as_str).collect()
@@ -161,6 +274,7 @@ async fn persist_applied_proposal(
             )
             .await
             .map_err(database_error)?;
+        operations.push((target.block_id.clone(), operation_id.clone()));
         predecessor_ids.push(operation_id);
     }
     client
@@ -185,7 +299,12 @@ async fn persist_applied_proposal(
         )
         .await
         .map_err(database_error)?;
-    Ok(Some(proposal_id))
+    Ok(PersistedProposal {
+        proposal_id,
+        revision_id: proposal_revision_id,
+        validation_receipt_id,
+        operations,
+    })
 }
 
 fn database_error(error: tokio_postgres::Error) -> CompleteAgentRunError {
