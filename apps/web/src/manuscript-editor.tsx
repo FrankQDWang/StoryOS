@@ -375,9 +375,9 @@ export function ManuscriptEditor({
     const onClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const focused = target.closest<HTMLElement>("[data-proposal-id]");
+    const focused = target.closest<HTMLElement>("[data-candidate-proposal-id]");
       onCandidateFocusRef.current?.(focused === null ? undefined : {
-        proposalId: focused.dataset.proposalId!, operationId: focused.dataset.proposalOperationId!,
+      proposalId: focused.dataset.candidateProposalId!, operationId: focused.dataset.proposalOperationId!,
         revisionId: focused.dataset.proposalRevisionId!, blockId: focused.dataset.proposalTargetId!,
       });
       const acceptButton = target.closest<HTMLButtonElement>("button[data-proposal-accept]");
