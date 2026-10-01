@@ -392,7 +392,50 @@ async fn persist_stream_and_decision(
     include_decision: bool,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let (decision_id, status, hold) = match (include_decision, outcome) {
+    let mut outcome = outcome.clone();
+    let mut items = items.to_vec();
+    let producer_output = if author_message.starts_with("Revise these passages") {
+        let targets =
+            crate::admitted_proposal_target::load_admitted_targets(client, claim, chapter_id)
+                .await?;
+        let declared: Vec<_> = targets
+            .iter()
+            .map(|target| (target.block_id.clone(), target.revision_id.clone()))
+            .collect();
+        let candidates =
+            storyos_core::produce_fake_prose_changes(chapter_id, &declared, author_message);
+        let incomplete = author_message.ends_with("SCRIPT:incomplete");
+        let unselected = author_message.ends_with("SCRIPT:unselected");
+        if !storyos_core::prose_changes_match_targets(chapter_id, &declared, &candidates)
+            || incomplete
+        {
+            outcome = FakeAttemptOutcome::NoDecision {
+                reason: if incomplete {
+                    storyos_core::NoDecisionReason::Incomplete
+                } else {
+                    storyos_core::NoDecisionReason::Invalid
+                },
+            };
+            if incomplete && let Some(item) = items.first_mut() {
+                item.state = StreamItemState::Incomplete;
+            }
+        } else if let FakeAttemptOutcome::Decision {
+            kind: FakeDecisionKind::ProseChange { locations, .. },
+            selected,
+            advances_continuation,
+        } = &mut outcome
+        {
+            *locations = Some(candidates.clone());
+            if unselected {
+                *selected = false;
+                *advances_continuation = false;
+            }
+        }
+        Some(candidates)
+    } else {
+        None
+    };
+    let (decision_id, status, hold) = match (include_decision, &outcome) {
         (false, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
         (false, FakeAttemptOutcome::Decision { .. }) => (None, "claimed", Some("stream")),
         (true, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
@@ -416,11 +459,16 @@ async fn persist_stream_and_decision(
     };
     let mut stream_hold = false;
     let mut locations = None;
-    let opened_proposal = match (decision_id.as_deref(), outcome) {
+    let opened_proposal = match (decision_id.as_deref(), &outcome) {
         (
             Some(decision_id),
             FakeAttemptOutcome::Decision {
-                kind: FakeDecisionKind::ProseChange { text, .. },
+                kind:
+                    FakeDecisionKind::ProseChange {
+                        text,
+                        locations: produced,
+                        ..
+                    },
                 selected: true,
                 ..
             },
@@ -454,6 +502,7 @@ async fn persist_stream_and_decision(
                     decision_id,
                     text,
                     author_message,
+                    produced.as_deref(),
                 )
                 .await?;
                 locations = opened.locations;
@@ -467,8 +516,9 @@ async fn persist_stream_and_decision(
         chapter_id,
         assembly_manifest_id,
         attempt_id,
-        items,
-        outcome,
+        &items,
+        &outcome,
+        producer_output.as_deref(),
         decision_id.as_deref(),
         opened_proposal.as_deref(),
         locations.as_deref(),
@@ -524,12 +574,13 @@ fn encode_payload(
     attempt_id: &str,
     items: &[storyos_core::NativeStreamItem],
     outcome: &FakeAttemptOutcome,
+    producer_output: Option<&[storyos_core::ProseChangeCandidate]>,
     decision_id: Option<&str>,
     opened_proposal: Option<&str>,
     locations: Option<&[storyos_contracts::ProseChangeLocationInspect]>,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> serde_json::Value {
-    let encoded_items: Vec<serde_json::Value> = items
+    let mut encoded_items: Vec<serde_json::Value> = items
         .iter()
         .map(|item| {
             let phase = match item.state {
@@ -558,6 +609,12 @@ fn encode_payload(
             })
         })
         .collect();
+    if let Some(output) = producer_output
+        && let Some(item) = encoded_items.first_mut()
+    {
+        item["text"] = serde_json::json!(storyos_core::canonical_json(&serde_json::json!(output)));
+        item["summary"] = serde_json::json!("host_fake_native_prose_changes");
+    }
     let decision = match (outcome, decision_id) {
         (
             FakeAttemptOutcome::Decision {
@@ -578,13 +635,14 @@ fn encode_payload(
             FakeDecisionKind::ProseChange {
                 text,
                 producer_input,
+                ..
             } => {
                 let mut decision = serde_json::json!({
                     "kind": "prose_change",
                     "decision_id": decision_id,
                     "selected": selected,
                     "text": text,
-                    "producer_input": producer_input,
+                    "producer_input": producer_output.map(|output| storyos_core::canonical_json(&serde_json::json!(output))).unwrap_or_else(|| (*producer_input).to_owned()),
                     "authoritative": false,
                     "advances_continuation": advances_continuation,
                     "opened_proposal": match opened_proposal {

@@ -195,7 +195,29 @@ test("one request produces explained exact locations and keeps them after restar
   } finally { await stopRealServer(started.server); }
 });
 
-test("a later reservation on the second Block refuses the whole admitted set", async () => {
+test.each(["malformed_locations", "undeclared_location", "stale_location_base", "oversized_explanation", "incomplete", "unselected"])(
+  "unusable typed output %s retains evidence without candidates", async (script) => {
+    const started = await startRealServer();
+    try {
+      await drainLeftoverWork();
+      const ns = randomBytes(3).toString("hex");
+      const { fetchImpl, projectId, chapterId } = await prepare(started.baseUrl, id(`${ns}11`), "Rejected list", `${ns}2`);
+      await seedTwoBlocks(started.baseUrl, fetchImpl, projectId, `${ns}3`);
+      const before = await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl });
+      const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+        `Revise these passages SCRIPT:${script}`, id(`${ns}41`));
+      assert.deepEqual(run.decision, { kind: "absent" });
+      const output = JSON.parse(run.items[0]!.text!);
+      assert.equal(output.length, 2);
+      assert.equal(output[1].candidate_text, SECOND_PROSE);
+      assert.equal(run.items[0]!.state, script === "incomplete" ? "incomplete" : "complete");
+      assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals WHERE source_run_id = '${run.run_id}'::uuid;`), "0");
+      assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId, chapterId, fetchImpl })).chapter, before.chapter);
+      assert.deepEqual(await getAgentRun({ baseUrl: started.baseUrl, projectId, runId: run.run_id, fetchImpl }), run);
+    } finally { await stopRealServer(started.server); }
+  });
+
+test.each(["", " SCRIPT:reverse_locations"])("a later reservation preserves the permitted location%s", async (script) => {
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
@@ -204,7 +226,7 @@ test("a later reservation on the second Block refuses the whole admitted set", a
     const seeded = await seedTwoBlocks(started.baseUrl, prepared.fetchImpl, prepared.projectId, `${ns}3`);
     const queried = await admitPassages(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId,
-      "Revise these passages: keep the voice.", id(`${ns}41`), async () => {
+      `Revise these passages: keep the voice.${script}`, id(`${ns}41`), async () => {
         const other = await admitPassages(
           started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId,
           "Revise this passage: keep the voice.", id(`${ns}51`), undefined, false,
@@ -227,10 +249,20 @@ test("a later reservation on the second Block refuses the whole admitted set", a
     );
     assert.equal(queried.decision.kind, "prose_change");
     if (queried.decision.kind !== "prose_change") throw new Error("expected prose decision");
-    assert.deepEqual(queried.decision.opened_proposal, { kind: "absent" });
-    assert.equal(queried.context.current_availability.working_target.kind, "current");
+    const opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: openedProposal(queried), fetchImpl: prepared.fetchImpl });
+    assert.equal(opened.proposal.operations.length, 1);
+    assert.deepEqual(queried.decision.locations?.map((location) => ({
+      block: location.manuscript_block_id, candidate: location.candidate_text, outcome: location.outcome,
+    })), [{ block: opened.proposal.operations[0]!.manuscript_block_id, candidate: PROSE,
+      outcome: { kind: "opened", proposal_id: opened.proposal.proposal_id,
+        operation_id: opened.proposal.operations[0]!.operation_id, revision_id: opened.proposal.revision_id,
+        validation_receipt_id: opened.proposal.validation_receipt.kind === "present"
+          ? opened.proposal.validation_receipt.validation_receipt_id : "missing" } },
+      { block: seeded.secondBlockId, candidate: SECOND_PROSE,
+        outcome: { kind: "refused", reason: "conflicting_reservation" } }]);
     assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals
-      WHERE source_run_id = '${queried.run_id}'::uuid;`), "0");
+      WHERE source_run_id = '${queried.run_id}'::uuid;`), "1");
     const chapter = await getChapter({ baseUrl: started.baseUrl,
       projectId: prepared.projectId, chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
     assert.equal(chapter.chapter.current_revision.revision_id, seeded.revisionId);

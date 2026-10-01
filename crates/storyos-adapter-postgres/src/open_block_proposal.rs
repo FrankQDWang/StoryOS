@@ -16,6 +16,7 @@ pub(crate) async fn open_selected_prose_change(
     decision_id: &str,
     candidate_text: &str,
     author_message: &str,
+    produced: Option<&[storyos_core::ProseChangeCandidate]>,
 ) -> Result<ProseOpening, CompleteAgentRunError> {
     use storyos_contracts::{ProseChangeLocationInspect, ProseChangeLocationOutcome};
     let targets = load_admitted_targets(client, claim, chapter_id).await?;
@@ -29,17 +30,20 @@ pub(crate) async fn open_selected_prose_change(
         .iter()
         .map(|target| (target.block_id.clone(), target.revision_id.clone()))
         .collect();
-    let candidates = storyos_core::produce_fake_prose_changes(chapter_id, &declared);
-    if multiple
-        && !candidates.is_empty()
-        && !storyos_core::prose_changes_match_targets(chapter_id, &declared, &candidates)
-    {
-        return Err(CompleteAgentRunError::Unavailable(Box::new(
-            std::io::Error::other("The producer output is invalid"),
-        )));
-    }
+    let candidates = produced.map_or_else(
+        || storyos_core::produce_fake_prose_changes(chapter_id, &declared, author_message),
+        <[storyos_core::ProseChangeCandidate]>::to_vec,
+    );
+    let candidate_by_block: std::collections::BTreeMap<_, _> = candidates
+        .iter()
+        .map(|candidate| (candidate.manuscript_block_id.as_str(), candidate))
+        .collect();
     let mut locations = Vec::new();
-    for (target, candidate) in selected.iter().zip(&candidates) {
+    let mut validation_result = "invalid";
+    for target in &selected {
+        let candidate = candidate_by_block
+            .get(target.block_id.as_str())
+            .expect("the selected complete Decision covers its declared targets");
         let current = load_current_target(client, claim, chapter_id, &target.block_id).await?;
         let result = open_block_proposal(&OpenBlockProposal {
             scope_matches: true,
@@ -48,6 +52,9 @@ pub(crate) async fn open_selected_prose_change(
             current_base_revision_id: current.revision_id,
             conflicting_reservation: current.reserved,
         });
+        if let Some(receipt_result) = result.validation_receipt_result() {
+            validation_result = receipt_result;
+        }
         let reason = match result {
             storyos_core::OpenBlockProposalResult::Applied => "eligible",
             storyos_core::OpenBlockProposalResult::Refused {
@@ -87,8 +94,13 @@ pub(crate) async fn open_selected_prose_change(
             }
         }
     }
-    let eligible: Vec<_> = selected.into_iter().filter(|target| locations.iter().any(|location|
-        location.manuscript_block_id == target.block_id && matches!(&location.outcome, ProseChangeLocationOutcome::Refused { reason } if reason == "eligible"))).collect();
+    let eligible_ids: std::collections::BTreeSet<_> = locations.iter().filter_map(|location|
+        matches!(&location.outcome, ProseChangeLocationOutcome::Refused { reason } if reason == "eligible")
+            .then_some(location.manuscript_block_id.as_str())).collect();
+    let eligible: Vec<_> = selected
+        .into_iter()
+        .filter(|target| eligible_ids.contains(target.block_id.as_str()))
+        .collect();
     let persisted = if eligible.is_empty() {
         None
     } else {
@@ -100,17 +112,17 @@ pub(crate) async fn open_selected_prose_change(
                     chapter_id,
                     decision_id,
                     candidate_text: if multiple {
-                        candidates
-                            .iter()
-                            .find(|candidate| candidate.manuscript_block_id == eligible[0].block_id)
-                            .map(|candidate| candidate.candidate_text.as_str())
+                        candidate_by_block
+                            .get(eligible[0].block_id.as_str())
                             .expect("validated producer target")
+                            .candidate_text
+                            .as_str()
                     } else {
                         candidate_text
                     },
                     author_message,
                     targets: &eligible,
-                    validation_result: "valid",
+                    validation_result,
                     candidates: multiple.then_some(candidates.as_slice()),
                 },
             )
@@ -118,15 +130,16 @@ pub(crate) async fn open_selected_prose_change(
         )
     };
     if let Some(persisted) = &persisted {
+        let operations: std::collections::BTreeMap<_, _> = persisted
+            .operations
+            .iter()
+            .map(|(block, operation)| (block.as_str(), operation))
+            .collect();
         for location in &mut locations {
-            if let Some((_, operation_id)) = persisted
-                .operations
-                .iter()
-                .find(|(block, _)| block == &location.manuscript_block_id)
-            {
+            if let Some(operation_id) = operations.get(location.manuscript_block_id.as_str()) {
                 location.outcome = ProseChangeLocationOutcome::Opened {
                     proposal_id: persisted.proposal_id.clone(),
-                    operation_id: operation_id.clone(),
+                    operation_id: (*operation_id).clone(),
                     revision_id: persisted.revision_id.clone(),
                     validation_receipt_id: persisted.validation_receipt_id.clone(),
                 };
@@ -222,17 +235,25 @@ async fn persist_applied_proposal(
         .map_err(database_error)?;
     let mut predecessor_ids: Vec<String> = Vec::new();
     let mut operations = Vec::new();
+    let candidates: std::collections::BTreeMap<_, _> = persist
+        .candidates
+        .unwrap_or_default()
+        .iter()
+        .map(|candidate| {
+            (
+                candidate.manuscript_block_id.as_str(),
+                candidate.candidate_text.as_str(),
+            )
+        })
+        .collect();
     for target in persist.targets {
         let operation_id = Uuid::now_v7().to_string();
-        let operation_candidate = persist
-            .candidates
-            .and_then(|candidates| {
-                candidates
-                    .iter()
-                    .find(|candidate| candidate.manuscript_block_id == target.block_id)
-            })
-            .map(|candidate| candidate.candidate_text.as_str())
-            .unwrap_or(persist.candidate_text);
+        let operation_candidate = match persist.candidates {
+            Some(_) => *candidates
+                .get(target.block_id.as_str())
+                .expect("validated producer target"),
+            None => persist.candidate_text,
+        };
         let predecessors: Vec<&str> = if ordered {
             predecessor_ids.iter().map(String::as_str).collect()
         } else {

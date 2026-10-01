@@ -15,8 +15,9 @@ pub struct ProseChangeCandidate {
 pub fn produce_fake_prose_changes(
     chapter_id: &str,
     targets: &[(String, String)],
+    author_message: &str,
 ) -> Vec<ProseChangeCandidate> {
-    targets
+    let mut candidates: Vec<_> = targets
         .iter()
         .enumerate()
         .map(|(index, (block_id, revision_id))| ProseChangeCandidate {
@@ -36,7 +37,23 @@ pub fn produce_fake_prose_changes(
             }
             .to_owned(),
         })
-        .collect()
+        .collect();
+    if let Some(first) = candidates.first_mut() {
+        if author_message.ends_with("SCRIPT:malformed_locations") {
+            first.explanation.clear();
+        } else if author_message.ends_with("SCRIPT:undeclared_location") {
+            first.manuscript_block_id = chapter_id.to_owned();
+        } else if author_message.ends_with("SCRIPT:stale_location_base") {
+            first.base_authoritative_revision_id = first.manuscript_block_id.clone();
+        } else if author_message.ends_with("SCRIPT:oversized_explanation") {
+            first.explanation =
+                "a".repeat(crate::assemble_context::CONTEXT_ITEM_TOKEN_LIMIT as usize + 1);
+        }
+    }
+    if author_message.ends_with("SCRIPT:reverse_locations") {
+        candidates.reverse();
+    }
+    candidates
 }
 
 /// Validate the whole declared result before any candidate can open.

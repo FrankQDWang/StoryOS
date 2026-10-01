@@ -84,9 +84,9 @@ pub use compact_active_context::{
 pub use complete_fake_decision::{
     ADVISORY_TEXT, ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
     HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
-    INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT,
-    STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole, StreamItemState, host_fake_wire_digest,
-    plan_fake_model_decision, stream_batch_plan,
+    INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, NoDecisionReason, PROSE_CHANGE_TEXT,
+    SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole,
+    StreamItemState, host_fake_wire_digest, plan_fake_model_decision, stream_batch_plan,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
