@@ -139,11 +139,12 @@ async function admitPassages(
   beforeSettle?: () => Promise<void>,
   settle = true,
   target?: CreateAgentRunRequest["create_agent_run_input"]["working_target"],
+  conversation?: CreateAgentRunRequest["create_agent_run_input"]["conversation"],
 ) {
   const request: CreateAgentRunRequest = {
     command_schema: "storyos.command.create-agent-run.request.v2",
     create_agent_run_input: {
-      conversation: { kind: "new" },
+      conversation: conversation ?? { kind: "new" },
       author_message: { text },
       working_target: target ?? { kind: "current_chapter", chapter_id: chapterId },
       instruction: { kind: "absent" },
@@ -166,13 +167,13 @@ async function admitPassages(
   return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
 }
 
-async function collectionSetup(baseUrl: string, ns: string, secondText = "A lantern crossed the river.") {
+async function collectionSetup(baseUrl: string, ns: string, secondText = "A lantern crossed the river.", secondTitle = "Second target") {
   const { fetchImpl, projectId, chapterId } = await prepare(baseUrl, id(`${ns}11`), "Chapter collection", `${ns}2`);
   const first = await seedTwoBlocks(baseUrl, fetchImpl, projectId, `${ns}3`);
   const tree = await getManuscriptTree({ baseUrl: baseUrl, projectId, fetchImpl });
   const volumeId = tree.volumes[0]!.volume_id;
   const request = { command_schema: "storyos.command.create-chapter.request.v1",
-    create_chapter_input: { title: "Second target", expected_tree_revision: tree.tree_revision,
+    create_chapter_input: { title: secondTitle, expected_tree_revision: tree.tree_revision,
     ...BINDING, correlation_id: id(`${ns}41`) } };
   const created = await challenged(baseUrl, fetchImpl, projectId, "POST",
     "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", request.command_schema,
@@ -206,14 +207,22 @@ async function collectionSetup(baseUrl: string, ns: string, secondText = "A lant
     editorSessionId: first.session.editor_session.editor_session_id };
 }
 
-test.each(["", " SCRIPT:reverse_locations"])("one collection request produces three exact locations across two Chapters%s", async (script) => {
+test.each(["", "chinese", " SCRIPT:reverse_locations"])("one collection request produces three exact locations across two Chapters%s", async (script) => {
   let started = await startRealServer();
   try {
     await drainLeftoverWork();
     const ns = randomBytes(3).toString("hex");
-    const { fetchImpl, projectId, chapterId, chapters, target } = await collectionSetup(started.baseUrl, ns);
+    const { fetchImpl, projectId, chapterId, chapters, target } = await collectionSetup(started.baseUrl, ns,
+      "A lantern crossed the river.", "Harbor and Ash");
+    if (script === "") {
+      const foreign = await prepare(started.baseUrl, id(`${ns}71`), "Foreign same title", `${ns}72`);
+      await seedTwoBlocks(started.baseUrl, foreign.fetchImpl, foreign.projectId, `${ns}74`, "Private foreign prose.");
+    }
     const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
-      `Revise these passages: keep the voice.${script}`, id(`${ns}43`), undefined, true, target);
+      script.startsWith(" SCRIPT:") ? `Revise these passages: keep the voice.${script}` : script === "chinese" ?
+      `请改写《${chapters[0]!.chapter.title}》的第二段和《${chapters[0]!.chapter.title}》的第一段和《${chapters[0]!.chapter.title}》的第一段和《${chapters[1]!.chapter.title}》的第一段` :
+      `Tighten the first two paragraphs of chapter "${chapters[0]!.chapter.title}" and the first paragraph of chapter "${chapters[1]!.chapter.title}"`,
+      id(`${ns}43`), undefined, true, script.startsWith(" SCRIPT:") ? target : undefined);
     if (run.decision.kind !== "prose_change") throw new Error("expected collection Decision");
     assert.deepEqual(run.decision.locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id }) =>
       ({ chapter_id, manuscript_block_id, base_authoritative_revision_id })), chapters.flatMap(({ chapter }) =>
@@ -225,6 +234,7 @@ test.each(["", " SCRIPT:reverse_locations"])("one collection request produces th
     const wire = JSON.parse(sent.content);
     assert.deepEqual(wire.targets, target.targets);
     assert.equal(wire.source_chapter_id, chapterId);
+    assert.equal(sent.content.includes("Private foreign prose."), false);
     assert.deepEqual(wire.selected, run.context.selected.map((source) => ({ ...source, token_count: Number(source.token_count) })));
     assert.equal(wire.selected.some((source: { content: string }) => source.content === "A lantern crossed the river."), true);
     const retained = JSON.parse(await queryPostgres(`SELECT payload->'wire' FROM storyos.model_attempts WHERE run_id='${run.run_id}'::uuid;`));
@@ -251,6 +261,38 @@ test.each(["", " SCRIPT:reverse_locations"])("one collection request produces th
       projectId, proposalId: proposal.proposal_id, fetchImpl: reloadedFetch })).proposal, proposal);
     for (const before of chapters) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId,
       chapterId: before.chapter.chapter_id, fetchImpl: reloadedFetch })).chapter, before.chapter);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("ordinary clarification keeps the Conversation and resolves fresh targets with continuation", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const { fetchImpl, projectId, chapterId, chapters, target } = await collectionSetup(started.baseUrl, ns,
+      "A different boat reached the shore.", "Chapter A");
+    const question = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      'Rewrite the first paragraph of chapter "Chapter A"', id(`${ns}81`));
+    if (question.decision.kind !== "clarification") throw new Error("expected native Clarification");
+    assert.deepEqual({ question: question.decision.question, continuation: question.decision.continuation,
+      targets: question.context.passage_targets, prose: question.context.selected.filter((source) => source.source_class === "working_target") },
+      { question: "Which unique Chapter and paragraph numbers should I revise?", continuation: { kind: "absent" }, targets: undefined, prose: [] });
+    const questionText = question.decision.question;
+    assert.equal(question.items.some((item) => item.text === questionText), true);
+    const conversation = { kind: "existing", conversation_id: question.conversation_id } as const;
+    const first = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      "Rewrite the first paragraph of chapter 2", id(`${ns}82`), undefined, true, undefined, conversation);
+    assert.deepEqual(first.context.passage_targets, [target.targets[1]]);
+    if (first.decision.kind !== "prose_change" || first.decision.continuation.kind !== "present") throw new Error("expected resolved Decision");
+    const second = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
+      "Rewrite paragraph 2 of this chapter", id(`${ns}83`), undefined, true, undefined, conversation);
+    assert.deepEqual(second.context.passage_targets, [{ ...target.targets[0], manuscript_block_ids: [target.targets[0]!.manuscript_block_ids[1]] }]);
+    if (second.model_attempt.kind !== "present") throw new Error("expected actual Attempt");
+    assert.deepEqual({ conversation: second.conversation_id, mapping: second.model_attempt.input_mapping,
+      prior: second.model_attempt.prior_continuation }, { conversation: question.conversation_id,
+      mapping: "incremental", prior: first.decision.continuation });
+    for (const before of chapters) assert.deepEqual((await getChapter({ baseUrl: started.baseUrl,
+      projectId, chapterId: before.chapter.chapter_id, fetchImpl })).chapter, before.chapter);
   } finally { await stopRealServer(started.server); }
 });
 
