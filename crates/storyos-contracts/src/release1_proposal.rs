@@ -170,6 +170,7 @@ pub struct ReplacementSpanInspect {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProposalOperationInspect {
+    pub candidate_text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub candidate_blocks: Option<Vec<crate::ReplacementBlock>>,
     pub operation_id: String,

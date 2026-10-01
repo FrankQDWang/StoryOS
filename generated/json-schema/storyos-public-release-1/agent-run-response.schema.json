@@ -83,6 +83,16 @@
           "format": "uuid",
           "type": "string"
         },
+        "candidate_target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProposalCandidateTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "considered": {
           "items": {
             "$ref": "#/$defs/ContextSourceInspect"
@@ -111,6 +121,15 @@
         },
         "outbound_disclosure_manifest": {
           "$ref": "#/$defs/OptionalManifestRef"
+        },
+        "passage_targets": {
+          "items": {
+            "$ref": "#/$defs/PassageTarget"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "purpose": {
           "$ref": "#/$defs/ContextPurpose"
@@ -163,6 +182,41 @@
         "cancelled"
       ],
       "type": "string"
+    },
+    "AgentRunSteeringInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "author_message": {
+          "type": "string"
+        },
+        "input_position": {
+          "type": "string"
+        },
+        "input_snapshot_id": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_attempt_id": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "steering_input_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "steering_input_id",
+        "input_position",
+        "author_message"
+      ],
+      "type": "object"
     },
     "AgentRunStreamItemInspect": {
       "additionalProperties": false,
@@ -1006,6 +1060,15 @@
               "const": "prose_change",
               "type": "string"
             },
+            "locations": {
+              "items": {
+                "$ref": "#/$defs/ProseChangeLocationInspect"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "opened_proposal": {
               "$ref": "#/$defs/OptionalOpenedProposalInspect"
             },
@@ -1523,6 +1586,34 @@
       ],
       "type": "string"
     },
+    "PassageTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "base_authoritative_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "chapter_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "manuscript_block_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 10001,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "chapter_id",
+        "base_authoritative_revision_id",
+        "manuscript_block_ids"
+      ],
+      "type": "object"
+    },
     "ProjectScope": {
       "additionalProperties": false,
       "properties": {
@@ -1546,6 +1637,199 @@
         "exact_required"
       ],
       "type": "string"
+    },
+    "ProposalCandidateTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "operation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "proposal_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "revision_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_id",
+        "operation_id",
+        "revision_id"
+      ],
+      "type": "object"
+    },
+    "ProseChangeLocationCurrent": {
+      "additionalProperties": false,
+      "properties": {
+        "closure": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "string"
+        },
+        "reservation_state": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "string"
+        },
+        "revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "validation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision_id",
+        "generation",
+        "validation",
+        "closure",
+        "resolution",
+        "reservation_state"
+      ],
+      "type": "object"
+    },
+    "ProseChangeLocationInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "base_authoritative_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "candidate_text": {
+          "type": "string"
+        },
+        "chapter_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "current": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProseChangeLocationCurrent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "manuscript_block_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ProseChangeLocationOutcome"
+        }
+      },
+      "required": [
+        "chapter_id",
+        "manuscript_block_id",
+        "base_authoritative_revision_id",
+        "candidate_text",
+        "explanation",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "ProseChangeLocationOutcome": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "revised",
+              "type": "string"
+            },
+            "operation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "prior_revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "proposal_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "validation_receipt_id": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_id",
+            "operation_id",
+            "revision_id",
+            "prior_revision_id",
+            "validation_receipt_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "opened",
+              "type": "string"
+            },
+            "operation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "proposal_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "validation_receipt_id": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_id",
+            "operation_id",
+            "revision_id",
+            "validation_receipt_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ReferenceRecoveryDisposition": {
       "enum": [
@@ -1704,6 +1988,12 @@
     "status": {
       "$ref": "#/$defs/AgentRunStatus"
     },
+    "steering_inputs": {
+      "items": {
+        "$ref": "#/$defs/AgentRunSteeringInspect"
+      },
+      "type": "array"
+    },
     "unknown_create_successor": {
       "$ref": "#/$defs/OptionalUnknownCreateSuccessorInspect"
     },
@@ -1719,6 +2009,7 @@
     "conversation_id",
     "memory_settings_revision",
     "captured_memory_settings",
+    "steering_inputs",
     "run_id",
     "status",
     "context",

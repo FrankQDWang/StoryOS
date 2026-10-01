@@ -6,6 +6,8 @@ use super::{
 
 fn command() -> CreateChapter {
     CreateChapter {
+        placement: super::CreateChapterPlacement::Append,
+        ordered_chapter_ids: Vec::new(),
         presence: ProjectPresence::Present,
         volume_join: VolumeJoin::ExactScope,
         expected_tree_revision: 2,
@@ -23,6 +25,7 @@ fn the_first_chapter_on_an_empty_active_project_becomes_current() {
         CreateChapterResult::Applied {
             tree_revision: 3,
             current: CreateChapterCurrent::SelectCreated,
+            order: 1,
         }
     );
 }
@@ -39,6 +42,7 @@ fn a_later_chapter_preserves_the_existing_current_chapter() {
         CreateChapterResult::Applied {
             tree_revision: 4,
             current: CreateChapterCurrent::PreserveExisting,
+            order: 1,
         }
     );
 }

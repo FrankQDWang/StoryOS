@@ -260,6 +260,7 @@ pub(super) async fn load_agent_run(
                 .flatten(),
             payload.as_ref(),
             row.get::<_, Option<String>>(12),
+            crate::prose_change_location_read::decode_locations(payload.as_ref())?,
         ),
         model,
         active_compaction: crate::agent_run_compaction::load_active_compaction(
@@ -286,6 +287,7 @@ pub(super) async fn load_agent_run(
             /*settlement*/ None,
             Some(&selection.payload),
             selection.continuation_binding_id,
+            crate::prose_change_location_read::decode_locations(Some(&selection.payload))?,
         );
         model.items = selection
             .payload
@@ -301,6 +303,8 @@ pub(super) async fn load_agent_run(
             .unwrap_or("unknown")
             .to_owned();
     }
+    crate::prose_change_location_read::hydrate_locations(client, scope, &mut record.decision)
+        .await?;
     Ok(Some(record))
 }
 
@@ -323,6 +327,7 @@ fn inspect_decision(
     settlement: Option<&serde_json::Value>,
     payload: Option<&serde_json::Value>,
     continuation_binding_id: Option<String>,
+    locations: Option<Vec<storyos_contracts::ProseChangeLocationInspect>>,
 ) -> AgentRunDecisionInspect {
     if let Some(capability) = settlement
         .and_then(|value| value.get("capability"))
@@ -362,6 +367,7 @@ fn inspect_decision(
             continuation_binding_id,
         },
         Some("prose_change") => AgentRunDecisionInspect::ProseChange {
+            locations,
             decision_id,
             selected,
             text: decision

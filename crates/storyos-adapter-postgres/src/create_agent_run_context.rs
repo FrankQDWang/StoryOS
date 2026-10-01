@@ -51,7 +51,7 @@ pub(crate) async fn persist_current_passage_assembly(
         .map_err(agent_run_database_error)?;
     let operation_requirement_id = uuid::Uuid::now_v7().to_string();
     let input_snapshot_id = uuid::Uuid::now_v7().to_string();
-    let record = assemble_current_passage_context(&CurrentPassageAssembly {
+    let source = CurrentPassageAssembly {
         operation_requirement_id: operation_requirement_id.clone(),
         input_snapshot_id: input_snapshot_id.clone(),
         run_id: command.run_id.to_owned(),
@@ -64,7 +64,65 @@ pub(crate) async fn persist_current_passage_assembly(
         chapter_body,
         instruction: InstructionBindingInput::Absent,
         destination_identity: destination_identity.to_owned(),
-    });
+    };
+    let record = if let Some(target) = &command.candidate_target {
+        let candidate = crate::candidate_revision_target::load(
+            client,
+            &command.project_scope,
+            &command.chapter_id,
+            target,
+        )
+        .await?
+        .ok_or(CreateAgentRunError::BindingConflict)?;
+        storyos_core::assemble_candidate_context(
+            &CurrentPassageAssembly {
+                proposal_target_block_ids: Some(vec![candidate.block_id]),
+                ..source
+            },
+            target,
+            &candidate.text,
+        )
+    } else {
+        match &command.passage_targets {
+            Some(targets) => {
+                crate::passage_collection::assemble(client, command, &source, targets).await?
+            }
+            None => match storyos_core::parse_ordinary_passage_request(&command.author_message) {
+                None => assemble_current_passage_context(&source),
+                Some(request) => {
+                    let targets = match request {
+                        Ok(references) => {
+                            crate::ordinary_passage_targets::resolve(client, command, &references)
+                                .await?
+                        }
+                        Err(()) => None,
+                    };
+                    let resolved = targets.is_some();
+                    let mut record = match targets {
+                        Some(targets) => {
+                            crate::passage_collection::assemble(client, command, &source, &targets)
+                                .await?
+                        }
+                        None => assemble_current_passage_context(&CurrentPassageAssembly {
+                            chapter_body: String::new(),
+                            ..source.clone()
+                        }),
+                    };
+                    if !resolved {
+                        record.selected.retain(|item| {
+                            item.source_class != storyos_core::ContextSourceClass::WorkingTarget
+                        });
+                    }
+                    record.operation_requirement.ordinary_resolution = Some(if resolved {
+                        storyos_core::OrdinaryPassageResolution::Resolved
+                    } else {
+                        storyos_core::OrdinaryPassageResolution::Clarification
+                    });
+                    record
+                }
+            },
+        }
+    };
     let payload = encode_assembly_record(&record).to_string();
     client
         .execute(
@@ -245,7 +303,13 @@ async fn current_chapter_payload(
               WHERE object.owner_user_id = $1::text::uuid
                 AND object.project_id = $2::text::uuid
                 AND object.manuscript_object_id = $3::text::uuid
-                AND object.object_kind = 'chapter'",
+                AND object.object_kind = 'chapter'
+                AND NOT EXISTS (
+                    SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                     WHERE removal.owner_user_id = object.owner_user_id
+                       AND removal.project_id = object.project_id
+                       AND removal.chapter_id = object.manuscript_object_id
+                )",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),

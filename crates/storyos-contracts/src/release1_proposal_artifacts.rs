@@ -213,6 +213,7 @@ fn proposal_fixture() -> Value {
             "operation_resolution": "pending",
             "operations": [{
                 "operation_id": "018f0000-0000-7001-8000-000000000b04",
+                "candidate_text": "Guard the narrator voice in this passage.",
                 "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
                 "resolution": "pending",
                 "reservation_state": "unresolved"

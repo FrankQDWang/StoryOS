@@ -88,6 +88,8 @@ fn run_command(
     chapter_id: &str,
 ) -> CreateAgentRunCommand {
     CreateAgentRunCommand {
+        passage_targets: None,
+        candidate_target: None,
         project_scope: binding.project_scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: binding.client_session_binding_digest.clone(),

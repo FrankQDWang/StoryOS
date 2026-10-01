@@ -26,6 +26,11 @@ mod manuscript_payload;
 mod refused_edit;
 pub use draft_retry::select_draft_replacement;
 pub use refused_edit::{CurrentOrderedSourceFacts, ProposalEditSourceFacts};
+mod ordinary_passage_request;
+pub use ordinary_passage_request::{
+    HumanChapterReference, HumanPassageReference, ORDINARY_PASSAGE_PROFILE,
+    OrdinaryPassageResolution, PASSAGE_REFERENCE_QUESTION, parse_ordinary_passage_request,
+};
 mod open_block_proposal;
 mod open_inline_proposal;
 mod pause_proposal_generation;
@@ -73,8 +78,8 @@ pub use archive_project::{
 pub use assemble_context::{
     CONTEXT_ITEM_TOKEN_LIMIT, ContextBlockReason, ContextSourceClass, ContextSufficiency,
     CurrentPassageAssembly, CurrentPassageAssemblyRecord, DestinationIo, InstructionBindingInput,
-    RejectionReason, assemble_current_passage_context, decode_assembly_record,
-    encode_assembly_record,
+    PassageContextTarget, RejectionReason, assemble_current_passage_context,
+    assemble_passage_collection, decode_assembly_record, encode_assembly_record,
 };
 pub use compact_active_context::{
     ACTIVE_COMPACTION_REQUEST_PREFIX, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
@@ -85,9 +90,10 @@ pub use compact_active_context::{
 pub use complete_fake_decision::{
     ADVISORY_TEXT, ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
     HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
-    INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT,
-    STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole, StreamItemState, host_fake_wire_digest,
-    plan_fake_model_decision, stream_batch_plan,
+    INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, NoDecisionReason, PROSE_CHANGE_TEXT,
+    SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole,
+    StreamItemState, host_fake_wire_digest, plan_fake_model_decision, plan_resolved_fake_decision,
+    stream_batch_plan,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
@@ -99,7 +105,7 @@ pub use create_agent_run::{
 };
 pub use create_chapter::{
     CreateChapter, CreateChapterConflict, CreateChapterCurrent, CreateChapterOpen,
-    CreateChapterRefusal, CreateChapterResult, VolumeJoin, create_chapter,
+    CreateChapterPlacement, CreateChapterRefusal, CreateChapterResult, VolumeJoin, create_chapter,
 };
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 pub use create_volume::{
@@ -611,3 +617,12 @@ mod close_editor_flow_draft;
 pub use close_editor_flow_draft::{
     CloseEditorFlowDraftResult, DraftCloseSource, close_editor_flow_draft,
 };
+
+mod prose_change_locations;
+pub use prose_change_locations::{
+    ProseChangeCandidate, is_fake_candidate_revision_request, produce_fake_candidate_revision,
+    produce_fake_prose_changes, prose_changes_match_targets,
+};
+
+mod assemble_candidate_context;
+pub use assemble_candidate_context::{ProposalCandidateTarget, assemble_candidate_context};

@@ -24,6 +24,8 @@ import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, UUID_V7, challenged, drainLeftoverWork, id,
   prepare, settleOnce, startRealServer } from "../support/acceptance.ts";
 
+import { admitCandidateRevision } from "../support/candidate-revision.ts";
+
 const INLINE_CANDIDATE = "narrator tone";
 const SOURCE_SLICE = "narrator voice";
 const GOLDEN_DIGEST =
@@ -230,8 +232,8 @@ function mixedRequest(
           { owner: { kind: "proposal", proposal_id: opened.proposal.proposal_id,
             operation_id: opened.proposal.operation_id, revision_id: opened.proposal.revision_id,
             manuscript_block_id: opened.proposal.manuscript_block_id },
-            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: INLINE_CANDIDATE.length,
-            block_kind: "paragraph", source_text: INLINE_CANDIDATE },
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: opened.proposal.candidate_text.length,
+            block_kind: "paragraph", source_text: opened.proposal.candidate_text },
           { owner: { kind: "manuscript", manuscript_block_id: opened.proposal.manuscript_block_id },
             coordinate_profile: "prosemirror-token-utf16.v1", from: 24, to: 26,
             block_kind: "paragraph", source_text: PROSE },
@@ -973,9 +975,19 @@ test("inline Proposal uses exact Anchors, keeps source and candidate distinct, a
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e08111"), "Inline Proposal Novel", "e082");
-    const { opened, writer } = await openInline(
+    let { opened, writer } = await openInline(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, "e083",
     );
+    await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      opened.proposal, opened.proposal.operation_id, id("e0832"), "revise the candidate consistently.");
+    await settleOnce();
+    const prior = opened.proposal;
+    opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: prior.proposal_id, fetchImpl: prepared.fetchImpl });
+    assert.notEqual(opened.proposal.revision_id, prior.revision_id);
+    assert.deepEqual(opened.proposal.anchors, prior.anchors);
+    const INTERIOR_CANDIDATE = "narrxxr tone Keep the voice consistent.";
+    const ACCEPTED_BODY = "Guard the narrxxr tone Keep the voice consistent. in this passage.";
     const before = await getChapter({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
@@ -1491,8 +1503,13 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e0d111"), "Draft Lifecycle Export", "e0d2");
-    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+    let { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
       prepared.projectId, prepared.chapterId, "e0d3");
+    await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      opened.proposal, opened.proposal.operation_id, id("e0d32"), "revise the candidate consistently.");
+    await settleOnce();
+    opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl });
     const drafts: Awaited<ReturnType<typeof getRefusedEditDraft>>[] = [];
     const results: Awaited<ReturnType<typeof applyAuthorEdit>>[] = [];
     for (const [index, text] of ["Closed alternate", "Archived alternate ✨", "Restricted erased alternative 🌘"].entries()) {
@@ -1502,7 +1519,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       if (primitive.kind !== "replace_structured_selection") throw new Error("expected structured replacement");
       primitive.replacement[0]!.text = text;
       const result = await sendMixed(started.baseUrl, prepared, request, id(`e0d5${index}`));
-      if (result.effect.kind !== "refused_to_draft") throw new Error("expected fresh lifecycle Draft");
+      if (result.effect.kind !== "refused_to_draft") throw new Error(`expected fresh lifecycle Draft: ${JSON.stringify(result.effect)}`);
       const queried = await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
         draftId: result.effect.draft_id, fetchImpl: prepared.fetchImpl });
       assert.deepEqual(queried.draft.payload.author_edit_units, request.author_edit_units);
@@ -1769,6 +1786,15 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
     assert.equal(download.status, 200);
     const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+    for (const table of ["agent_runs", "operation_requirements", "context_assembly_manifests", "model_attempts",
+      "proposal_generations", "proposal_stream_events", "proposal_revisions", "validation_receipts"]) {
+      const expected = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text)
+        FROM storyos.${table} AS record WHERE project_id='${prepared.projectId}'::uuid`));
+      const exported = JSON.parse(new TextDecoder().decode(files.get(`canonical/${table}.json`)));
+      const compare = (a: object, b: object) => JSON.stringify(a, Object.keys(a).sort())
+        .localeCompare(JSON.stringify(b, Object.keys(b).sort()));
+      assert.deepEqual(exported.sort(compare), expected.sort(compare));
+    }
     const revisionGap = { kind: "refused_edit_revision_payload", reason: "withheld_due_to_tombstone",
       entry_path: "canonical/draft_artifact_revisions.json", record_id: tombstoned.draft.draft_revision_id,
       payload_field: "payload", draft_id: tombstoned.draft.draft_id, retention_state: "tombstoned",

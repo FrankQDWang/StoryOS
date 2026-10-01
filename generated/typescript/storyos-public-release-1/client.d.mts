@@ -123,13 +123,15 @@ export type DeleteVolumeEffect = { "kind": "authoritative_applied", volume_id: s
 
 export type DeleteVolumeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: DeleteVolumeEffect, };
 
-export type CreateChapterInput = { title: string, expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type CreateChapterPlacement = { "kind": "before", chapter_id: string, } | { "kind": "after", chapter_id: string, };
+
+export type CreateChapterInput = { title: string, expected_tree_revision: string, placement?: CreateChapterPlacement, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type CreateChapterRequest = { command_schema: string, create_chapter_input: CreateChapterInput, };
 
 export type CreateChapterConflictReason = "stale_tree_revision";
 
-export type CreateChapterRefusalReason = "archived_project" | "invalid_title" | "invalid_volume_join";
+export type CreateChapterRefusalReason = "archived_project" | "invalid_title" | "invalid_volume_join" | "invalid_placement";
 
 export type CreateChapterEffect = { "kind": "authoritative_applied", volume_id: string, chapter_id: string, title: string, tree_revision: string, order: string, current_chapter_id: string, project_activity_position: string, } | { "kind": "conflicted", reason: CreateChapterConflictReason, } | { "kind": "refused", reason: CreateChapterRefusalReason, };
 
@@ -363,7 +365,11 @@ export type ConversationSelection = { "kind": "new" } | { "kind": "existing", co
 
 export type AuthorMessage = { text: string, };
 
-export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, };
+export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, } | { "kind": "proposal_candidate", source_chapter_id: string, target: ProposalCandidateTarget, } | { "kind": "passage_collection", source_chapter_id: string, targets: Array<PassageTarget>, };
+
+export type PassageTarget = { chapter_id: string, base_authoritative_revision_id: string, manuscript_block_ids: Array<string>, };
+
+export type ProposalCandidateTarget = { proposal_id: string, operation_id: string, revision_id: string, };
 
 export type InstructionBinding = { "kind": "absent" };
 
@@ -411,7 +417,7 @@ export type HostControlInspect = { distinct_from_destination: boolean, destinati
 
 export type CurrentAvailabilityInspect = { working_target: SourceAvailability, };
 
-export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, };
+export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, passage_targets?: Array<PassageTarget>, candidate_target?: ProposalCandidateTarget, };
 
 export type EvidenceAvailability = "current" | "unknown";
 
@@ -421,7 +427,13 @@ export type OptionalContinuationInspect = { "kind": "absent" } | { "kind": "pres
 
 export type OptionalOpenedProposalInspect = { "kind": "absent" } | { "kind": "present", proposal_id: string, };
 
-export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
+export type ProseChangeLocationInspect = { chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, candidate_text: string, explanation: string, outcome: ProseChangeLocationOutcome, current: ProseChangeLocationCurrent | null, };
+
+export type ProseChangeLocationOutcome = { "kind": "revised", proposal_id: string, operation_id: string, revision_id: string, prior_revision_id: string, validation_receipt_id: string, } | { "kind": "opened", proposal_id: string, operation_id: string, revision_id: string, validation_receipt_id: string, } | { "kind": "refused", reason: string, };
+
+export type ProseChangeLocationCurrent = { revision_id: string, generation: string, validation: string, closure: string, resolution: string, reservation_state: string, };
+
+export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
 
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 
@@ -451,7 +463,9 @@ export type GetAgentRunRequest = { model_attempt_id?: string | null, };
 
 export type CapturedMemorySettingsInspect = { "kind": "available", memory_settings_revision: string, use_enabled: boolean, contribution_enabled: boolean, } | { "kind": "unavailable" };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
+export type AgentRunSteeringInspect = { steering_input_id: string, input_position: string, author_message: string, input_snapshot_id: string | null, model_attempt_id: string | null, };
+
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
 
 export type OriginalResultRetrievalDisposition = "kept_unknown" | "evidence_only" | "settled";
 
@@ -523,7 +537,7 @@ export type AcceptanceRefusalInspect = { refusal_id: string, correlation_id: str
 
 export type OptionalAcceptanceRefusalInspect = { "kind": "absent" } | { "kind": "present" } & AcceptanceRefusalInspect;
 
-export type ProposalOperationInspect = { candidate_blocks?: Array<ReplacementBlock> | null, operation_id: string, manuscript_block_id: string, resolution: string, reservation_state: string, };
+export type ProposalOperationInspect = { candidate_text: string, candidate_blocks?: Array<ReplacementBlock> | null, operation_id: string, manuscript_block_id: string, resolution: string, reservation_state: string, };
 
 export type ProposalAnchorInspect = { manuscript_block_id: string, base_authoritative_revision_id: string, manuscript_schema_version: number, coordinate_profile: string, from: number, to: number, boundary_profile: string, base_slice_digest: string, };
 

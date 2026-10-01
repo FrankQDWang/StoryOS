@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -106,9 +107,11 @@ it("the production page uses the approved workspace without losing writing state
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
   ).toBe(true);
+  await beginInlineChapterCreation(frame.contentDocument);
   const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -156,7 +159,7 @@ it("the production page uses the approved workspace without losing writing state
   }
   expect({
     tree: root.querySelector('nav[aria-label="稿件目录"]') !== null,
-    createChapter: root.querySelector("form[data-create-chapter]") !== null,
+    createChapter: root.querySelector("[data-add-chapter]") !== null,
     renameVolume: root.querySelector("form[data-rename-volume]") !== null,
     renameChapter: root.querySelector("form[data-rename-chapter]") !== null,
     expandVolume: root.querySelector("[data-volume-expand]") !== null,

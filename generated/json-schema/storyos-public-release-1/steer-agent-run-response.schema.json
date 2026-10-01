@@ -274,9 +274,11 @@
               "type": "string"
             },
             "run_id": {
+              "format": "uuid",
               "type": "string"
             },
             "steering_input_id": {
+              "format": "uuid",
               "type": "string"
             }
           },

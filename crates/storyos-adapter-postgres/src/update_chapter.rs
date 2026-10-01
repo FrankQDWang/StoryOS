@@ -10,6 +10,7 @@ use storyos_application::{
 use super::*;
 
 mod persist;
+pub(super) mod sibling_order;
 use persist::persist_update_chapter;
 
 impl UpdateChapterStore for PostgresProjectReader {

@@ -15,6 +15,7 @@ pub struct CreateChapterCommand {
     pub correlation_id: String,
     pub volume_id: String,
     pub title: String,
+    pub placement: storyos_core::CreateChapterPlacement,
     pub expected_tree_revision: u64,
     pub ids: AuthorCommandAdmissionIds,
 }

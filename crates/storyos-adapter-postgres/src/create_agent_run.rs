@@ -176,6 +176,18 @@ async fn persist_create_agent_run(
             });
         }
     }
+    if let Some(target) = &command.candidate_target
+        && crate::candidate_revision_target::load(
+            client,
+            &command.project_scope,
+            &command.chapter_id,
+            target,
+        )
+        .await?
+        .is_none()
+    {
+        return Err(CreateAgentRunError::BindingConflict);
+    }
     hold_conversation_if_requested(&command.challenge_binding.idempotency_key).await;
     write::insert_create_agent_run_admission(client, command).await?;
     client

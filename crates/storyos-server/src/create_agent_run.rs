@@ -74,7 +74,35 @@ pub(super) async fn create_agent_run(
             conversation_id.clone()
         }
     };
-    let contracts::AssistanceWorkingTarget::CurrentChapter { chapter_id } = &input.working_target;
+    let mut candidate_target = None;
+    let (chapter_id, passage_targets) = match &input.working_target {
+        contracts::AssistanceWorkingTarget::CurrentChapter { chapter_id } => (chapter_id, None),
+        contracts::AssistanceWorkingTarget::ProposalCandidate {
+            source_chapter_id,
+            target,
+        } => {
+            for value in [
+                &target.proposal_id,
+                &target.operation_id,
+                &target.revision_id,
+            ] {
+                valid_uuid(value)?;
+            }
+            candidate_target = Some(storyos_core::ProposalCandidateTarget {
+                proposal_id: target.proposal_id.clone(),
+                operation_id: target.operation_id.clone(),
+                revision_id: target.revision_id.clone(),
+            });
+            (source_chapter_id, None)
+        }
+        contracts::AssistanceWorkingTarget::PassageCollection {
+            source_chapter_id,
+            targets,
+        } => (
+            source_chapter_id,
+            Some(super::passage_targets::resolve(targets)?),
+        ),
+    };
     valid_uuid(chapter_id)?;
     let store = project_reader(&state).await?;
     let admission = request_create_agent_run(
@@ -116,6 +144,8 @@ pub(super) async fn create_agent_run(
             },
             author_message: input.author_message.text.clone(),
             chapter_id: chapter_id.clone(),
+            passage_targets,
+            candidate_target,
             ids: AuthorCommandAdmissionIds {
                 command_id: Uuid::now_v7().to_string(),
                 author_command_admission_id: Uuid::now_v7().to_string(),
@@ -396,6 +426,7 @@ fn inspect_decision(
             selected,
             text,
             producer_input,
+            locations,
             continuation_binding_id,
             opened_proposal_id,
         } => contracts::OptionalDecisionInspect::ProseChange {
@@ -403,6 +434,7 @@ fn inspect_decision(
             selected: *selected,
             text: text.clone(),
             producer_input: producer_input.clone(),
+            locations: locations.clone(),
             continuation: inspect_continuation(continuation_binding_id.as_deref()),
             authoritative: false,
             opened_proposal: match opened_proposal_id.as_deref() {
@@ -679,6 +711,31 @@ fn inspect_context(
             .clone(),
         input_snapshot_id: record.operation_requirement.input_snapshot_id.clone(),
         purpose: contracts::ContextPurpose::CurrentPassageAssistance,
+        candidate_target: record
+            .operation_requirement
+            .candidate_target
+            .as_ref()
+            .map(|target| contracts::ProposalCandidateTarget {
+                proposal_id: target.proposal_id.clone(),
+                operation_id: target.operation_id.clone(),
+                revision_id: target.revision_id.clone(),
+            }),
+        passage_targets: record
+            .operation_requirement
+            .passage_targets
+            .as_ref()
+            .map(|targets| {
+                targets
+                    .iter()
+                    .map(|target| contracts::PassageTarget {
+                        chapter_id: target.chapter_id.clone(),
+                        base_authoritative_revision_id: target
+                            .base_authoritative_revision_id
+                            .clone(),
+                        manuscript_block_ids: target.manuscript_block_ids.clone(),
+                    })
+                    .collect()
+            }),
         token_counting_profile: contracts::TokenCountingProfileInspect {
             profile_revision: record.token_counting_profile_revision.clone(),
             algorithm_revision: record.token_counting_algorithm_revision.clone(),

@@ -140,9 +140,10 @@ pub use release1_agent_run::{
     OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
     OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
-    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, ProjectionMode,
-    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
-    UnknownCreateSuccessorDisposition,
+    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
+    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
+    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
+    SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,
@@ -184,7 +185,7 @@ pub use release1_author_edit_outcome::{
 pub use release1_create_chapter::{
     CREATE_CHAPTER_DIGEST_PROFILE, CREATE_CHAPTER_METHOD, CREATE_CHAPTER_PATH,
     CREATE_CHAPTER_REQUEST_SCHEMA_ID, CREATE_CHAPTER_RESPONSE_SCHEMA_ID,
-    CreateChapterConflictReason, CreateChapterEffect, CreateChapterInput,
+    CreateChapterConflictReason, CreateChapterEffect, CreateChapterInput, CreateChapterPlacement,
     CreateChapterRefusalReason, CreateChapterRequest, CreateChapterResponse,
 };
 pub use release1_create_project::{

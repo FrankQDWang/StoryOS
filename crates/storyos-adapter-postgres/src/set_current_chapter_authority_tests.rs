@@ -218,6 +218,7 @@ async fn post_chapter(
     let settlement = create_chapter(
         store,
         &CreateChapterCommand {
+            placement: storyos_core::CreateChapterPlacement::Append,
             project_scope: scope.clone(),
             client_binding: EditorClientBinding {
                 binding_ref: issue.binding.client_session_binding_digest.clone(),

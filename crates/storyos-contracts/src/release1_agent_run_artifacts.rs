@@ -18,9 +18,10 @@ use crate::release1_agent_run::{
     OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
     OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
-    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, ProjectionMode,
-    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
-    UnknownCreateSuccessorDisposition,
+    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
+    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
+    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
+    SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 
 pub(super) const CREATE_REQUEST_SCHEMA_PATH: &str =
@@ -60,7 +61,14 @@ pub(super) fn create_request_schema_bytes() -> Vec<u8> {
         constrain_uuid_fields(existing, &["conversation_id"]);
     }
     if let Some(target) = schema["$defs"].get_mut("AssistanceWorkingTarget") {
-        constrain_uuid_fields(target, &["chapter_id"]);
+        constrain_uuid_fields(target, &["chapter_id", "source_chapter_id"]);
+    }
+    if let Some(target) = schema["$defs"].get_mut("PassageTarget") {
+        constrain_uuid_fields(target, &["chapter_id", "base_authoritative_revision_id"]);
+        target["properties"]["manuscript_block_ids"]["items"]["format"] = json!("uuid");
+    }
+    if let Some(target) = schema["$defs"].get_mut("ProposalCandidateTarget") {
+        constrain_uuid_fields(target, &["proposal_id", "operation_id", "revision_id"]);
     }
     json_bytes(&schema)
 }
@@ -183,6 +191,11 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         "ActiveCompactionKnownInput",
         "OptionalContinuationInspect",
         "OptionalOpenedProposalInspect",
+        "ProseChangeLocationInspect",
+        "PassageTarget",
+        "ProposalCandidateTarget",
+        "ProseChangeLocationOutcome",
+        "ProseChangeLocationCurrent",
         "ContinuationAdmissionInspect",
     ] {
         if let Some(definition) = schema["$defs"].get_mut(name) {
@@ -220,6 +233,13 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
                     "run_step_id",
                     "id",
                     "proposal_id",
+                    "chapter_id",
+                    "manuscript_block_id",
+                    "base_authoritative_revision_id",
+                    "operation_id",
+                    "revision_id",
+                    "prior_revision_id",
+                    "validation_receipt_id",
                     "processing_destination_identity",
                     "model_registration_revision",
                     "project_model_use_binding_revision",
@@ -228,6 +248,8 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
             );
         }
     }
+    schema["$defs"]["PassageTarget"]["properties"]["manuscript_block_ids"]["items"]["format"] =
+        json!("uuid");
     json_bytes(&schema)
 }
 
@@ -275,10 +297,12 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
+        PassageTarget::decl(&config),
+        ProposalCandidateTarget::decl(&config),
         InstructionBinding::decl(&config),
         AssistanceCause::decl(&config),
         CreateAgentRunInput::decl(&config),
@@ -307,6 +331,9 @@ pub(super) fn typescript_type_declarations() -> String {
         AttemptEvidence::decl(&config),
         OptionalContinuationInspect::decl(&config),
         OptionalOpenedProposalInspect::decl(&config),
+        ProseChangeLocationInspect::decl(&config),
+        ProseChangeLocationOutcome::decl(&config),
+        ProseChangeLocationCurrent::decl(&config),
         OptionalDecisionInspect::decl(&config),
         ContinuationInputMappingInspect::decl(&config),
         ContinuationAdmissionInspect::decl(&config),

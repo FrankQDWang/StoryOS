@@ -30,6 +30,8 @@ fn command() -> CreateAgentRunCommand {
         project_id: ProjectId::new("018f0000-0000-7001-8000-000000000201"),
     };
     CreateAgentRunCommand {
+        passage_targets: None,
+        candidate_target: None,
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: "binding".to_owned(),

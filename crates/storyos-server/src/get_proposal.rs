@@ -76,6 +76,7 @@ pub(super) async fn get_proposal(
                 .into_iter()
                 .map(|operation| contracts::ProposalOperationInspect {
                     candidate_blocks: operation.candidate_blocks,
+                    candidate_text: operation.candidate_text,
                     operation_id: operation.operation_id,
                     manuscript_block_id: operation.manuscript_block_id,
                     resolution: operation.resolution,
