@@ -54,7 +54,15 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     const composer = page.locator('textarea[name="assistant-message"]');
     await expect(composer).toHaveCount(1);
     await composer.fill("Revise this passage: keep the voice.");
+    const short = await composer.boundingBox();
+    assert.ok(short && short.height >= 50 && short.height < 75);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-875", "composer-two-lines.png") });
+    await composer.fill(Array.from({ length: 10 }, (_, index) => `Line ${index + 1}`).join("\n"));
+    const long = await composer.boundingBox();
+    assert.ok(long && long.height > short.height && long.height <= 225);
+    await page.screenshot({ path: join(repositoryRoot, "target", "issue-875", "composer-ten-lines.png") });
+    await composer.fill(Array.from({ length: 14 }, () => "Another line").join("\n"));
+    assert.equal((await composer.boundingBox())?.height, long.height);
   } finally {
     await page.close();
   }
