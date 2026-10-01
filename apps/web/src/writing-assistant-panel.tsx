@@ -359,13 +359,14 @@ export function WritingAssistantPanel({
       }
       let selected = context.candidateTarget;
       if (selected !== undefined) {
+        const observedTarget = selected;
         const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
           projectId: context.scope.project_id, proposalId: selected.proposalId });
         if (response.project_scope.owner_user_id !== context.scope.owner_user_id
           || response.project_scope.project_id !== context.scope.project_id
           || response.proposal.chapter_id !== context.chapterId
-          || !response.proposal.operations.some((operation) => operation.operation_id === selected.operationId
-            && operation.manuscript_block_id === selected.blockId && operation.resolution === "pending"
+          || !response.proposal.operations.some((operation) => operation.operation_id === observedTarget.operationId
+            && operation.manuscript_block_id === observedTarget.blockId && operation.resolution === "pending"
             && operation.reservation_state === "unresolved")) throw new Error("候选位置已变化。");
         selected = { ...selected, revisionId: response.proposal.revision_id };
       }
