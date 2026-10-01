@@ -189,6 +189,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     await expect(candidate).toHaveText("narraxxtor tone Keep the voice consistent.");
     await expect(candidate).toHaveAttribute("data-proposal-revision-id", edited.revision_id);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
+    await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
     let acceptanceRequest: AcceptProposalRequest | undefined;
     let acceptancePosts = 0;
     let finishAcceptanceLoss = () => {};
