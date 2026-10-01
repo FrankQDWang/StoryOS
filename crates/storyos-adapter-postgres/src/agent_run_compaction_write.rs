@@ -268,7 +268,8 @@ async fn insert_assembly_copy(
                   WHERE owner_user_id = $1::text::uuid
                     AND project_id = $2::text::uuid
                     AND run_id = $3::text::uuid
-                    AND requirement_role = 'primary' AND decision_position = 0"
+                    AND requirement_role = 'primary' AND decision_position = (SELECT active_decision_position FROM storyos.agent_runs
+                      WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND run_id=$3::text::uuid)"
             ),
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
@@ -300,7 +301,8 @@ async fn insert_assembly_copy(
                   WHERE owner_user_id = $1::text::uuid
                     AND project_id = $2::text::uuid
                     AND run_id = $3::text::uuid
-                    AND manifest_role = 'decision' AND decision_position = 0"
+                    AND manifest_role = 'decision' AND decision_position = (SELECT active_decision_position FROM storyos.agent_runs
+                      WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND run_id=$3::text::uuid)"
             ),
             &[
                 &claim.project_scope.owner_user_id.as_ref(),

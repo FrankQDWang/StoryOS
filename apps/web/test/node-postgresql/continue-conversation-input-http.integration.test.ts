@@ -1,14 +1,11 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts"]}
 import assert from "node:assert/strict";
-import { expect, test } from "vitest";
-import { writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { test } from "vitest";
 
 import {
   createAgentRun,
   digestCreateAgentRun,
-  getAgentRun, getProposal, steerAgentRun, digestSteerAgentRun,
+  getAgentRun, getProposal, steerAgentRun, digestSteerAgentRun, pauseAgentRun, digestPauseAgentRun,
   type CreateAgentRunRequest,
   type GetAgentRunResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -135,6 +132,16 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
     const prepared = await prepare(started.baseUrl, id("d411"), "Guidance Novel", "d42");
     const created = await admitQueued(started.baseUrl, prepared, id("d432"), original);
     const runId = created.effect.run_id;
+    if (original === FIRST) {
+      const request = { command_schema: "storyos.command.pause-agent-run.request.v1" as const,
+        pause_agent_run_input: { ...BINDING, correlation_id: id("d460") } };
+      await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause", request.command_schema,
+        await digestPauseAgentRun(request), id("d461"), (antiForgery) => pauseAgentRun({
+          baseUrl: started.baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl,
+          request, idempotencyKey: id("d461"), antiForgery }));
+      assert.equal((await inspect(started.baseUrl, prepared, runId)).status, "paused");
+    }
     const corrections = original.startsWith("Compact") ? [CORRECTION] : [CORRECTION, "Keep the ending open."];
     for (const [index, text] of corrections.entries()) {
       await retain(started.baseUrl, prepared, runId, created.conversation_id, text, id(`d45${index}`), String(index + 1));
@@ -162,22 +169,17 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
 
 test("guidance after a visible stream keeps the Proposal bound to its original Decision", async () => {
   const started = await startRealServer();
-  const hold = join(tmpdir(), `storyos-guidance-stream-${process.pid}`);
-  let worker: Promise<void> | undefined;
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("d511"), "Stream Guidance", "d52");
     const created = await admitQueued(started.baseUrl, prepared, id("d532"), "Stream this passage: keep the voice.");
-    writeFileSync(hold, "hold");
-    worker = settleOnce({ STORYOS_TEST_FAKE_STREAM_HOLD_PATH: hold });
-    void worker.catch(() => undefined);
-    await expect.poll(async () => (await inspect(started.baseUrl, prepared, created.effect.run_id)).decision.kind).toBe("prose_change");
+    await settleOnce();
     const original = await inspect(started.baseUrl, prepared, created.effect.run_id);
     if (original.decision.kind !== "prose_change" || original.decision.opened_proposal.kind !== "present") throw new Error("expected streamed Proposal");
     const proposalId = original.decision.opened_proposal.proposal_id;
     const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, runId: created.effect.run_id, fetchImpl: prepared.fetchImpl };
     await retain(started.baseUrl, prepared, created.effect.run_id, created.conversation_id, CORRECTION, id("d541"), "1");
-    rmSync(hold); await worker;
+    await drainLeftoverWork();
     const current = await getAgentRun(options);
     const historical = await getAgentRun({ ...options, modelAttemptId: attempt(original).model_attempt_id });
     assert.equal(current.status, "completed");
@@ -191,8 +193,6 @@ test("guidance after a visible stream keeps the Proposal bound to its original D
     assert.deepEqual(proposal.proposal.source, { kind: "agent_run_decision", run_id: created.effect.run_id,
       decision_id: original.decision.decision_id });
   } finally {
-    rmSync(hold, { force: true });
-    await worker?.catch(() => undefined);
     await stopRealServer(started.server);
   }
 });
