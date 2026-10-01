@@ -181,9 +181,11 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     assert.ok(revisionRun.decision.kind === "prose_change"
       && revisionRun.decision.locations?.[0]?.outcome.kind === "revised");
     const aiEdited = (await getProposal({ ...options, proposalId })).proposal;
+    assert.equal(aiEdited.candidate_text, "narraxxtor tone Keep the voice consistent.");
     assert.notEqual(aiEdited.revision_id, edited.revision_id);
     assert.equal(aiEdited.operations[0]!.operation_id, edited.operations[0]!.operation_id);
     edited = aiEdited;
+    await page.locator('[data-assistant-inspect]').last().click();
     await expect(candidate).toHaveText("narraxxtor tone Keep the voice consistent.");
     await expect(candidate).toHaveAttribute("data-proposal-revision-id", edited.revision_id);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
