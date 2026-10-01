@@ -285,7 +285,7 @@ test("ordinary clarification keeps the Conversation and resolves fresh targets w
     assert.deepEqual(first.context.passage_targets, [target.targets[1]]);
     if (first.decision.kind !== "prose_change" || first.decision.continuation.kind !== "present") throw new Error("expected resolved Decision");
     const second = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
-      "Revise paragraph 2 of chapter 1", id(`${ns}83`), undefined, true, undefined, conversation);
+      "Rewrite paragraph 2 of this chapter", id(`${ns}83`), undefined, true, undefined, conversation);
     assert.deepEqual(second.context.passage_targets, [{ ...target.targets[0], manuscript_block_ids: [target.targets[0]!.manuscript_block_ids[1]] }]);
     if (second.model_attempt.kind !== "present") throw new Error("expected actual Attempt");
     assert.deepEqual({ conversation: second.conversation_id, mapping: second.model_attempt.input_mapping,

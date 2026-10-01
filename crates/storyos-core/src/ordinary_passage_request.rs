@@ -87,22 +87,20 @@ pub fn parse_ordinary_passage_request(
                     let title = clause[start + 1..end].to_owned();
                     remainder.replace_range(start..=end, "");
                     HumanChapterReference::Title(title)
-                } else if let Some((before, after)) = clause.split_once("chapter ") {
-                    if before.ends_with("this ") || before.ends_with("current ") {
-                        HumanChapterReference::Current
-                    } else {
-                        let ordinal = after.split_whitespace().next().ok_or(())?;
-                        remainder = before.to_owned() + after.strip_prefix(ordinal).ok_or(())?;
-                        {
-                            let ordinal = number(ordinal).ok_or(())?;
-                            if ordinal == 0 || ordinal > ORDINARY_REFERENCE_POSITION_LIMIT {
-                                return Err(());
-                            }
-                            HumanChapterReference::Ordinal(ordinal)
-                        }
-                    }
-                } else if clause.contains("当前章") || clause.contains("本章") {
+                } else if clause.contains("this chapter")
+                    || clause.contains("current chapter")
+                    || clause.contains("当前章")
+                    || clause.contains("本章")
+                {
                     HumanChapterReference::Current
+                } else if let Some((before, after)) = clause.split_once("chapter ") {
+                    let ordinal = after.split_whitespace().next().ok_or(())?;
+                    remainder = before.to_owned() + after.strip_prefix(ordinal).ok_or(())?;
+                    let ordinal = number(ordinal).ok_or(())?;
+                    if ordinal == 0 || ordinal > ORDINARY_REFERENCE_POSITION_LIMIT {
+                        return Err(());
+                    }
+                    HumanChapterReference::Ordinal(ordinal)
                 } else {
                     return Err(());
                 };
