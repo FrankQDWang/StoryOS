@@ -34,6 +34,7 @@ pub struct BlockProposalRecord {
 /// One inspectable Proposal Operation incarnation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposalOperationRecord {
+    pub candidate_text: String,
     pub candidate_blocks: Option<Vec<storyos_contracts::ReplacementBlock>>,
     pub operation_id: String,
     pub manuscript_block_id: String,

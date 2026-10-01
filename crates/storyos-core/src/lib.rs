@@ -610,3 +610,8 @@ mod close_editor_flow_draft;
 pub use close_editor_flow_draft::{
     CloseEditorFlowDraftResult, DraftCloseSource, close_editor_flow_draft,
 };
+
+mod prose_change_locations;
+pub use prose_change_locations::{
+    ProseChangeCandidate, produce_fake_prose_changes, prose_changes_match_targets,
+};

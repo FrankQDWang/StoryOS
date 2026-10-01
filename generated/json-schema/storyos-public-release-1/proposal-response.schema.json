@@ -660,6 +660,9 @@
             "null"
           ]
         },
+        "candidate_text": {
+          "type": "string"
+        },
         "manuscript_block_id": {
           "format": "uuid",
           "type": "string"
@@ -676,6 +679,7 @@
         }
       },
       "required": [
+        "candidate_text",
         "operation_id",
         "manuscript_block_id",
         "resolution",

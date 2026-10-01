@@ -19,6 +19,7 @@ use crate::release1_agent_run::{
     OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
     OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, ProjectionMode,
+    ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
     ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
     UnknownCreateSuccessorDisposition,
 };
@@ -181,6 +182,9 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         "ActiveCompactionKnownInput",
         "OptionalContinuationInspect",
         "OptionalOpenedProposalInspect",
+        "ProseChangeLocationInspect",
+        "ProseChangeLocationOutcome",
+        "ProseChangeLocationCurrent",
         "ContinuationAdmissionInspect",
     ] {
         if let Some(definition) = schema["$defs"].get_mut(name) {
@@ -215,6 +219,12 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
                     "run_step_id",
                     "id",
                     "proposal_id",
+                    "chapter_id",
+                    "manuscript_block_id",
+                    "base_authoritative_revision_id",
+                    "operation_id",
+                    "revision_id",
+                    "validation_receipt_id",
                     "processing_destination_identity",
                     "model_registration_revision",
                     "project_model_use_binding_revision",
@@ -270,7 +280,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
@@ -302,6 +312,9 @@ pub(super) fn typescript_type_declarations() -> String {
         AttemptEvidence::decl(&config),
         OptionalContinuationInspect::decl(&config),
         OptionalOpenedProposalInspect::decl(&config),
+        ProseChangeLocationInspect::decl(&config),
+        ProseChangeLocationOutcome::decl(&config),
+        ProseChangeLocationCurrent::decl(&config),
         OptionalDecisionInspect::decl(&config),
         ContinuationInputMappingInspect::decl(&config),
         ContinuationAdmissionInspect::decl(&config),

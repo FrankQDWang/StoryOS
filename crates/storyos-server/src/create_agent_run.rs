@@ -389,6 +389,7 @@ fn inspect_decision(
             selected,
             text,
             producer_input,
+            locations,
             continuation_binding_id,
             opened_proposal_id,
         } => contracts::OptionalDecisionInspect::ProseChange {
@@ -396,6 +397,7 @@ fn inspect_decision(
             selected: *selected,
             text: text.clone(),
             producer_input: producer_input.clone(),
+            locations: locations.clone(),
             continuation: inspect_continuation(continuation_binding_id.as_deref()),
             authoritative: false,
             opened_proposal: match opened_proposal_id.as_deref() {

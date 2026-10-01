@@ -21,6 +21,7 @@
     "operation_resolution": "pending",
     "operations": [
       {
+        "candidate_text": "Guard the narrator voice in this passage.",
         "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
         "operation_id": "018f0000-0000-7001-8000-000000000b04",
         "reservation_state": "unresolved",

@@ -423,7 +423,13 @@ export type OptionalContinuationInspect = { "kind": "absent" } | { "kind": "pres
 
 export type OptionalOpenedProposalInspect = { "kind": "absent" } | { "kind": "present", proposal_id: string, };
 
-export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
+export type ProseChangeLocationInspect = { chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, candidate_text: string, explanation: string, outcome: ProseChangeLocationOutcome, current: ProseChangeLocationCurrent | null, };
+
+export type ProseChangeLocationOutcome = { "kind": "opened", proposal_id: string, operation_id: string, revision_id: string, validation_receipt_id: string, } | { "kind": "refused", reason: string, };
+
+export type ProseChangeLocationCurrent = { revision_id: string, generation: string, validation: string, closure: string, resolution: string, reservation_state: string, };
+
+export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, locations?: Array<ProseChangeLocationInspect>, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
 
 export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
 
@@ -517,7 +523,7 @@ export type AcceptanceRefusalInspect = { refusal_id: string, correlation_id: str
 
 export type OptionalAcceptanceRefusalInspect = { "kind": "absent" } | { "kind": "present" } & AcceptanceRefusalInspect;
 
-export type ProposalOperationInspect = { candidate_blocks?: Array<ReplacementBlock> | null, operation_id: string, manuscript_block_id: string, resolution: string, reservation_state: string, };
+export type ProposalOperationInspect = { candidate_text: string, candidate_blocks?: Array<ReplacementBlock> | null, operation_id: string, manuscript_block_id: string, resolution: string, reservation_state: string, };
 
 export type ProposalAnchorInspect = { manuscript_block_id: string, base_authoritative_revision_id: string, manuscript_schema_version: number, coordinate_profile: string, from: number, to: number, boundary_profile: string, base_slice_digest: string, };
 

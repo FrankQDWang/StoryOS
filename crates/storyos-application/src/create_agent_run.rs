@@ -225,6 +225,7 @@ pub enum AgentRunDecisionInspect {
         selected: bool,
         text: String,
         producer_input: String,
+        locations: Option<Vec<storyos_contracts::ProseChangeLocationInspect>>,
         continuation_binding_id: Option<String>,
         opened_proposal_id: Option<String>,
     },

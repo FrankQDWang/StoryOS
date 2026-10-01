@@ -191,7 +191,7 @@ async fn read_operations(
 ) -> Result<Vec<ProposalOperationRecord>, ProjectReadError> {
     let rows = client
         .query(
-            "SELECT operation_id::text, manuscript_block_id::text, resolution, reservation_state, candidate_blocks::text
+            "SELECT operation_id::text, manuscript_block_id::text, resolution, reservation_state, candidate_blocks::text, candidate_text
                FROM storyos.proposal_operations
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -208,6 +208,7 @@ async fn read_operations(
     rows.into_iter()
         .map(|row| {
             Ok(ProposalOperationRecord {
+                candidate_text: row.get(5),
                 operation_id: row.get(0),
                 manuscript_block_id: row.get(1),
                 resolution: row.get(2),

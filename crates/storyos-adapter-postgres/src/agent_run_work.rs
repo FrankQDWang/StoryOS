@@ -415,6 +415,7 @@ async fn persist_stream_and_decision(
         }
     };
     let mut stream_hold = false;
+    let mut locations = None;
     let opened_proposal = match (decision_id.as_deref(), outcome) {
         (
             Some(decision_id),
@@ -446,7 +447,7 @@ async fn persist_stream_and_decision(
                 stream_hold = matches!(work, crate::stream_proposal_generation::StreamWork::Hold);
                 proposal_id
             } else {
-                crate::open_block_proposal::open_selected_prose_change(
+                let opened = crate::open_block_proposal::open_selected_prose_change(
                     client,
                     claim,
                     chapter_id,
@@ -454,7 +455,9 @@ async fn persist_stream_and_decision(
                     text,
                     author_message,
                 )
-                .await?
+                .await?;
+                locations = opened.locations;
+                opened.proposal_id
             }
         }
         _ => None,
@@ -468,6 +471,7 @@ async fn persist_stream_and_decision(
         outcome,
         decision_id.as_deref(),
         opened_proposal.as_deref(),
+        locations.as_deref(),
         continuation,
     );
     client
@@ -522,6 +526,7 @@ fn encode_payload(
     outcome: &FakeAttemptOutcome,
     decision_id: Option<&str>,
     opened_proposal: Option<&str>,
+    locations: Option<&[storyos_contracts::ProseChangeLocationInspect]>,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> serde_json::Value {
     let encoded_items: Vec<serde_json::Value> = items
@@ -573,22 +578,28 @@ fn encode_payload(
             FakeDecisionKind::ProseChange {
                 text,
                 producer_input,
-            } => serde_json::json!({
-                "kind": "prose_change",
-                "decision_id": decision_id,
-                "selected": selected,
-                "text": text,
-                "producer_input": producer_input,
-                "authoritative": false,
-                "advances_continuation": advances_continuation,
-                "opened_proposal": match opened_proposal {
-                    Some(proposal_id) => serde_json::json!({
-                        "kind": "present",
-                        "proposal_id": proposal_id
-                    }),
-                    None => serde_json::json!({ "kind": "absent" }),
+            } => {
+                let mut decision = serde_json::json!({
+                    "kind": "prose_change",
+                    "decision_id": decision_id,
+                    "selected": selected,
+                    "text": text,
+                    "producer_input": producer_input,
+                    "authoritative": false,
+                    "advances_continuation": advances_continuation,
+                    "opened_proposal": match opened_proposal {
+                        Some(proposal_id) => serde_json::json!({
+                            "kind": "present",
+                            "proposal_id": proposal_id
+                        }),
+                        None => serde_json::json!({ "kind": "absent" }),
+                    }
+                });
+                if let Some(locations) = locations {
+                    decision["locations"] = serde_json::json!(locations);
                 }
-            }),
+                decision
+            }
             FakeDecisionKind::Clarification { question } => serde_json::json!({
                 "kind": "clarification",
                 "decision_id": decision_id,
