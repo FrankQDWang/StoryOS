@@ -1,3 +1,4 @@
+import { beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -52,6 +53,7 @@ it("the author creates one named Volume from the empty manuscript workspace", as
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -65,7 +67,7 @@ it("the author creates one named Volume from the empty manuscript workspace", as
   await expect.poll(() => {
     const tree = frame.contentDocument?.querySelector('nav[aria-label="稿件目录"]');
     const items = [...(tree?.querySelectorAll(":scope > ul > li") ?? [])];
-    return items.length === 1 && items[0]?.textContent?.trim().startsWith("Volume A") === true;
+    return items.length === 1 && items[0]?.querySelector("[data-volume-title]")?.textContent === "Volume A";
   }).toBe(true);
   const root = frame.contentDocument?.querySelector("#app");
   expect(root?.getAttribute("data-boot-state")).toBe("empty-project-ready");

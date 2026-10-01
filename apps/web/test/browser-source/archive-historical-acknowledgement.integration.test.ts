@@ -1,9 +1,8 @@
 import { expect, it } from "vitest";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { loadStoryOSWebState } from "../../src/app.ts";
-import { HISTORICAL_ACKNOWLEDGEMENT_MESSAGE } from "../../src/historical-acknowledgement.ts";
-import { mountStage1View } from "../../src/stage1-view.tsx";
+import { archiveOwnedProject } from "../../src/archive-project.ts";
+import { historicalAcknowledgementUnavailable } from "../../src/historical-acknowledgement.ts";
 import { jsonResponse } from "./scenario.ts";
 
 const OWNER = "018f0000-0000-7001-8000-000000000001";
@@ -49,27 +48,9 @@ it("explains a historical Archive Project acknowledgement and does not retry it"
 
   document.body.innerHTML = '<main id="app"></main>';
   try {
-    const loaded = await loadStoryOSWebState({
-      documentImpl: document,
-      locationImpl: { origin: location.origin, pathname: "/" },
-      fetchImpl,
-      cryptoImpl: crypto,
-    });
-    mountStage1View(loaded.root, loaded);
-    await expect.poll(() =>
-      loaded.root.querySelector<HTMLButtonElement>(`form[data-archive="${PROJECT}"] button[type="submit"]`)
-        ?.disabled
-    ).toBe(false);
-    const form = loaded.root.querySelector<HTMLFormElement>(`form[data-archive="${PROJECT}"]`);
-    if (form === null) {
-      throw new Error("the archive form is missing");
-    }
-    form.requestSubmit();
-    await expect.poll(() =>
-      loaded.root.querySelector("[data-archive-error]")?.textContent
-    ).toBe(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
-    expect(loaded.root.querySelector("h1")?.textContent).toBe("StoryOS");
-    expect(loaded.root.textContent).toContain("Listed Novel");
+    const unavailable = await archiveOwnedProject({ baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+      projectId: PROJECT, expectedProjectRevision: "2" }).catch(historicalAcknowledgementUnavailable);
+    expect(unavailable).toBe(true);
     expect(methods.filter((entry) => entry.startsWith("PUT ") && entry.endsWith("/archival"))).toEqual([
       `PUT /api/v1/projects/${PROJECT}/archival`,
     ]);

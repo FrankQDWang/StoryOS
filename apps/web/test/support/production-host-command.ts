@@ -164,8 +164,10 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator('input[name="title"]').fill("Production host acceptance");
     await writer.locator('input[name="title"]').press("Enter");
     await writer.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
-    const projectId = await writer.locator("form[data-rename]").getAttribute("data-rename");
+    const projectId = await writer.locator("[data-project-id]").getAttribute("data-project-id");
     assert.ok(projectId !== null && UUID.test(projectId));
+    await writer.locator("[data-add-chapter]").click();
+    await writer.locator("[data-create-volume-action]").click();
     await writer.locator('input[name="volume-title"]').fill("Production Volume");
     await writer.locator('input[name="volume-title"]').press("Enter");
     await writer.locator('input[name="chapter-title"]').fill("Production Chapter");

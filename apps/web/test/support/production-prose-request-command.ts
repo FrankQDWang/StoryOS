@@ -57,8 +57,8 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.locator('input[name="title"]').fill(`${scenario === "refused_edit" ? "Refused edit" : "Prose request"} ${uuidV7()}`);
     await page.locator('input[name="title"]').press("Enter");
     await page.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
-    await page.locator("form[data-rename]").waitFor();
-    const projectId = await page.locator("form[data-rename]").getAttribute("data-rename");
+    await page.locator("[data-project-id]").waitFor();
+    const projectId = await page.locator("[data-project-id]").getAttribute("data-project-id");
     assert.ok(projectId !== null && UUID.test(projectId), `Project id: ${projectId}`);
     await page.locator('[data-assistant-availability="unavailable"]').waitFor();
     assert.equal(await page.locator(".composer button").isDisabled(), true);
@@ -91,6 +91,8 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       ...options, request, idempotencyKey, antiForgery: challenge.nonce,
     });
     assert.equal(enabled.assistance.availability, "available");
+    await page.locator("[data-add-chapter]").click();
+    await page.locator("[data-create-volume-action]").click();
     await page.locator('input[name="volume-title"]').fill("Request Volume");
     await page.locator('input[name="volume-title"]').press("Enter");
     await page.locator('input[name="chapter-title"]').fill("Request Chapter");

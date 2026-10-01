@@ -16,6 +16,6 @@ export function ChapterCreationMenu({ point, onClose, children }: {
     document.addEventListener("mousedown", close); document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
   }, [onClose]);
-  return <div ref={ref} className="chapter-creation-menu" role="menu"
+  return <div ref={ref} className="chapter-creation-menu" role="menu" onClick={(event) => { if ((event.target as Element).closest("button")) onClose(); }}
     style={{ left: position.x, top: position.y }}>{children}</div>;
 }

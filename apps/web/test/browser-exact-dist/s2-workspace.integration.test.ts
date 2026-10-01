@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -97,6 +97,7 @@ it("the production page uses the approved workspace without losing writing state
   expect(empty.textContent).not.toContain("Receipt");
   expect(empty.textContent).not.toContain("权威修订");
 
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -160,8 +161,8 @@ it("the production page uses the approved workspace without losing writing state
   expect({
     tree: root.querySelector('nav[aria-label="稿件目录"]') !== null,
     createChapter: root.querySelector("[data-add-chapter]") !== null,
-    renameVolume: root.querySelector("form[data-rename-volume]") !== null,
-    renameChapter: root.querySelector("form[data-rename-chapter]") !== null,
+    renameVolume: root.querySelector("[data-create-chapter-menu]") !== null,
+    renameChapter: root.querySelector("[data-chapter-menu]") !== null,
     expandVolume: root.querySelector("[data-volume-expand]") !== null,
     chapter: currentChapter.textContent,
     heading: root.querySelector("h2")?.textContent ?? null,

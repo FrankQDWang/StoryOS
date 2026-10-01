@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -128,6 +128,7 @@ it("exports a durable human-readable manuscript through the Worker", { timeout: 
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -184,6 +185,7 @@ it("exports a durable human-readable manuscript through the Worker", { timeout: 
     'nav[aria-label="稿件目录"] button[data-chapter-id]',
   )].find((button) => button.textContent === "Chapter B")?.getAttribute("data-chapter-id");
   if (chapterBId === null || chapterBId === undefined) throw new Error("Chapter B is missing");
+  await beginTreeAction(appRoot(frame), `li[data-chapter-id="${chapterBId}"]`, "[data-make-current-chapter]");
   await expect.poll(() =>
     appRoot(frame).querySelector(`[data-make-current-chapter="${chapterBId}"]`) !== null
   ).toBe(true);

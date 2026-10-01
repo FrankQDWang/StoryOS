@@ -22,6 +22,7 @@ body,
 
 body {
   margin: 0;
+  font-size: 13px;
   min-width: 920px;
   color: var(--ink);
   background: var(--canvas);
@@ -61,8 +62,8 @@ input:focus-visible,
 }
 
 .tree-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: var(--tree-panel);
   border-right: 1px solid var(--line);
@@ -70,18 +71,25 @@ input:focus-visible,
 
 .tree-panel h1 {
   margin: 0;
-  padding: 0 22px;
-  height: 78px;
+  padding: 0;
+  height: 60px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   display: flex;
   align-items: center;
   font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
 }
 
 .tree-panel nav[aria-label="稿件目录"] {
   min-height: 0;
-  overflow: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .tree-panel nav ul {
@@ -91,13 +99,14 @@ input:focus-visible,
 }
 
 .tree-panel nav > ul > li > ul {
-  padding: 0 0 0 28px;
+  padding: 0;
 }
 
 .tree-panel button[data-chapter-id] {
-  width: 100%;
-  min-height: 36px;
-  padding: 8px 10px 8px 12px;
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 8px 0 56px;
   border: 0;
   border-left: 2px solid transparent;
   background: transparent;
@@ -121,8 +130,8 @@ input:focus-visible,
 }
 
 .tree-panel [data-volume-title] {
-  display: inline-block;
-  padding: 10px 0 6px;
+  flex: 1;
+  min-width: 0;
   font-family: "Noto Serif SC", "Songti SC", serif;
   font-size: 13px;
   font-weight: 600;
@@ -131,6 +140,7 @@ input:focus-visible,
 .tree-heading {
   padding: 0 22px;
   height: 40px;
+  flex: none;
   display: flex;
   align-items: center;
   color: #74716a;
@@ -145,21 +155,17 @@ input:focus-visible,
 
 .tree-footer {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 12px;
+  flex: none;
+  min-height: 40px;
+  padding: 8px 22px;
   border-top: 1px solid var(--line);
 }
 
-.editor-panel { overflow: auto; background: var(--canvas); }
+.editor-panel { display: flex; flex-direction: column; overflow: auto; background: var(--canvas); }
 
 .editor-panel h2,
-.editor-panel [data-manuscript-statistics],
-.editor-panel [data-readable-export],
-.editor-panel [data-manuscript-search],
-.manuscript-editor,
-.editor-panel [data-save-state],
-.editor-panel [data-activity-replay-generation] {
+.editor-status,
+.manuscript-editor {
   width: min(100%, 850px);
   margin-left: auto;
   margin-right: auto;
@@ -176,37 +182,6 @@ input:focus-visible,
   font-weight: 600;
 }
 
-.editor-panel [data-manuscript-statistics],
-.editor-panel [data-readable-export],
-.editor-panel [data-manuscript-search] {
-  margin-bottom: 24px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.editor-panel [data-manuscript-search] form,
-.editor-panel [data-manuscript-search] fieldset {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 16px;
-  align-items: end;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.editor-panel [data-manuscript-search] ol {
-  margin: 8px 0 0;
-  padding-left: 1.25em;
-}
-
-.editor-panel [data-manuscript-replace-form] {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 16px;
-  align-items: end;
-  margin: 12px 0 0;
-}
 
 .manuscript-editor {
   display: block;
@@ -267,21 +242,12 @@ input:focus-visible,
   font-size: 13px;
 }
 
-.editor-panel [data-save-state] {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 12px;
-}
+.editor-panel h2 { margin-top: 91px; margin-bottom: 38px; font-family: "Noto Serif SC", "Songti SC", serif; font-size: clamp(27px, 2.1vw, 32px); font-weight: 600; }
+.editor-status { position: sticky; bottom: 0; margin-top: auto; min-height: 40px; display: flex; align-items: center; gap: 8px; background: var(--canvas); color: var(--muted); font-size: 12px; }
+.editor-status [data-manuscript-statistics] { margin-left: auto; order: 3; }
 
-.editor-panel [data-activity-replay-generation] {
-  display: block;
-  margin-bottom: 24px;
-  color: var(--muted);
-  font-size: 12px;
-}
 
-.workspace.agent-is-collapsed .agent-panel { width: var(--assistant-rail-width); }
+.agent-panel { width: var(--assistant-rail-width); }
 
 .agent-panel {
   height: 100%;
@@ -476,4 +442,43 @@ input:focus-visible,
 .inline-chapter-creation input { box-sizing: border-box; width: 100%; min-width: 0; padding: 4px 6px; border: 1px solid #b9b4a9; border-radius: 3px; font: inherit; background: transparent; }
 .inline-chapter-creation [data-create-chapter-error] { font-size: 12px; margin: 4px 0; }
 li[data-chapter-id] { position: relative; }
-li[data-chapter-id] > [data-chapter-menu] { position: absolute; right: 8px; top: 4px; }
+
+
+.project-heading { height: 60px; flex: none; display: flex; align-items: center; padding: 0 23px; gap: 8px; }
+.project-heading h1 { margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px "Noto Serif SC", "Songti SC", serif; }
+.project-heading form { flex: 1; min-width: 0; }
+.tree-panel button { color: inherit; }
+[data-project-menu], [data-create-chapter-menu], [data-chapter-menu], [data-volume-expand] { border: 0; background: transparent; padding: 3px; cursor: pointer; }
+
+.volume-row { display: flex; align-items: center; min-height: 40px; padding: 0 11px 0 23px; }
+.volume-row-actions { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; }
+[data-volume-title] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "Noto Serif SC", "Songti SC", serif; }
+.tree-panel li[data-chapter-id] { min-height: 40px; display: flex; align-items: center; flex-wrap: wrap; padding-right: 11px; border-left: 2px solid transparent; }
+.tree-panel li[data-chapter-id]:has([aria-current="true"]) { background: #f1f0ee; border-left-color: #34332f; }
+
+[data-create-chapter-menu], [data-chapter-menu], .project-heading [data-project-menu] { opacity: 0; font-size: 18px; }
+:is(.volume-row, li[data-chapter-id], .project-heading):hover :is([data-create-chapter-menu], [data-chapter-menu], [data-project-menu]), :is([data-create-chapter-menu], [data-chapter-menu], [data-project-menu]):focus-visible { opacity: 1; }
+.tree-panel :is([data-rename-volume], [data-rename-chapter]) { flex: 1; min-width: 0; }
+.tree-panel [data-rename-chapter] { padding-left: 54px; }
+.tree-panel :is([data-rename], [data-rename-volume], [data-rename-chapter], [data-create-volume]) input { width: 100%; min-width: 0; padding: 3px 4px; border: 1px solid #aaa295; border-radius: 2px; background: #fbfaf8; font: 13px "Noto Serif SC", "Songti SC", serif; }
+.inline-volume-creation { padding: 6px 20px 6px 42px; }
+.tree-panel :is([data-rename-volume-error], [data-rename-chapter-error], [data-create-volume-error]) { flex-basis: 100%; margin: 5px 0; font-size: 12px; }
+.tree-panel :is([data-confirm-delete-volume], [data-confirm-delete-chapter]) { margin-left: auto; }
+.tree-panel :is([data-confirm-delete-volume], [data-confirm-delete-chapter], [data-cancel-delete-volume], [data-cancel-delete-chapter]) { border: 0; background: transparent; padding: 5px; font-size: 12px; }
+
+.tree-panel nav > ul { overflow: auto; min-height: 0; padding: 18px 0 8px; scrollbar-width: thin; }
+.tree-panel nav > ul > li { margin-bottom: 10px; }
+
+.tree-panel [data-manuscript-search] { flex: none; padding: 0 22px 8px; }
+.manuscript-search-field { display: block; position: relative; }
+.manuscript-search-field svg { position: absolute; left: 8px; top: 6px; width: 15px; height: 15px; color: #918a80; }
+.manuscript-search-field input { width: 100%; height: 28px; padding: 4px 9px 4px 30px; border: 1px solid #e5e1dc; background: #fbfaf8; border-radius: 4px; }
+[data-search-active="false"] :is(fieldset, button[type="submit"]) { display: none; }
+[data-manuscript-search] fieldset { display: flex; gap: 8px; border: 0; padding: 10px 0 0; margin: 0; }
+[data-manuscript-search] legend { display: none; }
+[data-manuscript-search] button, [data-readable-export] button { border: 0; background: transparent; padding: 5px 0; cursor: pointer; }
+[data-search-outcome] { max-height: 300px; overflow: auto; }
+[data-search-outcome] ol { list-style: none; padding: 0; }
+[data-search-match] button { font-size: 12px; text-align: left; word-break: break-all; }
+[data-search-match-selected] { background: var(--hover); }
+.tree-footer [data-readable-export] pre { position: absolute; bottom: 75px; left: 12px; width: 236px; max-height: 300px; overflow: auto; white-space: pre-wrap; background: var(--tree-panel); border: 1px solid var(--line); padding: 12px; font: 13px/1.8 "Noto Serif SC", "Songti SC", serif; z-index: 5; }

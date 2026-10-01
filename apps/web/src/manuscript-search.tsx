@@ -6,7 +6,6 @@ import {
   type ManuscriptSearchSelection,
   type SearchManuscriptResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { BoundReplacementMatch, ManualInputController } from "./manual-input.ts";
 
 type SearchOutcome =
   | {
@@ -40,25 +39,23 @@ export function ManuscriptSearchPanel({
   projectId,
   baseUrl,
   fetchImpl,
-  currentChapterId,
-  controllerRef,
+  chapterTitles,
+  onSelectChapter,
 }: {
   projectId: string;
   baseUrl: string;
   fetchImpl: typeof fetch;
-  currentChapterId: string;
-  controllerRef: { current: ManualInputController | null };
+  chapterTitles: ReadonlyMap<string, string>;
+  onSelectChapter?: (chapterId: string) => void;
 }) {
+  const [query, setQuery] = useState("");
   const [selection, setSelection] = useState<ManuscriptSearchSelection>("current_chapter");
   const [outcome, setOutcome] = useState<SearchOutcome | undefined>(undefined);
-  const [selectedMatch, setSelectedMatch] = useState<BoundReplacementMatch | undefined>(undefined);
-  const [replaceOutcome, setReplaceOutcome] = useState<
-    { kind: "applied" } | { kind: "unchanged" } | { kind: "refused" }
-    | { kind: "stale" } | undefined
-  >(undefined);
+  const [selectedMatch, setSelectedMatch] = useState<{ chapterId: string; manuscriptBlockId: string; start: number; end: number }>();
+
 
   return (
-    <section data-manuscript-search="">
+    <section data-manuscript-search="" data-search-active={query.trim() ? "true" : "false"}>
       <form
         data-manuscript-search-form=""
         onSubmit={(event) => {
@@ -70,6 +67,7 @@ export function ManuscriptSearchPanel({
               ? "manuscript"
               : "current_chapter";
           if (!query) return;
+          setQuery(query);
           setSelection(nextSelection);
           void (async () => {
             try {
@@ -91,9 +89,7 @@ export function ManuscriptSearchPanel({
                 manuscriptBlockId: first.manuscript_block_id,
                 start: Number(first.start),
                 end: Number(first.end),
-                queryText: query,
               });
-              setReplaceOutcome(undefined);
             } catch (error) {
               setOutcome(
                 problemCode(error) === "projection_not_ready"
@@ -104,10 +100,12 @@ export function ManuscriptSearchPanel({
           })();
         }}
       >
-        <label>
-          搜索
+        <label className="manuscript-search-field">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" /><path d="m12 12 5 5" stroke="currentColor" /></svg>
           <input
+            aria-label="搜索稿件" placeholder="搜索稿件"
             name="manuscript-search-query"
+            value={query} onChange={(event) => { setQuery(event.currentTarget.value); if (!event.currentTarget.value.trim()) setOutcome(undefined); }}
             maxLength={1024}
           />
         </label>
@@ -176,7 +174,6 @@ export function ManuscriptSearchPanel({
                     manuscriptBlockId: item.manuscript_block_id,
                     start: Number(item.start),
                     end: Number(item.end),
-                    queryText: outcome.query,
                   };
                   const selected = selectedMatch?.chapterId === match.chapterId
                     && selectedMatch.manuscriptBlockId === match.manuscriptBlockId
@@ -194,75 +191,14 @@ export function ManuscriptSearchPanel({
                     >
                       <button
                         type="button"
-                        onClick={() => setSelectedMatch(match)}
+                        onClick={() => { setSelectedMatch(match); onSelectChapter?.(item.chapter_id); }}
                       >
-                        {item.chapter_id} · {item.start}–{item.end}
+                        {chapterTitles.get(item.chapter_id) ?? "章节暂不可读"} · 第 {item.start}–{item.end} 字
                       </button>
                     </li>
                   );
                 })}
               </ol>
-              <form
-                data-manuscript-replace-form=""
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const submitter = event.nativeEvent instanceof SubmitEvent
-                    ? event.nativeEvent.submitter
-                    : null;
-                  const data = submitter instanceof HTMLElement
-                    ? new FormData(event.currentTarget, submitter)
-                    : new FormData(event.currentTarget);
-                  const replacement = String(data.get("manuscript-search-replacement") ?? "");
-                  const matches: BoundReplacementMatch[] = outcome.page.items.map((item) => ({
-                    chapterId: item.chapter_id,
-                    manuscriptBlockId: item.manuscript_block_id,
-                    start: Number(item.start),
-                    end: Number(item.end),
-                    queryText: outcome.query,
-                  }));
-                  const broader = data.get("replace-mode") === "all"
-                    || (submitter instanceof HTMLButtonElement
-                      && submitter.getAttribute("data-replace-all") !== null);
-                  const bound = broader
-                    ? matches
-                    : selectedMatch === undefined ? [] : [selectedMatch];
-                  if (bound.length === 0) return;
-                  const kind = !broader
-                    && bound.length === 1
-                    && bound[0]?.chapterId === currentChapterId
-                    ? "one"
-                    : "broader";
-                  void (async () => {
-                    const result = await controllerRef.current?.replaceBound({
-                      kind,
-                      matches: bound,
-                      text: replacement,
-                    }) ?? "refused";
-                    setReplaceOutcome({ kind: result });
-                  })();
-                }}
-              >
-                <label>
-                  替换为
-                  <input name="manuscript-search-replacement" maxLength={1024} />
-                </label>
-                <button type="submit" name="replace-mode" value="one" data-replace-one="">替换此处</button>
-                <button type="submit" name="replace-mode" value="all" data-replace-all="">全部替换</button>
-              </form>
-              {replaceOutcome === undefined ? null : (
-                <p
-                  role="status"
-                  data-replace-outcome={replaceOutcome.kind}
-                >
-                  {replaceOutcome.kind === "applied"
-                    ? "已替换一处匹配。"
-                    : replaceOutcome.kind === "unchanged"
-                      ? "正文未变化，已保存。"
-                    : replaceOutcome.kind === "stale"
-                      ? "选中的匹配已失效，权威正文未改。"
-                      : "已拒绝更广的替换，权威正文未改。"}
-                </p>
-              )}
             </>
           )}
         </div>
