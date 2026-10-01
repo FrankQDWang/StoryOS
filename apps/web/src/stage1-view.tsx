@@ -449,7 +449,7 @@ function ProjectReadyView({
       }}
       assistant={{
         scope: state.project.project_scope,
-        chapterId: currentChapterId, candidateTarget,
+        chapterId: currentChapterId, candidateTarget, tree,
         canSubmit: selectedChapter.chapter.chapter_id === currentChapterId
           && saveState === "saved" && !readOnly && !archived,
         baseUrl, fetchImpl, cryptoImpl,

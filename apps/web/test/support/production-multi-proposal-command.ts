@@ -134,11 +134,15 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     for (const fault of ['stale', 'deleted', 'wrong_scope']) {
       phase = fault;
       let observedFault = false;
-      let faultReads = 0;
+      let switched = false;
+      const currentRoute = (url: URL) => url.pathname.endsWith('/current-chapter');
+      if (fault === 'stale') await page.route(currentRoute, async route => {
+        const response = await route.fetch(); switched = true; await route.fulfill({ response });
+      });
       await page.route(proposalRoute, async route => {
         const response = await route.fetch();
         const body = await response.json();
-        if (fault === 'stale' && ++faultReads === 1) return route.fulfill({ response });
+        if (fault === 'stale' && !switched) return route.fulfill({ response });
         if (fault === 'stale') body.proposal.revision_id = id();
         if (fault === 'wrong_scope') body.project_scope.project_id = id();
         await route.fulfill(fault === 'deleted' ? { status: 404, json: { code: 'not_found' } } : { response, json: body });
@@ -150,6 +154,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       await expect(page.locator('.editor-panel h2')).toHaveText(fault === 'stale' ? 'Chapter A' : 'Chapter B');
       await expect(page.locator('[data-manuscript-editor]')).toHaveAttribute('contenteditable', 'true');
       await page.unroute(proposalRoute);
+      if (fault === 'stale') await page.unroute(currentRoute);
       await page.locator('[data-proposal-return]').click();
       await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
       await expect(page.locator('.editor-panel [role="alert"]')).toHaveCount(0);

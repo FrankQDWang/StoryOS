@@ -28,14 +28,8 @@ export function ProposalDecisionStatus({
   const posture: SessionPosture = !writerOpen ? "closed" : sessionBlocked ? "blocked" : "current";
   const message = pendingRejection
     ? "拒绝结果尚未确认。请重试同一操作。"
-    : proposal?.operation_resolution === "rejected"
-      ? undefined
-      : rejectionResult !== undefined
-        ? {
-          resolved: undefined,
-          conflicted: "正文已变化，拒绝结果请检查。",
-          refused: "此次拒绝未生效，请检查当前候选文字。",
-        }[rejectionResult]
+    : rejectionResult === "conflicted" ? "正文已变化，拒绝结果请检查。"
+      : rejectionResult === "refused" ? "此次拒绝未生效，请检查当前候选文字。"
         : pendingReplan
           ? "重新规划结果尚未确认。请重试同一操作。"
           : pendingWithdraw
@@ -46,12 +40,11 @@ export function ProposalDecisionStatus({
                 ? proposal?.operation_resolution === "applied"
                   ? "正文已变化；此次接受结果尚未确认。请重试同一操作。"
                   : decisionMessage ?? "接受结果尚未确认。请重试同一操作。"
-                : proposal?.operation_resolution === "applied"
-                  && proposal.operations.every(operation => operation.resolution !== "pending")
+                : proposal !== undefined && proposal.operations.every(operation => operation.resolution !== "pending")
                   ? !acceptanceChecked ? "正在同步正文。"
                     : decisionMessage?.includes("请刷新") ? decisionMessage : undefined
                   : proposal === undefined ? decisionMessage
-                    : (recoveryStatus(proposal, posture) ?? decisionMessage);
+                    : recoveryStatus(proposal, posture);
   if (message === undefined) return null;
   return (
     <p data-proposal-decision={proposalId} role="status">

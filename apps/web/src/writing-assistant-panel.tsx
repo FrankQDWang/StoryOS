@@ -6,7 +6,7 @@ import {
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, ProjectScope,
+  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -49,6 +49,7 @@ export type AssistantContext = {
   scope: ProjectScope;
   chapterId?: string;
   candidateTarget?: ProposalFocus | undefined;
+  tree?: GetManuscriptTreeResponse | undefined;
   canSubmit: boolean;
   baseUrl: string;
   fetchImpl: typeof fetch;
@@ -135,7 +136,9 @@ function resultText(run: GetAgentRunResponse): string | undefined {
     case "advisory":
       return run.decision.text;
     case "prose_change":
-      return run.decision.text;
+      return (run.decision.locations?.length ?? 0) > 0
+        ? `这次修改涉及 ${new Set(run.decision.locations!.map(location => location.chapter_id)).size} 个章节、${run.decision.locations!.length} 处文字，具体建议在下方。`
+        : "本次修改建议已生成，可以在正文中查看。";
     case "clarification":
       return run.decision.question;
     case "execution_refused":
@@ -495,8 +498,10 @@ export function WritingAssistantPanel({
               {index > 0 && history[index - 1]?.conversationId !== exchange.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <p className="assistant-author-message">{exchange.message}</p>
+              {exchange.run?.steering_inputs?.map(input => <p className="assistant-author-message"
+                key={input.steering_input_id}>{input.author_message}</p>)}
               {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
-              {exchange.run === undefined ? null : <ProposalLocationLinks run={exchange.run}
+              {exchange.run === undefined ? null : <ProposalLocationLinks run={exchange.run} tree={context?.tree}
                 sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
             </section>
           ))}
@@ -506,9 +511,11 @@ export function WritingAssistantPanel({
                 && reference.history?.at(-1)?.conversationId !== reference.conversationId
                 ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <p className="assistant-author-message">{reference.message}</p>
+              {run?.steering_inputs?.map(input => <p className="assistant-author-message"
+                key={input.steering_input_id}>{input.author_message}</p>)}
               {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
               {run === undefined ? null : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
-                <ProposalLocationLinks run={run} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
+                <ProposalLocationLinks run={run} tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
               {!terminal ? <button type="button" data-assistant-inspect="" onClick={() => {
                 void inspectDetails(reference.correlationId);
               }}>检查结果</button> : null}
