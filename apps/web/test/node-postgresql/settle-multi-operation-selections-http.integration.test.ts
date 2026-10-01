@@ -213,7 +213,9 @@ test.each(["", " SCRIPT:reverse_locations"])("one collection request produces th
     const ns = randomBytes(3).toString("hex");
     const { fetchImpl, projectId, chapterId, chapters, target } = await collectionSetup(started.baseUrl, ns);
     const run = await admitPassages(started.baseUrl, fetchImpl, projectId, chapterId,
-      `Revise these passages: keep the voice.${script}`, id(`${ns}43`), undefined, true, target);
+      script ? `Revise these passages: keep the voice.${script}` :
+      `Tighten the first two paragraphs of chapter "${chapters[0]!.chapter.title}" and the first paragraph of chapter "${chapters[1]!.chapter.title}"`,
+      id(`${ns}43`), undefined, true, script ? target : undefined);
     if (run.decision.kind !== "prose_change") throw new Error("expected collection Decision");
     assert.deepEqual(run.decision.locations!.map(({ chapter_id, manuscript_block_id, base_authoritative_revision_id }) =>
       ({ chapter_id, manuscript_block_id, base_authoritative_revision_id })), chapters.flatMap(({ chapter }) =>
