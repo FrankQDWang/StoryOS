@@ -27,6 +27,7 @@ export type BlockProposalProjection = {
   expectedHeads: string[];
   localPending?: boolean;
   pendingOperationIds?: string[];
+  focused?: boolean;
 };
 
 export const PROPOSAL_ATTRIBUTES = [
@@ -34,7 +35,7 @@ export const PROPOSAL_ATTRIBUTES = [
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
   "rejectEligible", "retryRejection", "replanEligible", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
-  "pendingOperationIds", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
+  "focused", "pendingOperationIds", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
@@ -148,6 +149,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         sessionEligible: proposal.sessionEligible ?? false,
         expectedHeads: proposal.expectedHeads,
         pendingOperationIds: proposal.pendingOperationIds ?? [],
+        focused: proposal.focused ?? false,
         inlineProposal: proposal.inlineProposal ?? false,
         inlineFrom: proposal.inlineAnchor?.from ?? null,
         inlineTo: proposal.inlineAnchor?.to ?? null,
@@ -192,6 +194,7 @@ export const blockProposalDecoration = TiptapNode.create({
     return ["div", {
       class: node.attrs.inlineFrom !== null ? "block-proposal inline-proposal-controls"
         : node.attrs.inlineProposal === true ? "block-proposal inline-proposal-stale" : "block-proposal",
+      "data-proposal-focused": node.attrs.focused === true ? "true" : "false",
       "data-proposal-id": node.attrs.proposalId,
       "data-proposal-operation-id": node.attrs.operationId,
       "data-proposal-revision-id": node.attrs.revisionId,

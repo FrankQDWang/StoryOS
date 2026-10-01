@@ -338,6 +338,9 @@ export function BlockProposalDisplay({
       ...(baseMatches && inlineAnchor !== undefined ? { inlineAnchor } : {}),
       proposalId: proposal.proposal_id,
       operationId: operation.operation_id,
+      focused: editorProps.focusProposal?.proposalId === proposal.proposal_id
+        && editorProps.focusProposal.operationId === operation.operation_id
+        && editorProps.focusProposal.revisionId === proposal.revision_id,
       pendingOperationIds: proposal.operations.filter((item) => item.resolution === "pending").map((item) => item.operation_id).sort(),
       revisionId: proposal.revision_id,
       blockId: operation.manuscript_block_id,

@@ -1,3 +1,4 @@
+import type { GetProposalResponse, ProjectScope } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { openControlledProject } from "./boot.ts";
 import { completeJournalOrRefuse, openSelectedChapter } from "./chapter-navigation.ts";
@@ -10,6 +11,19 @@ import type { ProposalLocator } from "./block-proposal-display.tsx";
 export type ProposalFocus = { proposalId: string; operationId: string; revisionId: string; blockId: string };
 export type ProposalDestination = { chapterId: string; focus?: ProposalFocus };
 export type ProposalNavigation = { sequence: number; queue: Promise<void> };
+
+function matchesDestination(response: GetProposalResponse, scope: ProjectScope,
+  destination: ProposalDestination): boolean {
+  const proposal = response.proposal;
+  const focus = destination.focus!;
+  return response.project_scope.owner_user_id === scope.owner_user_id
+    && response.project_scope.project_id === scope.project_id
+    && proposal.proposal_id === focus.proposalId && proposal.chapter_id === destination.chapterId
+    && proposal.revision_id === focus.revisionId && proposal.closure === "open"
+    && proposal.operations.some((operation) => operation.operation_id === focus.operationId
+      && operation.manuscript_block_id === focus.blockId && operation.resolution === "pending"
+      && operation.reservation_state === "unresolved");
+}
 
 export function navigateProposal(options: {
   state: ProjectReadyState;
@@ -46,13 +60,7 @@ export function navigateProposal(options: {
           proposalId: focus.proposalId });
         if (!latest()) return;
         const proposal = response.proposal;
-        if (response.project_scope.owner_user_id !== scope.owner_user_id
-          || response.project_scope.project_id !== scope.project_id
-          || proposal.proposal_id !== focus.proposalId || proposal.chapter_id !== destination.chapterId
-          || proposal.revision_id !== focus.revisionId || proposal.closure !== "open"
-          || !proposal.operations.some((operation) => operation.operation_id === focus.operationId
-            && operation.manuscript_block_id === focus.blockId && operation.resolution === "pending"
-            && operation.reservation_state === "unresolved")) throw new Error("候选位置已变化，请检查本次结果。");
+        if (!matchesDestination(response, scope, destination)) throw new Error("候选位置已变化，请检查本次结果。");
         if (proposal.source.kind === "agent_run_decision") options.onLocator({
           proposalId: proposal.proposal_id, runId: proposal.source.run_id, decisionId: proposal.source.decision_id,
         });
@@ -77,7 +85,22 @@ export function navigateProposal(options: {
         throw new Error("无法打开写作会话。");
       }
       const next = await openControlledProject({ baseUrl, fetchImpl, cryptoImpl, projectId: scope.project_id });
-      if (latest()) options.onOpened(next, focus);
+      if (!latest()) return;
+      if (next.kind !== "project-ready" || next.editor.kind !== "editor-ready"
+        || next.editor.session.writer.kind !== "current_writer"
+        || next.editor.partition.disposition !== "current_writer_open"
+        || next.chapter.chapter.chapter_id !== destination.chapterId
+        || next.project.project_scope.owner_user_id !== scope.owner_user_id
+        || next.project.project_scope.project_id !== scope.project_id
+        || focus !== undefined && !next.chapter.chapter.current_revision.blocks.some((block) =>
+          block.manuscript_block_id === focus.blockId)) throw new Error("无法打开写作会话。");
+      if (focus !== undefined) {
+        const response = await getProposal({ baseUrl, fetchImpl, projectId: scope.project_id,
+          proposalId: focus.proposalId });
+        if (!latest()) return;
+        if (!matchesDestination(response, scope, destination)) throw new Error("候选位置已变化，请检查本次结果。");
+      }
+      options.onOpened(next, focus);
     } catch (error) {
       if (latest()) options.onFailure(error instanceof Error ? error.message : "无法打开候选位置。");
     }

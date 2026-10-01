@@ -6,7 +6,7 @@ import { expect } from "playwright/test";
 import type { BrowserContext } from "playwright";
 import { createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun,
   getChapter, getProposal, updateProjectAssistance } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { CreateAgentRunResponse, UpdateProjectAssistanceRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { CreateAgentRunRequest, CreateAgentRunResponse, AcceptProposalRequest, UpdateProjectAssistanceRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch } from "./node-integration.ts";
 
@@ -70,27 +70,37 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     }
     let admitted: CreateAgentRunResponse | undefined;
+    let requestTarget: CreateAgentRunRequest["create_agent_run_input"]["working_target"] | undefined;
     await page.route(url=>url.pathname.endsWith('/agent-runs'),async route=>{
       if(route.request().method()!=="POST")return route.continue();
+      requestTarget = (route.request().postDataJSON() as CreateAgentRunRequest).create_agent_run_input.working_target;
       const response=await route.fetch(); admitted=await response.json() as CreateAgentRunResponse;
       await route.fulfill({response});
     });
-    await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
-    await page.locator('[data-assistant-availability="available"]').waitFor();
-    await page.locator('input[name="assistant-message"]').fill('Rewrite the first 2 paragraphs of chapter 1 and the first paragraph of chapter 2');
-    await page.locator('.composer button').click();
-    await expect.poll(()=>admitted?.effect.kind).toBe('admitted');
-    const result=admitted as CreateAgentRunResponse|undefined;
-    assert.ok(result?.effect.kind==='admitted');
-    const runId=result.effect.run_id;
-    for(let i=0;i<8;i++) {
-      if((await getAgentRun({...options,runId})).status==='completed')break;
-      await runStoryOSWorker({repositoryRoot,workerBinary:join(repositoryRoot,'target/release-package/storyos-worker'),args:['--once']});
-    }
-    const run=await getAgentRun({...options,runId});
-    assert.equal(run.status,'completed'); assert.ok(run.decision.kind==='prose_change');
+    const completeRun = async (message: string) => {
+      admitted = undefined;
+      await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
+      await page.locator('[data-assistant-availability="available"]').waitFor();
+      await page.locator('input[name="assistant-message"]').fill(message);
+      await page.locator('.composer button').click();
+      await expect.poll(() => admitted?.effect.kind).toBe('admitted');
+      const result = admitted as CreateAgentRunResponse | undefined;
+      assert.ok(result?.effect.kind === 'admitted');
+      const runId = result.effect.run_id;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        if ((await getAgentRun({ ...options, runId })).status === 'completed') break;
+        await runStoryOSWorker({ repositoryRoot, workerBinary: join(repositoryRoot, 'target/release-package/storyos-worker'), args: ['--once'] });
+      }
+      const completed = await getAgentRun({ ...options, runId });
+      assert.equal(completed.status, 'completed');
+      assert.ok(completed.decision.kind === 'prose_change');
+      await page.locator('[data-assistant-inspect]').click();
+      return completed;
+    };
+    const requestMessage = 'Rewrite the first 2 paragraphs of chapter 1 and the first paragraph of chapter 2';
+    const run = await completeRun(requestMessage);
+    assert.ok(run.decision.kind === 'prose_change');
     assert.equal(run.decision.locations?.length,3);
-    await page.locator('[data-assistant-inspect]').click();
     await expect(page.locator('[data-proposal-location]')).toHaveCount(3);
     for(const location of run.decision.locations ?? []) {
       assert.ok(location.outcome.kind!=='refused');
@@ -102,6 +112,101 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       await expect(candidate).toHaveAttribute('data-proposal-focused','true');
       await expect(candidate.locator('.block-proposal-text')).toHaveText(location.candidate_text);
     }
+    const locations = run.decision.locations!;
+    const first = locations[0]!;
+    const secondary = locations[1]!;
+    assert.ok(first.outcome.kind !== 'refused' && secondary.outcome.kind !== 'refused');
+    const firstOutcome = first.outcome;
+    const secondaryOutcome = secondary.outcome;
+    const proposalId = secondaryOutcome.proposal_id;
+    const before = (await getProposal({ ...options, proposalId })).proposal;
+    await page.locator(`[data-proposal-location="${secondaryOutcome.operation_id}"]`).click();
+    const candidate = () => page.locator(`[data-proposal-id="${proposalId}"][data-proposal-operation-id="${secondaryOutcome.operation_id}"]`);
+    await expect(candidate()).toHaveAttribute('data-proposal-focused', 'true');
+    await page.keyboard.press('End');
+    await page.keyboard.insertText(' Manual candidate edit.');
+    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
+      .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text)
+      .toBe(`${secondary.candidate_text} Manual candidate edit.`);
+    const manual = (await getProposal({ ...options, proposalId })).proposal;
+    assert.notEqual(manual.revision_id, before.revision_id);
+    assert.equal(manual.operations.find(operation => operation.operation_id === firstOutcome.operation_id)?.candidate_text,
+      before.operations.find(operation => operation.operation_id === firstOutcome.operation_id)?.candidate_text);
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    const revised = await completeRun('Make the selected candidate calmer and preserve its meaning');
+    assert.deepEqual(requestTarget, { kind: 'proposal_candidate', source_chapter_id: secondary.chapter_id,
+      target: { proposal_id: proposalId, operation_id: secondaryOutcome.operation_id, revision_id: manual.revision_id } });
+    assert.ok(revised.decision.kind === 'prose_change');
+    assert.ok(revised.decision.locations?.[0]?.outcome.kind === 'revised');
+    const ai = (await getProposal({ ...options, proposalId })).proposal;
+    assert.notEqual(ai.revision_id, manual.revision_id);
+    await expect(candidate()).toHaveAttribute('data-proposal-revision-id', ai.revision_id);
+    const primary = page.locator(`[data-proposal-id="${proposalId}"][data-proposal-operation-id="${firstOutcome.operation_id}"]`);
+    await primary.locator('[data-proposal-accept]:not([data-proposal-all])').click();
+    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
+      .find(operation => operation.operation_id === firstOutcome.operation_id)?.resolution).toBe('applied');
+    const authorBlock = page.locator(`[data-manuscript-editor] > p[data-manuscript-block-id="${first.manuscript_block_id}"]`);
+    await authorBlock.click();
+    await page.keyboard.press('End');
+    await page.keyboard.insertText(' Author continues writing.');
+    await expect.poll(async () => (await getChapter({ ...options, chapterId: first.chapter_id })).chapter.current_revision.blocks
+      .find(block => block.manuscript_block_id === first.manuscript_block_id)?.text)
+      .toContain('Author continues writing.');
+    const conflicted = (await getProposal({ ...options, proposalId })).proposal;
+    assert.equal(conflicted.operations.find(operation => operation.operation_id === secondaryOutcome.operation_id)?.resolution, 'pending');
+    await candidate().locator('[data-proposal-replan]').click();
+    await expect(candidate().locator('[data-proposal-reject]')).toBeVisible();
+    const replanned = (await getProposal({ ...options, proposalId })).proposal;
+    assert.notEqual(replanned.revision_id, conflicted.revision_id);
+    assert.equal(replanned.operations.find(operation => operation.operation_id === firstOutcome.operation_id)?.resolution, 'applied');
+    await candidate().locator('[data-proposal-reject]').click();
+    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
+      .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.resolution).toBe('rejected');
+    await page.locator(`[data-assistant-history-inspect="${run.run_id}"]`).click();
+    const third = locations[2]!;
+    assert.ok(third.outcome.kind !== 'refused');
+    await page.locator(`[data-proposal-location="${third.outcome.operation_id}"]`).click();
+    const thirdOutcome = third.outcome;
+    const thirdCandidate = page.locator(`[data-proposal-id="${thirdOutcome.proposal_id}"]`);
+    await expect(thirdCandidate).toHaveAttribute('data-proposal-focused', 'true');
+    await thirdCandidate.locator('[data-proposal-reject]').click();
+    await expect.poll(async () => (await getProposal({ ...options, proposalId: thirdOutcome.proposal_id })).proposal.closure).toBe('closed');
+    await page.locator('[data-proposal-return]').last().click();
+    await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
+    const wholeRun = await completeRun(requestMessage);
+    assert.ok(wholeRun.decision.kind === 'prose_change');
+    const whole = wholeRun.decision.locations?.[0];
+    assert.ok(whole && whole.outcome.kind !== 'refused');
+    const wholeOutcome = whole.outcome;
+    await page.locator(`[data-proposal-location="${wholeOutcome.operation_id}"]`).click();
+    const wholeCandidate = page.locator(`[data-proposal-id="${wholeOutcome.proposal_id}"]`).first();
+    await expect(wholeCandidate.locator('[data-proposal-accept][data-proposal-all]')).toBeVisible();
+    const bodies: string[] = [];
+    const keys: string[] = [];
+    let finishLoss!: () => void;
+    const lost = new Promise<void>(resolve => { finishLoss = resolve; });
+    await page.route(url => url.pathname.endsWith(`/proposals/${wholeOutcome.proposal_id}/acceptances`), async route => {
+      bodies.push(route.request().postData()!);
+      keys.push((await route.request().allHeaders())['idempotency-key']!);
+      const response = await route.fetch();
+      if (bodies.length <= 2) await route.abort('failed');
+      else await route.fulfill({ response });
+      if (bodies.length === 2) finishLoss();
+    });
+    await wholeCandidate.locator('[data-proposal-accept][data-proposal-all]').click();
+    await lost;
+    assert.equal(bodies.length, 2);
+    const frozen = JSON.parse(bodies[0]!) as AcceptProposalRequest;
+    assert.equal(frozen.accept_proposal_input.selected_operation_ids.length, 2);
+    await page.reload();
+    await expect(page.locator('[data-proposal-return]').last()).toBeVisible();
+    assert.equal(bodies.length, 2);
+    await page.getByRole('button', { name: '重试接受', exact: true }).click();
+    await expect.poll(() => bodies.length).toBe(3);
+    assert.deepEqual(bodies, [bodies[0], bodies[0], bodies[0]]);
+    assert.deepEqual(keys, [keys[0], keys[0], keys[0]]);
+    await expect.poll(async () => (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal.closure).toBe('closed');
+    await page.screenshot({ path: join(repositoryRoot, 'target/382-multi-settled.png') });
     await page.screenshot({path:join(repositoryRoot,'target/382-multi-pending.png')});
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
   } finally { await page.close(); }

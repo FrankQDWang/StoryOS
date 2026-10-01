@@ -231,6 +231,17 @@ export function WritingAssistantPanel({
     setRun(result);
     if (result.decision.kind === "prose_change") {
       for (const location of result.decision.locations ?? []) {
+        if (location.outcome.kind === "revised") {
+          const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
+            projectId: current.scope.project_id, proposalId: location.outcome.proposal_id });
+          if (!stillCurrent()) return;
+          if (response.project_scope.owner_user_id === current.scope.owner_user_id
+            && response.project_scope.project_id === current.scope.project_id
+            && response.proposal.source.kind === "agent_run_decision") onOpenedProposal?.({
+              proposalId: response.proposal.proposal_id, runId: response.proposal.source.run_id,
+              decisionId: response.proposal.source.decision_id,
+            });
+        }
         if (location.outcome.kind === "opened") onOpenedProposal?.({
           proposalId: location.outcome.proposal_id, runId: result.run_id,
           decisionId: result.decision.decision_id,

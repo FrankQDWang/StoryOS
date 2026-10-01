@@ -358,12 +358,12 @@ export function ManuscriptEditor({
       const identity = `${focusProposal.proposalId}:${focusProposal.operationId}:${focusProposal.revisionId}`;
       if (focusedProposalRef.current !== identity) {
         focusedProposalRef.current = identity;
+        onCandidateFocusRef.current?.(focusProposal);
         editor.commands.setTextSelection(position + 1);
         editor.commands.focus();
       }
       const candidate = editor.view.nodeDOM(position);
       if (candidate instanceof HTMLElement) {
-        candidate.dataset.proposalFocused = "true";
         candidate.scrollIntoView({ block: "nearest" });
       }
     });

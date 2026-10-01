@@ -21,16 +21,16 @@ The primary writing workspace is a fixed three-column shell:
 ## Proposal presentation
 
 - A replacement or continuation is projected directly after the paragraph it affects, preserving reading order and local context.
-- Proposed prose is editable in place before acceptance.
+- Each pending Proposal Operation is editable in place before acceptance. The same editor presents locations from all Chapters.
 - The proposal block uses the approved restrained treatment: warm off-white canvas, charcoal type, pale warm-gray proposal surface, and a thin vertical marker.
-- The author-facing actions are `接受` and `拒绝`.
+- The author-facing actions are `接受` and `拒绝`. A Proposal with several pending Operations also offers one exact-set `接受全部` or `拒绝全部` command.
 - There is no visible diff comparison, `查看差异` action, or persistent Word-style tracked-change markup.
 - Technical receipts, JSON, state grids, and debugging controls do not appear in the manuscript surface.
 
 ## Agent panel behavior
 
 - Agent operations happen in the right conversation panel rather than in a separate workflow menu or editor-side control center.
-- Requests and results read like a normal Agent conversation.
+- Requests and results read like a normal Agent conversation. Each prose location shows its producer explanation and a link to the writable Chapter and candidate. A link in that exchange returns to the source Chapter. AI re-edit uses the focused candidate identity.
 - Tool and run activity may appear as compact, inspectable transcript rows without displacing the conversation.
 - A composer remains available at the bottom of the panel.
 - Collapsing the panel gives the editor more room without changing the active manuscript or proposal state.
