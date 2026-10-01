@@ -34,14 +34,22 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     await editor.click();
     await page.keyboard.insertText(original);
     await saved.waitFor();
+    let latest: { projectId: string; runId: string } | undefined;
     const submit = async (message: string) => {
+      if (latest?.projectId === setup.projectId) {
+        const prior = await inspect(latest.runId);
+        await page.reload();
+        await page.locator(`[data-assistant-run-id="${latest.runId}"][data-assistant-dispatch="${prior.status}"]`).waitFor();
+      }
       const responsePromise = page.waitForResponse((response) =>
         response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/agent-runs"));
       await page.locator('[name="assistant-message"]').fill(message);
       await page.locator(".composer button").click();
       const response = await responsePromise;
       assert.equal(response.status(), 202);
-      return (await response.json() as CreateAgentRunResponse).effect.run_id;
+      const runId = (await response.json() as CreateAgentRunResponse).effect.run_id;
+      latest = { projectId: setup.projectId, runId };
+      return runId;
     };
     const inspect = (runId: string) => getAgentRun({ baseUrl: server.baseUrl,
       projectId: setup.projectId, runId, fetchImpl: setup.fetchImpl });
