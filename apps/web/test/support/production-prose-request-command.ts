@@ -206,7 +206,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     const firstProposalId = completed.decision.opened_proposal.proposal_id;
     const firstProposal = (await getProposal({ ...options, proposalId: firstProposalId })).proposal;
     assert.equal(firstProposal.manuscript_block_id, firstBlock.manuscript_block_id);
-    await page.locator("[data-assistant-inspect]").click();
+    await page.reload();
     await page.locator('[data-assistant-dispatch="completed"]').waitFor();
     const firstCandidate = page.locator(`[data-proposal-id="${firstProposalId}"]`);
     await firstCandidate.waitFor();
@@ -299,7 +299,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     const secondProposal = (await getProposal({ ...options, proposalId: secondProposalId })).proposal;
     assert.notEqual(secondProposalId, firstProposalId);
     assert.equal(secondProposal.manuscript_block_id, secondBlock.manuscript_block_id);
-    await page.locator("[data-assistant-inspect]").click();
+    await page.reload();
     await page.locator(`[data-proposal-id="${secondProposalId}"]`).waitFor();
     assert.equal(await page.locator("[data-proposal-id]").count(), 2);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).evaluate(
@@ -466,20 +466,20 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
         }
         await route.fulfill({ response, body: JSON.stringify(body) });
       });
-    await page.locator("[data-assistant-inspect]").click();
+    await page.reload();
     const ineligible = page.locator(`[data-proposal-id="${firstProposalId}"]`);
     await page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="ineligible"]`)
       .waitFor();
     assert.ok((await ineligible.textContent())?.includes(firstProposal.candidate_text));
     assert.equal(await ineligible.getAttribute("data-proposal-revision-id"), restored.revision_id);
     readMode = "missing";
-    await page.locator("[data-assistant-inspect]").click();
+    await page.reload();
     await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor();
     assert.equal(await page.locator(`[data-proposal-id="${firstProposalId}"]`).count(), 0);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).count(), 1);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
     await page.unrouteAll();
-    await page.locator("[data-assistant-inspect]").click();
+    await page.reload();
     const ready = page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="eligible"]`);
     await ready.waitFor();
     const secondReady = page.locator(`[data-proposal-id="${secondProposalId}"][data-proposal-eligibility="eligible"]`);
@@ -694,7 +694,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.deepEqual(separate.model_attempt.prior_continuation, { kind: "absent" });
     assert.equal(separate.context.selected.find((item) =>
       item.source_class === "working_target")?.content, acceptedChapter.chapter.current_revision.body);
-    await page.locator("[data-assistant-inspect]").click();
+    await page.reload();
     await page.reload();
     await page.locator('[data-assistant-dispatch="completed"]').waitFor();
     assert.deepEqual(await page.locator(".assistant-author-message").allTextContents(),
