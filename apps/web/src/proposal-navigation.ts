@@ -33,7 +33,7 @@ export function navigateProposal(options: {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
-  onOpened: (state: ControlledProjectState, focus?: ProposalFocus) => void;
+  onOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onLocator: (locator: ProposalLocator) => void;
   onFailure: (message: string) => void;
 }): void {
@@ -91,14 +91,20 @@ export function navigateProposal(options: {
         || next.editor.partition.disposition !== "current_writer_open"
         || next.chapter.chapter.chapter_id !== destination.chapterId
         || next.project.project_scope.owner_user_id !== scope.owner_user_id
-        || next.project.project_scope.project_id !== scope.project_id
-        || focus !== undefined && !next.chapter.chapter.current_revision.blocks.some((block) =>
-          block.manuscript_block_id === focus.blockId)) throw new Error("无法打开写作会话。");
+        || next.project.project_scope.project_id !== scope.project_id) throw new Error("无法打开写作会话。");
       if (focus !== undefined) {
-        const response = await getProposal({ baseUrl, fetchImpl, projectId: scope.project_id,
-          proposalId: focus.proposalId });
-        if (!latest()) return;
-        if (!matchesDestination(response, scope, destination)) throw new Error("候选位置已变化，请检查本次结果。");
+        try {
+          if (!next.chapter.chapter.current_revision.blocks.some((block) => block.manuscript_block_id === focus.blockId)) {
+            throw new Error("Candidate Block changed");
+          }
+          const response = await getProposal({ baseUrl, fetchImpl, projectId: scope.project_id,
+            proposalId: focus.proposalId });
+          if (!latest()) return;
+          if (!matchesDestination(response, scope, destination)) throw new Error("Candidate changed");
+        } catch {
+          if (latest()) options.onOpened(next, undefined, "候选位置已变化，请检查本次结果。");
+          return;
+        }
       }
       options.onOpened(next, focus);
     } catch (error) {

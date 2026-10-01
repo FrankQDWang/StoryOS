@@ -63,7 +63,8 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   state: ProjectReadyState;
   proposalNavigation: ProposalNavigation;
   proposalFocus: ProposalFocus | undefined;
-  onProposalOpened: (state: ControlledProjectState, focus?: ProposalFocus) => void;
+  proposalNotice: string | undefined;
+  onProposalOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onReopened: (state: ControlledProjectState) => void;
 }
 
@@ -94,7 +95,7 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
 }
 
 function ProjectReadyView({
-  state, baseUrl, fetchImpl, cryptoImpl, onReopened, proposalNavigation, proposalFocus, onProposalOpened,
+  state, baseUrl, fetchImpl, cryptoImpl, onReopened, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
 }: ProjectReadyViewProps) {
   const inputRef = useRef<ManualInputController | null>(null);
   const [candidateTarget, setCandidateTarget] = useState<ProposalFocus>();
@@ -437,7 +438,9 @@ function ProjectReadyView({
       writer={writer}
       onNavigateProposal={(destination) => navigateProposal({ state, destination,
         navigation: proposalNavigation, controller: inputRef, baseUrl, fetchImpl, cryptoImpl,
-        onOpened: onProposalOpened, onFailure: setSwitchRecovery,
+        onOpened: (next, focus, notice) => {
+          setCandidateTarget(focus); setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
+        }, onFailure: setSwitchRecovery,
         onLocator: (locator) => setProposalLocators(rememberProposalLocator(state.project.project_scope, locator)),
       })}
       onOpenedProposal={(locator) => {
@@ -505,8 +508,8 @@ function ProjectReadyView({
       )}
       editor={(
         <>
-          {switchRecovery === undefined ? null : (
-            <p role="alert">{switchRecovery}</p>
+          {(switchRecovery ?? proposalNotice) === undefined ? null : (
+            <p role="alert">{switchRecovery ?? proposalNotice}</p>
           )}
           <h2>{selectedChapter.chapter.title}</h2>
           <BlockProposalDisplay
@@ -981,6 +984,7 @@ function Stage1View({
 }: Stage1ViewProps & { setBootState: (kind: string) => void }) {
   const [current, setCurrent] = useState(state);
   const [proposalFocus, setProposalFocus] = useState<ProposalFocus>();
+  const [proposalNotice, setProposalNotice] = useState<string>();
   const proposalNavigation = useRef<ProposalNavigation>({ sequence: 0, queue: Promise.resolve() });
   useEffect(() => { setBootState(current.kind); }, [current, setBootState]);
   if (current.kind === "project-ready") {
@@ -1008,7 +1012,8 @@ function Stage1View({
         cryptoImpl={cryptoImpl}
         proposalNavigation={proposalNavigation.current}
         proposalFocus={proposalFocus}
-        onProposalOpened={(next, focus) => { setProposalFocus(focus); setCurrent(next); }}
+        proposalNotice={proposalNotice}
+        onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); setCurrent(next); }}
         onReopened={setCurrent}
       />
     );

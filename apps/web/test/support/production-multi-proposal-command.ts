@@ -122,27 +122,35 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const proposalId = secondaryOutcome.proposal_id;
     const proposalRoute = (url: URL) => url.pathname.endsWith(`/proposals/${proposalId}`);
     for (const fault of ['stale', 'deleted', 'wrong_scope']) {
+      let observedFault = false;
+      let faultReads = 0;
       await page.route(proposalRoute, async route => {
         const response = await route.fetch();
         const body = await response.json();
+        if (fault === 'stale' && ++faultReads === 1) return route.fulfill({ response });
         if (fault === 'stale') body.proposal.revision_id = id();
         if (fault === 'wrong_scope') body.project_scope.project_id = id();
         await route.fulfill(fault === 'deleted' ? { status: 404, json: { code: 'not_found' } } : { response, json: body });
+        observedFault = true;
       });
       await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
       await expect(page.locator('.editor-panel [role="alert"]')).toBeVisible();
-      await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
+      await expect.poll(() => observedFault).toBe(true);
+      await expect(page.locator('.editor-panel h2')).toHaveText(fault === 'stale' ? 'Chapter A' : 'Chapter B');
+      await expect(page.locator('[data-manuscript-editor]')).toHaveAttribute('contenteditable', 'true');
       await page.unroute(proposalRoute);
       await page.locator('[data-proposal-return]').click();
+      await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
       await expect(page.locator('.editor-panel [role="alert"]')).toHaveCount(0);
     }
     let releaseHeld!: () => void;
     let observedHeld!: () => void;
     const held = new Promise<void>(resolve => { releaseHeld = resolve; });
     const observed = new Promise<void>(resolve => { observedHeld = resolve; });
+    let navigationReads = 0;
     await page.route(proposalRoute, async route => {
       const response = await route.fetch();
-      observedHeld(); await held;
+      if (++navigationReads === 2) { observedHeld(); await held; }
       await route.fulfill({ response });
     });
     await page.locator(`[data-proposal-location="${firstOutcome.operation_id}"]`).click();
@@ -227,7 +235,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const thirdCandidate = page.locator(`[data-proposal-id="${thirdOutcome.proposal_id}"]`);
     await expect(thirdCandidate).toHaveAttribute('data-proposal-focused', 'true');
     await thirdCandidate.locator('[data-proposal-reject]').click();
-    await expect.poll(async () => (await getProposal({ ...options, proposalId: thirdOutcome.proposal_id })).proposal.closure).toBe('closed');
+    await expect.poll(async () => (await getProposal({ ...options, proposalId: thirdOutcome.proposal_id })).proposal.operations
+      .find(operation => operation.operation_id === thirdOutcome.operation_id)?.resolution).toBe('rejected');
     await page.locator('[data-proposal-return]').last().click();
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
     const wholeRun = await completeRun(requestMessage);
@@ -263,7 +272,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect.poll(() => bodies.length).toBe(3);
     assert.deepEqual(bodies, [bodies[0], bodies[0], bodies[0]]);
     assert.deepEqual(keys, [keys[0], keys[0], keys[0]]);
-    await expect.poll(async () => (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal.closure).toBe('closed');
+    await expect.poll(async () => (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal.operations
+      .map(operation => operation.resolution)).toEqual(['applied', 'applied']);
     await page.screenshot({ path: join(repositoryRoot, 'target/382-multi-settled.png') });
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
   } catch (error) {

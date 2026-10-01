@@ -109,6 +109,8 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       return { proposalId, proposal };
     };
     const { proposalId, proposal } = await openInline();
+    await expect(page.locator('[data-proposal-location]')).toHaveCount(1);
+    await page.locator('[data-proposal-location]').click();
     const candidate = page.locator(`span[data-inline-proposal-id="${proposalId}"]`);
     await expect(candidate).toHaveCount(1);
     assert.equal(await candidate.textContent(), "narrator tone");
@@ -197,6 +199,12 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     assert.equal(acceptancePosts, 2, "reload must not resubmit an uncertain explicit decision");
     await page.getByRole("button", { name: "重试接受", exact: true }).click();
     await expect.poll(() => acceptancePosts).toBe(3);
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    await page.locator('[data-manuscript-editor] > p').first().click();
+    await page.keyboard.press('End'); await page.keyboard.insertText(' Continue after Inline.');
+    await expect.poll(async () => (await getChapter({ ...options, chapterId })).chapter.current_revision.blocks[0]?.text)
+      .toContain('Continue after Inline.');
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-accepted-recovered.png") });
     const createInlineChapter = async (title: string) => {
       await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
