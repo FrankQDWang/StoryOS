@@ -149,8 +149,12 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await primary.locator('[data-proposal-accept]:not([data-proposal-all])').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === firstOutcome.operation_id)?.resolution).toBe('applied');
+    await expect(primary).toHaveCount(0);
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const authorBlock = page.locator(`[data-manuscript-editor] > p[data-id="${first.manuscript_block_id}"]`);
     await authorBlock.click();
+    await expect.poll(() => page.evaluate(() => document.activeElement?.hasAttribute('data-manuscript-editor'))).toBe(true);
     await page.keyboard.press('End');
     await page.keyboard.insertText(' Author continues writing.');
     await expect.poll(async () => (await getChapter({ ...options, chapterId: first.chapter_id })).chapter.current_revision.blocks

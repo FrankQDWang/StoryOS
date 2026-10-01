@@ -283,12 +283,14 @@ export function BlockProposalDisplay({
       .map((operation) => ({ locator, proposal, operation })));
   for (const { locator, proposal, operation } of pendingOperations) {
     if (proposal !== undefined && proposal.chapter_id !== chapterId) continue;
-    const condition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
+    const recordedCondition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
     const anchored = proposal !== undefined
       && (proposal.kind === "block_edit" || proposal.kind === "reversal" || proposal.kind === "inline_edit")
       && operation !== undefined
       && blockCounts.get(operation?.manuscript_block_id ?? "") === 1 && safeToProject;
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
+    const condition = proposal !== undefined && !baseMatches && recordedCondition === "absent"
+      ? "proposal_conflict" : recordedCondition;
     const inlineAnchor = proposal === undefined ? undefined
       : inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId);
     const conditionVisible = condition !== "absent" || proposal?.validation === "invalid"
