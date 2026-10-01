@@ -1791,8 +1791,9 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       const expected = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text)
         FROM storyos.${table} AS record WHERE project_id='${prepared.projectId}'::uuid`));
       const exported = JSON.parse(new TextDecoder().decode(files.get(`canonical/${table}.json`)));
-      assert.deepEqual(exported.sort((a: object, b: object) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
-        expected.sort((a: object, b: object) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+      const compare = (a: object, b: object) => JSON.stringify(a, Object.keys(a).sort())
+        .localeCompare(JSON.stringify(b, Object.keys(b).sort()));
+      assert.deepEqual(exported.sort(compare), expected.sort(compare));
     }
     const revisionGap = { kind: "refused_edit_revision_payload", reason: "withheld_due_to_tombstone",
       entry_path: "canonical/draft_artifact_revisions.json", record_id: tombstoned.draft.draft_revision_id,
