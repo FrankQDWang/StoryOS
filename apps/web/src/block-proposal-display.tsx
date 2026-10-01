@@ -245,7 +245,7 @@ export function BlockProposalDisplay({
       if (proposal === undefined) return await hasPendingDisplayedAcceptance(workspace,
         locator.proposalId) ? locator.proposalId : undefined;
       const result = await reconcileDisplayedAcceptance(workspace, proposal);
-      if (result === "applied" && !refreshedAcceptance.current.has(proposal.proposal_id)) {
+      if (active && result === "applied" && !refreshedAcceptance.current.has(proposal.proposal_id)) {
         refreshedAcceptance.current.add(proposal.proposal_id);
         await onAccepted();
       }
@@ -452,10 +452,11 @@ export function BlockProposalDisplay({
           conflicted: "正文已变化，候选文字尚未接受。",
           refused: "此次接受已被拒绝，候选文字仍保留。",
         }[response.effect.kind];
+        const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(target.proposalId);
         if (response.effect.kind === "applied") refreshedAcceptance.current.add(target.proposalId);
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
         setSettlementRefresh((value) => value + 1);
-        try { await onAccepted(); } catch {
+        try { if (refresh) await onAccepted(); } catch {
           setDecisionMessages((current) => ({ ...current,
             [target.proposalId]: "接受结果已记录。请刷新查看当前正文。" }));
         }

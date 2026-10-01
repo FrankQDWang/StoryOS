@@ -22,6 +22,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
   const page = await context.newPage();
   await page.setViewportSize({ width: 1487, height: 1058 });
   page.setDefaultTimeout(10_000);
+  let phase = "setup";
   try {
     await page.goto(origin);
     await page.locator('input[name="title"]').fill(`Multi-location ${id()}`);
@@ -122,6 +123,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const proposalId = secondaryOutcome.proposal_id;
     const proposalRoute = (url: URL) => url.pathname.endsWith(`/proposals/${proposalId}`);
     for (const fault of ['stale', 'deleted', 'wrong_scope']) {
+      phase = fault;
       let observedFault = false;
       let faultReads = 0;
       await page.route(proposalRoute, async route => {
@@ -160,6 +162,8 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     releaseHeld(); await page.unroute(proposalRoute, undefined);
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
     await expect(page.locator(`[data-proposal-operation-id="${locations[2]!.outcome.operation_id}"]`)).toHaveAttribute('data-proposal-focused', 'true');
+    await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
+    phase = "candidate-edit";
     const before = (await getProposal({ ...options, proposalId })).proposal;
     const retainedHistory = async () => JSON.parse(await queryStoryOSPostgres(`SELECT jsonb_build_object(
       'revision', (SELECT to_jsonb(record) FROM storyos.proposal_revisions AS record
@@ -192,12 +196,14 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     assert.notEqual(ai.revision_id, manual.revision_id);
     await expect(candidate()).toHaveAttribute('data-proposal-revision-id', ai.revision_id);
     const primary = page.locator(`[data-proposal-id="${proposalId}"][data-proposal-operation-id="${firstOutcome.operation_id}"]`);
+    phase = "accept-primary";
     await primary.locator('[data-proposal-accept]:not([data-proposal-all])').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === firstOutcome.operation_id)?.resolution).toBe('applied');
     await expect(primary).toHaveCount(0);
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    await expect(candidate().locator('[data-proposal-accept]')).toBeVisible();
     const authorBlock = page.locator(`[data-manuscript-editor] > p[data-id="${first.manuscript_block_id}"]`);
     await expect(authorBlock).toHaveText(ai.operations.find(operation => operation.operation_id === firstOutcome.operation_id)!.candidate_text);
     await authorBlock.click();
@@ -237,8 +243,14 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await thirdCandidate.locator('[data-proposal-reject]').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId: thirdOutcome.proposal_id })).proposal.operations
       .find(operation => operation.operation_id === thirdOutcome.operation_id)?.resolution).toBe('rejected');
-    await page.locator('[data-proposal-return]').last().click();
+    phase = "return";
+    await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
+    await page.locator(`.assistant-exchange:has([data-assistant-inspect]) [data-proposal-return]`).click();
+    await expect(page.locator('.editor-panel h2')).toHaveText('Chapter A');
+    await page.locator(`.assistant-exchange:has([data-assistant-history-inspect="${run.run_id}"]) [data-proposal-return]`).click();
     await expect(page.locator('.editor-panel h2')).toHaveText('Chapter B');
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    phase = "whole-request";
     const wholeRun = await completeRun(requestMessage);
     assert.ok(wholeRun.decision.kind === 'prose_change');
     const whole = wholeRun.decision.locations?.[0];
@@ -277,21 +289,22 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.screenshot({ path: join(repositoryRoot, 'target/382-multi-settled.png') });
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
   } catch (error) {
-    await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify(await page.evaluate(() => {
+    await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify({ phase, observed: await page.evaluate(() => {
       const surface = document.querySelector('[data-manuscript-editor]') as HTMLElement & { editor?: import('@tiptap/core').Editor };
       const editor = surface.editor;
       const candidates: unknown[] = [];
       editor?.state.doc.descendants((node, position) => {
         if (node.type.name === 'blockProposal') candidates.push({ position, attrs: node.attrs });
       });
-      return { selection: editor?.state.selection.toJSON(), candidates,
+      return { requests: Object.entries(sessionStorage).filter(([key]) => key.startsWith('prose_request:')),
+      selection: editor?.state.selection.toJSON(), candidates,
       attached: editor?.view.dom.isConnected, destroyed: editor?.isDestroyed,
       active: document.activeElement?.outerHTML,
       anchor: window.getSelection()?.anchorNode?.parentElement?.outerHTML,
       offset: window.getSelection()?.anchorOffset,
       focus: window.getSelection()?.focusNode?.parentElement?.outerHTML,
       editor: document.querySelector('[data-manuscript-editor]')?.outerHTML,
-    }; }), null, 2));
+    }; }) }, null, 2));
     await page.screenshot({ path: join(repositoryRoot, 'target/382-ui-stop.png') });
     throw error;
   } finally { await page.close(); }

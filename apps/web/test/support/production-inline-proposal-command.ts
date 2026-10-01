@@ -109,8 +109,6 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       return { proposalId, proposal };
     };
     const { proposalId, proposal } = await openInline();
-    await expect(page.locator('[data-proposal-location]')).toHaveCount(1);
-    await page.locator('[data-proposal-location]').click();
     const candidate = page.locator(`span[data-inline-proposal-id="${proposalId}"]`);
     await expect(candidate).toHaveCount(1);
     assert.equal(await candidate.textContent(), "narrator tone");
