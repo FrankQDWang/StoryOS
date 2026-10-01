@@ -72,3 +72,33 @@ fn agent_run_wire_is_generated_from_one_closed_contract() {
     assert!(client.contains("export async function getAgentRun("));
     assert!(client.contains("storyos.command.createAgentRun.jcs.v1"));
 }
+
+#[test]
+fn agent_run_query_rejects_malformed_captured_settings_revision() {
+    let generated = super::generated_files()
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let schema: serde_json::Value = serde_json::from_slice(
+        &generated[crate::release1_agent_run_artifacts::GET_RESPONSE_SCHEMA_PATH],
+    )
+    .expect("AgentRun response schema must be JSON");
+    let validator = jsonschema::options()
+        .should_validate_formats(true)
+        .build(&schema)
+        .expect("AgentRun response schema must compile");
+    let mut response: serde_json::Value = serde_json::from_slice(
+        &generated[crate::release1_agent_run_artifacts::GET_FIXTURE_PATHS[0]],
+    )
+    .expect("positive AgentRun response must be JSON");
+    assert!(validator.is_valid(&response));
+    response["captured_memory_settings"] = serde_json::json!({
+        "kind": "available",
+        "memory_settings_revision": response["memory_settings_revision"],
+        "use_enabled": true,
+        "contribution_enabled": false
+    });
+    assert!(validator.is_valid(&response));
+    response["captured_memory_settings"]["memory_settings_revision"] =
+        serde_json::json!("not-a-uuid");
+    assert!(!validator.is_valid(&response));
+}
