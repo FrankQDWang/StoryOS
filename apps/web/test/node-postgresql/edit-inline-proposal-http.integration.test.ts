@@ -232,8 +232,8 @@ function mixedRequest(
           { owner: { kind: "proposal", proposal_id: opened.proposal.proposal_id,
             operation_id: opened.proposal.operation_id, revision_id: opened.proposal.revision_id,
             manuscript_block_id: opened.proposal.manuscript_block_id },
-            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: INLINE_CANDIDATE.length,
-            block_kind: "paragraph", source_text: INLINE_CANDIDATE },
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: opened.proposal.candidate_text.length,
+            block_kind: "paragraph", source_text: opened.proposal.candidate_text },
           { owner: { kind: "manuscript", manuscript_block_id: opened.proposal.manuscript_block_id },
             coordinate_profile: "prosemirror-token-utf16.v1", from: 24, to: 26,
             block_kind: "paragraph", source_text: PROSE },
@@ -1519,7 +1519,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       if (primitive.kind !== "replace_structured_selection") throw new Error("expected structured replacement");
       primitive.replacement[0]!.text = text;
       const result = await sendMixed(started.baseUrl, prepared, request, id(`e0d5${index}`));
-      if (result.effect.kind !== "refused_to_draft") throw new Error("expected fresh lifecycle Draft");
+      if (result.effect.kind !== "refused_to_draft") throw new Error(`expected fresh lifecycle Draft: ${JSON.stringify(result.effect)}`);
       const queried = await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
         draftId: result.effect.draft_id, fetchImpl: prepared.fetchImpl });
       assert.deepEqual(queried.draft.payload.author_edit_units, request.author_edit_units);

@@ -33,7 +33,15 @@ pub(crate) async fn prepare(
             locations: None,
         };
     }
-    let producer_output = if candidate_record.is_some()
+    let candidate_change = candidate_record.is_some()
+        && matches!(
+            outcome,
+            FakeAttemptOutcome::Decision {
+                kind: FakeDecisionKind::ProseChange { .. },
+                ..
+            }
+        );
+    let producer_output = if candidate_change
         || author_message.starts_with("Revise these passages")
         || (targets.first().is_some_and(|target| target.collection)
             && matches!(
