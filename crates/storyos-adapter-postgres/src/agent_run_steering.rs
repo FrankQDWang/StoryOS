@@ -9,12 +9,17 @@ pub(crate) async fn advance(
 ) -> Result<bool, CompleteAgentRunError> {
     let Some(row) = client.query_opt(
         "SELECT run.author_message, run.chapter_id::text, input.receipt_id::text,
-                input.payload->>'input_position', COALESCE(requirement.payload, 'null'::jsonb)::text
+                input.payload->>'input_position', COALESCE(requirement.payload, 'null'::jsonb)::text,
+                COALESCE(attempt.payload, 'null'::jsonb)::text
            FROM storyos.agent_runs AS run
            LEFT JOIN storyos.operation_requirements AS requirement
              ON (requirement.owner_user_id,requirement.project_id,requirement.run_id)=
                 (run.owner_user_id,run.project_id,run.run_id)
             AND requirement.requirement_role='primary' AND requirement.decision_position=run.active_decision_position
+           LEFT JOIN storyos.model_attempts AS attempt
+             ON (attempt.owner_user_id,attempt.project_id,attempt.run_id)=
+                (run.owner_user_id,run.project_id,run.run_id)
+            AND attempt.attempt_role='decision' AND attempt.decision_position=run.active_decision_position
            JOIN storyos.project_activity_event_payloads AS input
              ON (input.owner_user_id,input.project_id)=(run.owner_user_id,run.project_id)
             AND input.event_kind='agent_run_steering_retained' AND input.payload->>'run_id'=run.run_id::text
@@ -26,11 +31,33 @@ pub(crate) async fn advance(
     ).await.map_err(complete_database_error)? else { return Ok(false); };
     let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(4))
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let retained = storyos_core::decode_assembly_record(&payload).ok_or_else(|| {
+    let mut retained = storyos_core::decode_assembly_record(&payload).ok_or_else(|| {
         CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
             "The retained Operation Requirement is unavailable",
         )))
     })?;
+    if let Some(target) = retained.operation_requirement.candidate_target.as_mut() {
+        let attempt: serde_json::Value = serde_json::from_str(&row.get::<_, String>(5))
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+        let locations = crate::prose_change_location_read::decode_locations(Some(&attempt))
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+        for location in locations.unwrap_or_default() {
+            if let storyos_contracts::ProseChangeLocationOutcome::Revised {
+                proposal_id,
+                operation_id,
+                revision_id,
+                prior_revision_id,
+                ..
+            } = location.outcome
+                && proposal_id == target.proposal_id
+                && operation_id == target.operation_id
+                && prior_revision_id == target.revision_id
+            {
+                target.revision_id = revision_id;
+                break;
+            }
+        }
+    }
     let position: String = row.get(3);
     let messages = client.query(
         "SELECT payload->>'author_message' FROM storyos.project_activity_event_payloads
