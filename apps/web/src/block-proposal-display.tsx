@@ -277,7 +277,7 @@ export function BlockProposalDisplay({
   const expectedHeads = reads.flatMap(({ proposal }) => proposal?.chapter_id === chapterId && proposal.closure === "open"
       && proposal.operations.some((item) => item.resolution === "pending" && item.reservation_state === "unresolved")
     ? [proposal.revision_id] : []).sort();
-  const pendingOperations = reads.flatMap(({ locator, proposal }) => proposal === undefined
+  const pendingOperations = reads.flatMap<ProposalRead & { operation: BlockProposalInspect["operations"][number] | undefined }>(({ locator, proposal }) => proposal === undefined
     ? [{ locator, proposal, operation: undefined }]
     : proposal.operations.filter((item) => item.resolution === "pending")
       .map((operation) => ({ locator, proposal, operation })));
