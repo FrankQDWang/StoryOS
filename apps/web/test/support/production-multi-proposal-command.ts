@@ -121,6 +121,12 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const secondaryOutcome = secondary.outcome;
     const proposalId = secondaryOutcome.proposal_id;
     const before = (await getProposal({ ...options, proposalId })).proposal;
+    const retainedHistory = async () => JSON.parse(await queryStoryOSPostgres(`SELECT jsonb_build_object(
+      'revision', (SELECT to_jsonb(record) FROM storyos.proposal_revisions AS record
+        WHERE project_id='${projectId}'::uuid AND revision_id='${before.revision_id}'::uuid),
+      'validation', (SELECT to_jsonb(record) FROM storyos.validation_receipts AS record
+        WHERE project_id='${projectId}'::uuid AND proposal_revision_id='${before.revision_id}'::uuid))::text`));
+    const originalHistory = await retainedHistory();
     await page.locator(`[data-proposal-location="${secondaryOutcome.operation_id}"]`).click();
     const candidate = () => page.locator(`[data-proposal-id="${proposalId}"][data-proposal-operation-id="${secondaryOutcome.operation_id}"]`);
     await expect(candidate()).toHaveAttribute('data-proposal-focused', 'true');
@@ -162,11 +168,21 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       .toContain('Author continues writing.');
     const conflicted = (await getProposal({ ...options, proposalId })).proposal;
     assert.equal(conflicted.operations.find(operation => operation.operation_id === secondaryOutcome.operation_id)?.resolution, 'pending');
+    await candidate().locator('[data-proposal-accept]').click();
+    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.source_condition.kind).toBe('proposal_conflict');
     await candidate().locator('[data-proposal-replan]').click();
-    await expect(candidate().locator('[data-proposal-reject]')).toBeVisible();
+    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.revision_id).not.toBe(conflicted.revision_id);
+    await expect(candidate().locator('[data-proposal-accept]')).toBeVisible();
     const replanned = (await getProposal({ ...options, proposalId })).proposal;
     assert.notEqual(replanned.revision_id, conflicted.revision_id);
     assert.equal(replanned.operations.find(operation => operation.operation_id === firstOutcome.operation_id)?.resolution, 'applied');
+    await candidate().locator('.block-proposal-text').click();
+    await page.keyboard.press('End');
+    await page.keyboard.insertText(' Edit after Replan.');
+    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
+      .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text).toContain('Edit after Replan.');
+    assert.deepEqual(await retainedHistory(), originalHistory);
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     await candidate().locator('[data-proposal-reject]').click();
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.resolution).toBe('rejected');
@@ -189,6 +205,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await page.locator(`[data-proposal-location="${wholeOutcome.operation_id}"]`).click();
     const wholeCandidate = page.locator(`[data-proposal-id="${wholeOutcome.proposal_id}"]`).first();
     await expect(wholeCandidate.locator('[data-proposal-accept][data-proposal-all]')).toBeVisible();
+    await page.screenshot({path:join(repositoryRoot,'target/382-multi-pending.png')});
     const bodies: string[] = [];
     const keys: string[] = [];
     let finishLoss!: () => void;
@@ -215,7 +232,6 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     assert.deepEqual(keys, [keys[0], keys[0], keys[0]]);
     await expect.poll(async () => (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal.closure).toBe('closed');
     await page.screenshot({ path: join(repositoryRoot, 'target/382-multi-settled.png') });
-    await page.screenshot({path:join(repositoryRoot,'target/382-multi-pending.png')});
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
   } catch (error) {
     await writeFile(join(repositoryRoot, 'target/382-ui-stop.json'), JSON.stringify(await page.evaluate(() => {

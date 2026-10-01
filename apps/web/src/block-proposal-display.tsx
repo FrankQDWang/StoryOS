@@ -283,22 +283,15 @@ export function BlockProposalDisplay({
       .map((operation) => ({ locator, proposal, operation })));
   for (const { locator, proposal, operation } of pendingOperations) {
     if (proposal !== undefined && proposal.chapter_id !== chapterId) continue;
-    const recordedCondition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
+    const condition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
     const anchored = proposal !== undefined
       && (proposal.kind === "block_edit" || proposal.kind === "reversal" || proposal.kind === "inline_edit")
       && operation !== undefined
       && blockCounts.get(operation?.manuscript_block_id ?? "") === 1 && safeToProject;
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
-    const condition = proposal !== undefined && !baseMatches && recordedCondition === "absent"
-      ? "proposal_conflict" : recordedCondition;
     const inlineAnchor = proposal === undefined ? undefined
       : inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId);
-    const conditionVisible = condition !== "absent" || proposal?.validation === "invalid"
-      || proposal?.validation === "pending"
-      || proposal?.kind === "inline_edit" && proposal.closure === "open"
-        && operation?.resolution === "pending" && operation.reservation_state === "unresolved";
-    if (!anchored || proposal === undefined || operation === undefined
-      || (!baseMatches && !conditionVisible)) {
+    if (!anchored || proposal === undefined || operation === undefined) {
       unavailable.push({ locator, proposal });
       continue;
     }
@@ -311,7 +304,7 @@ export function BlockProposalDisplay({
       && journalPendingIds.length === 0 && writerOpen && !sessionBlocked
       && editorProps.editable && accepting !== proposal.proposal_id && !localPending;
     const problem = knownProblems[proposal.proposal_id];
-    const eligible = controlsReady && baseMatches
+    const eligible = controlsReady
       && proposal.generation === "ready" && proposal.validation === "valid"
       && condition === "absent"
       && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined)
