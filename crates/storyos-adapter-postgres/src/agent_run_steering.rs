@@ -9,8 +9,12 @@ pub(crate) async fn advance(
 ) -> Result<bool, CompleteAgentRunError> {
     let Some(row) = client.query_opt(
         "SELECT run.author_message, run.chapter_id::text, input.receipt_id::text,
-                input.payload->>'input_position'
+                input.payload->>'input_position', COALESCE(requirement.payload, 'null'::jsonb)::text
            FROM storyos.agent_runs AS run
+           LEFT JOIN storyos.operation_requirements AS requirement
+             ON (requirement.owner_user_id,requirement.project_id,requirement.run_id)=
+                (run.owner_user_id,run.project_id,run.run_id)
+            AND requirement.requirement_role='primary' AND requirement.decision_position=run.active_decision_position
            JOIN storyos.project_activity_event_payloads AS input
              ON (input.owner_user_id,input.project_id)=(run.owner_user_id,run.project_id)
             AND input.event_kind='agent_run_steering_retained' AND input.payload->>'run_id'=run.run_id::text
@@ -20,6 +24,13 @@ pub(crate) async fn advance(
             AND run.status IN ('claimed','completed') AND run.fence_token=$4",
         &[&claim.project_scope.owner_user_id.as_ref(), &claim.project_scope.project_id.as_ref(), &claim.run_id, &claim.fence_token],
     ).await.map_err(complete_database_error)? else { return Ok(false); };
+    let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(4))
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let retained = storyos_core::decode_assembly_record(&payload).ok_or_else(|| {
+        CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+            "The retained Operation Requirement is unavailable",
+        )))
+    })?;
     let position: String = row.get(3);
     let messages = client.query(
         "SELECT payload->>'author_message' FROM storyos.project_activity_event_payloads
@@ -51,8 +62,8 @@ pub(crate) async fn advance(
             author_message: &effective,
             receipt_id: &row.get::<_, String>(2),
             decision_position: &position,
-            passage_targets: None,
-            candidate_target: None,
+            passage_targets: retained.operation_requirement.passage_targets.as_deref(),
+            candidate_target: retained.operation_requirement.candidate_target.as_ref(),
         },
         &assistance.processing_destination_identity,
     )
