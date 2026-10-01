@@ -49,6 +49,7 @@ import {
 import { renameOwnedProject } from "./rename-project.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
+import { navigateProposal, type ProposalFocus, type ProposalNavigation } from "./proposal-navigation.ts";
 import { WritingWorkspace } from "./writing-workspace.tsx";
 
 interface Stage1ViewProps {
@@ -60,6 +61,10 @@ interface Stage1ViewProps {
 
 interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   state: ProjectReadyState;
+  proposalNavigation: ProposalNavigation;
+  proposalFocus: ProposalFocus | undefined;
+  proposalNotice: string | undefined;
+  onProposalOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onReopened: (state: ControlledProjectState) => void;
 }
 
@@ -90,9 +95,10 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
 }
 
 function ProjectReadyView({
-  state, baseUrl, fetchImpl, cryptoImpl, onReopened,
+  state, baseUrl, fetchImpl, cryptoImpl, onReopened, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
 }: ProjectReadyViewProps) {
   const inputRef = useRef<ManualInputController | null>(null);
+  const [candidateTarget, setCandidateTarget] = useState<ProposalFocus>();
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
   const makeCurrentInFlightRef = useRef(false);
@@ -430,13 +436,20 @@ function ProjectReadyView({
   return (
     <WritingWorkspace
       writer={writer}
+      onNavigateProposal={(destination) => navigateProposal({ state, destination,
+        navigation: proposalNavigation, controller: inputRef, baseUrl, fetchImpl, cryptoImpl,
+        onOpened: (next, focus, notice) => {
+          setCandidateTarget(focus); setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
+        }, onFailure: setSwitchRecovery,
+        onLocator: (locator) => setProposalLocators(rememberProposalLocator(state.project.project_scope, locator)),
+      })}
       onOpenedProposal={(locator) => {
         setProposalLocators(rememberProposalLocator(state.project.project_scope, locator));
         setProposalRefresh((current) => current + 1);
       }}
       assistant={{
         scope: state.project.project_scope,
-        chapterId: currentChapterId,
+        chapterId: currentChapterId, candidateTarget,
         canSubmit: selectedChapter.chapter.chapter_id === currentChapterId
           && saveState === "saved" && !readOnly && !archived,
         baseUrl, fetchImpl, cryptoImpl,
@@ -495,8 +508,8 @@ function ProjectReadyView({
       )}
       editor={(
         <>
-          {switchRecovery === undefined ? null : (
-            <p role="alert">{switchRecovery}</p>
+          {(switchRecovery ?? proposalNotice) === undefined ? null : (
+            <p role="alert">{switchRecovery ?? proposalNotice}</p>
           )}
           <h2>{selectedChapter.chapter.title}</h2>
           <BlockProposalDisplay
@@ -506,6 +519,8 @@ function ProjectReadyView({
             authoritativeRevisionId={selectedChapter.chapter.chapter_id === currentChapterId
               && pending !== null ? pending.authoritative_revision_id
               : selectedChapter.chapter.current_revision.revision_id}
+            focusProposal={proposalFocus}
+            onCandidateFocus={setCandidateTarget}
             locators={proposalLocators}
             refreshKey={proposalRefresh}
             safeToProject={(state.editor.kind !== "editor-ready" && pending === null)
@@ -968,6 +983,9 @@ function Stage1View({
   state, baseUrl, fetchImpl, cryptoImpl, setBootState,
 }: Stage1ViewProps & { setBootState: (kind: string) => void }) {
   const [current, setCurrent] = useState(state);
+  const [proposalFocus, setProposalFocus] = useState<ProposalFocus>();
+  const [proposalNotice, setProposalNotice] = useState<string>();
+  const proposalNavigation = useRef<ProposalNavigation>({ sequence: 0, queue: Promise.resolve() });
   useEffect(() => { setBootState(current.kind); }, [current, setBootState]);
   if (current.kind === "project-ready") {
     // Volume removal keeps the current Chapter, so chapter and writer keys
@@ -992,6 +1010,10 @@ function Stage1View({
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
         cryptoImpl={cryptoImpl}
+        proposalNavigation={proposalNavigation.current}
+        proposalFocus={proposalFocus}
+        proposalNotice={proposalNotice}
+        onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); setCurrent(next); }}
         onReopened={setCurrent}
       />
     );

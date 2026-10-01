@@ -233,10 +233,11 @@ input:focus-visible {
   box-shadow: 0 2px #746b60;
 }
 
-.block-proposal-unavailable {
+.block-proposal-unavailable, [data-proposal-decision] {
   width: min(100%, 850px);
   margin: 0 auto 20px;
   padding: 0 66px 0 84px;
+  box-sizing: border-box;
   color: var(--muted);
   font-size: 13px;
 }
@@ -426,8 +427,9 @@ input:focus-visible {
 
 .manuscript-editor .inline-proposal-controls { display: flex; flex-wrap: wrap; column-gap: 24px; padding: 0; border: 0; background: transparent; }
 .manuscript-editor :is(.inline-proposal-controls, .inline-proposal-stale) .block-proposal-label { flex-basis: 100%; }
-.manuscript-editor :is(.inline-proposal-controls, .inline-proposal-stale) button { border: 0; background: transparent; display: inline-flex; align-items: center; gap: 7px; padding: 5px 4px; color: #5b5953; cursor: pointer; font-size: 14px; }
-.manuscript-editor :is(.inline-proposal-controls, .inline-proposal-stale) button:hover:not(:disabled) { color: #171612; }
+.manuscript-editor .block-proposal button, [data-proposal-decision] button { border: 0; background: transparent; display: inline-flex; align-items: center; gap: 7px; padding: 5px 4px; color: #5b5953; cursor: pointer; font: 13px "Noto Sans SC", "PingFang SC", sans-serif; }
+.manuscript-editor .block-proposal button:hover:not(:disabled), [data-proposal-decision] button:hover:not(:disabled) { color: #171612; }
+.manuscript-editor .block-proposal:not(.inline-proposal-controls):not(.inline-proposal-stale) button { margin-right: 20px; }
 .manuscript-editor .inline-proposal-stale { display: flex; flex-wrap: wrap; column-gap: 24px; }
 .manuscript-editor .inline-proposal-stale .block-proposal-text { flex-basis: 100%; }
 

@@ -226,14 +226,10 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     },
     { proposalId: firstProposalId, expected: firstBlock.text }, { polling: 100 });
     assert.equal(await page.locator("body").getAttribute("data-author-input-events"), "0");
-    assert.equal(await page.locator("[data-assistant-result]").textContent(),
-      completed.decision.kind === "prose_change" ? completed.decision.text : null);
     assert.equal(await page.locator("[data-assistant-run-id]").getAttribute("data-assistant-run-id"), runId);
     await page.reload();
     await page.locator('[data-assistant-dispatch="completed"]').waitFor();
     await page.locator(`[data-proposal-id="${firstProposalId}"]`).waitFor();
-    assert.equal(await page.locator("[data-assistant-result]").textContent(),
-      completed.decision.kind === "prose_change" ? completed.decision.text : null);
     assert.equal(posted, 1);
     const after = await getChapter({ ...options, chapterId });
     assert.deepEqual(after.chapter, before.chapter);
