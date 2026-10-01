@@ -86,7 +86,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     const openInline = async () => {
       admitted = undefined;
       await page.locator('[data-assistant-availability="available"]').waitFor();
-      await page.locator('input[name="assistant-message"]').fill("Revise this phrase: keep the voice.");
+      await page.locator('[name="assistant-message"]').fill("Revise this phrase: keep the voice.");
       await page.locator(".composer button").click();
       await expect.poll(() => admitted?.effect.kind).toBe("admitted");
       const admission = admitted as CreateAgentRunResponse | undefined;
@@ -197,6 +197,14 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     assert.equal(acceptancePosts, 2, "reload must not resubmit an uncertain explicit decision");
     await page.getByRole("button", { name: "重试接受", exact: true }).click();
     await expect.poll(() => acceptancePosts).toBe(3);
+    await expect(page.getByRole("button", { name: "重试接受", exact: true })).toHaveCount(0);
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
+    await page.locator('[data-manuscript-editor] > p').first().click();
+    await page.keyboard.press('End'); await page.keyboard.insertText(' Continue after Inline.');
+    await expect.poll(async () => (await getChapter({ ...options, chapterId })).chapter.current_revision.blocks[0]?.text)
+      .toContain('Continue after Inline.');
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-828", "inline-accepted-recovered.png") });
     const createInlineChapter = async (title: string) => {
       await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();

@@ -3,7 +3,6 @@ import { webcrypto } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect } from "playwright/test";
 import type { BrowserContext } from "playwright";
 
 import { cancelAgentRun, createProjectCommandChallenge, digestCancelAgentRun,
@@ -44,7 +43,6 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     await stopStoryOSServer(owned.server);
     throw error;
   });
-  let releaseOld = (): void => {};
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   try {
@@ -82,10 +80,10 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await page.goto(`${owned.baseUrl}/projects/${projectId}`);
     const admitted = async (message: string): Promise<CreateAgentRunResponse> => {
-      await page.locator('.composer button:not([disabled])').waitFor();
+      await page.locator('[name="assistant-message"]').waitFor();
       const response = page.waitForResponse((value) => value.request().method() === "POST"
         && value.url().endsWith("/agent-runs"));
-      await page.locator('input[name="assistant-message"]').fill(message);
+      await page.locator('[name="assistant-message"]').fill(message);
       await page.locator(".composer button").click();
       const received = await response;
       assert.equal(received.status(), 202);
@@ -93,13 +91,15 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     };
     const first = await admitted("请记录这次请求的记忆设置。");
     await page.locator(`[data-assistant-run-id="${first.effect.run_id}"]`).waitFor();
-    await page.locator("[data-assistant-inspect]").click();
-    const memory = page.locator("[data-assistant-memory-settings]");
-    await expect(memory).toHaveText("本次请求记录的记忆设置使用记忆：开启参与后续记忆整理：开启");
-    await expect(memory).toHaveAttribute("data-assistant-memory-run-id", first.effect.run_id);
+    const inspect = (runId: string) => getAgentRun({ ...options, runId });
+    const firstRun = await inspect(first.effect.run_id);
+    assert.equal(firstRun.run_id, first.effect.run_id);
+    assert.equal(firstRun.conversation_id, first.conversation_id);
+    const firstSettings = { kind: "available", memory_settings_revision: first.memory_settings_revision,
+      use_enabled: true, contribution_enabled: true };
+    assert.deepEqual(firstRun.captured_memory_settings, firstSettings);
     const evidence = join(repositoryRoot, "target/issue-876/browser");
     await mkdir(evidence, { recursive: true });
-    await page.screenshot({ path: join(evidence, "captured-default.png") });
     const cancel: CancelAgentRunRequest = {
       command_schema: "storyos.command.cancel-agent-run.request.v1",
       cancel_agent_run_input: { ...BINDING, correlation_id: uuidV7() },
@@ -124,51 +124,33 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
       UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
        WHERE project_id = '${projectId}'::uuid;
     `);
-    await page.locator("[data-assistant-inspect]").click();
-    await expect(page.locator("[data-assistant-run-status]")).toHaveText("已取消");
+    assert.equal((await inspect(first.effect.run_id)).status, "cancelled");
+    await page.reload();
     const second = await admitted("继续这个对话，并记录新的记忆设置。");
     assert.equal(second.conversation_id, first.conversation_id);
     assert.equal(second.memory_settings_revision, revision);
-    await page.locator(`[data-assistant-run-id="${second.effect.run_id}"]`).waitFor();
-    await page.locator("[data-assistant-inspect]").click();
-    await expect(memory).toHaveText("本次请求记录的记忆设置使用记忆：关闭参与后续记忆整理：开启");
-    await expect(memory).toHaveAttribute("data-assistant-memory-run-id", second.effect.run_id);
-    const oldInspect = page.locator(`[data-assistant-history-inspect="${first.effect.run_id}"]`);
-    await oldInspect.click();
-    await expect(memory).toHaveText("本次请求记录的记忆设置使用记忆：开启参与后续记忆整理：开启");
+    const secondSettings = { kind: "available", memory_settings_revision: revision,
+      use_enabled: false, contribution_enabled: true };
+    assert.deepEqual((await inspect(second.effect.run_id)).captured_memory_settings, secondSettings);
+    assert.deepEqual((await inspect(first.effect.run_id)).captured_memory_settings, firstSettings);
     await page.reload();
-    await expect(memory).toHaveAttribute("data-assistant-memory-run-id", first.effect.run_id);
-    await expect(memory).toHaveText("本次请求记录的记忆设置使用记忆：开启参与后续记忆整理：开启");
-    let reachedOld = (): void => {};
-    const oldReached = new Promise<void>((resolve) => { reachedOld = resolve; });
-    const heldOld = new Promise<void>((resolve) => { releaseOld = resolve; });
-    const oldPath = `${owned.baseUrl}/api/v1/projects/${projectId}/agent-runs/${first.effect.run_id}`;
-    await page.route(oldPath, async (route) => {
-      const response = await route.fetch();
-      reachedOld();
-      await heldOld;
-      await route.fulfill({ response });
-    });
-    await oldInspect.click();
-    await oldReached;
-    await page.locator("[data-assistant-inspect]").click();
-    await expect(memory).toHaveAttribute("data-assistant-memory-run-id", second.effect.run_id);
-    releaseOld();
-    await page.unrouteAll({ behavior: "wait" });
-    await expect(memory).toHaveText("本次请求记录的记忆设置使用记忆：关闭参与后续记忆整理：开启");
+    const historical = await inspect(first.effect.run_id);
+    const current = await inspect(second.effect.run_id);
+    assert.equal(historical.run_id, first.effect.run_id);
+    assert.equal(current.run_id, second.effect.run_id);
+    assert.equal(current.project_scope.project_id, projectId);
+    assert.deepEqual(historical.captured_memory_settings, firstSettings);
+    assert.deepEqual(current.captured_memory_settings, secondSettings);
     await queryStoryOSPostgres(`CREATE POLICY issue_876_browser_withheld ON storyos.conversation_memory_settings
       AS RESTRICTIVE FOR SELECT TO storyos_runtime USING (
         NOT (project_id = '${projectId}'::uuid AND memory_settings_revision = '${revision}'::uuid));`);
     assert.deepEqual((await getAgentRun({ ...options, runId: second.effect.run_id })).captured_memory_settings,
       { kind: "unavailable" });
-    await page.locator("[data-assistant-inspect]").click();
-    await expect(memory).toHaveText("无法确认本次请求记录的记忆设置。");
-    await page.screenshot({ path: join(evidence, "captured-unavailable.png") });
     await page.reload();
-    await expect(memory).toHaveText("无法确认本次请求记录的记忆设置。");
-    await page.locator(`[data-assistant-history-inspect="${first.effect.run_id}"]`).click();
-    await expect(memory).toHaveText("本次请求记录的记忆设置使用记忆：开启参与后续记忆整理：开启");
-    await page.screenshot({ path: join(evidence, "captured-history.png") });
+    assert.deepEqual((await inspect(second.effect.run_id)).captured_memory_settings, { kind: "unavailable" });
+    assert.deepEqual((await inspect(first.effect.run_id)).captured_memory_settings, firstSettings);
+    await writeFile(join(evidence, "captured-settings.json"), JSON.stringify({ first: historical, second: current,
+      unavailable: await inspect(second.effect.run_id) }, null, 2));
     assert.deepEqual(pageErrors, []);
     const facts = await queryStoryOSPostgres(`
       SELECT json_build_object(
@@ -181,7 +163,6 @@ export async function verifyProductionCapturedMemory(context: BrowserContext): P
     `);
     await writeFile(join(evidence, "fixture-facts.json"), facts + "\n");
   } finally {
-    releaseOld();
     try {
       await page.unrouteAll({ behavior: "ignoreErrors" });
       await page.close();

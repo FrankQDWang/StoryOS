@@ -15,6 +15,7 @@ export type BlockProposalProjection = {
   sourceDecisionId: string;
   text: string;
   eligible: boolean;
+  candidateEditable?: boolean;
   retryPending?: boolean;
   rejectEligible?: boolean;
   retryRejection?: boolean;
@@ -26,6 +27,8 @@ export type BlockProposalProjection = {
   sessionEligible?: boolean;
   expectedHeads: string[];
   localPending?: boolean;
+  pendingOperationIds?: string[];
+  focused?: boolean;
 };
 
 export const PROPOSAL_ATTRIBUTES = [
@@ -33,7 +36,7 @@ export const PROPOSAL_ATTRIBUTES = [
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
   "rejectEligible", "retryRejection", "replanEligible", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
-  "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
+  "candidateEditable", "focused", "pendingOperationIds", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
@@ -64,12 +67,12 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
   const after = candidateNodes(next);
   if (before.length !== after.length || !candidateAnchorsValid(previous)
     || !candidateAnchorsValid(next)) return { valid: false as const };
-  const currentById = new Map(after.map((node) => [node.attrs.proposalId as string, node]));
+  const currentById = new Map(after.map((node) => [`${node.attrs.proposalId}:${node.attrs.operationId}`, node]));
   if (currentById.size !== after.length) return { valid: false as const };
   let changed: { proposal: BlockProposalProjection; priorText: string;
     from: number; to: number; text: string; resultingBody: string } | undefined;
   for (const node of before) {
-    const current = currentById.get(node.attrs.proposalId as string);
+    const current = currentById.get(`${node.attrs.proposalId}:${node.attrs.operationId}`);
     if (current === undefined || PROPOSAL_ATTRIBUTES.some((key) =>
       JSON.stringify(node.attrs[key]) !== JSON.stringify(current.attrs[key]))) {
       return { valid: false as const };
@@ -102,7 +105,7 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
       priorText: node.textContent,
       ...replacement,
     };
-    if (!changed.proposal.eligible) return { valid: false as const };
+    if (!(node.attrs.candidateEditable ?? node.attrs.eligible)) return { valid: false as const };
   }
   return { valid: true as const, edit: changed };
 }
@@ -112,7 +115,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
   const candidateType = schema.nodes.blockProposal;
   if (candidateType === undefined) return;
   const existing = new Map(candidateNodes(editor.state.doc).map((node) =>
-    [node.attrs.proposalId as string, node]));
+    [`${node.attrs.proposalId}:${node.attrs.operationId}`, node]));
   const byBlock = new Map<string, BlockProposalProjection[]>();
   for (const proposal of proposals) {
     const items = byBlock.get(proposal.blockId) ?? [];
@@ -125,7 +128,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
     node = restoreInlineSource(node);
     next.push(node);
     for (const proposal of byBlock.get(node.attrs.id as string) ?? []) {
-      const current = existing.get(proposal.proposalId);
+      const current = existing.get(`${proposal.proposalId}:${proposal.operationId}`);
       const text = !proposal.localPending && current?.attrs.revisionId === proposal.revisionId
         ? current.textContent : proposal.text;
       const attrs = {
@@ -136,6 +139,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         sourceRunId: proposal.sourceRunId,
         sourceDecisionId: proposal.sourceDecisionId,
         eligible: proposal.eligible,
+        candidateEditable: proposal.candidateEditable ?? proposal.eligible,
         retryPending: proposal.retryPending ?? false,
         rejectEligible: proposal.rejectEligible ?? false,
         retryRejection: proposal.retryRejection ?? false,
@@ -146,6 +150,8 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         validity: proposal.validity ?? "",
         sessionEligible: proposal.sessionEligible ?? false,
         expectedHeads: proposal.expectedHeads,
+        pendingOperationIds: proposal.pendingOperationIds ?? [],
+        focused: proposal.focused ?? false,
         inlineProposal: proposal.inlineProposal ?? false,
         inlineFrom: proposal.inlineAnchor?.from ?? null,
         inlineTo: proposal.inlineAnchor?.to ?? null,
@@ -190,6 +196,7 @@ export const blockProposalDecoration = TiptapNode.create({
     return ["div", {
       class: node.attrs.inlineFrom !== null ? "block-proposal inline-proposal-controls"
         : node.attrs.inlineProposal === true ? "block-proposal inline-proposal-stale" : "block-proposal",
+      "data-proposal-focused": node.attrs.focused === true ? "true" : "false",
       "data-proposal-id": node.attrs.proposalId,
       "data-proposal-operation-id": node.attrs.operationId,
       "data-proposal-revision-id": node.attrs.revisionId,
@@ -203,20 +210,19 @@ export const blockProposalDecoration = TiptapNode.create({
       role: "group",
       "aria-label": eligible || rejectEligible ? "候选文字，尚未成为正文"
         : "候选文字，暂不可操作",
-      ...(eligible ? {} : { contenteditable: "false" }),
-    }, ["span", { class: "block-proposal-label", contenteditable: "false" },
-      eligible || rejectEligible ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可操作"],
-    ["p", { class: "block-proposal-text" }, 0],
+      ...(node.attrs.candidateEditable === true ? {} : { contenteditable: "false" }),
+    }, ["p", { class: "block-proposal-text" }, 0],
+    ["div", { class: "proposal-actions", contenteditable: "false" },
     ...(eligible || retryPending ? [["button", {
       type: "button",
       class: "block-proposal-accept",
       "data-proposal-accept": node.attrs.proposalId,
       contenteditable: "false",
-    }, retryPending ? "重试接受" : "接受"]] : []),
+    }, retryPending ? "重试接受" : "✓ 接受"]] : []),
     ...(rejectEligible || retryRejection ? [["button", {
       type: "button", class: "block-proposal-reject",
       "data-proposal-reject": node.attrs.proposalId, contenteditable: "false",
-    }, retryRejection ? "重试拒绝" : "拒绝"]] : []),
+    }, retryRejection ? "重试拒绝" : "× 拒绝"]] : []),
     ...(replanEligible ? [["button", {
       type: "button", class: "block-proposal-replan",
       "data-proposal-replan": node.attrs.proposalId, contenteditable: "false",
@@ -228,6 +234,6 @@ export const blockProposalDecoration = TiptapNode.create({
     ...(copyEligible ? [["button", {
       type: "button", class: "block-proposal-copy",
       "data-proposal-copy": node.attrs.proposalId, contenteditable: "false",
-    }, "复制"]] : [])];
+    }, "复制"]] : [])]];
   },
 });

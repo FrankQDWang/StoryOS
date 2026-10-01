@@ -163,8 +163,14 @@ async function admitPassages(
   );
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
   await beforeSettle?.();
-  if (settle) await settleOnce();
-  return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
+  let run = await getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
+  if (settle) {
+    for (let attempt = 0; attempt < 8 && !["completed", "refused", "cancelled", "paused"].includes(run.status); attempt++) {
+      await settleOnce();
+      run = await getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
+    }
+  }
+  return run;
 }
 
 async function collectionSetup(baseUrl: string, ns: string, secondText = "A lantern crossed the river.", secondTitle = "Second target") {

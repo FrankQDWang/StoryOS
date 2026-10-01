@@ -1,3 +1,4 @@
+import { decisionMembers, decisionReference } from "./acceptance-journal.ts";
 import { createProjectCommandChallenge, digestRejectProposalOperations, rejectProposalOperations,
   StoryOSProtocolError } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { RejectProposalOperationsRequest, RejectProposalOperationsResponse }
@@ -20,12 +21,13 @@ type RejectionOptions = {
   workspace: EditorReadyState;
   proposalId: string;
   operationId: string;
+  operationIds?: readonly string[] | undefined;
   proposalRevisionId: string;
   targetRevisionId: string;
 };
 
 function rejectionKey(options: RejectionOptions): string {
-  return `rejection:${options.workspace.partition.journal_partition_id}:${options.proposalId}:${options.proposalRevisionId}:${options.operationId}`;
+  return `rejection:${options.workspace.partition.journal_partition_id}:${options.proposalId}:${options.proposalRevisionId}:${[...(options.operationIds ?? [options.operationId])].sort().join(",")}`;
 }
 
 export async function rejectionJournalState(workspace: EditorWorkspace): Promise<{
@@ -78,6 +80,7 @@ export async function retryPendingDisplayedRejection(options: Pick<RejectionOpti
   const flight = flights[0];
   return rejectDisplayedBlockProposal({ ...options,
     operationId: flight.author_visible_decision_ref.operation_id,
+    operationIds: decisionMembers(flight.author_visible_decision_ref),
     proposalRevisionId: flight.request.reject_proposal_operations_input.proposal_revision_id,
     targetRevisionId: flight.request.reject_proposal_operations_input.expected_target_revisions[0] ?? "",
   });
@@ -85,6 +88,7 @@ export async function retryPendingDisplayedRejection(options: Pick<RejectionOpti
 
 async function rejectLocked(options: RejectionOptions): Promise<RejectProposalOperationsResponse> {
   const workspace = options.workspace;
+  const operationIds = [...(options.operationIds ?? [options.operationId])].sort();
   const key = rejectionKey(options);
   let flight = await readFlight(workspace.database, key);
   if (flight !== undefined && flight.command_kind !== "rejectProposalOperations") {
@@ -93,10 +97,7 @@ async function rejectLocked(options: RejectionOptions): Promise<RejectProposalOp
   let journal = await readAcceptanceJournal(workspace);
   if (flight === undefined) {
     const prior = journal.records.find((record) => record.command_kind === "rejectProposalOperations"
-      && JSON.stringify(record.author_visible_decision_ref) === JSON.stringify({
-        proposal_id: options.proposalId, operation_id: options.operationId,
-        revision_id: options.proposalRevisionId,
-      }));
+      && JSON.stringify(record.author_visible_decision_ref) === JSON.stringify(decisionReference(options.proposalId, options.proposalRevisionId, operationIds)));
     if (prior !== undefined) {
       const group = journal.groups.find((item) =>
         (item.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref
@@ -113,7 +114,7 @@ async function rejectLocked(options: RejectionOptions): Promise<RejectProposalOp
       command_schema: "storyos.command.reject-proposal-operations.request.v1",
       reject_proposal_operations_input: {
         proposal_revision_id: options.proposalRevisionId,
-        selected_pending_operation_ids: [options.operationId],
+        selected_pending_operation_ids: operationIds,
         expected_target_revisions: [options.targetRevisionId],
         rejection_reason: { kind: "author_declined", note: { kind: "omitted" } },
         editor_session_id: workspace.partition.editor_session_id,
@@ -132,8 +133,7 @@ async function rejectLocked(options: RejectionOptions): Promise<RejectProposalOp
       editor_session_id: workspace.partition.editor_session_id,
       writer_generation: workspace.partition.writer_generation,
       command_kind: "rejectProposalOperations",
-      author_visible_decision_ref: { proposal_id: options.proposalId,
-        operation_id: options.operationId, revision_id: options.proposalRevisionId },
+      author_visible_decision_ref: decisionReference(options.proposalId, options.proposalRevisionId, operationIds),
       frozen_request_digest: await digestRejectProposalOperations(request, options.cryptoImpl),
       settlement: "frozen", proposalId: options.proposalId,
       idempotencyKey: uuidV7(options.cryptoImpl), request,
@@ -157,10 +157,10 @@ async function rejectLocked(options: RejectionOptions): Promise<RejectProposalOp
     || flight.writer_generation !== workspace.partition.writer_generation
     || flight.request.command_schema !== "storyos.command.reject-proposal-operations.request.v1"
     || input.proposal_revision_id !== options.proposalRevisionId
-    || JSON.stringify(input.selected_operation_ids) !== JSON.stringify([options.operationId])
+    || JSON.stringify(input.selected_operation_ids) !== JSON.stringify(operationIds)
     || JSON.stringify(input.target_revisions) !== JSON.stringify([options.targetRevisionId])
     || flight.author_visible_decision_ref.proposal_id !== options.proposalId
-    || flight.author_visible_decision_ref.operation_id !== options.operationId
+    || JSON.stringify(decisionMembers(flight.author_visible_decision_ref)) !== JSON.stringify(operationIds)
     || flight.author_visible_decision_ref.revision_id !== options.proposalRevisionId
     || JSON.stringify(flight.frozen_request_digest)
       !== JSON.stringify(await digestRejectProposalOperations(flight.request, options.cryptoImpl))) {
