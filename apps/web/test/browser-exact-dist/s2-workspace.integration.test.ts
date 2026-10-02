@@ -87,7 +87,7 @@ it("the production page uses the approved workspace without losing writing state
   const empty = appRoot(frame);
   const emptyWorkspace = workspace(frame);
   expect(empty.querySelector('nav[aria-label="稿件目录"]')).not.toBeNull();
-  expect(empty.querySelector("textarea")).toBeNull();
+  expect(empty.querySelector(".editor-panel textarea")).toBeNull();
   expect(emptyWorkspace.querySelector("[data-writing-assistant]")?.getAttribute(
     "data-assistant-availability",
   )).toBe("unavailable");
@@ -220,8 +220,9 @@ it("the production page uses the approved workspace without losing writing state
   await expect.poll(() => toggle.getAttribute("aria-expanded")).toBe("true");
   const composer = shell.querySelector<HTMLFormElement>("form[data-writing-assistant-composer]");
   if (composer === null) throw new Error("the writing-assistant composer is missing");
+  expect(composer.querySelector<HTMLButtonElement>("button[type=submit]")?.disabled).toBe(true);
   composer.requestSubmit();
-  await expect.poll(() => assistant.getAttribute("data-assistant-dispatch")).toBe("refused");
+  expect(assistant.getAttribute("data-assistant-dispatch")).toBe("idle");
   expect(manuscriptBody(editor)).toBe("Quiet prose");
   expect(shell.getAttribute("data-writer-generation")).toBe("1");
 

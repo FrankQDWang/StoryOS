@@ -76,7 +76,9 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
   await expect.poll(() => frame.contentDocument?.querySelectorAll("li[data-volume-id]").length).toBe(1);
-  volumeTitle.value = "Volume B"; volumeForm.requestSubmit();
+  await beginInlineVolumeCreation(frame.contentDocument);
+  const nextVolumeTitle = frame.contentDocument!.querySelector<HTMLInputElement>('form[data-create-volume] input[name="volume-title"]')!;
+  nextVolumeTitle.value = "Volume B"; nextVolumeTitle.form!.requestSubmit();
   await expect.poll(() => frame.contentDocument?.querySelectorAll("li[data-volume-id]").length).toBe(2);
   await beginInlineChapterCreation(frame.contentDocument,
     frame.contentDocument!.querySelector("li[data-volume-id]")!.getAttribute("data-volume-id")!);
@@ -119,7 +121,7 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
     await expect.poll(() => [menu.getBoundingClientRect().left, menu.getBoundingClientRect().top])
       .toEqual(pointer ? [180, 240] : [rect.left, rect.bottom + 4]);
     expect(documentRoot.defaultView!.getComputedStyle(menu).fontSize).toBe("12px");
-    return [...menu.querySelectorAll<HTMLButtonElement>("button")].map((button) => button.dataset.chapterPlacement);
+    return [...menu.querySelectorAll<HTMLButtonElement>("button[data-chapter-placement]")].map((button) => button.dataset.chapterPlacement);
   };
   expect(await open(0, true)).toEqual(["after"]);
   await page.screenshot({ element: frame, path: "../../../../target/issue-254/chapter-pointer-menu.png" });

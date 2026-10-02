@@ -95,7 +95,7 @@ it("hydrates production Tiptap for one paragraph Block without a textarea write 
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
-  expect(appRoot(frame).querySelector("textarea")).toBeNull();
+  expect(appRoot(frame).querySelector(".editor-panel textarea")).toBeNull();
   expect(appRoot(frame).querySelector(MANUSCRIPT_EDITOR_SELECTOR)).toBeNull();
 
   await beginInlineVolumeCreation(frame.contentDocument);
@@ -132,7 +132,7 @@ it("hydrates production Tiptap for one paragraph Block without a textarea write 
 
   const root = appRoot(frame);
   const childWindow = applicationWindow(frame);
-  expect(root.querySelector("textarea")).toBeNull();
+  expect(root.querySelector(".editor-panel textarea")).toBeNull();
   const editor = manuscriptEditor(root, childWindow);
   expect(manuscriptBody(editor)).toBe("");
   expect(editor.getAttribute("contenteditable")).toBe("true");

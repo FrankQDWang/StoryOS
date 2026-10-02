@@ -94,6 +94,6 @@ it("the author renames one exact Project and the library plus opened title conve
   renamedButton?.click();
   await expect.poll(() => root.getAttribute("data-boot-state")).toBe("empty-project-ready");
   expect(root.querySelector("h1")?.textContent).toBe("Renamed Novel");
-  expect(root.querySelector("textarea")).toBeNull();
+  expect(root.querySelector(".editor-panel textarea")).toBeNull();
   expect(root.textContent).toContain("空工作区");
 });

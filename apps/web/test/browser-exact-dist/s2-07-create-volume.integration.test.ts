@@ -71,7 +71,7 @@ it("the author creates one named Volume from the empty manuscript workspace", as
   }).toBe(true);
   const root = frame.contentDocument?.querySelector("#app");
   expect(root?.getAttribute("data-boot-state")).toBe("empty-project-ready");
-  expect(root?.querySelector("textarea")).toBeNull();
+  expect(root?.querySelector(".editor-panel textarea")).toBeNull();
   const volumeItem = root?.querySelector('nav[aria-label="稿件目录"] > ul > li');
   expect(volumeItem?.querySelectorAll("li")).toHaveLength(0);
   expect(root?.textContent).not.toContain("模型");
