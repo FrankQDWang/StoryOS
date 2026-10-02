@@ -493,17 +493,21 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
     const rateLimitedFetch: typeof fetch = (input, init) => {
       const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
       if (path.endsWith("/anti-forgery-challenges")) {
-        assert.equal(existsSync(dispatchHold), false, "Challenge retry must complete before the Worker hold");
+        assert.equal(existsSync(dispatchHold), false, "Challenge preparation must complete before the Worker hold");
         challengeAttempts += 1;
-        if (challengeAttempts === 1) {
-          return Promise.resolve(Response.json({ code: "challenge_rate_limited" }, {
-            status: 429,
-            headers: { "retry-after": "1" },
-          }));
-        }
       }
       return prepared.fetchImpl(input, init);
     };
+    await queryPostgres(`UPDATE storyos.project_command_challenge_rate_windows
+      SET issued_count = 10, window_started_at = date_trunc('minute', now())
+      WHERE project_id = '${prepared.projectId}'::uuid;`);
+    const request = cancelRequest(id("c332"));
+    const digest = await digestCancelAgentRun(request);
+    await assert.rejects(() => createProjectCommandChallenge({
+      baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: rateLimitedFetch,
+      request: { method: "POST", route_template: "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
+        command_schema: request.command_schema, canonical_command_digest: digest, idempotency_key: id("c331") },
+    }), (error) => requireStoryOSProtocolError(error).status === 429);
     const challenge = await cancelChallenge(started.baseUrl, rateLimitedFetch, prepared.projectId, id("c331"), id("c332"));
     assert.equal(challengeAttempts, 2);
     writeFileSync(dispatchHold, "hold");

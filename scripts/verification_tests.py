@@ -82,6 +82,15 @@ class VerificationCommandTests(unittest.TestCase):
         report = self.report()
         self.assertEqual((report["status"], report["steps"][0]["exit_code"]), ("failed", 7))
 
+    def test_observation_storage_failure_does_not_replace_test_result(self):
+        shared = self.root / '.git/storyos-observation'
+        shared.mkdir()
+        (shared / 'records').write_text('Unavailable projection storage')
+        result = self.cli('step', 'sample', '--', sys.executable, '-c', 'print("executed")')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Observation publication failed', result.stderr)
+        self.assertEqual(self.report()['status'], 'passed')
+
     def test_source_edit_invalidates_a_successful_child(self):
         result = self.cli("run", "--", sys.executable, "-c",
                           "from pathlib import Path; Path('AGENTS.md').write_text('changed')")

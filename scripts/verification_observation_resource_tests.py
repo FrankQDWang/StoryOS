@@ -46,6 +46,7 @@ path.write_text(json.dumps(state))
 ''')
         docker.chmod(0o755)
         self.environment = {**os.environ, 'PATH': f'{tools}{os.pathsep}{os.environ["PATH"]}',
+                            'STORYOS_VERIFICATION_RUN': str(self.directory / 'run'),
                             'RESOURCE_DOCKER_STATE': str(self.state), 'PYTHONDONTWRITEBYTECODE': '1'}
 
     def checkout(self, name):
@@ -67,11 +68,12 @@ path.write_text(json.dumps(state))
 
     def test_development_database_lifecycle_preserves_other_checkouts_and_legacy_data(self):
         first, second = self.checkout('first'), self.checkout('second')
-        started = self.command(first, 'sh', 'scripts/dev-postgres.sh', 'up')
+        started = self.command(first, 'sh', 'scripts/dev-postgres.sh', 'up', '--interactive')
         self.assertEqual(started.returncode, 0, started.stderr)
         retained = json.loads(self.state.read_text())
         for action in ('up', 'reload', 'down'):
-            result = self.command(second, 'sh', 'scripts/dev-postgres.sh', action)
+            result = self.command(second, 'sh', 'scripts/dev-postgres.sh', action,
+                                  *(['--interactive'] if action == 'up' else []))
             self.assertEqual(result.returncode, 0, result.stderr)
             current = json.loads(self.state.read_text())
             self.assertEqual({name: current.get(name) for name in retained}, retained)
@@ -81,6 +83,14 @@ path.write_text(json.dumps(state))
         alias.symlink_to(first, target_is_directory=True)
         self.assertEqual(self.command(alias, 'sh', 'scripts/dev-postgres.sh', 'env').stdout, started.stdout)
         self.assertEqual(json.loads(self.state.read_text())['storyos-dev-postgres'], {'port': 5999, 'writes': 0})
+
+    def test_unowned_database_start_requires_explicit_interactive_mode(self):
+        root = self.checkout('unowned')
+        before = self.state.read_bytes()
+        result = self.command(root, 'sh', 'scripts/dev-postgres.sh', 'up')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('run command', result.stderr)
+        self.assertEqual(self.state.read_bytes(), before)
 
     def test_scoped_database_removes_only_its_resources_on_success_and_failure(self):
         root = self.checkout('scoped')
@@ -174,6 +184,15 @@ else:
         result = self.command(first, 'make', 'observe-stop')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual([args[-1] for args in json.loads(self.state.read_text())['mutations']], ['down'])
+        (first / 'target/observation/grafana').mkdir(parents=True)
+        (first / 'scripts/verification_records.py').write_text('def import_worktrees(root): return root\n')
+        (first / 'scripts/verification_observation.py').write_text(
+            "import json, os\nfrom pathlib import Path\n"
+            "state=json.loads(Path(os.environ['RESOURCE_DOCKER_STATE']).read_text())\n"
+            "assert state['mutations'][-1][-1] == 'stop', 'Import requires stopped services'\n")
+        for action in ('start', 'rebuild'):
+            result = self.command(first, sys.executable, 'scripts/verification_observation_runtime.py', action)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_overlapping_smoke_commands_keep_separate_projects_through_cleanup(self):
         with socket.socket() as barrier:

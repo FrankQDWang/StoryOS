@@ -7,6 +7,35 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import urllib.error
+import urllib.request
+
+
+def supervision(report=None, *, url='http://127.0.0.1:3754'):
+    """Report collection health and exact record receipt without granting admission."""
+    result = {'status': 'unavailable', 'receipt': 'not-requested',
+              'nextAction': ['make', 'observe-status']}
+    try:
+        with urllib.request.urlopen(url + '/api/v1/health', timeout=1) as response:
+            health = json.load(response)
+        result.update(status='ok' if all(health.get(k, {}).get('status') == 'ok'
+                      for k in ('collector', 'query')) else 'unavailable',
+                      collector=health.get('collector', {}).get('status', 'unavailable'))
+        if report:
+            path = Path(report)
+            result['receipt'] = 'pending'
+            with urllib.request.urlopen(url + '/api/v1/runs/' + path.parent.name, timeout=1) as response:
+                detail = json.load(response)
+            result['receipt'] = ('current' if detail.get('source_sha256') ==
+                hashlib.sha256(path.read_bytes()).hexdigest() else 'behind')
+            result['timing'] = detail.get('timing', {'reason': 'projection-upgrade-required'})
+        if result['status'] == 'ok' and result['receipt'] in {'current', 'not-requested'}:
+            result['nextAction'] = None
+    except (OSError, ValueError, TypeError):
+        pass
+    if result['status'] == 'ok' and result['receipt'] in {'pending', 'behind'}:
+        result['status'] = 'awaiting-receipt'
+    return result
 
 
 @lru_cache(maxsize=16)

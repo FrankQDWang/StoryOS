@@ -36,7 +36,7 @@ def prepare():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', nargs='?', default='prepare', choices=('prepare', 'start', 'stop', 'status'))
+    parser.add_argument('action', nargs='?', default='prepare', choices=('prepare', 'start', 'rebuild', 'stop', 'status'))
     action = parser.parse_args().action
     # The fixed loopback ports belong to one local owner across all checkouts.
     descriptor = os.open(f'/tmp/storyos-observation-{os.getuid()}.lock',
@@ -53,15 +53,17 @@ def main():
                 if not owner or Path(owner).resolve() != ROOT / 'scripts/observation':
                     raise ValueError(f'Observation owner is {owner or "unknown"}; use that checkout to stop it. '
                                      'No service or retained data was changed.')
-        if action in ('prepare', 'start'):
+        if action in ('prepare', 'start', 'rebuild'):
             prepare()
-        if action == 'start':
+        if action in ('start', 'rebuild'):
+            subprocess.run([*COMPOSE, 'stop'], check=True)
             (ROOT / 'target/verification').mkdir(parents=True, exist_ok=True)
             (OUTPUT / 'data').mkdir(parents=True, exist_ok=True)
             import verification_records
             records = verification_records.import_worktrees(ROOT)
             os.environ['STORYOS_OBSERVATION_RECORDS'] = str(records)
-            subprocess.run([sys.executable, str(ROOT / 'scripts/verification_observation.py'), 'collect',
+            subprocess.run([sys.executable, str(ROOT / 'scripts/verification_observation.py'),
+                            'rebuild' if action == 'rebuild' else 'collect',
                             '--records', str(records)], check=True)
             subprocess.run([*COMPOSE, 'up', '-d', '--build'], check=True)
         elif action == 'stop':

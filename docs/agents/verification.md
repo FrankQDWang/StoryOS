@@ -459,7 +459,7 @@ Run `make observe-dashboard` after edits. Observation tests reject generated dri
 `make observe-smoke` also queries collapsed and expanded DAGs through Grafana for
 labelled synthetic partial, complete, running, failed, reused, and legacy examples.
 These examples prove display behavior, not product execution.
-The read-only collector has a 64 MiB temporary mount for SQLite sort files. The
+The collector stores SQLite sort files in its owned observation data directory. The
 smoke check forces a sort spill and requires a container-collected change after
 the initial import; a stale database cannot satisfy that check.
 
@@ -537,3 +537,11 @@ six retained conditions and refusal evidence. Ordinary verification still runs
 all business cases. Shared phases retain per-file Vitest JSON results in complete
 and daily runs. Use the command-owned database described in
 [Parallel resources](parallel-resources.md) for targeted measurements.
+
+Managed execution and status output include `supervision`. It separates collector
+health from exact report receipt (`current`, `behind`, or `pending`). The query
+service returns the collected source digest and runtime comparison facts. A PASS
+with unavailable supervision remains a test PASS, with an explicit observation
+repair action. Observation cannot admit, reject, retry, or rewrite verification.
+Missing build state, candidate facts, and comparable samples remain explicit;
+unknown timing never means no regression. Grafana availability does not gate tests.

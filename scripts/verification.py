@@ -179,7 +179,10 @@ def write_json(path, value):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n")
     temporary.replace(path)
-    verification_records.publish(path)
+    try:
+        verification_records.publish(path)
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"Observation publication failed: {error}", file=sys.stderr)
 
 
 def execute(command, environment, new_group, observation=None, stdout=None, timeout=None):
@@ -328,6 +331,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
 
     write_json(report_path, report)
     code, interrupted = 1, 0
+    print('Observation: ' + json.dumps(verification_records.supervision(report_path)), file=sys.stderr, flush=True)
     cache = None
     has_verification_file_workers = False
     try:
@@ -430,6 +434,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     if cache:
         cache.publish(report_path)
     print(f"Verification {report['status']}: {report['duration_seconds']:.2f}s; report: {report_path}", flush=True)
+    print('Observation: ' + json.dumps(verification_records.supervision(report_path)), file=sys.stderr, flush=True)
     if report["status"] == "passed":
         return 0
     return 128 + interrupted if interrupted else (code if code > 0 else 1)

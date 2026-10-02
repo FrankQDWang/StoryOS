@@ -11,7 +11,7 @@ lock protects each resource lease. The next run removes abandoned leases only
 when no owner holds that lock. Cleanup failures retain the lease for the next run.
 The daily database runner uses this same owner.
 
-Interactive development can use `up`, `reload`, `env`, and `down`. These commands
+Interactive development requires `up --interactive`, then `reload`, `env`, and `down`. These commands
 select the canonical checkout path; `down` also removes the anonymous data volume.
 Do not share database environment variables between worktrees.
 
@@ -35,3 +35,9 @@ execution evidence; neither the shared read copies nor SQLite authorize executio
 ## Validation
 
 `make verify-targeted CHECK=verification-observation-tests` exercises public resource commands with stateful Docker CLI doubles. It checks cross-checkout database preservation, foreign and unknown observation owner refusal, and overlapping smoke cleanup through deterministic socket barriers. `make observe-smoke` checks actual disposable services. Run `make verify-policy` after changes to runner inputs.
+
+Observation start and rebuild stop the singleton services before a host-side
+import. The services start again only after import completes. This prevents two
+writers across the host and container filesystem boundary. Run resource-command
+checks after an observation lifecycle command completes; both use the same local
+singleton lock.

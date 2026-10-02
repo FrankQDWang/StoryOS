@@ -151,6 +151,8 @@ def guidance(result, observe, *, complete):
 
 def display(value, as_json, details=False, *, page=1, selection='all'):
     import verification_summary
+    import verification_records
+    value['supervision'] = verification_records.supervision(value.get('report'))
     if details:
         print(json.dumps(value, indent=2))
     else:
