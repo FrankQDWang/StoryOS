@@ -79,8 +79,11 @@ def readiness(root, candidate, context):
 
 
 def validate_success(report):
-    if {step['stage'] for step in report['steps']} != set(report['plan']['stages']):
-        raise ValueError('Complete verification stages are missing or unexpected')
+    actual = {step['stage'] for step in report['steps']}
+    expected = set(report['plan']['stages'])
+    if actual != expected:
+        raise ValueError('Complete verification stages are missing or unexpected: '
+                         f'missing={sorted(expected - actual)}; unexpected={sorted(actual - expected)}')
 
 
 def require_cleanup(active_path):

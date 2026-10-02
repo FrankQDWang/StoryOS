@@ -413,6 +413,11 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     allowed = {"cached"} if cache and cache.observation["status"] == "hit" else {"passed"}
     if report["status"] == "passed" and (not steps or any(item["status"] not in allowed for item in steps)):
         report["status"] = "incomplete"
+    if report["status"] == "passed" and report["profile"] == "complete" and "plan" in report:
+        try:
+            verification_candidate.validate_success(report)
+        except (ValueError, KeyError, TypeError) as error:
+            report.update(status="incomplete", error=str(error))
     if cache and report["status"] == "passed":
         try:
             cache_started = time.monotonic()
