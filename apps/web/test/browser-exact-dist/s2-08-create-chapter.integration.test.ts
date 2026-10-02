@@ -113,6 +113,7 @@ it("the author creates Chapters at inline menu positions and keeps the first cur
   const open = async (index: number, pointer = false) => {
     const row = documentRoot.querySelectorAll<HTMLElement>("li[data-chapter-id]")[index]!;
     const trigger = row.querySelector<HTMLButtonElement>("[data-chapter-menu]")!;
+    trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     if (pointer) row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 180, clientY: 240 }));
     else trigger.click();
     await expect.poll(() => documentRoot.querySelector(".chapter-creation-menu")?.tagName).toBe("DIV");
