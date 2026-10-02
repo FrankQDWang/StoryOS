@@ -1,3 +1,4 @@
+import { LocalRecoveryPanel } from "./local-recovery-panel.tsx";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -620,7 +621,17 @@ function ProjectReadyView({
             }}
           />
           </div>
+          {state.editor.kind === "editor-ready" ? <LocalRecoveryPanel
+            workspace={state.editor}
+            refreshKey={`${saveState}:${pending?.unsettled_intent_count}`}
+            onContinue={async () => {
+              const next = await openControlledProject({ baseUrl,
+                projectId: state.project.project.project_id, fetchImpl, cryptoImpl });
+              onReopened(next);
+            }}
+          /> : null}
           {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
+            && !pending.requires_local_reconfirmation
             ? (
               <button
                 type="button"
@@ -983,6 +994,7 @@ function Stage1View({
   state, baseUrl, fetchImpl, cryptoImpl, setBootState,
 }: Stage1ViewProps & { setBootState: (kind: string) => void }) {
   const [current, setCurrent] = useState(state);
+  const [editorGeneration, setEditorGeneration] = useState(0);
   const [proposalFocus, setProposalFocus] = useState<ProposalFocus>();
   const [proposalNotice, setProposalNotice] = useState<string>();
   const proposalNavigation = useRef<ProposalNavigation>({ sequence: 0, queue: Promise.resolve() });
@@ -992,7 +1004,7 @@ function Stage1View({
     // stay put. The new editor base snapshot remounts the tree after honor-deletion.
     return (
       <ProjectReadyView
-        key={`${
+        key={`${editorGeneration}:${
           current.project.project.open.kind === "current_chapter"
             ? current.project.project.open.current_chapter_id
             : current.project.project.project_id
@@ -1014,7 +1026,7 @@ function Stage1View({
         proposalFocus={proposalFocus}
         proposalNotice={proposalNotice}
         onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); setCurrent(next); }}
-        onReopened={setCurrent}
+        onReopened={(next) => { setCurrent(next); setEditorGeneration((value) => value + 1); }}
       />
     );
   }

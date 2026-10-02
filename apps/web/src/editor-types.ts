@@ -192,6 +192,7 @@ export interface JournalSubmissionGroup extends Record<string, unknown> {
 }
 
 export interface JournalSnapshot {
+  localRecovery?: import("./local-recovery-record.ts").LocalRecoveryMaterial[];
   explicitExpansion?: Awaited<ReturnType<typeof import("./refused-edit-expansion.ts").readExpansionJournal>>;
   explicitDraftUndo?: Awaited<ReturnType<typeof import("./draft-undo-journal.ts").readDraftUndoJournal>>;
   explicitDiscard?: Awaited<ReturnType<typeof import("./refused-edit-discard.ts").readDiscardJournal>>;
@@ -212,6 +213,7 @@ export interface ValidatedJournalSnapshot extends JournalSnapshot {
 }
 
 export interface PendingEditProjection {
+  requires_local_reconfirmation?: boolean;
   body: string;
   blocks: EditorBaseSnapshot["materialized_revision"]["blocks"];
   save_state: "saving" | "saved" | "needs_attention";

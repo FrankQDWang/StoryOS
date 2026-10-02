@@ -119,7 +119,7 @@ export function createAuthorEditIdleController({
 
   const submitPending = async (): Promise<void> => {
     clearIdle();
-    if (pendingIntentCount === 0 || holdSubmission) return;
+    if (pendingIntentCount === 0 || holdSubmission || workspace.pending.save_state === "needs_attention") return;
     submissionClosed = true;
     const projection = await submitGroup({
       workspace, baseUrl, fetchImpl, cryptoImpl,

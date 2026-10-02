@@ -1940,3 +1940,33 @@ advisory until their numerical values are accepted by the appropriate owner.
     pre-admission, Committed, outcome Query rejected, or reconfirmation
     observation. A fenced old partition may collect after exact successor and
     disposition proof without pretending its generation is current.
+
+### Local terminal recovery and manual re-entry
+
+A terminal `RequiresReconfirmation` group needs author attention. Stop automatic
+submission. Keep its exact settlement, original identity, complete records, and
+payload chains. A pending or unknown outcome cannot use this action.
+
+The author can select **Keep local recovery content and continue with the current
+server manuscript**. This action removes the unapplied source from the active
+editor projection. It does not mark that source saved, replay it, rebase it, or
+create a Host Artifact. Show the full source text, its manuscript or candidate
+origin, and the closed reason before and after the action. Keep Copy available.
+Reopen the current server Project and Editor Session, and remount the editor.
+Manual re-entry then uses the normal fresh-intent and command path.
+
+IndexedDB `metadata` stores one independent record per source group at
+`local_retained_recovery:<journal_partition_id>:<journal_submission_group_id>`.
+Format version 1 binds the original group, records, complete chains, text, and
+blocks to `retained_for_manual_reentry`. Missing records mean no author action;
+unsupported or inconsistent records cannot unlock the source. Commit the record
+with strict durability and an unchanged partition, base, group, and intent set.
+Preserve the original records. This format adds no database store or version
+upgrade. Readers must retain unknown-version records without treating them as
+permission to continue.
+
+A retained source is excluded from the active pending projection and new chain
+selection. It remains available across reload and later Editor Sessions through
+a bounded, paged local recovery list. It is not a collection fence or Receipt and
+must not authorize payload GC. A later edit cannot reuse its chain, old command,
+key, or Admission. The old source remains available when the new edit settles.
