@@ -1,6 +1,7 @@
+import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
-import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { applyTrustedInput, settleWorkerOnce, updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
   focusManuscriptEnd,
   manuscriptBody,
@@ -92,6 +93,11 @@ async function requestExport(root: Element): Promise<void> {
   )].find((candidate) => candidate.textContent === "导出可读稿件");
   if (button === undefined) throw new Error("the readable export request button is missing");
   button.click();
+  await expect.poll(() =>
+    root.querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"),
+  ).toBe("in_progress");
+  expect(root.querySelector("[data-export-id]")?.getAttribute("data-export-id")).toBeTruthy();
+  await settleWorkerOnce();
   await expect.poll(() => {
     const panel = root.querySelector("[data-readable-export]");
     const exportId = root.querySelector("[data-export-id]")?.getAttribute("data-export-id") ?? "";
@@ -127,6 +133,7 @@ it("exports a durable human-readable manuscript through the Worker", { timeout: 
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -137,9 +144,11 @@ it("exports a durable human-readable manuscript through the Worker", { timeout: 
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
   ).toBe(true);
+  await beginInlineChapterCreation(frame.contentDocument);
   const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -162,6 +171,7 @@ it("exports a durable human-readable manuscript through the Worker", { timeout: 
     .toBe("# Volume A\n\n## Chapter A\n\nHello world\n");
   expect(root.querySelector("[data-readable-export-bytes]")?.textContent)
     .not.toContain("Chapter B");
+  await beginInlineChapterCreation(frame.contentDocument);
   const secondChapter = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -180,6 +190,7 @@ it("exports a durable human-readable manuscript through the Worker", { timeout: 
     'nav[aria-label="稿件目录"] button[data-chapter-id]',
   )].find((button) => button.textContent === "Chapter B")?.getAttribute("data-chapter-id");
   if (chapterBId === null || chapterBId === undefined) throw new Error("Chapter B is missing");
+  await beginTreeAction(appRoot(frame), `li[data-chapter-id="${chapterBId}"]`, "[data-make-current-chapter]");
   await expect.poll(() =>
     appRoot(frame).querySelector(`[data-make-current-chapter="${chapterBId}"]`) !== null
   ).toBe(true);

@@ -1,5 +1,6 @@
 services:
   query:
+    restart: unless-stopped
     image: python:3.13.7-alpine
     command: [python, /query.py, --container, --database, /observation/runs.sqlite,
       --collector-health, /observation/collector.json, --health-file, /health/probe.json,
@@ -20,7 +21,10 @@ services:
     logging:
       driver: none
   collector:
+    restart: unless-stopped
     image: python:3.13.7-alpine
+    environment:
+      SQLITE_TMPDIR: /observation
     command: [python, /collector.py, watch, --records, /records, --database, /observation/runs.sqlite]
     volumes:
       - ../verification_observation.py:/collector.py:ro
@@ -28,7 +32,7 @@ services:
       - ../verification_observation_nodes.py:/verification_observation_nodes.py:ro
       - ../verification_observation_rules.py:/verification_observation_rules.py:ro
       - ./settings.json:/observation/settings.json:ro
-      - ../../target/verification:/records:ro
+      - ${STORYOS_OBSERVATION_RECORDS:-../../target/verification}:/records:ro
       - ../../target/observation/data:/observation
     network_mode: none
     read_only: true
@@ -39,6 +43,7 @@ services:
     logging:
       driver: none
   grafana:
+    restart: unless-stopped
     build: .
     entrypoint: [sh, -c, 'export GF_SECURITY_ADMIN_PASSWORD=$$(head -c 32 /dev/urandom | base64); exec /run.sh']
     ports: ["127.0.0.1:3749:3000"]

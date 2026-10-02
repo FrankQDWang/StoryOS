@@ -24,6 +24,8 @@ import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, UUID_V7, challenged, drainLeftoverWork, id,
   prepare, settleOnce, startRealServer } from "../support/acceptance.ts";
 
+import { admitCandidateRevision } from "../support/candidate-revision.ts";
+
 const INLINE_CANDIDATE = "narrator tone";
 const SOURCE_SLICE = "narrator voice";
 const GOLDEN_DIGEST =
@@ -65,6 +67,7 @@ async function writePassage(
   fetchImpl: typeof fetch,
   projectId: string,
   ns: string,
+  text = PROSE,
 ) {
   const sessionRequest: CreateEditorSessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1",
@@ -98,7 +101,7 @@ async function writePassage(
     completed_intent_record_id: id(`${ns}5`),
     local_intent_sequence: "1",
     author_edit_units: [{
-      normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text: PROSE }],
+      normalized_primitives: [{ kind: "replace_selection", from: 0, to: 0, text }],
       selection_snapshot: {
         coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 0,
       },
@@ -229,8 +232,8 @@ function mixedRequest(
           { owner: { kind: "proposal", proposal_id: opened.proposal.proposal_id,
             operation_id: opened.proposal.operation_id, revision_id: opened.proposal.revision_id,
             manuscript_block_id: opened.proposal.manuscript_block_id },
-            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: INLINE_CANDIDATE.length,
-            block_kind: "paragraph", source_text: INLINE_CANDIDATE },
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: opened.proposal.candidate_text.length,
+            block_kind: "paragraph", source_text: opened.proposal.candidate_text },
           { owner: { kind: "manuscript", manuscript_block_id: opened.proposal.manuscript_block_id },
             coordinate_profile: "prosemirror-token-utf16.v1", from: 24, to: 26,
             block_kind: "paragraph", source_text: PROSE },
@@ -972,9 +975,19 @@ test("inline Proposal uses exact Anchors, keeps source and candidate distinct, a
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e08111"), "Inline Proposal Novel", "e082");
-    const { opened, writer } = await openInline(
+    let { opened, writer } = await openInline(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, "e083",
     );
+    await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      opened.proposal, opened.proposal.operation_id, id("e0832"), "revise the candidate consistently.");
+    await settleOnce();
+    const prior = opened.proposal;
+    opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: prior.proposal_id, fetchImpl: prepared.fetchImpl });
+    assert.notEqual(opened.proposal.revision_id, prior.revision_id);
+    assert.deepEqual(opened.proposal.anchors, prior.anchors);
+    const INTERIOR_CANDIDATE = "narrxxr tone Keep the voice consistent.";
+    const ACCEPTED_BODY = "Guard the narrxxr tone Keep the voice consistent. in this passage.";
     const before = await getChapter({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
@@ -1057,6 +1070,104 @@ test("inline Proposal uses exact Anchors, keeps source and candidate distinct, a
     );
   } finally {
     await stopRealServer(started.server);
+  }
+});
+
+test.each(["paragraph", "heading"] as const)("inline Acceptance preserves complete two-Block state with a %s sibling after response loss and restart", async (siblingKind) => {
+  let started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = siblingKind === "paragraph" ? "f865a" : "f865b";
+    const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Canonical Inline Acceptance", `${ns}2`);
+    const siblingText = "Second paragraph. 😀";
+    const writer = await writePassage(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, `${ns}3`, PROSE + siblingText);
+    const options = () => ({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    const initial = await getChapter(options());
+    const firstBlock = initial.chapter.current_revision.blocks[0]!;
+    const siblingId = id(`${ns}41`);
+    const split = replaceUnit(0, 0, "", writer, `${ns}4`, id(`${ns}ff1`));
+    split.expected_proposal_head_revision_ids = [];
+    split.observed_ownership_partition = "authoritative";
+    split.author_edit_units = [{ normalized_primitives: [
+      { kind: "split_block", manuscript_block_id: firstBlock.manuscript_block_id,
+        offset: PROSE.length, new_manuscript_block_id: siblingId },
+      { kind: "retype_block", manuscript_block_id: siblingId, block_kind: siblingKind },
+    ], selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+      from: PROSE.length, to: PROSE.length } }];
+    const divided = await sendMixed(started.baseUrl, prepared, split, id(`${ns}42`));
+    if (divided.effect.kind !== "authoritative_applied") throw new Error("expected split");
+    const before = await getChapter(options());
+    assert.deepEqual(before.chapter.current_revision.blocks, [
+      { ...firstBlock, text: PROSE },
+      { manuscript_block_id: siblingId, block_kind: siblingKind, text: siblingText },
+    ]);
+    const run = await admitPhrase(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, id(`${ns}51`));
+    if (run.decision.kind !== "prose_change" || run.decision.opened_proposal.kind !== "present")
+      throw new Error("expected inline Proposal");
+    const proposalId = run.decision.opened_proposal.proposal_id;
+    const opened = await getProposal({ ...options(), proposalId });
+    assert.equal(opened.proposal.manuscript_block_id, firstBlock.manuscript_block_id);
+    assert.equal(opened.proposal.validation, "valid");
+    if (opened.proposal.validation_receipt.kind !== "present") throw new Error("expected receipt");
+    const request: AcceptProposalRequest = {
+      command_schema: "storyos.command.accept-proposal.request.v1",
+      accept_proposal_input: { ...BINDING, correlation_id: id(`${ns}61`),
+        proposal_revision_id: opened.proposal.revision_id,
+        validation_receipt_id: opened.proposal.validation_receipt.validation_receipt_id,
+        selected_operation_ids: [opened.proposal.operation_id],
+        expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
+        editor_session_id: writer.session.editor_session.editor_session_id },
+    };
+    const digest = await digestAcceptProposal(request);
+    let originalNonce = "";
+    let original: Awaited<ReturnType<typeof acceptProposal>> | undefined;
+    const lossyFetch: typeof fetch = async (input, init) => {
+      const response = await prepared.fetchImpl(input, init);
+      if (init?.method === "POST" && String(input).endsWith("/acceptances")) {
+        assert.equal(response.status, 200, await response.clone().text());
+        original = await response.clone().json();
+        await stopRealServer(started.server);
+        throw new Error("Controlled Acceptance response loss");
+      }
+      return response;
+    };
+    await assert.rejects(() => challenged(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, "POST", "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
+      request.command_schema, digest, id(`${ns}62`), (antiForgery) => {
+        originalNonce = antiForgery;
+        return acceptProposal({ ...options(), proposalId, fetchImpl: lossyFetch,
+          idempotencyKey: id(`${ns}62`), antiForgery, request });
+      }), /Controlled Acceptance response loss/);
+    assert.equal(original?.effect.kind, "applied", "valid canonical two-Block inline Acceptance must apply");
+    if (original?.effect.kind !== "applied") throw new Error("expected applied");
+    const origin = new URL(started.baseUrl);
+    started = await startRealServer(`${origin.hostname}:${origin.port}`);
+    prepared.fetchImpl = browserFetch(started.baseUrl, "session-a");
+    const replay = () => acceptProposal({ ...options(), proposalId,
+      idempotencyKey: id(`${ns}62`), antiForgery: originalNonce, request });
+    assert.deepEqual(await replay(), original);
+    const after = await getChapter(options());
+    assert.deepEqual(after.chapter, { ...before.chapter, current_revision: {
+      ...original.effect.authoritative_revision,
+      body: "Guard the narrator tone in this passage.\nSecond paragraph. 😀",
+      blocks: [{ ...firstBlock, text: "Guard the narrator tone in this passage." },
+        { manuscript_block_id: siblingId, block_kind: siblingKind, text: siblingText }],
+    } });
+    assert.deepEqual(await Promise.all([replay(), replay()]), [original, original]);
+    assert.deepEqual((await getChapter(options())).chapter, after.chapter);
+    const settled = await getProposal({ ...options(), proposalId });
+    assert.equal(settled.proposal.operation_resolution, "applied");
+    assert.equal(settled.proposal.reservation_state, "resolved");
+    assert.equal(settled.proposal.revision_id, opened.proposal.revision_id);
+    await assert.rejects(() => getProposal({ ...options(), proposalId,
+      fetchImpl: browserFetch(started.baseUrl, "session-b") }),
+      (error) => requireStoryOSProtocolError(error).status === 404);
+  } finally {
+    if (started.server.exitCode === null && started.server.signalCode === null)
+      await stopRealServer(started.server);
   }
 });
 
@@ -1392,8 +1503,13 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e0d111"), "Draft Lifecycle Export", "e0d2");
-    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+    let { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
       prepared.projectId, prepared.chapterId, "e0d3");
+    await admitCandidateRevision(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      opened.proposal, opened.proposal.operation_id, id("e0d32"), "revise the candidate consistently.");
+    await settleOnce();
+    opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl });
     const drafts: Awaited<ReturnType<typeof getRefusedEditDraft>>[] = [];
     const results: Awaited<ReturnType<typeof applyAuthorEdit>>[] = [];
     for (const [index, text] of ["Closed alternate", "Archived alternate ✨", "Restricted erased alternative 🌘"].entries()) {
@@ -1403,7 +1519,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       if (primitive.kind !== "replace_structured_selection") throw new Error("expected structured replacement");
       primitive.replacement[0]!.text = text;
       const result = await sendMixed(started.baseUrl, prepared, request, id(`e0d5${index}`));
-      if (result.effect.kind !== "refused_to_draft") throw new Error("expected fresh lifecycle Draft");
+      if (result.effect.kind !== "refused_to_draft") throw new Error(`expected fresh lifecycle Draft: ${JSON.stringify(result.effect)}`);
       const queried = await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
         draftId: result.effect.draft_id, fetchImpl: prepared.fetchImpl });
       assert.deepEqual(queried.draft.payload.author_edit_units, request.author_edit_units);
@@ -1670,6 +1786,15 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
     assert.equal(download.status, 200);
     const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+    for (const table of ["agent_runs", "operation_requirements", "context_assembly_manifests", "model_attempts",
+      "proposal_generations", "proposal_stream_events", "proposal_revisions", "validation_receipts"]) {
+      const expected = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text)
+        FROM storyos.${table} AS record WHERE project_id='${prepared.projectId}'::uuid`));
+      const exported = JSON.parse(new TextDecoder().decode(files.get(`canonical/${table}.json`)));
+      const compare = (a: object, b: object) => JSON.stringify(a, Object.keys(a).sort())
+        .localeCompare(JSON.stringify(b, Object.keys(b).sort()));
+      assert.deepEqual(exported.sort(compare), expected.sort(compare));
+    }
     const revisionGap = { kind: "refused_edit_revision_payload", reason: "withheld_due_to_tombstone",
       entry_path: "canonical/draft_artifact_revisions.json", record_id: tombstoned.draft.draft_revision_id,
       payload_field: "payload", draft_id: tombstoned.draft.draft_id, retention_state: "tombstoned",
@@ -1978,5 +2103,139 @@ test("a complete source cannot prove a selection inside a UTF-16 surrogate pair"
     const result = await sendMixed(started.baseUrl, prepared, request, id("e0f56"));
     assert.equal(result.effect.kind, "conflicted");
     assert.deepEqual(await retainedState(prepared.projectId), before);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("explicit Inline candidate input binds the exact Operation and preserves source prose", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("d828011"), "Explicit Inline Novel", "d82802");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "d82803");
+    const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl };
+    const before = await getChapter({ ...options, chapterId: prepared.chapterId });
+    const operation = opened.proposal.operations[0]!;
+    const request = replaceUnit(5, 5, "xx", writer, "d82804", opened.proposal.revision_id);
+    request.proposal_target = { proposal_id: opened.proposal.proposal_id,
+      operation_id: operation.operation_id, revision_id: opened.proposal.revision_id,
+      manuscript_block_id: opened.proposal.manuscript_block_id };
+    const send = async (input: ApplyAuthorEditRequest, key: string) => challenged(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", input.command_schema,
+      await digestApplyAuthorEdit(input), key, (antiForgery) => applyAuthorEdit({
+        ...options, request: input, idempotencyKey: key, antiForgery }));
+    const wrong = structuredClone(request);
+    wrong.correlation_id = id("d828053");
+    wrong.completed_intent_record_id = id("d828055");
+    wrong.proposal_target!.operation_id = id("d828057");
+    const refused = await send(wrong, id("d828056"));
+    assert.equal(refused.effect.kind, "refused");
+    assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
+    assert.deepEqual((await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal,
+      opened.proposal);
+    const edited = await send(request, id("d828046"));
+    assert.equal(edited.effect.kind, "proposal_revised");
+    const revised = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+    assert.equal(revised.candidate_text, "narraxxtor tone");
+    assert.notEqual(revised.revision_id, opened.proposal.revision_id);
+    assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("canonical Inline boundary input preserves exact target and refuses wrong, stale, or interior ownership", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    for (const [index, offset] of [10, 24].entries()) {
+      const ns = `d829${index}`;
+      const prepared = await prepare(started.baseUrl, id(`${ns}011`), "Canonical Inline Edge", `${ns}02`);
+      const siblingText = "Second paragraph. 😀";
+      const writer = await writePassage(started.baseUrl, prepared.fetchImpl,
+        prepared.projectId, `${ns}03`, PROSE + siblingText);
+      const initial = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+      const firstBlock = initial.chapter.current_revision.blocks[0]!;
+      const split = replaceUnit(PROSE.length, PROSE.length, "", writer, `${ns}07`, id(`${ns}079`));
+      split.expected_proposal_head_revision_ids = [];
+      split.observed_ownership_partition = "authoritative";
+      split.author_edit_units[0]!.normalized_primitives = [{ kind: "split_block",
+        manuscript_block_id: firstBlock.manuscript_block_id, offset: PROSE.length,
+        new_manuscript_block_id: id(`${ns}077`) }];
+      const divided = await sendMixed(started.baseUrl, prepared, split, id(`${ns}076`));
+      if (divided.effect.kind !== "authoritative_applied") throw new Error("expected split");
+      writer.authoritativeRevisionId = divided.effect.authoritative_revision.revision_id;
+      writer.nextSequence = "3";
+      const run = await admitPhrase(started.baseUrl, prepared.fetchImpl,
+        prepared.projectId, prepared.chapterId, id(`${ns}038`));
+      if (run.decision.kind !== "prose_change" || run.decision.opened_proposal.kind !== "present")
+        throw new Error("expected Inline Proposal");
+      const opened = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        proposalId: run.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl });
+      if (index === 0) {
+        await queryPostgres(`UPDATE storyos.proposal_revisions SET validation='invalid'
+          WHERE project_id='${prepared.projectId}'::uuid AND revision_id='${opened.proposal.revision_id}'::uuid`);
+        opened.proposal = (await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal;
+        assert.equal(opened.proposal.validation, "invalid");
+      }
+      const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl };
+      const before = await getChapter({ ...options, chapterId: prepared.chapterId });
+      const request = replaceUnit(offset, offset, "!", writer, `${ns}04`, opened.proposal.revision_id);
+      request.author_edit_units[0]!.normalized_primitives = [{ kind: "replace_block_selection",
+        manuscript_block_id: opened.proposal.manuscript_block_id, from: offset, to: offset, text: "!" }];
+      const send = async (input: ApplyAuthorEditRequest, key: string) => challenged(
+        started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/manuscript/author-edits", input.command_schema,
+        await digestApplyAuthorEdit(input), key, (antiForgery) => applyAuthorEdit({
+          ...options, request: input, idempotencyKey: key, antiForgery }));
+      for (const [negativeIndex, shape] of ["wrong_block", "stale_head", "interior"].entries()) {
+        const refused = structuredClone(request);
+        refused.correlation_id = id(`${ns}05${negativeIndex}3`);
+        refused.completed_intent_record_id = id(`${ns}05${negativeIndex}5`);
+        const primitive = refused.author_edit_units[0]!.normalized_primitives[0]!;
+        assert.ok(primitive.kind === "replace_block_selection");
+        if (shape === "wrong_block") primitive.manuscript_block_id = id(`${ns}0577`);
+        if (shape === "stale_head") refused.expected_proposal_head_revision_ids = [id(`${ns}0578`)];
+        if (shape === "interior") {
+          primitive.from = 15; primitive.to = 15;
+          refused.author_edit_units[0]!.selection_snapshot.from = 15;
+          refused.author_edit_units[0]!.selection_snapshot.to = 15;
+        }
+        assert.equal((await send(refused, id(`${ns}05${negativeIndex}6`))).effect.kind, "conflicted");
+        assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, before.chapter);
+        assert.deepEqual((await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal, opened.proposal);
+      }
+      assert.equal((await send(request, id(`${ns}046`))).effect.kind, "authoritative_applied");
+      const after = await getChapter({ ...options, chapterId: prepared.chapterId });
+      assert.deepEqual(after.chapter.current_revision.blocks, before.chapter.current_revision.blocks.map((block) => ({
+        ...block, text: block.manuscript_block_id === opened.proposal.manuscript_block_id
+          ? block.text.slice(0, offset) + "!" + block.text.slice(offset) : block.text })));
+      const retained = (await getProposal({ ...options, proposalId: opened.proposal.proposal_id })).proposal;
+      assert.equal(retained.revision_id, opened.proposal.revision_id);
+      assert.equal(retained.candidate_text, INLINE_CANDIDATE);
+      if (index === 0) {
+        assert.equal(retained.validation, "invalid");
+        if (retained.validation_receipt.kind !== "present") throw new Error("expected receipt");
+        const acceptance: AcceptProposalRequest = { command_schema: "storyos.command.accept-proposal.request.v1",
+          accept_proposal_input: { ...BINDING, correlation_id: id(`${ns}081`),
+            proposal_revision_id: retained.revision_id,
+            validation_receipt_id: retained.validation_receipt.validation_receipt_id,
+            selected_operation_ids: [retained.operation_id],
+            expected_authoritative_revision_id: after.chapter.current_revision.revision_id,
+            editor_session_id: writer.session.editor_session.editor_session_id } };
+        const result = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+          "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", acceptance.command_schema,
+          await digestAcceptProposal(acceptance), id(`${ns}082`), (antiForgery) => acceptProposal({
+            ...options, proposalId: retained.proposal_id, request: acceptance, antiForgery,
+            idempotencyKey: id(`${ns}082`) }));
+        assert.deepEqual(result.effect, { kind: "refused", reason: "not_eligible" });
+        assert.deepEqual((await getProposal({ ...options, proposalId: retained.proposal_id })).proposal, retained);
+        assert.deepEqual(result.receipt.authoritative_commit_ids, []);
+        assert.equal(result.receipt.proposal_revision_id, retained.revision_id);
+        assert.deepEqual(result.receipt.resulting_authoritative_revision_ids, [after.chapter.current_revision.revision_id]);
+        assert.deepEqual((await getChapter({ ...options, chapterId: prepared.chapterId })).chapter, after.chapter);
+      }
+    }
   } finally { await stopRealServer(started.server); }
 });

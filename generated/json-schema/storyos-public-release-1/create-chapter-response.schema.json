@@ -109,7 +109,8 @@
       "enum": [
         "archived_project",
         "invalid_title",
-        "invalid_volume_join"
+        "invalid_volume_join",
+        "invalid_placement"
       ],
       "type": "string"
     },
@@ -272,6 +273,7 @@
         "updateProjectAssistance",
         "createAgentRun",
         "pauseAgentRun",
+        "steerAgentRun",
         "cancelAgentRun"
       ],
       "type": "string"

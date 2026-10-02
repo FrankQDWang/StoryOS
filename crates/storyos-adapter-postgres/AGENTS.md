@@ -16,18 +16,13 @@ This file adds the subtree rules for the `storyos_runtime` store. The root `AGEN
 
 ## Run one PostgreSQL test locally
 
-The `#[ignore]` tests in this crate and the `node-postgresql` Vitest project read `STORYOS_TEST_DATABASE_URL`, `STORYOS_TEST_ADMIN_DATABASE_URL`, and `STORYOS_TEST_POSTGRES_CONTAINER`. Complete `make verify` sets them. For one test, prepare the same database yourself:
+The `#[ignore]` tests in this crate and the `node-postgresql` Vitest project read `STORYOS_TEST_DATABASE_URL`, `STORYOS_TEST_ADMIN_DATABASE_URL`, and `STORYOS_TEST_POSTGRES_CONTAINER`. Complete `make verify` sets them. For one test, use the command-owned database:
 
 ```sh
-make release-package                      # needs a clean worktree; commit first
-eval "$(scripts/dev-postgres.sh up)"      # start, activate, set password, load fixture
-cargo test -p storyos-adapter-postgres --lib -- --ignored connection_pool
-cargo test -p storyos-adapter-postgres --test project_scope -- --ignored
-scripts/dev-postgres.sh reload            # empty the domain tables, load the fixture again
-STORYOS_VITEST_FILE_ORDER=test/node-postgresql/create-project-http.integration.test.ts: \
-  pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/create-project-http.integration.test.ts
-scripts/dev-postgres.sh down
+make release-package  # needs a clean worktree
+scripts/dev-postgres.sh run cargo test -p storyos-adapter-postgres --lib -- --ignored connection_pool
+scripts/dev-postgres.sh run cargo test -p storyos-adapter-postgres --test project_scope -- --ignored
+scripts/dev-postgres.sh run pnpm --dir apps/web exec vitest run --project node-postgresql test/node-postgresql/create-project-http.integration.test.ts
 ```
 
-The fixture uses fixed identifiers, so run `reload` between two runs of the same Vitest file. Run `verify-project-scope.sh` through `make verify` only; it owns the input oracles and the file order.
+Each `run` uses a new fixture and removes its database when the child exits. Run `verify-project-scope.sh` through `make verify` only; it owns the input oracles and the file order.

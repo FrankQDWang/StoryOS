@@ -9,11 +9,14 @@ if (!Number.isInteger(expectedCount)) {
 }
 const rows = JSON.parse(execFileSync("docker", ["exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
   "-U", "postgres", "-Atc", `SELECT json_agg(row_to_json(evidence) ORDER BY evidence.proposal_id) FROM (
-    SELECT condition.*, to_jsonb(receipt) AS acceptance, to_jsonb(validation.*) AS historical_validation
+    SELECT condition.*, to_jsonb(receipt) AS acceptance, to_jsonb(validation.*) AS historical_validation, to_jsonb(revision.*) AS historical_revision
     FROM storyos.proposal_validation_conditions AS condition
     JOIN storyos.acceptance_receipts AS receipt USING (owner_user_id, project_id, acceptance_receipt_id)
     JOIN storyos.validation_receipts AS validation ON
       (validation.owner_user_id, validation.project_id, validation.proposal_id, validation.proposal_revision_id) =
+      (condition.owner_user_id, condition.project_id, condition.proposal_id, condition.proposal_revision_id)
+    JOIN storyos.proposal_revisions AS revision ON
+      (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id) =
       (condition.owner_user_id, condition.project_id, condition.proposal_id, condition.proposal_revision_id)
   ) AS evidence`], { encoding: "utf8" }));
 assert.equal(rows.length, expectedCount);
@@ -61,4 +64,9 @@ for (const row of refusals) {
       SELECT count(*) FROM storyos.acceptance_refusals; ROLLBACK;`], { encoding: "utf8" });
   assert.match(isolated, /\n0\nROLLBACK/);
 }
-process.stdout.write(JSON.stringify({ conditions: inspected, refusals, refusalProposals }));
+const settlements = JSON.parse(execFileSync("docker", ["exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
+  "-U", "postgres", "-Atc", `SELECT jsonb_build_object(${[
+    "proposal_revisions", "validation_receipts", "proposal_operations", "acceptance_receipts", "domain_receipts",
+  ].map((table) => `'${table}', (SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)
+    FROM storyos.${table} AS record)`).join(",")})::text`], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }));
+process.stdout.write(JSON.stringify({ conditions: inspected, refusals, refusalProposals, settlements }));

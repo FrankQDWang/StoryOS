@@ -708,6 +708,7 @@ ApplyAuthorEditResult {
           FreshEditorIntent
           | DraftRetryReplacement { replacement_provenance_edge_ref }
       }
+    | Refused { reason: AuthorEditRefusal }
     | Conflicted {
         current_authoritative_heads
         current_proposal_heads
@@ -733,12 +734,18 @@ in this order:
    Mixed authoritative/Proposal ownership returns `RefusedToDraft`, changes
    neither target, and preserves the complete attempted structured payload in
    one `RefusedEditDraft`.
-3. A single-owner command whose normalized result equals current durable
+3. Validate the admitted edit payload before committing any unit.
+   Invalid selection, unsupported intent shape, or target mismatch returns
+   `Refused { reason: AuthorEditRefusal }`. It retains one typed Domain Receipt and
+   no Revision, Authoritative Commit, Author Action, Project Activity, or Draft.
+   This result is distinct from pre-Admission failure and `RefusedToDraft`;
+   exact retry returns the same Receipt and result.
+4. A single-owner command whose normalized result equals current durable
    content returns `NoEffect`.
-4. An all-authoritative command returns `AuthoritativeApplied`, appends the
+5. An all-authoritative command returns `AuthoritativeApplied`, appends the
    required Authoritative Revisions, and creates exactly one Authoritative
    Commit and one Forward Author Action.
-5. A command strictly inside one exact pending Proposal ownership region
+6. A command strictly inside one exact pending Proposal ownership region
    returns `ProposalRevised`, appends exactly one Proposal Revision, and creates
    exactly one Forward Author Action.
 
@@ -760,8 +767,8 @@ not for #46's Author Action allocation. Its merged
 and does not distinguish a successful author-authored Proposal Revision from
 no-change outcomes. Under the canonical Author Action and unified undo
 contracts, `ProposalRevised` therefore allocates exactly one Forward action;
-`RefusedToDraft`, `Conflicted`, and `NoEffect` allocate none. This owner boundary
-is required so a successful Proposal edit has a durable Author Undo Frontier.
+`RefusedToDraft`, `Refused`, `Conflicted`, and `NoEffect` allocate none. This owner
+boundary is required so a successful Proposal edit has a durable Author Undo Frontier.
 
 Narrowing a Refused Edit Draft or retrying a Recovery Draft always constructs a
 new `ApplyAuthorEdit` with `DraftRetry`; it uses the same classifier and never
@@ -771,7 +778,7 @@ closure. Its source disposition is closed and exhaustive:
 
 | Retry source | Effect | Required source-Draft disposition | Active recovery surface after settlement |
 | --- | --- | --- | --- |
-| `FreshEditorIntent` | any of the five effects | `NotApplicable` | only a newly allocated Refused Edit Draft when the effect is `RefusedToDraft` |
+| `FreshEditorIntent` | any of the six effects | `NotApplicable` | only a newly allocated Refused Edit Draft when the effect is `RefusedToDraft` |
 | `DraftRetry` | `AuthoritativeApplied` or `ProposalRevised` | `ClosedSuperseded`; same Transition records prior `open`, resulting `closed`, reason `superseded`, and one closure event | none on the source Draft |
 | `DraftRetry` | `RefusedToDraft` | `ClosedSuperseded`; the new Refused Edit Draft preserves the complete selected retry payload, records `DraftRetryReplacement` provenance, and is the sole open recovery surface | exactly the new Refused Edit Draft |
 | `DraftRetry` | `NoEffect` | `Unchanged` with exact current `Open` closure and no new event | the exact source Draft |
@@ -1203,7 +1210,7 @@ The accepted prototype's transitions map one-to-one as follows:
 
 | Author-facing transition | Core command and positive semantic result |
 | --- | --- |
-| narrow Refused Edit Draft; retry Recovery Draft | new `ApplyAuthorEdit`; any of its five results remains possible |
+| narrow Refused Edit Draft; retry Recovery Draft | new `ApplyAuthorEdit`; any of its six results remains possible |
 | expand Refused Edit Draft | `ProposalCreatedFromDraft` |
 | discard either Draft | `DraftClosureChanged { close_reason: abandoned }` |
 | replan Proposal Conflict or Proposal Recovery Conflict | `ProposalRevisionAppended.Replan` |
@@ -1332,6 +1339,7 @@ empty. The closed allocation matrix is:
 | `ApplyAuthorEdit.ProposalRevised.Pending` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | Fresh N/A; `DraftRetry` exact source closes `superseded` | 0 |
 | `ApplyAuthorEdit.ProposalRevised.StructuralReshapeConflict` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | Fresh N/A; `DraftRetry` exact source closes `superseded` | exactly 1 `ProposalConflict` caused by the newly appended Revision's structural shape |
 | `ApplyAuthorEdit.RefusedToDraft` | `DomainReceipt` | 0 | 0 | exactly 1 `RefusedEditDraft` | Fresh N/A; `DraftRetry` exact source closes `superseded` and the new Draft replaces it as the sole open surface | 0 |
+| `ApplyAuthorEdit.Refused` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; `DraftRetry` source is unchanged and creates no lifecycle event | 0 |
 | `ApplyAuthorEdit.Conflicted` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; `DraftRetry` source is unchanged and creates no lifecycle event | exactly 1 `ProposalConflict` only when an exact Proposal Revision is the affected surface; otherwise 0 |
 | `ApplyAuthorEdit.NoEffect` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; `DraftRetry` source remains `open` with no lifecycle event | 0 |
 | applied author Proposal decision, replan, or Draft close | `DomainReceipt` | 0 | exactly 1 Forward | 0 new Draft | N/A | only the condition explicitly named by its closed result variant |

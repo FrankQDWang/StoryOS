@@ -20,7 +20,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -68,7 +68,7 @@ async function openEditorSession(
     correlation_id: correlationId,
   };
   const digest = await digestCreateEditorSession(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
     baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
     request: {
       method: "POST",
@@ -141,7 +141,7 @@ test("an observer takeOverProjectWriter fences the prior writer and refuses its 
     };
     const takeoverKey = "018f0000-0000-7001-8000-000000000333";
     const takeoverDigest = await digestTakeOverProjectWriter(takeoverRequest);
-    const takeoverChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const takeoverChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
       baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
       request: {
         method: "POST",
@@ -282,7 +282,7 @@ test("an observer takeOverProjectWriter fences the prior writer and refuses its 
     };
     const staleKey = "018f0000-0000-7001-8000-000000000337";
     const staleDigest = await digestApplyAuthorEdit(staleRequest);
-    const staleChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const staleChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
       baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
       request: {
         method: "POST",

@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -105,6 +106,7 @@ async function makeCurrent(
   chapterId: string,
   heading: string,
 ): Promise<void> {
+  await beginTreeAction(appRoot(frame), `li[data-chapter-id="${chapterId}"]`, "[data-make-current-chapter]");
   appRoot(frame).querySelector<HTMLButtonElement>(
     `[data-make-current-chapter="${chapterId}"]`,
   )?.click();
@@ -142,6 +144,7 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -152,10 +155,12 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
   ).toBe(true);
   for (const name of ["Chapter A", "Chapter B"] as const) {
+    await beginInlineChapterCreation(frame.contentDocument);
     const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
       '#app form[data-create-chapter] input[name="chapter-title"]',
     );
@@ -178,7 +183,7 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   const coldOpenMs = Math.round(performance.now() - started);
 
   const root = appRoot(frame);
-  const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
+  const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
   const chapterAId = chapterButton(root, "Chapter A")?.getAttribute("data-chapter-id");
   const chapterBId = chapterButton(root, "Chapter B")?.getAttribute("data-chapter-id");
   if (projectId === null || projectId === undefined

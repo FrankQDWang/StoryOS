@@ -99,24 +99,23 @@ def main():
                     return code
             files = [path.removeprefix("apps/web/") for path in phase["files"]]
             os.environ["STORYOS_VITEST_FILE_ORDER"] = ":".join(files)
-            extra = []
+            output = Path(os.environ.get("STORYOS_VERIFICATION_RUN", str(root / "target"))) / f"{phase['name']}.json"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            extra = ["--passWithNoTests=false", "--allowOnly=false",
+                     "--reporter=default", "--reporter=json", f"--outputFile={output}"]
             if args.groups:
-                output = Path(os.environ.get("STORYOS_VERIFICATION_RUN", str(root / "target"))) / f"{phase['name']}.json"
-                output.parent.mkdir(parents=True, exist_ok=True)
-                extra = ["--cache=false", "--passWithNoTests=false", "--allowOnly=false",
-                         "--reporter=default", "--reporter=json", f"--outputFile={output}"]
+                extra.append("--cache=false")
             code = verification.step(root, phase["stage"],
                                      ["pnpm", "--dir", "apps/web", "exec", "vitest", "run",
                                       "--project", phase["group"], *files, *extra], node_id="phase:" + phase["name"])
             if code:
                 return code
-            if args.groups:
-                result = json.loads(output.read_text())
-                suites = result.get("testResults", [])
-                if (result.get("success") is not True
-                        or {suite["name"] for suite in suites} != {str(root / path) for path in phase["files"]}
-                        or any(not any(test["status"] == "passed" for test in suite["assertionResults"]) for suite in suites)):
-                    raise ValueError("Shared daily files were missing or had no passing tests")
+            result = json.loads(output.read_text())
+            suites = result.get("testResults", [])
+            if (result.get("success") is not True
+                    or {suite["name"] for suite in suites} != {str(root / path) for path in phase["files"]}
+                    or any(not any(test["status"] == "passed" for test in suite["assertionResults"]) for suite in suites)):
+                raise ValueError("Shared files were missing or had no passing tests")
         return 0
     except (ValueError, OSError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")

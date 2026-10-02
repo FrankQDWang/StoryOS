@@ -81,6 +81,17 @@ impl ProposalReader for PostgresProjectReader {
             )
             .await
             .map_err(read_error)?;
+        let unavailable = crate::validation_history::unavailable_revisions(&transaction, scope)
+            .await
+            .map_err(read_error)?;
+        if row
+            .as_ref()
+            .is_some_and(|row| unavailable.contains(&row.get::<_, String>(2)))
+        {
+            return Err(ProjectReadError::unavailable(std::io::Error::other(
+                "original validation history is unavailable; explicit replan is required",
+            )));
+        }
         let latest_acceptance_refusal =
             crate::acceptance_refusal::read_latest_refusal(&transaction, scope, proposal_id)
                 .await?;
@@ -180,7 +191,7 @@ async fn read_operations(
 ) -> Result<Vec<ProposalOperationRecord>, ProjectReadError> {
     let rows = client
         .query(
-            "SELECT operation_id::text, manuscript_block_id::text, resolution, reservation_state, candidate_blocks::text
+            "SELECT operation_id::text, manuscript_block_id::text, resolution, reservation_state, candidate_blocks::text, candidate_text
                FROM storyos.proposal_operations
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -197,6 +208,7 @@ async fn read_operations(
     rows.into_iter()
         .map(|row| {
             Ok(ProposalOperationRecord {
+                candidate_text: row.get(5),
                 operation_id: row.get(0),
                 manuscript_block_id: row.get(1),
                 resolution: row.get(2),

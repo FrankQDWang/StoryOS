@@ -49,6 +49,7 @@ fn plans_prose_change_input_without_treating_it_as_authority() {
                 kind: FakeDecisionKind::ProseChange {
                     text: PROSE_CHANGE_TEXT,
                     producer_input: PROSE_CHANGE_TEXT,
+                    locations: None,
                 },
                 selected: true,
                 advances_continuation: true,
@@ -85,6 +86,7 @@ fn plans_a_progressive_stream_without_treating_native_items_as_batches() {
                 kind: FakeDecisionKind::ProseChange {
                     text: PROSE_CHANGE_TEXT,
                     producer_input: PROSE_CHANGE_TEXT,
+                    locations: None,
                 },
                 selected: true,
                 advances_continuation: true,
@@ -110,6 +112,7 @@ fn plans_inline_phrase_change_without_treating_it_as_authority() {
                 kind: FakeDecisionKind::ProseChange {
                     text: INLINE_PROSE_CHANGE_TEXT,
                     producer_input: INLINE_PROSE_CHANGE_TEXT,
+                    locations: None,
                 },
                 selected: true,
                 advances_continuation: true,

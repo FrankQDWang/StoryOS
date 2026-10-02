@@ -54,7 +54,7 @@ it("the protected browser creates one empty workspace without a starter Chapter"
   ).toBe("empty-project-ready");
   const emptyRoot = frame.contentDocument?.querySelector("#app");
   expect(emptyRoot?.querySelector("h1")?.textContent).toBe("Empty Novel");
-  expect(emptyRoot?.querySelector("textarea")).toBeNull();
+  expect(emptyRoot?.querySelector(".editor-panel textarea")).toBeNull();
   expect(emptyRoot?.textContent).toContain("空工作区");
   const tree = emptyRoot?.querySelector('nav[aria-label="稿件目录"]');
   expect(tree).not.toBeNull();

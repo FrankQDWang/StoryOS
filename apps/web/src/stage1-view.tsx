@@ -1,3 +1,4 @@
+import { LocalRecoveryPanel } from "./local-recovery-panel.tsx";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -31,17 +32,17 @@ import type {
   ProjectReadyState,
 } from "./editor-types.ts";
 import { rebuildPendingProjection, reconfirmLegacyReplaceSelection } from "./editor-session.ts";
-import { archiveOwnedProject } from "./archive-project.ts";
 import type { ManualInputController } from "./manual-input.ts";
 import {
   BlockProposalDisplay, readProposalLocators, rememberProposalLocator,
 } from "./block-proposal-display.tsx";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
+import { ChapterCreationMenu } from "./chapter-creation-menu.tsx";
 import { ManuscriptSearchPanel } from "./manuscript-search.tsx";
 import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
-import { CreateVolumeForm, ManuscriptTree } from "./manuscript-tree.tsx";
+import { ManuscriptTree } from "./manuscript-tree.tsx";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
   historicalAcknowledgementUnavailable,
@@ -49,6 +50,7 @@ import {
 import { renameOwnedProject } from "./rename-project.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
+import { navigateProposal, type ProposalFocus, type ProposalNavigation } from "./proposal-navigation.ts";
 import { WritingWorkspace } from "./writing-workspace.tsx";
 
 interface Stage1ViewProps {
@@ -60,8 +62,12 @@ interface Stage1ViewProps {
 
 interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   state: ProjectReadyState;
-  onArchived: () => void;
+  proposalNavigation: ProposalNavigation;
+  proposalFocus: ProposalFocus | undefined;
+  proposalNotice: string | undefined;
+  onProposalOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onReopened: (state: ControlledProjectState) => void;
+  onLocalRecoveryContinued: (state: ControlledProjectState) => void;
 }
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
@@ -91,9 +97,10 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
 }
 
 function ProjectReadyView({
-  state, baseUrl, fetchImpl, cryptoImpl, onArchived, onReopened,
+  state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
 }: ProjectReadyViewProps) {
   const inputRef = useRef<ManualInputController | null>(null);
+  const [candidateTarget, setCandidateTarget] = useState<ProposalFocus>();
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
   const makeCurrentInFlightRef = useRef(false);
@@ -431,20 +438,47 @@ function ProjectReadyView({
   return (
     <WritingWorkspace
       writer={writer}
+      onNavigateProposal={(destination) => navigateProposal({ state, destination,
+        navigation: proposalNavigation, controller: inputRef, baseUrl, fetchImpl, cryptoImpl,
+        onOpened: (next, focus, notice) => {
+          setCandidateTarget(focus); setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
+        }, onFailure: setSwitchRecovery,
+        onLocator: (locator) => setProposalLocators(rememberProposalLocator(state.project.project_scope, locator)),
+      })}
       onOpenedProposal={(locator) => {
         setProposalLocators(rememberProposalLocator(state.project.project_scope, locator));
         setProposalRefresh((current) => current + 1);
       }}
       assistant={{
         scope: state.project.project_scope,
-        chapterId: currentChapterId,
+        chapterId: currentChapterId, candidateTarget, tree,
         canSubmit: selectedChapter.chapter.chapter_id === currentChapterId
           && saveState === "saved" && !readOnly && !archived,
         baseUrl, fetchImpl, cryptoImpl,
       }}
       tree={(
         <>
-          <h1>{title}</h1>
+          <RenameProjectForm
+                title={title}
+                workspace
+                disabled={archived}
+                projectId={state.project.project.project_id}
+                revision={revision}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                onRenamed={(nextTitle, nextRevision) => {
+                  setTitle(nextTitle);
+                  setRevision(nextRevision);
+                }}
+              />
+          <ManuscriptSearchPanel
+            chapterTitles={new Map(tree?.volumes.flatMap((volume) => volume.chapters.map((chapter) => [chapter.chapter_id, chapter.title])))}
+            onSelectChapter={selectChapter}
+            projectId={state.project.project.project_id}
+            baseUrl={baseUrl}
+            fetchImpl={fetchImpl}
+          />
           {tree === undefined ? null : (
             <ManuscriptTree
               projectId={state.project.project.project_id}
@@ -464,58 +498,22 @@ function ProjectReadyView({
               onRemoveVolume={removeVolume}
             />
           )}
-          {archived ? null : (
-            <div className="tree-footer">
-              <RenameProjectForm
-                projectId={state.project.project.project_id}
-                revision={revision}
-                baseUrl={baseUrl}
-                fetchImpl={fetchImpl}
-                cryptoImpl={cryptoImpl}
-                onRenamed={(nextTitle, nextRevision) => {
-                  setTitle(nextTitle);
-                  setRevision(nextRevision);
-                }}
-              />
-              <ArchiveProjectForm
-                projectId={state.project.project.project_id}
-                revision={revision}
-                baseUrl={baseUrl}
-                fetchImpl={fetchImpl}
-                cryptoImpl={cryptoImpl}
-                onArchived={onArchived}
-              />
-            </div>
-          )}
-        </>
-      )}
-      editor={(
-        <>
-          {switchRecovery === undefined ? null : (
-            <p role="alert">{switchRecovery}</p>
-          )}
-          <h2>{selectedChapter.chapter.title}</h2>
-          <ManuscriptStatisticsPanel
-            projectId={state.project.project.project_id}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            currentChapterId={currentChapterId}
-            saveState={saveState}
-            treeRevision={tree?.tree_revision}
-          />
+          <div className="tree-footer">
           <ManuscriptReadableExportPanel
             projectId={state.project.project.project_id}
             baseUrl={baseUrl}
             fetchImpl={fetchImpl}
             cryptoImpl={cryptoImpl}
           />
-          <ManuscriptSearchPanel
-            projectId={state.project.project.project_id}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            currentChapterId={currentChapterId}
-            controllerRef={inputRef}
-          />
+          </div>
+        </>
+      )}
+      editor={(
+        <>
+          {(switchRecovery ?? proposalNotice) === undefined ? null : (
+            <p role="alert">{switchRecovery ?? proposalNotice}</p>
+          )}
+          <h2>{selectedChapter.chapter.title}</h2>
           <BlockProposalDisplay
             key={selectedChapter.chapter.chapter_id}
             scope={state.project.project_scope}
@@ -523,6 +521,8 @@ function ProjectReadyView({
             authoritativeRevisionId={selectedChapter.chapter.chapter_id === currentChapterId
               && pending !== null ? pending.authoritative_revision_id
               : selectedChapter.chapter.current_revision.revision_id}
+            focusProposal={proposalFocus}
+            onCandidateFocus={setCandidateTarget}
             locators={proposalLocators}
             refreshKey={proposalRefresh}
             safeToProject={(state.editor.kind !== "editor-ready" && pending === null)
@@ -581,6 +581,15 @@ function ProjectReadyView({
               );
             }}
           />
+          <div className="editor-status">
+          <ManuscriptStatisticsPanel
+            projectId={state.project.project.project_id}
+            baseUrl={baseUrl}
+            fetchImpl={fetchImpl}
+            currentChapterId={currentChapterId}
+            saveState={saveState}
+            treeRevision={tree?.tree_revision}
+          />
           <small
             data-save-state={saveState}
             data-editor-failure={editorFailure ?? ""}
@@ -612,7 +621,18 @@ function ProjectReadyView({
               setEditorFailure("活动流无法同步");
             }}
           />
+          </div>
+          {state.editor.kind === "editor-ready" ? <LocalRecoveryPanel
+            workspace={state.editor}
+            refreshKey={String(pending?.requires_local_reconfirmation === true)}
+            onContinue={async () => {
+              const next = await openControlledProject({ baseUrl,
+                projectId: state.project.project.project_id, fetchImpl, cryptoImpl });
+              onLocalRecoveryContinued(next);
+            }}
+          /> : null}
           {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
+            && !pending.requires_local_reconfirmation
             ? (
               <button
                 type="button"
@@ -653,6 +673,7 @@ function ProjectReadyView({
 }
 
 function RenameProjectForm({
+  title, workspace = false, disabled = false,
   projectId,
   revision,
   baseUrl,
@@ -660,6 +681,9 @@ function RenameProjectForm({
   cryptoImpl,
   onRenamed,
 }: {
+  title?: string;
+  workspace?: boolean;
+  disabled?: boolean;
   projectId: string;
   revision: string | undefined;
   baseUrl: string;
@@ -668,91 +692,49 @@ function RenameProjectForm({
   onRenamed: (title: string, revision: string) => void;
 }) {
   const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number }>();
+  const pending = useRef(false);
+  const cancelled = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const submit = (value: string) => {
+    const title = value.trim();
+    if (revision === undefined || !title || pending.current || cancelled.current) return;
+    pending.current = true; setSaving(true);
+    void renameOwnedProject({ baseUrl, fetchImpl, cryptoImpl, projectId, title, expectedProjectRevision: revision })
+      .then((updated) => {
+        setHistoricalUnavailable(false);
+        if (updated.effect.kind !== "authoritative_applied") return;
+        setEditing(false); onRenamed(updated.project.title, updated.effect.revision);
+      }).catch((error: unknown) => {
+        if (historicalAcknowledgementUnavailable(error)) setHistoricalUnavailable(true);
+      }).finally(() => { pending.current = false; setSaving(false); });
+  };
   return (
+    <div className={workspace ? "project-heading" : undefined} data-project-id={projectId} onContextMenu={disabled ? undefined : (event) => {
+      event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY });
+    }}>
+      {editing ?
     <form
       data-rename={projectId}
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (revision === undefined) return;
-        const title = String(new FormData(event.currentTarget).get("rename-title") ?? "").trim();
-        if (!title) return;
-        void renameOwnedProject({
-          baseUrl,
-          fetchImpl,
-          cryptoImpl,
-          projectId,
-          title,
-          expectedProjectRevision: revision,
-        }).then((updated) => {
-          setHistoricalUnavailable(false);
-          if (updated.effect.kind !== "authoritative_applied") return;
-          onRenamed(updated.project.title, updated.effect.revision);
-        }).catch((error: unknown) => {
-          if (historicalAcknowledgementUnavailable(error)) {
-            setHistoricalUnavailable(true);
-          }
-        });
-      }}
+      onSubmit={(event) => { event.preventDefault(); submit(String(new FormData(event.currentTarget).get("rename-title") ?? "")); }}
     >
-      <label>
-        项目标题
-        <input name="rename-title" required maxLength={1024} disabled={revision === undefined} />
-      </label>
-      <button type="submit" disabled={revision === undefined}>重命名</button>
+      <input autoFocus name="rename-title" aria-label="项目标题" required maxLength={1024} defaultValue={title}
+        readOnly={saving} onBlur={(event) => submit(event.currentTarget.value)} onKeyDown={(event) => {
+          if (event.key === "Escape" && !pending.current) { cancelled.current = true; setEditing(false); }
+        }} />
+    </form> : workspace ? <h1>{title}</h1> : null}
+      {disabled ? null : <button type="button" data-project-menu aria-label="项目菜单" onClick={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect(); setMenu({ x: rect.left, y: rect.bottom + 4 });
+      }}>⋯</button>}
+      {menu === undefined ? null : <ChapterCreationMenu point={menu} onClose={() => setMenu(undefined)}>
+        <button type="button" data-begin-rename-project disabled={revision === undefined}
+          onClick={() => { cancelled.current = false; setEditing(true); }}>重命名</button>
+      </ChapterCreationMenu>}
       {historicalUnavailable
         ? <p data-rename-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
         : null}
-    </form>
-  );
-}
-
-function ArchiveProjectForm({
-  projectId,
-  revision,
-  baseUrl,
-  fetchImpl,
-  cryptoImpl,
-  onArchived,
-}: {
-  projectId: string;
-  revision: string | undefined;
-  baseUrl: string;
-  fetchImpl: typeof fetch;
-  cryptoImpl: Crypto;
-  onArchived: () => void;
-}) {
-  const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
-  return (
-    <form
-      data-archive={projectId}
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (revision === undefined) return;
-        void archiveOwnedProject({
-          baseUrl,
-          fetchImpl,
-          cryptoImpl,
-          projectId,
-          expectedProjectRevision: revision,
-        }).then((archived) => {
-          setHistoricalUnavailable(false);
-          if (archived.effect.kind === "authoritative_applied"
-            || (archived.effect.kind === "no_effect"
-              && archived.effect.reason === "already_archived")) {
-            onArchived();
-          }
-        }).catch((error: unknown) => {
-          if (historicalAcknowledgementUnavailable(error)) {
-            setHistoricalUnavailable(true);
-          }
-        });
-      }}
-    >
-      <button type="submit" disabled={revision === undefined}>归档</button>
-      {historicalUnavailable
-        ? <p data-archive-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
-        : null}
-    </form>
+    </div>
   );
 }
 
@@ -762,7 +744,6 @@ function EmptyProjectReadyView({
   baseUrl,
   fetchImpl,
   cryptoImpl,
-  onArchived,
   onVolumeCreated,
   onChapterCreated,
 }: {
@@ -771,7 +752,6 @@ function EmptyProjectReadyView({
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
-  onArchived: () => void;
   onVolumeCreated: () => void;
   onChapterCreated: () => void;
 }) {
@@ -795,7 +775,21 @@ function EmptyProjectReadyView({
       }}
       tree={(
         <>
-          <h1>{title}</h1>
+            <RenameProjectForm
+              title={title}
+              workspace
+              projectId={project.project.project_id}
+              revision={revision}
+              baseUrl={baseUrl}
+              fetchImpl={fetchImpl}
+              cryptoImpl={cryptoImpl}
+              onRenamed={(nextTitle, nextRevision) => {
+                setTitle(nextTitle);
+                setRevision(nextRevision);
+              }}
+            />
+          <ManuscriptSearchPanel projectId={project.project.project_id} baseUrl={baseUrl}
+            fetchImpl={fetchImpl} chapterTitles={new Map()} />
           {volumeRemoval === undefined ? null : (
             <p role="alert">{volumeRemoval}</p>
           )}
@@ -856,35 +850,6 @@ function EmptyProjectReadyView({
               });
             }}
           />
-          <CreateVolumeForm
-            projectId={project.project.project_id}
-            treeRevision={tree.tree_revision}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            cryptoImpl={cryptoImpl}
-            onCreated={onVolumeCreated}
-          />
-          <div className="tree-footer">
-            <RenameProjectForm
-              projectId={project.project.project_id}
-              revision={revision}
-              baseUrl={baseUrl}
-              fetchImpl={fetchImpl}
-              cryptoImpl={cryptoImpl}
-              onRenamed={(nextTitle, nextRevision) => {
-                setTitle(nextTitle);
-                setRevision(nextRevision);
-              }}
-            />
-            <ArchiveProjectForm
-              projectId={project.project.project_id}
-              revision={revision}
-              baseUrl={baseUrl}
-              fetchImpl={fetchImpl}
-              cryptoImpl={cryptoImpl}
-              onArchived={onArchived}
-            />
-          </div>
         </>
       )}
       editor={<p>空工作区</p>}
@@ -993,20 +958,13 @@ function ProtectedReadyView({
                 {archived ? null : (
                   <>
                     <RenameProjectForm
+                      title={item.title}
                       projectId={item.project_scope.project_id}
                       revision={item.revision}
                       baseUrl={baseUrl}
                       fetchImpl={fetchImpl}
                       cryptoImpl={cryptoImpl}
                       onRenamed={refreshLibrary}
-                    />
-                    <ArchiveProjectForm
-                      projectId={item.project_scope.project_id}
-                      revision={item.revision}
-                      baseUrl={baseUrl}
-                      fetchImpl={fetchImpl}
-                      cryptoImpl={cryptoImpl}
-                      onArchived={refreshLibrary}
                     />
                   </>
                 )}
@@ -1037,13 +995,17 @@ function Stage1View({
   state, baseUrl, fetchImpl, cryptoImpl, setBootState,
 }: Stage1ViewProps & { setBootState: (kind: string) => void }) {
   const [current, setCurrent] = useState(state);
+  const [editorGeneration, setEditorGeneration] = useState(0);
+  const [proposalFocus, setProposalFocus] = useState<ProposalFocus>();
+  const [proposalNotice, setProposalNotice] = useState<string>();
+  const proposalNavigation = useRef<ProposalNavigation>({ sequence: 0, queue: Promise.resolve() });
   useEffect(() => { setBootState(current.kind); }, [current, setBootState]);
   if (current.kind === "project-ready") {
     // Volume removal keeps the current Chapter, so chapter and writer keys
     // stay put. The new editor base snapshot remounts the tree after honor-deletion.
     return (
       <ProjectReadyView
-        key={`${
+        key={`${editorGeneration}:${
           current.project.project.open.kind === "current_chapter"
             ? current.project.project.open.current_chapter_id
             : current.project.project.project_id
@@ -1061,10 +1023,12 @@ function Stage1View({
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
         cryptoImpl={cryptoImpl}
-        onArchived={() => {
-          setCurrent({ kind: "protected-ready", profile: current.profile });
-        }}
+        proposalNavigation={proposalNavigation.current}
+        proposalFocus={proposalFocus}
+        proposalNotice={proposalNotice}
+        onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); setCurrent(next); }}
         onReopened={setCurrent}
+        onLocalRecoveryContinued={(next) => { setCurrent(next); setEditorGeneration((value) => value + 1); }}
       />
     );
   }
@@ -1076,9 +1040,6 @@ function Stage1View({
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
         cryptoImpl={cryptoImpl}
-        onArchived={() => {
-          setCurrent({ kind: "protected-ready", profile: current.profile });
-        }}
         onVolumeCreated={() => {
           void openControlledProject({
             baseUrl,

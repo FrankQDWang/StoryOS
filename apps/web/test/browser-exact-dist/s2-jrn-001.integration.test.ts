@@ -1,7 +1,8 @@
+import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { applyTrustedInput, settleWorkerOnce, updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
   focusManuscriptEnd,
   manuscriptBody,
@@ -101,6 +102,7 @@ async function makeCurrent(
   chapterId: string,
   heading: string,
 ): Promise<void> {
+  await beginTreeAction(appRoot(frame), `li[data-chapter-id="${chapterId}"]`, "[data-make-current-chapter]");
   appRoot(frame).querySelector<HTMLButtonElement>(
     `[data-make-current-chapter="${chapterId}"]`,
   )?.click();
@@ -148,6 +150,7 @@ it("runs the AI-disabled production journey without losing Chapter work", {
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -158,10 +161,12 @@ it("runs the AI-disabled production journey without losing Chapter work", {
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
   ).toBe(true);
   for (const name of ["Chapter A", "Chapter B"] as const) {
+    await beginInlineChapterCreation(frame.contentDocument);
     const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
       '#app form[data-create-chapter] input[name="chapter-title"]',
     );
@@ -190,7 +195,7 @@ it("runs the AI-disabled production journey without losing Chapter work", {
     ?.getAttribute("data-assistant-availability")).toBe("unavailable");
   expect(root.textContent).not.toContain("模型");
   expect(root.textContent).not.toContain("Agent");
-  const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
+  const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
   const chapterAId = chapterButton(root, "Chapter A")?.getAttribute("data-chapter-id");
   const chapterBId = chapterButton(root, "Chapter B")?.getAttribute("data-chapter-id");
   if (projectId === null || projectId === undefined
@@ -235,6 +240,11 @@ it("runs the AI-disabled production journey without losing Chapter work", {
   )].find((candidate) => candidate.textContent === "导出可读稿件");
   if (exportButton === undefined) throw new Error("the readable export request button is missing");
   exportButton.click();
+  await expect.poll(() =>
+    appRoot(frame).querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"),
+  ).toBe("in_progress");
+  expect(appRoot(frame).querySelector("[data-export-id]")?.getAttribute("data-export-id")).toBeTruthy();
+  await settleWorkerOnce();
   await expect.poll(() =>
     appRoot(frame).querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"),
     { timeout: 15_000 },

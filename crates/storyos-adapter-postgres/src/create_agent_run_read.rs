@@ -126,7 +126,12 @@ pub(super) async fn load_agent_run(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     run_id: &str,
+    selection: &storyos_application::AgentRunReadSelection,
 ) -> Result<Option<AgentRunRecord>, CreateAgentRunError> {
+    let requested_attempt = match selection {
+        storyos_application::AgentRunReadSelection::Current => None,
+        storyos_application::AgentRunReadSelection::ModelAttempt(id) => Some(id),
+    };
     let row = client
         .query_opt(
             "SELECT run.project_agent_id::text, run.conversation_id::text,
@@ -136,12 +141,18 @@ pub(super) async fn load_agent_run(
                     attempt.outbound_disclosure_event_id::text,
                     attempt.model_invocation_id::text, attempt.dispatch_state,
                     attempt.decision_id::text, attempt.continuation_binding_id::text,
-                    attempt.payload::text
+                    attempt.payload::text, settings.use_enabled, settings.contribution_enabled, COALESCE(attempt.decision_position,run.active_decision_position)::text
                FROM storyos.agent_runs AS run
+               LEFT JOIN storyos.conversation_memory_settings AS settings
+                 ON (settings.owner_user_id, settings.project_id, settings.conversation_id,
+                     settings.memory_settings_revision) =
+                    (run.owner_user_id, run.project_id, run.conversation_id,
+                     run.memory_settings_revision)
                LEFT JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
                 AND attempt.attempt_role = 'decision'
+                AND (($4::text IS NULL AND attempt.decision_position=run.active_decision_position) OR attempt.model_attempt_id=$4::text::uuid)
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
@@ -149,6 +160,7 @@ pub(super) async fn load_agent_run(
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &run_id,
+                &requested_attempt,
             ],
         )
         .await
@@ -156,6 +168,9 @@ pub(super) async fn load_agent_run(
     let Some(row) = row else {
         return Ok(None);
     };
+    if requested_attempt.is_some() && row.get::<_, Option<String>>(6).is_none() {
+        return Ok(None);
+    }
     let status = parse_run_status(&row.get::<_, String>(4))?;
     let settlement = row
         .get::<_, Option<String>>(5)
@@ -219,13 +234,33 @@ pub(super) async fn load_agent_run(
         project_agent_id: row.get(0),
         conversation_id: row.get(1),
         memory_settings_revision: row.get(2),
+        captured_memory_settings: row
+            .get::<_, Option<bool>>(14)
+            .zip(row.get::<_, Option<bool>>(15))
+            .map(|(use_enabled, contribution_enabled)| {
+                storyos_application::CapturedMemorySettings {
+                    use_enabled,
+                    contribution_enabled,
+                }
+            }),
         run_id: row.get(3),
         status,
-        context: super::context::load_assembled_context(client, scope, run_id).await?,
+        steering_inputs: crate::agent_run_steering::inspect(client, scope, run_id).await?,
+        context: super::context::load_assembled_context(
+            client,
+            scope,
+            run_id,
+            &row.get::<_, String>(16),
+        )
+        .await?,
         decision: inspect_decision(
-            settlement.as_ref(),
+            requested_attempt
+                .is_none()
+                .then_some(settlement.as_ref())
+                .flatten(),
             payload.as_ref(),
             row.get::<_, Option<String>>(12),
+            crate::prose_change_location_read::decode_locations(payload.as_ref())?,
         ),
         model,
         active_compaction: crate::agent_run_compaction::load_active_compaction(
@@ -243,14 +278,16 @@ pub(super) async fn load_agent_run(
         )
         .await?,
     };
-    if let Some(selection) =
-        crate::agent_run_successor::load_successor_selection(client, scope, run_id).await?
+    if row.get::<_, String>(16) == "0"
+        && let Some(selection) =
+            crate::agent_run_successor::load_successor_selection(client, scope, run_id).await?
         && let Some(model) = record.model.as_mut()
     {
         record.decision = inspect_decision(
             /*settlement*/ None,
             Some(&selection.payload),
             selection.continuation_binding_id,
+            crate::prose_change_location_read::decode_locations(Some(&selection.payload))?,
         );
         model.items = selection
             .payload
@@ -266,6 +303,8 @@ pub(super) async fn load_agent_run(
             .unwrap_or("unknown")
             .to_owned();
     }
+    crate::prose_change_location_read::hydrate_locations(client, scope, &mut record.decision)
+        .await?;
     Ok(Some(record))
 }
 
@@ -288,6 +327,7 @@ fn inspect_decision(
     settlement: Option<&serde_json::Value>,
     payload: Option<&serde_json::Value>,
     continuation_binding_id: Option<String>,
+    locations: Option<Vec<storyos_contracts::ProseChangeLocationInspect>>,
 ) -> AgentRunDecisionInspect {
     if let Some(capability) = settlement
         .and_then(|value| value.get("capability"))
@@ -327,6 +367,7 @@ fn inspect_decision(
             continuation_binding_id,
         },
         Some("prose_change") => AgentRunDecisionInspect::ProseChange {
+            locations,
             decision_id,
             selected,
             text: decision

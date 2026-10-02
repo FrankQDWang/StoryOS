@@ -21,7 +21,6 @@ pub(crate) struct LoadedGeneration {
     pub(crate) last_seq: u64,
     pub(crate) generation_state: String,
     pub(crate) existing_fence: bool,
-    pub(crate) block_id: String,
     pub(crate) base_revision_id: String,
 }
 
@@ -35,7 +34,7 @@ pub(crate) async fn apply_streamed_proposal(
     let Some(batches) = stream_batch_plan(author_message) else {
         return Ok((None, StreamWork::Continue));
     };
-    let loaded = match load_generation(client, claim).await? {
+    let loaded = match load_generation(client, claim, decision_id).await? {
         Some(current) => current,
         None => {
             let Some(first) = load_admitted_targets(client, claim, chapter_id)
@@ -92,6 +91,7 @@ pub(crate) async fn apply_streamed_proposal(
                 stream_seq,
                 text,
                 !batches.iter().any(|(seq, _)| *seq > stream_seq),
+                /*operation_id*/ None,
             )
             .await?;
         }
@@ -235,19 +235,19 @@ async fn open_generating(
         last_seq: 0,
         generation_state: "generating".to_owned(),
         existing_fence: false,
-        block_id: first.block_id.clone(),
         base_revision_id: first.revision_id.clone(),
     }))
 }
 
-async fn persist_batch(
+pub(crate) async fn persist_batch(
     client: &Client,
     claim: &ClaimedAgentRun,
     loaded: &LoadedGeneration,
     stream_seq: u64,
     text: &str,
     complete: bool,
-) -> Result<(), CompleteAgentRunError> {
+    operation_id: Option<&str>,
+) -> Result<(String, Option<String>), CompleteAgentRunError> {
     let owner = claim.project_scope.owner_user_id.as_ref();
     let project = claim.project_scope.project_id.as_ref();
     let revision_id = Uuid::now_v7().to_string();
@@ -257,6 +257,18 @@ async fn persist_batch(
     } else {
         ("generating", "pending")
     };
+    let summary = client.query_one(
+        "SELECT proposal.manuscript_block_id::text,
+                CASE WHEN $4::text IS NULL OR operation.operation_id=$4::text::uuid
+                     THEN $5 ELSE operation.candidate_text END
+           FROM storyos.proposals AS proposal
+           JOIN storyos.proposal_operations AS operation USING (owner_user_id,project_id,proposal_id)
+          WHERE proposal.owner_user_id=$1::text::uuid AND proposal.project_id=$2::text::uuid
+            AND proposal.proposal_id=$3::text::uuid
+            AND operation.manuscript_block_id=proposal.manuscript_block_id",
+        &[&owner, &project, &loaded.proposal_id, &operation_id, &text],
+    ).await.map_err(stream_err)?;
+    let summary_text: &str = summary.get(1);
     append_revision(
         client,
         owner,
@@ -265,7 +277,7 @@ async fn persist_batch(
         &revision_id,
         generation,
         validation,
-        text,
+        summary_text,
         &loaded.revision_id,
         Some(&loaded.base_revision_id),
     )
@@ -275,8 +287,9 @@ async fn persist_batch(
             "UPDATE storyos.proposal_operations
                 SET candidate_text = $4
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND proposal_id = $3::text::uuid AND reservation_state = 'unresolved'",
-            &[&owner, &project, &loaded.proposal_id, &text],
+                AND proposal_id = $3::text::uuid AND reservation_state = 'unresolved'
+                AND ($5::text IS NULL OR operation_id=$5::text::uuid)",
+            &[&owner, &project, &loaded.proposal_id, &text, &operation_id],
         )
         .await
         .map_err(stream_err)?;
@@ -310,7 +323,8 @@ async fn persist_batch(
         )
         .await
         .map_err(stream_err)?;
-    if complete {
+    let validation_id = complete.then(|| Uuid::now_v7().to_string());
+    if let Some(validation_id) = validation_id.as_deref() {
         client
             .execute(
                 "INSERT INTO storyos.validation_receipts
@@ -322,18 +336,18 @@ async fn persist_batch(
                 &[
                     &owner,
                     &project,
-                    &Uuid::now_v7().to_string(),
+                    &validation_id,
                     &loaded.proposal_id,
                     &revision_id,
                     &loaded.base_revision_id,
-                    &loaded.block_id,
-                    &text,
+                    &summary.get::<_, &str>(0),
+                    &summary_text,
                 ],
             )
             .await
             .map_err(stream_err)?;
     }
-    Ok(())
+    Ok((revision_id, validation_id))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -402,6 +416,7 @@ pub(crate) async fn append_revision(
 async fn load_generation(
     client: &Client,
     claim: &ClaimedAgentRun,
+    decision_id: &str,
 ) -> Result<Option<LoadedGeneration>, CompleteAgentRunError> {
     let row = client
         .query_opt(
@@ -409,7 +424,6 @@ async fn load_generation(
                     generation.last_applied_stream_seq, head.current_revision_id::text,
                     revision.candidate_text, revision.generation,
                     fence.editor_input_fence_id IS NOT NULL,
-                    proposal.manuscript_block_id::text,
                     revision.base_authoritative_revision_id::text
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_generation_heads AS generation_head
@@ -434,8 +448,12 @@ async fn load_generation(
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND (
-                  generation.run_id = $3::text::uuid
-                  OR proposal.source_run_id = $3::text::uuid
+                  proposal.source_decision_id = $4::text::uuid
+                  OR EXISTS (SELECT 1 FROM storyos.proposal_generation_transitions AS transition
+                    JOIN storyos.agent_runs AS run USING (owner_user_id, project_id)
+                    WHERE (transition.owner_user_id, transition.project_id, transition.resulting_generation_id, transition.resulting_run_id) =
+                          (generation.owner_user_id, generation.project_id, generation.generation_id, $3::text::uuid)
+                      AND run.run_id=transition.resulting_run_id AND run.active_decision_position=0)
                 )
               ORDER BY (generation.run_id = $3::text::uuid) DESC, generation.generation_id
               LIMIT 1",
@@ -443,6 +461,7 @@ async fn load_generation(
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
+                &decision_id,
             ],
         )
         .await
@@ -457,8 +476,7 @@ async fn load_generation(
             candidate_text: row.get(4),
             generation_state: row.get(5),
             existing_fence: row.get(6),
-            block_id: row.get(7),
-            base_revision_id: row.get(8),
+            base_revision_id: row.get(7),
         }),
         None => None,
     })

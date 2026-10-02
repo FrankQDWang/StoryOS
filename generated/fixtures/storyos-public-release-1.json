@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:3e460ea60a1d0d6943747405dd902e9858718871afb13942233d92a68921975a",
+  "corpus_digest": "sha256:e01495e4fe34f5650417340724e302bfeba85172bad84ca52d8ae4f74385a23c",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -72,6 +72,9 @@
       "generated/golden-wire/storyos-public-release-1/get-agent-run.json",
       "generated/golden-wire/storyos-public-release-1/get-agent-run.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/steer-agent-run.json",
+      "generated/golden-wire/storyos-public-release-1/steer-agent-run.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/steer-agent-run.boundary.json",
       "generated/golden-wire/storyos-public-release-1/pause-agent-run.json",
       "generated/golden-wire/storyos-public-release-1/pause-agent-run.invalid.json",
       "generated/golden-wire/storyos-public-release-1/pause-agent-run.boundary.json",
@@ -572,6 +575,24 @@
       "fixture_id": "storyos.golden.getAgentRun.boundary.v1",
       "operation_id": "getAgentRun",
       "path": "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.steerAgentRun.positive.v1",
+      "operation_id": "steerAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/steer-agent-run.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.steerAgentRun.invalid.v1",
+      "operation_id": "steerAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/steer-agent-run.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.steerAgentRun.boundary.v1",
+      "operation_id": "steerAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/steer-agent-run.boundary.json"
     },
     {
       "classification": "positive",

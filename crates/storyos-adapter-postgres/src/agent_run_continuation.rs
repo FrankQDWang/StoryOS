@@ -153,8 +153,8 @@ async fn load_prior_binding(
                 AND attempt.attempt_role = 'decision'
                 AND attempt.continuation_binding_id IS NOT NULL
                 AND attempt.dispatch_state = 'settled'
-                AND run.status = 'completed' AND run.run_id <> $4::text::uuid
-              ORDER BY run.run_id DESC LIMIT 1",
+                AND ((run.status = 'completed' AND run.run_id <> $4::text::uuid) OR run.run_id = $4::text::uuid)
+              ORDER BY run.run_id DESC, attempt.decision_position DESC LIMIT 1",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),

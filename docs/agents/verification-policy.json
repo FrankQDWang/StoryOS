@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "stage_budgets_seconds": {"acceptance-timing": 120, "recovery-seed": 90, "recovery-drill": 300, "http-files": 900, "exact-dist": 600, "recovery-fixture": 300, "recovery-mixed": 300},
   "verification_test_workers": 2,
   "verification_test_parallel_files": [
     "scripts/verification_cache_tests.py",
@@ -75,6 +76,7 @@
       "readable-export-process-cut": "aggregate",
       "project-export-process-cut": "aggregate",
       "exact-dist": "aggregate",
+      "recovery-seed": "setup",
       "recovery-fixture": "aggregate",
       "recovery-mixed": "aggregate",
       "node-install": "setup",
@@ -113,8 +115,9 @@
       "postgres-scope": {"requires": ["database-setup"]},
       "postgres-challenge": {"requires": ["database-setup"]},
       "postgres-library": {"requires": ["database-setup"]},
-      "recovery-fixture": {"requires": ["release-package"]},
-      "recovery-mixed": {"requires": ["release-package"]},
+      "recovery-seed": {"requires": ["release-package"]},
+      "recovery-fixture": {"requires": ["release-package"], "members": ["recovery-seed"]},
+      "recovery-mixed": {"requires": ["release-package"], "members": ["recovery-seed"]},
       "verification-tests": {"members": ["verification-tools"]},
       "rust-tests": {"requires": ["rust-test-build"], "members": ["cargo"]},
       "verification-tools": {},
@@ -153,7 +156,7 @@
       "foundation-tests", "project-scope", "postgres-scope",
       "postgres-challenge", "postgres-library", "http-files",
       "author-edit-process-cut", "readable-export-process-cut", "project-export-process-cut",
-      "exact-dist", "recovery-fixture", "recovery-mixed",
+      "exact-dist", "recovery-seed", "recovery-fixture", "recovery-mixed",
       "workspace-boundaries", "author-edit-policy", "transaction-guards"
     ],
     "groups": {

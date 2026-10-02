@@ -26,7 +26,7 @@ import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
 
 type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
 
-export type IdlePersistEdit = ReplaceSelectionEdit | CapturedManuscriptEdit
+export type IdlePersistEdit = ReplaceSelectionEdit | (CapturedManuscriptEdit & { expectedProposalHeads?: string[] })
   | CandidateSelectionEdit | StructuredSelectionEdit;
 
 export interface AuthorEditIdleController {
@@ -37,6 +37,7 @@ export interface AuthorEditIdleController {
   ): Promise<void>;
   flush(): Promise<void>;
   whenIdle(): Promise<void>;
+  hasQueuedInput(): boolean;
   fail(error: unknown): void;
   canAcceptCandidateInput(hardBoundary?: boolean): boolean;
   setHoldSubmission(hold: boolean): void;
@@ -118,7 +119,7 @@ export function createAuthorEditIdleController({
 
   const submitPending = async (): Promise<void> => {
     clearIdle();
-    if (pendingIntentCount === 0 || holdSubmission) return;
+    if (pendingIntentCount === 0 || holdSubmission || workspace.pending.save_state === "needs_attention") return;
     submissionClosed = true;
     const projection = await submitGroup({
       workspace, baseUrl, fetchImpl, cryptoImpl,
@@ -232,6 +233,8 @@ export function createAuthorEditIdleController({
                 text: edit.text,
                 resultingBody: edit.resultingBody,
                 manuscript_block_id: edit.manuscript_block_id,
+                ...("expectedProposalHeads" in edit && edit.expectedProposalHeads !== undefined
+                  ? { expectedProposalHeads: edit.expectedProposalHeads } : {}),
                 ...persistFields,
               }, cryptoImpl);
         workspace.pending = projection;
@@ -254,6 +257,7 @@ export function createAuthorEditIdleController({
           === workspace.pending.unsettled_intent_count
         && (!hardBoundary || pendingIntentCount === 0 && queuedWrites === 0);
     },
+    hasQueuedInput: () => queuedWrites > 0,
     async whenIdle() {
       await Promise.resolve();
       await queue;

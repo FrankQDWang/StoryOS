@@ -236,6 +236,15 @@ pub(super) async fn collect_exportable_families(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
 ) -> Result<Vec<PinnedArchiveFamily>, ExportProjectArchiveError> {
+    if !crate::validation_history::unavailable_revisions(client, scope)
+        .await
+        .map_err(|error| archive_table_error("validation_receipts", error))?
+        .is_empty()
+    {
+        return Err(archive_build_error(
+            ProjectArchiveBuildRefusal::InvalidProvenance,
+        ));
+    }
     super::project_archive_draft::validate_withheld_payloads(client, scope).await?;
     let mut families = Vec::with_capacity(EXPORT_TABLES.len());
     for (table, path) in EXPORT_TABLES {
@@ -478,6 +487,13 @@ fn archive_root_facts(
     created_at: &str,
     sources: &[ArchiveEntrySource],
 ) -> Result<ProjectArchiveRootFacts, ProjectArchiveBuildRefusal> {
+    if !crate::validation_history::archive_history_available(|table| {
+        let path = format!("canonical/{table}.json");
+        let source = sources.iter().find(|source| source.path == path)?;
+        serde_json::from_slice(&source.bytes).ok()
+    }) {
+        return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
+    }
     let known_purged_gaps = super::project_archive_draft::withheld_payload_gaps(sources)?;
     Ok(ProjectArchiveRootFacts {
         archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),

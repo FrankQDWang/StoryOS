@@ -42,7 +42,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -214,7 +214,7 @@ async function postVolume(
   request: CreateVolumeRequest,
 ) {
   const digest = await digestCreateVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -245,7 +245,7 @@ async function postChapter(
   request: CreateChapterRequest,
 ) {
   const digest = await digestCreateChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -277,7 +277,7 @@ async function deleteOwned(
   request: DeleteChapterRequest,
 ) {
   const digest = await digestDeleteChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -308,7 +308,7 @@ async function postUndo(
   request: UndoLatestAuthorActionRequest,
 ) {
   const digest = await digestUndoLatestAuthorAction(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -373,7 +373,7 @@ test("undoLatestAuthorAction freezes compensation and conflict acknowledgements 
       correlation_id: "018f0000-0000-7001-8000-00000000ea06",
     };
     const sessionDigest = await digestCreateEditorSession(sessionRequest);
-    const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const sessionChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -448,7 +448,7 @@ test("undoLatestAuthorAction freezes compensation and conflict acknowledgements 
     const laterDigest = await digestUpdateProject(
       renameRequest("Later Undo Title", "1", "018f0000-0000-7001-8000-00000000ea0f"),
     );
-    const laterChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const laterChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -495,7 +495,7 @@ test("undoLatestAuthorAction freezes compensation and conflict acknowledgements 
       editorSessionId: session.editor_session.editor_session_id,
       correlationId: "018f0000-0000-7001-8000-00000000ea13",
     }));
-    const laterCurrentChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const laterCurrentChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -638,7 +638,7 @@ test("undoLatestAuthorAction distinguishes historical absence from damaged new-f
       correlation_id: "018f0000-0000-7001-8000-00000000ea26",
     };
     const sessionDigest = await digestCreateEditorSession(sessionRequest);
-    const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const sessionChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

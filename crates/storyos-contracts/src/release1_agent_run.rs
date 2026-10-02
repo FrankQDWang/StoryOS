@@ -88,7 +88,35 @@ pub struct AuthorMessage {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AssistanceWorkingTarget {
-    CurrentChapter { chapter_id: String },
+    CurrentChapter {
+        chapter_id: String,
+    },
+    ProposalCandidate {
+        source_chapter_id: String,
+        target: ProposalCandidateTarget,
+    },
+    PassageCollection {
+        source_chapter_id: String,
+        #[schemars(length(min = 1, max = 10_001))]
+        targets: Vec<PassageTarget>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProposalCandidateTarget {
+    pub proposal_id: String,
+    pub operation_id: String,
+    pub revision_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PassageTarget {
+    pub chapter_id: String,
+    pub base_authoritative_revision_id: String,
+    #[schemars(length(min = 1, max = 10_001))]
+    pub manuscript_block_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -302,6 +330,12 @@ pub struct AgentRunContextInspect {
     pub outbound_disclosure_manifest: OptionalManifestRef,
     pub destination_io: DestinationIo,
     pub current_availability: CurrentAvailabilityInspect,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub passage_targets: Option<Vec<PassageTarget>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub candidate_target: Option<ProposalCandidateTarget>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -351,6 +385,50 @@ pub enum OptionalOpenedProposalInspect {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProseChangeLocationInspect {
+    pub chapter_id: String,
+    pub manuscript_block_id: String,
+    pub base_authoritative_revision_id: String,
+    pub candidate_text: String,
+    pub explanation: String,
+    pub outcome: ProseChangeLocationOutcome,
+    pub current: Option<ProseChangeLocationCurrent>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProseChangeLocationOutcome {
+    Revised {
+        proposal_id: String,
+        operation_id: String,
+        revision_id: String,
+        prior_revision_id: String,
+        validation_receipt_id: String,
+    },
+    Opened {
+        proposal_id: String,
+        operation_id: String,
+        revision_id: String,
+        validation_receipt_id: String,
+    },
+    Refused {
+        reason: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProseChangeLocationCurrent {
+    pub revision_id: String,
+    pub generation: String,
+    pub validation: String,
+    pub closure: String,
+    pub resolution: String,
+    pub reservation_state: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OptionalDecisionInspect {
     Absent,
@@ -368,6 +446,9 @@ pub enum OptionalDecisionInspect {
         selected: bool,
         text: String,
         producer_input: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        locations: Option<Vec<ProseChangeLocationInspect>>,
         continuation: OptionalContinuationInspect,
         authoritative: bool,
         opened_proposal: OptionalOpenedProposalInspect,
@@ -622,6 +703,28 @@ pub struct AgentRunUsageInspect {
     pub kind: String,
 }
 
+/// Settings evidence from the exact revision captured by this Run.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CapturedMemorySettingsInspect {
+    Available {
+        memory_settings_revision: String,
+        use_enabled: bool,
+        contribution_enabled: bool,
+    },
+    Unavailable,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct AgentRunSteeringInspect {
+    pub steering_input_id: String,
+    pub input_position: String,
+    pub author_message: String,
+    pub input_snapshot_id: Option<String>,
+    pub model_attempt_id: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct GetAgentRunResponse {
@@ -631,6 +734,8 @@ pub struct GetAgentRunResponse {
     pub project_agent_id: String,
     pub conversation_id: String,
     pub memory_settings_revision: String,
+    pub captured_memory_settings: CapturedMemorySettingsInspect,
+    pub steering_inputs: Vec<AgentRunSteeringInspect>,
     pub run_id: String,
     pub status: AgentRunStatus,
     pub context: AgentRunContextInspect,

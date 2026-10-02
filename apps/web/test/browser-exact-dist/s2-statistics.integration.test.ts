@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -137,6 +138,7 @@ it("rebuilds Chapter and manuscript statistics after edit, switch, and deletion"
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -147,10 +149,12 @@ it("rebuilds Chapter and manuscript statistics after edit, switch, and deletion"
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
   ).toBe(true);
   for (const name of ["Chapter A", "Chapter B"] as const) {
+    await beginInlineChapterCreation(frame.contentDocument);
     const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
       '#app form[data-create-chapter] input[name="chapter-title"]',
     );
@@ -178,7 +182,7 @@ it("rebuilds Chapter and manuscript statistics after edit, switch, and deletion"
     || chapterBId === null || chapterBId === undefined) {
     throw new Error("the Chapter identity is missing");
   }
-  root.querySelector<HTMLButtonElement>(`[data-make-current-chapter="${chapterAId}"]`)?.click();
+  expect(chapterButton(root, "Chapter A")?.getAttribute("aria-current")).toBe("true");
   await expect.poll(() => {
     const nextRoot = appRoot(frame);
     const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
@@ -200,6 +204,7 @@ it("rebuilds Chapter and manuscript statistics after edit, switch, and deletion"
   expect(afterA.getAttribute("data-statistics-counting-profile"))
     .toBe("storyos.statistics.unicode-16.0.0.v1");
 
+  await beginTreeAction(root, `li[data-chapter-id="${chapterBId}"]`, "[data-make-current-chapter]");
   root.querySelector<HTMLButtonElement>(`[data-make-current-chapter="${chapterBId}"]`)?.click();
   await expect.poll(() => {
     const nextRoot = appRoot(frame);
@@ -219,6 +224,8 @@ it("rebuilds Chapter and manuscript statistics after edit, switch, and deletion"
 
   const row = [...(frame.contentDocument?.querySelectorAll("li[data-chapter-id]") ?? [])]
     .find((item) => item.getAttribute("data-chapter-id") === chapterBId);
+  row?.querySelector<HTMLButtonElement>("[data-chapter-menu]")?.click();
+  await expect.poll(() => row?.querySelector("button[data-delete-chapter]")?.tagName).toBe("BUTTON");
   row?.querySelector<HTMLButtonElement>("button[data-delete-chapter]")?.click();
   await expect.poll(() =>
     row?.querySelector("button[data-confirm-delete-chapter]")?.tagName

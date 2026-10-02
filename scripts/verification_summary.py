@@ -39,6 +39,8 @@ def summary(value, page=1, selection='all'):
     for key in ('run_id', 'report'):
         if key in value:
             output[key] = short(value[key])
+    if 'supervision' in value:
+        output['supervision'] = value['supervision']
     output['changedInputs'] = [short(v) for v in value.get('changedInputs', [])[:PAGE_SIZE]]
     output['omittedChangedInputs'] = max(0, len(value.get('changedInputs', [])) - PAGE_SIZE)
     output['base'] = plan.get('base', value.get('base'))

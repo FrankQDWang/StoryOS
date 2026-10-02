@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -42,7 +43,10 @@ function volumeRow(frame: HTMLIFrameElement, title: string): Element | undefined
 }
 
 async function confirmDeleteVolume(frame: HTMLIFrameElement, title: string): Promise<void> {
+  await expect.poll(() => volumeRow(frame, title)?.querySelector("[data-create-chapter-menu]")?.tagName).toBe("BUTTON");
   const row = volumeRow(frame, title);
+  row?.querySelector<HTMLButtonElement>("[data-create-chapter-menu], [data-chapter-menu]")?.click();
+  await expect.poll(() => row?.querySelector("button[data-delete-volume], button[data-delete-chapter]")?.tagName).toBe("BUTTON");
   const start = row?.querySelector<HTMLButtonElement>("button[data-delete-volume]");
   if (start === undefined || start === null) {
     throw new Error(`the Delete Volume control is missing for ${title}`);
@@ -86,6 +90,7 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
     ["Volume A", "Volume A"],
     ["Volume B", "Volume A\nVolume B"],
   ] as const) {
+    await beginInlineVolumeCreation(frame.contentDocument);
     await expect.poll(() =>
       frame.contentDocument?.querySelector('#app form[data-create-volume] input[name="volume-title"]')
         ?.tagName
@@ -106,6 +111,7 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
     }).toBe(true);
   }
 
+  await beginInlineChapterCreation(frame.contentDocument, volumeRow(frame, "Volume B")?.getAttribute("data-volume-id") ?? undefined);
   const chapterTitle = volumeRow(frame, "Volume B")
     ?.querySelector<HTMLInputElement>('form[data-create-chapter] input[name="chapter-title"]');
   const chapterForm = chapterTitle?.form;
@@ -119,9 +125,6 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("project-ready");
 
-  await expect.poll(() =>
-    volumeRow(frame, "Volume B")?.querySelector("button[data-delete-volume]")?.tagName
-  ).toBe("BUTTON");
   await confirmDeleteVolume(frame, "Volume B");
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
@@ -129,9 +132,6 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
       && volumeTitles(root).join("\n") === "Volume A\nVolume B";
   }, { timeout: 15_000 }).toBe(true);
 
-  await expect.poll(() =>
-    volumeRow(frame, "Volume A")?.querySelector("button[data-delete-volume]")?.tagName
-  ).toBe("BUTTON");
   await confirmDeleteVolume(frame, "Volume A");
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");

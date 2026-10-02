@@ -125,23 +125,25 @@ pub use release1_accept_proposal::{
 };
 pub use release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
-    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
-    AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
-    CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH,
-    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ContextBlockReason,
-    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
-    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
-    ContinuationInputMappingInspect, ConversationSelection, CreateAgentRunEffect,
-    CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
-    DestinationIo, EvidenceAvailability, GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH,
-    GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest,
-    GetAgentRunResponse, HostControlInspect, InstructionBinding, OptionalActiveCompactionInspect,
-    OptionalCompactionInstallInspect, OptionalContinuationInspect, OptionalDecisionInspect,
-    OptionalManifestRef, OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
+    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunSteeringInspect,
+    AgentRunStreamItemInspect, AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget,
+    AttemptEvidence, AuthorMessage, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD,
+    CREATE_AGENT_RUN_PATH, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    CapturedMemorySettingsInspect, ContextBlockReason, ContextProjectionInspect, ContextPurpose,
+    ContextRejectionInspect, ContextRejectionReason, ContextSourceClass, ContextSourceInspect,
+    ContextSufficiency, ContinuationAdmissionInspect, ContinuationInputMappingInspect,
+    ConversationSelection, CreateAgentRunEffect, CreateAgentRunInput, CreateAgentRunRequest,
+    CreateAgentRunResponse, CurrentAvailabilityInspect, DestinationIo, EvidenceAvailability,
+    GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
+    GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect,
+    InstructionBinding, OptionalActiveCompactionInspect, OptionalCompactionInstallInspect,
+    OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
+    OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
-    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, ProjectionMode,
-    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
-    UnknownCreateSuccessorDisposition,
+    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
+    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
+    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
+    SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,
@@ -152,6 +154,9 @@ pub use release1_agent_run_control::{
     PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID, PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
     PauseAgentRunConflictReason, PauseAgentRunEffect, PauseAgentRunInput,
     PauseAgentRunNoEffectReason, PauseAgentRunRequest, PauseAgentRunResponse,
+    STEER_AGENT_RUN_DIGEST_PROFILE, STEER_AGENT_RUN_PATH, STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
+    STEER_AGENT_RUN_RESPONSE_SCHEMA_ID, SteerAgentRunEffect, SteerAgentRunInput,
+    SteerAgentRunRequest, SteerAgentRunResponse,
 };
 pub use release1_archive_project::{
     ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,
@@ -180,7 +185,7 @@ pub use release1_author_edit_outcome::{
 pub use release1_create_chapter::{
     CREATE_CHAPTER_DIGEST_PROFILE, CREATE_CHAPTER_METHOD, CREATE_CHAPTER_PATH,
     CREATE_CHAPTER_REQUEST_SCHEMA_ID, CREATE_CHAPTER_RESPONSE_SCHEMA_ID,
-    CreateChapterConflictReason, CreateChapterEffect, CreateChapterInput,
+    CreateChapterConflictReason, CreateChapterEffect, CreateChapterInput, CreateChapterPlacement,
     CreateChapterRefusalReason, CreateChapterRequest, CreateChapterResponse,
 };
 pub use release1_create_project::{

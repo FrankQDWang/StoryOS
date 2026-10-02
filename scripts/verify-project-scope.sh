@@ -377,9 +377,11 @@ cleanup() {
   if [ -n "$s1_server_log" ]; then
     rm -f "$s1_server_log"
   fi
-  docker rm -f "$container" "$oracle_container" "$activation_container" >/dev/null 2>&1 || true
+  docker rm -fv "$container" "$oracle_container" "$activation_container" >/dev/null 2>&1 || true
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 cleanup
 
 echo "Running catalogued SQL apply and faulted rollback without Server or Worker"
@@ -570,6 +572,7 @@ reset_command_challenge_rate_windows "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
 s1_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
 stage1_user_id="018f0000-0000-7001-8000-000000000001"
+STORYOS_WORKER=0 \
 STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
 STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
 STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$stage1_user_id\"}" \

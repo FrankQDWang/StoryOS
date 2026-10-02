@@ -119,7 +119,7 @@ pub(crate) async fn reconcile_fenced_original_result(
                JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
-                AND attempt.attempt_role = 'decision'
+                AND attempt.attempt_role = 'decision' AND attempt.decision_position = 0
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
@@ -177,7 +177,7 @@ pub(crate) async fn load_original_result_retrieval(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'decision'",
+                AND attempt_role = 'decision' AND decision_position = 0",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -425,7 +425,7 @@ async fn admit_retrieval(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND requirement_role = 'primary'",
+                AND requirement_role = 'primary' AND decision_position = 0",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -454,7 +454,7 @@ async fn admit_retrieval(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND manifest_role = 'decision'",
+                AND manifest_role = 'decision' AND decision_position = 0",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -589,7 +589,7 @@ async fn write_settled_decision(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'decision'
+                AND attempt_role = 'decision' AND decision_position = 0
                 AND decision_id IS NULL",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
@@ -623,7 +623,7 @@ async fn write_unsettled_payload(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND model_attempt_id = $3::text::uuid
-                AND attempt_role = 'decision'
+                AND attempt_role = 'decision' AND decision_position = 0
                 AND dispatch_state = 'uncertain'
                 AND decision_id IS NULL",
             &[

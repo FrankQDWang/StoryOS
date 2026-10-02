@@ -1,3 +1,5 @@
+import { listProjects } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { archiveOwnedProject } from "../../src/archive-project.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -42,7 +44,7 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-it("the author archives one exact Project and the library fails closed on open and write", async () => {
+it("the library fails closed on open and write for an archived Project", async () => {
   const created = await loadApplication("StoryOS exact-dist create for archive");
   await expect.poll(() =>
     created.contentDocument?.querySelector('#app input[name="title"]')?.tagName
@@ -57,20 +59,12 @@ it("the author archives one exact Project and the library fails closed on open a
   await expect.poll(() =>
     created.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
-  await expect.poll(() => {
-    const submit = created.contentDocument?.querySelector<HTMLButtonElement>(
-      '#app form[data-archive] button[type="submit"]',
-    );
-    return submit !== null && submit !== undefined && !submit.disabled;
-  }).toBe(true);
-  const archiveForm = created.contentDocument?.querySelector<HTMLFormElement>("#app form[data-archive]");
-  if (archiveForm === null || archiveForm === undefined) {
-    throw new Error("the archive form is missing");
-  }
-  archiveForm.requestSubmit();
-  await expect.poll(() =>
-    created.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("protected-ready");
+  const childWindow = created.contentWindow! as Window & typeof globalThis;
+  const projectId = created.contentDocument?.querySelector("[data-project-id]")?.getAttribute("data-project-id");
+  const projects = await listProjects({ baseUrl: location.origin, fetchImpl: childWindow.fetch.bind(childWindow) });
+  const project = projects.projects.find((item) => item.project_scope.project_id === projectId)!;
+  await archiveOwnedProject({ baseUrl: location.origin, fetchImpl: childWindow.fetch.bind(childWindow),
+    cryptoImpl: childWindow.crypto, projectId: project.project_scope.project_id, expectedProjectRevision: project.revision });
   await destroyApplicationFrame(created);
 
   const frame = await loadApplication("StoryOS exact-dist archived library");
@@ -98,5 +92,5 @@ it("the author archives one exact Project and the library fails closed on open a
   const archivedItem = archivedButton.closest("li");
   expect(archivedItem?.querySelector("form[data-rename]")).toBeNull();
   expect(archivedItem?.querySelector("form[data-archive]")).toBeNull();
-  expect(root.querySelector("textarea")).toBeNull();
+  expect(root.querySelector(".editor-panel textarea")).toBeNull();
 });

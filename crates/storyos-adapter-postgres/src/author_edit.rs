@@ -608,7 +608,14 @@ async fn classify_author_edit(
     )
     .await
     .map_err(author_edit_database_error)?;
-    let mut current_target_ownership = VersionedTargetOwnership::Chapter;
+    let mut current_target_ownership = super::author_edit_inline::load_inline_target_ownership(
+        client,
+        command,
+        loaded.context.as_ref(),
+        current_revision_id,
+    )
+    .await?
+    .unwrap_or(VersionedTargetOwnership::Chapter);
     if command.retry_source.is_some()
         && let [unit] = command.author_edit_units.as_slice()
         && let [

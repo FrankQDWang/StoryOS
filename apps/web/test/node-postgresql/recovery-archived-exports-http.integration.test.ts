@@ -32,7 +32,7 @@ import {
   sessionFetch,
   startStoryOSServer,
   stopStoryOSServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 
@@ -50,7 +50,7 @@ async function addProse(command: { baseUrl: string; projectId: string; fetchImpl
   const { baseUrl, projectId, fetchImpl } = command;
   const challenged = async (method: string, route_template: string, command_schema: string,
     canonical_command_digest: Awaited<ReturnType<typeof digestCreateVolume>>, idempotency_key: string) => {
-    const result = await withChallengeRetry(() => createProjectCommandChallenge({
+    const result = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
       baseUrl, projectId, fetchImpl,
       request: { method, route_template, command_schema, canonical_command_digest, idempotency_key },
     }));

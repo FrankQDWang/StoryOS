@@ -1,3 +1,4 @@
+import { decisionMembers, decisionReference } from "./acceptance-journal.ts";
 import { acceptProposal, createProjectCommandChallenge, digestAcceptProposal, getProposal, StoryOSProtocolError } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, AcceptProposalResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -42,6 +43,7 @@ export async function retryPendingDisplayedAcceptance(options: {
       const flight = flights[0]!;
       return acceptDisplayedBlockProposalLocked({ ...options,
         operationId: flight.author_visible_decision_ref.operation_id,
+    operationIds: decisionMembers(flight.author_visible_decision_ref),
         proposalRevisionId: flight.request.accept_proposal_input.proposal_revision_id,
         validationReceiptId: flight.request.accept_proposal_input.validation_receipt_id,
         authoritativeRevisionId: flight.request.accept_proposal_input.expected_authoritative_revision_id,
@@ -56,6 +58,7 @@ export async function acceptDisplayedBlockProposal(options: {
   workspace: EditorReadyState;
   proposalId: string;
   operationId: string;
+  operationIds?: readonly string[] | undefined;
   proposalRevisionId: string;
   validationReceiptId: string;
   authoritativeRevisionId: string;
@@ -72,8 +75,9 @@ async function acceptDisplayedBlockProposalLocked(
   options: Parameters<typeof acceptDisplayedBlockProposal>[0],
 ): Promise<AcceptProposalResponse> {
   const workspace = options.workspace;
+  const operationIds = [...(options.operationIds ?? [options.operationId])].sort();
   const projectId = workspace.partition.project_scope.project_id;
-  const key = `acceptance:${workspace.partition.journal_partition_id}:${options.proposalId}:${options.proposalRevisionId}:${options.operationId}`;
+  const key = `acceptance:${workspace.partition.journal_partition_id}:${options.proposalId}:${options.proposalRevisionId}:${operationIds.join(",")}`;
   let flight = await readFlight(workspace.database, key);
   if (flight !== undefined && flight.command_kind !== "acceptProposal") {
     throw new Error("A prior Acceptance decision is unresolved. Reload and inspect its result.");
@@ -84,7 +88,7 @@ async function acceptDisplayedBlockProposalLocked(
       const decision = record.author_visible_decision_ref as AcceptanceFlight["author_visible_decision_ref"];
       return decision?.proposal_id === options.proposalId
         && decision.revision_id === options.proposalRevisionId
-        && decision.operation_id === options.operationId;
+        && JSON.stringify(decisionMembers(decision)) === JSON.stringify(operationIds);
     });
     if (prior !== undefined) {
       const priorGroup = journal.groups.find((group) =>
@@ -113,7 +117,7 @@ async function acceptDisplayedBlockProposalLocked(
       accept_proposal_input: {
         proposal_revision_id: options.proposalRevisionId,
         validation_receipt_id: options.validationReceiptId,
-        selected_operation_ids: [options.operationId],
+        selected_operation_ids: operationIds,
         expected_authoritative_revision_id: options.authoritativeRevisionId,
         editor_session_id: workspace.partition.editor_session_id,
         client_contract_revision:
@@ -132,11 +136,7 @@ async function acceptDisplayedBlockProposalLocked(
       editor_session_id: workspace.partition.editor_session_id,
       writer_generation: workspace.partition.writer_generation,
       command_kind: "acceptProposal",
-      author_visible_decision_ref: {
-        proposal_id: options.proposalId,
-        operation_id: options.operationId,
-        revision_id: options.proposalRevisionId,
-      },
+      author_visible_decision_ref: decisionReference(options.proposalId, options.proposalRevisionId, operationIds),
       frozen_request_digest: await digestAcceptProposal(request, options.cryptoImpl),
       settlement: "frozen",
       proposalId: options.proposalId,
@@ -169,12 +169,11 @@ async function acceptDisplayedBlockProposalLocked(
     || flight.request.command_schema !== "storyos.command.accept-proposal.request.v1"
     || input?.proposal_revision_id !== options.proposalRevisionId
     || input.validation_receipt_id !== options.validationReceiptId
-    || input.selected_operation_ids.length !== 1
-    || input.selected_operation_ids[0] !== options.operationId
+    || JSON.stringify(input.selected_operation_ids) !== JSON.stringify(operationIds)
     || input.expected_authoritative_revision_id !== options.authoritativeRevisionId
     || input.editor_session_id !== workspace.partition.editor_session_id
     || flight.author_visible_decision_ref.proposal_id !== options.proposalId
-    || flight.author_visible_decision_ref.operation_id !== options.operationId
+    || JSON.stringify(decisionMembers(flight.author_visible_decision_ref)) !== JSON.stringify(operationIds)
     || flight.author_visible_decision_ref.revision_id !== options.proposalRevisionId
     || JSON.stringify(flight.frozen_request_digest)
       !== JSON.stringify(await digestAcceptProposal(flight.request, options.cryptoImpl))) {

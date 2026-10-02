@@ -1,3 +1,4 @@
+import { retainLocalRecovery, readLocalRecovery } from "../../src/local-edit-recovery.ts";
 import { expect, it } from "vitest";
 
 import type {
@@ -51,6 +52,7 @@ type OutcomeMode =
   | "malformed"
   | "mismatch"
   | "no_effect"
+  | "requires_reconfirmation"
   | "rejected"
   | "unavailable";
 
@@ -187,7 +189,20 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
         effect: { kind: "no_effect", reason: "content_unchanged" },
       };
       let response: GetApplyAuthorEditOutcomeResponse;
-      if (outcomeMode === "rejected") {
+      if (outcomeMode === "requires_reconfirmation") {
+        response = {
+          schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+          correlation_id: "018f0000-0000-7001-8000-000000000082",
+          project_scope: scope,
+          outcome: {
+            outcome_kind: "requires_reconfirmation",
+            command_id: "018f0000-0000-7001-8000-000000000031",
+            author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
+            reconfirmation_reason: "direct_edit_intent_unrecoverable",
+            recovery_draft_ref: null,
+          },
+        };
+      } else if (outcomeMode === "rejected") {
         response = {
           schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
           correlation_id: "018f0000-0000-7001-8000-000000000082",
@@ -347,6 +362,55 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
 
   await deleteJournal(scenario.journalName);
   try {
+    outcomeMode = "requires_reconfirmation";
+    let reconfirmationWorkspace = await openReady();
+    await persistPending(reconfirmationWorkspace);
+    const beforeReconfirmation = await snapshot(reconfirmationWorkspace);
+    const projection = await submitOnePendingAuthorEdit({
+      workspace: reconfirmationWorkspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    });
+    const closedSnapshot = await snapshot(reconfirmationWorkspace);
+    assertGroup(closedSnapshot, {
+      kind: "outcome_query_requires_reconfirmation",
+      command_id: "018f0000-0000-7001-8000-000000000031",
+      author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
+      reconfirmation_reason: "direct_edit_intent_unrecoverable",
+      recovery_draft_ref: null,
+    });
+    expect(closedSnapshot.records).toEqual(beforeReconfirmation.records);
+    expect(projection).toMatchObject({ body: "Base!?", unsettled_intent_count: 1 });
+    reconfirmationWorkspace.database.close();
+    reconfirmationWorkspace = await openReady();
+    const reopenedProjection = await rebuildPendingProjection(reconfirmationWorkspace);
+    expect(await snapshot(reconfirmationWorkspace)).toEqual(closedSnapshot);
+    expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
+      .toEqual({ authorEdits: 1, outcomes: 1 });
+    expect.soft(projection.save_state).toBe("needs_attention");
+    expect.soft(reopenedProjection).toMatchObject({
+      body: "Base!?", save_state: "needs_attention", unsettled_intent_count: 1,
+    });
+    const originalGroup = requireGroup(closedSnapshot);
+    await retainLocalRecovery(reconfirmationWorkspace, originalGroup.journal_submission_group_id);
+    expect(await rebuildPendingProjection(reconfirmationWorkspace)).toMatchObject({
+      body: "Base", save_state: "saved", unsettled_intent_count: 0,
+    });
+    const retained = await readLocalRecovery(reconfirmationWorkspace);
+    expect(retained).toHaveLength(1);
+    expect(retained[0]).toMatchObject({ text: "Base!?", disposition: "retained_for_manual_reentry" });
+    expect(requireGroup(await snapshot(reconfirmationWorkspace))).toEqual(originalGroup);
+    await persistReplaceSelection(reconfirmationWorkspace, {
+      from: 4, to: 4, text: "+", resultingBody: "Base+",
+    });
+    reconfirmationWorkspace.database.close();
+    reconfirmationWorkspace = await openReady();
+    expect(await rebuildPendingProjection(reconfirmationWorkspace)).toMatchObject({
+      body: "Base+", save_state: "saving", unsettled_intent_count: 1,
+    });
+    expect(await readLocalRecovery(reconfirmationWorkspace)).toEqual(retained);
+    expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
+      .toEqual({ authorEdits: 1, outcomes: 1 });
+    await closeScenario(reconfirmationWorkspace);
+
     outcomeMode = "committed";
     counts.authorEdits = 0;
     counts.outcomes = 0;
@@ -468,6 +532,10 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
       strongest: { kind: "challenge_issued", expires_at: EXPIRES },
     });
     await persistBlocked(workspace);
+    const unknownSnapshot = await snapshot(workspace);
+    await expect(retainLocalRecovery(workspace, requireGroup(unknownSnapshot).journal_submission_group_id))
+      .rejects.toThrow(/Only a closed Author Edit/);
+    expect(await snapshot(workspace)).toEqual(unknownSnapshot);
     await submitOnePendingAuthorEdit({
       workspace,
       baseUrl: location.origin,

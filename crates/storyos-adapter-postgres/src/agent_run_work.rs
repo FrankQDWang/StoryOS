@@ -5,7 +5,7 @@ use storyos_application::{
 use storyos_core::{
     ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
     HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, StreamItemRole, StreamItemState,
-    host_fake_wire_digest, plan_fake_model_decision, stream_batch_plan,
+    host_fake_wire_digest, plan_resolved_fake_decision, stream_batch_plan,
 };
 use uuid::Uuid;
 
@@ -31,12 +31,24 @@ impl AgentRunWorkStore for PostgresProjectReader {
         &self,
         claim: &ClaimedAgentRun,
     ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
+        let lease_seconds = i64::try_from(self.readable_export_lease_ttl.as_secs())
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
         loop {
             let transaction = self
                 .begin_serializable_project_command_transaction(&claim.project_scope)
                 .await
                 .map_err(complete_challenge_error)?;
-            let phase = settle_one_phase(&transaction.client, claim).await;
+            let phase = async {
+                let phase = settle_one_phase(&transaction.client, claim, lease_seconds).await?;
+                if let WorkPhase::Done(CompleteAgentRun::Settled) = phase
+                    && crate::agent_run_steering::advance(&transaction.client, claim, lease_seconds)
+                        .await?
+                {
+                    return Ok(WorkPhase::Hold("steering"));
+                }
+                Ok(phase)
+            }
+            .await;
             match phase {
                 Ok(WorkPhase::Done(result)) => {
                     transaction
@@ -118,25 +130,26 @@ async fn claim_agent_run_row(
 async fn settle_one_phase(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    lease_seconds: i64,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let Some(run) = client
         .query_opt(
-            "SELECT run.status, run.author_message, run.chapter_id::text,
+            "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'),run.author_message), run.chapter_id::text,
                     run.conversation_id::text, run.settlement,
                     assembly.sufficiency, assembly.context_assembly_manifest_id::text,
                     assembly.destination_context_manifest_id::text,
                     attempt.model_attempt_id::text, attempt.decision_id::text,
                     attempt.continuation_binding_id::text, attempt.dispatch_state,
-                    attempt.payload::text
+                    attempt.payload::text, run.active_decision_position::text, assembly.payload::text
                FROM storyos.agent_runs AS run
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
-                AND assembly.manifest_role = 'decision'
+                AND assembly.manifest_role = 'decision' AND assembly.decision_position=run.active_decision_position
                LEFT JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
-                AND attempt.attempt_role = 'decision'
+                AND attempt.attempt_role = 'decision' AND attempt.decision_position=run.active_decision_position
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid
@@ -168,12 +181,28 @@ async fn settle_one_phase(
     let assembly_manifest_id: String = run.get(6);
     let destination_manifest: Option<String> = run.get(7);
     let attempt_id: Option<String> = run.get(8);
+    if attempt_id.is_none()
+        && run.get::<_, String>(13) == "0"
+        && crate::agent_run_steering::advance(client, claim, lease_seconds).await?
+    {
+        return Ok(WorkPhase::Hold("steering"));
+    }
     let decision_id: Option<String> = run.get(9);
     let continuation_id: Option<String> = run.get(10);
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let plan = plan_fake_model_decision(&author_message);
+    let record: serde_json::Value = serde_json::from_str(&run.get::<_, String>(14))
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let resolution = storyos_core::decode_assembly_record(&record)
+        .ok_or_else(|| {
+            CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+                "Invalid retained Context",
+            )))
+        })?
+        .operation_requirement
+        .ordinary_resolution;
+    let plan = plan_resolved_fake_decision(&author_message, resolution);
     let blocked = sufficiency != "complete"
         || !matches!(
             assistance.as_ref().map(|record| record.availability),
@@ -240,6 +269,8 @@ async fn settle_one_phase(
                 )))
             })?,
             rebuild.as_ref(),
+            &run.get::<_, String>(13),
+            &record,
         )
         .await?;
         if let Some(dispatch) = rebuild.as_ref() {
@@ -314,11 +345,13 @@ async fn settle_one_phase(
             &outcome,
             /*include_decision*/ !items_empty,
             crate::agent_run_continuation::parse_wire(&payload).as_ref(),
+            &payload,
         )
         .await?;
         return Ok(next);
     }
-    if stream_batch_plan(&author_message).is_some()
+    if payload.pointer("/decision/locations").is_none()
+        && stream_batch_plan(&author_message).is_some()
         && let Some(decision) = decision_id.as_deref()
     {
         let (_proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
@@ -391,8 +424,22 @@ async fn persist_stream_and_decision(
     outcome: &FakeAttemptOutcome,
     include_decision: bool,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
+    retained_payload: &serde_json::Value,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let (decision_id, status, hold) = match (include_decision, outcome) {
+    let crate::prose_change_decision::PreparedProseChange {
+        outcome,
+        items,
+        output: producer_output,
+    } = crate::prose_change_decision::prepare(
+        client,
+        claim,
+        chapter_id,
+        author_message,
+        items,
+        outcome,
+    )
+    .await?;
+    let (decision_id, status, hold) = match (include_decision, &outcome) {
         (false, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
         (false, FakeAttemptOutcome::Decision { .. }) => (None, "claimed", Some("stream")),
         (true, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
@@ -415,16 +462,32 @@ async fn persist_stream_and_decision(
         }
     };
     let mut stream_hold = false;
-    let opened_proposal = match (decision_id.as_deref(), outcome) {
+    let mut locations = None;
+    let opened_proposal = match (decision_id.as_deref(), &outcome) {
         (
             Some(decision_id),
             FakeAttemptOutcome::Decision {
-                kind: FakeDecisionKind::ProseChange { text, .. },
+                kind:
+                    FakeDecisionKind::ProseChange {
+                        text,
+                        locations: produced,
+                        ..
+                    },
                 selected: true,
                 ..
             },
         ) => {
-            if author_message.starts_with("Revise this phrase:") {
+            if let Some(record) = crate::candidate_revision_target::admitted(client, claim).await? {
+                let revised = crate::revise_candidate_generation::apply(
+                    client,
+                    claim,
+                    &record,
+                    produced.as_deref().unwrap_or_default(),
+                )
+                .await?;
+                locations = revised.locations;
+                revised.proposal_id
+            } else if produced.is_none() && author_message.starts_with("Revise this phrase:") {
                 crate::open_inline_proposal::open_selected_inline_change(
                     client,
                     claim,
@@ -433,7 +496,7 @@ async fn persist_stream_and_decision(
                     text,
                 )
                 .await?
-            } else if stream_batch_plan(author_message).is_some() {
+            } else if produced.is_none() && stream_batch_plan(author_message).is_some() {
                 let (proposal_id, work) =
                     crate::stream_proposal_generation::apply_streamed_proposal(
                         client,
@@ -446,30 +509,36 @@ async fn persist_stream_and_decision(
                 stream_hold = matches!(work, crate::stream_proposal_generation::StreamWork::Hold);
                 proposal_id
             } else {
-                crate::open_block_proposal::open_selected_prose_change(
+                let opened = crate::open_block_proposal::open_selected_prose_change(
                     client,
                     claim,
                     chapter_id,
                     decision_id,
                     text,
                     author_message,
+                    produced.as_deref(),
                 )
-                .await?
+                .await?;
+                locations = opened.locations;
+                opened.proposal_id
             }
         }
         _ => None,
     };
-    let payload = encode_payload(
+    let mut payload = encode_payload(
         author_message,
         chapter_id,
         assembly_manifest_id,
         attempt_id,
-        items,
-        outcome,
+        &items,
+        &outcome,
+        producer_output.as_deref(),
         decision_id.as_deref(),
         opened_proposal.as_deref(),
+        locations.as_deref(),
         continuation,
     );
+    crate::passage_collection::retain_wire(retained_payload, &mut payload);
     client
         .execute(
             "UPDATE storyos.model_attempts
@@ -479,7 +548,7 @@ async fn persist_stream_and_decision(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'decision'",
+                AND attempt_role = 'decision' AND model_attempt_id=$7::text::uuid",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -491,6 +560,7 @@ async fn persist_stream_and_decision(
                     "settled"
                 },
                 &payload.to_string(),
+                &attempt_id,
             ],
         )
         .await
@@ -520,8 +590,10 @@ fn encode_payload(
     attempt_id: &str,
     items: &[storyos_core::NativeStreamItem],
     outcome: &FakeAttemptOutcome,
+    producer_output: Option<&[storyos_core::ProseChangeCandidate]>,
     decision_id: Option<&str>,
     opened_proposal: Option<&str>,
+    locations: Option<&[storyos_contracts::ProseChangeLocationInspect]>,
     continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> serde_json::Value {
     let encoded_items: Vec<serde_json::Value> = items
@@ -573,6 +645,7 @@ fn encode_payload(
             FakeDecisionKind::ProseChange {
                 text,
                 producer_input,
+                ..
             } => serde_json::json!({
                 "kind": "prose_change",
                 "decision_id": decision_id,
@@ -601,7 +674,7 @@ fn encode_payload(
         }),
         _ => None,
     };
-    serde_json::json!({
+    let mut payload = serde_json::json!({
         "execution_profile": {
             "profile_revision": HOST_FAKE_EXECUTION_PROFILE,
             "mapping_revision": HOST_FAKE_MAPPING_REVISION,
@@ -624,7 +697,9 @@ fn encode_payload(
             assembly_manifest_id,
             continuation.and_then(|wire| wire.known_prior_binding_id.as_deref()),
         )
-    })
+    });
+    crate::prose_change_decision::encode(&mut payload, producer_output, locations);
+    payload
 }
 
 pub(crate) fn evidence_values(

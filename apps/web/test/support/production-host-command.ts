@@ -125,7 +125,7 @@ async function replaceAndSave(page: Page, text: string): Promise<void> {
   assert.equal(await manuscriptBody(page), text);
 }
 
-export async function verifyProductionHostJourney(context: BrowserContext): Promise<void> {
+export async function verifyProductionHostJourney(sharedContext: BrowserContext): Promise<void> {
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "run the production journey through the Project Scope verification entry");
   const server = new URL(configured);
@@ -133,6 +133,9 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     && server.port && server.pathname === "/" && !server.search && !server.hash
     && !server.username && !server.password, "the production fixture needs an exact loopback origin");
   const origin = server.origin;
+  const browser = sharedContext.browser();
+  assert.ok(browser, "the production cold-start journey needs an owned browser context");
+  const context = await browser.newContext();
   const pages: Page[] = [];
   let releaseWriterEdits = (): void => {};
   try {
@@ -164,10 +167,14 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator('input[name="title"]').fill("Production host acceptance");
     await writer.locator('input[name="title"]').press("Enter");
     await writer.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
-    const projectId = await writer.locator("form[data-rename]").getAttribute("data-rename");
+    const projectId = await writer.locator("[data-project-id]").getAttribute("data-project-id");
     assert.ok(projectId !== null && UUID.test(projectId));
+    await writer.locator("[data-add-chapter]").click();
+    await writer.locator("[data-create-volume-action]").click();
     await writer.locator('input[name="volume-title"]').fill("Production Volume");
     await writer.locator('input[name="volume-title"]').press("Enter");
+    await writer.locator("[data-add-chapter]").click();
+    await writer.locator('[data-chapter-placement="append"]').click();
     await writer.locator('input[name="chapter-title"]').fill("Production Chapter");
     await writer.locator('input[name="chapter-title"]').press("Enter");
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
@@ -176,12 +183,12 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const writerId = await sessionId(writer, projectId);
     await replaceAndSave(writer, "Saved through the production host.");
-    await writer.locator('[data-activity-replay-generation="1"]').waitFor();
+    await writer.locator('[data-activity-replay-generation="1"]').waitFor({ state: "attached" });
     await writer.reload();
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(writer), "Saved through the production host.");
     assert.equal(await sessionId(writer, projectId), writerId);
-    await writer.locator('[data-activity-replay-generation="1"]').waitFor();
+    await writer.locator('[data-activity-replay-generation="1"]').waitFor({ state: "attached" });
     await queryPostgres(`
       INSERT INTO storyos.replay_generations (owner_user_id, project_id, replay_generation)
       VALUES ('${USER}'::uuid, '${projectId}'::uuid, 2)
@@ -193,7 +200,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await replaceAndSave(writer, "Saved after replay generation two.");
     await writer.locator(
       '[data-activity-resync="applied"][data-activity-replay-generation="2"]',
-    ).waitFor();
+    ).waitFor({ state: "attached" });
     assert.equal(await manuscriptBody(writer), "Saved after replay generation two.");
 
     assert.equal((await observer.goto(projectUrl))?.status(), 200);
@@ -281,7 +288,6 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     assert.ok(requests.every((url) => !url.pathname.startsWith("/@vite/")));
   } finally {
     releaseWriterEdits();
-    await Promise.all(pages.map((page) => page.close()));
-    await context.clearCookies({ name: "storyos_session" });
+    await context.close();
   }
 }

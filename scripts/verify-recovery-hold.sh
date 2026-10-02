@@ -63,13 +63,15 @@ cleanup() {
   if [ -n "$drill_server_log" ]; then
     rm -f "$drill_server_log"
   fi
-  docker rm -f "$primary" "$hold" >/dev/null 2>&1 || true
+  docker rm -fv "$primary" "$hold" >/dev/null 2>&1 || true
   if [ "$created_volumes" = "1" ]; then
     docker volume rm "$archive_volume" "$backup_volume" "$hold_volume" >/dev/null 2>&1 || true
   fi
   docker network rm "$network" >/dev/null 2>&1 || true
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 cleanup
 
 docker network create "$network" >/dev/null
@@ -182,7 +184,7 @@ if [ "$recovery_drill" = "mixed" ]; then
   pnpm --dir apps/web exec vitest run --project node-postgresql \
     test/node-postgresql/edit-inline-proposal-http.integration.test.ts
   export STORYOS_DISCARD_RECOVERY_EXPECTED="$STORYOS_VERIFICATION_RUN/production-discard-recovery.json"
-  start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
+  STORYOS_WORKER=0 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
   STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
   STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
@@ -201,16 +203,14 @@ docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
   -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
 STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
 STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
-STORYOS_VITEST_FILE_ORDER=test/node-postgresql/accept-proposal-http.integration.test.ts:test/node-postgresql/acceptance-refusal-http.integration.test.ts: \
-  pnpm --dir apps/web exec vitest run --project node-postgresql \
-    test/node-postgresql/accept-proposal-http.integration.test.ts \
-    test/node-postgresql/acceptance-refusal-http.integration.test.ts
+  python3 scripts/verification.py step recovery-seed -- sh "$repository_root/scripts/seed-recovery-acceptance.sh"
 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
-# Fixture-only records three acceptProposal refusals. Mixed also records the production conflicted Proposal acceptance.
+# Both modes retain three single-Operation conditions and three partial-Acceptance histories.
+# Mixed also retains the production Conflict and cross-Chapter pending-Operation Conflict.
 if [ "$recovery_drill" = "mixed" ]; then
-  acceptance_condition_count=4
+  acceptance_condition_count=8
 else
-  acceptance_condition_count=3
+  acceptance_condition_count=6
 fi
 acceptance_before=$(node scripts/inspect-acceptance-conditions.mjs "$primary" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")
 stop_recovery_drill_server

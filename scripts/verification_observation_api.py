@@ -126,9 +126,14 @@ def query(connection, path, parameters):
         if section is None:
             if parameters:
                 raise ValueError('unsupported_parameter')
-            retained = connection.execute("SELECT payload FROM records WHERE kind='run' AND run=?", (run,)).fetchone()
+            retained = connection.execute("SELECT payload,fingerprint FROM records WHERE kind='run' AND run=?", (run,)).fetchone()
             payload = json.loads(retained[0])
+            timing = connection.execute('SELECT samples,baseline,state FROM timing_comparison WHERE run=?', (run,)).fetchone()
             return {'record': dict(root), 'reason': payload.get('reason'),
+                    'source_sha256': retained[1].split(':', 1)[-1],
+                    'timing': {**(dict(timing) if timing else {}),
+                        'reason': payload.get('comparison_unavailable') or
+                            ('insufficient-comparable-samples' if timing is None or timing['state'] == 'unknown' else None)},
                     'has_graph': connection.execute('SELECT 1 FROM run_graphs WHERE run_id=?', (run,)).fetchone() is not None,
                     'evidence': run + '/report.json'}
         if section in {'graph', 'cost'}:

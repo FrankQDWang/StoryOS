@@ -1,3 +1,5 @@
+import { beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation } from "../support/inline-chapter-creation.ts";
 import { expect, it } from "vitest";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -95,6 +97,7 @@ it("explains a historical Create Volume acknowledgement and does not retry it", 
       cryptoImpl: crypto,
     });
     mountStage1View(loaded.root, loaded);
+    await beginInlineVolumeCreation(loaded.root);
     await expect.poll(() =>
       loaded.root.querySelector<HTMLInputElement>('form[data-create-volume] input[name="volume-title"]')
         !== null
@@ -119,8 +122,11 @@ it("explains a historical Create Volume acknowledgement and does not retry it", 
   }
 });
 
-it("explains a historical Create Chapter acknowledgement and does not retry it", async () => {
+it("keeps the pending inline title when another creation is requested and explains the historical acknowledgement", async () => {
   const methods: string[] = [];
+  let release!: () => void, reached!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const submitted = new Promise<void>((resolve) => { reached = resolve; });
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     const method = init?.method ?? "GET";
@@ -134,10 +140,16 @@ it("explains a historical Create Chapter acknowledgement and does not retry it",
         title: "Volume A",
         order: "1",
         chapters: [],
+      }, {
+        volume_id: "018f0000-0000-7001-8000-000000002540",
+        title: "Volume B",
+        order: "2",
+        chapters: [],
       }]));
     }
     if (path === `/api/v1/projects/${PROJECT}/anti-forgery-challenges`) return jsonResponse(challenge());
     if (path === `/api/v1/projects/${PROJECT}/volumes/${VOLUME}/chapters` && method === "POST") {
+      reached(); await held;
       return historicalProblem("The original Create Chapter acknowledgement cannot be recovered.");
     }
     throw new Error(`unexpected request: ${method} ${path}`);
@@ -152,6 +164,7 @@ it("explains a historical Create Chapter acknowledgement and does not retry it",
       cryptoImpl: crypto,
     });
     mountStage1View(loaded.root, loaded);
+    await beginInlineChapterCreation(loaded.root, VOLUME);
     await expect.poll(() =>
       loaded.root.querySelector<HTMLInputElement>(`form[data-create-chapter="${VOLUME}"] input[name="chapter-title"]`)
         !== null
@@ -165,6 +178,12 @@ it("explains a historical Create Chapter acknowledgement and does not retry it",
     }
     input.value = "Chapter A";
     form.requestSubmit();
+    await submitted;
+    loaded.root.querySelector<HTMLButtonElement>("[data-add-chapter]")!.click();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect([input.isConnected, input.value, input.readOnly, input.form?.getAttribute("data-create-chapter")])
+      .toEqual([true, "Chapter A", true, VOLUME]);
+    release();
     await expect.poll(() =>
       loaded.root.querySelector("[data-create-chapter-error]")?.textContent
     ).toBe(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
@@ -177,6 +196,7 @@ it("explains a historical Create Chapter acknowledgement and does not retry it",
     ]);
     expect(methods.filter((entry) => entry.includes("anti-forgery-challenges"))).toHaveLength(1);
   } finally {
+    release();
     document.body.replaceChildren();
   }
 });

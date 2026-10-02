@@ -20,7 +20,7 @@ import {
   requireStoryOSProtocolError,
   runStoryOSWorker,
   sessionFetch,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -108,7 +108,7 @@ async function challenged<Result>(options: {
   key: string;
   send: (nonce: string) => Promise<Result>;
 }): Promise<Result> {
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(options.projectId, () => createProjectCommandChallenge({
     baseUrl: options.baseUrl,
     projectId: options.projectId,
     fetchImpl: options.fetchImpl,

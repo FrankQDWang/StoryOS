@@ -90,9 +90,18 @@ export async function verifyConflictedProposalRecovery(input: {
   assert.equal(await candidate.getAttribute("data-proposal-validity"), "valid");
   assert.equal(await candidate.getAttribute("data-proposal-condition"), "absent");
   assert.equal(await candidate.getAttribute("data-proposal-session"), "eligible");
-  await candidate.locator("button[data-proposal-copy]").click();
-  await page.locator(`[data-proposal-decision="${proposalId}"]`).getByText("已复制候选文字。").waitFor();
+  await candidate.locator(".block-proposal-text").evaluate((element) => {
+    element.closest<HTMLElement>("[data-manuscript-editor]")?.focus();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
+  await page.keyboard.press("ControlOrMeta+C");
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), proposal.candidate_text);
+  assert.equal(await prose(), originalProse);
+  assert.deepEqual((await getProposal(read)).proposal, proposal);
 
   await queryStoryOSPostgres(`UPDATE storyos.proposal_revisions SET validation = 'invalid'
     WHERE project_id = '${projectId}'::uuid AND revision_id = '${proposal.revision_id}'::uuid`);

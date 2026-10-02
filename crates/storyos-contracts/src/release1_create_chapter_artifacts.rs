@@ -5,7 +5,8 @@ use ts_rs::{Config, TS};
 use crate::release1_create_chapter::{
     CREATE_CHAPTER, CREATE_CHAPTER_DIGEST_PROFILE, CREATE_CHAPTER_REQUEST_SCHEMA_ID,
     CREATE_CHAPTER_RESPONSE_SCHEMA_ID, CreateChapterConflictReason, CreateChapterEffect,
-    CreateChapterInput, CreateChapterRefusalReason, CreateChapterRequest, CreateChapterResponse,
+    CreateChapterInput, CreateChapterPlacement, CreateChapterRefusalReason, CreateChapterRequest,
+    CreateChapterResponse,
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -29,7 +30,15 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
     let input = &mut schema["$defs"]["CreateChapterInput"]["properties"];
     input["correlation_id"]["format"] = json!("uuid");
     input["expected_tree_revision"] = json!({"type": "string", "pattern": U64_WIRE});
-    let title = &mut input["title"];
+    input["placement"] = json!({"$ref": "#/$defs/CreateChapterPlacement"});
+    for variant in schema["$defs"]["CreateChapterPlacement"]["oneOf"]
+        .as_array_mut()
+        .into_iter()
+        .flatten()
+    {
+        variant["properties"]["chapter_id"]["format"] = json!("uuid");
+    }
+    let title = &mut schema["$defs"]["CreateChapterInput"]["properties"]["title"];
     title["minLength"] = json!(1);
     title["x-storyos-max-utf8-bytes"] = json!(1024);
     json_bytes(&schema)
@@ -87,7 +96,8 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        CreateChapterPlacement::decl(&config),
         CreateChapterInput::decl(&config),
         CreateChapterRequest::decl(&config),
         CreateChapterConflictReason::decl(&config),

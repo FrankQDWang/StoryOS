@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -84,6 +85,8 @@ function currentChapterRow(frame: HTMLIFrameElement): Element | undefined {
 
 async function confirmCurrentDelete(frame: HTMLIFrameElement): Promise<void> {
   const row = currentChapterRow(frame);
+  row?.querySelector<HTMLButtonElement>("[data-create-chapter-menu], [data-chapter-menu]")?.click();
+  await expect.poll(() => row?.querySelector("button[data-delete-volume], button[data-delete-chapter]")?.tagName).toBe("BUTTON");
   const start = row?.querySelector<HTMLButtonElement>("button[data-delete-chapter]");
   if (start === undefined || start === null) {
     throw new Error("the Delete Chapter control is missing");
@@ -115,6 +118,7 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
 
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -125,6 +129,7 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter] input[name="chapter-title"]')
       ?.tagName
@@ -148,11 +153,13 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
     ["Chapter B", "Chapter A\nChapter B"],
     ["Chapter C", "Chapter A\nChapter B\nChapter C"],
   ] as const) {
+    await beginInlineChapterCreation(frame.contentDocument);
     await expect.poll(() =>
       frame.contentDocument?.querySelector(
         '#app form[data-create-chapter] input[name="chapter-title"]',
       )?.tagName
     ).toBe("INPUT");
+    await beginInlineChapterCreation(frame.contentDocument);
     const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
       '#app form[data-create-chapter] input[name="chapter-title"]',
     );

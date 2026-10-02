@@ -101,12 +101,14 @@ mod agent_run_continuation;
 mod agent_run_control;
 mod agent_run_expiry;
 mod agent_run_retrieval;
+mod agent_run_steering;
 mod agent_run_successor;
 mod agent_run_work;
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_admission_recovery;
+mod author_edit_inline;
 mod author_edit_outcome;
 mod author_edit_proposal;
 mod author_edit_replay;
@@ -134,6 +136,8 @@ mod manuscript_search;
 mod manuscript_tree;
 mod open_block_proposal;
 mod open_inline_proposal;
+mod ordinary_passage_targets;
+mod passage_collection;
 mod pinned_export_source;
 mod project_archive_build;
 mod project_archive_draft;
@@ -141,6 +145,8 @@ mod project_archive_draft_copies;
 mod project_export;
 mod project_export_work;
 mod proposal_generation_decision;
+mod prose_change_decision;
+mod prose_change_location_read;
 mod readable_export;
 mod readable_export_work;
 mod refused_edit_draft;
@@ -170,6 +176,7 @@ mod update_chapter;
 mod update_project;
 mod update_project_assistance;
 mod update_volume;
+mod validation_history;
 mod volume_storage_order;
 mod withdraw_proposal;
 
@@ -803,3 +810,6 @@ async fn set_scope(
 pub(crate) fn read_error(source: tokio_postgres::Error) -> ProjectReadError {
     ProjectReadError::unavailable(source)
 }
+
+mod candidate_revision_target;
+mod revise_candidate_generation;

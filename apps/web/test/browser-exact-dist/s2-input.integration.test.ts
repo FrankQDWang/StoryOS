@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import {
@@ -122,6 +123,7 @@ async function openChapterEditor(): Promise<{
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -132,9 +134,11 @@ async function openChapterEditor(): Promise<{
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
   ).toBe(true);
+  await beginInlineChapterCreation(frame.contentDocument);
   const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -147,7 +151,7 @@ async function openChapterEditor(): Promise<{
   chapterForm.requestSubmit();
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
-    const projectId = root?.querySelector("form[data-rename]")?.getAttribute("data-rename");
+    const projectId = root?.querySelector("[data-project-id]")?.getAttribute("data-project-id");
     const chapterId = root?.querySelector(
       'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
     )?.getAttribute("data-chapter-id");
@@ -159,7 +163,7 @@ async function openChapterEditor(): Promise<{
       && UUID.test(chapterId);
   }, { timeout: 10_000 }).toBe(true);
   const root = appRoot(frame);
-  const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
+  const projectId = root.querySelector("[data-project-id]")?.getAttribute("data-project-id");
   const chapterId = root.querySelector(
     'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
   )?.getAttribute("data-chapter-id");

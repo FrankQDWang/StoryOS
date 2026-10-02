@@ -26,6 +26,7 @@ import verification_status
 import verification_graph
 import verification_rust_cache
 import verification_web_overlap
+import verification_records
 
 
 def git(root, *arguments):
@@ -70,6 +71,10 @@ def inventory(root, revision=None):
     known = set(paths)
     if policy.get("version") != 1 or not policy.get("rules"):
         raise ValueError("Unsupported or empty verification policy")
+    budgets = policy.get("stage_budgets_seconds", {})
+    if not isinstance(budgets, dict) or any(not re.fullmatch(r"[a-z][a-z0-9-]*", name)
+            or type(seconds) is not int or not 1 <= seconds <= 7200 for name, seconds in budgets.items()):
+        raise ValueError("Invalid stage time budget")
     profiles = policy.get("file_profiles", {})
     if (not isinstance(profiles, dict) or set(profiles) - {"node-contract", "cargo"}
             or any(not isinstance(value, str) or not value for value in profiles.values())):
@@ -174,9 +179,13 @@ def write_json(path, value):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n")
     temporary.replace(path)
+    try:
+        verification_records.publish(path)
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"Observation publication failed: {error}", file=sys.stderr)
 
 
-def execute(command, environment, new_group, observation=None, stdout=None):
+def execute(command, environment, new_group, observation=None, stdout=None, timeout=None):
     interrupted = 0
     try:
         child = subprocess.Popen(command, env=environment, start_new_session=new_group, stdout=stdout)
@@ -198,11 +207,31 @@ def execute(command, environment, new_group, observation=None, stdout=None):
             except ProcessLookupError:
                 pass
 
+    deadline = time.monotonic() + timeout if timeout else None
     previous = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGINT, signal.SIGTERM)}
     try:
         while True:
             try:
-                code = child.wait(timeout=5)
+                remaining = deadline - time.monotonic() if deadline else 5
+                if remaining <= 0:
+                    if observation:
+                        observation({"budget_exceeded": True})
+                    print(f"Stage exceeded its {timeout}s budget; stopping and cleaning up", flush=True)
+                    if new_group:
+                        os.killpg(child.pid, signal.SIGTERM)
+                    else:
+                        child.terminate()
+                    try:
+                        child.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        if new_group:
+                            os.killpg(child.pid, signal.SIGKILL)
+                        else:
+                            child.kill()
+                        child.wait()
+                    code = 124
+                    break
+                code = child.wait(timeout=min(5, remaining))
                 break
             except subprocess.TimeoutExpired:
                 if observation:
@@ -258,7 +287,11 @@ def step(root, stage, command, *, node_id=None, stdout=None, node_only=False):
                           started_monotonic=time.monotonic())
         write_json(path, result)
     observation({"heartbeat_at": result["started_at"]})
-    code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_PARENT": identifier}, False, observation, stdout)
+    budgets = json.loads((root / "docs/agents/verification-policy.json").read_text()).get("stage_budgets_seconds", {})
+    timeout = budgets.get(stage)
+    result["budget_seconds"] = timeout
+    code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_PARENT": identifier},
+                                os.name == "posix", observation, stdout, timeout)
     result.update(ended_at=datetime.now(timezone.utc).isoformat(), ended_monotonic=time.monotonic(),
                   duration_seconds=time.monotonic() - result["started_monotonic"], exit_code=code,
                   status="interrupted" if interrupted else ("passed" if code == 0 else "failed"))
@@ -298,10 +331,19 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
 
     write_json(report_path, report)
     code, interrupted = 1, 0
+    print('Observation: ' + json.dumps(verification_records.supervision(report_path)), file=sys.stderr, flush=True)
     cache = None
     has_verification_file_workers = False
     try:
         report["source_start"] = source_identity(root)
+        rust_target = Path(os.environ.get("CARGO_TARGET_DIR", root / "target"))
+        report["build_inputs"] = {
+            "rust_debug": any((rust_target / "debug/.fingerprint").glob("*/*")),
+            "rust_release": any((root / "target/web-release/release/.fingerprint").glob("*/*")),
+            "web_dependencies": (root / "apps/web/node_modules").is_dir(),
+        }
+        present = list(report["build_inputs"].values())
+        report["build_state"] = "warm" if all(present) else ("cold" if not any(present) else "mixed")
         if plan:
             report["plan"] = plan
             if plan["source"] != report["source_start"]:
@@ -371,6 +413,11 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     allowed = {"cached"} if cache and cache.observation["status"] == "hit" else {"passed"}
     if report["status"] == "passed" and (not steps or any(item["status"] not in allowed for item in steps)):
         report["status"] = "incomplete"
+    if report["status"] == "passed" and report["profile"] == "complete" and "plan" in report:
+        try:
+            verification_candidate.validate_success(report)
+        except (ValueError, KeyError, TypeError) as error:
+            report.update(status="incomplete", error=str(error))
     if cache and report["status"] == "passed":
         try:
             cache_started = time.monotonic()
@@ -392,6 +439,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     if cache:
         cache.publish(report_path)
     print(f"Verification {report['status']}: {report['duration_seconds']:.2f}s; report: {report_path}", flush=True)
+    print('Observation: ' + json.dumps(verification_records.supervision(report_path)), file=sys.stderr, flush=True)
     if report["status"] == "passed":
         return 0
     return 128 + interrupted if interrupted else (code if code > 0 else 1)

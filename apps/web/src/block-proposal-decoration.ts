@@ -1,9 +1,12 @@
 import { Node as TiptapNode, type Editor } from "@tiptap/core";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 
+import { projectInlineCandidate, restoreInlineSource } from "./inline-proposal-decoration.ts";
 import { contiguousUtf16Replace } from "./manuscript-doc.ts";
 
 export type BlockProposalProjection = {
+  inlineProposal?: boolean;
+  inlineAnchor?: { from: number; to: number; sourceText: string };
   proposalId: string;
   operationId: string;
   revisionId: string;
@@ -12,6 +15,7 @@ export type BlockProposalProjection = {
   sourceDecisionId: string;
   text: string;
   eligible: boolean;
+  candidateEditable?: boolean;
   retryPending?: boolean;
   rejectEligible?: boolean;
   retryRejection?: boolean;
@@ -23,19 +27,23 @@ export type BlockProposalProjection = {
   sessionEligible?: boolean;
   expectedHeads: string[];
   localPending?: boolean;
+  pendingOperationIds?: string[];
+  focused?: boolean;
 };
 
-const ATTRIBUTES = [
+export const PROPOSAL_ATTRIBUTES = [
   "proposalId", "operationId", "revisionId", "blockId", "sourceRunId",
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
   "rejectEligible", "retryRejection", "replanEligible", "withdrawEligible",
   "copyEligible", "conditionKind", "validity", "sessionEligible",
+  "candidateEditable", "focused", "pendingOperationIds", "inlineFrom", "inlineTo", "sourceText", "inlineProposal",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
   const nodes: ProseMirrorNode[] = [];
-  doc.forEach((node) => {
-    if (node.type.name === "blockProposal") nodes.push(node);
+  doc.descendants((node) => {
+    if (node.type.name === "inlineProposal"
+      || node.type.name === "blockProposal" && node.attrs.inlineFrom === null) nodes.push(node);
   });
   return nodes;
 }
@@ -43,10 +51,10 @@ function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
 function candidateAnchorsValid(doc: ProseMirrorNode): boolean {
   let blockId = "";
   let valid = true;
-  doc.forEach((node) => {
+  doc.descendants((node) => {
     if (node.type.name === "paragraph" || node.type.name === "heading") {
       blockId = node.attrs.id as string;
-    } else if (node.type.name === "blockProposal"
+    } else if ((node.type.name === "blockProposal" || node.type.name === "inlineProposal")
       && (blockId === "" || node.attrs.blockId !== blockId)) {
       valid = false;
     }
@@ -59,13 +67,13 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
   const after = candidateNodes(next);
   if (before.length !== after.length || !candidateAnchorsValid(previous)
     || !candidateAnchorsValid(next)) return { valid: false as const };
-  const currentById = new Map(after.map((node) => [node.attrs.proposalId as string, node]));
+  const currentById = new Map(after.map((node) => [`${node.attrs.proposalId}:${node.attrs.operationId}`, node]));
   if (currentById.size !== after.length) return { valid: false as const };
   let changed: { proposal: BlockProposalProjection; priorText: string;
     from: number; to: number; text: string; resultingBody: string } | undefined;
   for (const node of before) {
-    const current = currentById.get(node.attrs.proposalId as string);
-    if (current === undefined || ATTRIBUTES.some((key) =>
+    const current = currentById.get(`${node.attrs.proposalId}:${node.attrs.operationId}`);
+    if (current === undefined || PROPOSAL_ATTRIBUTES.some((key) =>
       JSON.stringify(node.attrs[key]) !== JSON.stringify(current.attrs[key]))) {
       return { valid: false as const };
     }
@@ -97,7 +105,7 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
       priorText: node.textContent,
       ...replacement,
     };
-    if (!changed.proposal.eligible) return { valid: false as const };
+    if (!(node.attrs.candidateEditable ?? node.attrs.eligible)) return { valid: false as const };
   }
   return { valid: true as const, edit: changed };
 }
@@ -107,7 +115,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
   const candidateType = schema.nodes.blockProposal;
   if (candidateType === undefined) return;
   const existing = new Map(candidateNodes(editor.state.doc).map((node) =>
-    [node.attrs.proposalId as string, node]));
+    [`${node.attrs.proposalId}:${node.attrs.operationId}`, node]));
   const byBlock = new Map<string, BlockProposalProjection[]>();
   for (const proposal of proposals) {
     const items = byBlock.get(proposal.blockId) ?? [];
@@ -117,12 +125,13 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
   const next: ProseMirrorNode[] = [];
   editor.state.doc.forEach((node) => {
     if (node.type.name === "blockProposal") return;
+    node = restoreInlineSource(node);
     next.push(node);
     for (const proposal of byBlock.get(node.attrs.id as string) ?? []) {
-      const current = existing.get(proposal.proposalId);
+      const current = existing.get(`${proposal.proposalId}:${proposal.operationId}`);
       const text = !proposal.localPending && current?.attrs.revisionId === proposal.revisionId
         ? current.textContent : proposal.text;
-      next.push(candidateType.create({
+      const attrs = {
         proposalId: proposal.proposalId,
         operationId: proposal.operationId,
         revisionId: proposal.revisionId,
@@ -130,6 +139,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         sourceRunId: proposal.sourceRunId,
         sourceDecisionId: proposal.sourceDecisionId,
         eligible: proposal.eligible,
+        candidateEditable: proposal.candidateEditable ?? proposal.eligible,
         retryPending: proposal.retryPending ?? false,
         rejectEligible: proposal.rejectEligible ?? false,
         retryRejection: proposal.retryRejection ?? false,
@@ -140,7 +150,18 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         validity: proposal.validity ?? "",
         sessionEligible: proposal.sessionEligible ?? false,
         expectedHeads: proposal.expectedHeads,
-      }, text.length ? schema.text(text) : undefined));
+        pendingOperationIds: proposal.pendingOperationIds ?? [],
+        focused: proposal.focused ?? false,
+        inlineProposal: proposal.inlineProposal ?? false,
+        inlineFrom: proposal.inlineAnchor?.from ?? null,
+        inlineTo: proposal.inlineAnchor?.to ?? null,
+        sourceText: proposal.inlineAnchor?.sourceText ?? null,
+      };
+      if (proposal.inlineAnchor !== undefined) {
+        next[next.length - 1] = projectInlineCandidate(node, proposal, attrs, text);
+      }
+      next.push(candidateType.create(attrs, proposal.inlineAnchor === undefined && text.length
+        ? schema.text(text) : undefined));
     }
   });
   if (next.length === editor.state.doc.childCount
@@ -159,7 +180,7 @@ export const blockProposalDecoration = TiptapNode.create({
   selectable: false,
   isolating: true,
   addAttributes() {
-    return Object.fromEntries(ATTRIBUTES.map((key) => [key, { default: null }]));
+    return Object.fromEntries(PROPOSAL_ATTRIBUTES.map((key) => [key, { default: null }]));
   },
   parseHTML() {
     return [{ tag: "div[data-proposal-id]" }];
@@ -173,8 +194,11 @@ export const blockProposalDecoration = TiptapNode.create({
     const withdrawEligible = node.attrs.withdrawEligible === true;
     const copyEligible = node.attrs.copyEligible === true;
     return ["div", {
-      class: "block-proposal",
+      class: node.attrs.inlineFrom !== null ? "block-proposal inline-proposal-controls"
+        : node.attrs.inlineProposal === true ? "block-proposal inline-proposal-stale" : "block-proposal",
+      "data-proposal-focused": node.attrs.focused === true ? "true" : "false",
       "data-proposal-id": node.attrs.proposalId,
+      "data-candidate-proposal-id": node.attrs.proposalId,
       "data-proposal-operation-id": node.attrs.operationId,
       "data-proposal-revision-id": node.attrs.revisionId,
       "data-proposal-source-run-id": node.attrs.sourceRunId,
@@ -187,20 +211,19 @@ export const blockProposalDecoration = TiptapNode.create({
       role: "group",
       "aria-label": eligible || rejectEligible ? "候选文字，尚未成为正文"
         : "候选文字，暂不可操作",
-      ...(eligible ? {} : { contenteditable: "false" }),
-    }, ["span", { class: "block-proposal-label", contenteditable: "false" },
-      eligible || rejectEligible ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可操作"],
-    ["p", { class: "block-proposal-text" }, 0],
+      ...(node.attrs.candidateEditable === true ? {} : { contenteditable: "false" }),
+    }, ["p", { class: "block-proposal-text" }, 0],
+    ["div", { class: "proposal-actions", contenteditable: "false" },
     ...(eligible || retryPending ? [["button", {
       type: "button",
       class: "block-proposal-accept",
       "data-proposal-accept": node.attrs.proposalId,
       contenteditable: "false",
-    }, retryPending ? "重试接受" : "接受"]] : []),
+    }, retryPending ? "重试接受" : "✓ 接受"]] : []),
     ...(rejectEligible || retryRejection ? [["button", {
       type: "button", class: "block-proposal-reject",
       "data-proposal-reject": node.attrs.proposalId, contenteditable: "false",
-    }, retryRejection ? "重试拒绝" : "拒绝"]] : []),
+    }, retryRejection ? "重试拒绝" : "× 拒绝"]] : []),
     ...(replanEligible ? [["button", {
       type: "button", class: "block-proposal-replan",
       "data-proposal-replan": node.attrs.proposalId, contenteditable: "false",
@@ -212,6 +235,6 @@ export const blockProposalDecoration = TiptapNode.create({
     ...(copyEligible ? [["button", {
       type: "button", class: "block-proposal-copy",
       "data-proposal-copy": node.attrs.proposalId, contenteditable: "false",
-    }, "复制"]] : [])];
+    }, "复制"]] : [])]];
   },
 });

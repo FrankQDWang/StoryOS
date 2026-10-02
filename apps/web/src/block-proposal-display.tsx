@@ -1,3 +1,4 @@
+import { inlineProjectionAnchor } from "./inline-proposal-decoration.ts";
 import { useEffect, useRef, useState } from "react";
 
 import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -142,7 +143,6 @@ export function BlockProposalDisplay({
 
   useEffect(() => {
     let active = true;
-    setReads([]);
     void Promise.all(effectiveLocators.map(async (locator): Promise<ProposalRead> => {
       try {
         const response = await getProposal({
@@ -170,7 +170,7 @@ export function BlockProposalDisplay({
         return { locator };
       }
     })).then((result) => {
-      if (active) setReads(result);
+      if (active) setReads((current) => canonical(current) === canonical(result) ? current : result);
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, locatorKey, refreshKey,
@@ -184,19 +184,18 @@ export function BlockProposalDisplay({
       setCandidateTexts({});
       return () => { active = false; };
     }
-    void Promise.all(reads.map(async ({ proposal }) => {
-      if (proposal === undefined || proposal.chapter_id !== chapterId) return undefined;
-      const operation = proposal.operations.find((item) =>
-        item.manuscript_block_id === proposal.manuscript_block_id);
-      if (operation === undefined) return undefined;
-      const text = await candidateProjectionFromJournal(workspace, {
-        proposal_id: proposal.proposal_id,
-        operation_id: operation.operation_id,
-        revision_id: proposal.revision_id,
-        manuscript_block_id: proposal.manuscript_block_id,
+    void Promise.all(reads.flatMap(({ proposal }) => {
+      if (proposal === undefined || proposal.chapter_id !== chapterId) return [];
+      return proposal.operations.filter((item) => item.resolution === "pending").map(async (operation) => {
+        const text = await candidateProjectionFromJournal(workspace, {
+          proposal_id: proposal.proposal_id,
+          operation_id: operation.operation_id,
+          revision_id: proposal.revision_id,
+          manuscript_block_id: operation.manuscript_block_id,
+        });
+        return text === undefined ? undefined
+          : [`${proposal.proposal_id}:${operation.operation_id}:${proposal.revision_id}`, text] as const;
       });
-      return text === undefined ? undefined
-        : [`${proposal.proposal_id}:${proposal.revision_id}`, text] as const;
     })).then((values) => {
       if (active) setCandidateTexts(Object.fromEntries(values.filter((item) => item !== undefined)));
     }).catch(editorProps.onFailure);
@@ -245,7 +244,8 @@ export function BlockProposalDisplay({
       if (proposal === undefined) return await hasPendingDisplayedAcceptance(workspace,
         locator.proposalId) ? locator.proposalId : undefined;
       const result = await reconcileDisplayedAcceptance(workspace, proposal);
-      if (result === "applied" && !refreshedAcceptance.current.has(proposal.proposal_id)) {
+      if (active && !acceptingRef.current && result === "applied"
+        && !refreshedAcceptance.current.has(proposal.proposal_id)) {
         refreshedAcceptance.current.add(proposal.proposal_id);
         await onAccepted();
       }
@@ -274,22 +274,24 @@ export function BlockProposalDisplay({
   const unavailable: ProposalRead[] = [];
   const allHeadsKnown = recoveryChecked && reads.length === effectiveLocators.length
     && reads.every((item) => item.proposal !== undefined);
-  const expectedHeads = reads.flatMap(({ proposal }) => proposal?.chapter_id === chapterId
+  const expectedHeads = reads.flatMap(({ proposal }) => proposal?.chapter_id === chapterId && proposal.closure === "open"
+      && proposal.operations.some((item) => item.resolution === "pending" && item.reservation_state === "unresolved")
     ? [proposal.revision_id] : []).sort();
-  for (const { locator, proposal } of reads) {
+  const pendingOperations = reads.flatMap<ProposalRead & { operation: BlockProposalInspect["operations"][number] | undefined }>(({ locator, proposal }) => proposal === undefined
+    ? [{ locator, proposal, operation: undefined }]
+    : proposal.operations.filter((item) => item.resolution === "pending")
+      .map((operation) => ({ locator, proposal, operation })));
+  for (const { locator, proposal, operation } of pendingOperations) {
     if (proposal !== undefined && proposal.chapter_id !== chapterId) continue;
-    const operation = proposal?.operations.find((item) =>
-      item.manuscript_block_id === proposal.manuscript_block_id);
     const condition = proposal === undefined ? "absent" : proposalConditionKind(proposal);
     const anchored = proposal !== undefined
-      && (proposal.kind === "block_edit" || proposal.kind === "reversal")
+      && (proposal.kind === "block_edit" || proposal.kind === "reversal" || proposal.kind === "inline_edit")
       && operation !== undefined
-      && blockCounts.get(proposal.manuscript_block_id) === 1 && safeToProject;
+      && blockCounts.get(operation?.manuscript_block_id ?? "") === 1 && safeToProject;
     const baseMatches = proposal?.base_authoritative_revision_id === authoritativeRevisionId;
-    const conditionVisible = condition !== "absent" || proposal?.validation === "invalid"
-      || proposal?.validation === "pending";
-    if (!anchored || proposal === undefined || operation === undefined
-      || (!baseMatches && !conditionVisible)) {
+    const inlineAnchor = proposal === undefined ? undefined
+      : inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId);
+    if (!anchored || proposal === undefined || operation === undefined) {
       unavailable.push({ locator, proposal });
       continue;
     }
@@ -297,14 +299,15 @@ export function BlockProposalDisplay({
       && editorProps.persistWorkspace.session.writer.kind === "current_writer";
     const sessionBlocked = sessionBlockedIds.includes(proposal.proposal_id);
     const pendingAcceptance = pendingAcceptances.includes(proposal.proposal_id);
-    const localPending = candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`] !== undefined;
+    const localPending = candidateTexts[`${proposal.proposal_id}:${operation.operation_id}:${proposal.revision_id}`] !== undefined;
     const controlsReady = allHeadsKnown && acceptanceChecked && !recoveryUnavailable
       && journalPendingIds.length === 0 && writerOpen && !sessionBlocked
       && editorProps.editable && accepting !== proposal.proposal_id && !localPending;
     const problem = knownProblems[proposal.proposal_id];
-    const eligible = controlsReady && baseMatches
+    const eligible = controlsReady
       && proposal.generation === "ready" && proposal.validation === "valid"
       && condition === "absent"
+      && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined)
       && proposal.closure === "open" && operation.resolution === "pending"
       && operation.reservation_state === "unresolved"
       && proposal.validation_receipt.kind === "present"
@@ -326,15 +329,24 @@ export function BlockProposalDisplay({
       pendingWithdraw: pendingWithdrawals.includes(proposal.proposal_id),
     });
     projections.push({
+      inlineProposal: proposal.kind === "inline_edit",
+      ...(baseMatches && inlineAnchor !== undefined ? { inlineAnchor } : {}),
       proposalId: proposal.proposal_id,
       operationId: operation.operation_id,
+      focused: editorProps.focusProposal?.proposalId === proposal.proposal_id
+        && editorProps.focusProposal.operationId === operation.operation_id
+        && editorProps.focusProposal.revisionId === proposal.revision_id,
+      pendingOperationIds: proposal.operations.filter((item) => item.resolution === "pending").map((item) => item.operation_id).sort(),
       revisionId: proposal.revision_id,
-      blockId: proposal.manuscript_block_id,
+      blockId: operation.manuscript_block_id,
       sourceRunId: proposal.source.kind === "agent_run_decision" ? proposal.source.run_id : "",
       sourceDecisionId: proposal.source.kind === "agent_run_decision" ? proposal.source.decision_id : "",
-      text: candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`]
-        ?? proposal.candidate_text,
+      text: candidateTexts[`${proposal.proposal_id}:${operation.operation_id}:${proposal.revision_id}`]
+        ?? operation.candidate_text,
       eligible,
+      candidateEditable: rejectEligible && baseMatches && condition === "absent"
+        && proposal.generation === "ready" && proposal.validation !== "invalid"
+        && (proposal.kind !== "inline_edit" || inlineAnchor !== undefined) && !pendingAcceptance,
       retryPending: pendingAcceptance && knownProblems[proposal.proposal_id] === undefined
         && accepting !== proposal.proposal_id,
       rejectEligible,
@@ -342,14 +354,25 @@ export function BlockProposalDisplay({
         && accepting !== proposal.proposal_id,
       replanEligible,
       withdrawEligible,
-      copyEligible: proposal.candidate_text.length > 0,
+      copyEligible: operation.candidate_text.length > 0
+        && (condition !== "absent" || proposal.validation === "invalid" || !writerOpen || sessionBlocked),
       conditionKind: condition,
       validity: proposal.validation,
       sessionEligible: writerOpen && !sessionBlocked,
       expectedHeads,
-      localPending: candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`]
+      localPending: candidateTexts[`${proposal.proposal_id}:${operation.operation_id}:${proposal.revision_id}`]
         !== undefined,
     });
+  }
+
+  const anchorWorkspace = editorProps.persistWorkspace;
+  if (anchorWorkspace !== undefined) {
+    anchorWorkspace.inlineProposalAnchors = reads.flatMap(({ proposal }) =>
+      proposal?.chapter_id === chapterId && proposal.kind === "inline_edit"
+        && expectedHeads.length === 1 && expectedHeads[0] === proposal.revision_id
+        && inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId) !== undefined
+        ? proposal.anchors.map(({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest }) =>
+          ({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest })) : []);
   }
 
   const acceptDisplayed = (target: {
@@ -357,16 +380,18 @@ export function BlockProposalDisplay({
     operationId: string;
     revisionId: string;
     text: string;
+    operationIds?: readonly string[] | undefined;
   }) => {
     if (acceptingRef.current) return;
     const displayed = reads.find(({ proposal }) => proposal?.proposal_id === target.proposalId)?.proposal;
     const receipt = displayed?.validation_receipt;
-    const projection = projections.find((item) => item.proposalId === target.proposalId);
+    const projection = projections.find((item) => item.proposalId === target.proposalId
+      && item.operationId === target.operationId);
     const workspace = editorProps.persistWorkspace;
     if (displayed === undefined || (projection?.eligible !== true
         && projection?.retryPending !== true)
       || displayed.revision_id !== target.revisionId
-      || displayed.candidate_text !== target.text
+      || projection.text !== target.text
       || receipt?.kind !== "present"
       || receipt.result !== "valid"
       || displayed.operations.find((item) => item.operation_id === target.operationId
@@ -409,6 +434,7 @@ export function BlockProposalDisplay({
           workspace,
           proposalId: target.proposalId,
           operationId: target.operationId,
+          operationIds: target.operationIds,
           proposalRevisionId: target.revisionId,
           validationReceiptId: receipt.validation_receipt_id,
           authoritativeRevisionId,
@@ -417,8 +443,8 @@ export function BlockProposalDisplay({
           || response.project_scope.project_id !== scope.project_id
           || response.receipt.proposal_id !== target.proposalId
           || response.receipt.proposal_revision_id !== target.revisionId
-          || response.receipt.selected_operation_ids.length !== 1
-          || response.receipt.selected_operation_ids[0] !== target.operationId) {
+          || JSON.stringify(response.receipt.selected_operation_ids)
+            !== JSON.stringify(target.operationIds ?? [target.operationId])) {
           throw new Error("接受结果的身份不匹配。");
         }
         const message = {
@@ -427,9 +453,11 @@ export function BlockProposalDisplay({
           conflicted: "正文已变化，候选文字尚未接受。",
           refused: "此次接受已被拒绝，候选文字仍保留。",
         }[response.effect.kind];
+        const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(target.proposalId);
+        if (response.effect.kind === "applied") refreshedAcceptance.current.add(target.proposalId);
         setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
         setSettlementRefresh((value) => value + 1);
-        try { await onAccepted(); } catch {
+        try { if (refresh) await onAccepted(); } catch {
           setDecisionMessages((current) => ({ ...current,
             [target.proposalId]: "接受结果已记录。请刷新查看当前正文。" }));
         }
@@ -469,7 +497,9 @@ export function BlockProposalDisplay({
           || response.receipt.proposal_id !== proposalId) {
           throw new Error("Acceptance result identity changed");
         }
-        await onAccepted();
+        const refresh = response.effect.kind !== "applied" || !refreshedAcceptance.current.has(proposalId);
+        if (response.effect.kind === "applied") refreshedAcceptance.current.add(proposalId);
+        if (refresh) await onAccepted();
         setSettlementRefresh((value) => value + 1);
       } catch {
         setDecisionMessages((current) => ({ ...current,
@@ -484,7 +514,7 @@ export function BlockProposalDisplay({
   };
 
   const rejectDisplayed = (target: {
-    proposalId: string; operationId: string; revisionId: string; text: string;
+    proposalId: string; operationId: string; revisionId: string; text: string; operationIds?: readonly string[] | undefined;
   }) => {
     if (acceptingRef.current) return;
     if (pendingRejections.includes(target.proposalId)) {
@@ -492,12 +522,13 @@ export function BlockProposalDisplay({
       return;
     }
     const displayed = reads.find(({ proposal }) => proposal?.proposal_id === target.proposalId)?.proposal;
-    const projection = projections.find((item) => item.proposalId === target.proposalId);
+    const projection = projections.find((item) => item.proposalId === target.proposalId
+      && item.operationId === target.operationId);
     const workspace = editorProps.persistWorkspace;
     if (displayed === undefined || workspace === undefined
       || projection?.rejectEligible !== true
       || displayed.revision_id !== target.revisionId
-      || displayed.candidate_text !== target.text
+      || projection.text !== target.text
       || displayed.operations.find((item) => item.operation_id === target.operationId
         && item.manuscript_block_id === projection.blockId) === undefined) {
       setDecisionMessages((current) => ({ ...current,
@@ -531,14 +562,14 @@ export function BlockProposalDisplay({
         }
         const response = await rejectDisplayedBlockProposal({ baseUrl: editorProps.baseUrl,
             fetchImpl: editorProps.fetchImpl, cryptoImpl: editorProps.cryptoImpl,
-            workspace, proposalId: target.proposalId, operationId: target.operationId,
+            workspace, proposalId: target.proposalId, operationId: target.operationId, operationIds: target.operationIds,
             proposalRevisionId: target.revisionId, targetRevisionId: authoritativeRevisionId });
         if (response.project_scope.owner_user_id !== scope.owner_user_id
           || response.project_scope.project_id !== scope.project_id
           || response.receipt.proposal_id !== target.proposalId
           || response.receipt.proposal_revision_id !== target.revisionId
           || JSON.stringify(response.receipt.selected_pending_operation_ids)
-            !== JSON.stringify([target.operationId])) {
+            !== JSON.stringify(target.operationIds ?? [target.operationId])) {
           throw new Error("拒绝结果的身份不匹配。");
         }
         const message = { resolved: "已拒绝，正文保持不变。",
@@ -608,7 +639,8 @@ export function BlockProposalDisplay({
       return;
     }
     const displayed = reads.find(({ proposal }) => proposal?.proposal_id === target.proposalId)?.proposal;
-    const projection = projections.find((item) => item.proposalId === target.proposalId);
+    const projection = projections.find((item) => item.proposalId === target.proposalId
+      && item.operationId === target.operationId);
     const workspace = editorProps.persistWorkspace;
     const condition = displayed === undefined ? undefined : displayed.source_condition;
     if (displayed === undefined || workspace === undefined || projection?.replanEligible !== true
@@ -704,7 +736,8 @@ export function BlockProposalDisplay({
     proposalId: string; operationId: string; revisionId: string; text: string;
   }) => {
     const displayed = reads.find(({ proposal }) => proposal?.proposal_id === target.proposalId)?.proposal;
-    const projection = projections.find((item) => item.proposalId === target.proposalId);
+    const projection = projections.find((item) => item.proposalId === target.proposalId
+      && item.operationId === target.operationId);
     dispatchDisplayedWithdraw({
       ...withdrawControl, target, pending: pendingWithdrawals.includes(target.proposalId),
       busy: acceptingRef.current, displayedRevisionId: displayed?.revision_id,
@@ -755,11 +788,20 @@ export function BlockProposalDisplay({
         onCopyProposal={copyDisplayed} />
       <RefusedEditDraftDisplay workspace={editorProps.persistWorkspace} scope={scope}
         baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
-        refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold} onProjection={editorProps.onProjection}
+        refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold}
+        onProjection={(projection) => editorProps.controllerRef.current?.installProjection(projection)}
         onResult={() => setSettlementRefresh((value) => value + 1)} />
       {reads.flatMap(({ proposal }) => proposal?.source.kind === "refused_edit_draft" ? [
-        <section key={proposal.proposal_id} data-proposal-id={proposal.proposal_id} aria-label="Draft Proposal">
-          <p>Source Draft: {proposal.source.draft_id}. Revision: {proposal.source.draft_revision_id}. Status: {proposal.validation}, {proposal.closure}.</p>
+        <section className="editor-recovery" key={proposal.proposal_id} data-proposal-id={proposal.proposal_id} aria-label="Draft Proposal">
+          <header className="editor-recovery-heading">
+            <span>From a preserved edit</span>
+            <h2>Proposal from your draft</h2>
+            <p>{proposal.closure === "closed"
+              ? proposal.operation_resolution === "applied" ? "Accepted into the manuscript." : "This proposal is closed."
+              : proposal.validation === "valid" ? "The complete preserved text is ready for review. Accept it to change the manuscript."
+                : proposal.validation === "invalid" ? "The proposal needs review before it can be accepted."
+                  : "The proposal is waiting for validation before it can be accepted."}</p>
+          </header>
           {proposal.candidate_blocks?.map((block, index) => block.block_kind === "heading"
             ? <h3 key={index} data-proposal-structured-block style={{ whiteSpace: "pre-wrap" }}>{block.text}</h3>
             : <p key={index} data-proposal-structured-block style={{ whiteSpace: "pre-wrap" }}>{block.text}</p>)}
@@ -783,7 +825,8 @@ export function BlockProposalDisplay({
           onRetryReplan={() => retryReplan(locator.proposalId)}
           onRetryWithdraw={() => retryWithdraw(locator.proposalId)} />
       ))}
-      {unavailable.map(({ locator, proposal }) => (
+      {unavailable.filter(({ locator, proposal }) => proposal?.operation_resolution !== "applied"
+        || !acceptanceChecked || pendingAcceptances.includes(locator.proposalId)).map(({ locator, proposal }) => (
         <p className="block-proposal-unavailable" data-proposal-unavailable={locator.proposalId}
           data-proposal-revision-id={proposal?.revision_id ?? ""}
           data-proposal-operation-id={proposal?.operation_id ?? ""}

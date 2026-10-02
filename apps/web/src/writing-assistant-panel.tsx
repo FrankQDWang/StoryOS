@@ -1,21 +1,36 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   activityStream, createAgentRun, createProjectCommandChallenge, digestCreateAgentRun,
-  getAgentRun, getManuscriptTree, getProjectAssistance,
+  getAgentRun, getProposal, getManuscriptTree, getProjectAssistance,
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, ProjectScope,
+  CreateAgentRunRequest, CreateAgentRunResponse, GetAgentRunResponse, GetManuscriptTreeResponse, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
+import { AssistantComposer } from "./assistant-composer.tsx";
+import { ProposalLocationLinks } from "./proposal-location-links.tsx";
+import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
+import { type SelectedRunDetails } from "./assistant-run-details.tsx";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type TranscriptExchange = {
+  requestId: string;
+  chapterId?: string;
+  runId?: string;
+  conversationId: string;
+  message: string;
+  status: GetAgentRunResponse["status"];
+  result?: string;
+  run?: GetAgentRunResponse;
+};
 
 type RequestReference = {
   scope: ProjectScope;
@@ -25,11 +40,17 @@ type RequestReference = {
   idempotencyKey: string;
   snapshotId: string;
   runId?: string;
+  conversationId?: string;
+  conversationChoice?: "new";
+  history?: TranscriptExchange[];
+  selectedRequestId?: string;
 };
 
 export type AssistantContext = {
   scope: ProjectScope;
   chapterId?: string;
+  candidateTarget?: ProposalFocus | undefined;
+  tree?: GetManuscriptTreeResponse | undefined;
   canSubmit: boolean;
   baseUrl: string;
   fetchImpl: typeof fetch;
@@ -66,7 +87,16 @@ function readReference(scope: ProjectScope): RequestReference | undefined {
       || !UUID.test(ref.correlationId)
       || !UUID.test(ref.idempotencyKey)
       || !UUID.test(ref.snapshotId)
-      || (ref.runId !== undefined && !UUID.test(ref.runId))) return undefined;
+      || (ref.runId !== undefined && !UUID.test(ref.runId))
+      || (ref.conversationId !== undefined && !UUID.test(ref.conversationId))
+      || (ref.conversationChoice !== undefined && ref.conversationChoice !== "new")
+      || (ref.selectedRequestId !== undefined && !UUID.test(ref.selectedRequestId))
+      || (ref.history !== undefined && (!Array.isArray(ref.history)
+        || !ref.history.every((exchange) => exchange !== null && typeof exchange === "object"
+          && UUID.test(exchange.requestId) && UUID.test(exchange.conversationId)
+          && (exchange.runId === undefined || UUID.test(exchange.runId))
+          && typeof exchange.message === "string" && Object.hasOwn(runLabels, exchange.status)
+          && (exchange.result === undefined || typeof exchange.result === "string"))))) return undefined;
     return ref;
   } catch {
     return undefined;
@@ -105,8 +135,11 @@ function runFromActivity(body: string, ref: RequestReference): string | undefine
 function resultText(run: GetAgentRunResponse): string | undefined {
   switch (run.decision.kind) {
     case "advisory":
-    case "prose_change":
       return run.decision.text;
+    case "prose_change":
+      return (run.decision.locations?.length ?? 0) > 0
+        ? `这次修改涉及 ${new Set(run.decision.locations!.map(location => location.chapter_id)).size} 个章节、${run.decision.locations!.length} 处文字，具体建议在下方。`
+        : "本次修改建议已生成，可以在正文中查看。";
     case "clarification":
       return run.decision.question;
     case "execution_refused":
@@ -127,8 +160,9 @@ const runLabels: Record<GetAgentRunResponse["status"], string> = {
 };
 
 export function WritingAssistantPanel({
-  collapsed, context, onOpenedProposal,
+  collapsed, context, onOpenedProposal, onNavigateProposal,
 }: {
+  onNavigateProposal?: ((destination: ProposalDestination) => void) | undefined;
   collapsed: boolean;
   context?: AssistantContext | undefined;
   onOpenedProposal?: ((locator: ProposalLocator) => void) | undefined;
@@ -141,6 +175,8 @@ export function WritingAssistantPanel({
   const [status, setStatus] = useState("");
   const [sending, setSending] = useState(false);
   const [refused, setRefused] = useState(false);
+  const [details, setDetails] = useState<SelectedRunDetails>({ kind: "loading" });
+  const detailSequence = useRef(0);
 
   useEffect(() => {
     if (context === undefined) {
@@ -164,7 +200,7 @@ export function WritingAssistantPanel({
     return () => { active = false; };
   }, [context?.baseUrl, context?.fetchImpl, context?.scope.owner_user_id, context?.scope.project_id]);
 
-  const inspect = async (current: RequestReference): Promise<void> => {
+  const inspect = async (current: RequestReference): Promise<GetAgentRunResponse | undefined> => {
     if (context === undefined) return;
     const stillCurrent = () =>
       readReference(current.scope)?.correlationId === current.correlationId;
@@ -181,7 +217,7 @@ export function WritingAssistantPanel({
         setStatus("请求结果仍待确认。请稍后检查。");
         return;
       }
-      current = { ...current, runId };
+      current = { ...(readReference(current.scope) ?? current), runId };
       saveReference(current);
       setReference(current);
     }
@@ -192,36 +228,98 @@ export function WritingAssistantPanel({
     if (!stillCurrent()) return;
     if (result.project_scope.owner_user_id !== current.scope.owner_user_id
       || result.project_scope.project_id !== current.scope.project_id
-      || result.run_id !== runId) throw new Error("Run Scope mismatch");
+      || result.run_id !== runId
+      || (current.conversationId !== undefined
+        && result.conversation_id !== current.conversationId)) throw new Error("Run Scope mismatch");
+    current = { ...(readReference(current.scope) ?? current), conversationId: result.conversation_id };
+    saveReference(current);
+    setReference(current);
     setRun(result);
-    if (result.decision.kind === "prose_change"
-      && result.decision.opened_proposal.kind === "present") {
-      onOpenedProposal?.({
-        proposalId: result.decision.opened_proposal.proposal_id,
-        runId: result.run_id,
-        decisionId: result.decision.decision_id,
-      });
+    if (result.decision.kind === "prose_change") {
+      for (const location of result.decision.locations ?? []) {
+        if (location.outcome.kind === "revised") {
+          const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
+            projectId: current.scope.project_id, proposalId: location.outcome.proposal_id });
+          if (!stillCurrent()) return;
+          if (response.project_scope.owner_user_id === current.scope.owner_user_id
+            && response.project_scope.project_id === current.scope.project_id
+            && response.proposal.source.kind === "agent_run_decision") onOpenedProposal?.({
+              proposalId: response.proposal.proposal_id, runId: response.proposal.source.run_id,
+              decisionId: response.proposal.source.decision_id,
+            });
+        }
+        if (location.outcome.kind === "opened") onOpenedProposal?.({
+          proposalId: location.outcome.proposal_id, runId: result.run_id,
+          decisionId: result.decision.decision_id,
+        });
+      }
+      if ((result.decision.locations?.length ?? 0) === 0
+        && result.decision.opened_proposal.kind === "present") onOpenedProposal?.({
+          proposalId: result.decision.opened_proposal.proposal_id, runId: result.run_id,
+          decisionId: result.decision.decision_id,
+        });
     }
     setStatus("");
+    return result;
+  };
+
+  const inspectDetails = async (requestId: string): Promise<void> => {
+    if (context === undefined) return;
+    const cached = readReference(context.scope);
+    if (cached === undefined) return;
+    const exchange = cached.history?.find((entry) => entry.requestId === requestId);
+    const latest = requestId === cached.correlationId;
+    if (!latest && exchange === undefined) return;
+    const chosen = { ...cached, selectedRequestId: requestId };
+    const expectedRunId = latest ? cached.runId : exchange?.runId;
+    const expectedConversationId = latest ? cached.conversationId : exchange?.conversationId;
+    const sequence = ++detailSequence.current;
+    const stillSelected = () => sequence === detailSequence.current
+      && readReference(context.scope)?.selectedRequestId === requestId;
+    saveReference(chosen);
+    setReference(chosen);
+    setDetails({ kind: "loading" });
+    try {
+      const result = latest ? await inspect(chosen) : expectedRunId === undefined ? undefined
+        : await getAgentRun({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
+          projectId: context.scope.project_id, runId: expectedRunId });
+      if (!stillSelected()) return;
+      if (result === undefined
+        || result.project_scope.owner_user_id !== context.scope.owner_user_id
+        || result.project_scope.project_id !== context.scope.project_id
+        || (expectedRunId !== undefined && result.run_id !== expectedRunId)
+        || (expectedConversationId !== undefined && result.conversation_id !== expectedConversationId)) {
+        setDetails({ kind: "unavailable" });
+        return;
+      }
+      setDetails({ kind: "known", run: result, selection: { projectScope: context.scope,
+        runId: result.run_id, conversationId: result.conversation_id } });
+    } catch {
+      if (stillSelected()) setDetails({ kind: "unavailable" });
+    }
   };
 
   useEffect(() => {
     if (reference === undefined || context === undefined) return;
-    void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
+    if (reference.selectedRequestId !== undefined) void inspectDetails(reference.selectedRequestId);
+    if (reference.selectedRequestId !== reference.correlationId) {
+      void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
+    }
+    return () => { detailSequence.current += 1; };
   }, [context?.scope.owner_user_id, context?.scope.project_id]);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const terminal = run !== undefined
+    && (run.status === "completed" || run.status === "refused" || run.status === "cancelled");
+  const unresolved = reference !== undefined && (!terminal || reference.conversationId === undefined);
+
+  const submit = (message: string, onAdmitted: () => void) => {
     if (availability === "unavailable") {
       setRefused(true);
       return;
     }
     if (context === undefined || context.chapterId === undefined
       || !context.canSubmit || availability !== "available" || sending
-      || (reference !== undefined && reference.runId === undefined)) return;
-    const input = event.currentTarget.elements.namedItem("assistant-message");
-    if (!(input instanceof HTMLInputElement)) return;
-    const message = input.value.trim();
+      || unresolved) return;
     if (message.length === 0) return;
     const previous = reference;
     const previousRun = run;
@@ -261,18 +359,45 @@ export function WritingAssistantPanel({
         || tree.snapshot.project_scope.project_id !== context.scope.project_id) {
         throw new Error("Working Target Scope mismatch");
       }
+      let selected = context.candidateTarget;
+      if (selected !== undefined) {
+        const observedTarget = selected;
+        const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
+          projectId: context.scope.project_id, proposalId: selected.proposalId });
+        if (response.project_scope.owner_user_id !== context.scope.owner_user_id
+          || response.project_scope.project_id !== context.scope.project_id
+          || response.proposal.chapter_id !== context.chapterId
+          || !response.proposal.operations.some((operation) => operation.operation_id === observedTarget.operationId
+            && operation.manuscript_block_id === observedTarget.blockId && operation.resolution === "pending"
+            && operation.reservation_state === "unresolved")) throw new Error("候选位置已变化。");
+        selected = { ...selected, revisionId: response.proposal.revision_id };
+      }
       const current: RequestReference = {
         scope: context.scope, message, chapterId: context.chapterId!,
         correlationId: uuidV7(context.cryptoImpl),
         idempotencyKey: uuidV7(context.cryptoImpl),
         snapshotId: tree.snapshot.snapshot_id,
+        ...(previous?.conversationId === undefined || previous.conversationChoice === "new"
+          ? {} : { conversationId: previous.conversationId }),
+        history: previous === undefined || previousRun === undefined ? [] : [
+          ...(previous.history ?? []), {
+            requestId: previous.correlationId, chapterId: previous.chapterId, conversationId: previousRun.conversation_id,
+            runId: previousRun.run_id, run: previousRun,
+            message: previous.message, status: previousRun.status,
+            ...(resultText(previousRun) === undefined ? {} : { result: resultText(previousRun)! }),
+          },
+        ],
       };
       const request: CreateAgentRunRequest = {
         command_schema: "storyos.command.create-agent-run.request.v2",
         create_agent_run_input: {
-          conversation: { kind: "new" },
+          conversation: current.conversationId === undefined ? { kind: "new" }
+            : { kind: "existing", conversation_id: current.conversationId },
           author_message: { text: current.message },
-          working_target: { kind: "current_chapter", chapter_id: current.chapterId },
+          working_target: selected === undefined ? { kind: "current_chapter", chapter_id: current.chapterId }
+            : { kind: "proposal_candidate", source_chapter_id: current.chapterId, target: {
+              proposal_id: selected.proposalId, operation_id: selected.operationId, revision_id: selected.revisionId,
+            } },
           instruction: { kind: "absent" },
           cause: { kind: "author_request" },
           client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
@@ -319,13 +444,15 @@ export function WritingAssistantPanel({
         throw error;
       }
       if (admitted.project_scope.owner_user_id !== current.scope.owner_user_id
-        || admitted.project_scope.project_id !== current.scope.project_id) {
+        || admitted.project_scope.project_id !== current.scope.project_id
+        || (current.conversationId !== undefined && admitted.conversation_id !== current.conversationId)) {
         throw new Error("Run admission Scope mismatch");
       }
-      const acknowledged = { ...current, runId: admitted.effect.run_id };
+      const acknowledged = { ...current, runId: admitted.effect.run_id,
+        conversationId: admitted.conversation_id };
       saveReference(acknowledged);
       setReference(acknowledged);
-      input.value = "";
+      onAdmitted();
       await inspect(acknowledged);
     })().catch(() => {
       if (!commandSent) {
@@ -347,30 +474,59 @@ export function WritingAssistantPanel({
       data-assistant-request-id={reference?.correlationId ?? ""}
       aria-label={collapsed ? "写作助手已收起" : "写作助手对话"}>
       <div className="assistant-body" hidden={collapsed}>
-        <header className="agent-header"><strong>写作助手</strong></header>
+        <header className="agent-header">
+          <strong>写作助手</strong>
+          <button type="button" data-assistant-new-conversation=""
+            disabled={reference === undefined || unresolved || sending || reference.conversationChoice === "new"}
+            onClick={() => {
+              if (reference === undefined || unresolved || sending) return;
+              const selected = { ...reference, conversationChoice: "new" as const };
+              saveReference(selected);
+              setReference(selected);
+              setStatus("");
+            }}>新对话</button>
+        </header>
         <div className="assistant-conversation" aria-live="polite">
           {availability === "unavailable" ? (
             <p className="assistant-status">写作助手当前不可用。你仍可以直接写作。</p>
           ) : null}
+          {reference?.history?.map((exchange, index, history) => (
+            <section className="assistant-exchange" key={exchange.requestId} data-assistant-history-run={exchange.runId}>
+              {index > 0 && history[index - 1]?.conversationId !== exchange.conversationId
+                ? <p className="assistant-conversation-boundary">新对话</p> : null}
+              <p className="assistant-author-message">{exchange.message}</p>
+              {exchange.run?.steering_inputs?.map(input => <p className="assistant-author-message"
+                key={input.steering_input_id}>{input.author_message}</p>)}
+              {exchange.result === undefined ? null : <p className="assistant-result">{exchange.result}</p>}
+              {exchange.run === undefined ? null : <ProposalLocationLinks run={exchange.run} tree={context?.tree}
+                sourceChapterId={exchange.chapterId ?? reference.chapterId} onNavigate={onNavigateProposal} />}
+            </section>
+          ))}
           {reference === undefined ? null : (
-            <section className="assistant-exchange">
+            <section className="assistant-exchange" data-assistant-current-run="">
+              {(reference.history?.length ?? 0) > 0
+                && reference.history?.at(-1)?.conversationId !== reference.conversationId
+                ? <p className="assistant-conversation-boundary">新对话</p> : null}
               <p className="assistant-author-message">{reference.message}</p>
-              <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p>
-              {run === undefined ? null : <p data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>}
-              <button type="button" data-assistant-inspect="" onClick={() => {
-                void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
-              }}>检查结果</button>
+              {run?.steering_inputs?.map(input => <p className="assistant-author-message"
+                key={input.steering_input_id}>{input.author_message}</p>)}
+              {!terminal ? <p data-assistant-run-status="">{run === undefined ? "请求结果待确认" : runLabels[run.status]}</p> : null}
+              {run === undefined ? null : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
+                <ProposalLocationLinks run={run} tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
+              {!terminal ? <button type="button" data-assistant-inspect="" onClick={() => {
+                void inspectDetails(reference.correlationId);
+              }}>检查结果</button> : null}
+              {details.kind === "unavailable" ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
             </section>
           )}
+          {reference?.conversationChoice === "new"
+            ? <p className="assistant-status">下一条消息将开始新对话。</p> : null}
           {status.length > 0 ? <p role="status">{status}</p> : null}
         </div>
-        <form className="composer" data-writing-assistant-composer="" onSubmit={submit}>
-          <input name="assistant-message" aria-label="给写作助手的消息" maxLength={4000}
-            placeholder="描述想修改的当前章节文字" />
-          <button type="submit" disabled={availability !== "available" || !context?.canSubmit
-            || context.chapterId === undefined || sending
-            || (reference !== undefined && reference.runId === undefined)}>发送</button>
-        </form>
+        <AssistantComposer key={context === undefined ? "none" : `${context.scope.owner_user_id}:${context.scope.project_id}`}
+          context={context} available={availability === "available"} sending={sending} current={reference} run={run}
+          onSend={submit} onRefresh={async () => { if (reference !== undefined) await inspect(reference); }}
+          onStatus={setStatus} />
       </div>
     </aside>
   );

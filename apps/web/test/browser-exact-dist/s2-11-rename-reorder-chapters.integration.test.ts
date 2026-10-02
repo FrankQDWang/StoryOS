@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -42,6 +43,7 @@ function chapterTitles(root: Element | null | undefined): string[] {
 }
 
 async function createNamedVolume(root: Document, title: string): Promise<void> {
+  await beginInlineVolumeCreation(root);
   const volumeTitle = root.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -55,6 +57,7 @@ async function createNamedVolume(root: Document, title: string): Promise<void> {
 }
 
 async function createNamedChapter(root: Document, title: string): Promise<void> {
+  await beginInlineChapterCreation(root);
   const chapterTitle = root.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -105,6 +108,7 @@ it("the author renames and reorders Chapters from the canonical tree and they su
     throw new Error("the empty Project document is missing");
   }
   await createNamedVolume(createdRoot, "Volume A");
+  await beginInlineChapterCreation(createdRoot);
   await expect.poll(() =>
     createdRoot.querySelector('#app form[data-create-chapter] input[name="chapter-title"]')
       ?.tagName
@@ -121,6 +125,9 @@ it("the author renames and reorders Chapters from the canonical tree and they su
     "Chapter B",
   ]);
 
+  await beginTreeAction(createdRoot, "li[data-chapter-id]", "[data-begin-rename-chapter]");
+  createdRoot.querySelector<HTMLButtonElement>("[data-begin-rename-chapter]")?.click();
+  await expect.poll(() => createdRoot.querySelector('input[name="chapter-title"]')?.tagName).toBe("INPUT");
   const renameInput = createdRoot.querySelector<HTMLInputElement>(
     '#app form[data-rename-chapter] input[name="chapter-title"]',
   );
@@ -150,6 +157,7 @@ it("the author renames and reorders Chapters from the canonical tree and they su
   expect(libraryRoot.textContent).not.toContain("模型");
   expect(libraryRoot.textContent).not.toContain("Agent");
 
+  await beginTreeAction(libraryRoot, 'li[data-chapter-order="1"]', '[data-chapter-move="down"]');
   const moveDown = libraryRoot.querySelector<HTMLButtonElement>(
     'nav[aria-label="稿件目录"] li[data-chapter-order="1"] button[data-chapter-move="down"]',
   );

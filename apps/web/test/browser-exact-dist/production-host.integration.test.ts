@@ -20,3 +20,14 @@ it("recovers a conflicted Proposal through reload, replan, and an explicit retry
   await expect(verifyProductionHost({ scenario: "conflicted_proposal" }))
     .resolves.toEqual({ kind: "production_host_verified" });
 }, 240_000);
+
+it("revises real cross-Chapter locations through the composer and central editor", async () => {
+  await expect(verifyProductionHost({ scenario: "multi_proposal" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+}, 120_000);
+
+
+it("uses the approved composer and controls the retained Run through the production host", async () => {
+  await expect(verifyProductionHost({ scenario: "composer_controls" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+}, 120_000);

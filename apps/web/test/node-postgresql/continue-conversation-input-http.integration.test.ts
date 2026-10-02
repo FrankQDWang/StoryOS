@@ -5,7 +5,7 @@ import { test } from "vitest";
 import {
   createAgentRun,
   digestCreateAgentRun,
-  getAgentRun,
+  getAgentRun, getProposal, steerAgentRun, digestSteerAgentRun, pauseAgentRun, digestPauseAgentRun,
   type CreateAgentRunRequest,
   type GetAgentRunResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -31,7 +31,7 @@ const CORRECTION = "I changed my mind: keep the voice.";
 const FULL = "Submit the complete current request. Keep the voice.";
 const EDITED = "Edited passage text.";
 
-async function admit(
+async function admitQueued(
   baseUrl: string,
   prepared: Awaited<ReturnType<typeof prepare>>,
   key: string,
@@ -69,8 +69,30 @@ async function admit(
     }),
   );
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
+  return created;
+}
+async function admit(...args: Parameters<typeof admitQueued>) {
+  const created = await admitQueued(...args);
   await settleOnce();
   return created;
+}
+async function retain(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, runId: string,
+  conversationId: string, text: string, key: string, position: string) {
+  const request = { command_schema: "storyos.command.steer-agent-run.request.v1" as const,
+    steer_agent_run_input: { conversation_id: conversationId, author_message: { text },
+      ...BINDING, correlation_id: key } };
+  return challenged(baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+    "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs", request.command_schema,
+    await digestSteerAgentRun(request), key, async (antiForgery) => {
+      const options = { baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl,
+        idempotencyKey: key, antiForgery, request };
+      const retained = await steerAgentRun(options);
+      assert.equal(retained.effect.kind, "retained");
+      if (retained.effect.kind !== "retained") throw new Error("expected retained input");
+      assert.equal(retained.effect.input_position, position);
+      assert.deepEqual(await steerAgentRun(options), retained);
+      return retained;
+    });
 }
 async function inspect(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>, runId: string): Promise<GetAgentRunResponse> {
   return getAgentRun({ baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl });
@@ -102,6 +124,79 @@ async function rewriteChapter(projectId: string, chapterId: string, body: string
        AND head.manuscript_object_id = '${chapterId}'::uuid;
   `);
 }
+
+test.each([FIRST, "Compact active context between calls."])("ordered guidance is consumed by the same active Run with exact replay: %s", async (original) => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = original.startsWith("Compact") ? "d6" : "d4";
+    const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Guidance Novel", `${ns}2`);
+    const created = await admitQueued(started.baseUrl, prepared, id(`${ns}32`), original);
+    const runId = created.effect.run_id;
+    if (original === FIRST) {
+      const request = { command_schema: "storyos.command.pause-agent-run.request.v1" as const,
+        pause_agent_run_input: { ...BINDING, correlation_id: id("d460") } };
+      await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause", request.command_schema,
+        await digestPauseAgentRun(request), id("d461"), (antiForgery) => pauseAgentRun({
+          baseUrl: started.baseUrl, projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl,
+          request, idempotencyKey: id("d461"), antiForgery }));
+      assert.equal((await inspect(started.baseUrl, prepared, runId)).status, "paused");
+    }
+    const corrections = original.startsWith("Compact") ? [CORRECTION] : [CORRECTION, "Keep the ending open."];
+    for (const [index, text] of corrections.entries()) {
+      await retain(started.baseUrl, prepared, runId, created.conversation_id, text, id(`${ns}5${index}`), String(index + 1));
+    }
+    await settleOnce();
+    const queried = await inspect(started.baseUrl, prepared, runId);
+    assert.equal(queried.status, "completed");
+    assert.equal(queried.conversation_id, created.conversation_id);
+    assert.deepEqual(queried.steering_inputs.map((item) => [item.input_position, item.author_message, item.model_attempt_id !== null]),
+      corrections.map((text, index) => [String(index + 1), text, true]));
+    if (original.startsWith("Compact")) {
+      assert.equal(queried.active_compaction.kind, "present");
+      if (queried.active_compaction.kind !== "present") throw new Error("expected active compaction");
+      assert.equal(queried.active_compaction.prior_model_attempt_id, attempt(queried).model_attempt_id);
+    }
+    assert.equal(selected(queried, "author_instruction"), [original, ...corrections].join("\n"));
+    assert.deepEqual(queried.evidence.find((item) => item.kind === "sent_content"), {
+      kind: "sent_content", attempt_id: attempt(queried).model_attempt_id,
+      availability: "current", content: [original, ...corrections].join("\n"),
+    });
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+test("guidance after a visible stream keeps the Proposal bound to its original Decision", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("d511"), "Stream Guidance", "d52");
+    const created = await admitQueued(started.baseUrl, prepared, id("d532"), "Stream this passage: keep the voice.");
+    await settleOnce();
+    const original = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    if (original.decision.kind !== "prose_change" || original.decision.opened_proposal.kind !== "present") throw new Error("expected streamed Proposal");
+    const proposalId = original.decision.opened_proposal.proposal_id;
+    const options = { baseUrl: started.baseUrl, projectId: prepared.projectId, runId: created.effect.run_id, fetchImpl: prepared.fetchImpl };
+    await retain(started.baseUrl, prepared, created.effect.run_id, created.conversation_id, CORRECTION, id("d541"), "1");
+    await drainLeftoverWork();
+    const current = await getAgentRun(options);
+    const historical = await getAgentRun({ ...options, modelAttemptId: attempt(original).model_attempt_id });
+    assert.equal(current.status, "completed");
+    assert.equal(current.decision.kind, "prose_change");
+    if (current.decision.kind !== "prose_change") throw new Error("expected new prose Decision");
+    assert.notEqual(current.decision.decision_id, original.decision.decision_id);
+    assert.deepEqual(current.decision.opened_proposal, { kind: "absent" });
+    assert.equal(attempt(historical).model_attempt_id, attempt(original).model_attempt_id);
+    assert.equal(selected(historical, "author_instruction"), "Stream this passage: keep the voice.");
+    const proposal = await getProposal({ ...options, proposalId });
+    assert.deepEqual(proposal.proposal.source, { kind: "agent_run_decision", run_id: created.effect.run_id,
+      decision_id: original.decision.decision_id });
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
 
 test("continuation consumes an eligible prior binding and keeps current input inspectable", async () => {
   const started = await startRealServer();

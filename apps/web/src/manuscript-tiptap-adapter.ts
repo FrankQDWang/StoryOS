@@ -1,3 +1,4 @@
+import { inlineProposalDecoration, routeInlineEdgeInsertion } from "./inline-proposal-decoration.ts";
 import { Extension, type Editor } from "@tiptap/core";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import Document from "@tiptap/extension-document";
@@ -191,6 +192,7 @@ export function storyosManuscriptExtensions(
     Heading.configure({ levels: [1] }),
     Text,
     blockProposalDecoration,
+    inlineProposalDecoration,
     UniqueID.configure({
       attributeName: "id",
       types: ["paragraph", "heading"],
@@ -202,7 +204,8 @@ export function storyosManuscriptExtensions(
       addKeyboardShortcuts() {
         return {
           Enter: () => {
-            if (this.editor.state.selection.$from.parent.type.name === "blockProposal") {
+            if (this.editor.state.selection.$from.parent.type.name === "blockProposal"
+              || this.editor.state.selection.$from.parent.type.name === "inlineProposal") {
               return insertNewline(this.editor.view);
             }
             if (!this.editor.state.selection.empty) {
@@ -245,6 +248,7 @@ export function storyosManuscriptExtensions(
                 return true;
               }
               if (hasMixedComposition?.() === true) return true;
+              routeInlineEdgeInsertion(transaction, state);
               const mixed = captureStructuredSelection(state, transaction);
               if (mixed !== undefined) {
                 if (canAcceptCandidateInput?.(true) !== true) return false;
@@ -308,7 +312,7 @@ export function storyosEditorProps(blockId: string) {
       if (dropPos !== null) {
         const $pos = view.state.doc.resolve(dropPos.pos);
         if ($pos.parent.type.name === "paragraph" || $pos.parent.type.name === "heading"
-          || $pos.parent.type.name === "blockProposal") {
+          || $pos.parent.type.name === "blockProposal" || $pos.parent.type.name === "inlineProposal") {
           view.dispatch(view.state.tr.setSelection(
             TextSelection.create(view.state.doc, dropPos.pos),
           ));
@@ -326,6 +330,11 @@ export function storyosEditorProps(blockId: string) {
         if (!(event instanceof InputEvent) || event.isComposing
           || event.inputType !== "insertText" || event.data === null) return false;
         const transaction = view.state.tr.insertText(event.data);
+        if (routeInlineEdgeInsertion(transaction, view.state)) {
+          event.preventDefault();
+          view.dispatch(transaction);
+          return true;
+        }
         if (captureStructuredSelection(view.state, transaction) === undefined) return false;
         event.preventDefault();
         view.dispatch(transaction);
@@ -363,8 +372,8 @@ function dispatchPlainTextReplacement(
   }
   const $from = view.state.doc.resolve(from);
   const $to = view.state.doc.resolve(to);
-  if ($from.parent.type.name === "blockProposal"
-    && $to.parent.type.name === "blockProposal"
+  if (($from.parent.type.name === "blockProposal" || $from.parent.type.name === "inlineProposal")
+    && $to.parent.type.name === $from.parent.type.name
     && $from.before($from.depth) === $to.before($to.depth)) {
     const transaction = view.state.tr.insertText(text, from, to);
     transaction.setMeta(STORYOS_ORIGIN, origin);

@@ -213,7 +213,7 @@ pub(crate) async fn prohibit_automatic_successor(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'decision'",
+                AND attempt_role = 'decision' AND decision_position = 0",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -541,7 +541,7 @@ async fn copy_requirement(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND requirement_role = 'primary'",
+                AND requirement_role = 'primary' AND decision_position = 0",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -581,7 +581,7 @@ async fn copy_manifest(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND manifest_role = 'decision'",
+                AND manifest_role = 'decision' AND decision_position = 0",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -614,7 +614,7 @@ async fn load_decision(
                JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
-                AND attempt.attempt_role = 'decision'
+                AND attempt.attempt_role = 'decision' AND attempt.decision_position = 0
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
@@ -647,7 +647,7 @@ async fn decision_payload(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND attempt_role = 'decision'",
+                AND attempt_role = 'decision' AND decision_position = 0",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -677,7 +677,7 @@ async fn write_decision_payload(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND model_attempt_id = $3::text::uuid
-                AND attempt_role = 'decision'
+                AND attempt_role = 'decision' AND decision_position = 0
                 AND decision_id IS NULL",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),

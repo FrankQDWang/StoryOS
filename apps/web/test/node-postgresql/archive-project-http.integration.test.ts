@@ -26,7 +26,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -132,7 +132,7 @@ async function archive(
   request: ArchiveProjectRequest,
 ) {
   const digest = await digestArchiveProject(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -220,7 +220,7 @@ test("archiveProject settles lifecycle, replays, lists archived, and fails close
 
     const blockedRename = renameRequest("Stolen Title", "2", "018f0000-0000-7001-8000-000000000914");
     const blockedDigest = await digestUpdateProject(blockedRename);
-    const blockedChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const blockedChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -263,7 +263,7 @@ test("archiveProject settles lifecycle, replays, lists archived, and fails close
     const lostRequest = archiveRequest("1", "018f0000-0000-7001-8000-000000000916");
     const lostKey = "018f0000-0000-7001-8000-000000000926";
     const lostDigest = await digestArchiveProject(lostRequest);
-    const lostChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const lostChallenge = await withChallengeBudget(second.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: second.projectId,
       fetchImpl: first.fetchImpl,

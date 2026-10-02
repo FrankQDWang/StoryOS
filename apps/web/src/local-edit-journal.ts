@@ -1,3 +1,4 @@
+import { readRecoveryDispositions, retainedRecoverySequences, validateRecoveryDispositions } from "./local-recovery-record.ts";
 import { digestApplyAuthorEdit }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
@@ -309,7 +310,8 @@ function isAppliedSettlement(group: JournalSubmissionGroup) {
 
 function isZeroAuthoritySettlement(group: JournalSubmissionGroup) {
   return group?.settlement?.kind === "zero_authority_receipt_settled"
-    || group?.settlement?.kind === "outcome_query_rejected_no_admission";
+    || group?.settlement?.kind === "outcome_query_rejected_no_admission"
+    || group?.settlement?.kind === "outcome_query_requires_reconfirmation";
 }
 
 function closedReconciliation(group: JournalSubmissionGroup) {
@@ -340,6 +342,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
       "transport_capsules", "transport_attempts"],
     "readonly",
   );
+  const localRecoveryPromise = readRecoveryDispositions(transaction, workspace);
   const explicitAcceptancePromise = readAcceptanceJournal(workspace, transaction);
   void explicitAcceptancePromise.catch(() => {});
   const partitionId = workspace.partition.journal_partition_id;
@@ -358,6 +361,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
         .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
       requestResult(transaction.objectStore("metadata").get(`collection_fences:${partitionId}`)),
     ]);
+  const localRecovery = await localRecoveryPromise;
   const workingBoundary = await readJournalWorkingBoundary(transaction, workspace);
   const explicitAcceptance = await explicitAcceptancePromise;
   const explicitDiscard = await readDiscardJournal(workspace);
@@ -382,7 +386,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   groups.sort((left, right) => left.covered_sequence_range.first
     - right.covered_sequence_range.first);
   return {
-    watermark, activeBase, records, payloadChains, groups, fences, explicitAcceptance, explicitDiscard, explicitDraftUndo, explicitExpansion,
+    localRecovery, watermark, activeBase, records, payloadChains, groups, fences, explicitAcceptance, explicitDiscard, explicitDraftUndo, explicitExpansion,
     ...(workingBoundary ? { workingBoundary } : {}),
   };
 }
@@ -660,7 +664,9 @@ export async function validateJournalSnapshot(
       ))) {
     throw new Error("Local Edit Journal is corrupt");
   }
-  return { ...snapshot, bodyBySequence, blocksBySequence, covered };
+  const validated = { ...snapshot, bodyBySequence, blocksBySequence, covered };
+  validateRecoveryDispositions(validated);
+  return validated;
 }
 
 function provenNoEffectAgainstDurableBase(
@@ -737,11 +743,12 @@ function pendingProjectionFromSnapshot(
   const pendingExpansionCount = snapshot.explicitExpansion?.filter(({ observation }) => observation === undefined).length ?? 0;
   const pendingAcceptanceCount = pendingExpansionCount + pendingUndoCount + pendingDiscardCount + (snapshot.explicitAcceptance?.groups.filter((group) =>
     (group.settlement as { kind?: string })?.kind === "unsettled").length ?? 0);
-  const resolvedSequences = new Set<number>();
+  const resolvedSequences = retainedRecoverySequences(snapshot);
   let hasZeroAuthoritySettlement = false;
   const base = workspace.session.base_snapshot;
   for (const group of snapshot.groups) {
     const groupTargetsCurrentChapter = group.frozen_request_body.chapter_id === base.chapter_id;
+    if (group.ordered_coverage.every((item) => resolvedSequences.has(item.local_intent_sequence))) continue;
     if (isAppliedSettlement(group)) {
       for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
     } else if (isZeroAuthoritySettlement(group) && groupTargetsCurrentChapter) {
@@ -789,6 +796,9 @@ function pendingProjectionFromSnapshot(
   );
   return {
     body,
+    ...(snapshot.groups.some((group) => group.settlement.kind === "outcome_query_requires_reconfirmation"
+      && !group.ordered_coverage.every((item) => resolvedSequences.has(item.local_intent_sequence)))
+      ? { requires_local_reconfirmation: true } : {}),
     blocks: cloneBlocks(blocks),
     save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || hasLegacyReplaceSelection
       ? "needs_attention"
@@ -852,6 +862,7 @@ export async function persistReplaceSelection(
     },
     expectedBody: flattenChapterBody(expectedBlocks),
     expectedBlocks,
+    ...(edit.expectedProposalHeads === undefined ? {} : { expectedProposalHeads: edit.expectedProposalHeads }),
     extraUtf8: edit.text,
     resultingBody: edit.resultingBody,
     inputOrigin: edit.inputOrigin ?? "typing",
@@ -971,8 +982,10 @@ export async function candidateProjectionFromJournal(
   target: AuthorEditProposalTarget,
 ): Promise<string | undefined> {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const retained = retainedRecoverySequences(snapshot);
   const unresolved = snapshot.records.filter((record) =>
-    JSON.stringify(record.proposal_target) === JSON.stringify(target)
+    !retained.has(record.local_intent_sequence)
+    && JSON.stringify(record.proposal_target) === JSON.stringify(target)
     && !snapshot.groups.some((group) => group.settlement.kind
       === "zero_authority_receipt_settled"
       && group.settlement.effect.kind === "proposal_revised"
@@ -1333,6 +1346,7 @@ async function persistAuthorEditUnit(
     // Keep the latest persist through renderer reload. Chrome can drop a non-strict write.
     { durability: "strict" },
   );
+  const recoveryPromise = readRecoveryDispositions(transaction, workspace);
   const metadata = transaction.objectStore("metadata");
   const intents = transaction.objectStore("intents");
   const partitionId = workspace.partition.journal_partition_id;
@@ -1368,7 +1382,9 @@ async function persistAuthorEditUnit(
   const currentSequence = current?.value ?? 0;
   // The allocator is Project-wide. Another partition can advance it without
   // changing this partition's complete, linked projection history.
-  if (!Number.isSafeInteger(currentSequence) || currentSequence < (snapshot.watermark?.value ?? 0)
+  const dispositions = await recoveryPromise;
+  if (JSON.stringify(dispositions) !== JSON.stringify(snapshot.localRecovery ?? [])
+    || !Number.isSafeInteger(currentSequence) || currentSequence < (snapshot.watermark?.value ?? 0)
     || JSON.stringify((boundaryValue as { value?: unknown } | undefined)?.value)
       !== JSON.stringify(snapshot.workingBoundary)
     || JSON.stringify(durableWatermark) !== JSON.stringify(snapshot.watermark)
@@ -1410,9 +1426,11 @@ async function persistAuthorEditUnit(
     transaction.abort();
     throw new Error("Local Edit Journal schema or partition is incompatible");
   }
-  const existingPayloadChain = chains.find((chain) =>
+  const retainedChains = new Set((snapshot.localRecovery ?? []).flatMap((item) => item.chains.map((chain) => chain.payload_chain_id)));
+  const activeChains = chains.filter((chain) => !retainedChains.has(chain.payload_chain_id));
+  const existingPayloadChain = activeChains.find((chain) =>
     isOpenPayloadChainForBase(chain, base.snapshot_id, edit.candidate?.target));
-  if (chains.filter((chain) => isOpenPayloadChainForBase(
+  if (activeChains.filter((chain) => isOpenPayloadChainForBase(
     chain, base.snapshot_id, edit.candidate?.target,
   )).length > 1
     || (existingPayloadChain?.ordered_patch_refs.length ?? 0) >= AUTHOR_EDIT_MAX_UNITS) {

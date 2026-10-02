@@ -7,9 +7,9 @@ use crate::release1_agent_run::{
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
     AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
     CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
-    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ContextBlockReason, ContextProjectionInspect,
-    ContextPurpose, ContextRejectionInspect, ContextRejectionReason, ContextSourceClass,
-    ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
+    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, CapturedMemorySettingsInspect, ContextBlockReason,
+    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
+    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
     ContinuationInputMappingInspect, ConversationSelection, CreateAgentRunEffect,
     CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
     DestinationIo, EvidenceAvailability, GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
@@ -18,9 +18,10 @@ use crate::release1_agent_run::{
     OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
     OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
     OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
-    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, ProjectionMode,
-    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
-    UnknownCreateSuccessorDisposition,
+    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
+    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
+    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
+    SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 
 pub(super) const CREATE_REQUEST_SCHEMA_PATH: &str =
@@ -60,7 +61,14 @@ pub(super) fn create_request_schema_bytes() -> Vec<u8> {
         constrain_uuid_fields(existing, &["conversation_id"]);
     }
     if let Some(target) = schema["$defs"].get_mut("AssistanceWorkingTarget") {
-        constrain_uuid_fields(target, &["chapter_id"]);
+        constrain_uuid_fields(target, &["chapter_id", "source_chapter_id"]);
+    }
+    if let Some(target) = schema["$defs"].get_mut("PassageTarget") {
+        constrain_uuid_fields(target, &["chapter_id", "base_authoritative_revision_id"]);
+        target["properties"]["manuscript_block_ids"]["items"]["format"] = json!("uuid");
+    }
+    if let Some(target) = schema["$defs"].get_mut("ProposalCandidateTarget") {
+        constrain_uuid_fields(target, &["proposal_id", "operation_id", "revision_id"]);
     }
     json_bytes(&schema)
 }
@@ -131,6 +139,13 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         schema["properties"][field]["format"] = json!("uuid");
     }
     schema["properties"]["memory_settings_revision"]["format"] = json!("uuid");
+    if let Some(settings) = schema["$defs"].get_mut("CapturedMemorySettingsInspect") {
+        for variant in settings["oneOf"].as_array_mut().into_iter().flatten() {
+            if let Some(revision) = variant["properties"].get_mut("memory_settings_revision") {
+                revision["format"] = json!("uuid");
+            }
+        }
+    }
     if let Some(scope) = schema["$defs"].get_mut("ProjectScope") {
         scope["properties"]["owner_user_id"]["format"] = json!("uuid");
         scope["properties"]["project_id"]["format"] = json!("uuid");
@@ -147,6 +162,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         constrain_count_fields(inspect);
     }
     for name in [
+        "AgentRunSteeringInspect",
         "TokenCountingProfileInspect",
         "ContextSourceInspect",
         "ContextProjectionInspect",
@@ -163,6 +179,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         constrain_uuid_fields(availability, &["current_revision_id"]);
     }
     for name in [
+        "AgentRunSteeringInspect",
         "AttemptEvidence",
         "OptionalDecisionInspect",
         "OptionalModelAttemptInspect",
@@ -174,12 +191,20 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         "ActiveCompactionKnownInput",
         "OptionalContinuationInspect",
         "OptionalOpenedProposalInspect",
+        "ProseChangeLocationInspect",
+        "PassageTarget",
+        "ProposalCandidateTarget",
+        "ProseChangeLocationOutcome",
+        "ProseChangeLocationCurrent",
         "ContinuationAdmissionInspect",
     ] {
         if let Some(definition) = schema["$defs"].get_mut(name) {
             constrain_uuid_fields(
                 definition,
                 &[
+                    "steering_input_id",
+                    "input_snapshot_id",
+                    "model_attempt_id",
                     "attempt_id",
                     "decision_id",
                     "model_attempt_id",
@@ -208,6 +233,13 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
                     "run_step_id",
                     "id",
                     "proposal_id",
+                    "chapter_id",
+                    "manuscript_block_id",
+                    "base_authoritative_revision_id",
+                    "operation_id",
+                    "revision_id",
+                    "prior_revision_id",
+                    "validation_receipt_id",
                     "processing_destination_identity",
                     "model_registration_revision",
                     "project_model_use_binding_revision",
@@ -216,6 +248,8 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
             );
         }
     }
+    schema["$defs"]["PassageTarget"]["properties"]["manuscript_block_ids"]["items"]["format"] =
+        json!("uuid");
     json_bytes(&schema)
 }
 
@@ -263,10 +297,12 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
+        PassageTarget::decl(&config),
+        ProposalCandidateTarget::decl(&config),
         InstructionBinding::decl(&config),
         AssistanceCause::decl(&config),
         CreateAgentRunInput::decl(&config),
@@ -295,6 +331,9 @@ pub(super) fn typescript_type_declarations() -> String {
         AttemptEvidence::decl(&config),
         OptionalContinuationInspect::decl(&config),
         OptionalOpenedProposalInspect::decl(&config),
+        ProseChangeLocationInspect::decl(&config),
+        ProseChangeLocationOutcome::decl(&config),
+        ProseChangeLocationCurrent::decl(&config),
         OptionalDecisionInspect::decl(&config),
         ContinuationInputMappingInspect::decl(&config),
         ContinuationAdmissionInspect::decl(&config),
@@ -309,6 +348,8 @@ pub(super) fn typescript_type_declarations() -> String {
         AgentRunStreamItemInspect::decl(&config),
         AgentRunUsageInspect::decl(&config),
         GetAgentRunRequest::decl(&config),
+        CapturedMemorySettingsInspect::decl(&config),
+        crate::release1_agent_run::AgentRunSteeringInspect::decl(&config),
         GetAgentRunResponse::decl(&config),
         OriginalResultRetrievalDisposition::decl(&config),
         OptionalOriginalResultRetrievalInspect::decl(&config),
@@ -440,6 +481,13 @@ fn get_fixture() -> Value {
         "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",
         "run_id": "018f0000-0000-7001-8000-000000000a34",
         "status": "queued",
+        "steering_inputs": [],
+        "captured_memory_settings": {
+            "kind": "available",
+            "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",
+            "use_enabled": true,
+            "contribution_enabled": true
+        },
         "context": {
             "operation_requirement_id": "018f0000-0000-7001-8000-000000000a39",
             "input_snapshot_id": "018f0000-0000-7001-8000-000000000a3a",

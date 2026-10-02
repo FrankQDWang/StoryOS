@@ -3,7 +3,8 @@ use axum::extract::Query;
 use sha2::{Digest, Sha256};
 use storyos_application::{
     AuthorCommandAdmissionIds, ConversationSelection, CreateAgentRunCommand, CreateAgentRunError,
-    EditorClientBinding, ProjectCommandChallengeBinding, open_agent_run, request_create_agent_run,
+    EditorClientBinding, ProjectCommandChallengeBinding, inspect_agent_run,
+    request_create_agent_run,
 };
 
 use super::editor_session::{exact_header, session_binding_ref};
@@ -73,7 +74,35 @@ pub(super) async fn create_agent_run(
             conversation_id.clone()
         }
     };
-    let contracts::AssistanceWorkingTarget::CurrentChapter { chapter_id } = &input.working_target;
+    let mut candidate_target = None;
+    let (chapter_id, passage_targets) = match &input.working_target {
+        contracts::AssistanceWorkingTarget::CurrentChapter { chapter_id } => (chapter_id, None),
+        contracts::AssistanceWorkingTarget::ProposalCandidate {
+            source_chapter_id,
+            target,
+        } => {
+            for value in [
+                &target.proposal_id,
+                &target.operation_id,
+                &target.revision_id,
+            ] {
+                valid_uuid(value)?;
+            }
+            candidate_target = Some(storyos_core::ProposalCandidateTarget {
+                proposal_id: target.proposal_id.clone(),
+                operation_id: target.operation_id.clone(),
+                revision_id: target.revision_id.clone(),
+            });
+            (source_chapter_id, None)
+        }
+        contracts::AssistanceWorkingTarget::PassageCollection {
+            source_chapter_id,
+            targets,
+        } => (
+            source_chapter_id,
+            Some(super::passage_targets::resolve(targets)?),
+        ),
+    };
     valid_uuid(chapter_id)?;
     let store = project_reader(&state).await?;
     let admission = request_create_agent_run(
@@ -115,6 +144,8 @@ pub(super) async fn create_agent_run(
             },
             author_message: input.author_message.text.clone(),
             chapter_id: chapter_id.clone(),
+            passage_targets,
+            candidate_target,
             ids: AuthorCommandAdmissionIds {
                 command_id: Uuid::now_v7().to_string(),
                 author_command_admission_id: Uuid::now_v7().to_string(),
@@ -182,29 +213,43 @@ pub(super) async fn get_agent_run(
         valid_uuid(model_attempt_id)?;
     }
     let reader = project_reader(&state).await?;
-    let Some(record) = open_agent_run(&reader, &scope, &run_id)
+    let selection = query
+        .model_attempt_id
+        .map(storyos_application::AgentRunReadSelection::ModelAttempt)
+        .unwrap_or(storyos_application::AgentRunReadSelection::Current);
+    let Some(record) = inspect_agent_run(&reader, &scope, &run_id, &selection)
         .await
         .map_err(create_agent_run_error)?
     else {
         return Err(resource_unavailable());
     };
-    if let Some(model_attempt_id) = query.model_attempt_id.as_deref() {
-        let matches = record
-            .model
-            .as_ref()
-            .is_some_and(|model| model.model_attempt_id == model_attempt_id);
-        if !matches {
-            return Err(resource_unavailable());
-        }
-    }
     Ok(Json(contracts::GetAgentRunResponse {
         schema_id: contracts::GET_AGENT_RUN_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: Uuid::now_v7().to_string(),
         project_scope: contract_scope(&scope),
         project_agent_id: record.project_agent_id,
         conversation_id: record.conversation_id,
+        captured_memory_settings: match record.captured_memory_settings {
+            Some(settings) => contracts::CapturedMemorySettingsInspect::Available {
+                memory_settings_revision: record.memory_settings_revision.clone(),
+                use_enabled: settings.use_enabled,
+                contribution_enabled: settings.contribution_enabled,
+            },
+            None => contracts::CapturedMemorySettingsInspect::Unavailable,
+        },
         memory_settings_revision: record.memory_settings_revision,
         run_id: record.run_id,
+        steering_inputs: record
+            .steering_inputs
+            .into_iter()
+            .map(|input| contracts::AgentRunSteeringInspect {
+                steering_input_id: input.steering_input_id,
+                input_position: input.input_position,
+                author_message: input.author_message,
+                input_snapshot_id: input.input_snapshot_id,
+                model_attempt_id: input.model_attempt_id,
+            })
+            .collect(),
         status: inspect_status(record.status),
         context: inspect_context(&record.context),
         decision: inspect_decision(&record.decision),
@@ -381,6 +426,7 @@ fn inspect_decision(
             selected,
             text,
             producer_input,
+            locations,
             continuation_binding_id,
             opened_proposal_id,
         } => contracts::OptionalDecisionInspect::ProseChange {
@@ -388,6 +434,7 @@ fn inspect_decision(
             selected: *selected,
             text: text.clone(),
             producer_input: producer_input.clone(),
+            locations: locations.clone(),
             continuation: inspect_continuation(continuation_binding_id.as_deref()),
             authoritative: false,
             opened_proposal: match opened_proposal_id.as_deref() {
@@ -664,6 +711,31 @@ fn inspect_context(
             .clone(),
         input_snapshot_id: record.operation_requirement.input_snapshot_id.clone(),
         purpose: contracts::ContextPurpose::CurrentPassageAssistance,
+        candidate_target: record
+            .operation_requirement
+            .candidate_target
+            .as_ref()
+            .map(|target| contracts::ProposalCandidateTarget {
+                proposal_id: target.proposal_id.clone(),
+                operation_id: target.operation_id.clone(),
+                revision_id: target.revision_id.clone(),
+            }),
+        passage_targets: record
+            .operation_requirement
+            .passage_targets
+            .as_ref()
+            .map(|targets| {
+                targets
+                    .iter()
+                    .map(|target| contracts::PassageTarget {
+                        chapter_id: target.chapter_id.clone(),
+                        base_authoritative_revision_id: target
+                            .base_authoritative_revision_id
+                            .clone(),
+                        manuscript_block_ids: target.manuscript_block_ids.clone(),
+                    })
+                    .collect()
+            }),
         token_counting_profile: contracts::TokenCountingProfileInspect {
             profile_revision: record.token_counting_profile_revision.clone(),
             algorithm_revision: record.token_counting_algorithm_revision.clone(),

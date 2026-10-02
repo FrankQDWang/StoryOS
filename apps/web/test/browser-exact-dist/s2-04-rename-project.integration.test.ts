@@ -1,3 +1,4 @@
+import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -57,12 +58,9 @@ it("the author renames one exact Project and the library plus opened title conve
   await expect.poll(() =>
     created.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("empty-project-ready");
-  await expect.poll(() => {
-    const submit = created.contentDocument?.querySelector<HTMLButtonElement>(
-      '#app form[data-rename] button[type="submit"]',
-    );
-    return submit !== null && submit !== undefined && !submit.disabled;
-  }).toBe(true);
+  await beginTreeAction(created.contentDocument, "[data-project-id]", "[data-begin-rename-project]");
+  created.contentDocument?.querySelector<HTMLButtonElement>("[data-begin-rename-project]")?.click();
+  await expect.poll(() => created.contentDocument?.querySelector('input[name="rename-title"]')?.tagName).toBe("INPUT");
   const renameInput = created.contentDocument?.querySelector<HTMLInputElement>(
     '#app input[name="rename-title"]',
   );
@@ -96,6 +94,6 @@ it("the author renames one exact Project and the library plus opened title conve
   renamedButton?.click();
   await expect.poll(() => root.getAttribute("data-boot-state")).toBe("empty-project-ready");
   expect(root.querySelector("h1")?.textContent).toBe("Renamed Novel");
-  expect(root.querySelector("textarea")).toBeNull();
+  expect(root.querySelector(".editor-panel textarea")).toBeNull();
   expect(root.textContent).toContain("空工作区");
 });

@@ -43,7 +43,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -157,7 +157,7 @@ async function postVolume(
   request: CreateVolumeRequest,
 ) {
   const digest = await digestCreateVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -189,7 +189,7 @@ async function postChapter(
   request: CreateChapterRequest,
 ) {
   const digest = await digestCreateChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -222,7 +222,7 @@ async function patchChapter(
   request: UpdateChapterRequest,
 ) {
   const digest = await digestUpdateChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -518,7 +518,7 @@ test("updateChapter refuses a missing Chapter join and an archived Project", asy
     assert.equal(invalidJoin.updated.receipt.author_action_sequence, null);
 
     const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-000000000e68"));
-    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const archiveChallenge = await withChallengeBudget(owned.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: owned.projectId,
       fetchImpl: owned.fetchImpl,
@@ -605,7 +605,7 @@ async function renameProject(
   request: UpdateProjectRequest,
 ) {
   const digest = await digestUpdateProject(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -681,7 +681,7 @@ test("updateChapter freezes applied, no-effect, and conflict acknowledgements af
       correlation_id: "018f0000-0000-7001-8000-000000000f0b",
     };
     const sessionDigest = await digestCreateEditorSession(sessionRequest);
-    const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const sessionChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -769,7 +769,7 @@ test("updateChapter freezes applied, no-effect, and conflict acknowledgements af
       },
     };
     const switchDigest = await digestSetCurrentChapter(switchRequest);
-    const switchChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const switchChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

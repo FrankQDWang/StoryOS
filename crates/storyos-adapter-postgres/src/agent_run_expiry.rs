@@ -294,7 +294,7 @@ async fn load_latest_attempt(
                 AND attempt.conversation_id = $3::text::uuid
                 AND attempt.attempt_role = 'decision'
                 AND run.run_id <> $4::text::uuid
-              ORDER BY run.run_id DESC
+              ORDER BY run.run_id DESC, attempt.decision_position DESC
               LIMIT 1",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),

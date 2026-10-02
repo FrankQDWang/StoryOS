@@ -326,11 +326,12 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
 
   focusAtEnd(frame);
   await applyTrustedInput({ operation: "insert_text", text: " Hello" });
+  let input = pendingWithLiveBody(frame);
   await waitFor("the first saving projection", () => {
-    const pending = pendingWithLiveBody(frame);
-    return pending.body === AFTER_TYPE && pending.save_state === "saving";
+    input = pendingWithLiveBody(frame);
+    return input.body === AFTER_TYPE && input.save_state === "saving"
+      && input.unsettled_intent_count === 1;
   });
-  const input = pendingWithLiveBody(frame);
   await waitFor("the first collected Journal group", async () =>
     collectedGroups(await readJourneyJournal(applicationWindow(frame)), 1));
   await waitFor("the first saved projection", () => {
@@ -341,11 +342,12 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
 
   focusAtEnd(frame);
   await applyTrustedInput({ operation: "insert_text", text: "中文" });
+  let afterImeInput = pendingWithLiveBody(frame);
   await waitFor("the IME saving projection", () => {
-    const pending = pendingWithLiveBody(frame);
-    return pending.body === AFTER_IME && pending.save_state === "saving";
+    afterImeInput = pendingWithLiveBody(frame);
+    return afterImeInput.body === AFTER_IME && afterImeInput.save_state === "saving"
+      && afterImeInput.unsettled_intent_count === 1;
   });
-  const afterImeInput = pendingWithLiveBody(frame);
   await waitFor("the second collected Journal group", async () =>
     collectedGroups(await readJourneyJournal(applicationWindow(frame)), 2));
   await waitFor("the IME saved projection", () => {
@@ -357,11 +359,12 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
   await applicationWindow(frame).navigator.clipboard.writeText(" EN");
   focusAtEnd(frame);
   await applyTrustedInput({ operation: "paste" });
+  let afterPasteInput = pendingWithLiveBody(frame);
   await waitFor("the paste saving projection", () => {
-    const pending = pendingWithLiveBody(frame);
-    return pending.body === AFTER_PASTE && pending.save_state === "saving";
+    afterPasteInput = pendingWithLiveBody(frame);
+    return afterPasteInput.body === AFTER_PASTE && afterPasteInput.save_state === "saving"
+      && afterPasteInput.unsettled_intent_count === 1;
   });
-  const afterPasteInput = pendingWithLiveBody(frame);
   await waitFor("the third collected Journal group", async () =>
     collectedGroups(await readJourneyJournal(applicationWindow(frame)), 3));
   await waitFor("the paste saved projection", () => {

@@ -8,6 +8,7 @@ import { test } from "vitest";
 
 import {
   activityStream,
+  cancelAgentRun,
   createAgentRun,
   createChapter,
   createProject,
@@ -15,6 +16,7 @@ import {
   createProjectCommandChallenge,
   createVolume,
   digestCreateAgentRun,
+  digestCancelAgentRun,
   digestCreateChapter,
   digestCreateVolume,
   digestUpdateProjectAssistance,
@@ -24,6 +26,7 @@ import {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateAgentRunRequest,
+  CancelAgentRunRequest,
   CreateChapterRequest,
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
@@ -37,7 +40,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -161,7 +164,7 @@ async function challenged<T>(options: {
   key: string;
   send: (antiForgery: string) => Promise<T>;
 }): Promise<T> {
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(options.projectId, () => createProjectCommandChallenge({
     baseUrl: options.baseUrl,
     projectId: options.projectId,
     fetchImpl: options.fetchImpl,
@@ -295,7 +298,7 @@ async function postRun(
   request: CreateAgentRunRequest,
 ) {
   const digest = await digestCreateAgentRun(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -411,6 +414,15 @@ test("createAgentRun admits one conversation and keeps query scope closed", asyn
     });
     assert.equal(queried.conversation_id, created.admitted.conversation_id);
     assert.equal(queried.memory_settings_revision, created.admitted.memory_settings_revision);
+    assert.deepEqual(
+      Reflect.get(queried, "captured_memory_settings"),
+      {
+        kind: "available",
+        memory_settings_revision: created.admitted.memory_settings_revision,
+        use_enabled: true,
+        contribution_enabled: true,
+      },
+    );
     assert.equal(queried.run_id, created.admitted.effect.run_id);
     assert.equal(queried.status, "queued");
     assert.equal(queried.context.purpose, "current_passage_assistance");
@@ -539,6 +551,78 @@ async function waitForSettledKey(projectId: string, idempotencyKey: string) {
   throw new Error(`createAgentRun ${idempotencyKey} did not settle`);
 }
 
+test("Run settings stay captured when a legacy current revision is restored or evidence is unavailable", async () => {
+  const started = await startRealServer();
+  try {
+    const project = await createEmpty(started.baseUrl, "session-a", id("da00"), "Captured Memory", id("da01"));
+    const chapterId = await prepareProject(started.baseUrl, project.fetchImpl, project.projectId, "d0");
+    const created = await postRun(started.baseUrl, project.fetchImpl, project.projectId, id("da11"),
+      runRequest({ kind: "new" }, chapterId, id("da10")));
+    const options = { baseUrl: started.baseUrl, fetchImpl: project.fetchImpl, projectId: project.projectId };
+    const original = await getAgentRun({ ...options, runId: created.admitted.effect.run_id });
+    const cancel: CancelAgentRunRequest = {
+      command_schema: "storyos.command.cancel-agent-run.request.v1",
+      cancel_agent_run_input: { ...BINDING, correlation_id: id("da13") },
+    };
+    await challenged({ ...options, method: "POST",
+      route: "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
+      schema: cancel.command_schema, digest: await digestCancelAgentRun(cancel), key: id("da12"),
+      send: (antiForgery) => cancelAgentRun({ ...options, runId: original.run_id,
+        idempotencyKey: id("da12"), antiForgery, request: cancel }),
+    });
+    assert.equal((await getAgentRun({ ...options, runId: original.run_id })).status, "cancelled");
+    await queryPostgres(`
+      UPDATE storyos.conversation_memory_settings SET is_current = FALSE
+       WHERE project_id = '${project.projectId}'::uuid;
+      INSERT INTO storyos.conversation_memory_settings
+      SELECT (jsonb_populate_record(NULL::storyos.conversation_memory_settings,
+        (to_jsonb(settings) - 'is_current') || jsonb_build_object(
+          'memory_settings_revision', '${id("da14")}', 'use_enabled', false,
+          'contribution_enabled', true))).*
+        FROM storyos.conversation_memory_settings AS settings
+       WHERE project_id = '${project.projectId}'::uuid;
+    `);
+    const next = await postRun(started.baseUrl, project.fetchImpl, project.projectId, id("da15"),
+      runRequest({ kind: "existing", conversation_id: original.conversation_id }, chapterId, id("da16")));
+    const current = await getAgentRun({ ...options, runId: next.admitted.effect.run_id });
+    assert.equal(next.admitted.memory_settings_revision, id("da14"));
+    assert.deepEqual(current.captured_memory_settings, {
+      kind: "available", memory_settings_revision: id("da14"),
+      use_enabled: false, contribution_enabled: true,
+    });
+    assert.deepEqual((await getAgentRun({ ...options, runId: original.run_id })).captured_memory_settings,
+      original.captured_memory_settings);
+    await assert.rejects(() => queryPostgres(`
+      INSERT INTO storyos.conversation_memory_settings
+      SELECT (jsonb_populate_record(NULL::storyos.conversation_memory_settings,
+        to_jsonb(settings) || jsonb_build_object('memory_settings_revision', '${id("da17")}'))).*
+        FROM storyos.conversation_memory_settings AS settings
+       WHERE project_id = '${project.projectId}'::uuid AND is_current IS NULL;
+    `), (error) => String(error).includes("conversation_memory_settings_one_current"));
+    await queryPostgres(`
+      CREATE POLICY issue_876_withheld_settings ON storyos.conversation_memory_settings
+        AS RESTRICTIVE FOR SELECT TO storyos_runtime USING (
+          NOT (project_id = '${project.projectId}'::uuid
+            AND memory_settings_revision = '${original.memory_settings_revision}'::uuid));
+    `);
+    assert.deepEqual((await getAgentRun({ ...options, runId: original.run_id })).captured_memory_settings,
+      { kind: "unavailable" });
+    assert.deepEqual((await getAgentRun({ ...options, runId: current.run_id })).captured_memory_settings,
+      current.captured_memory_settings);
+    await assert.rejects(() => getAgentRun({ ...options, runId: original.run_id,
+      fetchImpl: browserFetch(started.baseUrl, "session-b") }), (error) => {
+      const protocol = requireStoryOSProtocolError(error);
+      return protocol.status === 404 && !String(protocol.responseBody).includes(original.conversation_id);
+    });
+  } finally {
+    try {
+      await queryPostgres("DROP POLICY IF EXISTS issue_876_withheld_settings ON storyos.conversation_memory_settings");
+    } finally {
+      await stopRealServer(started.server);
+    }
+  }
+});
+
 test("createAgentRun reopens an idle conversation and refuses digest or scope substitution", async () => {
   const started = await startRealServer();
   try {
@@ -577,7 +661,7 @@ test("createAgentRun reopens an idle conversation and refuses digest or scope su
     mutated.create_agent_run_input.author_message = { text: "A different assistance request." };
     const mutatedDigest = await digestCreateAgentRun(mutated);
     await assert.rejects(
-      () => withChallengeRetry(() => createProjectCommandChallenge({
+      () => withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
         baseUrl: started.baseUrl,
         projectId: first.projectId,
         fetchImpl: first.fetchImpl,
@@ -671,7 +755,7 @@ test("createAgentRun exact retry after commit keeps the first acknowledgement", 
     const chapterId = await prepareProject(started.baseUrl, first.fetchImpl, first.projectId);
     const request = runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000b52");
     const digest = await digestCreateAgentRun(request);
-    const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const challenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -780,7 +864,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
     );
     const heldDigest = await digestCreateAgentRun(heldRequest);
     const competingDigest = await digestCreateAgentRun(competingRequest);
-    const heldChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const heldChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -792,7 +876,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
         idempotency_key: heldKey,
       },
     }));
-    const competingChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const competingChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

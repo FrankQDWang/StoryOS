@@ -79,7 +79,7 @@ it("the current User library lists owned Projects and opens an empty Project fro
   emptyButton?.click();
   await expect.poll(() => root.getAttribute("data-boot-state")).toBe("empty-project-ready");
   expect(root.querySelector("h1")?.textContent).toBe("Library Empty");
-  expect(root.querySelector("textarea")).toBeNull();
+  expect(root.querySelector(".editor-panel textarea")).toBeNull();
   expect(root.textContent).toContain("空工作区");
   const tree = root.querySelector('nav[aria-label="稿件目录"]');
   expect(tree).not.toBeNull();

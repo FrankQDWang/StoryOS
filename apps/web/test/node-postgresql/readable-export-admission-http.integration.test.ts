@@ -29,7 +29,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 import {
   assertExportAdmissionFreezes,
@@ -127,7 +127,7 @@ async function postExport(
   request: ExportHumanReadableManuscriptRequest,
 ) {
   const digest = await digestExportHumanReadableManuscript(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -377,7 +377,7 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
     assert.equal(ready.export_id, historical.admitted.effect.export_id);
 
     const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-00000000ae16"));
-    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const archiveChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -401,7 +401,7 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
 
     const refusedRequest = exportRequest("018f0000-0000-7001-8000-00000000ae17");
     const refusedDigest = await digestExportHumanReadableManuscript(refusedRequest);
-    const refusedChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const refusedChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -552,7 +552,7 @@ test("the Worker settles failed when the Project is archived after admission", a
       throw new Error("Human-readable export must admit");
     }
     const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-00000000b016"));
-    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const archiveChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

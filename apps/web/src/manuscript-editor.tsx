@@ -37,7 +37,11 @@ import {
 } from "./block-proposal-decoration.ts";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 
+import type { ProposalFocus } from "./proposal-navigation.ts";
+
 export interface ManuscriptEditorProps {
+  focusProposal?: ProposalFocus | undefined;
+  onCandidateFocus?: ((focus: ProposalFocus | undefined) => void) | undefined;
   blocks: readonly ManuscriptParagraph[];
   proposals?: readonly BlockProposalProjection[];
   editable: boolean;
@@ -54,12 +58,14 @@ export interface ManuscriptEditorProps {
     operationId: string;
     revisionId: string;
     text: string;
+    operationIds?: readonly string[] | undefined;
   }) => void;
   onRejectProposal?: (target: {
     proposalId: string;
     operationId: string;
     revisionId: string;
     text: string;
+    operationIds?: readonly string[] | undefined;
   }) => void;
   onReplanProposal?: (target: {
     proposalId: string;
@@ -136,7 +142,7 @@ export function ManuscriptEditor({
   controllerRef,
   onProjection,
   onFailure,
-  onCandidateSettled,
+  onCandidateSettled, focusProposal, onCandidateFocus,
   onAcceptProposal,
   onRejectProposal,
   onReplanProposal,
@@ -145,6 +151,7 @@ export function ManuscriptEditor({
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
+  const focusedProposalRef = useRef<string | undefined>(undefined);
   const mixedCompositionRef = useRef<StructuredSelectionEdit | undefined>(undefined);
   const mixedCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionStartRef = useRef<ProseMirrorNode | null>(null);
@@ -154,6 +161,10 @@ export function ManuscriptEditor({
   const onProjectionRef = useRef(onProjection);
   const onFailureRef = useRef(onFailure);
   const onCandidateSettledRef = useRef(onCandidateSettled);
+  const onCandidateFocusRef = useRef(onCandidateFocus);
+  onCandidateFocusRef.current = onCandidateFocus;
+  const proposalsRef = useRef(proposals);
+  proposalsRef.current = proposals;
   const onAcceptProposalRef = useRef(onAcceptProposal);
   const onRejectProposalRef = useRef(onRejectProposal);
   const onReplanProposalRef = useRef(onReplanProposal);
@@ -201,7 +212,7 @@ export function ManuscriptEditor({
       if (nextBlocks === undefined) return;
       syncManuscriptSurface(current.view.dom, nextBlocks);
       if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) {
-        observedBlocksRef.current = nextBlocks;
+        if (!current.view.composing && !composingRef.current) observedBlocksRef.current = nextBlocks;
         return;
       }
       const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
@@ -278,7 +289,9 @@ export function ManuscriptEditor({
                 primitive.kind === "replace_block_selection")?.text ?? "",
             }
             : edit);
-      void idleRef.current?.persist(edit, origin, createdAt);
+      const edgeHeads = transaction.getMeta("storyos.inlineEdgeHeads") as string[] | undefined;
+      void idleRef.current?.persist(edgeHeads === undefined ? edit
+        : { ...edit, expectedProposalHeads: edgeHeads }, origin, createdAt);
     },
   }, []);
 
@@ -335,14 +348,38 @@ export function ManuscriptEditor({
   }, [editable, editor]);
 
   useEffect(() => {
-    if (editor !== null) projectBlockProposals(editor, proposals);
-  }, [editor, proposals]);
+    if (editor === null) return;
+    projectBlockProposals(editor, proposals);
+    if (!editable) { focusedProposalRef.current = undefined; return; }
+    if (focusProposal === undefined) return;
+    editor.state.doc.descendants((node, position) => {
+      if (node.type.name !== "blockProposal" || node.attrs.proposalId !== focusProposal.proposalId
+        || node.attrs.operationId !== focusProposal.operationId || node.attrs.revisionId !== focusProposal.revisionId
+        || node.attrs.blockId !== focusProposal.blockId) return;
+      const identity = `${focusProposal.proposalId}:${focusProposal.operationId}:${focusProposal.revisionId}`;
+      if (focusedProposalRef.current !== identity) {
+        editor.commands.setTextSelection(position + 1);
+        editor.view.focus();
+        focusedProposalRef.current = identity;
+        onCandidateFocusRef.current?.(focusProposal);
+      }
+      const candidate = editor.view.nodeDOM(position);
+      if (candidate instanceof HTMLElement) {
+        candidate.scrollIntoView({ block: "nearest" });
+      }
+    });
+  }, [editor, proposals, focusProposal, editable]);
 
   useEffect(() => {
     if (editor === null) return;
     const onClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const focused = target.closest<HTMLElement>("[data-candidate-proposal-id]");
+      onCandidateFocusRef.current?.(focused === null ? undefined : {
+        proposalId: focused.dataset.candidateProposalId!, operationId: focused.dataset.proposalOperationId!,
+        revisionId: focused.dataset.proposalRevisionId!, blockId: focused.dataset.proposalTargetId!,
+      });
       const acceptButton = target.closest<HTMLButtonElement>("button[data-proposal-accept]");
       const rejectButton = target.closest<HTMLButtonElement>("button[data-proposal-reject]");
       const replanButton = target.closest<HTMLButtonElement>("button[data-proposal-replan]");
@@ -350,7 +387,10 @@ export function ManuscriptEditor({
       const copyButton = target.closest<HTMLButtonElement>("button[data-proposal-copy]");
       const button = acceptButton ?? rejectButton ?? replanButton ?? withdrawButton ?? copyButton;
       const proposal = button?.closest<HTMLElement>("[data-proposal-id]");
-      const text = proposal?.querySelector(".block-proposal-text")?.textContent;
+      const proposalId = proposal?.dataset.proposalId;
+      const inline = proposalId === undefined ? null
+        : editor.view.dom.querySelector(`[data-inline-proposal-id="${proposalId}"]`);
+      const text = inline?.textContent ?? proposal?.querySelector(".block-proposal-text")?.textContent;
       if (button === null || button === undefined || proposal === null
         || proposal === undefined || text === null || text === undefined) return;
       const decision = {
@@ -358,6 +398,8 @@ export function ManuscriptEditor({
         operationId: proposal.dataset.proposalOperationId ?? "",
         revisionId: proposal.dataset.proposalRevisionId ?? "",
         text,
+        ...(button.hasAttribute("data-proposal-all") ? { operationIds: proposalsRef.current.find((item) =>
+          item.proposalId === proposal.dataset.proposalId && item.operationId === proposal.dataset.proposalOperationId)?.pendingOperationIds } : {}),
       };
       if (copyButton !== null) onCopyProposalRef.current?.(decision.proposalId);
       else if (replanButton !== null) onReplanProposalRef.current?.(decision);
@@ -370,26 +412,31 @@ export function ManuscriptEditor({
   }, [editor]);
 
   useEffect(() => {
-    if (editor === null) return;
+    if (editor === null || editor.view.composing || composingRef.current) return;
     const identityKey = blocks.map((block) =>
       `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" ");
     const rendered = readManuscriptParagraphs(editor.state.doc);
     const renderedKey = rendered?.map((block) =>
       `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" ");
-    if (renderedKey !== identityKey) {
+    if (renderedKey !== identityKey || (rendered !== undefined
+      && !paragraphsEqual(rendered, blocks) && persistWorkspace?.pending.save_state === "saved"
+      && persistWorkspace.pending.unsettled_intent_count === 0)) {
       hydrateManuscriptBlocks(editor, blocks);
+      projectBlockProposals(editor, proposals);
     }
     observedBlocksRef.current = readManuscriptParagraphs(editor.state.doc)
       ?? blocks.map((block) => ({ ...block }));
     syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
   }, [blocks.map((block) =>
-    `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" "), editor]);
+    `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}:${block.text}`).join(" "),
+    persistWorkspace?.pending.save_state, editor]);
 
   useEffect(() => {
     if (editor === null || persistWorkspace === undefined) {
       const detached: ManualInputController = {
         flush: () => Promise.resolve(),
         whenIdle: () => Promise.resolve(),
+        installProjection: (projection) => onProjectionRef.current(projection),
         hasIncompleteSemanticIntent: () => composingRef.current,
         close() {},
         replaceBound: async () => "refused",
@@ -399,6 +446,15 @@ export function ManuscriptEditor({
         if (controllerRef.current === detached) controllerRef.current = null;
       };
     }
+    const installProjection = (projection: PendingEditProjection): void => {
+      const rendered = readManuscriptParagraphs(editor.state.doc);
+      const local = idle.hasQueuedInput() && rendered !== undefined
+        && !paragraphsEqual(rendered, projection.blocks)
+        ? projectLocalPending({ ...persistWorkspace, pending: projection }, rendered) : undefined;
+      if (local !== undefined) {
+        onProjectionRef.current({ ...local, save_state: "saving" }, "local");
+      } else onProjectionRef.current(projection);
+    };
     const idle = createAuthorEditIdleController({
       workspace: persistWorkspace,
       baseUrl,
@@ -408,11 +464,12 @@ export function ManuscriptEditor({
         await collectEligibleJournalPayload(workspace);
         onCandidateSettledRef.current?.();
       },
-      onProjection: (projection) => { onProjectionRef.current(projection); },
+      onProjection: installProjection,
       onFailure: (error) => { onFailureRef.current(error); },
     });
     idleRef.current = idle;
     const controller: ManualInputController = {
+      installProjection,
       flush: () => idle.flush(),
       whenIdle: () => idle.whenIdle(),
       hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing,
@@ -523,7 +580,8 @@ export function ManuscriptEditor({
       mixedCompositionRef.current = captureStructuredSelection(editor.state, editor.state.tr.deleteSelection());
       if (mixedCompositionRef.current !== undefined && !idle.canAcceptCandidateInput(true)) mixedCompositionRef.current = undefined;
       mixedCompositionStartRef.current = mixedCompositionRef.current === undefined ? null : editor.state.doc;
-      const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal";
+      const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal"
+        || editor.state.selection.$from.parent.type.name === "inlineProposal";
       candidateCompositionBlockedRef.current = candidateSelected
         && !idle.canAcceptCandidateInput(true);
       candidateCompositionStartRef.current = candidateSelected

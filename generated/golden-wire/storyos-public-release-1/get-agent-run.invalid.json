@@ -2,6 +2,12 @@
   "active_compaction": {
     "kind": "absent"
   },
+  "captured_memory_settings": {
+    "contribution_enabled": true,
+    "kind": "available",
+    "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",
+    "use_enabled": true
+  },
   "context": {
     "assembly_manifest_id": "018f0000-0000-7001-8000-000000000a3b",
     "considered": [
@@ -102,6 +108,7 @@
   },
   "run_id": "018f0000-0000-7001-8000-000000000a34",
   "schema_id": "storyos.query.agent-run.response.v2",
+  "steering_inputs": [],
   "unknown_create_successor": {
     "kind": "absent"
   },

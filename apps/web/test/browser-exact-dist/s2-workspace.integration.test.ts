@@ -1,3 +1,4 @@
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -86,7 +87,7 @@ it("the production page uses the approved workspace without losing writing state
   const empty = appRoot(frame);
   const emptyWorkspace = workspace(frame);
   expect(empty.querySelector('nav[aria-label="稿件目录"]')).not.toBeNull();
-  expect(empty.querySelector("textarea")).toBeNull();
+  expect(empty.querySelector(".editor-panel textarea")).toBeNull();
   expect(emptyWorkspace.querySelector("[data-writing-assistant]")?.getAttribute(
     "data-assistant-availability",
   )).toBe("unavailable");
@@ -96,6 +97,7 @@ it("the production page uses the approved workspace without losing writing state
   expect(empty.textContent).not.toContain("Receipt");
   expect(empty.textContent).not.toContain("权威修订");
 
+  await beginInlineVolumeCreation(frame.contentDocument);
   const volumeTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-volume] input[name="volume-title"]',
   );
@@ -106,9 +108,11 @@ it("the production page uses the approved workspace without losing writing state
   }
   volumeTitle.value = "Volume A";
   volumeForm.requestSubmit();
+  await beginInlineChapterCreation(frame.contentDocument);
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app form[data-create-chapter]') !== null
   ).toBe(true);
+  await beginInlineChapterCreation(frame.contentDocument);
   const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -156,9 +160,9 @@ it("the production page uses the approved workspace without losing writing state
   }
   expect({
     tree: root.querySelector('nav[aria-label="稿件目录"]') !== null,
-    createChapter: root.querySelector("form[data-create-chapter]") !== null,
-    renameVolume: root.querySelector("form[data-rename-volume]") !== null,
-    renameChapter: root.querySelector("form[data-rename-chapter]") !== null,
+    createChapter: root.querySelector("[data-add-chapter]") !== null,
+    renameVolume: root.querySelector("[data-create-chapter-menu]") !== null,
+    renameChapter: root.querySelector("[data-chapter-menu]") !== null,
     expandVolume: root.querySelector("[data-volume-expand]") !== null,
     chapter: currentChapter.textContent,
     heading: root.querySelector("h2")?.textContent ?? null,
@@ -216,8 +220,9 @@ it("the production page uses the approved workspace without losing writing state
   await expect.poll(() => toggle.getAttribute("aria-expanded")).toBe("true");
   const composer = shell.querySelector<HTMLFormElement>("form[data-writing-assistant-composer]");
   if (composer === null) throw new Error("the writing-assistant composer is missing");
+  expect(composer.querySelector<HTMLButtonElement>("button[type=submit]")?.disabled).toBe(true);
   composer.requestSubmit();
-  await expect.poll(() => assistant.getAttribute("data-assistant-dispatch")).toBe("refused");
+  expect(assistant.getAttribute("data-assistant-dispatch")).toBe("idle");
   expect(manuscriptBody(editor)).toBe("Quiet prose");
   expect(shell.getAttribute("data-writer-generation")).toBe("1");
 

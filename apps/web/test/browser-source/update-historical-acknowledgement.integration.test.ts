@@ -1,3 +1,4 @@
+import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { expect, it } from "vitest";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -103,6 +104,8 @@ it("explains a historical Update Volume acknowledgement and does not retry it", 
       cryptoImpl: crypto,
     });
     mountStage1View(loaded.root, loaded);
+    await beginTreeAction(loaded.root, `li[data-volume-id="${VOLUME}"]`, "[data-begin-rename-volume]");
+    loaded.root.querySelector<HTMLButtonElement>("[data-begin-rename-volume]")?.click();
     await expect.poll(() =>
       loaded.root.querySelector<HTMLInputElement>(`form[data-rename-volume="${VOLUME}"] input[name="volume-title"]`)
         !== null
@@ -165,6 +168,8 @@ it("explains a historical Update Chapter acknowledgement and does not retry it",
       cryptoImpl: crypto,
     });
     mountStage1View(loaded.root, loaded);
+    await beginTreeAction(loaded.root, `li[data-chapter-id="${CHAPTER}"]`, "[data-begin-rename-chapter]");
+    loaded.root.querySelector<HTMLButtonElement>("[data-begin-rename-chapter]")?.click();
     await expect.poll(() =>
       loaded.root.querySelector<HTMLInputElement>(`form[data-rename-chapter="${CHAPTER}"] input[name="chapter-title"]`)
         !== null

@@ -41,7 +41,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -122,7 +122,7 @@ async function postVolume(
   request: CreateVolumeRequest,
 ) {
   const digest = await digestCreateVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -229,7 +229,7 @@ test("createVolume creates one named Volume, replays, and fails closed", async (
     );
 
     const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-000000000846"));
-    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const archiveChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -324,7 +324,7 @@ async function deleteOwned(
   request: DeleteVolumeRequest,
 ) {
   const digest = await digestDeleteVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -356,7 +356,7 @@ async function patchVolume(
   request: UpdateVolumeRequest,
 ) {
   const digest = await digestUpdateVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -622,7 +622,7 @@ test("createVolume freezes the acknowledgement after later title and Current Cha
       },
     };
     const chapterDigest = await digestCreateChapter(chapterRequest);
-    const chapterChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const chapterChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -655,7 +655,7 @@ test("createVolume freezes the acknowledgement after later title and Current Cha
       },
     };
     const renameDigest = await digestUpdateProject(renameBody);
-    const renameChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const renameChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

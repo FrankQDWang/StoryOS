@@ -65,6 +65,7 @@ class CandidateCommandTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.repo.report()['status'], 'incomplete')
         self.assertIn('stages are missing', self.repo.report()['error'])
+        self.assertNotIn('Verification passed', result.stdout)
         self.assertNotEqual(self.run_complete().returncode, 0)
         self.assertEqual((self.root / 'target/launches').read_text(), 'x')
 
