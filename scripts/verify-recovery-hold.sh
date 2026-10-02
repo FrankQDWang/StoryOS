@@ -182,7 +182,7 @@ if [ "$recovery_drill" = "mixed" ]; then
   pnpm --dir apps/web exec vitest run --project node-postgresql \
     test/node-postgresql/edit-inline-proposal-http.integration.test.ts
   export STORYOS_DISCARD_RECOVERY_EXPECTED="$STORYOS_VERIFICATION_RUN/production-discard-recovery.json"
-  start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
+  STORYOS_WORKER=0 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
   STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
   STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
   pnpm --dir apps/web exec vitest run --project browser-exact-dist \
