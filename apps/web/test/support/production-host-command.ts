@@ -125,7 +125,7 @@ async function replaceAndSave(page: Page, text: string): Promise<void> {
   assert.equal(await manuscriptBody(page), text);
 }
 
-export async function verifyProductionHostJourney(context: BrowserContext): Promise<void> {
+export async function verifyProductionHostJourney(sharedContext: BrowserContext): Promise<void> {
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "run the production journey through the Project Scope verification entry");
   const server = new URL(configured);
@@ -133,6 +133,9 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     && server.port && server.pathname === "/" && !server.search && !server.hash
     && !server.username && !server.password, "the production fixture needs an exact loopback origin");
   const origin = server.origin;
+  const browser = sharedContext.browser();
+  assert.ok(browser, "the production cold-start journey needs an owned browser context");
+  const context = await browser.newContext();
   const pages: Page[] = [];
   let releaseWriterEdits = (): void => {};
   try {
@@ -285,7 +288,6 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     assert.ok(requests.every((url) => !url.pathname.startsWith("/@vite/")));
   } finally {
     releaseWriterEdits();
-    await Promise.all(pages.map((page) => page.close()));
-    await context.clearCookies({ name: "storyos_session" });
+    await context.close();
   }
 }
