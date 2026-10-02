@@ -37,6 +37,7 @@ export interface AuthorEditIdleController {
   ): Promise<void>;
   flush(): Promise<void>;
   whenIdle(): Promise<void>;
+  hasQueuedInput(): boolean;
   fail(error: unknown): void;
   canAcceptCandidateInput(hardBoundary?: boolean): boolean;
   setHoldSubmission(hold: boolean): void;
@@ -256,6 +257,7 @@ export function createAuthorEditIdleController({
           === workspace.pending.unsettled_intent_count
         && (!hardBoundary || pendingIntentCount === 0 && queuedWrites === 0);
     },
+    hasQueuedInput: () => queuedWrites > 0,
     async whenIdle() {
       await Promise.resolve();
       await queue;

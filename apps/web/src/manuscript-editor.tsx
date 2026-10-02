@@ -454,7 +454,15 @@ export function ManuscriptEditor({
         await collectEligibleJournalPayload(workspace);
         onCandidateSettledRef.current?.();
       },
-      onProjection: (projection) => { onProjectionRef.current(projection); },
+      onProjection: (projection) => {
+        const rendered = readManuscriptParagraphs(editor.state.doc);
+        const local = idle.hasQueuedInput() && rendered !== undefined
+          && !paragraphsEqual(rendered, projection.blocks)
+          ? projectLocalPending(persistWorkspace, rendered) : undefined;
+        if (local !== undefined) {
+          onProjectionRef.current({ ...local, save_state: "saving" }, "local");
+        } else onProjectionRef.current(projection);
+      },
       onFailure: (error) => { onFailureRef.current(error); },
     });
     idleRef.current = idle;
