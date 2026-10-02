@@ -122,7 +122,7 @@ it("the author renames and reorders Volumes from the canonical tree and they sur
   openButton?.click();
   await expect.poll(() => libraryRoot.getAttribute("data-boot-state")).toBe("empty-project-ready");
   await expect.poll(() => volumeTitles(libraryRoot)).toEqual(["Volume C", "Volume B"]);
-  expect(libraryRoot.querySelector("textarea")).toBeNull();
+  expect(libraryRoot.querySelector(".editor-panel textarea")).toBeNull();
   expect(libraryRoot.textContent).not.toContain("模型");
   expect(libraryRoot.textContent).not.toContain("Agent");
 

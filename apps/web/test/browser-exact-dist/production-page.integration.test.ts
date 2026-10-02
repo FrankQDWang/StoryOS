@@ -51,7 +51,7 @@ it("loads the exact Vite production page in Google Chrome and shows the Stage 1 
     bootState: root.getAttribute("data-boot-state"),
     heading: root.querySelector("h1")?.textContent ?? null,
     message: root.querySelector("p")?.textContent ?? null,
-    textarea: root.querySelector("textarea") !== null,
+    textarea: root.querySelector(".editor-panel textarea") !== null,
     userAgent: frame.contentWindow?.navigator.userAgent.includes("Chrome/") ?? false,
   }).toEqual({
     alert: false,

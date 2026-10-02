@@ -212,7 +212,7 @@ export function ManuscriptEditor({
       if (nextBlocks === undefined) return;
       syncManuscriptSurface(current.view.dom, nextBlocks);
       if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) {
-        observedBlocksRef.current = nextBlocks;
+        if (!current.view.composing && !composingRef.current) observedBlocksRef.current = nextBlocks;
         return;
       }
       const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
@@ -412,7 +412,7 @@ export function ManuscriptEditor({
   }, [editor]);
 
   useEffect(() => {
-    if (editor === null) return;
+    if (editor === null || editor.view.composing || composingRef.current) return;
     const identityKey = blocks.map((block) =>
       `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" ");
     const rendered = readManuscriptParagraphs(editor.state.doc);

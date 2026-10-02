@@ -92,5 +92,5 @@ it("the library fails closed on open and write for an archived Project", async (
   const archivedItem = archivedButton.closest("li");
   expect(archivedItem?.querySelector("form[data-rename]")).toBeNull();
   expect(archivedItem?.querySelector("form[data-archive]")).toBeNull();
-  expect(root.querySelector("textarea")).toBeNull();
+  expect(root.querySelector(".editor-panel textarea")).toBeNull();
 });

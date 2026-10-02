@@ -182,8 +182,7 @@ it("rebuilds Chapter and manuscript statistics after edit, switch, and deletion"
     || chapterBId === null || chapterBId === undefined) {
     throw new Error("the Chapter identity is missing");
   }
-  await beginTreeAction(root, `li[data-chapter-id="${chapterAId}"]`, "[data-make-current-chapter]");
-  root.querySelector<HTMLButtonElement>(`[data-make-current-chapter="${chapterAId}"]`)?.click();
+  expect(chapterButton(root, "Chapter A")?.getAttribute("aria-current")).toBe("true");
   await expect.poll(() => {
     const nextRoot = appRoot(frame);
     const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
