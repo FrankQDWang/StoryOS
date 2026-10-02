@@ -59,4 +59,3 @@ export function recoveryMaterial(snapshot: ValidatedJournalSnapshot, group: Jour
     blocks: snapshot.blocksBySequence.get(group.covered_sequence_range.last)!,
   };
 }
-
