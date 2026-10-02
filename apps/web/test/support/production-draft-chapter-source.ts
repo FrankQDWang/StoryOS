@@ -14,17 +14,17 @@ export async function verifyProductionDraftChapterSource(page: Page, projectId: 
       refused.push(`${reply.status()} ${new URL(reply.url()).pathname}: ${body.code}`)).catch(() => undefined);
   };
   page.on("response", observe);
-  const created = page.waitForResponse((reply) => reply.request().method() === "POST"
-    && new URL(reply.url()).pathname.startsWith(`/api/v1/projects/${projectId}/`)
-    && new URL(reply.url()).pathname.endsWith("/chapters"));
   const volume = page.locator(`li[data-volume-id]:has(li[data-chapter-id="${chapter.chapter.chapter_id}"])`);
   await volume.locator("[data-create-chapter-menu]").click();
   await page.locator('[data-chapter-placement="append"]').click();
   const title = volume.locator('form[data-create-chapter] input[name="chapter-title"]');
-  await title.fill("Other Chapter"); await title.press("Enter");
-  const creation = await (await created.catch((error: unknown) => {
+  await title.fill("Other Chapter");
+  const [created] = await Promise.all([page.waitForResponse((reply) => reply.request().method() === "POST"
+    && new URL(reply.url()).pathname.startsWith(`/api/v1/projects/${projectId}/`)
+    && new URL(reply.url()).pathname.endsWith("/chapters")).catch((error: unknown) => {
     throw new Error(`Chapter creation did not submit: ${refused.join("; ")}`, { cause: error });
-  })).json() as CreateChapterResponse;
+  }), title.press("Enter")]);
+  const creation = await created.json() as CreateChapterResponse;
   page.off("response", observe);
   assert.ok(creation.effect.kind === "authoritative_applied");
   await page.locator(`li[data-chapter-id="${creation.effect.chapter_id}"] [data-chapter-menu]`).click();
@@ -79,11 +79,13 @@ export async function verifyProductionDraftChapterSource(page: Page, projectId: 
   });
   try {
     await surface.locator("[data-draft-copy]").click(); await fetched;
-    const renamed = page.waitForResponse((reply) => reply.request().method() === "PATCH"
-      && new URL(reply.url()).pathname === sourcePath);
+    await page.locator(`li[data-chapter-id="${chapter.chapter.chapter_id}"] [data-chapter-menu]`).click();
+    await page.locator(`[data-begin-rename-chapter="${chapter.chapter.chapter_id}"]`).click();
     const rename = page.locator(`form[data-rename-chapter="${chapter.chapter.chapter_id}"] input`);
-    await rename.fill("Renamed source chapter"); await rename.press("Enter");
-    assert.equal((await renamed).status(), 200);
+    await rename.fill("Renamed source chapter");
+    const [renamed] = await Promise.all([page.waitForResponse((reply) => reply.request().method() === "PATCH"
+      && new URL(reply.url()).pathname === sourcePath), rename.press("Enter")]);
+    assert.equal(renamed.status(), 200);
     await page.locator(`li[data-chapter-id="${chapter.chapter.chapter_id}"] [data-chapter-menu]`).click();
     await page.locator(`[data-make-current-chapter="${chapter.chapter.chapter_id}"]`).click();
     await expect(source).toContainText("Source chapter: Renamed source chapter.");
