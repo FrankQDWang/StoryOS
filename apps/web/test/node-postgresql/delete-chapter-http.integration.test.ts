@@ -40,7 +40,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -147,7 +147,7 @@ async function postVolume(
   request: CreateVolumeRequest,
 ) {
   const digest = await digestCreateVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -178,7 +178,7 @@ async function postChapter(
   request: CreateChapterRequest,
 ) {
   const digest = await digestCreateChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -210,7 +210,7 @@ async function deleteOwned(
   request: DeleteChapterRequest,
 ) {
   const digest = await digestDeleteChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -297,7 +297,7 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
       correlation_id: "018f0000-0000-7001-8000-00000000c230",
     };
     const sessionDigest = await digestCreateEditorSession(sessionRequest);
-    const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const sessionChallenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId,
       fetchImpl,
@@ -456,7 +456,7 @@ test("deleteChapter refuses a missing Chapter join and an archived Project", asy
     }
 
     const digest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-00000000c307"));
-    const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId,
       fetchImpl,
@@ -543,7 +543,7 @@ async function deleteOwnedWithChallenge(
   request: DeleteChapterRequest,
 ) {
   const digest = await digestDeleteChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -640,7 +640,7 @@ test("deleteChapter freezes applied empty Current Chapter, no-effect, and confli
     const laterDigest = await digestUpdateProject(
       renameRequest("Later Delete Chapter Title", "1", "018f0000-0000-7001-8000-00000000e90d"),
     );
-    const laterChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const laterChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

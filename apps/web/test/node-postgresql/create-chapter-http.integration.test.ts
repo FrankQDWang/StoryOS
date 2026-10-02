@@ -50,7 +50,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -145,7 +145,7 @@ async function postVolume(
   request: CreateVolumeRequest,
 ) {
   const digest = await digestCreateVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -177,7 +177,7 @@ async function postChapter(
   request: CreateChapterRequest,
 ) {
   const digest = await digestCreateChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -284,7 +284,7 @@ test("Editor Sessions capture nonzero Activity and preserve legacy Snapshot evid
     };
     const digest = await digestCreateEditorSession(request);
     async function openSession(idempotencyKey: string) {
-      const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
         baseUrl, projectId, fetchImpl,
         request: { method: "POST", route_template: "/api/v1/projects/{project_id}/editor-sessions",
           command_schema: request.command_schema, canonical_command_digest: digest,
@@ -597,7 +597,7 @@ test("createChapter creates three named Chapters, keeps the first current, and f
     );
 
     const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-000000000949"));
-    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const archiveChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -709,7 +709,7 @@ async function deleteOwned(
   request: DeleteChapterRequest,
 ) {
   const digest = await digestDeleteChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -741,7 +741,7 @@ async function patchChapter(
   request: UpdateChapterRequest,
 ) {
   const digest = await digestUpdateChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -1054,7 +1054,7 @@ test("createChapter freezes the acknowledgement after later title and Current Ch
       correlation_id: "018f0000-0000-7001-8000-000000000b69",
     };
     const sessionDigest = await digestCreateEditorSession(sessionRequest);
-    const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const sessionChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -1093,7 +1093,7 @@ test("createChapter freezes the acknowledgement after later title and Current Ch
       },
     };
     const switchDigest = await digestSetCurrentChapter(switchRequest);
-    const switchChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const switchChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -1125,7 +1125,7 @@ test("createChapter freezes the acknowledgement after later title and Current Ch
       },
     };
     const renameDigest = await digestUpdateProject(renameBody);
-    const renameChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const renameChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

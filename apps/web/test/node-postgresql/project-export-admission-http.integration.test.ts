@@ -28,7 +28,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 import {
   assertExportAdmissionFreezes,
@@ -133,7 +133,7 @@ async function postExport(
   request: ExportProjectArchiveRequest,
 ) {
   const digest = await digestExportProjectArchive(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -165,7 +165,7 @@ async function archiveOpenProject(
   idempotencyKey: string,
 ) {
   const digest = await digestArchiveProject(archiveRequest(expectedProjectRevision, correlationId));
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -476,7 +476,7 @@ test("exportProjectArchive admits one inspectable in-progress operation", async 
 
     const refusedRequest = exportRequest("018f0000-0000-7001-8000-000000000c17");
     const refusedDigest = await digestExportProjectArchive(refusedRequest);
-    const refusedChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const refusedChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

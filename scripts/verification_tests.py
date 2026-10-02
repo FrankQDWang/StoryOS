@@ -91,6 +91,38 @@ class VerificationCommandTests(unittest.TestCase):
         self.assertEqual(report["exit_code"], 0)
         self.assertNotEqual(report["source_start"], report["source_end"])
 
+    def test_stage_budget_fails_even_when_child_handles_termination_as_success(self):
+        policy_path = self.root / 'docs/agents/verification-policy.json'
+        policy = json.loads(policy_path.read_text())
+        policy['stage_budgets_seconds'] = {'waiting': 1}
+        policy_path.write_text(json.dumps(policy))
+        self.git('add', '.')
+        self.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                 'commit', '--quiet', '-m', 'Set stage budget.')
+        child = 'import signal; signal.signal(signal.SIGTERM, lambda *_: exit(0)); signal.pause()'
+        result = self.cli('step', 'waiting', '--', sys.executable, '-c', child)
+        self.assertNotEqual(result.returncode, 0)
+        report = self.report()
+        self.assertEqual(report['steps'][0]['budget_exceeded'], True)
+        self.assertEqual(report['steps'][0]['exit_code'], 124)
+
+    def test_new_worktree_publishes_records_to_the_same_read_copy_directory(self):
+        self.assertEqual(self.cli('step', 'sample', '--', sys.executable, '-c', 'pass').returncode, 0)
+        first = self.report()
+        other = self.root / 'target/other'
+        self.git('worktree', 'add', '--detach', str(other), 'HEAD')
+        result = subprocess.run([sys.executable, str(COMMAND), 'step', 'sample', '--',
+                                 sys.executable, '-c', 'pass'], cwd=other,
+                                env=self.environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        copies = list((self.root / '.git/storyos-observation/records').glob('*/report.json'))
+        self.assertEqual(len(copies), 2)
+        self.assertEqual({json.loads(p.read_text())['repository'] for p in copies},
+                         {str(self.root.resolve()), str(other.resolve())})
+        original = self.root / 'target/verification' / first['run_id'] / 'report.json'
+        copied = self.root / '.git/storyos-observation/records' / first['run_id'] / 'report.json'
+        self.assertEqual(original.read_bytes(), copied.read_bytes())
+
     def test_later_success_cannot_mask_a_failed_stage(self):
         failure = shlex.join([sys.executable, str(COMMAND), "step", "failure", "--",
                               sys.executable, "-c", "raise SystemExit(7)"])

@@ -45,7 +45,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 import { admitCandidateRevision } from "../support/candidate-revision.ts";
@@ -120,7 +120,7 @@ async function challenged<T>(
   key: string,
   send: (antiForgery: string) => Promise<T>,
 ): Promise<T> {
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,

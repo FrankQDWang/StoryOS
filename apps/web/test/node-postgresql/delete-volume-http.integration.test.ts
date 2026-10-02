@@ -36,7 +36,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -142,7 +142,7 @@ async function postVolume(
   request: CreateVolumeRequest,
 ) {
   const digest = await digestCreateVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -173,7 +173,7 @@ async function postChapter(
   request: CreateChapterRequest,
 ) {
   const digest = await digestCreateChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -205,7 +205,7 @@ async function deleteOwned(
   request: DeleteVolumeRequest,
 ) {
   const digest = await digestDeleteVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -400,7 +400,7 @@ test("deleteVolume refuses an archived Project", async () => {
     );
     const volumeId = appliedVolumeId(volume);
     const digest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-00000000d305"));
-    const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId,
       fetchImpl,
@@ -489,7 +489,7 @@ async function deleteOwnedWithChallenge(
   request: DeleteVolumeRequest,
 ) {
   const digest = await digestDeleteVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -614,7 +614,7 @@ test("deleteVolume freezes applied, no-effect, conflict, and refusal acknowledge
     const laterDigest = await digestUpdateProject(
       renameRequest("Later Delete Volume Title", "1", "018f0000-0000-7001-8000-00000000e811"),
     );
-    const laterChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const laterChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

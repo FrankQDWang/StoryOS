@@ -82,6 +82,60 @@ path.write_text(json.dumps(state))
         self.assertEqual(self.command(alias, 'sh', 'scripts/dev-postgres.sh', 'env').stdout, started.stdout)
         self.assertEqual(json.loads(self.state.read_text())['storyos-dev-postgres'], {'port': 5999, 'writes': 0})
 
+    def test_scoped_database_removes_only_its_resources_on_success_and_failure(self):
+        root = self.checkout('scoped')
+        shutil.copy(SOURCE / 'scripts/verification_resources.py', root / 'scripts')
+        for code in (0, 7):
+            result = self.command(root, 'sh', 'scripts/dev-postgres.sh', 'run',
+                                  sys.executable, '-c',
+                                  f'import os; assert os.environ["STORYOS_TEST_POSTGRES_CONTAINER"]; exit({code})')
+            self.assertEqual(result.returncode, code, result.stderr)
+            self.assertEqual(json.loads(self.state.read_text()),
+                             {'storyos-dev-postgres': {'port': 5999, 'writes': 0}})
+            self.assertEqual(list((root / 'target/verification/resources').glob('*.json')), [])
+
+    def test_scoped_database_cleans_up_after_interruption(self):
+        root = self.checkout('interrupted')
+        shutil.copy(SOURCE / 'scripts/verification_resources.py', root / 'scripts')
+        with socket.socket() as barrier:
+            barrier.bind(('127.0.0.1', 0))
+            barrier.listen(1)
+            barrier.settimeout(10)
+            child = ('import socket; s=socket.create_connection(("127.0.0.1", '
+                     f'{barrier.getsockname()[1]})); s.recv(1)')
+            process = subprocess.Popen(['sh', 'scripts/dev-postgres.sh', 'run', sys.executable, '-c', child],
+                                       cwd=root, env=self.environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                connection, _ = barrier.accept()
+                with connection:
+                    process.terminate()
+                    process.communicate(timeout=10)
+                self.assertEqual(process.returncode, 143)
+                self.assertEqual(list((root / 'target/verification/resources').glob('*.json')), [])
+                self.assertEqual(json.loads(self.state.read_text()),
+                                 {'storyos-dev-postgres': {'port': 5999, 'writes': 0}})
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.communicate(timeout=10)
+
+    def test_scoped_database_reclaims_an_abandoned_lease(self):
+        import hashlib
+        root = self.checkout('abandoned')
+        shutil.copy(SOURCE / 'scripts/verification_resources.py', root / 'scripts')
+        name = 'storyos-test-' + hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:20] + '-dead'
+        state = json.loads(self.state.read_text())
+        state[name] = {'port': 6001, 'writes': 0}
+        self.state.write_text(json.dumps(state))
+        leases = root / 'target/verification/resources'
+        leases.mkdir(parents=True)
+        (leases / 'dead.json').write_text(json.dumps({'container': name}))
+        result = self.command(root, 'sh', 'scripts/dev-postgres.sh', 'run', 'true')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(list(leases.glob('*.json')), [])
+        self.assertEqual(json.loads(self.state.read_text()),
+                         {'storyos-dev-postgres': {'port': 5999, 'writes': 0}})
+
     def test_observation_lifecycle_refuses_foreign_and_unknown_owners_before_mutation(self):
         first, second = self.checkout('owner'), self.checkout('worker')
         for root in (first, second):

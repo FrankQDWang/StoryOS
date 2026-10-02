@@ -41,7 +41,7 @@ WHERE r.kind = 'run' AND r.quality = 'valid' AND json_extract(r.payload, '$.stat
 """
 FIELDS = ('run_id', 'id', 'issue', 'pr', 'profile', 'status', 'stage', 'parent',
           'started_at', 'ended_at', 'heartbeat_at', 'duration_seconds', 'started_monotonic',
-          'repository', 'retry_reason', 'requested_scope', 'complete_dispatch_attempt', 'build_state', 'blocked_clock', 'blocked_intervals', 'ended_monotonic', 'attempt_started', 'actual_started_at', 'outcome', 'utc', 'recovery_of', 'node_version', 'node_id', 'graph_sha256', 'selection_reason', 'execution_scope')
+          'repository', 'retry_reason', 'requested_scope', 'complete_dispatch_attempt', 'build_state', 'build_inputs', 'budget_seconds', 'budget_exceeded', 'blocked_clock', 'blocked_intervals', 'ended_monotonic', 'attempt_started', 'actual_started_at', 'outcome', 'utc', 'recovery_of', 'node_version', 'node_id', 'graph_sha256', 'selection_reason', 'execution_scope')
 STATUSES = {'running', 'passed', 'failed', 'pending', 'interrupted', 'incomplete',
             'source-changed', 'infrastructure-failed', 'cached'}
 
@@ -58,7 +58,7 @@ def read_record(path, records):
             raw = source.read(16 * 1024 * 1024 + 1)
         if len(raw) > 16 * 1024 * 1024:
             raise ValueError('Record exceeds 16 MiB')
-        fingerprint = '760:' + hashlib.sha256(raw).hexdigest()
+        fingerprint = '761:' + hashlib.sha256(raw).hexdigest()
         value = json.loads(raw)
         if not isinstance(value, dict):
             raise ValueError('Expected a record object')
@@ -96,6 +96,9 @@ def read_record(path, records):
         comparison = {key: candidate.get(key) for key in ('tools', 'inputs', 'runners', 'host')} if isinstance(candidate, dict) else {}
         comparison.update(build_state=value.get('build_state'), policy=(candidate or {}).get('plan', {}).get('policy_sha256'), profile=value.get('profile'), plan=payload['scope'], repository=value.get('repository'))
         payload['comparison_key'] = hashlib.sha256(json.dumps(comparison, sort_keys=True).encode()).hexdigest() if isinstance(candidate, dict) and all(candidate.get(key) for key in ('tools', 'inputs', 'runners', 'host')) and comparison['policy'] and value.get('build_state') in {'cold', 'warm'} else None
+        payload['comparison_unavailable'] = (
+            'build-state-unavailable' if value.get('build_state') not in {'cold', 'warm'}
+            else ('candidate-facts-unavailable' if not payload['comparison_key'] else None))
         payload['reason'] = value.get('retry_reason') or value.get('reason') or value.get('trigger')
         return str(relative), fingerprint, kind, run, quality, ('Unversioned record; facts are historical' if quality == 'legacy' else None), json.dumps(payload, sort_keys=True, allow_nan=False)
     except (OSError, ValueError, TypeError, AttributeError, KeyError) as error:
@@ -121,10 +124,10 @@ def collect(records, database, rebuild=False):
                 "SELECT 1 FROM sqlite_master WHERE type='table'").fetchone()):
             raise ValueError('The database is not a StoryOS observation read model')
         connection.execute('PRAGMA application_id=749')
-        if rebuild or connection.execute('PRAGMA user_version').fetchone()[0] != 752:
+        if rebuild or connection.execute('PRAGMA user_version').fetchone()[0] != 753:
             connection.execute('DROP VIEW IF EXISTS current_execution')
             connection.execute('DROP VIEW IF EXISTS violations')
-            connection.execute('PRAGMA user_version=752')
+            connection.execute('PRAGMA user_version=753')
         connection.executescript(SCHEMA + cost.SCHEMA + rules.SCHEMA + nodes.SCHEMA)
         connection.execute('BEGIN IMMEDIATE')
         if rebuild:
@@ -155,10 +158,14 @@ def collect(records, database, rebuild=False):
         cost.refresh(connection, changed_runs)
         rules.refresh(connection, settings)
         count = connection.execute('SELECT COUNT(*) FROM records').fetchone()[0]
+        repositories = [row[0] for row in connection.execute(
+            "SELECT DISTINCT json_extract(payload,'$.repository') FROM records WHERE kind='run' "
+            "AND json_extract(payload,'$.repository') IS NOT NULL ORDER BY 1")]
     if rebuild:
         with sqlite3.connect(database) as connection:
             connection.execute('VACUUM')
-    return {'updated': updated, 'records': count, 'pending': pending, 'seconds': time.monotonic() - started,
+    return {'updated': updated, 'records': count, 'pending': pending, 'repositories': repositories,
+            'coverage': [json.loads(p.read_text()) for p in sorted((records / 'sources').glob('*.json'))], 'seconds': time.monotonic() - started,
             'cpu_seconds': time.process_time() - cpu, 'database_bytes': database.stat().st_size,
             'peak_rss_bytes': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == 'darwin' else 1024)}
 
@@ -166,10 +173,13 @@ def collect(records, database, rebuild=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['collect', 'rebuild', 'watch', 'status'])
-    parser.add_argument('--records', type=Path, default=Path('target/verification'))
+    parser.add_argument('--records', type=Path, default=None)
     parser.add_argument('--database', type=Path, default=Path('target/observation/data/runs.sqlite'))
     parser.add_argument('--interval', type=float, default=5)
     args = parser.parse_args()
+    if args.records is None:
+        import verification_records
+        args.records = verification_records.import_worktrees(Path.cwd())
     args.records, args.database = args.records.resolve(), args.database.resolve()
     if args.database.is_relative_to(args.records):
         parser.error('Keep observation output outside source records')

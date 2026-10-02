@@ -21,7 +21,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -132,7 +132,7 @@ async function issueAuthorEditChallenge(
   request: ApplyAuthorEditRequest,
   idempotencyKey: string,
 ) {
-  return withChallengeRetry(async () => createProjectCommandChallenge({
+  return withChallengeBudget(PROJECT, async () => createProjectCommandChallenge({
     baseUrl, projectId: PROJECT, fetchImpl: browserFetch(baseUrl, SESSION_HANDLE),
     request: {
       method: "POST",

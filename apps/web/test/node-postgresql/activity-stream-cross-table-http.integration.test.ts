@@ -21,7 +21,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -112,7 +112,7 @@ async function loadCurrentWriter(baseUrl: string): Promise<GetEditorSessionRespo
     correlation_id: "018f0000-0000-7001-8000-000000000e56",
   };
   const digest = await digestCreateEditorSession(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
     baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
     request: {
       method: "POST",
@@ -149,7 +149,7 @@ async function postVolume(
     },
   };
   const digest = await digestCreateVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
     baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
     request: {
       method: "POST",
@@ -209,7 +209,7 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
       }],
     };
     const authorEditDigest = await digestApplyAuthorEdit(authorEditRequest);
-    const authorEditChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const authorEditChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
       baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
       request: {
         method: "POST",

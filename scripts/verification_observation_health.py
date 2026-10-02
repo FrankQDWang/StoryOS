@@ -32,7 +32,7 @@ class Probe:
                             raise ValueError('Invalid collector health')
                         json.dumps(value, allow_nan=False)
                         item = {key: value[key] for key in ('checked_at', 'status', 'pending', 'records',
-                                'seconds', 'database_bytes', 'error') if key in value}
+                                'seconds', 'database_bytes', 'repositories', 'coverage', 'error') if key in value}
                         if item.get('status') not in {'ok', 'unavailable'} or 'checked_at' not in item:
                             raise ValueError('Invalid collector health')
                     elif name == 'query':

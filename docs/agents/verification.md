@@ -393,8 +393,12 @@ heartbeats, and comparable runtime growth. Requests do not become executed
 violations. A stale heartbeat means unknown liveness. Runtime comparison requires
 an explicit recorded `build_state` (`cold` or `warm`), equal effective scope,
 policy, tools, execution inputs, runners, host and repository. Missing facts or
-samples stay unknown. Current reports omit build state and do not establish a
-runtime benchmark. Never edit original reports to add these observations.
+samples stay unknown. New reports record build-input presence for Rust debug artifacts, Rust release
+artifacts, and Web dependencies. `warm` means all three are present, `cold` means
+none are present, and `mixed` remains incomparable. Presence does not claim a
+cache hit. Missing build state and candidate facts have explicit comparison
+reasons. Historical reports remain unchanged; a baseline still needs three
+comparable completed samples. Never edit original reports to add these observations.
 
 `scripts/observation/settings.json` sets the heartbeat and comparison thresholds,
 record batch cap, and database size guard. Compose caps CPU and memory. Grafana
@@ -514,3 +518,22 @@ retains the full version 1 plan for program consumers. Redirect this explicit
 export to `target/plan.json` when a saved plan is needed. Full graph exports use
 `plan --profile complete`. The runner still recomputes and rejects stale inputs.
 Queries do not create files, run tests, or change retained evidence.
+
+### Execution time and resources
+
+The runner applies `stage_budgets_seconds` from the input policy. A stage over its
+budget stops its child process group, waits for cleanup, and returns 124 even if
+the child handles termination with exit zero. Its record retains `budget_seconds`
+and `budget_exceeded`; observation reports `stage-budget-exceeded`. The HTTP
+stage has a 15-minute ceiling; each recovery drill has a five-minute ceiling.
+These are stop limits, not expected durations or performance acceptance evidence.
+
+Ordinary business tests use `withChallengeBudget(projectId, action)` to prepare
+only that Project's operational Challenge quota before a command. The helper does
+not sleep or retry errors. Dedicated admission tests use the original interfaces
+and controlled clocks. Production limits and nonce checks do not change.
+Recovery Acceptance preparation selects only the seven scenarios that create its
+six retained conditions and refusal evidence. Ordinary verification still runs
+all business cases. Shared phases retain per-file Vitest JSON results in complete
+and daily runs. Use the command-owned database described in
+[Parallel resources](parallel-resources.md) for targeted measurements.

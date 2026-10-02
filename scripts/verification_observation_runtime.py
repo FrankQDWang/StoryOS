@@ -58,7 +58,11 @@ def main():
         if action == 'start':
             (ROOT / 'target/verification').mkdir(parents=True, exist_ok=True)
             (OUTPUT / 'data').mkdir(parents=True, exist_ok=True)
-            subprocess.run([sys.executable, str(ROOT / 'scripts/verification_observation.py'), 'collect'], check=True)
+            import verification_records
+            records = verification_records.import_worktrees(ROOT)
+            os.environ['STORYOS_OBSERVATION_RECORDS'] = str(records)
+            subprocess.run([sys.executable, str(ROOT / 'scripts/verification_observation.py'), 'collect',
+                            '--records', str(records)], check=True)
             subprocess.run([*COMPOSE, 'up', '-d', '--build'], check=True)
         elif action == 'stop':
             subprocess.run([*COMPOSE, 'down'], check=True)

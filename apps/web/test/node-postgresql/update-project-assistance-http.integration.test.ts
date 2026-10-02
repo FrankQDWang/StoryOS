@@ -24,7 +24,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -108,7 +108,7 @@ async function prepare(
   request: UpdateProjectAssistanceRequest,
 ) {
   const digest = await digestUpdateProjectAssistance(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -148,7 +148,7 @@ test("project assistance prepares the host fake binding without a run", async ()
     const absentRequest = assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a2f");
     const absentKey = "018f0000-0000-7001-8000-000000000a20";
     const absentDigest = await digestUpdateProjectAssistance(absentRequest);
-    const absentChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const absentChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
       fetchImpl: captureFetch,
