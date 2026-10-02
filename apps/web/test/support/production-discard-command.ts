@@ -40,6 +40,33 @@ async function readObjects(page: Page, projectId: string, chapterId: string, pro
   { projectId, chapterId, proposalId });
 }
 
+async function readRemovedChapterState(page: Page, source: { projectId: string; chapterId: string; proposalId: string }) {
+  return page.evaluate(async ({ projectId, chapterId, proposalId }) => {
+    const response = await fetch(`/api/v1/projects/${projectId}/chapters/${chapterId}`);
+    if (response.status !== 404) throw new Error(`Removed Chapter read ${response.status}`);
+    const chapter = { status: response.status, body: await response.json() };
+    const [proposal, tree] = await Promise.all([
+      `/api/v1/projects/${projectId}/proposals/${proposalId}`, `/api/v1/projects/${projectId}/manuscript/tree`,
+    ].map(async (url) => {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Recovery source read ${response.status}`);
+      return response.json();
+    }));
+    const { correlation_id: _correlationId, ...treeFacts } = tree;
+    return { chapter, proposal: proposal.proposal, tree: treeFacts };
+  }, source);
+}
+
+export async function finalizeProductionDiscardRecovery(page: Page, projectId: string): Promise<void> {
+  const file = process.env.STORYOS_DISCARD_RECOVERY_EXPECTED;
+  if (file === undefined) return;
+  const expected = JSON.parse(await readFile(file, "utf8"));
+  assert.equal(expected.projectId, projectId);
+  const finalSource = await readRemovedChapterState(page, expected);
+  assert.deepEqual(finalSource.proposal, expected.objects[1]);
+  await writeFile(file, JSON.stringify({ ...expected, finalSource }));
+}
+
 export async function verifyProductionDiscard({ page, context, origin, projectId, chapterId, proposalId, draft, restart }: {
   page: Page; context: BrowserContext; origin: string; projectId: string; chapterId: string; proposalId: string;
   draft: RefusedEditDraftInspect; restart: () => Promise<void>;
@@ -203,7 +230,8 @@ export async function verifyRestoredProductionDiscard(context: BrowserContext): 
   assert.ok(file && origin);
   const expected = JSON.parse(await readFile(file, "utf8")) as { projectId: string; chapterId: string; proposalId: string;
     draft: RefusedEditDraftInspect; objects: unknown[]; journal: Record<string, Record<string, unknown>[]>;
-    sessionStorage: Record<string, string>; archive: { exportId: string; root: string; bytesSha256: string } };
+    sessionStorage: Record<string, string>; archive: { exportId: string; root: string; bytesSha256: string };
+    finalSource: Awaited<ReturnType<typeof readRemovedChapterState>> };
   const page = await context.newPage();
   try {
     await page.goto(`${origin}/projects/${expected.projectId}`);
@@ -224,7 +252,7 @@ export async function verifyRestoredProductionDiscard(context: BrowserContext): 
     await page.reload();
     const surface = page.locator(`[data-refused-edit-draft="${expected.draft.draft_id}"]`);
     await surface.locator("[data-draft-reopened]").waitFor();
-    assert.deepEqual(await readObjects(page, expected.projectId, expected.chapterId, expected.proposalId), expected.objects);
+    assert.deepEqual(await readRemovedChapterState(page, expected), expected.finalSource);
     const restored = await page.evaluate(async ({ projectId, draft }) => {
       const response = await fetch(`/api/v1/projects/${projectId}/refused-edit-drafts/${draft.draft_id}`);
       if (!response.ok) throw new Error(`Restored Draft read ${response.status}`);

@@ -1,4 +1,4 @@
-import { readProductionJournal, verifyProductionDiscard } from "./production-discard-command.ts";
+import { finalizeProductionDiscardRecovery, readProductionJournal, verifyProductionDiscard } from "./production-discard-command.ts";
 import { verifyProductionDraftUndo } from "./production-draft-undo-command.ts";
 import { verifyProductionRetryReservationRace } from "./production-draft-retry-race.ts";
 import { verifyProductionDraftExpansion } from "./production-draft-expansion-command.ts";
@@ -348,5 +348,6 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   await verifyProductionDiscard({ page, context, origin, projectId, chapterId: chapter.chapter.chapter_id,
     proposalId: proposal.proposal_id, draft: reopened, restart });
   await verifyRemovedDraftChapterSource(page, projectId, retained.draft, screenshots);
+  await finalizeProductionDiscardRecovery(page, projectId);
   } finally { await page.unroute(snapshotRoute); await page.unroute(retryRoute); }
 }
