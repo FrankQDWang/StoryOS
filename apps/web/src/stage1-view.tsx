@@ -67,6 +67,7 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   proposalNotice: string | undefined;
   onProposalOpened: (state: ControlledProjectState, focus?: ProposalFocus, notice?: string) => void;
   onReopened: (state: ControlledProjectState) => void;
+  onLocalRecoveryContinued: (state: ControlledProjectState) => void;
 }
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
@@ -96,7 +97,7 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
 }
 
 function ProjectReadyView({
-  state, baseUrl, fetchImpl, cryptoImpl, onReopened, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
+  state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
 }: ProjectReadyViewProps) {
   const inputRef = useRef<ManualInputController | null>(null);
   const [candidateTarget, setCandidateTarget] = useState<ProposalFocus>();
@@ -623,11 +624,11 @@ function ProjectReadyView({
           </div>
           {state.editor.kind === "editor-ready" ? <LocalRecoveryPanel
             workspace={state.editor}
-            refreshKey={`${saveState}:${pending?.unsettled_intent_count}`}
+            refreshKey={String(pending?.requires_local_reconfirmation === true)}
             onContinue={async () => {
               const next = await openControlledProject({ baseUrl,
                 projectId: state.project.project.project_id, fetchImpl, cryptoImpl });
-              onReopened(next);
+              onLocalRecoveryContinued(next);
             }}
           /> : null}
           {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
@@ -1026,7 +1027,8 @@ function Stage1View({
         proposalFocus={proposalFocus}
         proposalNotice={proposalNotice}
         onProposalOpened={(next, focus, notice) => { setProposalFocus(focus); setProposalNotice(notice); setCurrent(next); }}
-        onReopened={(next) => { setCurrent(next); setEditorGeneration((value) => value + 1); }}
+        onReopened={setCurrent}
+        onLocalRecoveryContinued={(next) => { setCurrent(next); setEditorGeneration((value) => value + 1); }}
       />
     );
   }
