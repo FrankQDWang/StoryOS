@@ -6,8 +6,8 @@
     "issue": "https://github.com/FrankQDWang/StoryOS/issues/391",
     "parent": "https://github.com/FrankQDWang/StoryOS/issues/361",
     "revision": "stage3-production-repair-2026-09-30-v1",
-    "baseline_commit": "35cce4369f76f88f01c4ba6507b67a45c606e77a",
-    "baseline_tree": "bab87a1086b9327ec8599e6fecc74bf483a8274b"
+    "baseline_commit": "323cb6c9dac1faa7fd9a87ecc6d580178ca9f980",
+    "baseline_tree": "86de877bb8ae10e45bc7a829c891958f2e71382d"
   },
   "declarations": {
     "bindings": [
@@ -653,8 +653,8 @@
   },
   "verifications": {
     "baseline": {
-      "commit": "35cce4369f76f88f01c4ba6507b67a45c606e77a",
-      "tree": "bab87a1086b9327ec8599e6fecc74bf483a8274b"
+      "commit": "323cb6c9dac1faa7fd9a87ecc6d580178ca9f980",
+      "tree": "86de877bb8ae10e45bc7a829c891958f2e71382d"
     },
     "sources": [
       {

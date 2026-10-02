@@ -1970,3 +1970,15 @@ selection. It remains available across reload and later Editor Sessions through
 a bounded, paged local recovery list. It is not a collection fence or Receipt and
 must not authorize payload GC. A later edit cannot reuse its chain, old command,
 key, or Admission. The old source remains available when the new edit settles.
+
+#### Stage 3 delivery scope, 2026-10-02
+
+The author approved local terminal recovery and explicit manual re-entry in
+Issue [266](https://github.com/FrankQDWang/StoryOS/issues/266). Server RecoveryDraft
+creation and its production author workflow remain deferred to Issue
+[881](https://github.com/FrankQDWang/StoryOS/issues/881). The deferred work does not
+block this Stage 3 delivery and has no production PASS claim. This delivery note
+does not remove the specified RecoveryDraft contract or change the seven-state
+prototype. The delivered refusal and conflict states and the separate local
+recovery flow retain their own evidence under Issue
+[391](https://github.com/FrankQDWang/StoryOS/issues/391).
