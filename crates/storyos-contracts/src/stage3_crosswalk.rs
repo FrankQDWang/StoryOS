@@ -18,8 +18,8 @@ const MANDATORY_MAP: &str = "SMAP-STAGE-3";
 const CONTRACT_REVISION: &str = "stage3-production-repair-2026-09-30-v1";
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/361";
 const TICKET_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/391";
-const BASELINE_COMMIT: &str = "06d451329e6e64beffdd4ab7ee3539753f47e097";
-const BASELINE_TREE: &str = "bc2ec8fb5054c24b520f9734591de54072613211";
+const BASELINE_COMMIT: &str = "b1084aaa082e3672647dd041ca32827eac26b724";
+const BASELINE_TREE: &str = "29c3a2fc55e8b4c2d52e2dd0f4f0accb450f43bf";
 const FORBIDDEN_EMISSIONS: &[&str] = &["EV-SR", "PASS-STAGE", "PASS-CLOUD"];
 const REQUIRED_IDS: &[&str] = &[
     "REL-007",
