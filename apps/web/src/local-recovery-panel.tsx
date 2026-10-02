@@ -24,15 +24,20 @@ export function LocalRecoveryPanel({ workspace, refreshKey, onContinue }: {
     return () => { active = false; };
   }, [workspace, refreshKey]);
   if (materials.length === 0 && !failure) return null;
-  return <section aria-label="本地恢复内容" data-local-recovery="">
-    <h3>本地恢复内容</h3>
-    <p>这些修改没有写入服务器正文。内容保留在此浏览器中，可查看和复制。</p>
+  return <section className="editor-recovery" aria-label="本地恢复内容" data-local-recovery="">
+    <header className="editor-recovery-heading">
+      <span>未应用的本地修改</span>
+      <h2>本地恢复内容</h2>
+      <p>这些修改没有写入服务器正文。内容保留在此浏览器中，可查看和复制。</p>
+    </header>
     {materials.map((material) => {
       const settlement = material.group.settlement;
       if (settlement.kind !== "outcome_query_requires_reconfirmation") return null;
       return <article key={material.group.journal_submission_group_id}>
         <p>{material.group.frozen_request_body.proposal_target ? "候选修改" : "正文修改"} · {reasons[settlement.reconfirmation_reason]}</p>
-        <pre data-local-recovery-text="">{material.text}</pre>
+        <div className="editor-recovery-copy"><span>完整内容</span>
+          <pre data-local-recovery-text="">{material.text}</pre>
+        </div>
         <button type="button" data-local-recovery-copy="" onClick={() => {
           void navigator.clipboard.writeText(material.text).catch(() => setFailure("复制失败，请选择上方完整内容复制"));
         }}>复制完整内容</button>
