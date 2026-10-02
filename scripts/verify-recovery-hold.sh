@@ -207,11 +207,12 @@ STORYOS_VITEST_FILE_ORDER=test/node-postgresql/accept-proposal-http.integration.
     test/node-postgresql/acceptance-refusal-http.integration.test.ts \
     test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts
 start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
-# Both modes retain the two partial-Acceptance histories. Mixed also retains the production Conflict.
+# Both modes retain three single-Operation conditions and three partial-Acceptance histories.
+# Mixed also retains the production Conflict and cross-Chapter pending-Operation Conflict.
 if [ "$recovery_drill" = "mixed" ]; then
-  acceptance_condition_count=6
+  acceptance_condition_count=8
 else
-  acceptance_condition_count=5
+  acceptance_condition_count=6
 fi
 acceptance_before=$(node scripts/inspect-acceptance-conditions.mjs "$primary" "$STORYOS_DEV_SERVER" "$acceptance_condition_count")
 stop_recovery_drill_server
