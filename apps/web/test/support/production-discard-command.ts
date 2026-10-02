@@ -52,8 +52,9 @@ async function readRemovedChapterState(page: Page, source: { projectId: string; 
       if (!response.ok) throw new Error(`Recovery source read ${response.status}`);
       return response.json();
     }));
-    const { correlation_id: _correlationId, ...treeFacts } = tree;
-    return { chapter, proposal: proposal.proposal, tree: treeFacts };
+    const { correlation_id: _correlationId, snapshot, ...treeFacts } = tree;
+    const { snapshot_id: _snapshotId, created_at: _createdAt, ...snapshotFacts } = snapshot;
+    return { chapter, proposal: proposal.proposal, tree: { ...treeFacts, snapshot: snapshotFacts } };
   }, source);
 }
 
