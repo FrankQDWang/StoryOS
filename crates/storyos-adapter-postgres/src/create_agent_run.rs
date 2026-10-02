@@ -132,7 +132,15 @@ async fn persist_create_agent_run(
     let current_chapter_id = row.get::<_, Option<String>>(2);
     let assistance_record = read_assistance_record(client, &command.project_scope)
         .await
-        .map_err(|error| CreateAgentRunError::Unavailable(Box::new(error)))?;
+        .map_err(|error| {
+            if std::error::Error::source(&error)
+                .and_then(|source| source.downcast_ref::<tokio_postgres::Error>())
+                .is_some_and(admission_race)
+            {
+                return CreateAgentRunError::ConversationBusy;
+            }
+            CreateAgentRunError::Unavailable(Box::new(error))
+        })?;
     let assistance = match &assistance_record {
         Some(record) if record.availability == AssistanceAvailability::Available => {
             AssistanceAdmission::Available
