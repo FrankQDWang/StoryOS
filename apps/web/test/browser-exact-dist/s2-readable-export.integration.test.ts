@@ -1,7 +1,7 @@
 import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
-import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { applyTrustedInput, settleWorkerOnce, updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
   focusManuscriptEnd,
   manuscriptBody,
@@ -93,6 +93,11 @@ async function requestExport(root: Element): Promise<void> {
   )].find((candidate) => candidate.textContent === "导出可读稿件");
   if (button === undefined) throw new Error("the readable export request button is missing");
   button.click();
+  await expect.poll(() =>
+    root.querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"),
+  ).toBe("in_progress");
+  expect(root.querySelector("[data-export-id]")?.getAttribute("data-export-id")).toBeTruthy();
+  await settleWorkerOnce();
   await expect.poll(() => {
     const panel = root.querySelector("[data-readable-export]");
     const exportId = root.querySelector("[data-export-id]")?.getAttribute("data-export-id") ?? "";

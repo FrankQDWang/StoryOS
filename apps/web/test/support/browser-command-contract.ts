@@ -5,6 +5,7 @@ export const storyOSBrowserCommandNames = {
   imeComposition: "storyosImeComposition",
   trustedInput: "storyosTrustedInput",
   productionHost: "storyosProductionHost",
+  settleWorkerOnce: "storyosSettleWorkerOnce",
 } as const;
 
 export type ImeCompositionRequest = { readonly operation: "cancel" } | {
@@ -224,4 +225,12 @@ export function parseCommandChallengeRateWindowsResult(
     "command_challenge_rate_windows_reset",
     "Command Challenge rate windows",
   );
+}
+
+export function parseSettleWorkerOnceRequest(value: unknown): void {
+  exactObject(value, [], "Worker settlement request");
+}
+
+export function parseSettleWorkerOnceResult(value: unknown): Readonly<{ kind: "worker_settled" }> {
+  return parseResult(value, "worker_settled", "Worker settlement");
 }

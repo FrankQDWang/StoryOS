@@ -2,7 +2,7 @@ import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction 
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { applyTrustedInput, settleWorkerOnce, updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
   focusManuscriptEnd,
   manuscriptBody,
@@ -240,6 +240,11 @@ it("runs the AI-disabled production journey without losing Chapter work", {
   )].find((candidate) => candidate.textContent === "导出可读稿件");
   if (exportButton === undefined) throw new Error("the readable export request button is missing");
   exportButton.click();
+  await expect.poll(() =>
+    appRoot(frame).querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"),
+  ).toBe("in_progress");
+  expect(appRoot(frame).querySelector("[data-export-id]")?.getAttribute("data-export-id")).toBeTruthy();
+  await settleWorkerOnce();
   await expect.poll(() =>
     appRoot(frame).querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"),
     { timeout: 15_000 },

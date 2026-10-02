@@ -570,6 +570,7 @@ reset_command_challenge_rate_windows "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
 s1_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
 stage1_user_id="018f0000-0000-7001-8000-000000000001"
+STORYOS_WORKER=0 \
 STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
 STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
 STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$stage1_user_id\"}" \

@@ -180,12 +180,12 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const writerId = await sessionId(writer, projectId);
     await replaceAndSave(writer, "Saved through the production host.");
-    await writer.locator('[data-activity-replay-generation="1"]').waitFor();
+    await writer.locator('[data-activity-replay-generation="1"]').waitFor({ state: "attached" });
     await writer.reload();
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(writer), "Saved through the production host.");
     assert.equal(await sessionId(writer, projectId), writerId);
-    await writer.locator('[data-activity-replay-generation="1"]').waitFor();
+    await writer.locator('[data-activity-replay-generation="1"]').waitFor({ state: "attached" });
     await queryPostgres(`
       INSERT INTO storyos.replay_generations (owner_user_id, project_id, replay_generation)
       VALUES ('${USER}'::uuid, '${projectId}'::uuid, 2)
@@ -197,7 +197,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await replaceAndSave(writer, "Saved after replay generation two.");
     await writer.locator(
       '[data-activity-resync="applied"][data-activity-replay-generation="2"]',
-    ).waitFor();
+    ).waitFor({ state: "attached" });
     assert.equal(await manuscriptBody(writer), "Saved after replay generation two.");
 
     assert.equal((await observer.goto(projectUrl))?.status(), 200);

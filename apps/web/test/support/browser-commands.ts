@@ -7,9 +7,11 @@ import {
   parseCommandChallengeRateWindowsRequest,
   parseImeCompositionRequest,
   parseProductionHostRequest,
+  parseSettleWorkerOnceRequest,
   parseTrustedInputRequest,
   storyOSBrowserCommandNames,
 } from "./browser-command-contract";
+import { settleOnce } from "./acceptance";
 import { queryStoryOSPostgres } from "./node-integration";
 import { verifyProductionRunEvidence } from "./production-run-evidence-command";
 import { verifyProductionHostJourney } from "./production-host-command";
@@ -34,6 +36,13 @@ async function focusedApplicationFrame(context: BrowserCommandContext) {
 }
 
 export const storyOSBrowserCommands = {
+  [storyOSBrowserCommandNames.settleWorkerOnce]: defineBrowserCommand<[request: unknown]>(
+    async (_context, value) => {
+      parseSettleWorkerOnceRequest(value);
+      await settleOnce();
+      return { kind: "worker_settled" } as const;
+    },
+  ),
   [storyOSBrowserCommandNames.commandChallengeRateWindows]: defineBrowserCommand<[request: unknown]>(
     async (_context, value) => {
       parseCommandChallengeRateWindowsRequest(value);

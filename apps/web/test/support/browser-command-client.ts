@@ -17,6 +17,7 @@ import {
   parseCommandChallengeRateWindowsResult,
   parseImeCompositionResult,
   parseProductionHostResult,
+  parseSettleWorkerOnceResult,
   parseTrustedInputResult,
   storyOSBrowserCommandNames,
 } from "./browser-command-contract";
@@ -75,5 +76,11 @@ export async function resetCommandChallengeRateWindows(): Promise<CommandChallen
     await invokeStoryOSCommand(storyOSBrowserCommandNames.commandChallengeRateWindows, {
       action: "reset",
     }),
+  );
+}
+
+export async function settleWorkerOnce(): Promise<void> {
+  parseSettleWorkerOnceResult(
+    await invokeStoryOSCommand(storyOSBrowserCommandNames.settleWorkerOnce, {}),
   );
 }
