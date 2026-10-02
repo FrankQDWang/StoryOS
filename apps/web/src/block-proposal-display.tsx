@@ -788,7 +788,8 @@ export function BlockProposalDisplay({
         onCopyProposal={copyDisplayed} />
       <RefusedEditDraftDisplay workspace={editorProps.persistWorkspace} scope={scope}
         baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
-        refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold} onProjection={editorProps.onProjection}
+        refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold}
+        onProjection={(projection) => editorProps.controllerRef.current?.installProjection(projection)}
         onResult={() => setSettlementRefresh((value) => value + 1)} />
       {reads.flatMap(({ proposal }) => proposal?.source.kind === "refused_edit_draft" ? [
         <section className="editor-recovery" key={proposal.proposal_id} data-proposal-id={proposal.proposal_id} aria-label="Draft Proposal">

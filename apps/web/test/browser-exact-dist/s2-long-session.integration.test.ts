@@ -218,18 +218,7 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
     }
     const count = batch === 10 ? 1 : 240;
     for (let input = 0; input < count; input++) {
-      try {
-        await applyTrustedInput({ operation: "insert_text", text: "a" });
-      } catch (error) {
-        const root = appRoot(frame);
-        console.error("[279-input-cut]", JSON.stringify({ batch, input,
-          connected: longEditor.isConnected, editable: longEditor.contentEditable,
-          status: root.querySelector("[data-save-state]")?.outerHTML,
-          active: frame.contentDocument?.activeElement?.outerHTML,
-          frameActive: document.activeElement?.outerHTML,
-          body: manuscriptBody(longEditor), error: String(error) }));
-        throw error;
-      }
+      await applyTrustedInput({ operation: "insert_text", text: "a" });
     }
     await waitSaved(appRoot(frame));
   }

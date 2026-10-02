@@ -436,6 +436,7 @@ export function ManuscriptEditor({
       const detached: ManualInputController = {
         flush: () => Promise.resolve(),
         whenIdle: () => Promise.resolve(),
+        installProjection: (projection) => onProjectionRef.current(projection),
         hasIncompleteSemanticIntent: () => composingRef.current,
         close() {},
         replaceBound: async () => "refused",
@@ -445,6 +446,15 @@ export function ManuscriptEditor({
         if (controllerRef.current === detached) controllerRef.current = null;
       };
     }
+    const installProjection = (projection: PendingEditProjection): void => {
+      const rendered = readManuscriptParagraphs(editor.state.doc);
+      const local = idle.hasQueuedInput() && rendered !== undefined
+        && !paragraphsEqual(rendered, projection.blocks)
+        ? projectLocalPending({ ...persistWorkspace, pending: projection }, rendered) : undefined;
+      if (local !== undefined) {
+        onProjectionRef.current({ ...local, save_state: "saving" }, "local");
+      } else onProjectionRef.current(projection);
+    };
     const idle = createAuthorEditIdleController({
       workspace: persistWorkspace,
       baseUrl,
@@ -454,19 +464,12 @@ export function ManuscriptEditor({
         await collectEligibleJournalPayload(workspace);
         onCandidateSettledRef.current?.();
       },
-      onProjection: (projection) => {
-        const rendered = readManuscriptParagraphs(editor.state.doc);
-        const local = idle.hasQueuedInput() && rendered !== undefined
-          && !paragraphsEqual(rendered, projection.blocks)
-          ? projectLocalPending(persistWorkspace, rendered) : undefined;
-        if (local !== undefined) {
-          onProjectionRef.current({ ...local, save_state: "saving" }, "local");
-        } else onProjectionRef.current(projection);
-      },
+      onProjection: installProjection,
       onFailure: (error) => { onFailureRef.current(error); },
     });
     idleRef.current = idle;
     const controller: ManualInputController = {
+      installProjection,
       flush: () => idle.flush(),
       whenIdle: () => idle.whenIdle(),
       hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing,

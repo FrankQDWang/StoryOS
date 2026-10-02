@@ -10,6 +10,7 @@ import {
   FIRST_APPEND_EDIT,
   SECOND_APPEND_EDIT,
   openJournalAppendTestWorkspace,
+  createPausedDigestCrypto,
   withDigestBudget,
 } from "./local-edit-journal-append-fixture.ts";
 
@@ -282,5 +283,59 @@ it("keeps newer captured input visible when an earlier Author Edit settles", asy
     expect((await rebuildPendingProjection(test.workspace)).body).toBe("Base!?");
     expect(failure).toBeUndefined();
   } finally { release(); await act(async () => { root.unmount(); }); host.remove(); await test.close();
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
+});
+
+
+it("keeps captured manuscript input during a background Draft refresh", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const { BlockProposalDisplay } = await import("../../src/block-proposal-display.tsx");
+  const { applyTrustedInput } = await import("../support/browser-command-client.ts");
+  const paused = createPausedDigestCrypto(crypto);
+  const host = document.createElement("div"); document.body.append(host);
+  const root = createRoot(host);
+  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
+  let refresh!: () => void, observed!: () => void;
+  const refreshed = new Promise<void>((resolve) => { observed = resolve; });
+  let phase = "open", failure: unknown;
+  const fetchImpl: typeof fetch = () => { throw new Error("No command is issued before the append completes"); };
+  function View() {
+    const [projection, setProjection] = useState(test.workspace.pending);
+    const [refreshKey, setRefreshKey] = useState(0);
+    refresh = () => { setRefreshKey(1); };
+    return createElement(BlockProposalDisplay, { blocks: projection.blocks, editable: true,
+      persistWorkspace: test.workspace, baseUrl: location.origin, cryptoImpl: paused.cryptoImpl,
+      fetchImpl, controllerRef: controller,
+      scope: test.workspace.session.project_scope, chapterId: test.workspace.session.base_snapshot.chapter_id,
+      authoritativeRevisionId: projection.authoritative_revision_id, locators: [], refreshKey,
+      safeToProject: true, onAccepted: async () => {},
+      onFailure: (error) => { failure = error; }, onProjection: (next) => {
+        test.workspace.pending = next;
+        flushSync(() => { setProjection(next); });
+        if (phase === "refresh") observed();
+      } });
+  }
+  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  try {
+    await act(async () => { root.render(createElement(View)); });
+    await expect.poll(() => host.querySelector<HTMLElement>("[data-manuscript-editor]")?.contentEditable).toBe("true");
+    const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
+    surface.focus();
+    const text = surface.querySelector("p")!.firstChild!;
+    window.getSelection()!.setBaseAndExtent(text, 4, text, 4);
+    await applyTrustedInput({ operation: "insert_text", text: "!" });
+    await paused.reached;
+    phase = "refresh";
+    await act(async () => { refresh(); });
+    await refreshed;
+    expect(surface.querySelector("p")!.textContent).toBe("Base!");
+    expect(test.workspace.pending.body).toBe("Base!");
+    expect(test.workspace.pending.save_state).toBe("saving");
+    phase = "append";
+    await act(async () => { paused.release(); await controller.current!.whenIdle(); });
+    expect((await rebuildPendingProjection(test.workspace)).body).toBe("Base!");
+    expect(failure).toBeUndefined();
+  } finally { paused.release(); await act(async () => { root.unmount(); }); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
