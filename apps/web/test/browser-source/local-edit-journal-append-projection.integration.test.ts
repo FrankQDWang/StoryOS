@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { RefusedEditDraftDisplay } from "../../src/refused-edit-draft-display.tsx";
 
@@ -210,5 +211,76 @@ it("freezes one complete mixed Tiptap IME intent only after confirmation and ign
     expect(surface.querySelector(".block-proposal-text")!.textContent).toBe("Old");
     expect(failure).toBeUndefined();
   } finally { await act(async () => { root.unmount(); }); host.remove(); await test.close();
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
+});
+
+
+it("keeps newer captured input visible when an earlier Author Edit settles", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const { ManuscriptEditor } = await import("../../src/manuscript-editor.tsx");
+  const { applyTrustedInput } = await import("../support/browser-command-client.ts");
+  const { createBrowserScenario, createAppliedAuthorEditResponse } = await import("./scenario.ts");
+  const { digestApplyAuthorEdit } = await import("../../../../generated/typescript/storyos-public-release-1/client.mjs");
+  const scenario = createBrowserScenario();
+  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+  let reached!: () => void, release!: () => void;
+  const requested = new Promise<void>((resolve) => { reached = resolve; });
+  const responseGate = new Promise<void>((resolve) => { release = resolve; });
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const path = String(input);
+    if (path.endsWith("/anti-forgery-challenges")) return Response.json({ nonce: "a".repeat(64),
+      expires_at: new Date(Date.now() + 60_000).toISOString(), limit_profile_revision: "storyos.foundation.absolute.v1" });
+    if (path.includes("/editor-sessions/")) return Response.json(canonical);
+    if (!path.endsWith("/manuscript/author-edits")) throw new Error(`Unexpected request ${path}`);
+    const request = JSON.parse(String(init?.body));
+    const response = createAppliedAuthorEditResponse({ request, body: "Base!",
+      commandDigest: await digestApplyAuthorEdit(request), idempotencyKey: new Headers(init?.headers).get("idempotency-key")! });
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("Base!"));
+    canonical = { ...canonical, base_snapshot: { ...canonical.base_snapshot,
+      snapshot_id: "018f0000-0000-7001-8000-000000000080", project_activity_position: "1",
+      authoritative_head_revision_id: response.effect.kind === "authoritative_applied"
+        ? response.effect.authoritative_revision.revision_id : "",
+      materialized_revision: { ...canonical.base_snapshot.materialized_revision, revision_id: "018f0000-0000-7001-8000-000000000034",
+        body: "Base!", blocks: canonical.base_snapshot.materialized_revision.blocks.map((block) => ({ ...block, text: "Base!" })) },
+      materialized_payload_digest: { ...canonical.base_snapshot.materialized_payload_digest,
+        value_hex_lowercase: [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("") } } };
+    reached(); await responseGate;
+    return Response.json(response);
+  };
+  const host = document.createElement("div"); document.body.append(host);
+  const root = createRoot(host);
+  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
+  let failure: unknown, installedBody: string | null | undefined;
+  function View() {
+    const [projection, setProjection] = useState(test.workspace.pending);
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true,
+      persistWorkspace: test.workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: controller,
+      onFailure: (error) => { failure = error; }, onProjection: (next) => {
+        test.workspace.pending = next;
+        flushSync(() => { setProjection(next); });
+        if (next.authoritative_revision_id !== scenario.session.base_snapshot.authoritative_head_revision_id) {
+          installedBody ??= host.querySelector("[data-manuscript-editor] p")?.textContent;
+        }
+      } });
+  }
+  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  try {
+    await act(async () => { root.render(createElement(View)); });
+    const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
+    surface.focus();
+    const text = surface.querySelector("p")!.firstChild!;
+    window.getSelection()!.setBaseAndExtent(text, 4, text, 4);
+    await applyTrustedInput({ operation: "insert_text", text: "!" });
+    const flushing = controller.current!.flush();
+    await requested;
+    await applyTrustedInput({ operation: "insert_text", text: "?" });
+    expect(surface.querySelector("p")!.textContent).toBe("Base!?");
+    await act(async () => { release(); await flushing; await controller.current!.whenIdle(); });
+    expect(installedBody).toBe("Base!?");
+    expect(surface.querySelector("p")!.textContent).toBe("Base!?");
+    expect((await rebuildPendingProjection(test.workspace)).body).toBe("Base!?");
+    expect(failure).toBeUndefined();
+  } finally { release(); await act(async () => { root.unmount(); }); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
