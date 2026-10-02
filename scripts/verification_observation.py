@@ -105,7 +105,8 @@ def read_record(path, records):
         return str(relative), fingerprint, kind, run, 'malformed', str(error), '{}'
 
 
-def collect(records, database, rebuild=False):
+def collect(records, database, rebuild=False, cache=None):
+    cache = {} if cache is None else cache
     settings = json.loads((Path(__file__).parent / "observation/settings.json").read_text())
     if not (1 <= settings['max_batch_records'] <= 200 and 5 <= settings['heartbeat_seconds'] <= 3600
             and 3 <= settings['regression_min_samples'] <= 100 and settings['regression_ratio'] > 1
@@ -142,9 +143,24 @@ def collect(records, database, rebuild=False):
         changed_runs = set()
         paths = sorted([*records.glob('*/report.json'), *records.glob('*/steps/*.json'), *records.glob('*/nodes/*.json'),
                         *records.glob('requests/*.json')])
-        pending = 0
+        pending = parsed = 0
         for path in paths:
+            relative = str(path.relative_to(records))
+            try:
+                stat = path.lstat()
+                stamp = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino)
+            except OSError:
+                stamp = None
+            retained = cache.get(relative)
+            if stamp is not None and retained and retained[0] == stamp:
+                if previous.get(relative) == retained[1]:
+                    continue
+                if updated >= settings['max_batch_records']:
+                    pending += 1
+                    continue
             row = read_record(path, records)
+            parsed += 1
+            cache[relative] = (stamp, row[1])
             if previous.get(row[0]) == row[1]:
                 continue
             if updated >= settings['max_batch_records']:
@@ -164,7 +180,7 @@ def collect(records, database, rebuild=False):
     if rebuild:
         with sqlite3.connect(database) as connection:
             connection.execute('VACUUM')
-    return {'updated': updated, 'records': count, 'pending': pending, 'repositories': repositories,
+    return {'updated': updated, 'parsed_records': parsed, 'records': count, 'pending': pending, 'repositories': repositories,
             'coverage': [json.loads(p.read_text()) for p in sorted((records / 'sources').glob('*.json'))], 'seconds': time.monotonic() - started,
             'cpu_seconds': time.process_time() - cpu, 'database_bytes': database.stat().st_size,
             'peak_rss_bytes': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == 'darwin' else 1024)}
@@ -192,12 +208,13 @@ def main():
                               'quality': dict(connection.execute('SELECT quality, COUNT(*) FROM records GROUP BY quality'))}))
         return
     stop = threading.Event()
+    cache = {}
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
     while not stop.is_set():
         error = None
         try:
-            result = collect(args.records, args.database, args.action == 'rebuild')
+            result = collect(args.records, args.database, args.action == 'rebuild', cache)
             health = {'status': 'ok', **result}
             print(json.dumps(result), flush=True)
             if args.action == 'rebuild':
