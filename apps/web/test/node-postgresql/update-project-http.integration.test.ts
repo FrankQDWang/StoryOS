@@ -40,7 +40,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -158,7 +158,7 @@ async function rename(
   request: UpdateProjectRequest,
 ) {
   const digest = await digestUpdateProject(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -192,7 +192,7 @@ async function challenged<T>(
   digest: DigestValue,
   submit: (nonce: string) => Promise<T>,
 ): Promise<T> {
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -328,7 +328,7 @@ test("updateProject refuses an invalid title and replays the settled Receipt", a
     const lostRequest = renameRequest("Ack Lost Novel", "2", "018f0000-0000-7001-8000-000000000817");
     const lostKey = "018f0000-0000-7001-8000-000000000828";
     const lostDigest = await digestUpdateProject(lostRequest);
-    const lostChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const lostChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -507,7 +507,7 @@ test("updateProject first acknowledgement excludes a later committed rename", as
     const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000804", "Empty Novel");
     const requestA = renameRequest("Held Novel", "1", "018f0000-0000-7001-8000-000000000841");
     const digestA = await digestUpdateProject(requestA);
-    const challengeA = await withChallengeRetry(() => createProjectCommandChallenge({
+    const challengeA = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

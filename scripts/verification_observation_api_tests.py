@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 
 import verification_observation_api as query_api
+import verification_records
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,6 +69,18 @@ class QueryTests(unittest.TestCase):
         with response:
             return response.status, json.load(response)
 
+    def test_supervision_distinguishes_exact_receipt_from_collection_health(self):
+        self.write('receipt')
+        self.start()
+        report = self.records / 'receipt/report.json'
+        result = verification_records.supervision(report, url=self.url)
+        self.assertEqual((result['status'], result['receipt']), ('unavailable', 'current'))
+        self.write('receipt', status='failed')
+        result = verification_records.supervision(report, url=self.url)
+        self.assertEqual(result['receipt'], 'behind')
+        self.assertEqual(verification_records.supervision(report, url='http://127.0.0.1:1')['status'],
+                         'unavailable')
+
     def test_search_pages_all_history_and_preserves_unknown_facts(self):
         for index in range(105):
             self.write(f'fixture-{index:03}', status='running' if index == 0 else 'passed')
@@ -111,6 +124,9 @@ class QueryTests(unittest.TestCase):
             'utc': '2026-09-23T01:00:00Z', 'profile': 'complete', 'requested_scope': 'daily'}))
         self.start()
         code, detail = self.get('/api/v1/runs/fixture-group')
+        self.assertEqual(detail['source_sha256'], hashlib.sha256(
+            (self.records / 'fixture-group/report.json').read_bytes()).hexdigest())
+        self.assertEqual(detail['timing']['reason'], 'build-state-unavailable')
         self.assertEqual((code, detail['has_graph'], detail['evidence']),
                          (200, True, 'fixture-group/report.json'))
         code, files = self.get('/api/v1/runs/fixture-group/files')

@@ -5,18 +5,10 @@ cd "$repository_root"
 if [ -z "${STORYOS_VERIFICATION_RUN:-}" ]; then
   exec python3 scripts/verification.py step daily-database -- sh "$repository_root/scripts/verify-daily-database.sh" "$@"
 fi
-. "$repository_root/scripts/lib/controlled-postgres.sh"
-container="storyos-daily-$$"
-trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-start_postgres "$container"
-STORYOS_STORAGE_ADMIN_URL=$(postgres_admin_url "$container") target/release-package/storyos-storage
-set_runtime_password "$container"
-load_controlled_fixture "$container"
-export STORYOS_TEST_DATABASE_URL=$(postgres_runtime_url "$container")
-export STORYOS_TEST_ADMIN_DATABASE_URL=$(postgres_admin_url "$container")
-export STORYOS_TEST_POSTGRES_CONTAINER="$container"
+if [ "${1:-}" != "--prepared" ]; then
+  exec "$repository_root/scripts/dev-postgres.sh" run sh "$0" --prepared "$@"
+fi
+shift
 for group in "$@"; do
   case "$group" in
     database)

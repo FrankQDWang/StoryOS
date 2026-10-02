@@ -1,6 +1,8 @@
 """Test collection through the public command and its SQLite read interface."""
 
 import json
+import os
+import selectors
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -15,6 +17,40 @@ COMMAND = Path(__file__).with_name('verification_observation.py')
 
 
 class ObservationTests(unittest.TestCase):
+    def test_watch_reads_replacements_without_parsing_unchanged_history(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            records = root / 'records'
+            (records / 'run').mkdir(parents=True)
+            report = records / 'run/report.json'
+            report.write_text(json.dumps({'record_version': 1, 'run_id': 'run', 'status': 'passed'}))
+            (records / 'broken').mkdir()
+            (records / 'broken/report.json').symlink_to(root / 'missing.json')
+            process = subprocess.Popen([sys.executable, str(COMMAND), 'watch', '--interval', '1',
+                '--records', str(records), '--database', str(root / 'read.sqlite')],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                def event():
+                    with selectors.DefaultSelector() as selector:
+                        selector.register(process.stdout, selectors.EVENT_READ)
+                        self.assertTrue(selector.select(5), 'Collector did not report a cycle')
+                    return json.loads(process.stdout.readline())
+                self.assertEqual(event()['parsed_records'], 2)
+                self.assertEqual(event()['parsed_records'], 0)
+                stamp = report.stat()
+                replacement = report.with_suffix('.tmp')
+                replacement.write_text(report.read_text().replace('passed', 'failed'))
+                os.utime(replacement, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+                replacement.replace(report)
+                self.assertEqual(event()['parsed_records'], 1)
+                with sqlite3.connect(root / 'read.sqlite') as connection:
+                    self.assertEqual(connection.execute(
+                        "SELECT quality, json_extract(payload,'$.status') FROM records WHERE kind='run' ORDER BY path").fetchall(),
+                        [('malformed', None), ('valid', 'failed')])
+            finally:
+                process.terminate()
+                process.communicate(timeout=5)
+
     def test_replay_restart_rebuild_and_bad_history_preserve_originals(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

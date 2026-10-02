@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "stage_budgets_seconds": {"acceptance-timing": 120, "recovery-seed": 90, "recovery-drill": 300, "http-files": 900, "exact-dist": 600, "recovery-fixture": 300, "recovery-mixed": 300},
   "verification_test_workers": 2,
   "verification_test_parallel_files": [
     "scripts/verification_cache_tests.py",

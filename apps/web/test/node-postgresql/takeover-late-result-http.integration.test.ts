@@ -20,7 +20,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -74,7 +74,7 @@ async function openEditorSession(
     correlation_id: correlationId,
   };
   const digest = await digestCreateEditorSession(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
     baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
     request: {
       method: "POST",
@@ -159,7 +159,7 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     };
     const authorEditKey = "018f0000-0000-7001-8000-000000000345";
     const authorEditDigest = await digestApplyAuthorEdit(authorEditRequest);
-    const authorEditChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const authorEditChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
       baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
       request: {
         method: "POST",
@@ -198,7 +198,7 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     };
     const takeoverKey = "018f0000-0000-7001-8000-000000000347";
     const takeoverDigest = await digestTakeOverProjectWriter(takeoverRequest);
-    const takeoverChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const takeoverChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
       baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
       request: {
         method: "POST",
@@ -388,7 +388,7 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     };
     const staleKey = "018f0000-0000-7001-8000-000000000353";
     const staleDigest = await digestApplyAuthorEdit(staleRequest);
-    const staleChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const staleChallenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
       baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
       request: {
         method: "POST",

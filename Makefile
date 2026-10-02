@@ -136,6 +136,6 @@ observe-status:
 	@curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3754/api/v1/health
 	@python3 scripts/verification_observation.py status
 observe-rebuild:
-	@python3 scripts/verification_observation.py rebuild
+	@python3 scripts/verification_observation_runtime.py rebuild
 observe-smoke: observe-build
 	@$(VERIFY_STEP) observation-smoke -- python3 scripts/verification_observation_smoke.py

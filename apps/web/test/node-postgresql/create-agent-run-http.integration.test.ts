@@ -40,7 +40,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -164,7 +164,7 @@ async function challenged<T>(options: {
   key: string;
   send: (antiForgery: string) => Promise<T>;
 }): Promise<T> {
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(options.projectId, () => createProjectCommandChallenge({
     baseUrl: options.baseUrl,
     projectId: options.projectId,
     fetchImpl: options.fetchImpl,
@@ -298,7 +298,7 @@ async function postRun(
   request: CreateAgentRunRequest,
 ) {
   const digest = await digestCreateAgentRun(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -661,7 +661,7 @@ test("createAgentRun reopens an idle conversation and refuses digest or scope su
     mutated.create_agent_run_input.author_message = { text: "A different assistance request." };
     const mutatedDigest = await digestCreateAgentRun(mutated);
     await assert.rejects(
-      () => withChallengeRetry(() => createProjectCommandChallenge({
+      () => withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
         baseUrl: started.baseUrl,
         projectId: first.projectId,
         fetchImpl: first.fetchImpl,
@@ -755,7 +755,7 @@ test("createAgentRun exact retry after commit keeps the first acknowledgement", 
     const chapterId = await prepareProject(started.baseUrl, first.fetchImpl, first.projectId);
     const request = runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000b52");
     const digest = await digestCreateAgentRun(request);
-    const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const challenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -864,7 +864,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
     );
     const heldDigest = await digestCreateAgentRun(heldRequest);
     const competingDigest = await digestCreateAgentRun(competingRequest);
-    const heldChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const heldChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -876,7 +876,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
         idempotency_key: heldKey,
       },
     }));
-    const competingChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const competingChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,

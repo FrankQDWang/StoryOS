@@ -15,7 +15,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -68,7 +68,7 @@ async function ensureCurrentWriter(baseUrl: string): Promise<GetEditorSessionRes
     correlation_id: "018f0000-0000-7001-8000-000000000201",
   };
   const digest = await digestCreateEditorSession(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(PROJECT_A, () => createProjectCommandChallenge({
     baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
     request: {
       method: "POST",

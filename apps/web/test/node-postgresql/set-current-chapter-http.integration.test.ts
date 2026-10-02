@@ -42,7 +42,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -222,7 +222,7 @@ async function postVolume(
   request: CreateVolumeRequest,
 ) {
   const digest = await digestCreateVolume(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -253,7 +253,7 @@ async function postChapter(
   request: CreateChapterRequest,
 ) {
   const digest = await digestCreateChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -284,7 +284,7 @@ async function putCurrent(
   request: SetCurrentChapterRequest,
 ) {
   const digest = await digestSetCurrentChapter(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -362,7 +362,7 @@ test("setCurrentChapter switches the current Chapter, replays, and fails closed"
       correlation_id: "018f0000-0000-7001-8000-000000000f18",
     };
     const sessionDigest = await digestCreateEditorSession(sessionRequest);
-    const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const sessionChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
@@ -588,7 +588,7 @@ test("setCurrentChapter refuses a missing Chapter join and an archived Project",
       correlation_id: "018f0000-0000-7001-8000-000000000f38",
     };
     const sessionDigest = await digestCreateEditorSession(sessionRequest);
-    const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const sessionChallenge = await withChallengeBudget(owned.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: owned.projectId,
       fetchImpl: owned.fetchImpl,
@@ -639,7 +639,7 @@ test("setCurrentChapter refuses a missing Chapter join and an archived Project",
     const archiveDigest = await digestArchiveProject(
       archiveRequest("1", "018f0000-0000-7001-8000-000000000f3c"),
     );
-    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const archiveChallenge = await withChallengeBudget(owned.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: owned.projectId,
       fetchImpl: owned.fetchImpl,
@@ -736,7 +736,7 @@ async function prepareTwoChapterProject(
     correlation_id: keys.sessionCorrelation,
   };
   const sessionDigest = await digestCreateEditorSession(sessionRequest);
-  const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const sessionChallenge = await withChallengeBudget(first.projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId: first.projectId,
     fetchImpl: first.fetchImpl,
@@ -780,7 +780,7 @@ async function renameProject(
   request: UpdateProjectRequest,
 ) {
   const digest = await digestUpdateProject(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -956,7 +956,7 @@ test("setCurrentChapter first acknowledgement excludes a later selection", async
       correlationId: "018f0000-0000-7001-8000-000000000f8a",
     });
     const digestA = await digestSetCurrentChapter(requestA);
-    const challengeA = await withChallengeRetry(() => createProjectCommandChallenge({
+    const challengeA = await withChallengeBudget(prepared.projectId, () => createProjectCommandChallenge({
       baseUrl,
       projectId: prepared.projectId,
       fetchImpl: prepared.fetchImpl,

@@ -40,7 +40,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -74,7 +74,7 @@ async function challenged<Result>(options: {
   digest: DigestValue;
   send: (antiForgery: string) => Promise<Result>;
 }): Promise<{ antiForgery: string; result: Result }> {
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(options.projectId, () => createProjectCommandChallenge({
     baseUrl: options.baseUrl,
     projectId: options.projectId,
     fetchImpl: options.fetchImpl,

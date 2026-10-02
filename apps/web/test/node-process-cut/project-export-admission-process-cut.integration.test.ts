@@ -26,7 +26,7 @@ import {
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
-  withChallengeRetry,
+  withChallengeBudget,
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -127,7 +127,7 @@ test("an admitted Project Export Archive stays in progress across a Server proce
     });
     const request = exportRequest();
     const digest = await digestExportProjectArchive(request);
-    const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const challenge = await withChallengeBudget(created.prospective_project_id, () => createProjectCommandChallenge({
       baseUrl: first.baseUrl,
       projectId: created.prospective_project_id,
       fetchImpl,
@@ -217,7 +217,7 @@ test("a Worker claim without settlement is outcome_unknown, then takeover settle
       },
     };
     const digest = await digestExportProjectArchive(request);
-    const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    const challenge = await withChallengeBudget(created.prospective_project_id, () => createProjectCommandChallenge({
       baseUrl: first.baseUrl,
       projectId: created.prospective_project_id,
       fetchImpl,

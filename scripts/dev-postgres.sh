@@ -1,5 +1,5 @@
 #!/bin/sh
-# Local Active, fixture-loaded PostgreSQL: eval "$(scripts/dev-postgres.sh up)"
+# Run a command with a disposable Active, fixture-loaded PostgreSQL database.
 set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
@@ -16,12 +16,23 @@ print_env() {
 }
 
 case "${1:-}" in
+  run)
+    shift
+    if [ -z "${STORYOS_VERIFICATION_RUN:-}" ]; then
+      exec python3 "$repository_root/scripts/verification.py" step database-command -- "$0" run "$@"
+    fi
+    exec python3 "$repository_root/scripts/verification_resources.py" "$@"
+    ;;
   up)
+    if [ "${2:-}" != "--interactive" ]; then
+      echo "Use scripts/dev-postgres.sh run command...; manual sessions require up --interactive and down." >&2
+      exit 2
+    fi
     if [ ! -x "$storage_bin" ]; then
       echo "storyos-storage is missing; run make release-package first" >&2
       exit 1
     fi
-    docker rm -f "$container" >/dev/null 2>&1 || true
+    docker rm -fv "$container" >/dev/null 2>&1 || true
     start_postgres "$container"
     STORYOS_STORAGE_ADMIN_URL="$(postgres_admin_url "$container")" "$storage_bin" >/dev/null
     set_runtime_password "$container"
@@ -35,10 +46,10 @@ case "${1:-}" in
     print_env
     ;;
   down)
-    docker rm -f "$container" >/dev/null 2>&1 || true
+    docker rm -fv "$container" >/dev/null 2>&1 || true
     ;;
   *)
-    echo "usage: scripts/dev-postgres.sh up | reload | env | down" >&2
+    echo "usage: scripts/dev-postgres.sh run command... | up | reload | env | down" >&2
     exit 1
     ;;
 esac

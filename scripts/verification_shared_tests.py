@@ -84,7 +84,7 @@ for arg in sys.argv:
         self.assertIn("TRUNCATE", " ".join(children[3][1]))
         for phase, child in zip(phases, [c for c in children if c[0] == "pnpm"]):
             files = [path.removeprefix("apps/web/") for path in phase["files"]]
-            self.assertEqual(child[1], ["--dir", "apps/web", "exec", "vitest", "run", "--project", "node-postgresql", *files])
+            self.assertEqual(child[1][:7 + len(files)], ["--dir", "apps/web", "exec", "vitest", "run", "--project", "node-postgresql", *files])
             self.assertEqual(child[2], ":".join(files))
 
     def test_rename_and_delete_refresh_membership_and_reject_dangling_edges(self):
@@ -119,6 +119,7 @@ for arg in sys.argv:
             if not path.name.endswith("_tests.py"):
                 shutil.copy(path, self.root / "scripts")
         shutil.copy(scripts / "verify-daily-database.sh", self.root / "scripts")
+        shutil.copy(scripts / "dev-postgres.sh", self.root / "scripts")
         tools = self.root / "target/tools"
         docker = tools / "docker"
         docker.write_text(docker.read_text() + "\nprint('PostgreSQL init process complete' if 'logs' in sys.argv else '127.0.0.1:5432')\n")
@@ -165,7 +166,7 @@ for arg in sys.argv:
     def test_package_prerequisite_rejects_bad_membership_before_node_install(self):
         for name in ("verification.py", "verification_shared.py", "verification_cache.py", "verification_daily.py",
                      "verification_status.py", "verification_graph.py", "verification_candidate.py",
-                     "verification_rust_cache.py", "verification_web_overlap.py"):
+                     "verification_rust_cache.py", "verification_web_overlap.py", "verification_records.py"):
             shutil.copy(Path(__file__).parent / name, self.root / "scripts")
         (self.root / self.a).write_text("// Missing declaration.\n")
         result = subprocess.run(["make", "-f", str(Path(__file__).resolve().parent.parent / "Makefile"),

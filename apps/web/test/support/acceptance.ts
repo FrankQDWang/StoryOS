@@ -9,7 +9,7 @@ import type { ApplyAuthorEditRequest, CreateAgentRunRequest, CreateEditorSession
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres as queryPostgres, runStoryOSWorker,
-  sessionFetch as browserFetch, startStoryOSServer, withChallengeRetry } from "./node-integration.ts";
+  sessionFetch as browserFetch, startStoryOSServer, withChallengeBudget } from "./node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
@@ -83,7 +83,7 @@ export async function challenged<T>(
   key: string,
   send: (antiForgery: string) => Promise<T>,
 ): Promise<T> {
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  const challenge = await withChallengeBudget(projectId, () => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,

@@ -192,22 +192,16 @@ export async function exportSettlementReceipt(options: {
   `);
 }
 
-export async function withChallengeRetry<Result>(
+/** Prepare one business command without spending real time on the quota window. */
+export async function withChallengeBudget<Result>(
+  projectId: string,
   action: () => Promise<Result>,
 ): Promise<Result> {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    try {
-      return await action();
-    } catch (error) {
-      if (!(error instanceof StoryOSProtocolError) || error.status !== 429 || attempt === 3) {
-        throw error;
-      }
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, ((error.retryAfterSeconds ?? 1) + 1) * 1000);
-      });
-    }
-  }
-  throw new Error("command challenge retry exhausted");
+  await queryStoryOSPostgres(`
+    UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+     WHERE project_id = '${projectId}'::uuid;
+  `);
+  return action();
 }
 
 export function requireStoryOSProtocolError(error: unknown): StoryOSProtocolError {

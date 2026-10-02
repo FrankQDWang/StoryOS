@@ -39,6 +39,9 @@ CREATE VIEW IF NOT EXISTS violations AS
  SELECT t.run, 'runtime-regression', 'executed', r.path FROM timing_comparison t
  JOIN records r ON r.run=t.run AND r.kind='run' WHERE t.state='regression'
  UNION ALL
+ SELECT r.run, 'stage-budget-exceeded', 'executed', r.path FROM records r
+ WHERE json_extract(r.payload,'$.budget_exceeded')=1
+ UNION ALL
  SELECT r.run, 'daily-complete', CASE WHEN r.kind='request' THEN 'prevented' ELSE 'executed' END, r.path
  FROM records r WHERE r.quality='valid' AND json_extract(r.payload,'$.requested_scope')='daily'
  AND (json_extract(r.payload,'$.profile')='complete' OR json_extract(r.payload,'$.complete_dispatch_attempt')=1
