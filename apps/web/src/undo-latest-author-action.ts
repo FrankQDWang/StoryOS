@@ -5,6 +5,7 @@ import {
   getRefusedEditDraft,
   undoLatestAuthorAction,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { ChallengeAdmissionWait } from "./challenge-admission-wait.ts";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 import type {
   EditorBaseSnapshot,
@@ -27,13 +28,11 @@ const positiveU64 = (value: unknown): value is string =>
   typeof value === "string" && U64.test(value) && BigInt(value) > 0n
     && BigInt(value) <= 18446744073709551615n;
 
-type InFlightUndo = {
+type UndoSubmission = {
   idempotencyKey: string;
   correlationId: string;
   nonce?: string;
 };
-
-const inFlight = new Map<string, InFlightUndo>();
 
 function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
   const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
@@ -45,14 +44,6 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-function undoIdentity(options: {
-  projectId: string;
-  expectedAuthorUndoFrontierSequence: string;
-  expectedAuthoritativeRevisionId: string;
-}): string {
-  return `${options.projectId}\n${options.expectedAuthorUndoFrontierSequence}\n${options.expectedAuthoritativeRevisionId}`;
 }
 
 export async function installAuthoritativeBaseSnapshot(
@@ -84,6 +75,8 @@ export async function undoOwnedLatestAuthorAction(options: {
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   isCurrent: () => boolean;
+  challengeAdmission: ChallengeAdmissionWait;
+  onChallengeWait: () => void;
 }): Promise<UndoLatestAuthorActionResponse | { effect: { kind: "draft_reconciled"; event: EditorFlowDraftReopened } } | undefined> {
   const retainedUndo = await readDraftUndoJournal(options.workspace);
   const pendingUndo = retainedUndo.filter(({ observation }) => observation === undefined);
@@ -123,19 +116,10 @@ export async function undoOwnedLatestAuthorAction(options: {
   const expectedHead = durable?.group.frozen_request_body.undo_latest_author_action_input.expected_authoritative_revision_id
     ?? canonical.base_snapshot.authoritative_head_revision_id;
   if (!positiveU64(frontier)) return undefined;
-  const identity = undoIdentity({
-    projectId: options.workspace.partition.project_scope.project_id,
-    expectedAuthorUndoFrontierSequence: frontier,
-    expectedAuthoritativeRevisionId: expectedHead,
-  });
-  let flight = inFlight.get(identity);
-  if (flight === undefined) {
-    flight = {
-      idempotencyKey: uuidV7(options.cryptoImpl),
-      correlationId: uuidV7(options.cryptoImpl),
-    };
-    inFlight.set(identity, flight);
-  }
+  const flight: UndoSubmission = {
+    idempotencyKey: uuidV7(options.cryptoImpl),
+    correlationId: uuidV7(options.cryptoImpl),
+  };
   if (durable === undefined) {
     let closed = (await readDiscardJournal(options.workspace)).flatMap(({ observation }) =>
       observation?.kind === "settled_closed" ? [observation.event]
@@ -192,19 +176,18 @@ export async function undoOwnedLatestAuthorAction(options: {
   try {
     const settled = await submitUndo(durable === undefined ? options : guarded, frontier, expectedHead, flight, durable?.group.frozen_request_body);
     if (durable !== undefined) await observeDraftUndo(options.workspace, durable, { response: settled }, options.isCurrent);
-    inFlight.delete(identity);
     if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated"
       || settled.effect.kind === "reversal_required") {
       await refreshSessionAfterCompensation(options);
     }
     return settled;
   } catch (error) {
+    if (!options.isCurrent()) throw error;
     if (durable !== undefined) {
-      if (!options.isCurrent()) throw error;
       const current = await getRefusedEditDraft({ baseUrl: options.baseUrl,
         projectId: durable.project_scope.project_id, draftId: durable.source_close.draft_id, fetchImpl: options.fetchImpl });
       const event = await reconcileDraftUndo(options.workspace, current.draft, options.isCurrent);
-      if (event !== undefined) { inFlight.delete(identity); await refreshSessionAfterCompensation(options);
+      if (event !== undefined) { await refreshSessionAfterCompensation(options);
         return { effect: { kind: "draft_reconciled", event } }; }
       throw error;
     }
@@ -212,7 +195,6 @@ export async function undoOwnedLatestAuthorAction(options: {
       throw error;
     }
     const settled = await submitUndo(options, frontier, expectedHead, flight);
-    inFlight.delete(identity);
     if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated"
       || settled.effect.kind === "reversal_required") {
       await refreshSessionAfterCompensation(options);
@@ -245,15 +227,18 @@ async function submitUndo(
     baseUrl: string;
     fetchImpl: typeof fetch;
     cryptoImpl: Crypto;
+    isCurrent: () => boolean;
+    challengeAdmission: ChallengeAdmissionWait;
+    onChallengeWait: () => void;
   },
   frontier: string,
   expectedHead: string,
-  flight: InFlightUndo,
+  flight: UndoSubmission,
   frozen?: UndoLatestAuthorActionRequest,
 ): Promise<UndoLatestAuthorActionResponse> {
   const request = frozen ?? undoRequest(options.workspace, frontier, expectedHead, flight.correlationId);
   if (flight.nonce === undefined) {
-    const challenge = await createProjectCommandChallenge({
+    const challenge = await options.challengeAdmission.retry(async () => createProjectCommandChallenge({
       baseUrl: options.baseUrl,
       projectId: options.workspace.partition.project_scope.project_id,
       fetchImpl: options.fetchImpl,
@@ -267,19 +252,18 @@ async function submitUndo(
         ),
         idempotency_key: flight.idempotencyKey,
       },
-    });
+    }), options.onChallengeWait);
+    if (challenge === undefined) throw new Error("Undo view changed");
     flight.nonce = challenge.nonce;
   }
-  const nonce = flight.nonce;
-  if (nonce === undefined) {
-    throw new Error("the Undo Latest Author Action challenge nonce is missing");
-  }
+  // An abandoned Undo is never sent, also when its Challenge request completed after the abandon.
+  if (!options.isCurrent()) throw new Error("Undo view changed");
   return undoLatestAuthorAction({
     baseUrl: options.baseUrl,
     projectId: options.workspace.partition.project_scope.project_id,
     fetchImpl: options.fetchImpl,
     idempotencyKey: flight.idempotencyKey,
-    antiForgery: nonce,
+    antiForgery: flight.nonce,
     request,
   });
 }

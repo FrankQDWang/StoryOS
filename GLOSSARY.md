@@ -21,7 +21,7 @@ The single-use anti-forgery nonce that the Server issues for one exact project c
 _Avoid_: Reusable token, author confirmation step, CSRF cookie
 
 **Challenge Rate Class**:
-The Server-derived class of a project command kind that selects which rate budget a new Command Challenge uses. Release 1 has an `author_edit` class for Author Edit submissions and a `shared` class for all other project commands; each class has its own versioned policy and counter for each User, Project, and session generation.
+The Server-derived class of a project command kind that selects which rate budget a new Command Challenge uses. Release 1 has an `author_edit` class for Author Edit and Author Undo submissions and a `shared` class for all other project commands; each class has its own versioned policy and counter for each User, Project, and session generation.
 _Avoid_: Client-selected class, per-command quota, author-tunable rate limit, one shared writing quota
 
 **Trusted Local Session Bootstrap**:

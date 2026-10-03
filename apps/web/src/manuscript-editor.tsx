@@ -36,6 +36,7 @@ import {
   type BlockProposalProjection,
 } from "./block-proposal-decoration.ts";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
+import { createChallengeAdmissionWait, type ChallengeAdmissionTimers } from "./challenge-admission-wait.ts";
 
 import type { ProposalFocus } from "./proposal-navigation.ts";
 
@@ -80,6 +81,7 @@ export interface ManuscriptEditorProps {
     text: string;
   }) => void;
   onCopyProposal?: (proposalId: string) => void;
+  undoChallengeTimers?: ChallengeAdmissionTimers;
 }
 
 function syncManuscriptSurface(
@@ -148,6 +150,7 @@ export function ManuscriptEditor({
   onReplanProposal,
   onWithdrawProposal,
   onCopyProposal,
+  undoChallengeTimers,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
@@ -172,6 +175,7 @@ export function ManuscriptEditor({
   const onCopyProposalRef = useRef(onCopyProposal);
   const persistWorkspaceRef = useRef(persistWorkspace);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
+  const abandonUndoRef = useRef<(() => void) | undefined>(undefined);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onProjectionRef.current = onProjection;
   onFailureRef.current = onFailure;
@@ -215,6 +219,8 @@ export function ManuscriptEditor({
         if (!current.view.composing && !composingRef.current) observedBlocksRef.current = nextBlocks;
         return;
       }
+      // New input changes the Author Undo Frontier, so an Undo in progress can only conflict.
+      abandonUndoRef.current?.();
       const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
       if (mixed !== undefined) {
         if (current.view.composing || composingRef.current) {
@@ -297,22 +303,37 @@ export function ManuscriptEditor({
 
   const undoLifetime = useRef(0);
   useEffect(() => { undoLifetime.current += 1;
-    return () => { undoLifetime.current += 1; };
+    return () => { undoLifetime.current += 1; abandonUndoRef.current?.(); };
   }, [persistWorkspace, editor]);
   onAuthorUndoRef.current = () => {
+    const workspace = persistWorkspaceRef.current;
+    // One Author Undo is in progress from the key press until it settles.
+    if (abandonUndoRef.current !== undefined || editor === null || workspace === undefined) return true;
+    const started = undoLifetime.current;
+    let abandoned = false;
+    const isCurrent = () => !abandoned && started === undoLifetime.current
+      && persistWorkspaceRef.current === workspace && !editor.isDestroyed;
+    const challengeAdmission = createChallengeAdmissionWait(undoChallengeTimers);
+    const abandon = () => {
+      abandoned = true;
+      challengeAdmission.cancel();
+      if (abandonUndoRef.current === abandon) abandonUndoRef.current = undefined;
+    };
+    abandonUndoRef.current = abandon;
     void (async () => {
-      const workspace = persistWorkspaceRef.current;
-      if (editor === null || workspace === undefined) return;
-      const started = undoLifetime.current;
-      const isCurrent = () => started === undoLifetime.current && persistWorkspaceRef.current === workspace && !editor.isDestroyed;
       await idleRef.current?.flush();
       if (!isCurrent()) return;
+      let waited = false;
       try {
         const settled = await undoOwnedLatestAuthorAction({
           workspace,
           baseUrl,
           fetchImpl,
-          cryptoImpl, isCurrent,
+          cryptoImpl, isCurrent, challengeAdmission,
+          onChallengeWait: () => {
+            if (!waited) onProjectionRef.current({ ...workspace.pending, save_state: "saving" }, "local");
+            waited = true;
+          },
         });
         if (!isCurrent()) return;
         if (settled !== undefined && (settled.effect.kind === "draft_compensated" || settled.effect.kind === "draft_reconciled")) {
@@ -322,6 +343,7 @@ export function ManuscriptEditor({
           onCandidateSettledRef.current?.(); return;
         }
         if (settled !== undefined && settled.effect.kind === "reversal_required") {
+          if (waited) onProjectionRef.current(await rebuildPendingProjection(workspace));
           onCandidateSettledRef.current?.("proposal_id" in settled ? settled.proposal_id ?? undefined : undefined); return;
         }
         if (settled === undefined || settled.effect.kind !== "compensated") {
@@ -339,7 +361,7 @@ export function ManuscriptEditor({
       } catch (error) {
         if (isCurrent()) onFailureRef.current(error);
       }
-    })();
+    })().finally(() => { if (abandonUndoRef.current === abandon) abandonUndoRef.current = undefined; });
     return true;
   };
 

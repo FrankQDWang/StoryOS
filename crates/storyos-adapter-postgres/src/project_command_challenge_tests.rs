@@ -255,3 +255,82 @@ async fn author_edit_and_shared_challenges_use_separate_rate_budgets() {
         (10, Some(45), 120, Some(45), Some(45))
     );
 }
+
+fn undo_request(index: u64, generation: u64) -> IssueProjectCommandChallenge {
+    let mut request = numbered_request(index, generation);
+    let binding = &mut request.binding;
+    binding.command_kind = "undoLatestAuthorAction".to_owned();
+    binding.challenge_rate_policy_revision =
+        ChallengeRateClass::for_command_kind(&binding.command_kind)
+            .policy_revision()
+            .to_owned();
+    binding.method = "POST".to_owned();
+    binding.route_template = "/api/v1/projects/{project_id}/author-actions/undo".to_owned();
+    binding.command_schema = "storyos.command.undo-latest-author-action.request.v1".to_owned();
+    binding.canonical_command_digest = binding
+        .canonical_command_digest
+        .replace("updateProject", "undoLatestAuthorAction");
+    request
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn author_undo_and_author_edit_share_the_author_edit_rate_budget_for_one_project() {
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = fixed_clock_store(runtime_url, /*unix_seconds*/ 30_015);
+    let mut shared = Vec::new();
+    for index in 9_401..=9_410 {
+        shared.push(
+            issue_project_command_challenge(&store, &numbered_request(index, /*generation*/ 902))
+                .await,
+        );
+    }
+    let mut writing = Vec::new();
+    for index in 0..60 {
+        writing.push(
+            issue_project_command_challenge(
+                &store,
+                &author_edit_request(9_501 + index, /*generation*/ 902),
+            )
+            .await,
+        );
+        writing.push(
+            issue_project_command_challenge(
+                &store,
+                &undo_request(9_601 + index, /*generation*/ 902),
+            )
+            .await,
+        );
+    }
+    let undo_over_capacity =
+        issue_project_command_challenge(&store, &undo_request(/*index*/ 9_661, /*generation*/ 902))
+            .await;
+    let exact_retry =
+        issue_project_command_challenge(&store, &undo_request(/*index*/ 9_601, /*generation*/ 902))
+            .await;
+    let mut other_project = undo_request(/*index*/ 9_701, /*generation*/ 902);
+    other_project.binding.project_scope =
+        ProjectScope::new(UserId::new(USER_B), ProjectId::new(PROJECT_B));
+    let other_project = issue_project_command_challenge(&store, &other_project).await;
+
+    let admitted = |results: &[Result<_, ProjectCommandChallengeError>]| {
+        results.iter().filter(|result| result.is_ok()).count()
+    };
+    let retry_after = |result: &Result<_, ProjectCommandChallengeError>| match result {
+        Err(ProjectCommandChallengeError::RateLimited {
+            retry_after_seconds,
+        }) => Some(*retry_after_seconds),
+        Ok(_) | Err(_) => None,
+    };
+    assert_eq!(
+        (
+            admitted(&shared),
+            admitted(&writing),
+            retry_after(&undo_over_capacity),
+            exact_retry.as_ref().ok(),
+            other_project.is_ok(),
+        ),
+        (10, 120, Some(45), writing[1].as_ref().ok(), true)
+    );
+}
