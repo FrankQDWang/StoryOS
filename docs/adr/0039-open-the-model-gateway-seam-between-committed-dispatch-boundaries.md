@@ -77,13 +77,13 @@ The adapter resolves the Credential Reference at step 2, before the dispatch cla
 - `storyos-adapter-volcengine-responses` contains the Agent Plan Responses adapter. It is the only crate that depends on an HTTP client and TLS.
 - `storyos-adapter-postgres` keeps SQL and persistence. It gets no HTTP, TLS, or credential dependency.
 - The `storyos-worker` library contains the Worker loop. It does not depend on a Provider adapter.
-- One binary package composes the Worker loop with the PostgreSQL store, both adapters, and the credential resolver. No other package depends on that binary package.
+- One binary package composes the Worker loop with the PostgreSQL store, the fake and Volcengine adapters, and the credential resolver. No other package depends on that binary package.
 - The Worker binary moves into that package and keeps its name. For each request, it uses the adapter that the Model Registration binds. Thus process tests and the real route use the same Worker binary.
 - The capability refusal before dispatch is a Host decision. It stays in `storyos-core` and does not move into the fake adapter.
 
 ### The Server process does not hold Provider credentials
 
-ADR 0007 permits a co-located Worker. The Worker loop inside the Server process uses only the fake adapter. The real route needs the separate Worker binary. `storyos-server` depends on the `storyos-worker` library and the fake adapter only. It must not depend on `storyos-adapter-volcengine-responses`, directly or through another package. Thus the dependency graph enforces this rule.
+ADR 0007 permits a co-located Worker. The Worker loop inside the Server process uses only the fake adapter. It does not claim an AgentRun whose Model Registration binds another adapter. It never uses the fake adapter in place of another adapter. The real route needs the separate Worker binary. `storyos-server` depends on the `storyos-worker` library and the fake adapter only. It must not depend on `storyos-adapter-volcengine-responses`, directly or through another package. Thus the dependency graph enforces this rule.
 
 ### The first real route runs on the author's Mac
 
