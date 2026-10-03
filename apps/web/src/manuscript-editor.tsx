@@ -28,10 +28,6 @@ import {
   storyosManuscriptExtensions,
 } from "./manuscript-tiptap-adapter.ts";
 import {
-  closeProposalAgentWriteGate,
-  createProposalAgentWriteGate,
-} from "./proposal-agent-write-gate.ts";
-import {
   capturedCandidateEdit, projectBlockProposals,
   type BlockProposalProjection,
 } from "./block-proposal-decoration.ts";
@@ -592,12 +588,7 @@ export function ManuscriptEditor({
     };
     controllerRef.current = controller;
     const { dom } = editor.view;
-    const agentWriteGate = createProposalAgentWriteGate();
-    const onFirstAuthorInput = (): void => {
-      closeProposalAgentWriteGate(agentWriteGate);
-    };
     const onCompositionStart = (): void => {
-      onFirstAuthorInput();
       composingRef.current = true;
       mixedCompositionRef.current = captureStructuredSelection(editor.state, editor.state.tr.deleteSelection());
       if (mixedCompositionRef.current !== undefined && !idle.canAcceptCandidateInput(true)) mixedCompositionRef.current = undefined;
@@ -671,11 +662,9 @@ export function ManuscriptEditor({
       if (local !== undefined) onProjectionRef.current(local, "local");
       void idle.persist(edit, "composition_confirmation", new Date().toISOString());
     };
-    dom.addEventListener("beforeinput", onFirstAuthorInput);
     dom.addEventListener("compositionstart", onCompositionStart, true);
     dom.addEventListener("compositionend", onCompositionEnd);
     return () => {
-      dom.removeEventListener("beforeinput", onFirstAuthorInput);
       dom.removeEventListener("compositionstart", onCompositionStart, true);
       dom.removeEventListener("compositionend", onCompositionEnd);
       idle.close();
