@@ -24,6 +24,17 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
 
+      - name: Install ripgrep for the source guards
+        run: |
+          archive=ripgrep-15.2.0-x86_64-unknown-linux-musl
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive.tar.gz" \
+            "https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/$archive.tar.gz"
+          echo "33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c  $RUNNER_TEMP/$archive.tar.gz" \
+            | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive.tar.gz" -C "$RUNNER_TEMP" "$archive/rg"
+          echo "$RUNNER_TEMP/$archive" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/$archive/rg" --version
+
       - name: Verify the pull request candidate
         run: make verify-pr
         env:
