@@ -181,7 +181,7 @@ pub async fn control_agent_run(
     };
     if (command.intent == AgentRunControlIntent::Steer) != command.steering_input.is_some()
         || command.steering_input.as_ref().is_some_and(|input| {
-            input.author_message.is_empty() || input.author_message.len() > 8000
+            input.author_message.is_empty() || input.author_message.chars().count() > 8000
         })
         || challenge.project_scope != command.project_scope
         || challenge.client_session_binding_digest != command.client_binding.binding_ref

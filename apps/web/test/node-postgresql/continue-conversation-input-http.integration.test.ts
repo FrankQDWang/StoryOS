@@ -168,6 +168,42 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
   }
 });
 
+test("author messages are limited by characters, not UTF-8 bytes", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("d911"), "Long Message Novel", "d92");
+    const within = "字".repeat(3000);
+    const over = "字".repeat(8001);
+    const conflict = (message: string) => (error: unknown) => {
+      const protocol = requireStoryOSProtocolError(error);
+      assert.equal(protocol.status, 409);
+      assert.deepEqual(JSON.parse(protocol.responseBody ?? "{}"), {
+        schema_id: "storyos.problem.v1", code: "idempotency_binding_conflict", message });
+      return true;
+    };
+    await assert.rejects(() => admitQueued(started.baseUrl, prepared, id("d931"), over),
+      conflict("The createAgentRun binding conflicts."));
+    const created = await admitQueued(started.baseUrl, prepared, id("d932"), within);
+    const runId = created.effect.run_id;
+    const request = { command_schema: "storyos.command.steer-agent-run.request.v1" as const,
+      steer_agent_run_input: { conversation_id: created.conversation_id, author_message: { text: over },
+        ...BINDING, correlation_id: id("d940") } };
+    const digest = await digestSteerAgentRun(request);
+    await assert.rejects(() => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs", request.command_schema,
+      digest, id("d941"), (antiForgery) => steerAgentRun({ baseUrl: started.baseUrl,
+        projectId: prepared.projectId, runId, fetchImpl: prepared.fetchImpl, idempotencyKey: id("d941"),
+        antiForgery, request })),
+      conflict("The AgentRun control binding conflicts."));
+    await retain(started.baseUrl, prepared, runId, created.conversation_id, within, id("d950"), "1");
+    await settleOnce();
+    assert.equal(selected(await inspect(started.baseUrl, prepared, runId), "author_instruction"), `${within}\n${within}`);
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
 test("guidance after a visible stream keeps the Proposal bound to its original Decision", async () => {
   const started = await startRealServer();
   try {

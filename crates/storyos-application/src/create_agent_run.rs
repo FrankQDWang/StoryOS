@@ -444,7 +444,7 @@ pub async fn request_create_agent_run(
         || challenge.route_template != "/api/v1/projects/{project_id}/agent-runs"
         || challenge.command_schema != "storyos.command.create-agent-run.request.v2"
         || command.author_message.is_empty()
-        || command.author_message.len() > 8000
+        || command.author_message.chars().count() > 8000
     {
         return Err(CreateAgentRunError::BindingConflict);
     }
