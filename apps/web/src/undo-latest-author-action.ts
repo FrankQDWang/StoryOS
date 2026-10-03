@@ -3,6 +3,7 @@ import {
   digestUndoLatestAuthorAction,
   getEditorSession,
   getRefusedEditDraft,
+  StoryOSProtocolError,
   undoLatestAuthorAction,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
@@ -84,6 +85,7 @@ export async function undoOwnedLatestAuthorAction(options: {
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   isCurrent: () => boolean;
+  waitForChallengeAdmission: (retryAfterSeconds: number) => Promise<void>;
 }): Promise<UndoLatestAuthorActionResponse | { effect: { kind: "draft_reconciled"; event: EditorFlowDraftReopened } } | undefined> {
   const retainedUndo = await readDraftUndoJournal(options.workspace);
   const pendingUndo = retainedUndo.filter(({ observation }) => observation === undefined);
@@ -199,8 +201,8 @@ export async function undoOwnedLatestAuthorAction(options: {
     }
     return settled;
   } catch (error) {
+    if (!options.isCurrent()) throw error;
     if (durable !== undefined) {
-      if (!options.isCurrent()) throw error;
       const current = await getRefusedEditDraft({ baseUrl: options.baseUrl,
         projectId: durable.project_scope.project_id, draftId: durable.source_close.draft_id, fetchImpl: options.fetchImpl });
       const event = await reconcileDraftUndo(options.workspace, current.draft, options.isCurrent);
@@ -245,6 +247,8 @@ async function submitUndo(
     baseUrl: string;
     fetchImpl: typeof fetch;
     cryptoImpl: Crypto;
+    isCurrent: () => boolean;
+    waitForChallengeAdmission: (retryAfterSeconds: number) => Promise<void>;
   },
   frontier: string,
   expectedHead: string,
@@ -252,23 +256,30 @@ async function submitUndo(
   frozen?: UndoLatestAuthorActionRequest,
 ): Promise<UndoLatestAuthorActionResponse> {
   const request = frozen ?? undoRequest(options.workspace, frontier, expectedHead, flight.correlationId);
-  if (flight.nonce === undefined) {
-    const challenge = await createProjectCommandChallenge({
-      baseUrl: options.baseUrl,
-      projectId: options.workspace.partition.project_scope.project_id,
-      fetchImpl: options.fetchImpl,
-      request: {
-        method: "POST",
-        route_template: "/api/v1/projects/{project_id}/author-actions/undo",
-        command_schema: request.command_schema,
-        canonical_command_digest: await digestUndoLatestAuthorAction(
-          request,
-          options.cryptoImpl,
-        ),
-        idempotency_key: flight.idempotencyKey,
-      },
-    });
-    flight.nonce = challenge.nonce;
+  while (flight.nonce === undefined) {
+    try {
+      const challenge = await createProjectCommandChallenge({
+        baseUrl: options.baseUrl,
+        projectId: options.workspace.partition.project_scope.project_id,
+        fetchImpl: options.fetchImpl,
+        request: {
+          method: "POST",
+          route_template: "/api/v1/projects/{project_id}/author-actions/undo",
+          command_schema: request.command_schema,
+          canonical_command_digest: await digestUndoLatestAuthorAction(
+            request,
+            options.cryptoImpl,
+          ),
+          idempotency_key: flight.idempotencyKey,
+        },
+      });
+      flight.nonce = challenge.nonce;
+    } catch (error) {
+      // A Challenge rate limit only delays the Undo. The same request and idempotency key retry.
+      if (!(error instanceof StoryOSProtocolError && error.status === 429)) throw error;
+      await options.waitForChallengeAdmission(Math.max(1, error.retryAfterSeconds ?? 1));
+      if (!options.isCurrent()) throw new Error("Undo view changed");
+    }
   }
   const nonce = flight.nonce;
   if (nonce === undefined) {

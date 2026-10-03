@@ -39,6 +39,8 @@ import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 
 import type { ProposalFocus } from "./proposal-navigation.ts";
 
+type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
+
 export interface ManuscriptEditorProps {
   focusProposal?: ProposalFocus | undefined;
   onCandidateFocus?: ((focus: ProposalFocus | undefined) => void) | undefined;
@@ -80,6 +82,8 @@ export interface ManuscriptEditorProps {
     text: string;
   }) => void;
   onCopyProposal?: (proposalId: string) => void;
+  setTimeoutImpl?: (callback: () => void, timeout: number) => TimerHandle;
+  clearTimeoutImpl?: (timer: TimerHandle) => void;
 }
 
 function syncManuscriptSurface(
@@ -148,6 +152,8 @@ export function ManuscriptEditor({
   onReplanProposal,
   onWithdrawProposal,
   onCopyProposal,
+  setTimeoutImpl = (callback, timeout) => globalThis.setTimeout(callback, timeout),
+  clearTimeoutImpl = (timer) => globalThis.clearTimeout(timer),
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
@@ -172,6 +178,7 @@ export function ManuscriptEditor({
   const onCopyProposalRef = useRef(onCopyProposal);
   const persistWorkspaceRef = useRef(persistWorkspace);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
+  const abandonUndoWaitRef = useRef<(() => void) | undefined>(undefined);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onProjectionRef.current = onProjection;
   onFailureRef.current = onFailure;
@@ -215,6 +222,8 @@ export function ManuscriptEditor({
         if (!current.view.composing && !composingRef.current) observedBlocksRef.current = nextBlocks;
         return;
       }
+      // New input changes the Author Undo Frontier, so a waiting Undo can only conflict.
+      abandonUndoWaitRef.current?.();
       const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
       if (mixed !== undefined) {
         if (current.view.composing || composingRef.current) {
@@ -297,9 +306,10 @@ export function ManuscriptEditor({
 
   const undoLifetime = useRef(0);
   useEffect(() => { undoLifetime.current += 1;
-    return () => { undoLifetime.current += 1; };
+    return () => { undoLifetime.current += 1; abandonUndoWaitRef.current?.(); };
   }, [persistWorkspace, editor]);
   onAuthorUndoRef.current = () => {
+    if (abandonUndoWaitRef.current !== undefined) return true;
     void (async () => {
       const workspace = persistWorkspaceRef.current;
       if (editor === null || workspace === undefined) return;
@@ -307,12 +317,27 @@ export function ManuscriptEditor({
       const isCurrent = () => started === undoLifetime.current && persistWorkspaceRef.current === workspace && !editor.isDestroyed;
       await idleRef.current?.flush();
       if (!isCurrent()) return;
+      let waited = false;
       try {
         const settled = await undoOwnedLatestAuthorAction({
           workspace,
           baseUrl,
           fetchImpl,
           cryptoImpl, isCurrent,
+          waitForChallengeAdmission: (retryAfterSeconds) => new Promise<void>((resolve) => {
+            if (!waited) onProjectionRef.current({ ...workspace.pending, save_state: "saving" }, "local");
+            waited = true;
+            const timer = setTimeoutImpl(() => {
+              abandonUndoWaitRef.current = undefined;
+              resolve();
+            }, retryAfterSeconds * 1000);
+            abandonUndoWaitRef.current = () => {
+              abandonUndoWaitRef.current = undefined;
+              clearTimeoutImpl(timer);
+              undoLifetime.current += 1;
+              resolve();
+            };
+          }),
         });
         if (!isCurrent()) return;
         if (settled !== undefined && (settled.effect.kind === "draft_compensated" || settled.effect.kind === "draft_reconciled")) {
@@ -322,6 +347,7 @@ export function ManuscriptEditor({
           onCandidateSettledRef.current?.(); return;
         }
         if (settled !== undefined && settled.effect.kind === "reversal_required") {
+          if (waited) onProjectionRef.current(await rebuildPendingProjection(workspace));
           onCandidateSettledRef.current?.("proposal_id" in settled ? settled.proposal_id ?? undefined : undefined); return;
         }
         if (settled === undefined || settled.effect.kind !== "compensated") {
