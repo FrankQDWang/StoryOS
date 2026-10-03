@@ -27,8 +27,8 @@ These are design terms of this decision, not GLOSSARY terms:
 The Model Gateway module in `storyos-application` does these steps for each destination request, in this order:
 
 1. It gets the next work for one claimed AgentRun from the store. The store settles the phases that need no destination I/O. It returns a destination request only after gate six of ADR 0005 committed the Context Assembly Manifest.
-2. It tells the Model Provider Adapter to prepare the request. The adapter returns the non-secret Wire Payload Projection and a prepared value, or a pre-dispatch refusal.
-3. It commits the dispatch claim through the store. One transaction records the Destination Attempt Admission Decision, the Wire Payload Projection, the Model Attempt or Destination Attempt, and the Outbound Disclosure Event. The Event starts as OutcomeUnknown. The Wire Payload Projection and the Event commit together, before any I/O.
+2. It tells the Model Provider Adapter to prepare the request, as the seam section below describes.
+3. It commits the dispatch claim through the store. One transaction records the Destination Attempt Admission Decision, the Wire Payload Projection, the Destination Attempt, and the Outbound Disclosure Event. For a Create request, the Destination Attempt is a Model Attempt. The Event starts as OutcomeUnknown. The Wire Payload Projection and the Event commit together, before any I/O.
 4. It tells the adapter to do the exchange. No transaction is open. The adapter sends ordered Model Stream Events to the sink.
 5. It commits the observation through the store, after a check of the Run Lease fence.
 
@@ -44,13 +44,18 @@ The dispatch store port has four operations: get the next work, commit the dispa
 
 The seam has two operations:
 
-- `prepare` takes one closed destination request: Create, Retrieve, or Abort. It returns the Wire Payload Projection and a prepared value, or a pre-dispatch refusal.
+- `prepare` takes one closed destination request: Create, Retrieve, or Abort. It returns the non-secret Wire Payload Projection and a prepared value, or a pre-dispatch refusal.
 - `exchange` consumes the prepared value one time and returns one observation.
 
 These rules apply:
 
 - An observation has no error channel. A dropped stream, a timeout, a lost lease, or a stop after cancellation becomes an observation. The adapter does not decide retryability, fallback, or ToolCall execution.
-- A Create observation is one of these: proven not submitted, a destination rejection with its native reason, a terminal response, or OutcomeUnknown with any known response reference. A confirmed continuation expiry is a destination rejection with that reason.
+- A Create observation is one of these:
+  - proven not submitted;
+  - a destination rejection with its native reason;
+  - a terminal response;
+  - OutcomeUnknown with any known response reference.
+- A confirmed continuation expiry is a destination rejection with that reason.
 - The adapter returns native items, usage, and references only. It does not report that a result is selected or that it advances the continuation. Core validation of the complete Agent Decision decides both.
 - Usage is reported, estimated, or unknown. Unknown usage is never zero usage.
 - The sink commits Model Stream Events in short fenced transactions. It commits at each terminal item event and after a bounded number of provisional events. S4-06 selects that bound under its existing owner. The sink tells the adapter to stop when the Run Lease is stale or a Model Attempt Cancellation is durable.
@@ -72,7 +77,8 @@ The adapter resolves the Credential Reference at step 2, before the dispatch cla
 - `storyos-adapter-volcengine-responses` contains the Agent Plan Responses adapter. It is the only crate that depends on an HTTP client and TLS.
 - `storyos-adapter-postgres` keeps SQL and persistence. It gets no HTTP, TLS, or credential dependency.
 - The `storyos-worker` library contains the Worker loop. It does not depend on a Provider adapter.
-- One binary package composes the Worker loop with the PostgreSQL store, the Volcengine adapter, and the credential resolver. No other package depends on that binary package.
+- One binary package composes the Worker loop with the PostgreSQL store, both adapters, and the credential resolver. No other package depends on that binary package.
+- The Worker binary moves into that package and keeps its name. For each request, it uses the adapter that the Model Registration binds. Thus process tests and the real route use the same Worker binary.
 - The capability refusal before dispatch is a Host decision. It stays in `storyos-core` and does not move into the fake adapter.
 
 ### The Server process does not hold Provider credentials
