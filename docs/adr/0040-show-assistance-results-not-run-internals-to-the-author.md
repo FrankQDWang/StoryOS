@@ -41,8 +41,8 @@ The author stated this product decision during Stage 3 review. The approved conc
 
 ## Pending downstream alignment
 
-The Context owner must revise these contracts before the first Stage 4 child Claim:
+These owners must revise their contracts before the first Stage 4 child Claim. Each revision covers only the inspection of context and Run evidence. Author inspection of Memory and Research artifacts, which later stages require, does not change.
 
-- Section 11, "Author inspection and controls", of the Context Assembly, Retrieval, and Outbound Disclosure Semantics contract: Context Inspect is a read-only audit query, not an author view.
-- Section 11, "Author inspection and history availability", and RET-012 of the Run Event, Mailbox, Snapshot, Retention, and Archival Semantics contract: the inspection Query serves audit and verification.
-- The "author inspection/control semantics" responsibility of the Context, Memory, and Research module in the Modular Monolith and Repository Governance Boundaries contract.
+- The Context owner: section 11, "Author inspection and controls", of the Context Assembly, Retrieval, and Outbound Disclosure Semantics contract. Context Inspect is a read-only audit query, not an author view.
+- The retention owner: section 11, "Author inspection and history availability", and RET-012 of the Run Event, Mailbox, Snapshot, Retention, and Archival Semantics contract. The inspection Query for Run evidence serves audit and verification.
+- The governance owner: the "author inspection/control semantics" responsibility of the Context, Memory, and Research module in the Modular Monolith and Repository Governance Boundaries contract. It covers context and Run evidence inspection as an audit query.
