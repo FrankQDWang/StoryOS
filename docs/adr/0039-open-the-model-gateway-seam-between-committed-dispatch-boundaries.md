@@ -32,7 +32,7 @@ The Model Gateway module in `storyos-application` does these steps for each dest
 4. It tells the adapter to do the exchange. No transaction is open. The adapter sends ordered Model Stream Events to the sink.
 5. It commits the observation through the store, after a check of the Run Lease fence.
 
-A pre-dispatch refusal at step 2 is a proven failure before the dispatch claim. It creates no Destination Attempt and no Outbound Disclosure Event. The record operation of the store records the refusal on the AgentRun, as other refusals before dispatch are recorded.
+A pre-dispatch refusal at step 2 is a proven failure before the dispatch claim. It creates no Destination Attempt and no Outbound Disclosure Event. The Record operation of the store records the refusal on the AgentRun, as the store records other refusals before dispatch.
 
 The order of these steps is written in this module only. A new adapter cannot change it.
 
@@ -40,7 +40,7 @@ The order of these steps is written in this module only. A new adapter cannot ch
 
 The dispatch store port has four operations. Each operation is one committed transaction with a check of the Run Lease fence.
 
-- **Get the next work** returns the next destination request, or the settled AgentRun.
+- **Get the next work** returns the next destination request, or the settled AgentRun. After a restart, it returns an Abort request with its abort ticket when a durable Model Attempt Cancellation still needs one.
 - **Commit the dispatch claim** does step 3.
 - **Append Model Stream Events** commits a batch of events. When a Model Attempt Cancellation is durable, it also returns the abort ticket.
 - **Record** commits the observation of an exchange. It also records a pre-dispatch refusal on the AgentRun.
@@ -69,7 +69,7 @@ These rules apply:
 
 Original-result retrieval and Provider abort each send a reference and a credential to the destination. Each gets its own Destination Attempt, dispatch claim, and Outbound Disclosure Event through the same sequence. This applies the rule in [ADR 0034](0034-bound-provider-hosted-tool-operations.md) that retrieval for reconciliation has its own admitted Destination Attempt. Retrieval never sends the original request again.
 
-An Abort request needs an abort ticket. Only the store can issue an abort ticket, and only after the Model Attempt Cancellation commits. The append operation returns the ticket, and the sink gives it to the module when it tells the adapter to stop. The types permit no other way to make an Abort request.
+An Abort request needs an abort ticket. Only the store can issue an abort ticket, and only after the Model Attempt Cancellation commits. The Append Model Stream Events operation returns the ticket during an exchange. The sink gives the ticket to the module when it tells the adapter to stop. The types permit no other way to make an Abort request.
 
 ### Credential resolution
 
