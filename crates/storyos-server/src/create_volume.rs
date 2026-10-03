@@ -1,9 +1,11 @@
 use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateVolumeCommand, CreateVolumeError, CreateVolumePublicOrder,
-    CreateVolumeSettlementEffect, EditorClientBinding, ProjectCommandChallengeBinding,
+    AuthorCommandAdmissionIds, CreateVolumeInput, CreateVolumePublicOrder, EditorClientBinding,
+    ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectCommandError,
+    StructureAuthorityEvidence,
 };
+use storyos_core::TransitionOutcome;
 
 use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
@@ -77,46 +79,49 @@ pub(super) async fn create_volume(
         contracts::CREATE_VOLUME_DIGEST_PROFILE
     );
     let store = project_reader(&state).await?;
-    let settlement = storyos_application::create_volume(
-        &store,
-        &CreateVolumeCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: binding_ref.clone(),
-                session_generation: session.session_generation,
-                client_contract_revision: session.client_contract_revision.clone(),
-                security_policy_revision: session.security_policy_revision.clone(),
-            },
-            challenge_binding: ProjectCommandChallengeBinding {
+    let settlement = store
+        .create_volume(
+            &ProjectCommandEnvelope {
                 project_scope: scope.clone(),
-                client_session_binding_digest: binding_ref,
-                client_session_generation: session.session_generation,
-                client_contract_revision: session.client_contract_revision.clone(),
-                security_policy_revision: session.security_policy_revision.clone(),
-                limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-                challenge_rate_policy_revision:
-                    storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
-                method: contracts::CREATE_VOLUME_METHOD.to_owned(),
-                route_template: contracts::CREATE_VOLUME_PATH.to_owned(),
-                command_schema: body.command_schema.clone(),
-                command_kind: "createVolume".to_owned(),
-                canonical_command_digest: canonical_command_digest.clone(),
-                idempotency_key: idempotency_key.to_owned(),
+                client_binding: EditorClientBinding {
+                    binding_ref: binding_ref.clone(),
+                    session_generation: session.session_generation,
+                    client_contract_revision: session.client_contract_revision.clone(),
+                    security_policy_revision: session.security_policy_revision.clone(),
+                },
+                challenge_binding: ProjectCommandChallengeBinding {
+                    project_scope: scope.clone(),
+                    client_session_binding_digest: binding_ref,
+                    client_session_generation: session.session_generation,
+                    client_contract_revision: session.client_contract_revision.clone(),
+                    security_policy_revision: session.security_policy_revision.clone(),
+                    limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
+                    challenge_rate_policy_revision:
+                        storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION
+                            .to_owned(),
+                    method: contracts::CREATE_VOLUME_METHOD.to_owned(),
+                    route_template: contracts::CREATE_VOLUME_PATH.to_owned(),
+                    command_schema: body.command_schema.clone(),
+                    command_kind: "createVolume".to_owned(),
+                    canonical_command_digest: canonical_command_digest.clone(),
+                    idempotency_key: idempotency_key.to_owned(),
+                },
+                nonce_digest: plain_digest(nonce.as_bytes()),
+                canonical_command_bytes,
+                correlation_id: input.correlation_id.clone(),
+                ids: AuthorCommandAdmissionIds {
+                    command_id: Uuid::now_v7().to_string(),
+                    author_command_admission_id: Uuid::now_v7().to_string(),
+                    receipt_id: Uuid::now_v7().to_string(),
+                },
             },
-            nonce_digest: plain_digest(nonce.as_bytes()),
-            canonical_command_bytes,
-            correlation_id: input.correlation_id.clone(),
-            title: input.title.clone(),
-            expected_tree_revision,
-            ids: AuthorCommandAdmissionIds {
-                command_id: Uuid::now_v7().to_string(),
-                author_command_admission_id: Uuid::now_v7().to_string(),
-                receipt_id: Uuid::now_v7().to_string(),
+            &CreateVolumeInput {
+                title: input.title.clone(),
+                expected_tree_revision,
             },
-        },
-    )
-    .await
-    .map_err(create_volume_error)?;
+        )
+        .await
+        .map_err(create_volume_error)?;
     super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
     create_volume_response(
         &scope,
@@ -137,44 +142,40 @@ fn create_volume_response(
     settlement: storyos_application::CreateVolumeSettlement,
 ) -> Result<Json<contracts::CreateVolumeResponse>, ApiError> {
     let project = settlement.response_project;
-    let (commit_ids, action_sequence) = match (&settlement.effect, settlement.authority.as_ref()) {
-        (
-            CreateVolumeSettlementEffect::Applied {
-                order: CreateVolumePublicOrder::CanonicalSiblingOrder(_),
-                ..
-            },
-            Some(authority),
-        ) => (
-            vec![authority.authoritative_commit_id.clone()],
-            Some(authority.author_action_sequence.to_string()),
-        ),
-        _ => (Vec::new(), None),
-    };
-    let (receipt_result, effect) = match settlement.effect {
-        CreateVolumeSettlementEffect::Applied {
-            tree_revision,
-            volume_id,
-            order,
-        } => (
-            contracts::DomainReceiptResult::AuthoritativeApplied,
-            contracts::CreateVolumeEffect::AuthoritativeApplied {
-                volume_id,
-                title: title.to_owned(),
-                tree_revision: tree_revision.to_string(),
-                order: match order {
-                    CreateVolumePublicOrder::CanonicalSiblingOrder(rank) => rank.to_string(),
-                    CreateVolumePublicOrder::HistoricalCreateVolumeAck => "1".to_owned(),
+    let mut commit_ids = Vec::new();
+    let mut action_sequence = None;
+    let (receipt_result, effect) = match settlement.outcome {
+        TransitionOutcome::Applied(applied) => {
+            if let (
+                CreateVolumePublicOrder::CanonicalSiblingOrder(_),
+                StructureAuthorityEvidence::Settled(authority),
+            ) = (applied.effect.order, applied.authority)
+            {
+                commit_ids.push(authority.authoritative_commit_id);
+                action_sequence = Some(authority.author_action_sequence.to_string());
+            }
+            (
+                contracts::DomainReceiptResult::AuthoritativeApplied,
+                contracts::CreateVolumeEffect::AuthoritativeApplied {
+                    volume_id: applied.effect.volume_id,
+                    title: title.to_owned(),
+                    tree_revision: applied.effect.tree_revision.to_string(),
+                    order: match applied.effect.order {
+                        CreateVolumePublicOrder::CanonicalSiblingOrder(rank) => rank.to_string(),
+                        CreateVolumePublicOrder::HistoricalCreateVolumeAck => "1".to_owned(),
+                    },
+                    project_activity_position: applied.project_activity_position.to_string(),
                 },
-                project_activity_position: settlement.project_activity_position.to_string(),
-            },
-        ),
-        CreateVolumeSettlementEffect::Conflicted { reason } => (
+            )
+        }
+        TransitionOutcome::NoEffect(reason) => match reason {},
+        TransitionOutcome::Conflicted(reason) => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::CreateVolumeEffect::Conflicted {
                 reason: contract_reason(&reason)?,
             },
         ),
-        CreateVolumeSettlementEffect::Refused { reason } => (
+        TransitionOutcome::Refused(reason) => (
             contracts::DomainReceiptResult::Refused,
             contracts::CreateVolumeEffect::Refused {
                 reason: contract_reason(&reason)?,
@@ -248,25 +249,25 @@ fn canonical_json(value: serde_json::Value) -> serde_json::Value {
     }
 }
 
-fn create_volume_error(error: CreateVolumeError) -> ApiError {
+fn create_volume_error(error: ProjectCommandError) -> ApiError {
     match error {
-        CreateVolumeError::BindingConflict => problem(
+        ProjectCommandError::BindingConflict => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Create Volume binding conflicts.",
         ),
-        CreateVolumeError::HistoricalAcknowledgementUnavailable => problem(
+        ProjectCommandError::HistoricalAcknowledgementUnavailable => problem(
             StatusCode::CONFLICT,
             "historical_acknowledgement_unavailable",
             "The original Create Volume acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
-        CreateVolumeError::InvalidChallenge => problem(
+        ProjectCommandError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,
             "challenge_invalid",
             "The Create Volume challenge is invalid.",
         ),
-        CreateVolumeError::MissingProject => resource_unavailable(),
-        CreateVolumeError::Unavailable(_) => problem(
+        ProjectCommandError::MissingProject => resource_unavailable(),
+        ProjectCommandError::Unavailable(_) => problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",
             "The Project store is unavailable.",

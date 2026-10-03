@@ -1,9 +1,11 @@
 use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,
-    CreateChapterSettlementEffect, EditorClientBinding, ProjectCommandChallengeBinding,
+    AuthorCommandAdmissionIds, ChapterCreated, CreateChapterInput, CreateChapterPublicOrder,
+    EditorClientBinding, ProjectCommandChallengeBinding, ProjectCommandEnvelope,
+    ProjectCommandError, StructureApplied, StructureAuthorityEvidence,
 };
+use storyos_core::TransitionOutcome;
 
 use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
@@ -93,7 +95,7 @@ pub(super) async fn create_chapter(
         contracts::CREATE_CHAPTER_DIGEST_PROFILE
     );
     let store = project_reader(&state).await?;
-    let command = CreateChapterCommand {
+    let command = ProjectCommandEnvelope {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: binding_ref.clone(),
@@ -120,49 +122,56 @@ pub(super) async fn create_chapter(
         nonce_digest: plain_digest(nonce.as_bytes()),
         canonical_command_bytes,
         correlation_id: input.correlation_id.clone(),
-        volume_id: volume_id.clone(),
-        title: input.title.clone(),
-        placement,
-        expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: Uuid::now_v7().to_string(),
             author_command_admission_id: Uuid::now_v7().to_string(),
             receipt_id: Uuid::now_v7().to_string(),
         },
     };
-    let settlement = storyos_application::create_chapter(&store, &command)
+    let create_chapter_input = CreateChapterInput {
+        volume_id: volume_id.clone(),
+        title: input.title.clone(),
+        placement,
+        expected_tree_revision,
+    };
+    let settlement = store
+        .create_chapter(&command, &create_chapter_input)
         .await
         .map_err(create_chapter_error)?;
     super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
-    create_chapter_response(&command, &digest_hex, settlement)
+    create_chapter_response(&command, &create_chapter_input, &digest_hex, settlement)
 }
 
 fn create_chapter_response(
-    command: &CreateChapterCommand,
+    command: &ProjectCommandEnvelope,
+    input: &CreateChapterInput,
     digest_hex: &str,
     settlement: storyos_application::CreateChapterSettlement,
 ) -> Result<Json<contracts::CreateChapterResponse>, ApiError> {
     let project = settlement.response_project;
-    let (commit_ids, action_sequence) = match (&settlement.effect, settlement.authority.as_ref()) {
-        (
-            CreateChapterSettlementEffect::Applied {
-                order: CreateChapterPublicOrder::CanonicalSiblingOrder(_),
-                ..
-            },
-            Some(authority),
-        ) => (
-            vec![authority.authoritative_commit_id.clone()],
-            Some(authority.author_action_sequence.to_string()),
-        ),
-        _ => (Vec::new(), None),
-    };
-    let (receipt_result, effect) = match settlement.effect {
-        CreateChapterSettlementEffect::Applied {
-            tree_revision,
-            chapter_id,
-            order,
+    let mut commit_ids = Vec::new();
+    let mut action_sequence = None;
+    let (receipt_result, effect) = match settlement.outcome {
+        TransitionOutcome::Applied(StructureApplied {
+            effect,
+            project_activity_position,
+            authority,
             ..
-        } => {
+        }) => {
+            if let (
+                CreateChapterPublicOrder::CanonicalSiblingOrder(_),
+                StructureAuthorityEvidence::Settled(authority),
+            ) = (&effect.order, authority)
+            {
+                commit_ids.push(authority.authoritative_commit_id);
+                action_sequence = Some(authority.author_action_sequence.to_string());
+            }
+            let ChapterCreated {
+                tree_revision,
+                chapter_id,
+                order,
+                ..
+            } = effect;
             let current_chapter_id = project
                 .current_chapter_id
                 .as_ref()
@@ -172,9 +181,9 @@ fn create_chapter_response(
             (
                 contracts::DomainReceiptResult::AuthoritativeApplied,
                 contracts::CreateChapterEffect::AuthoritativeApplied {
-                    volume_id: command.volume_id.clone(),
+                    volume_id: input.volume_id.clone(),
                     chapter_id,
-                    title: command.title.clone(),
+                    title: input.title.clone(),
                     tree_revision: tree_revision.to_string(),
                     order: match order {
                         CreateChapterPublicOrder::CanonicalSiblingOrder(order)
@@ -183,17 +192,18 @@ fn create_chapter_response(
                         }
                     },
                     current_chapter_id,
-                    project_activity_position: settlement.project_activity_position.to_string(),
+                    project_activity_position: project_activity_position.to_string(),
                 },
             )
         }
-        CreateChapterSettlementEffect::Conflicted { reason } => (
+        TransitionOutcome::NoEffect(reason) => match reason {},
+        TransitionOutcome::Conflicted(reason) => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::CreateChapterEffect::Conflicted {
                 reason: contract_reason(&reason)?,
             },
         ),
-        CreateChapterSettlementEffect::Refused { reason } => (
+        TransitionOutcome::Refused(reason) => (
             contracts::DomainReceiptResult::Refused,
             contracts::CreateChapterEffect::Refused {
                 reason: contract_reason(&reason)?,
@@ -267,25 +277,25 @@ fn canonical_json(value: serde_json::Value) -> serde_json::Value {
     }
 }
 
-fn create_chapter_error(error: CreateChapterError) -> ApiError {
+fn create_chapter_error(error: ProjectCommandError) -> ApiError {
     match error {
-        CreateChapterError::BindingConflict => problem(
+        ProjectCommandError::BindingConflict => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Create Chapter binding conflicts.",
         ),
-        CreateChapterError::HistoricalAcknowledgementUnavailable => problem(
+        ProjectCommandError::HistoricalAcknowledgementUnavailable => problem(
             StatusCode::CONFLICT,
             "historical_acknowledgement_unavailable",
             "The original Create Chapter acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
-        CreateChapterError::InvalidChallenge => problem(
+        ProjectCommandError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,
             "challenge_invalid",
             "The Create Chapter challenge is invalid.",
         ),
-        CreateChapterError::MissingProject => resource_unavailable(),
-        CreateChapterError::Unavailable(_) => problem(
+        ProjectCommandError::MissingProject => resource_unavailable(),
+        ProjectCommandError::Unavailable(_) => problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",
             "The Project store is unavailable.",

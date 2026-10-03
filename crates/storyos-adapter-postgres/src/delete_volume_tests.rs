@@ -1,17 +1,20 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
-    CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, CreateVolumeSettlementEffect, DeleteVolumeCommand,
-    DeleteVolumeSettlementEffect, EditorClientBinding, EditorSessionId, GetManuscriptTree,
-    IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UndoLatestAuthorActionCommand,
-    UndoLatestAuthorActionSettlementEffect, UserId, VolumeId, VolumeNode, create_chapter,
-    create_editor_session, create_project, create_volume, delete_volume, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
-    undo_latest_author_action,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
+    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, DeleteVolumeInput,
+    EditorClientBinding, EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge,
+    IssueProjectCommandChallenge, OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding,
+    ProjectId, ProjectScope, UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect,
+    UserId, VolumeCreated, VolumeDeleted, VolumeId, VolumeNode, create_editor_session,
+    create_project, get_manuscript_tree, issue_create_project_challenge,
+    issue_project_command_challenge, open_chapter, undo_latest_author_action,
 };
+use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{
+    CommandCall, applied, command_call, create_chapter, create_volume, delete_volume,
+};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const CLIENT: &str = "storyos.web-client.release-1.v3";
@@ -76,18 +79,17 @@ fn delete_command(
     volume_id: &str,
     expected_tree_revision: u64,
     bytes: &[u8],
-) -> DeleteVolumeCommand {
-    DeleteVolumeCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: client_binding(&binding),
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-        volume_id: VolumeId::new(volume_id),
-        expected_tree_revision,
-        ids: ids(suffix),
-    }
+) -> CommandCall<DeleteVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        suffix,
+        bytes,
+        DeleteVolumeInput {
+            volume_id: VolumeId::new(volume_id),
+            expected_tree_revision,
+        },
+    )
 }
 
 async fn seed_project(store: &PostgresProjectReader, suffix: &str) -> ProjectScope {
@@ -173,23 +175,20 @@ async fn apply_volume(
         .unwrap();
     let settlement = create_volume(
         store,
-        &CreateVolumeCommand {
-            project_scope: issue.binding.project_scope.clone(),
-            client_binding: client_binding(&issue.binding),
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            title: title.to_owned(),
-            expected_tree_revision,
-            ids: ids(suffix),
-        },
+        &command_call(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            bytes,
+            CreateVolumeInput {
+                title: title.to_owned(),
+                expected_tree_revision,
+            },
+        ),
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied { volume_id, .. } = settlement.effect else {
-        panic!("{title} must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&settlement);
     volume_id
 }
 
@@ -220,25 +219,22 @@ async fn apply_chapter(
         .unwrap();
     let settlement = create_chapter(
         store,
-        &CreateChapterCommand {
-            placement: storyos_core::CreateChapterPlacement::Append,
-            project_scope: issue.binding.project_scope.clone(),
-            client_binding: client_binding(&issue.binding),
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            volume_id: volume_id.to_owned(),
-            title: title.to_owned(),
-            expected_tree_revision,
-            ids: ids(suffix),
-        },
+        &command_call(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            bytes,
+            CreateChapterInput {
+                placement: storyos_core::CreateChapterPlacement::Append,
+                volume_id: volume_id.to_owned(),
+                title: title.to_owned(),
+                expected_tree_revision,
+            },
+        ),
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied { chapter_id, .. } = settlement.effect else {
-        panic!("{title} must apply");
-    };
+    let (ChapterCreated { chapter_id, .. }, _) = applied(&settlement);
     chapter_id
 }
 
@@ -331,12 +327,9 @@ async fn delete_volume_is_atomic_replayable_and_scope_safe() {
     )
     .await;
     assert_eq!(
-        nonempty.effect,
-        DeleteVolumeSettlementEffect::Refused {
-            reason: storyos_core::DeleteVolumeRefusal::NonemptyVolume,
-        }
+        nonempty.outcome,
+        TransitionOutcome::Refused(storyos_core::DeleteVolumeRefusal::NonemptyVolume)
     );
-    assert_eq!(nonempty.authority, None);
 
     let delete_bytes = br#"{"expected_tree_revision":"4"}"#;
     let delete_digest = format!(
@@ -368,17 +361,14 @@ async fn delete_volume_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
+    let (effect, authority) = applied(&first);
     assert_eq!(
-        first.effect,
-        DeleteVolumeSettlementEffect::Applied {
+        effect,
+        VolumeDeleted {
             tree_revision: 5,
             volume_id: volume_a.clone(),
         }
     );
-    let authority = first
-        .authority
-        .clone()
-        .expect("Applied Delete Volume must write Structural Authority Settlement");
     assert_eq!(authority.prior_manuscript_tree_revision, 4);
     assert_eq!(authority.resulting_manuscript_tree_revision, 5);
     assert_eq!(authority.author_action_sequence, 4);
@@ -402,9 +392,12 @@ async fn delete_volume_is_atomic_replayable_and_scope_safe() {
     };
     assert_eq!(tree.tree_revision, 5);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
+    let TransitionOutcome::Applied(first_applied) = &first.outcome else {
+        panic!("Delete Volume must apply");
+    };
     assert_eq!(
         tree.snapshot.project_activity_position,
-        first.project_activity_position
+        first_applied.project_activity_position
     );
     assert_eq!(
         tree.volumes,
@@ -430,12 +423,9 @@ async fn delete_volume_is_atomic_replayable_and_scope_safe() {
     )
     .await;
     assert_eq!(
-        already.effect,
-        DeleteVolumeSettlementEffect::NoEffect {
-            reason: storyos_core::DeleteVolumeNoEffect::AlreadyRemoved,
-        }
+        already.outcome,
+        TransitionOutcome::NoEffect(storyos_core::DeleteVolumeNoEffect::AlreadyRemoved)
     );
-    assert_eq!(already.authority, None);
 
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
@@ -534,17 +524,14 @@ async fn author_undo_compensates_delete_volume_and_restores_prior_volume_identit
         br#"{"expected_tree_revision":"4"}"#,
     )
     .await;
+    let (effect, authority) = applied(&deleted);
     assert_eq!(
-        deleted.effect,
-        DeleteVolumeSettlementEffect::Applied {
+        effect,
+        VolumeDeleted {
             tree_revision: 5,
             volume_id: volume_b.clone(),
         }
     );
-    let authority = deleted
-        .authority
-        .clone()
-        .expect("Applied Delete Volume must write authority");
     let session_issue = named_issue(
         &scope,
         "e47a",

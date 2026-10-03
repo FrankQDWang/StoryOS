@@ -1,18 +1,20 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
-    CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectCommandError,
-    ProjectId, ProjectScope, StructureAuthority, StructureAuthorityEvidence,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
+    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
+    EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
+    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UpdateVolumeInput,
-    UpdateVolumeSettlement, UserId, VolumeId, VolumeNode, create_chapter, create_editor_session,
-    create_project, create_volume, get_manuscript_tree, issue_create_project_challenge,
-    issue_project_command_challenge, open_chapter, undo_latest_author_action,
+    UserId, VolumeCreated, VolumeId, VolumeNode, create_editor_session, create_project,
+    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
+    open_chapter, undo_latest_author_action,
 };
 use storyos_core::{TransitionOutcome, UpdateVolumeApplied};
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{
+    CommandCall, applied, command_call, create_chapter, create_volume, update_volume,
+};
 
 #[path = "update_volume_rank_batch_tests.rs"]
 mod rank_batch_tests;
@@ -127,27 +129,17 @@ fn volume_command(
     title: &str,
     bytes: &[u8],
     expected_tree_revision: u64,
-) -> CreateVolumeCommand {
-    CreateVolumeCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        bytes,
+        CreateVolumeInput {
+            title: title.to_owned(),
+            expected_tree_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: title.to_owned(),
-        expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 pub(crate) fn update_issue(
@@ -185,69 +177,24 @@ pub(crate) struct UpdateFixture<'a> {
     pub(crate) bytes: &'a [u8],
 }
 
-pub(crate) struct UpdateVolumeCall {
-    pub(crate) envelope: ProjectCommandEnvelope,
-    pub(crate) input: UpdateVolumeInput,
-}
-
-pub(crate) async fn update_volume(
-    store: &PostgresProjectReader,
-    call: &UpdateVolumeCall,
-) -> Result<UpdateVolumeSettlement, ProjectCommandError> {
-    store.update_volume(&call.envelope, &call.input).await
-}
-
-/// The applied effect and settled authority of one Update Volume.
-pub(crate) fn applied(
-    settlement: &UpdateVolumeSettlement,
-) -> (UpdateVolumeApplied, StructureAuthority) {
-    match &settlement.outcome {
-        TransitionOutcome::Applied(applied) => match &applied.authority {
-            StructureAuthorityEvidence::Settled(authority) => {
-                (applied.effect.clone(), authority.clone())
-            }
-            StructureAuthorityEvidence::BeforeAuthorityHistoryFloor => {
-                panic!("Applied Update Volume must write Structural Authority Settlement")
-            }
-        },
-        other => panic!("Update Volume must apply, got {other:?}"),
-    }
-}
-
 pub(crate) fn update_command(
     binding: ProjectCommandChallengeBinding,
     nonce_digest: &str,
     ids_suffix: &str,
     fixture: UpdateFixture<'_>,
-) -> UpdateVolumeCall {
-    UpdateVolumeCall {
-        envelope: ProjectCommandEnvelope {
-            project_scope: binding.project_scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: binding.client_session_binding_digest.clone(),
-                session_generation: binding.client_session_generation,
-                client_contract_revision: binding.client_contract_revision.clone(),
-                security_policy_revision: binding.security_policy_revision.clone(),
-            },
-            challenge_binding: binding,
-            nonce_digest: nonce_digest.to_owned(),
-            canonical_command_bytes: fixture.bytes.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-                author_command_admission_id: format!(
-                    "018f0000-0000-7001-8000-00000002{ids_suffix}"
-                ),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-            },
-        },
-        input: UpdateVolumeInput {
+) -> CommandCall<UpdateVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        fixture.bytes,
+        UpdateVolumeInput {
             volume_id: VolumeId::new(fixture.volume_id),
             title: fixture.title.to_owned(),
             order: fixture.order,
             expected_tree_revision: fixture.expected_tree_revision,
         },
-    }
+    )
 }
 
 fn applied_fixture(volume_id: &str) -> UpdateFixture<'_> {
@@ -306,13 +253,13 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied {
-        volume_id: first_volume_id,
-        ..
-    } = first_volume.effect
-    else {
-        panic!("the first Volume must apply");
-    };
+    let (
+        VolumeCreated {
+            volume_id: first_volume_id,
+            ..
+        },
+        _,
+    ) = applied(&first_volume);
     let second_volume_issue = volume_issue(&scope, "0b14", VOLUME_B_DIGEST);
     issue_project_command_challenge(&store, &second_volume_issue)
         .await
@@ -330,13 +277,13 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied {
-        volume_id: second_volume_id,
-        ..
-    } = second_volume.effect
-    else {
-        panic!("the second Volume must apply");
-    };
+    let (
+        VolumeCreated {
+            volume_id: second_volume_id,
+            ..
+        },
+        _,
+    ) = applied(&second_volume);
 
     let first_issue = update_issue(&scope, "0b16", UPDATE_DIGEST);
     issue_project_command_challenge(&store, &first_issue)
@@ -668,9 +615,7 @@ pub(crate) async fn apply_volume(
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied { volume_id, .. } = settlement.effect else {
-        panic!("{title} must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&settlement);
     volume_id
 }
 
@@ -701,34 +646,22 @@ async fn apply_chapter(
         .unwrap();
     let settlement = create_chapter(
         store,
-        &CreateChapterCommand {
-            placement: storyos_core::CreateChapterPlacement::Append,
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+        &command_call(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            bytes,
+            CreateChapterInput {
+                placement: storyos_core::CreateChapterPlacement::Append,
+                volume_id: volume_id.to_owned(),
+                title: title.to_owned(),
+                expected_tree_revision,
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            volume_id: volume_id.to_owned(),
-            title: title.to_owned(),
-            expected_tree_revision,
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-            },
-        },
+        ),
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied { chapter_id, .. } = settlement.effect else {
-        panic!("{title} must apply");
-    };
+    let (ChapterCreated { chapter_id, .. }, _) = applied(&settlement);
     chapter_id
 }
 

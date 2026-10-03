@@ -18,7 +18,8 @@ use crate::command_response_project::{
 };
 use crate::structural_authority_settlement::{
     StructureAffectedIdentity, StructureCommitBinding, allocate_structure_transition_sequences,
-    persist_forward_author_action, persist_structure_commit, receipt_reason_payload,
+    persist_forward_author_action, persist_structure_commit, rebind_writer_base,
+    receipt_reason_payload,
 };
 
 pub(crate) enum CommandIsolation {
@@ -35,10 +36,29 @@ pub(crate) struct CommandSpec {
 pub(crate) struct LockedProject {
     pub(crate) lifecycle: ProjectLifecycle,
     pub(crate) tree_revision: u64,
+    pub(crate) current_chapter_id: Option<String>,
 }
 
 pub(crate) enum StructureIdentity {
     Volume(String),
+    Chapter(String),
+    ChapterInitialRevision {
+        chapter_id: String,
+        revision_id: String,
+    },
+}
+
+/// The Current Chapter that the transition leaves on the Project.
+pub(crate) enum CurrentChapterChange {
+    Preserve,
+    Select(String),
+    Clear,
+}
+
+/// Whether the current writer base Snapshot moves to the new canonical Snapshot.
+pub(crate) enum WriterBase {
+    Keep,
+    RebindToCurrentChapter,
 }
 
 /// The applied writes that one command returns; the sequence writes every authority record.
@@ -46,6 +66,8 @@ pub(crate) struct StructureWrite<E> {
     pub(crate) effect: E,
     pub(crate) resulting_tree_revision: u64,
     pub(crate) identity: StructureIdentity,
+    pub(crate) current_chapter: CurrentChapterChange,
+    pub(crate) writer_base: WriterBase,
     /// The command fields of the Activity payload; the sequence adds `kind` and `tree_revision`.
     pub(crate) activity: serde_json::Value,
 }
@@ -80,17 +102,23 @@ pub(crate) trait StructureCommand: Sync {
         project: &LockedProject,
     ) -> impl Future<Output = Result<(Classified<Self>, Self::Plan), ProjectCommandError>> + Send;
 
+    /// The Domain Receipt payload of an applied outcome.
+    fn applied_receipt_payload(&self, _applied: &Self::Applied, _plan: &Self::Plan) -> String {
+        "{}".to_owned()
+    }
+
     /// Writes the effect rows of an applied outcome.
     fn apply(
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
         plan: Self::Plan,
         applied: Self::Applied,
     ) -> impl Future<Output = Result<StructureWrite<Self::Effect>, ProjectCommandError>> + Send;
 
     /// Decodes the applied effect from the stored acknowledgement evidence.
-    fn decode(replay: &CommandReplay) -> Result<Self::Effect, ReplayFault>;
+    fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault>;
 }
 
 pub(crate) type SettledStructure<C> = StructureSettlement<
@@ -122,7 +150,7 @@ pub(crate) async fn settle_structure_command<C: StructureCommand>(
             transaction.rollback().await.map_err(challenge_error)?;
             read_command_replay(store, &envelope.challenge_binding, &result_reference)
                 .await
-                .and_then(|replay| replay_structure::<C>(&replay))
+                .and_then(|replay| replay_structure(command, &replay))
                 .map_err(replay_error)
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
@@ -164,6 +192,10 @@ async fn first_use<C: StructureCommand>(
             let sequences = allocate_structure_transition_sequences(client, scope)
                 .await
                 .map_err(ProjectCommandError::Unavailable)?;
+            let receipt = ReceiptRecord {
+                payload: command.applied_receipt_payload(&applied, &plan),
+                ..receipt
+            };
             let receipt_created_at = insert_receipt(
                 client,
                 envelope,
@@ -171,24 +203,36 @@ async fn first_use<C: StructureCommand>(
                 std::slice::from_ref(&sequences.authoritative_commit_id),
             )
             .await?;
-            let write = command.apply(client, envelope, plan, applied).await?;
+            let write = command
+                .apply(client, envelope, &project, plan, applied)
+                .await?;
+            let resulting_current = match &write.current_chapter {
+                CurrentChapterChange::Preserve => project.current_chapter_id.clone(),
+                CurrentChapterChange::Select(chapter_id) => Some(chapter_id.clone()),
+                CurrentChapterChange::Clear => None,
+            };
             let bumped = client
                 .execute(
                     "UPDATE storyos.projects
-                        SET tree_revision = $3::text::bigint
+                        SET tree_revision = $3::text::bigint, current_chapter_id = $5::text::uuid
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                        AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
+                        AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'
+                        AND current_chapter_id IS NOT DISTINCT FROM $6::text::uuid",
                     &[
                         &scope.owner_user_id.as_ref(),
                         &scope.project_id.as_ref(),
                         &write.resulting_tree_revision.to_string(),
                         &project.tree_revision.to_string(),
+                        &resulting_current,
+                        &project.current_chapter_id,
                     ],
                 )
                 .await
                 .map_err(unavailable)?;
             if bumped != 1 {
-                return Err(unavailable("tree revision changed under FOR UPDATE"));
+                return Err(unavailable(
+                    "tree revision or Current Chapter changed under FOR UPDATE",
+                ));
             }
             let serde_json::Value::Object(mut activity) = write.activity else {
                 return Err(unavailable("the Activity payload is not an object"));
@@ -218,10 +262,23 @@ async fn first_use<C: StructureCommand>(
                 )
                 .await
                 .map_err(unavailable)?;
-            let identity = match &write.identity {
+            let (identity, resulting_revision_id) = match &write.identity {
                 StructureIdentity::Volume(volume_id) => {
-                    StructureAffectedIdentity::Volume { volume_id }
+                    (StructureAffectedIdentity::Volume { volume_id }, None)
                 }
+                StructureIdentity::Chapter(chapter_id) => {
+                    (StructureAffectedIdentity::Chapter { chapter_id }, None)
+                }
+                StructureIdentity::ChapterInitialRevision {
+                    chapter_id,
+                    revision_id,
+                } => (
+                    StructureAffectedIdentity::ChapterInitialRevision {
+                        chapter_id,
+                        resulting_revision_id: revision_id,
+                    },
+                    Some(revision_id.clone()),
+                ),
             };
             persist_structure_commit(
                 client,
@@ -248,6 +305,19 @@ async fn first_use<C: StructureCommand>(
             )
             .await
             .map_err(unavailable)?;
+            if let (WriterBase::RebindToCurrentChapter, Some(chapter_id)) =
+                (&write.writer_base, &resulting_current)
+            {
+                rebind_writer_base(
+                    client,
+                    scope,
+                    chapter_id,
+                    &sequences.snapshot_id,
+                    sequences.project_activity_position,
+                )
+                .await
+                .map_err(ProjectCommandError::Unavailable)?;
+            }
             let applied = TransitionOutcome::Applied(StructureApplied {
                 effect: write.effect,
                 project_activity_position: sequences.project_activity_position,
@@ -258,6 +328,7 @@ async fn first_use<C: StructureCommand>(
                     snapshot_id: sequences.snapshot_id,
                     prior_manuscript_tree_revision: project.tree_revision,
                     resulting_manuscript_tree_revision: write.resulting_tree_revision,
+                    resulting_revision_id,
                 }),
             });
             (receipt_created_at, applied)
@@ -348,11 +419,12 @@ async fn insert_receipt(
 }
 
 fn replay_structure<C: StructureCommand>(
+    command: &C,
     replay: &CommandReplay,
 ) -> Result<SettledStructure<C>, ReplayFault> {
     let outcome = match replay.outcome::<C::NoEffect, C::Conflict, C::Refusal>()? {
         TransitionOutcome::Applied(()) => TransitionOutcome::Applied(StructureApplied {
-            effect: C::decode(replay)?,
+            effect: command.decode(replay)?,
             project_activity_position: replay.project_activity_position,
             project_activity_event_id: replay.project_activity_event_id.clone(),
             authority: match &replay.authority {
@@ -363,6 +435,7 @@ fn replay_structure<C: StructureCommand>(
                     prior_manuscript_tree_revision: authority.prior_manuscript_tree_revision,
                     resulting_manuscript_tree_revision: authority
                         .resulting_manuscript_tree_revision,
+                    resulting_revision_id: authority.resulting_revision_id.clone(),
                 }),
                 None => StructureAuthorityEvidence::BeforeAuthorityHistoryFloor,
             },
@@ -385,7 +458,7 @@ async fn lock_project(
 ) -> Result<LockedProject, ProjectCommandError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state, tree_revision::text
+            "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text
                FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
@@ -409,6 +482,7 @@ async fn lock_project(
     Ok(LockedProject {
         lifecycle,
         tree_revision: row.get::<_, String>(1).parse().map_err(unavailable)?,
+        current_chapter_id: row.get(2),
     })
 }
 
@@ -540,4 +614,4 @@ fn replay_error(fault: ReplayFault) -> ProjectCommandError {
 
 #[cfg(test)]
 #[path = "structure_command_tests.rs"]
-mod tests;
+pub(crate) mod tests;

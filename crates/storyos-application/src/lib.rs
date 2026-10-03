@@ -49,21 +49,19 @@ mod challenge_rate_class;
 pub use challenge_rate_class::ChallengeRateClass;
 mod chapter_query;
 mod create_agent_run;
-mod create_chapter;
 mod create_project;
 mod create_project_challenge;
-mod create_volume;
-mod delete_chapter;
-mod delete_volume;
 mod editor_session;
 mod export_work;
 mod get_proposal;
 mod list_projects;
 mod manuscript_search;
 mod manuscript_statistics;
+mod manuscript_structure;
 mod manuscript_tree;
 mod pinned_export_source;
 mod project_activity;
+mod project_command;
 mod project_export;
 mod project_export_work;
 mod proposal_generation_decision;
@@ -77,8 +75,6 @@ mod set_current_chapter;
 mod snapshot;
 mod takeover;
 mod undo_latest_author_action;
-mod project_command;
-mod update_chapter;
 mod update_project;
 mod update_project_assistance;
 mod withdraw_proposal;
@@ -137,10 +133,6 @@ pub use create_agent_run::{
     UnknownCreateSuccessorInspect, WorkingTargetAvailability, inspect_agent_run, open_agent_run,
     request_create_agent_run,
 };
-pub use create_chapter::{
-    CreateChapterAuthority, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,
-    CreateChapterSettlement, CreateChapterSettlementEffect, CreateChapterStore, create_chapter,
-};
 pub use create_project::{
     CreateProjectCommand, CreateProjectError, CreateProjectSettlement, CreateProjectStore,
     create_project,
@@ -148,18 +140,6 @@ pub use create_project::{
 pub use create_project_challenge::{
     CreateProjectChallenge, CreateProjectChallengeBinding, CreateProjectChallengeStore,
     IssueCreateProjectChallenge, issue_create_project_challenge,
-};
-pub use create_volume::{
-    CreateVolumeAuthority, CreateVolumeCommand, CreateVolumeError, CreateVolumePublicOrder,
-    CreateVolumeSettlement, CreateVolumeSettlementEffect, CreateVolumeStore, create_volume,
-};
-pub use delete_chapter::{
-    DeleteChapterAuthority, DeleteChapterCommand, DeleteChapterError, DeleteChapterSettlement,
-    DeleteChapterSettlementEffect, DeleteChapterStore, delete_chapter,
-};
-pub use delete_volume::{
-    DeleteVolumeAuthority, DeleteVolumeCommand, DeleteVolumeError, DeleteVolumeSettlement,
-    DeleteVolumeSettlementEffect, DeleteVolumeStore, delete_volume,
 };
 pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work};
 pub use get_proposal::{
@@ -179,6 +159,13 @@ pub use manuscript_statistics::{
     MANUSCRIPT_STATISTICS_PROJECTION_KIND, ManuscriptStatisticsPage, ManuscriptStatisticsRequest,
     ManuscriptTotals, get_manuscript_statistics,
 };
+pub use manuscript_structure::{
+    ChapterCreated, ChapterDeleted, CreateChapterInput, CreateChapterPublicOrder,
+    CreateChapterSettlement, CreateVolumeInput, CreateVolumePublicOrder, CreateVolumeSettlement,
+    DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput, DeleteVolumeSettlement,
+    UpdateChapterInput, UpdateChapterSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
+    VolumeCreated, VolumeDeleted,
+};
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterNode,
     GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
@@ -186,6 +173,10 @@ pub use manuscript_tree::{
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,
     render_readable_manuscript_from_pinned_source,
+};
+pub use project_command::{
+    ProjectCommandEnvelope, ProjectCommandError, StructureApplied, StructureAuthority,
+    StructureAuthorityEvidence, StructureSettlement,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,
@@ -248,14 +239,6 @@ pub use set_current_chapter::{
 pub use undo_latest_author_action::{
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
     UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore, undo_latest_author_action,
-};
-pub use project_command::{
-    ProjectCommandEnvelope, ProjectCommandError, StructureApplied, StructureAuthority,
-    StructureAuthorityEvidence, StructureSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
-};
-pub use update_chapter::{
-    UpdateChapterAuthority, UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
-    UpdateChapterSettlementEffect, UpdateChapterStore, update_chapter,
 };
 pub use update_project::{
     UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,

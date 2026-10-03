@@ -1,15 +1,19 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
-    CreateChapterPublicOrder, CreateChapterSettlementEffect, CreateProjectChallengeBinding,
-    CreateProjectCommand, CreateVolumeCommand, EditorClientBinding, GetManuscriptTree,
-    IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId, VolumeId, VolumeNode,
-    create_chapter, create_project, create_volume, get_manuscript_tree,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
+    CreateChapterPublicOrder, CreateProjectChallengeBinding, CreateProjectCommand,
+    CreateVolumeInput, EditorClientBinding, GetManuscriptTree, IssueCreateProjectChallenge,
+    IssueProjectCommandChallenge, OpenChapter, ProjectCommandChallengeBinding, ProjectId,
+    ProjectScope, UserId, VolumeCreated, VolumeId, VolumeNode, create_project, get_manuscript_tree,
     issue_create_project_challenge, issue_project_command_challenge, open_chapter,
     open_current_chapter, open_project,
 };
+use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{
+    CommandCall, applied, command_call, create_chapter, create_volume,
+};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -111,27 +115,17 @@ fn volume_command(
     binding: ProjectCommandChallengeBinding,
     nonce_digest: &str,
     ids_suffix: &str,
-) -> CreateVolumeCommand {
-    CreateVolumeCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        VOLUME_BYTES,
+        CreateVolumeInput {
+            title: VOLUME_TITLE.to_owned(),
+            expected_tree_revision: 1,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: VOLUME_BYTES.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: VOLUME_TITLE.to_owned(),
-        expected_tree_revision: 1,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 fn chapter_issue(
@@ -169,29 +163,19 @@ fn chapter_command(
     title: &str,
     expected_tree_revision: u64,
     bytes: &[u8],
-) -> CreateChapterCommand {
-    CreateChapterCommand {
-        placement: storyos_core::CreateChapterPlacement::Append,
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateChapterInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        bytes,
+        CreateChapterInput {
+            placement: storyos_core::CreateChapterPlacement::Append,
+            volume_id: volume_id.to_owned(),
+            title: title.to_owned(),
+            expected_tree_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        volume_id: volume_id.to_owned(),
-        title: title.to_owned(),
-        expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 #[tokio::test]
@@ -237,11 +221,7 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let storyos_application::CreateVolumeSettlementEffect::Applied { volume_id, .. } =
-        volume.effect
-    else {
-        panic!("Create Volume on an empty active Project must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&volume);
 
     let first_issue = chapter_issue(&scope, "0914", CHAPTER_A_DIGEST);
     issue_project_command_challenge(&store, &first_issue)
@@ -261,23 +241,18 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied {
-        tree_revision,
-        chapter_id,
-        current,
-        order,
-        ..
-    } = first.effect.clone()
-    else {
-        panic!("the first Chapter on an empty active Project must apply");
-    };
+    let (
+        ChapterCreated {
+            tree_revision,
+            chapter_id,
+            current,
+            order,
+        },
+        authority,
+    ) = applied(&first);
     assert_eq!(tree_revision, 3);
     assert_eq!(current, storyos_core::CreateChapterCurrent::SelectCreated);
     assert_eq!(order, CreateChapterPublicOrder::CanonicalSiblingOrder(1));
-    let authority = first
-        .authority
-        .clone()
-        .expect("Applied Create Chapter must write Structural Authority Settlement");
     assert_eq!(authority.prior_manuscript_tree_revision, 2);
     assert_eq!(authority.resulting_manuscript_tree_revision, 3);
     assert_eq!(authority.author_action_sequence, 2);
@@ -304,9 +279,12 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     };
     assert_eq!(tree_after_first.tree_revision, 3);
     assert_eq!(tree_after_first.snapshot.snapshot_id, authority.snapshot_id);
+    let TransitionOutcome::Applied(first_applied) = &first.outcome else {
+        panic!("the first Chapter on an empty active Project must apply");
+    };
     assert_eq!(
         tree_after_first.snapshot.project_activity_position,
-        first.project_activity_position
+        first_applied.project_activity_position
     );
     assert_eq!(
         tree_after_first.volumes[0].chapters,
@@ -351,16 +329,15 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied {
-        tree_revision: second_revision,
-        chapter_id: chapter_b,
-        current: second_current,
-        order: second_order,
-        ..
-    } = second.effect.clone()
-    else {
-        panic!("a later Chapter on the same Volume must apply");
-    };
+    let (
+        ChapterCreated {
+            tree_revision: second_revision,
+            chapter_id: chapter_b,
+            current: second_current,
+            order: second_order,
+        },
+        _,
+    ) = applied(&second);
     assert_eq!(second_revision, 4);
     assert_eq!(
         second_current,
@@ -406,16 +383,15 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied {
-        tree_revision: third_revision,
-        chapter_id: chapter_c,
-        current: third_current,
-        order: third_order,
-        ..
-    } = third.effect.clone()
-    else {
-        panic!("the third Chapter on the same Volume must apply");
-    };
+    let (
+        ChapterCreated {
+            tree_revision: third_revision,
+            chapter_id: chapter_c,
+            current: third_current,
+            order: third_order,
+        },
+        third_authority,
+    ) = applied(&third);
     assert_eq!(third_revision, 5);
     assert_eq!(
         third_current,
@@ -431,14 +407,13 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     };
     assert_eq!(tree.project_scope, scope);
     assert_eq!(tree.tree_revision, 5);
-    let third_authority = third
-        .authority
-        .clone()
-        .expect("the third Chapter must write Structural Authority Settlement");
     assert_eq!(tree.snapshot.snapshot_id, third_authority.snapshot_id);
+    let TransitionOutcome::Applied(third_applied) = &third.outcome else {
+        panic!("the third Chapter on the same Volume must apply");
+    };
     assert_eq!(
         tree.snapshot.project_activity_position,
-        third.project_activity_position
+        third_applied.project_activity_position
     );
     assert_eq!(
         tree.volumes,
@@ -551,12 +526,9 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        stale.effect,
-        CreateChapterSettlementEffect::Conflicted {
-            reason: storyos_core::CreateChapterConflict::StaleTreeRevision,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(storyos_core::CreateChapterConflict::StaleTreeRevision)
     );
-    assert_eq!(stale.authority, None);
 
     let invalid_issue = chapter_issue(&scope, "0922", CHAPTER_A_DIGEST);
     issue_project_command_challenge(&store, &invalid_issue)
@@ -577,17 +549,18 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        invalid.effect,
-        CreateChapterSettlementEffect::Refused {
-            reason: storyos_core::CreateChapterRefusal::InvalidVolumeJoin,
-        }
+        invalid.outcome,
+        TransitionOutcome::Refused(storyos_core::CreateChapterRefusal::InvalidVolumeJoin)
     );
-    assert_eq!(invalid.authority, None);
 
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
         admin_connection.await.unwrap();
     });
+    let resulting_revision_id = authority
+        .resulting_revision_id
+        .clone()
+        .expect("Applied Create Chapter binds a resulting Authoritative Revision");
     let row = admin
         .query_one(
             "SELECT tree_revision::text,
@@ -623,7 +596,7 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
             &[
                 &scope.project_id.as_ref(),
                 &chapter_id,
-                &authority.resulting_revision_id,
+                &resulting_revision_id,
                 &authority.authoritative_commit_id,
                 &stale.ids.receipt_id,
             ],
@@ -686,12 +659,9 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        archived.effect,
-        CreateChapterSettlementEffect::Refused {
-            reason: storyos_core::CreateChapterRefusal::ArchivedProject,
-        }
+        archived.outcome,
+        TransitionOutcome::Refused(storyos_core::CreateChapterRefusal::ArchivedProject)
     );
-    assert_eq!(archived.authority, None);
     let chapters_after_refuse = admin
         .query_one(
             "SELECT count(*) FROM storyos.manuscript_objects
@@ -763,11 +733,7 @@ async fn create_chapter_replays_canonical_sibling_order_and_keeps_historical_ack
     )
     .await
     .unwrap();
-    let storyos_application::CreateVolumeSettlementEffect::Applied { volume_id, .. } =
-        volume.effect
-    else {
-        panic!("Create Volume must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&volume);
 
     let first_issue = chapter_issue(&scope, "0c14", CHAPTER_A_DIGEST);
     issue_project_command_challenge(&store, &first_issue)
@@ -787,12 +753,12 @@ async fn create_chapter_replays_canonical_sibling_order_and_keeps_historical_ack
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied {
-        order: first_order, ..
-    } = first.effect.clone()
-    else {
-        panic!("the first Create Chapter must apply");
-    };
+    let (
+        ChapterCreated {
+            order: first_order, ..
+        },
+        _,
+    ) = applied(&first);
     assert_eq!(
         first_order,
         CreateChapterPublicOrder::CanonicalSiblingOrder(1)
@@ -816,15 +782,15 @@ async fn create_chapter_replays_canonical_sibling_order_and_keeps_historical_ack
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied {
-        tree_revision,
-        chapter_id,
-        current,
-        order,
-    } = second.effect.clone()
-    else {
-        panic!("the second Create Chapter must apply");
-    };
+    let (
+        ChapterCreated {
+            tree_revision,
+            chapter_id,
+            current,
+            order,
+        },
+        _,
+    ) = applied(&second);
     assert_eq!(tree_revision, 4);
     assert_eq!(
         current,
@@ -903,8 +869,8 @@ async fn create_chapter_replays_canonical_sibling_order_and_keeps_historical_ack
     .await
     .unwrap();
     assert_eq!(
-        historical.effect,
-        CreateChapterSettlementEffect::Applied {
+        applied(&historical).0,
+        ChapterCreated {
             tree_revision,
             chapter_id,
             current,

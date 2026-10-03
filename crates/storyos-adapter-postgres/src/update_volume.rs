@@ -10,8 +10,9 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, LockedProject, StructureCommand, StructureIdentity,
-    StructureWrite, settle_structure_command, unavailable,
+    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
+    unavailable,
 };
 
 impl PostgresProjectReader {
@@ -112,6 +113,7 @@ impl StructureCommand for UpdateVolumeInput {
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
+        _project: &LockedProject,
         live: LiveVolumes,
         applied: UpdateVolumeApplied,
     ) -> Result<StructureWrite<UpdateVolumeApplied>, ProjectCommandError> {
@@ -145,6 +147,8 @@ impl StructureCommand for UpdateVolumeInput {
         Ok(StructureWrite {
             resulting_tree_revision: applied.tree_revision,
             identity: StructureIdentity::Volume(self.volume_id.as_ref().to_owned()),
+            current_chapter: CurrentChapterChange::Preserve,
+            writer_base: WriterBase::Keep,
             activity: serde_json::json!({
             "volume_id": self.volume_id.as_ref(),
             "title": applied.title,
@@ -156,7 +160,7 @@ impl StructureCommand for UpdateVolumeInput {
         })
     }
 
-    fn decode(replay: &CommandReplay) -> Result<UpdateVolumeApplied, ReplayFault> {
+    fn decode(&self, replay: &CommandReplay) -> Result<UpdateVolumeApplied, ReplayFault> {
         Ok(UpdateVolumeApplied {
             title: replay.activity_text("title")?,
             order: replay.activity_u64("order")?,

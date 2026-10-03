@@ -1,18 +1,19 @@
 use super::*;
 use storyos_application::{
-    ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditSettlementEffect, ChapterId,
-    ChapterNode, CreateChapterCommand, CreateChapterSettlementEffect,
-    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeCommand,
-    CreateVolumePublicOrder, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeId,
-    VolumeNode, apply_author_edit, create_chapter, create_editor_session, create_project,
-    create_volume, get_manuscript_tree, issue_create_project_challenge,
-    issue_project_command_challenge, open_chapter, undo_latest_author_action,
+    ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditSettlementEffect, ChapterCreated,
+    ChapterId, ChapterNode, CreateChapterInput, CreateProjectChallengeBinding,
+    CreateProjectCommand, CreateVolumeInput, CreateVolumePublicOrder, EditorClientBinding,
+    EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
+    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeCreated,
+    VolumeId, VolumeNode, apply_author_edit, create_editor_session, create_project,
+    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
+    open_chapter, undo_latest_author_action,
 };
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{applied, command_call, create_chapter, create_volume};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -159,26 +160,16 @@ async fn post_volume(
         .unwrap();
     create_volume(
         store,
-        &CreateVolumeCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+        &command_call(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            bytes,
+            CreateVolumeInput {
+                title: title.to_owned(),
+                expected_tree_revision,
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            title: title.to_owned(),
-            expected_tree_revision,
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-            },
-        },
+        ),
     )
     .await
     .unwrap()
@@ -243,9 +234,9 @@ async fn two_users_and_two_projects_keep_separate_structure_sequences() {
         1,
     )
     .await;
-    let first_authority = first_volume.authority.expect("first Project authority");
-    let second_authority = second_volume.authority.expect("second Project authority");
-    let other_authority = other_volume.authority.expect("second User authority");
+    let (_, first_authority) = applied(&first_volume);
+    let (_, second_authority) = applied(&second_volume);
+    let (_, other_authority) = applied(&other_volume);
     assert_eq!(first_authority.author_action_sequence, 1);
     assert_eq!(second_authority.author_action_sequence, 1);
     assert_eq!(other_authority.author_action_sequence, 1);
@@ -279,13 +270,13 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
         1,
     )
     .await;
-    let CreateVolumeSettlementEffect::Applied {
-        volume_id: volume_a_id,
-        ..
-    } = volume_a.effect.clone()
-    else {
-        panic!("Volume A must apply");
-    };
+    let (
+        VolumeCreated {
+            volume_id: volume_a_id,
+            ..
+        },
+        _,
+    ) = applied(&volume_a);
     let chapter_issue = command_issue(
         &scope,
         "f624",
@@ -300,34 +291,22 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
         .unwrap();
     let chapter = create_chapter(
         &store,
-        &CreateChapterCommand {
-            placement: storyos_core::CreateChapterPlacement::Append,
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: chapter_issue.binding.client_session_binding_digest.clone(),
-                session_generation: chapter_issue.binding.client_session_generation,
-                client_contract_revision: chapter_issue.binding.client_contract_revision.clone(),
-                security_policy_revision: chapter_issue.binding.security_policy_revision.clone(),
+        &command_call(
+            chapter_issue.binding,
+            &chapter_issue.nonce_digest,
+            "f624",
+            CHAPTER_BYTES,
+            CreateChapterInput {
+                placement: storyos_core::CreateChapterPlacement::Append,
+                volume_id: volume_a_id.clone(),
+                title: "Chapter A".to_owned(),
+                expected_tree_revision: 2,
             },
-            challenge_binding: chapter_issue.binding,
-            nonce_digest: chapter_issue.nonce_digest,
-            canonical_command_bytes: CHAPTER_BYTES.to_vec(),
-            correlation_id: "018f0000-0000-7001-8000-00000000f624".to_owned(),
-            volume_id: volume_a_id.clone(),
-            title: "Chapter A".to_owned(),
-            expected_tree_revision: 2,
-            ids: AuthorCommandAdmissionIds {
-                command_id: "018f0000-0000-7001-8000-00000001f624".to_owned(),
-                author_command_admission_id: "018f0000-0000-7001-8000-00000002f624".to_owned(),
-                receipt_id: "018f0000-0000-7001-8000-00000003f624".to_owned(),
-            },
-        },
+        ),
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied { chapter_id, .. } = chapter.effect else {
-        panic!("Chapter A must apply");
-    };
+    let (ChapterCreated { chapter_id, .. }, _) = applied(&chapter);
     let session_issue = command_issue(
         &scope,
         "f626",
@@ -389,14 +368,14 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
         3,
     )
     .await;
-    let CreateVolumeSettlementEffect::Applied {
-        volume_id: volume_b_id,
-        tree_revision,
-        order,
-    } = volume_b.effect.clone()
-    else {
-        panic!("Volume B must apply");
-    };
+    let (
+        VolumeCreated {
+            volume_id: volume_b_id,
+            tree_revision,
+            order,
+        },
+        volume_b_authority,
+    ) = applied(&volume_b);
     assert_eq!(tree_revision, 4);
     assert_eq!(order, CreateVolumePublicOrder::CanonicalSiblingOrder(2));
     let later_edit = apply_named_edit(
@@ -451,11 +430,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
         &store,
         &scope,
         editor_session_id,
-        volume_b
-            .authority
-            .as_ref()
-            .expect("Volume B authority")
-            .author_action_sequence,
+        volume_b_authority.author_action_sequence,
         opened.chapter.revision_id.as_ref(),
         "f632",
     )
@@ -468,14 +443,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     else {
         panic!("Create Volume Undo must write structure Compensation");
     };
-    assert_eq!(
-        source_sequence,
-        volume_b
-            .authority
-            .as_ref()
-            .expect("Volume B authority")
-            .author_action_sequence
-    );
+    assert_eq!(source_sequence, volume_b_authority.author_action_sequence);
     let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
         panic!("the tree remains after structure Compensation");
     };

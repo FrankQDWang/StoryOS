@@ -1,13 +1,10 @@
 //! Shared types of project commands that settle through one command sequence.
 
-use storyos_core::{
-    TransitionOutcome, UpdateVolumeApplied, UpdateVolumeConflict, UpdateVolumeNoEffect,
-    UpdateVolumeRefusal,
-};
+use storyos_core::TransitionOutcome;
 
 use crate::{
     AuthorCommandAdmissionIds, EditorClientBinding, Project, ProjectCommandChallengeBinding,
-    ProjectScope, VolumeId,
+    ProjectScope,
 };
 
 /// The admitted request facts that every project command carries into its Core Transition.
@@ -88,19 +85,6 @@ pub struct StructureAuthority {
     pub snapshot_id: String,
     pub prior_manuscript_tree_revision: u64,
     pub resulting_manuscript_tree_revision: u64,
+    /// The Authoritative Revision that the Commit binds, when it binds one.
+    pub resulting_revision_id: Option<String>,
 }
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct UpdateVolumeInput {
-    pub volume_id: VolumeId,
-    pub title: String,
-    pub order: u64,
-    pub expected_tree_revision: u64,
-}
-
-pub type UpdateVolumeSettlement = StructureSettlement<
-    UpdateVolumeApplied,
-    UpdateVolumeNoEffect,
-    UpdateVolumeConflict,
-    UpdateVolumeRefusal,
->;

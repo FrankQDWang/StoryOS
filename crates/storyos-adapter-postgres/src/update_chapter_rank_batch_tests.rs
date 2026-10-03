@@ -1,16 +1,19 @@
 use super::*;
 use crate::delete_chapter_tests::apply_delete;
+use crate::structure_command::tests::{
+    CommandCall, applied, command_call, create_volume, update_chapter,
+};
 use crate::update_chapter_tests::{
     USER_B, UpdateFixture, apply_chapter, apply_volume, named_issue, seed_project, update_command,
     update_issue,
 };
 use storyos_application::{
-    AuthorCommandAdmissionIds, CanonicalManuscriptTree, ChapterId, ChapterNode,
-    CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding, GetManuscriptTree,
-    ProjectScope, UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
-    UpdateChapterSettlementEffect, UserId, VolumeId, VolumeNode, create_volume,
-    get_manuscript_tree, issue_project_command_challenge, open_project, update_chapter,
+    CanonicalManuscriptTree, ChapterId, ChapterNode, CreateVolumeInput, GetManuscriptTree,
+    ProjectCommandError, ProjectScope, UpdateChapterInput, UpdateChapterSettlement, UserId,
+    VolumeCreated, VolumeId, VolumeNode, get_manuscript_tree, issue_project_command_challenge,
+    open_project,
 };
+use storyos_core::{TransitionOutcome, UpdateChapterApplied};
 use tokio_postgres::NoTls;
 
 fn hex_suffix(value: u16) -> String {
@@ -84,32 +87,20 @@ async fn apply_named_volume(
         .unwrap();
     let settlement = create_volume(
         store,
-        &CreateVolumeCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+        &command_call(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            &bytes,
+            CreateVolumeInput {
+                title: title.to_owned(),
+                expected_tree_revision,
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes,
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            title: title.to_owned(),
-            expected_tree_revision,
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-            },
-        },
+        ),
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied { volume_id, .. } = settlement.effect else {
-        panic!("{title} must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&settlement);
     volume_id
 }
 
@@ -118,7 +109,7 @@ async fn issue_update(
     scope: &ProjectScope,
     suffix: &str,
     fixture: UpdateFixture<'_>,
-) -> UpdateChapterCommand {
+) -> CommandCall<UpdateChapterInput> {
     let digest = command_digest("storyos.command.updateChapter.jcs.v1", fixture.bytes);
     let issue = update_issue(scope, suffix, &digest);
     issue_project_command_challenge(store, &issue)
@@ -260,15 +251,15 @@ fn assert_applied_reorder_tree(
     expected_titles: &[&str],
     tree_revision: u64,
 ) {
-    let authority = settlement
-        .authority
-        .as_ref()
-        .expect("Applied Update Chapter must write Structural Authority Settlement");
+    let (_, authority) = applied(settlement);
     assert_eq!(tree.tree_revision, tree_revision);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
+    let TransitionOutcome::Applied(settled) = &settlement.outcome else {
+        panic!("Update Chapter must apply");
+    };
     assert_eq!(
         tree.snapshot.project_activity_position,
-        settlement.project_activity_position
+        settled.project_activity_position
     );
     assert_eq!(
         tree.volumes,
@@ -303,7 +294,7 @@ async fn seed_volume_with_chapters(
 async fn measure_reorder(
     store: &PostgresProjectReader,
     admin: &tokio_postgres::Client,
-    command: &UpdateChapterCommand,
+    command: &CommandCall<UpdateChapterInput>,
 ) -> ((i64, i64, i64, i64), UpdateChapterSettlement) {
     install_chapter_tree_sql_probes(admin).await;
     let settlement = update_chapter(store, command).await.unwrap();
@@ -352,8 +343,8 @@ async fn measure_applied_reorder(
     let ((object_updates, project_updates, rank_writes, rank_rows), settlement) =
         measure_reorder(store, admin, &command).await;
     assert_eq!(
-        settlement.effect,
-        UpdateChapterSettlementEffect::Applied {
+        applied(&settlement).0,
+        UpdateChapterApplied {
             title: case.title.to_owned(),
             order: case.move_to,
             tree_revision: case.tree_revision,
@@ -532,8 +523,8 @@ async fn applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_st
     .await;
     let updated = update_chapter(&store, &command).await.unwrap();
     assert_eq!(
-        updated.effect,
-        UpdateChapterSettlementEffect::Applied {
+        applied(&updated).0,
+        UpdateChapterApplied {
             title: "Chapter 4".to_owned(),
             order: 1,
             tree_revision: 10,
@@ -693,7 +684,7 @@ async fn failed_chapter_rank_write_rolls_back_the_entire_command() {
         .await
         .expect_err("a failed rank write must stop acknowledgement");
     drop_chapter_tree_sql_probes(&admin).await;
-    assert!(matches!(error, UpdateChapterError::Unavailable(_)));
+    assert!(matches!(error, ProjectCommandError::Unavailable(_)));
     let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
         panic!("the Project still has a Canonical Query");
     };

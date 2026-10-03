@@ -1,131 +1,187 @@
 use storyos_application::{
-    ProjectCommandChallengeError, ProjectCommandChallengeUse, UpdateChapterAuthority,
-    UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
-    UpdateChapterSettlementEffect, UpdateChapterStore,
+    ProjectCommandEnvelope, ProjectCommandError, UpdateChapterInput, UpdateChapterSettlement,
+};
+use storyos_core::{
+    ChapterJoin, UpdateChapter as CoreUpdateChapter, UpdateChapterApplied, UpdateChapterConflict,
+    UpdateChapterNoEffect, UpdateChapterRefusal, update_chapter as classify_update_chapter,
+};
+use tokio_postgres::Client;
+
+use crate::PostgresProjectReader;
+use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::structure_command::{
+    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
+    unavailable,
 };
 
-use super::*;
-use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
-use storyos_core::TransitionOutcome;
+pub(crate) mod sibling_order;
 
-mod persist;
-pub(super) mod sibling_order;
-use persist::persist_update_chapter;
-
-impl UpdateChapterStore for PostgresProjectReader {
-    async fn update_chapter(
+impl PostgresProjectReader {
+    /// Settles one Update Chapter (rename and reorder) as a Manuscript Structure Transition.
+    pub async fn update_chapter(
         &self,
-        command: &UpdateChapterCommand,
-    ) -> Result<UpdateChapterSettlement, UpdateChapterError> {
-        let mut transaction = self
-            .begin_serializable_project_command_transaction(&command.project_scope)
-            .await
-            .map_err(update_chapter_challenge_error)?;
-        let challenge_use = transaction
-            .consume(&command.challenge_binding, &command.nonce_digest)
-            .await
-            .map_err(update_chapter_challenge_error)?;
-        match challenge_use {
-            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(update_chapter_challenge_error)?;
-                read_update_chapter_settlement(self, command, &result_reference).await
-            }
-            ProjectCommandChallengeUse::ExactRetryInProgress => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(update_chapter_challenge_error)?;
-                Err(UpdateChapterError::BindingConflict)
-            }
-            ProjectCommandChallengeUse::FirstUse => {
-                match persist_update_chapter(&transaction.client, command).await {
-                    Ok(settlement) => {
-                        transaction
-                            .commit()
-                            .await
-                            .map_err(update_chapter_challenge_error)?;
-                        Ok(settlement)
-                    }
-                    Err(error) => {
-                        let _rollback = transaction.rollback().await;
-                        Err(error)
-                    }
-                }
-            }
-        }
+        envelope: &ProjectCommandEnvelope,
+        input: &UpdateChapterInput,
+    ) -> Result<UpdateChapterSettlement, ProjectCommandError> {
+        settle_structure_command(self, envelope, input).await
     }
 }
 
-async fn read_update_chapter_settlement(
-    store: &PostgresProjectReader,
-    command: &UpdateChapterCommand,
-    receipt_id: &str,
-) -> Result<UpdateChapterSettlement, UpdateChapterError> {
-    read_command_replay(store, &command.challenge_binding, receipt_id)
-        .await
-        .and_then(update_chapter_replay)
-        .map_err(|fault| match fault {
-            ReplayFault::BindingConflict => UpdateChapterError::BindingConflict,
-            ReplayFault::HistoricalAcknowledgementUnavailable => {
-                UpdateChapterError::HistoricalAcknowledgementUnavailable
-            }
-            ReplayFault::Unavailable(source) => UpdateChapterError::Unavailable(source),
-        })
+/// The live sibling order of the target Chapter, locked by `classify`.
+pub(crate) struct LiveSiblings {
+    ordered_ids: Vec<String>,
+    parent_volume_id: String,
+    current_title: String,
+    current_order: u64,
 }
 
-fn update_chapter_replay(replay: CommandReplay) -> Result<UpdateChapterSettlement, ReplayFault> {
-    let effect = match replay.outcome()? {
-        TransitionOutcome::Applied(()) => UpdateChapterSettlementEffect::Applied {
+impl StructureCommand for UpdateChapterInput {
+    const SPEC: CommandSpec = CommandSpec {
+        kind: "updateChapter",
+        isolation: CommandIsolation::Serializable,
+        activity_kind: "chapter_updated",
+    };
+    type Applied = UpdateChapterApplied;
+    type Plan = LiveSiblings;
+    type Effect = UpdateChapterApplied;
+    type NoEffect = UpdateChapterNoEffect;
+    type Conflict = UpdateChapterConflict;
+    type Refusal = UpdateChapterRefusal;
+
+    async fn classify(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+    ) -> Result<(Classified<Self>, LiveSiblings), ProjectCommandError> {
+        let chapters = client
+            .query(
+                "SELECT manuscript_object_id::text, title, parent_volume_id::text
+                   FROM storyos.manuscript_objects AS chapter
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND object_kind = 'chapter'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                       WHERE removal.owner_user_id = chapter.owner_user_id
+                         AND removal.project_id = chapter.project_id
+                         AND removal.chapter_id = chapter.manuscript_object_id
+                    )
+                  ORDER BY parent_volume_id, tree_order
+                  FOR UPDATE",
+                &[
+                    &envelope.project_scope.owner_user_id.as_ref(),
+                    &envelope.project_scope.project_id.as_ref(),
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        let target = chapters
+            .iter()
+            .find(|chapter| chapter.get::<_, String>(0) == self.chapter_id.as_ref());
+        let (chapter_join, siblings) = match target {
+            Some(chapter) => {
+                let parent_volume_id = chapter.get::<_, String>(2);
+                let ordered_ids = chapters
+                    .iter()
+                    .filter(|row| row.get::<_, String>(2) == parent_volume_id)
+                    .map(|row| row.get::<_, String>(0))
+                    .collect::<Vec<_>>();
+                let current_order = ordered_ids
+                    .iter()
+                    .position(|chapter_id| chapter_id == self.chapter_id.as_ref())
+                    .map_or(1, |index| index as u64 + 1);
+                (
+                    ChapterJoin::ExactScope,
+                    LiveSiblings {
+                        ordered_ids,
+                        parent_volume_id,
+                        current_title: chapter.get(1),
+                        current_order,
+                    },
+                )
+            }
+            None => (
+                ChapterJoin::Invalid,
+                LiveSiblings {
+                    ordered_ids: Vec::new(),
+                    parent_volume_id: String::new(),
+                    current_title: String::new(),
+                    current_order: 1,
+                },
+            ),
+        };
+        let classified = classify_update_chapter(&CoreUpdateChapter {
+            chapter_join,
+            expected_tree_revision: self.expected_tree_revision,
+            current_tree_revision: project.tree_revision,
+            current_lifecycle: project.lifecycle,
+            title: self.title.clone(),
+            current_title: siblings.current_title.clone(),
+            order: self.order,
+            current_order: siblings.current_order,
+            chapter_count: siblings.ordered_ids.len() as u64,
+        });
+        Ok((classified, siblings))
+    }
+
+    async fn apply(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        _project: &LockedProject,
+        siblings: LiveSiblings,
+        applied: UpdateChapterApplied,
+    ) -> Result<StructureWrite<UpdateChapterApplied>, ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        let renamed = client
+            .execute(
+                "UPDATE storyos.manuscript_objects
+                    SET title = $3
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND manuscript_object_id = $4::text::uuid AND object_kind = 'chapter'",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &applied.title,
+                    &self.chapter_id.as_ref(),
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        if renamed != 1 {
+            return Err(unavailable("Chapter row changed under FOR UPDATE"));
+        }
+        if siblings.current_order != applied.order {
+            let mut ids = siblings.ordered_ids;
+            let moved = ids.remove((siblings.current_order - 1) as usize);
+            ids.insert((applied.order - 1) as usize, moved);
+            sibling_order::write_chapter_order(client, scope, &siblings.parent_volume_id, &ids)
+                .await
+                .map_err(unavailable)?;
+        }
+        Ok(StructureWrite {
+            resulting_tree_revision: applied.tree_revision,
+            identity: StructureIdentity::Chapter(self.chapter_id.as_ref().to_owned()),
+            current_chapter: CurrentChapterChange::Preserve,
+            writer_base: WriterBase::Keep,
+            activity: serde_json::json!({
+                "chapter_id": self.chapter_id.as_ref(),
+                "title": applied.title,
+                "order": applied.order.to_string(),
+                "prior_title": siblings.current_title,
+                "prior_order": siblings.current_order.to_string(),
+            }),
+            effect: applied,
+        })
+    }
+
+    fn decode(&self, replay: &CommandReplay) -> Result<UpdateChapterApplied, ReplayFault> {
+        let tree_revision = replay.activity_u64("tree_revision")?;
+        Ok(UpdateChapterApplied {
             title: replay.activity_text("title")?,
             order: replay.activity_u64("order")?,
-            tree_revision: replay.activity_u64("tree_revision")?,
-        },
-        TransitionOutcome::NoEffect(reason) => UpdateChapterSettlementEffect::NoEffect { reason },
-        TransitionOutcome::Conflicted(reason) => {
-            UpdateChapterSettlementEffect::Conflicted { reason }
-        }
-        TransitionOutcome::Refused(reason) => UpdateChapterSettlementEffect::Refused { reason },
-    };
-    let response_project = replay.response_project()?;
-    Ok(UpdateChapterSettlement {
-        authority: replay.authority.map(|authority| UpdateChapterAuthority {
-            authoritative_commit_id: authority.authoritative_commit_id,
-            author_action_sequence: authority.author_action_sequence,
-            snapshot_id: authority.snapshot_id,
-            prior_manuscript_tree_revision: authority.prior_manuscript_tree_revision,
-            resulting_manuscript_tree_revision: authority.resulting_manuscript_tree_revision,
-        }),
-        ids: replay.ids,
-        receipt_created_at: replay.receipt_created_at,
-        effect,
-        project_activity_position: replay.project_activity_position,
-        project_activity_event_id: replay.project_activity_event_id,
-        response_project,
-    })
-}
-
-pub(super) fn update_chapter_challenge_error(
-    error: ProjectCommandChallengeError,
-) -> UpdateChapterError {
-    match error {
-        ProjectCommandChallengeError::BindingConflict => UpdateChapterError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired => UpdateChapterError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
-        | ProjectCommandChallengeError::Unavailable(_) => {
-            UpdateChapterError::Unavailable(Box::new(error))
-        }
+            tree_revision,
+        })
     }
-}
-
-pub(super) fn update_chapter_database_error(error: tokio_postgres::Error) -> UpdateChapterError {
-    UpdateChapterError::Unavailable(Box::new(error))
-}
-
-pub(super) fn update_chapter_parse_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> UpdateChapterError {
-    UpdateChapterError::Unavailable(Box::new(error))
 }

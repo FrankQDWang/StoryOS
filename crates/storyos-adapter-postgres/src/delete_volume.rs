@@ -1,128 +1,169 @@
-use super::*;
-use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
 use storyos_application::{
-    DeleteVolumeAuthority, DeleteVolumeCommand, DeleteVolumeError, DeleteVolumeSettlement,
-    DeleteVolumeSettlementEffect, DeleteVolumeStore, ProjectCommandChallengeError,
-    ProjectCommandChallengeUse,
+    DeleteVolumeInput, DeleteVolumeSettlement, ProjectCommandEnvelope, ProjectCommandError,
+    VolumeDeleted,
 };
-use storyos_core::TransitionOutcome;
+use storyos_core::{
+    DeleteVolume as CoreDeleteVolume, DeleteVolumeApplied, DeleteVolumeConflict,
+    DeleteVolumeNoEffect, DeleteVolumeRefusal, VolumeChildPolicy, VolumeJoin,
+    VolumeRemovalLifecycle, delete_volume as classify_delete_volume,
+};
+use tokio_postgres::Client;
+use uuid::Uuid;
 
-mod persist;
-use persist::persist_delete_volume;
+use crate::PostgresProjectReader;
+use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::structure_command::{
+    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
+    unavailable,
+};
 
-impl DeleteVolumeStore for PostgresProjectReader {
-    async fn delete_volume(
+impl PostgresProjectReader {
+    /// Settles one author-initiated Volume removal as a Manuscript Structure Transition.
+    pub async fn delete_volume(
         &self,
-        command: &DeleteVolumeCommand,
-    ) -> Result<DeleteVolumeSettlement, DeleteVolumeError> {
-        let mut transaction = self
-            .begin_serializable_project_command_transaction(&command.project_scope)
+        envelope: &ProjectCommandEnvelope,
+        input: &DeleteVolumeInput,
+    ) -> Result<DeleteVolumeSettlement, ProjectCommandError> {
+        settle_structure_command(self, envelope, input).await
+    }
+}
+
+impl StructureCommand for DeleteVolumeInput {
+    const SPEC: CommandSpec = CommandSpec {
+        kind: "deleteVolume",
+        isolation: CommandIsolation::Serializable,
+        activity_kind: "volume_deleted",
+    };
+    type Applied = DeleteVolumeApplied;
+    type Plan = ();
+    type Effect = VolumeDeleted;
+    type NoEffect = DeleteVolumeNoEffect;
+    type Conflict = DeleteVolumeConflict;
+    type Refusal = DeleteVolumeRefusal;
+
+    async fn classify(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+    ) -> Result<(Classified<Self>, ()), ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        let target = client
+            .query_opt(
+                "SELECT removal.volume_id IS NOT NULL
+                   FROM storyos.manuscript_objects AS volume
+                   LEFT JOIN storyos.volume_removal_decisions AS removal
+                     ON (removal.owner_user_id, removal.project_id, removal.volume_id) =
+                        (volume.owner_user_id, volume.project_id, volume.manuscript_object_id)
+                  WHERE volume.owner_user_id = $1::text::uuid AND volume.project_id = $2::text::uuid
+                    AND volume.manuscript_object_id = $3::text::uuid
+                    AND volume.object_kind = 'volume'
+                  FOR UPDATE OF volume",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &self.volume_id.as_ref(),
+                ],
+            )
             .await
-            .map_err(delete_volume_challenge_error)?;
-        let challenge_use = transaction
-            .consume(&command.challenge_binding, &command.nonce_digest)
-            .await
-            .map_err(delete_volume_challenge_error)?;
-        match challenge_use {
-            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(delete_volume_challenge_error)?;
-                read_delete_volume_settlement(self, command, &result_reference).await
+            .map_err(unavailable)?;
+        let (volume_join, volume_lifecycle) = match target {
+            Some(target) if target.get::<_, bool>(0) => {
+                (VolumeJoin::ExactScope, VolumeRemovalLifecycle::Removed)
             }
-            ProjectCommandChallengeUse::ExactRetryInProgress => {
-                transaction
-                    .rollback()
+            Some(_) => (VolumeJoin::ExactScope, VolumeRemovalLifecycle::Active),
+            None => (VolumeJoin::Invalid, VolumeRemovalLifecycle::Active),
+        };
+        let child_chapters = match volume_join {
+            VolumeJoin::ExactScope => {
+                let active_chapters = client
+                    .query_one(
+                        "SELECT count(*)::text
+                           FROM storyos.manuscript_objects AS chapter
+                          WHERE chapter.owner_user_id = $1::text::uuid
+                            AND chapter.project_id = $2::text::uuid
+                            AND chapter.parent_volume_id = $3::text::uuid
+                            AND chapter.object_kind = 'chapter'
+                            AND NOT EXISTS (
+                              SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                               WHERE removal.owner_user_id = chapter.owner_user_id
+                                 AND removal.project_id = chapter.project_id
+                                 AND removal.chapter_id = chapter.manuscript_object_id
+                            )",
+                        &[
+                            &scope.owner_user_id.as_ref(),
+                            &scope.project_id.as_ref(),
+                            &self.volume_id.as_ref(),
+                        ],
+                    )
                     .await
-                    .map_err(delete_volume_challenge_error)?;
-                Err(DeleteVolumeError::BindingConflict)
-            }
-            ProjectCommandChallengeUse::FirstUse => {
-                match persist_delete_volume(&transaction.client, command).await {
-                    Ok(settlement) => {
-                        transaction
-                            .commit()
-                            .await
-                            .map_err(delete_volume_challenge_error)?;
-                        Ok(settlement)
-                    }
-                    Err(error) => {
-                        let _rollback = transaction.rollback().await;
-                        Err(error)
-                    }
+                    .map_err(unavailable)?
+                    .get::<_, String>(0);
+                if active_chapters == "0" {
+                    VolumeChildPolicy::Empty
+                } else {
+                    VolumeChildPolicy::Nonempty
                 }
             }
-        }
+            VolumeJoin::Invalid => VolumeChildPolicy::Empty,
+        };
+        let classified = classify_delete_volume(&CoreDeleteVolume {
+            volume_join,
+            volume_lifecycle,
+            child_chapters,
+            expected_tree_revision: self.expected_tree_revision,
+            current_tree_revision: project.tree_revision,
+            current_lifecycle: project.lifecycle,
+        });
+        Ok((classified, ()))
     }
-}
 
-async fn read_delete_volume_settlement(
-    store: &PostgresProjectReader,
-    command: &DeleteVolumeCommand,
-    receipt_id: &str,
-) -> Result<DeleteVolumeSettlement, DeleteVolumeError> {
-    read_command_replay(store, &command.challenge_binding, receipt_id)
-        .await
-        .and_then(delete_volume_replay)
-        .map_err(|fault| match fault {
-            ReplayFault::BindingConflict => DeleteVolumeError::BindingConflict,
-            ReplayFault::HistoricalAcknowledgementUnavailable => {
-                DeleteVolumeError::HistoricalAcknowledgementUnavailable
-            }
-            ReplayFault::Unavailable(source) => DeleteVolumeError::Unavailable(source),
+    async fn apply(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        _project: &LockedProject,
+        _plan: (),
+        applied: DeleteVolumeApplied,
+    ) -> Result<StructureWrite<VolumeDeleted>, ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        client
+            .execute(
+                "INSERT INTO storyos.volume_removal_decisions
+                   (owner_user_id, project_id, volume_removal_decision_id, receipt_id,
+                    volume_id, tree_revision)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                         $5::text::uuid, $6::text::bigint)",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &Uuid::now_v7().to_string(),
+                    &envelope.ids.receipt_id,
+                    &self.volume_id.as_ref(),
+                    &applied.tree_revision.to_string(),
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        Ok(StructureWrite {
+            resulting_tree_revision: applied.tree_revision,
+            identity: StructureIdentity::Volume(self.volume_id.as_ref().to_owned()),
+            current_chapter: CurrentChapterChange::Preserve,
+            writer_base: WriterBase::RebindToCurrentChapter,
+            activity: serde_json::json!({ "volume_id": self.volume_id.as_ref() }),
+            effect: VolumeDeleted {
+                volume_id: self.volume_id.as_ref().to_owned(),
+                tree_revision: applied.tree_revision,
+            },
         })
-}
-
-fn delete_volume_replay(replay: CommandReplay) -> Result<DeleteVolumeSettlement, ReplayFault> {
-    let effect = match replay.outcome()? {
-        TransitionOutcome::Applied(()) => DeleteVolumeSettlementEffect::Applied {
-            tree_revision: replay.activity_u64("tree_revision")?,
-            volume_id: replay.activity_text("volume_id")?,
-        },
-        TransitionOutcome::NoEffect(reason) => DeleteVolumeSettlementEffect::NoEffect { reason },
-        TransitionOutcome::Conflicted(reason) => {
-            DeleteVolumeSettlementEffect::Conflicted { reason }
-        }
-        TransitionOutcome::Refused(reason) => DeleteVolumeSettlementEffect::Refused { reason },
-    };
-    let response_project = replay.response_project()?;
-    Ok(DeleteVolumeSettlement {
-        authority: replay.authority.map(|authority| DeleteVolumeAuthority {
-            authoritative_commit_id: authority.authoritative_commit_id,
-            author_action_sequence: authority.author_action_sequence,
-            snapshot_id: authority.snapshot_id,
-            prior_manuscript_tree_revision: authority.prior_manuscript_tree_revision,
-            resulting_manuscript_tree_revision: authority.resulting_manuscript_tree_revision,
-        }),
-        ids: replay.ids,
-        receipt_created_at: replay.receipt_created_at,
-        effect,
-        project_activity_position: replay.project_activity_position,
-        project_activity_event_id: replay.project_activity_event_id,
-        response_project,
-    })
-}
-
-pub(super) fn delete_volume_challenge_error(
-    error: ProjectCommandChallengeError,
-) -> DeleteVolumeError {
-    match error {
-        ProjectCommandChallengeError::BindingConflict => DeleteVolumeError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired => DeleteVolumeError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
-        | ProjectCommandChallengeError::Unavailable(_) => {
-            DeleteVolumeError::Unavailable(Box::new(error))
-        }
     }
-}
 
-pub(super) fn delete_volume_database_error(error: tokio_postgres::Error) -> DeleteVolumeError {
-    DeleteVolumeError::Unavailable(Box::new(error))
-}
-
-pub(super) fn delete_volume_parse_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> DeleteVolumeError {
-    DeleteVolumeError::Unavailable(Box::new(error))
+    fn decode(&self, replay: &CommandReplay) -> Result<VolumeDeleted, ReplayFault> {
+        let tree_revision = replay.activity_u64("tree_revision")?;
+        Ok(VolumeDeleted {
+            volume_id: replay.activity_text("volume_id")?,
+            tree_revision,
+        })
+    }
 }

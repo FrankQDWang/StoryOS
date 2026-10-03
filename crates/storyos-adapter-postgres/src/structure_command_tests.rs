@@ -1,6 +1,12 @@
+use std::fmt::Debug;
+
 use storyos_application::{
-    ProjectCommandEnvelope, ProjectCommandError, ProjectScope, UpdateVolumeInput,
-    issue_project_command_challenge,
+    AuthorCommandAdmissionIds, CreateChapterInput, CreateChapterSettlement, CreateVolumeInput,
+    CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput,
+    DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
+    ProjectCommandEnvelope, ProjectCommandError, ProjectScope, StructureAuthority,
+    StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput, UpdateChapterSettlement,
+    UpdateVolumeInput, UpdateVolumeSettlement, issue_project_command_challenge,
 };
 use storyos_core::{
     TransitionOutcome, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
@@ -14,8 +20,106 @@ use super::{
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::update_volume_tests::{
-    UpdateFixture, applied, apply_volume, seed_project, update_command, update_issue, update_volume,
+    UpdateFixture, apply_volume, seed_project, update_command, update_issue,
 };
+
+/// One admitted command envelope and its typed Manuscript Structure input.
+pub(crate) struct CommandCall<I> {
+    pub(crate) envelope: ProjectCommandEnvelope,
+    pub(crate) input: I,
+}
+
+/// Builds a command call whose ids derive from one four-digit suffix.
+pub(crate) fn command_call<I>(
+    binding: ProjectCommandChallengeBinding,
+    nonce_digest: &str,
+    ids_suffix: &str,
+    bytes: &[u8],
+    input: I,
+) -> CommandCall<I> {
+    CommandCall {
+        envelope: ProjectCommandEnvelope {
+            project_scope: binding.project_scope.clone(),
+            client_binding: EditorClientBinding {
+                binding_ref: binding.client_session_binding_digest.clone(),
+                session_generation: binding.client_session_generation,
+                client_contract_revision: binding.client_contract_revision.clone(),
+                security_policy_revision: binding.security_policy_revision.clone(),
+            },
+            challenge_binding: binding,
+            nonce_digest: nonce_digest.to_owned(),
+            canonical_command_bytes: bytes.to_vec(),
+            correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
+            ids: AuthorCommandAdmissionIds {
+                command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
+                author_command_admission_id: format!(
+                    "018f0000-0000-7001-8000-00000002{ids_suffix}"
+                ),
+                receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
+            },
+        },
+        input,
+    }
+}
+
+pub(crate) async fn create_volume(
+    store: &PostgresProjectReader,
+    call: &CommandCall<CreateVolumeInput>,
+) -> Result<CreateVolumeSettlement, ProjectCommandError> {
+    store.create_volume(&call.envelope, &call.input).await
+}
+
+pub(crate) async fn update_volume(
+    store: &PostgresProjectReader,
+    call: &CommandCall<UpdateVolumeInput>,
+) -> Result<UpdateVolumeSettlement, ProjectCommandError> {
+    store.update_volume(&call.envelope, &call.input).await
+}
+
+pub(crate) async fn delete_volume(
+    store: &PostgresProjectReader,
+    call: &CommandCall<DeleteVolumeInput>,
+) -> Result<DeleteVolumeSettlement, ProjectCommandError> {
+    store.delete_volume(&call.envelope, &call.input).await
+}
+
+pub(crate) async fn create_chapter(
+    store: &PostgresProjectReader,
+    call: &CommandCall<CreateChapterInput>,
+) -> Result<CreateChapterSettlement, ProjectCommandError> {
+    store.create_chapter(&call.envelope, &call.input).await
+}
+
+pub(crate) async fn update_chapter(
+    store: &PostgresProjectReader,
+    call: &CommandCall<UpdateChapterInput>,
+) -> Result<UpdateChapterSettlement, ProjectCommandError> {
+    store.update_chapter(&call.envelope, &call.input).await
+}
+
+pub(crate) async fn delete_chapter(
+    store: &PostgresProjectReader,
+    call: &CommandCall<DeleteChapterInput>,
+) -> Result<DeleteChapterSettlement, ProjectCommandError> {
+    store.delete_chapter(&call.envelope, &call.input).await
+}
+
+/// The applied effect and settled authority of one structure command; panics on any other outcome.
+pub(crate) fn applied<A: Clone + Debug, N: Debug, C: Debug, R: Debug>(
+    settlement: &StructureSettlement<A, N, C, R>,
+) -> (A, StructureAuthority) {
+    match &settlement.outcome {
+        TransitionOutcome::Applied(applied) => match &applied.authority {
+            StructureAuthorityEvidence::Settled(authority) => {
+                (applied.effect.clone(), authority.clone())
+            }
+            StructureAuthorityEvidence::BeforeAuthorityHistoryFloor => {
+                panic!("an applied structure command must write Structural Authority Settlement")
+            }
+        },
+        other => panic!("the structure command must apply, got {other:?}"),
+    }
+}
 
 const BYTES: &[u8] = br#"{"expected_tree_revision":"3","order":"2","title":"Volume B"}"#;
 const DIGEST: &str = "sha256:storyos.command.updateVolume.jcs.v1:contract";
@@ -246,15 +350,18 @@ impl StructureCommand for Failing {
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
         plan: Self::Plan,
         applied: Self::Applied,
     ) -> Result<StructureWrite<Self::Effect>, ProjectCommandError> {
-        self.input.apply(client, envelope, plan, applied).await?;
+        self.input
+            .apply(client, envelope, project, plan, applied)
+            .await?;
         Err(unavailable("injected apply failure"))
     }
 
-    fn decode(replay: &CommandReplay) -> Result<Self::Effect, ReplayFault> {
-        UpdateVolumeInput::decode(replay)
+    fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault> {
+        self.input.decode(replay)
     }
 }
 

@@ -2,8 +2,11 @@ use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, EditorClientBinding, ProjectCommandChallengeBinding,
-    UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlementEffect,
+    ProjectCommandEnvelope, ProjectCommandError, StructureApplied, StructureAuthorityEvidence,
+    UpdateChapterInput,
 };
+use storyos_core::TransitionOutcome;
+use storyos_core::UpdateChapterApplied;
 
 use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
@@ -81,7 +84,7 @@ pub(super) async fn update_chapter(
         contracts::UPDATE_CHAPTER_DIGEST_PROFILE
     );
     let store = project_reader(&state).await?;
-    let command = UpdateChapterCommand {
+    let command = ProjectCommandEnvelope {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: binding_ref.clone(),
@@ -108,64 +111,75 @@ pub(super) async fn update_chapter(
         nonce_digest: plain_digest(nonce.as_bytes()),
         canonical_command_bytes,
         correlation_id: input.correlation_id.clone(),
-        chapter_id: ChapterId::new(chapter_id),
-        title: input.title.clone(),
-        order,
-        expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: Uuid::now_v7().to_string(),
             author_command_admission_id: Uuid::now_v7().to_string(),
             receipt_id: Uuid::now_v7().to_string(),
         },
     };
-    let settlement = storyos_application::update_chapter(&store, &command)
+    let update_chapter_input = UpdateChapterInput {
+        chapter_id: ChapterId::new(chapter_id),
+        title: input.title.clone(),
+        order,
+        expected_tree_revision,
+    };
+    let settlement = store
+        .update_chapter(&command, &update_chapter_input)
         .await
         .map_err(update_chapter_error)?;
     super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
-    update_chapter_response(&command, &digest_hex, settlement)
+    update_chapter_response(&command, &update_chapter_input, &digest_hex, settlement)
 }
 
 fn update_chapter_response(
-    command: &UpdateChapterCommand,
+    command: &ProjectCommandEnvelope,
+    input: &UpdateChapterInput,
     digest_hex: &str,
     settlement: storyos_application::UpdateChapterSettlement,
 ) -> Result<Json<contracts::UpdateChapterResponse>, ApiError> {
     let project = settlement.response_project;
-    let (commit_ids, action_sequence) = match settlement.authority.as_ref() {
-        Some(authority) => (
-            vec![authority.authoritative_commit_id.clone()],
-            Some(authority.author_action_sequence.to_string()),
-        ),
-        None => (Vec::new(), None),
-    };
-    let (receipt_result, effect) = match settlement.effect {
-        UpdateChapterSettlementEffect::Applied {
-            title,
-            order,
-            tree_revision,
-        } => (
-            contracts::DomainReceiptResult::AuthoritativeApplied,
-            contracts::UpdateChapterEffect::AuthoritativeApplied {
-                chapter_id: command.chapter_id.as_ref().to_owned(),
+    let mut commit_ids = Vec::new();
+    let mut action_sequence = None;
+    let (receipt_result, effect) = match settlement.outcome {
+        TransitionOutcome::Applied(StructureApplied {
+            effect,
+            project_activity_position,
+            authority,
+            ..
+        }) => {
+            if let StructureAuthorityEvidence::Settled(authority) = authority {
+                commit_ids.push(authority.authoritative_commit_id);
+                action_sequence = Some(authority.author_action_sequence.to_string());
+            }
+            let UpdateChapterApplied {
                 title,
-                tree_revision: tree_revision.to_string(),
-                order: order.to_string(),
-                project_activity_position: settlement.project_activity_position.to_string(),
-            },
-        ),
-        UpdateChapterSettlementEffect::NoEffect { reason } => (
+                order,
+                tree_revision,
+            } = effect;
+            (
+                contracts::DomainReceiptResult::AuthoritativeApplied,
+                contracts::UpdateChapterEffect::AuthoritativeApplied {
+                    chapter_id: input.chapter_id.as_ref().to_owned(),
+                    title,
+                    tree_revision: tree_revision.to_string(),
+                    order: order.to_string(),
+                    project_activity_position: project_activity_position.to_string(),
+                },
+            )
+        }
+        TransitionOutcome::NoEffect(reason) => (
             contracts::DomainReceiptResult::NoEffect,
             contracts::UpdateChapterEffect::NoEffect {
                 reason: contract_reason(&reason)?,
             },
         ),
-        UpdateChapterSettlementEffect::Conflicted { reason } => (
+        TransitionOutcome::Conflicted(reason) => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::UpdateChapterEffect::Conflicted {
                 reason: contract_reason(&reason)?,
             },
         ),
-        UpdateChapterSettlementEffect::Refused { reason } => (
+        TransitionOutcome::Refused(reason) => (
             contracts::DomainReceiptResult::Refused,
             contracts::UpdateChapterEffect::Refused {
                 reason: contract_reason(&reason)?,
@@ -239,25 +253,25 @@ fn canonical_json(value: serde_json::Value) -> serde_json::Value {
     }
 }
 
-fn update_chapter_error(error: UpdateChapterError) -> ApiError {
+fn update_chapter_error(error: ProjectCommandError) -> ApiError {
     match error {
-        UpdateChapterError::BindingConflict => problem(
+        ProjectCommandError::BindingConflict => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Update Chapter binding conflicts.",
         ),
-        UpdateChapterError::HistoricalAcknowledgementUnavailable => problem(
+        ProjectCommandError::HistoricalAcknowledgementUnavailable => problem(
             StatusCode::CONFLICT,
             "historical_acknowledgement_unavailable",
             "The original Update Chapter acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
-        UpdateChapterError::InvalidChallenge => problem(
+        ProjectCommandError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,
             "challenge_invalid",
             "The Update Chapter challenge is invalid.",
         ),
-        UpdateChapterError::MissingProject => resource_unavailable(),
-        UpdateChapterError::Unavailable(_) => problem(
+        ProjectCommandError::MissingProject => resource_unavailable(),
+        ProjectCommandError::Unavailable(_) => problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",
             "The Project store is unavailable.",
