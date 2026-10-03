@@ -36,10 +36,9 @@ import {
   type BlockProposalProjection,
 } from "./block-proposal-decoration.ts";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
+import { createChallengeAdmissionWait, type ChallengeAdmissionTimers } from "./challenge-admission-wait.ts";
 
 import type { ProposalFocus } from "./proposal-navigation.ts";
-
-type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
 
 export interface ManuscriptEditorProps {
   focusProposal?: ProposalFocus | undefined;
@@ -82,8 +81,7 @@ export interface ManuscriptEditorProps {
     text: string;
   }) => void;
   onCopyProposal?: (proposalId: string) => void;
-  setTimeoutImpl?: (callback: () => void, timeout: number) => TimerHandle;
-  clearTimeoutImpl?: (timer: TimerHandle) => void;
+  undoChallengeTimers?: ChallengeAdmissionTimers;
 }
 
 function syncManuscriptSurface(
@@ -152,8 +150,7 @@ export function ManuscriptEditor({
   onReplanProposal,
   onWithdrawProposal,
   onCopyProposal,
-  setTimeoutImpl = (callback, timeout) => globalThis.setTimeout(callback, timeout),
-  clearTimeoutImpl = (timer) => globalThis.clearTimeout(timer),
+  undoChallengeTimers,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
@@ -178,7 +175,7 @@ export function ManuscriptEditor({
   const onCopyProposalRef = useRef(onCopyProposal);
   const persistWorkspaceRef = useRef(persistWorkspace);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
-  const abandonUndoWaitRef = useRef<(() => void) | undefined>(undefined);
+  const abandonUndoRef = useRef<(() => void) | undefined>(undefined);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onProjectionRef.current = onProjection;
   onFailureRef.current = onFailure;
@@ -222,8 +219,8 @@ export function ManuscriptEditor({
         if (!current.view.composing && !composingRef.current) observedBlocksRef.current = nextBlocks;
         return;
       }
-      // New input changes the Author Undo Frontier, so a waiting Undo can only conflict.
-      abandonUndoWaitRef.current?.();
+      // New input changes the Author Undo Frontier, so an Undo in progress can only conflict.
+      abandonUndoRef.current?.();
       const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
       if (mixed !== undefined) {
         if (current.view.composing || composingRef.current) {
@@ -306,15 +303,18 @@ export function ManuscriptEditor({
 
   const undoLifetime = useRef(0);
   useEffect(() => { undoLifetime.current += 1;
-    return () => { undoLifetime.current += 1; abandonUndoWaitRef.current?.(); };
+    return () => { undoLifetime.current += 1; abandonUndoRef.current?.(); };
   }, [persistWorkspace, editor]);
   onAuthorUndoRef.current = () => {
-    if (abandonUndoWaitRef.current !== undefined) return true;
+    const workspace = persistWorkspaceRef.current;
+    // One Author Undo is in progress from the key press until it settles.
+    if (abandonUndoRef.current !== undefined || editor === null || workspace === undefined) return true;
+    const started = undoLifetime.current;
+    const isCurrent = () => started === undoLifetime.current && persistWorkspaceRef.current === workspace && !editor.isDestroyed;
+    const challengeAdmission = createChallengeAdmissionWait(undoChallengeTimers);
+    const abandon = () => { undoLifetime.current += 1; challengeAdmission.cancel(); };
+    abandonUndoRef.current = abandon;
     void (async () => {
-      const workspace = persistWorkspaceRef.current;
-      if (editor === null || workspace === undefined) return;
-      const started = undoLifetime.current;
-      const isCurrent = () => started === undoLifetime.current && persistWorkspaceRef.current === workspace && !editor.isDestroyed;
       await idleRef.current?.flush();
       if (!isCurrent()) return;
       let waited = false;
@@ -323,21 +323,11 @@ export function ManuscriptEditor({
           workspace,
           baseUrl,
           fetchImpl,
-          cryptoImpl, isCurrent,
-          waitForChallengeAdmission: (retryAfterSeconds) => new Promise<void>((resolve) => {
+          cryptoImpl, isCurrent, challengeAdmission,
+          onChallengeWait: () => {
             if (!waited) onProjectionRef.current({ ...workspace.pending, save_state: "saving" }, "local");
             waited = true;
-            const timer = setTimeoutImpl(() => {
-              abandonUndoWaitRef.current = undefined;
-              resolve();
-            }, retryAfterSeconds * 1000);
-            abandonUndoWaitRef.current = () => {
-              abandonUndoWaitRef.current = undefined;
-              clearTimeoutImpl(timer);
-              undoLifetime.current += 1;
-              resolve();
-            };
-          }),
+          },
         });
         if (!isCurrent()) return;
         if (settled !== undefined && (settled.effect.kind === "draft_compensated" || settled.effect.kind === "draft_reconciled")) {
@@ -365,7 +355,7 @@ export function ManuscriptEditor({
       } catch (error) {
         if (isCurrent()) onFailureRef.current(error);
       }
-    })();
+    })().finally(() => { if (abandonUndoRef.current === abandon) abandonUndoRef.current = undefined; });
     return true;
   };
 
