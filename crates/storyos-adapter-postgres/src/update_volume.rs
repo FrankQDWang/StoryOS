@@ -167,26 +167,25 @@ async fn read_update_volume_settlement(
                     tree_revision,
                 }
             }
-            ("no_effect", Some("unchanged")) => UpdateVolumeSettlementEffect::NoEffect {
-                reason: storyos_core::UpdateVolumeNoEffect::Unchanged,
-            },
-            ("conflicted", Some("stale_tree_revision")) => {
-                UpdateVolumeSettlementEffect::Conflicted {
-                    reason: storyos_core::UpdateVolumeConflict::StaleTreeRevision,
+            (result_kind, Some(reason)) => {
+                match storyos_core::UpdateVolumeResult::from_zero_authority_codes(
+                    result_kind,
+                    reason,
+                ) {
+                    Some(storyos_core::UpdateVolumeResult::NoEffect(reason)) => {
+                        UpdateVolumeSettlementEffect::NoEffect { reason }
+                    }
+                    Some(storyos_core::UpdateVolumeResult::Conflicted(reason)) => {
+                        UpdateVolumeSettlementEffect::Conflicted { reason }
+                    }
+                    Some(storyos_core::UpdateVolumeResult::Refused(reason)) => {
+                        UpdateVolumeSettlementEffect::Refused { reason }
+                    }
+                    Some(storyos_core::UpdateVolumeResult::Applied(_)) | None => {
+                        return Err(UpdateVolumeError::BindingConflict);
+                    }
                 }
             }
-            ("refused", Some("archived_project")) => UpdateVolumeSettlementEffect::Refused {
-                reason: storyos_core::UpdateVolumeRefusal::ArchivedProject,
-            },
-            ("refused", Some("invalid_title")) => UpdateVolumeSettlementEffect::Refused {
-                reason: storyos_core::UpdateVolumeRefusal::InvalidTitle,
-            },
-            ("refused", Some("invalid_order")) => UpdateVolumeSettlementEffect::Refused {
-                reason: storyos_core::UpdateVolumeRefusal::InvalidOrder,
-            },
-            ("refused", Some("invalid_volume_join")) => UpdateVolumeSettlementEffect::Refused {
-                reason: storyos_core::UpdateVolumeRefusal::InvalidVolumeJoin,
-            },
             _ => return Err(UpdateVolumeError::BindingConflict),
         };
         let authority = match (

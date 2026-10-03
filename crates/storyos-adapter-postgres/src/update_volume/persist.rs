@@ -6,11 +6,12 @@ use storyos_application::{
     UpdateVolumeSettlement, UpdateVolumeSettlementEffect,
 };
 use storyos_core::{
-    ProjectLifecycle, ProjectPresence, UpdateVolume as CoreUpdateVolume, UpdateVolumeResult,
+    ProjectLifecycle, UpdateVolume as CoreUpdateVolume, UpdateVolumeApplied, UpdateVolumeResult,
     VolumeJoin, update_volume as classify_update_volume,
 };
 
 use super::{update_volume_database_error, update_volume_parse_error};
+use crate::structural_authority_settlement::receipt_reason_payload;
 
 pub(super) async fn persist_update_volume(
     client: &tokio_postgres::Client,
@@ -93,7 +94,6 @@ pub(super) async fn persist_update_volume(
         None => (VolumeJoin::Invalid, String::new(), 1, Vec::new()),
     };
     let classified = classify_update_volume(&CoreUpdateVolume {
-        presence: ProjectPresence::Present,
         volume_join,
         expected_tree_revision: command.expected_tree_revision,
         current_tree_revision,
@@ -104,26 +104,23 @@ pub(super) async fn persist_update_volume(
         current_order,
         volume_count,
     });
+    let receipt_result = classified.receipt_result().code();
+    let receipt_payload = receipt_reason_payload(classified.reason_code());
     let effect = match classified {
-        UpdateVolumeResult::Applied {
+        UpdateVolumeResult::Applied(UpdateVolumeApplied {
             title,
             order,
             tree_revision,
-        } => UpdateVolumeSettlementEffect::Applied {
+        }) => UpdateVolumeSettlementEffect::Applied {
             title,
             order,
             tree_revision,
         },
-        UpdateVolumeResult::NoEffect { reason } => {
-            UpdateVolumeSettlementEffect::NoEffect { reason }
-        }
-        UpdateVolumeResult::Conflicted { reason } => {
+        UpdateVolumeResult::NoEffect(reason) => UpdateVolumeSettlementEffect::NoEffect { reason },
+        UpdateVolumeResult::Conflicted(reason) => {
             UpdateVolumeSettlementEffect::Conflicted { reason }
         }
-        UpdateVolumeResult::Refused {
-            reason: storyos_core::UpdateVolumeRefusal::MissingProject,
-        } => return Err(UpdateVolumeError::MissingProject),
-        UpdateVolumeResult::Refused { reason } => UpdateVolumeSettlementEffect::Refused { reason },
+        UpdateVolumeResult::Refused(reason) => UpdateVolumeSettlementEffect::Refused { reason },
     };
     insert_update_volume_admission(client, command).await?;
     let authority_sequences = match &effect {
@@ -140,28 +137,6 @@ pub(super) async fn persist_update_volume(
         UpdateVolumeSettlementEffect::NoEffect { .. }
         | UpdateVolumeSettlementEffect::Conflicted { .. }
         | UpdateVolumeSettlementEffect::Refused { .. } => None,
-    };
-    let (result_kind, result_payload) = match &effect {
-        UpdateVolumeSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
-        UpdateVolumeSettlementEffect::NoEffect { .. } => {
-            ("no_effect", r#"{"reason":"unchanged"}"#.to_owned())
-        }
-        UpdateVolumeSettlementEffect::Conflicted { .. } => (
-            "conflicted",
-            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
-        ),
-        UpdateVolumeSettlementEffect::Refused { reason } => {
-            let refused = match reason {
-                storyos_core::UpdateVolumeRefusal::ArchivedProject => "archived_project",
-                storyos_core::UpdateVolumeRefusal::InvalidTitle => "invalid_title",
-                storyos_core::UpdateVolumeRefusal::InvalidOrder => "invalid_order",
-                storyos_core::UpdateVolumeRefusal::InvalidVolumeJoin => "invalid_volume_join",
-                storyos_core::UpdateVolumeRefusal::MissingProject => {
-                    return Err(UpdateVolumeError::MissingProject);
-                }
-            };
-            ("refused", format!(r#"{{"reason":"{refused}"}}"#))
-        }
     };
     let commit_ids = authority_sequences
         .as_ref()
@@ -190,8 +165,8 @@ pub(super) async fn persist_update_volume(
                 &command.ids.command_id,
                 &command.challenge_binding.canonical_command_digest,
                 &command.challenge_binding.idempotency_key,
-                &result_kind,
-                &result_payload,
+                &receipt_result,
+                &receipt_payload,
                 &commit_ids,
             ],
         )

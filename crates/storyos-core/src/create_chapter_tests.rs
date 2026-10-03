@@ -1,6 +1,6 @@
 use super::{
-    CreateChapter, CreateChapterConflict, CreateChapterCurrent, CreateChapterOpen,
-    CreateChapterRefusal, CreateChapterResult, ProjectLifecycle, ProjectPresence, VolumeJoin,
+    CreateChapter, CreateChapterApplied, CreateChapterConflict, CreateChapterCurrent,
+    CreateChapterOpen, CreateChapterRefusal, CreateChapterResult, ProjectLifecycle, VolumeJoin,
     create_chapter,
 };
 
@@ -8,7 +8,6 @@ fn command() -> CreateChapter {
     CreateChapter {
         placement: super::CreateChapterPlacement::Append,
         ordered_chapter_ids: Vec::new(),
-        presence: ProjectPresence::Present,
         volume_join: VolumeJoin::ExactScope,
         expected_tree_revision: 2,
         current_tree_revision: 2,
@@ -22,11 +21,11 @@ fn command() -> CreateChapter {
 fn the_first_chapter_on_an_empty_active_project_becomes_current() {
     assert_eq!(
         create_chapter(&command()),
-        CreateChapterResult::Applied {
+        CreateChapterResult::Applied(CreateChapterApplied {
             tree_revision: 3,
             current: CreateChapterCurrent::SelectCreated,
             order: 1,
-        }
+        })
     );
 }
 
@@ -39,11 +38,11 @@ fn a_later_chapter_preserves_the_existing_current_chapter() {
     later.title = "Chapter B".to_owned();
     assert_eq!(
         create_chapter(&later),
-        CreateChapterResult::Applied {
+        CreateChapterResult::Applied(CreateChapterApplied {
             tree_revision: 4,
             current: CreateChapterCurrent::PreserveExisting,
             order: 1,
-        }
+        })
     );
 }
 
@@ -54,9 +53,7 @@ fn a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect() {
     stale.current_tree_revision = 3;
     assert_eq!(
         create_chapter(&stale),
-        CreateChapterResult::Conflicted {
-            reason: CreateChapterConflict::StaleTreeRevision,
-        }
+        CreateChapterResult::Conflicted(CreateChapterConflict::StaleTreeRevision)
     );
 }
 
@@ -66,9 +63,7 @@ fn an_invalid_volume_join_classifies_as_refused_with_zero_authority_effect() {
     invalid.volume_join = VolumeJoin::Invalid;
     assert_eq!(
         create_chapter(&invalid),
-        CreateChapterResult::Refused {
-            reason: CreateChapterRefusal::InvalidVolumeJoin,
-        }
+        CreateChapterResult::Refused(CreateChapterRefusal::InvalidVolumeJoin)
     );
 }
 
@@ -78,21 +73,7 @@ fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
     archived.current_lifecycle = ProjectLifecycle::Archived;
     assert_eq!(
         create_chapter(&archived),
-        CreateChapterResult::Refused {
-            reason: CreateChapterRefusal::ArchivedProject,
-        }
-    );
-}
-
-#[test]
-fn a_missing_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut missing = command();
-    missing.presence = ProjectPresence::Absent;
-    assert_eq!(
-        create_chapter(&missing),
-        CreateChapterResult::Refused {
-            reason: CreateChapterRefusal::MissingProject,
-        }
+        CreateChapterResult::Refused(CreateChapterRefusal::ArchivedProject)
     );
 }
 
@@ -102,16 +83,12 @@ fn an_invalid_title_classifies_as_refused_with_zero_authority_effect() {
     empty.title.clear();
     assert_eq!(
         create_chapter(&empty),
-        CreateChapterResult::Refused {
-            reason: CreateChapterRefusal::InvalidTitle,
-        }
+        CreateChapterResult::Refused(CreateChapterRefusal::InvalidTitle)
     );
     let mut too_long = command();
     too_long.title = "n".repeat(1025);
     assert_eq!(
         create_chapter(&too_long),
-        CreateChapterResult::Refused {
-            reason: CreateChapterRefusal::InvalidTitle,
-        }
+        CreateChapterResult::Refused(CreateChapterRefusal::InvalidTitle)
     );
 }

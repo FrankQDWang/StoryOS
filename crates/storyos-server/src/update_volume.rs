@@ -5,6 +5,7 @@ use storyos_application::{
     UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlementEffect, VolumeId,
 };
 
+use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
 use super::project_command_challenge::{
     hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
@@ -155,43 +156,19 @@ fn update_volume_response(
         UpdateVolumeSettlementEffect::NoEffect { reason } => (
             contracts::DomainReceiptResult::NoEffect,
             contracts::UpdateVolumeEffect::NoEffect {
-                reason: match reason {
-                    storyos_core::UpdateVolumeNoEffect::Unchanged => {
-                        contracts::UpdateVolumeNoEffectReason::Unchanged
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         UpdateVolumeSettlementEffect::Conflicted { reason } => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::UpdateVolumeEffect::Conflicted {
-                reason: match reason {
-                    storyos_core::UpdateVolumeConflict::StaleTreeRevision => {
-                        contracts::UpdateVolumeConflictReason::StaleTreeRevision
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         UpdateVolumeSettlementEffect::Refused { reason } => (
             contracts::DomainReceiptResult::Refused,
             contracts::UpdateVolumeEffect::Refused {
-                reason: match reason {
-                    storyos_core::UpdateVolumeRefusal::ArchivedProject => {
-                        contracts::UpdateVolumeRefusalReason::ArchivedProject
-                    }
-                    storyos_core::UpdateVolumeRefusal::InvalidTitle => {
-                        contracts::UpdateVolumeRefusalReason::InvalidTitle
-                    }
-                    storyos_core::UpdateVolumeRefusal::InvalidOrder => {
-                        contracts::UpdateVolumeRefusalReason::InvalidOrder
-                    }
-                    storyos_core::UpdateVolumeRefusal::InvalidVolumeJoin => {
-                        contracts::UpdateVolumeRefusalReason::InvalidVolumeJoin
-                    }
-                    storyos_core::UpdateVolumeRefusal::MissingProject => {
-                        return Err(update_volume_error(UpdateVolumeError::MissingProject));
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
     };

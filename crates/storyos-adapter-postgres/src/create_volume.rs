@@ -9,10 +9,12 @@ use storyos_application::{
     ProjectCommandChallengeUse,
 };
 use storyos_core::{
-    CreateVolume as CoreCreateVolume, CreateVolumeResult, ProjectLifecycle, ProjectPresence,
+    CreateVolume as CoreCreateVolume, CreateVolumeApplied, CreateVolumeResult, ProjectLifecycle,
     create_volume as classify_create_volume,
 };
 use uuid::Uuid;
+
+use crate::structural_authority_settlement::receipt_reason_payload;
 
 use super::*;
 
@@ -99,14 +101,15 @@ async fn persist_create_volume(
     let current_title = row.get::<_, String>(2);
     let current_chapter_id = row.get::<_, Option<String>>(3).map(ChapterId::new);
     let classified = classify_create_volume(&CoreCreateVolume {
-        presence: ProjectPresence::Present,
         expected_tree_revision: command.expected_tree_revision,
         current_tree_revision,
         current_lifecycle,
         title: command.title.clone(),
     });
+    let receipt_result = classified.receipt_result().code();
+    let receipt_reason = classified.reason_code();
     let effect = match classified {
-        CreateVolumeResult::Applied { tree_revision } => {
+        CreateVolumeResult::Applied(CreateVolumeApplied { tree_revision }) => {
             let volume_id = Uuid::now_v7().to_string();
             let tree_order = client
                 .query_one(
@@ -165,13 +168,11 @@ async fn persist_create_volume(
                 order: CreateVolumePublicOrder::CanonicalSiblingOrder(canonical_sibling_order),
             }
         }
-        CreateVolumeResult::Conflicted { reason } => {
+        CreateVolumeResult::NoEffect(reason) => match reason {},
+        CreateVolumeResult::Conflicted(reason) => {
             CreateVolumeSettlementEffect::Conflicted { reason }
         }
-        CreateVolumeResult::Refused {
-            reason: storyos_core::CreateVolumeRefusal::MissingProject,
-        } => return Err(CreateVolumeError::MissingProject),
-        CreateVolumeResult::Refused { reason } => CreateVolumeSettlementEffect::Refused { reason },
+        CreateVolumeResult::Refused(reason) => CreateVolumeSettlementEffect::Refused { reason },
     };
     insert_create_volume_admission(client, command).await?;
     let authority_sequences = match &effect {
@@ -188,11 +189,11 @@ async fn persist_create_volume(
         CreateVolumeSettlementEffect::Conflicted { .. }
         | CreateVolumeSettlementEffect::Refused { .. } => None,
     };
-    let (result_kind, result_payload) = match &effect {
+    let receipt_payload = match &effect {
         CreateVolumeSettlementEffect::Applied {
             order: CreateVolumePublicOrder::CanonicalSiblingOrder(order),
             ..
-        } => ("authoritative_applied", format!(r#"{{"order":"{order}"}}"#)),
+        } => format!(r#"{{"order":"{order}"}}"#),
         CreateVolumeSettlementEffect::Applied {
             order: CreateVolumePublicOrder::HistoricalCreateVolumeAck,
             ..
@@ -201,20 +202,8 @@ async fn persist_create_volume(
                 std::io::Error::other("Create Volume first use cannot replay a historical ack"),
             )));
         }
-        CreateVolumeSettlementEffect::Conflicted { .. } => (
-            "conflicted",
-            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
-        ),
-        CreateVolumeSettlementEffect::Refused { reason } => {
-            let refused = match reason {
-                storyos_core::CreateVolumeRefusal::ArchivedProject => "archived_project",
-                storyos_core::CreateVolumeRefusal::InvalidTitle => "invalid_title",
-                storyos_core::CreateVolumeRefusal::MissingProject => {
-                    return Err(CreateVolumeError::MissingProject);
-                }
-            };
-            ("refused", format!(r#"{{"reason":"{refused}"}}"#))
-        }
+        CreateVolumeSettlementEffect::Conflicted { .. }
+        | CreateVolumeSettlementEffect::Refused { .. } => receipt_reason_payload(receipt_reason),
     };
     let commit_ids = authority_sequences
         .as_ref()
@@ -243,8 +232,8 @@ async fn persist_create_volume(
                 &command.ids.command_id,
                 &command.challenge_binding.canonical_command_digest,
                 &command.challenge_binding.idempotency_key,
-                &result_kind,
-                &result_payload,
+                &receipt_result,
+                &receipt_payload,
                 &commit_ids,
             ],
         )
@@ -572,17 +561,23 @@ async fn read_create_volume_settlement(
                     order,
                 }
             }
-            ("conflicted", Some("stale_tree_revision")) => {
-                CreateVolumeSettlementEffect::Conflicted {
-                    reason: storyos_core::CreateVolumeConflict::StaleTreeRevision,
+            (result_kind, Some(reason)) => {
+                match storyos_core::CreateVolumeResult::from_zero_authority_codes(
+                    result_kind,
+                    reason,
+                ) {
+                    Some(storyos_core::CreateVolumeResult::NoEffect(reason)) => match reason {},
+                    Some(storyos_core::CreateVolumeResult::Conflicted(reason)) => {
+                        CreateVolumeSettlementEffect::Conflicted { reason }
+                    }
+                    Some(storyos_core::CreateVolumeResult::Refused(reason)) => {
+                        CreateVolumeSettlementEffect::Refused { reason }
+                    }
+                    Some(storyos_core::CreateVolumeResult::Applied(_)) | None => {
+                        return Err(CreateVolumeError::BindingConflict);
+                    }
                 }
             }
-            ("refused", Some("archived_project")) => CreateVolumeSettlementEffect::Refused {
-                reason: storyos_core::CreateVolumeRefusal::ArchivedProject,
-            },
-            ("refused", Some("invalid_title")) => CreateVolumeSettlementEffect::Refused {
-                reason: storyos_core::CreateVolumeRefusal::InvalidTitle,
-            },
             _ => return Err(CreateVolumeError::BindingConflict),
         };
         let authority = match (

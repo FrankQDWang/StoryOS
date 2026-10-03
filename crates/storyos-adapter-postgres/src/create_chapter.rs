@@ -9,11 +9,13 @@ use storyos_application::{
     ProjectCommandChallengeUse,
 };
 use storyos_core::{
-    CreateChapter as CoreCreateChapter, CreateChapterCurrent, CreateChapterOpen,
-    CreateChapterResult, ProjectLifecycle, ProjectPresence, VolumeJoin,
+    CreateChapter as CoreCreateChapter, CreateChapterApplied, CreateChapterCurrent,
+    CreateChapterOpen, CreateChapterResult, ProjectLifecycle, VolumeJoin,
     create_chapter as classify_create_chapter,
 };
 use uuid::Uuid;
+
+use crate::structural_authority_settlement::receipt_reason_payload;
 
 use super::*;
 
@@ -142,7 +144,6 @@ async fn persist_create_chapter(
         &[&command.project_scope.owner_user_id.as_ref(), &command.project_scope.project_id.as_ref(), &command.volume_id],
     ).await.map_err(create_chapter_database_error)?.iter().map(|row| row.get::<_, String>(0)).collect::<Vec<_>>();
     let classified = classify_create_chapter(&CoreCreateChapter {
-        presence: ProjectPresence::Present,
         volume_join,
         expected_tree_revision: command.expected_tree_revision,
         current_tree_revision,
@@ -155,12 +156,14 @@ async fn persist_create_chapter(
         placement: command.placement.clone(),
         ordered_chapter_ids: ordered_chapter_ids.clone(),
     });
+    let receipt_result = classified.receipt_result().code();
+    let receipt_reason = classified.reason_code();
     let effect = match classified {
-        CreateChapterResult::Applied {
+        CreateChapterResult::Applied(CreateChapterApplied {
             tree_revision,
             current,
             order,
-        } => {
+        }) => {
             let tree_order = next_chapter_order(client, command).await?;
             let chapter_id = Uuid::now_v7().to_string();
             insert_created_chapter_object(client, command, &chapter_id, tree_order).await?;
@@ -182,15 +185,11 @@ async fn persist_create_chapter(
                 order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
             }
         }
-        CreateChapterResult::Conflicted { reason } => {
+        CreateChapterResult::NoEffect(reason) => match reason {},
+        CreateChapterResult::Conflicted(reason) => {
             CreateChapterSettlementEffect::Conflicted { reason }
         }
-        CreateChapterResult::Refused {
-            reason: storyos_core::CreateChapterRefusal::MissingProject,
-        } => return Err(CreateChapterError::MissingProject),
-        CreateChapterResult::Refused { reason } => {
-            CreateChapterSettlementEffect::Refused { reason }
-        }
+        CreateChapterResult::Refused(reason) => CreateChapterSettlementEffect::Refused { reason },
     };
     insert_create_chapter_admission(client, command).await?;
     let authority_sequences = match &effect {
@@ -207,11 +206,11 @@ async fn persist_create_chapter(
         CreateChapterSettlementEffect::Conflicted { .. }
         | CreateChapterSettlementEffect::Refused { .. } => None,
     };
-    let (result_kind, result_payload) = match &effect {
+    let receipt_payload = match &effect {
         CreateChapterSettlementEffect::Applied {
             order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
             ..
-        } => ("authoritative_applied", format!(r#"{{"order":"{order}"}}"#)),
+        } => format!(r#"{{"order":"{order}"}}"#),
         CreateChapterSettlementEffect::Applied {
             order: CreateChapterPublicOrder::HistoricalCreateChapterAck(_),
             ..
@@ -220,22 +219,8 @@ async fn persist_create_chapter(
                 std::io::Error::other("Create Chapter first use cannot replay a historical ack"),
             )));
         }
-        CreateChapterSettlementEffect::Conflicted { .. } => (
-            "conflicted",
-            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
-        ),
-        CreateChapterSettlementEffect::Refused { reason } => {
-            let refused = match reason {
-                storyos_core::CreateChapterRefusal::ArchivedProject => "archived_project",
-                storyos_core::CreateChapterRefusal::InvalidTitle => "invalid_title",
-                storyos_core::CreateChapterRefusal::InvalidVolumeJoin => "invalid_volume_join",
-                storyos_core::CreateChapterRefusal::InvalidPlacement => "invalid_placement",
-                storyos_core::CreateChapterRefusal::MissingProject => {
-                    return Err(CreateChapterError::MissingProject);
-                }
-            };
-            ("refused", format!(r#"{{"reason":"{refused}"}}"#))
-        }
+        CreateChapterSettlementEffect::Conflicted { .. }
+        | CreateChapterSettlementEffect::Refused { .. } => receipt_reason_payload(receipt_reason),
     };
     let commit_ids = authority_sequences
         .as_ref()
@@ -264,8 +249,8 @@ async fn persist_create_chapter(
                 &command.ids.command_id,
                 &command.challenge_binding.canonical_command_digest,
                 &command.challenge_binding.idempotency_key,
-                &result_kind,
-                &result_payload,
+                &receipt_result,
+                &receipt_payload,
                 &commit_ids,
             ],
         )
@@ -556,23 +541,23 @@ async fn read_create_chapter_settlement(
                     order,
                 }
             }
-            ("conflicted", Some("stale_tree_revision")) => {
-                CreateChapterSettlementEffect::Conflicted {
-                    reason: storyos_core::CreateChapterConflict::StaleTreeRevision,
+            (result_kind, Some(reason)) => {
+                match storyos_core::CreateChapterResult::from_zero_authority_codes(
+                    result_kind,
+                    reason,
+                ) {
+                    Some(storyos_core::CreateChapterResult::NoEffect(reason)) => match reason {},
+                    Some(storyos_core::CreateChapterResult::Conflicted(reason)) => {
+                        CreateChapterSettlementEffect::Conflicted { reason }
+                    }
+                    Some(storyos_core::CreateChapterResult::Refused(reason)) => {
+                        CreateChapterSettlementEffect::Refused { reason }
+                    }
+                    Some(storyos_core::CreateChapterResult::Applied(_)) | None => {
+                        return Err(CreateChapterError::BindingConflict);
+                    }
                 }
             }
-            ("refused", Some("archived_project")) => CreateChapterSettlementEffect::Refused {
-                reason: storyos_core::CreateChapterRefusal::ArchivedProject,
-            },
-            ("refused", Some("invalid_title")) => CreateChapterSettlementEffect::Refused {
-                reason: storyos_core::CreateChapterRefusal::InvalidTitle,
-            },
-            ("refused", Some("invalid_volume_join")) => CreateChapterSettlementEffect::Refused {
-                reason: storyos_core::CreateChapterRefusal::InvalidVolumeJoin,
-            },
-            ("refused", Some("invalid_placement")) => CreateChapterSettlementEffect::Refused {
-                reason: storyos_core::CreateChapterRefusal::InvalidPlacement,
-            },
             _ => return Err(CreateChapterError::BindingConflict),
         };
         let authority = match (

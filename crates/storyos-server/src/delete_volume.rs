@@ -5,6 +5,7 @@ use storyos_application::{
     DeleteVolumeSettlementEffect, EditorClientBinding, ProjectCommandChallengeBinding, VolumeId,
 };
 
+use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
 use super::project_command_challenge::{
     hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
@@ -145,40 +146,19 @@ fn delete_volume_response(
         DeleteVolumeSettlementEffect::NoEffect { reason } => (
             contracts::DomainReceiptResult::NoEffect,
             contracts::DeleteVolumeEffect::NoEffect {
-                reason: match reason {
-                    storyos_core::DeleteVolumeNoEffect::AlreadyRemoved => {
-                        contracts::DeleteVolumeNoEffectReason::AlreadyRemoved
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         DeleteVolumeSettlementEffect::Conflicted { reason } => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::DeleteVolumeEffect::Conflicted {
-                reason: match reason {
-                    storyos_core::DeleteVolumeConflict::StaleTreeRevision => {
-                        contracts::DeleteVolumeConflictReason::StaleTreeRevision
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         DeleteVolumeSettlementEffect::Refused { reason } => (
             contracts::DomainReceiptResult::Refused,
             contracts::DeleteVolumeEffect::Refused {
-                reason: match reason {
-                    storyos_core::DeleteVolumeRefusal::ArchivedProject => {
-                        contracts::DeleteVolumeRefusalReason::ArchivedProject
-                    }
-                    storyos_core::DeleteVolumeRefusal::InvalidVolumeJoin => {
-                        contracts::DeleteVolumeRefusalReason::InvalidVolumeJoin
-                    }
-                    storyos_core::DeleteVolumeRefusal::NonemptyVolume => {
-                        contracts::DeleteVolumeRefusalReason::NonemptyVolume
-                    }
-                    storyos_core::DeleteVolumeRefusal::MissingProject => {
-                        return Err(delete_volume_error(DeleteVolumeError::MissingProject));
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
     };

@@ -1,10 +1,10 @@
 //! Pure Core classification for Update Volume (rename and reorder).
 
-use super::{ProjectLifecycle, ProjectPresence, VolumeJoin};
+use super::{ProjectLifecycle, TransitionOutcome, VolumeJoin};
+use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpdateVolume {
-    pub presence: ProjectPresence,
     pub volume_join: VolumeJoin,
     pub expected_tree_revision: u64,
     pub current_tree_revision: u64,
@@ -17,22 +17,18 @@ pub struct UpdateVolume {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UpdateVolumeResult {
-    Applied {
-        title: String,
-        order: u64,
-        tree_revision: u64,
-    },
-    NoEffect {
-        reason: UpdateVolumeNoEffect,
-    },
-    Conflicted {
-        reason: UpdateVolumeConflict,
-    },
-    Refused {
-        reason: UpdateVolumeRefusal,
-    },
+pub struct UpdateVolumeApplied {
+    pub title: String,
+    pub order: u64,
+    pub tree_revision: u64,
 }
+
+pub type UpdateVolumeResult = TransitionOutcome<
+    UpdateVolumeApplied,
+    UpdateVolumeNoEffect,
+    UpdateVolumeConflict,
+    UpdateVolumeRefusal,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateVolumeNoEffect {
@@ -46,53 +42,44 @@ pub enum UpdateVolumeConflict {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateVolumeRefusal {
-    MissingProject,
     InvalidVolumeJoin,
     ArchivedProject,
     InvalidTitle,
     InvalidOrder,
 }
 
+reason_codes!(UpdateVolumeNoEffect { Unchanged => "unchanged" });
+reason_codes!(UpdateVolumeConflict { StaleTreeRevision => "stale_tree_revision" });
+reason_codes!(UpdateVolumeRefusal {
+    InvalidVolumeJoin => "invalid_volume_join",
+    ArchivedProject => "archived_project",
+    InvalidTitle => "invalid_title",
+    InvalidOrder => "invalid_order",
+});
+
 /// Classify one Update Volume against exact Scope, Volume join, expected revision, title, and order.
 pub fn update_volume(command: &UpdateVolume) -> UpdateVolumeResult {
-    if command.presence == ProjectPresence::Absent {
-        return UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::MissingProject,
-        };
-    }
     if command.volume_join == VolumeJoin::Invalid {
-        return UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::InvalidVolumeJoin,
-        };
+        return UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidVolumeJoin);
     }
     if command.title.is_empty() || command.title.len() > 1024 {
-        return UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::InvalidTitle,
-        };
+        return UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidTitle);
     }
     if command.order < 1 || command.order > command.volume_count {
-        return UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::InvalidOrder,
-        };
+        return UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidOrder);
     }
     if command.current_lifecycle == ProjectLifecycle::Archived {
-        return UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::ArchivedProject,
-        };
+        return UpdateVolumeResult::Refused(UpdateVolumeRefusal::ArchivedProject);
     }
     if command.expected_tree_revision != command.current_tree_revision {
-        return UpdateVolumeResult::Conflicted {
-            reason: UpdateVolumeConflict::StaleTreeRevision,
-        };
+        return UpdateVolumeResult::Conflicted(UpdateVolumeConflict::StaleTreeRevision);
     }
     if command.title == command.current_title && command.order == command.current_order {
-        return UpdateVolumeResult::NoEffect {
-            reason: UpdateVolumeNoEffect::Unchanged,
-        };
+        return UpdateVolumeResult::NoEffect(UpdateVolumeNoEffect::Unchanged);
     }
-    UpdateVolumeResult::Applied {
+    UpdateVolumeResult::Applied(UpdateVolumeApplied {
         title: command.title.clone(),
         order: command.order,
         tree_revision: command.current_tree_revision + 1,
-    }
+    })
 }

@@ -1,11 +1,10 @@
 use super::{
-    ChapterJoin, ProjectLifecycle, ProjectPresence, UpdateChapter, UpdateChapterConflict,
+    ChapterJoin, ProjectLifecycle, UpdateChapter, UpdateChapterApplied, UpdateChapterConflict,
     UpdateChapterNoEffect, UpdateChapterRefusal, UpdateChapterResult, update_chapter,
 };
 
 fn command() -> UpdateChapter {
     UpdateChapter {
-        presence: ProjectPresence::Present,
         chapter_join: ChapterJoin::ExactScope,
         expected_tree_revision: 2,
         current_tree_revision: 2,
@@ -22,11 +21,11 @@ fn command() -> UpdateChapter {
 fn a_matching_revision_rename_and_reorder_classifies_as_applied() {
     assert_eq!(
         update_chapter(&command()),
-        UpdateChapterResult::Applied {
+        UpdateChapterResult::Applied(UpdateChapterApplied {
             title: "Chapter B".to_owned(),
             order: 2,
             tree_revision: 3,
-        }
+        })
     );
 }
 
@@ -36,9 +35,7 @@ fn a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect() {
     stale.current_tree_revision = 3;
     assert_eq!(
         update_chapter(&stale),
-        UpdateChapterResult::Conflicted {
-            reason: UpdateChapterConflict::StaleTreeRevision,
-        }
+        UpdateChapterResult::Conflicted(UpdateChapterConflict::StaleTreeRevision)
     );
 }
 
@@ -49,9 +46,7 @@ fn an_unchanged_title_and_order_classifies_as_no_effect() {
     unchanged.order = unchanged.current_order;
     assert_eq!(
         update_chapter(&unchanged),
-        UpdateChapterResult::NoEffect {
-            reason: UpdateChapterNoEffect::Unchanged,
-        }
+        UpdateChapterResult::NoEffect(UpdateChapterNoEffect::Unchanged)
     );
 }
 
@@ -61,9 +56,7 @@ fn a_wrong_scope_chapter_classifies_as_refused_with_zero_authority_effect() {
     wrong_scope.chapter_join = ChapterJoin::Invalid;
     assert_eq!(
         update_chapter(&wrong_scope),
-        UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::InvalidChapterJoin,
-        }
+        UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidChapterJoin)
     );
 }
 
@@ -73,17 +66,13 @@ fn an_invalid_order_classifies_as_refused_with_zero_authority_effect() {
     zero.order = 0;
     assert_eq!(
         update_chapter(&zero),
-        UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::InvalidOrder,
-        }
+        UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidOrder)
     );
     let mut past_end = command();
     past_end.order = 3;
     assert_eq!(
         update_chapter(&past_end),
-        UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::InvalidOrder,
-        }
+        UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidOrder)
     );
 }
 
@@ -93,21 +82,7 @@ fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
     archived.current_lifecycle = ProjectLifecycle::Archived;
     assert_eq!(
         update_chapter(&archived),
-        UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::ArchivedProject,
-        }
-    );
-}
-
-#[test]
-fn a_missing_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut missing = command();
-    missing.presence = ProjectPresence::Absent;
-    assert_eq!(
-        update_chapter(&missing),
-        UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::MissingProject,
-        }
+        UpdateChapterResult::Refused(UpdateChapterRefusal::ArchivedProject)
     );
 }
 
@@ -117,16 +92,12 @@ fn an_invalid_title_classifies_as_refused_with_zero_authority_effect() {
     empty.title.clear();
     assert_eq!(
         update_chapter(&empty),
-        UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::InvalidTitle,
-        }
+        UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidTitle)
     );
     let mut too_long = command();
     too_long.title = "n".repeat(1025);
     assert_eq!(
         update_chapter(&too_long),
-        UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::InvalidTitle,
-        }
+        UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidTitle)
     );
 }

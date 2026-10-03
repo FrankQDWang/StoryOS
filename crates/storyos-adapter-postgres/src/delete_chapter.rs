@@ -177,20 +177,25 @@ async fn read_delete_chapter_settlement(
                     },
                 }
             }
-            ("no_effect", Some("already_removed")) => DeleteChapterSettlementEffect::NoEffect {
-                reason: storyos_core::DeleteChapterNoEffect::AlreadyRemoved,
-            },
-            ("conflicted", Some("stale_tree_revision")) => {
-                DeleteChapterSettlementEffect::Conflicted {
-                    reason: storyos_core::DeleteChapterConflict::StaleTreeRevision,
+            (result_kind, Some(reason)) => {
+                match storyos_core::DeleteChapterResult::from_zero_authority_codes(
+                    result_kind,
+                    reason,
+                ) {
+                    Some(storyos_core::DeleteChapterResult::NoEffect(reason)) => {
+                        DeleteChapterSettlementEffect::NoEffect { reason }
+                    }
+                    Some(storyos_core::DeleteChapterResult::Conflicted(reason)) => {
+                        DeleteChapterSettlementEffect::Conflicted { reason }
+                    }
+                    Some(storyos_core::DeleteChapterResult::Refused(reason)) => {
+                        DeleteChapterSettlementEffect::Refused { reason }
+                    }
+                    Some(storyos_core::DeleteChapterResult::Applied(_)) | None => {
+                        return Err(DeleteChapterError::BindingConflict);
+                    }
                 }
             }
-            ("refused", Some("archived_project")) => DeleteChapterSettlementEffect::Refused {
-                reason: storyos_core::DeleteChapterRefusal::ArchivedProject,
-            },
-            ("refused", Some("invalid_chapter_join")) => DeleteChapterSettlementEffect::Refused {
-                reason: storyos_core::DeleteChapterRefusal::InvalidChapterJoin,
-            },
             _ => return Err(DeleteChapterError::BindingConflict),
         };
         let authority = match (

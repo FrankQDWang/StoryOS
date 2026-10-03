@@ -168,26 +168,25 @@ async fn read_update_chapter_settlement(
                     tree_revision,
                 }
             }
-            ("no_effect", Some("unchanged")) => UpdateChapterSettlementEffect::NoEffect {
-                reason: storyos_core::UpdateChapterNoEffect::Unchanged,
-            },
-            ("conflicted", Some("stale_tree_revision")) => {
-                UpdateChapterSettlementEffect::Conflicted {
-                    reason: storyos_core::UpdateChapterConflict::StaleTreeRevision,
+            (result_kind, Some(reason)) => {
+                match storyos_core::UpdateChapterResult::from_zero_authority_codes(
+                    result_kind,
+                    reason,
+                ) {
+                    Some(storyos_core::UpdateChapterResult::NoEffect(reason)) => {
+                        UpdateChapterSettlementEffect::NoEffect { reason }
+                    }
+                    Some(storyos_core::UpdateChapterResult::Conflicted(reason)) => {
+                        UpdateChapterSettlementEffect::Conflicted { reason }
+                    }
+                    Some(storyos_core::UpdateChapterResult::Refused(reason)) => {
+                        UpdateChapterSettlementEffect::Refused { reason }
+                    }
+                    Some(storyos_core::UpdateChapterResult::Applied(_)) | None => {
+                        return Err(UpdateChapterError::BindingConflict);
+                    }
                 }
             }
-            ("refused", Some("archived_project")) => UpdateChapterSettlementEffect::Refused {
-                reason: storyos_core::UpdateChapterRefusal::ArchivedProject,
-            },
-            ("refused", Some("invalid_title")) => UpdateChapterSettlementEffect::Refused {
-                reason: storyos_core::UpdateChapterRefusal::InvalidTitle,
-            },
-            ("refused", Some("invalid_order")) => UpdateChapterSettlementEffect::Refused {
-                reason: storyos_core::UpdateChapterRefusal::InvalidOrder,
-            },
-            ("refused", Some("invalid_chapter_join")) => UpdateChapterSettlementEffect::Refused {
-                reason: storyos_core::UpdateChapterRefusal::InvalidChapterJoin,
-            },
             _ => return Err(UpdateChapterError::BindingConflict),
         };
         let authority = match (

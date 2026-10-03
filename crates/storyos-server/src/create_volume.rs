@@ -5,6 +5,7 @@ use storyos_application::{
     CreateVolumeSettlementEffect, EditorClientBinding, ProjectCommandChallengeBinding,
 };
 
+use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
 use super::project_command_challenge::{
     hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
@@ -170,27 +171,13 @@ fn create_volume_response(
         CreateVolumeSettlementEffect::Conflicted { reason } => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::CreateVolumeEffect::Conflicted {
-                reason: match reason {
-                    storyos_core::CreateVolumeConflict::StaleTreeRevision => {
-                        contracts::CreateVolumeConflictReason::StaleTreeRevision
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         CreateVolumeSettlementEffect::Refused { reason } => (
             contracts::DomainReceiptResult::Refused,
             contracts::CreateVolumeEffect::Refused {
-                reason: match reason {
-                    storyos_core::CreateVolumeRefusal::ArchivedProject => {
-                        contracts::CreateVolumeRefusalReason::ArchivedProject
-                    }
-                    storyos_core::CreateVolumeRefusal::InvalidTitle => {
-                        contracts::CreateVolumeRefusalReason::InvalidTitle
-                    }
-                    storyos_core::CreateVolumeRefusal::MissingProject => {
-                        return Err(create_volume_error(CreateVolumeError::MissingProject));
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
     };

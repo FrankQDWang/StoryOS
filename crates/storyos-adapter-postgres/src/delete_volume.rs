@@ -159,23 +159,25 @@ async fn read_delete_volume_settlement(
                     volume_id,
                 }
             }
-            ("no_effect", Some("already_removed")) => DeleteVolumeSettlementEffect::NoEffect {
-                reason: storyos_core::DeleteVolumeNoEffect::AlreadyRemoved,
-            },
-            ("conflicted", Some("stale_tree_revision")) => {
-                DeleteVolumeSettlementEffect::Conflicted {
-                    reason: storyos_core::DeleteVolumeConflict::StaleTreeRevision,
+            (result_kind, Some(reason)) => {
+                match storyos_core::DeleteVolumeResult::from_zero_authority_codes(
+                    result_kind,
+                    reason,
+                ) {
+                    Some(storyos_core::DeleteVolumeResult::NoEffect(reason)) => {
+                        DeleteVolumeSettlementEffect::NoEffect { reason }
+                    }
+                    Some(storyos_core::DeleteVolumeResult::Conflicted(reason)) => {
+                        DeleteVolumeSettlementEffect::Conflicted { reason }
+                    }
+                    Some(storyos_core::DeleteVolumeResult::Refused(reason)) => {
+                        DeleteVolumeSettlementEffect::Refused { reason }
+                    }
+                    Some(storyos_core::DeleteVolumeResult::Applied(_)) | None => {
+                        return Err(DeleteVolumeError::BindingConflict);
+                    }
                 }
             }
-            ("refused", Some("archived_project")) => DeleteVolumeSettlementEffect::Refused {
-                reason: storyos_core::DeleteVolumeRefusal::ArchivedProject,
-            },
-            ("refused", Some("invalid_volume_join")) => DeleteVolumeSettlementEffect::Refused {
-                reason: storyos_core::DeleteVolumeRefusal::InvalidVolumeJoin,
-            },
-            ("refused", Some("nonempty_volume")) => DeleteVolumeSettlementEffect::Refused {
-                reason: storyos_core::DeleteVolumeRefusal::NonemptyVolume,
-            },
             _ => return Err(DeleteVolumeError::BindingConflict),
         };
         let authority = match (

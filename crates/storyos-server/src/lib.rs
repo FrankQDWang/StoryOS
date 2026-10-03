@@ -24,6 +24,7 @@ mod author_edit;
 mod author_edit_outcome;
 mod chapter;
 mod close_editor_flow_draft;
+mod contract_reason;
 mod create_agent_run;
 mod create_chapter;
 mod create_project;

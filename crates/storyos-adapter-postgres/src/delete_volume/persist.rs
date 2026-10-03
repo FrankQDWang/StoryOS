@@ -6,12 +6,13 @@ use storyos_application::{
     DeleteVolumeSettlement, DeleteVolumeSettlementEffect, Project,
 };
 use storyos_core::{
-    DeleteVolume as CoreDeleteVolume, DeleteVolumeResult, ProjectLifecycle, ProjectPresence,
+    DeleteVolume as CoreDeleteVolume, DeleteVolumeApplied, DeleteVolumeResult, ProjectLifecycle,
     VolumeChildPolicy, VolumeJoin, VolumeRemovalLifecycle, delete_volume as classify_delete_volume,
 };
 use uuid::Uuid;
 
 use super::{delete_volume_database_error, delete_volume_parse_error};
+use crate::structural_authority_settlement::receipt_reason_payload;
 
 pub(super) async fn persist_delete_volume(
     client: &tokio_postgres::Client,
@@ -113,7 +114,6 @@ pub(super) async fn persist_delete_volume(
         VolumeChildPolicy::Empty
     };
     let classified = classify_delete_volume(&CoreDeleteVolume {
-        presence: ProjectPresence::Present,
         volume_join,
         volume_lifecycle,
         child_chapters,
@@ -121,21 +121,20 @@ pub(super) async fn persist_delete_volume(
         current_tree_revision,
         current_lifecycle,
     });
+    let receipt_result = classified.receipt_result().code();
+    let receipt_payload = receipt_reason_payload(classified.reason_code());
     let effect = match classified {
-        DeleteVolumeResult::Applied { tree_revision } => DeleteVolumeSettlementEffect::Applied {
-            tree_revision,
-            volume_id: command.volume_id.as_ref().to_owned(),
-        },
-        DeleteVolumeResult::NoEffect { reason } => {
-            DeleteVolumeSettlementEffect::NoEffect { reason }
+        DeleteVolumeResult::Applied(DeleteVolumeApplied { tree_revision }) => {
+            DeleteVolumeSettlementEffect::Applied {
+                tree_revision,
+                volume_id: command.volume_id.as_ref().to_owned(),
+            }
         }
-        DeleteVolumeResult::Conflicted { reason } => {
+        DeleteVolumeResult::NoEffect(reason) => DeleteVolumeSettlementEffect::NoEffect { reason },
+        DeleteVolumeResult::Conflicted(reason) => {
             DeleteVolumeSettlementEffect::Conflicted { reason }
         }
-        DeleteVolumeResult::Refused {
-            reason: storyos_core::DeleteVolumeRefusal::MissingProject,
-        } => return Err(DeleteVolumeError::MissingProject),
-        DeleteVolumeResult::Refused { reason } => DeleteVolumeSettlementEffect::Refused { reason },
+        DeleteVolumeResult::Refused(reason) => DeleteVolumeSettlementEffect::Refused { reason },
     };
     insert_delete_volume_admission(client, command).await?;
     let authority_sequences = match &effect {
@@ -152,27 +151,6 @@ pub(super) async fn persist_delete_volume(
         DeleteVolumeSettlementEffect::NoEffect { .. }
         | DeleteVolumeSettlementEffect::Conflicted { .. }
         | DeleteVolumeSettlementEffect::Refused { .. } => None,
-    };
-    let (result_kind, result_payload) = match &effect {
-        DeleteVolumeSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
-        DeleteVolumeSettlementEffect::NoEffect { .. } => {
-            ("no_effect", r#"{"reason":"already_removed"}"#.to_owned())
-        }
-        DeleteVolumeSettlementEffect::Conflicted { .. } => (
-            "conflicted",
-            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
-        ),
-        DeleteVolumeSettlementEffect::Refused { reason } => {
-            let refused = match reason {
-                storyos_core::DeleteVolumeRefusal::ArchivedProject => "archived_project",
-                storyos_core::DeleteVolumeRefusal::InvalidVolumeJoin => "invalid_volume_join",
-                storyos_core::DeleteVolumeRefusal::NonemptyVolume => "nonempty_volume",
-                storyos_core::DeleteVolumeRefusal::MissingProject => {
-                    return Err(DeleteVolumeError::MissingProject);
-                }
-            };
-            ("refused", format!(r#"{{"reason":"{refused}"}}"#))
-        }
     };
     let commit_ids = authority_sequences
         .as_ref()
@@ -201,8 +179,8 @@ pub(super) async fn persist_delete_volume(
                 &command.ids.command_id,
                 &command.challenge_binding.canonical_command_digest,
                 &command.challenge_binding.idempotency_key,
-                &result_kind,
-                &result_payload,
+                &receipt_result,
+                &receipt_payload,
                 &commit_ids,
             ],
         )

@@ -5,6 +5,7 @@ use storyos_application::{
     UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlementEffect,
 };
 
+use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
 use super::project_command_challenge::{
     hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
@@ -155,43 +156,19 @@ fn update_chapter_response(
         UpdateChapterSettlementEffect::NoEffect { reason } => (
             contracts::DomainReceiptResult::NoEffect,
             contracts::UpdateChapterEffect::NoEffect {
-                reason: match reason {
-                    storyos_core::UpdateChapterNoEffect::Unchanged => {
-                        contracts::UpdateChapterNoEffectReason::Unchanged
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         UpdateChapterSettlementEffect::Conflicted { reason } => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::UpdateChapterEffect::Conflicted {
-                reason: match reason {
-                    storyos_core::UpdateChapterConflict::StaleTreeRevision => {
-                        contracts::UpdateChapterConflictReason::StaleTreeRevision
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         UpdateChapterSettlementEffect::Refused { reason } => (
             contracts::DomainReceiptResult::Refused,
             contracts::UpdateChapterEffect::Refused {
-                reason: match reason {
-                    storyos_core::UpdateChapterRefusal::ArchivedProject => {
-                        contracts::UpdateChapterRefusalReason::ArchivedProject
-                    }
-                    storyos_core::UpdateChapterRefusal::InvalidTitle => {
-                        contracts::UpdateChapterRefusalReason::InvalidTitle
-                    }
-                    storyos_core::UpdateChapterRefusal::InvalidOrder => {
-                        contracts::UpdateChapterRefusalReason::InvalidOrder
-                    }
-                    storyos_core::UpdateChapterRefusal::InvalidChapterJoin => {
-                        contracts::UpdateChapterRefusalReason::InvalidChapterJoin
-                    }
-                    storyos_core::UpdateChapterRefusal::MissingProject => {
-                        return Err(update_chapter_error(UpdateChapterError::MissingProject));
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
     };

@@ -5,6 +5,7 @@ use storyos_application::{
     DeleteChapterSettlementEffect, EditorClientBinding, ProjectCommandChallengeBinding,
 };
 
+use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
 use super::project_command_challenge::{
     hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
@@ -147,37 +148,19 @@ fn delete_chapter_response(
         DeleteChapterSettlementEffect::NoEffect { reason } => (
             contracts::DomainReceiptResult::NoEffect,
             contracts::DeleteChapterEffect::NoEffect {
-                reason: match reason {
-                    storyos_core::DeleteChapterNoEffect::AlreadyRemoved => {
-                        contracts::DeleteChapterNoEffectReason::AlreadyRemoved
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         DeleteChapterSettlementEffect::Conflicted { reason } => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::DeleteChapterEffect::Conflicted {
-                reason: match reason {
-                    storyos_core::DeleteChapterConflict::StaleTreeRevision => {
-                        contracts::DeleteChapterConflictReason::StaleTreeRevision
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         DeleteChapterSettlementEffect::Refused { reason } => (
             contracts::DomainReceiptResult::Refused,
             contracts::DeleteChapterEffect::Refused {
-                reason: match reason {
-                    storyos_core::DeleteChapterRefusal::ArchivedProject => {
-                        contracts::DeleteChapterRefusalReason::ArchivedProject
-                    }
-                    storyos_core::DeleteChapterRefusal::InvalidChapterJoin => {
-                        contracts::DeleteChapterRefusalReason::InvalidChapterJoin
-                    }
-                    storyos_core::DeleteChapterRefusal::MissingProject => {
-                        return Err(delete_chapter_error(DeleteChapterError::MissingProject));
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
     };

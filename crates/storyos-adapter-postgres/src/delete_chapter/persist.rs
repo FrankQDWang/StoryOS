@@ -6,13 +6,14 @@ use storyos_application::{
     DeleteChapterSettlement, DeleteChapterSettlementEffect, Project,
 };
 use storyos_core::{
-    ChapterJoin, ChapterRemovalLifecycle, DeleteChapter as CoreDeleteChapter, DeleteChapterCurrent,
-    DeleteChapterResult, ProjectLifecycle, ProjectPresence,
+    ChapterJoin, ChapterRemovalLifecycle, DeleteChapter as CoreDeleteChapter, DeleteChapterApplied,
+    DeleteChapterCurrent, DeleteChapterResult, ProjectLifecycle,
     delete_chapter as classify_delete_chapter,
 };
 use uuid::Uuid;
 
 use super::{delete_chapter_database_error, delete_chapter_parse_error};
+use crate::structural_authority_settlement::receipt_reason_payload;
 
 const ACTIVE_CHAPTER_PREDICATE: &str = "NOT EXISTS (
                  SELECT 1 FROM storyos.chapter_removal_decisions AS removal
@@ -122,7 +123,6 @@ pub(super) async fn persist_delete_chapter(
         .map(|chapter| chapter.get::<_, String>(0))
         .collect::<Vec<_>>();
     let classified = classify_delete_chapter(&CoreDeleteChapter {
-        presence: ProjectPresence::Present,
         chapter_join,
         chapter_lifecycle,
         expected_tree_revision: command.expected_tree_revision,
@@ -132,27 +132,22 @@ pub(super) async fn persist_delete_chapter(
         current_chapter_id: current_chapter_id.clone(),
         ordered_active_chapter_ids,
     });
+    let receipt_result = classified.receipt_result().code();
+    let receipt_payload = receipt_reason_payload(classified.reason_code());
     let effect = match classified {
-        DeleteChapterResult::Applied {
+        DeleteChapterResult::Applied(DeleteChapterApplied {
             tree_revision,
             current,
-        } => DeleteChapterSettlementEffect::Applied {
+        }) => DeleteChapterSettlementEffect::Applied {
             tree_revision,
             volume_id,
             current,
         },
-        DeleteChapterResult::NoEffect { reason } => {
-            DeleteChapterSettlementEffect::NoEffect { reason }
-        }
-        DeleteChapterResult::Conflicted { reason } => {
+        DeleteChapterResult::NoEffect(reason) => DeleteChapterSettlementEffect::NoEffect { reason },
+        DeleteChapterResult::Conflicted(reason) => {
             DeleteChapterSettlementEffect::Conflicted { reason }
         }
-        DeleteChapterResult::Refused {
-            reason: storyos_core::DeleteChapterRefusal::MissingProject,
-        } => return Err(DeleteChapterError::MissingProject),
-        DeleteChapterResult::Refused { reason } => {
-            DeleteChapterSettlementEffect::Refused { reason }
-        }
+        DeleteChapterResult::Refused(reason) => DeleteChapterSettlementEffect::Refused { reason },
     };
     insert_delete_chapter_admission(client, command).await?;
     let authority_sequences = match &effect {
@@ -169,26 +164,6 @@ pub(super) async fn persist_delete_chapter(
         DeleteChapterSettlementEffect::NoEffect { .. }
         | DeleteChapterSettlementEffect::Conflicted { .. }
         | DeleteChapterSettlementEffect::Refused { .. } => None,
-    };
-    let (result_kind, result_payload) = match &effect {
-        DeleteChapterSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
-        DeleteChapterSettlementEffect::NoEffect { .. } => {
-            ("no_effect", r#"{"reason":"already_removed"}"#.to_owned())
-        }
-        DeleteChapterSettlementEffect::Conflicted { .. } => (
-            "conflicted",
-            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
-        ),
-        DeleteChapterSettlementEffect::Refused { reason } => {
-            let refused = match reason {
-                storyos_core::DeleteChapterRefusal::ArchivedProject => "archived_project",
-                storyos_core::DeleteChapterRefusal::InvalidChapterJoin => "invalid_chapter_join",
-                storyos_core::DeleteChapterRefusal::MissingProject => {
-                    return Err(DeleteChapterError::MissingProject);
-                }
-            };
-            ("refused", format!(r#"{{"reason":"{refused}"}}"#))
-        }
     };
     let commit_ids = authority_sequences
         .as_ref()
@@ -217,8 +192,8 @@ pub(super) async fn persist_delete_chapter(
                 &command.ids.command_id,
                 &command.challenge_binding.canonical_command_digest,
                 &command.challenge_binding.idempotency_key,
-                &result_kind,
-                &result_payload,
+                &receipt_result,
+                &receipt_payload,
                 &commit_ids,
             ],
         )

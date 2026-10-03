@@ -6,11 +6,12 @@ use storyos_application::{
     UpdateChapterSettlement, UpdateChapterSettlementEffect,
 };
 use storyos_core::{
-    ChapterJoin, ProjectLifecycle, ProjectPresence, UpdateChapter as CoreUpdateChapter,
+    ChapterJoin, ProjectLifecycle, UpdateChapter as CoreUpdateChapter, UpdateChapterApplied,
     UpdateChapterResult, update_chapter as classify_update_chapter,
 };
 
 use super::{update_chapter_database_error, update_chapter_parse_error};
+use crate::structural_authority_settlement::receipt_reason_payload;
 
 struct ChapterSiblings<'a> {
     ordered_ids: &'a [String],
@@ -108,7 +109,6 @@ pub(super) async fn persist_update_chapter(
     };
     let chapter_count = ordered_ids.len() as u64;
     let classified = classify_update_chapter(&CoreUpdateChapter {
-        presence: ProjectPresence::Present,
         chapter_join,
         expected_tree_revision: command.expected_tree_revision,
         current_tree_revision,
@@ -119,28 +119,23 @@ pub(super) async fn persist_update_chapter(
         current_order,
         chapter_count,
     });
+    let receipt_result = classified.receipt_result().code();
+    let receipt_payload = receipt_reason_payload(classified.reason_code());
     let effect = match classified {
-        UpdateChapterResult::Applied {
+        UpdateChapterResult::Applied(UpdateChapterApplied {
             title,
             order,
             tree_revision,
-        } => UpdateChapterSettlementEffect::Applied {
+        }) => UpdateChapterSettlementEffect::Applied {
             title,
             order,
             tree_revision,
         },
-        UpdateChapterResult::NoEffect { reason } => {
-            UpdateChapterSettlementEffect::NoEffect { reason }
-        }
-        UpdateChapterResult::Conflicted { reason } => {
+        UpdateChapterResult::NoEffect(reason) => UpdateChapterSettlementEffect::NoEffect { reason },
+        UpdateChapterResult::Conflicted(reason) => {
             UpdateChapterSettlementEffect::Conflicted { reason }
         }
-        UpdateChapterResult::Refused {
-            reason: storyos_core::UpdateChapterRefusal::MissingProject,
-        } => return Err(UpdateChapterError::MissingProject),
-        UpdateChapterResult::Refused { reason } => {
-            UpdateChapterSettlementEffect::Refused { reason }
-        }
+        UpdateChapterResult::Refused(reason) => UpdateChapterSettlementEffect::Refused { reason },
     };
     insert_update_chapter_admission(client, command).await?;
     let authority_sequences = match &effect {
@@ -157,28 +152,6 @@ pub(super) async fn persist_update_chapter(
         UpdateChapterSettlementEffect::NoEffect { .. }
         | UpdateChapterSettlementEffect::Conflicted { .. }
         | UpdateChapterSettlementEffect::Refused { .. } => None,
-    };
-    let (result_kind, result_payload) = match &effect {
-        UpdateChapterSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
-        UpdateChapterSettlementEffect::NoEffect { .. } => {
-            ("no_effect", r#"{"reason":"unchanged"}"#.to_owned())
-        }
-        UpdateChapterSettlementEffect::Conflicted { .. } => (
-            "conflicted",
-            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
-        ),
-        UpdateChapterSettlementEffect::Refused { reason } => {
-            let refused = match reason {
-                storyos_core::UpdateChapterRefusal::ArchivedProject => "archived_project",
-                storyos_core::UpdateChapterRefusal::InvalidTitle => "invalid_title",
-                storyos_core::UpdateChapterRefusal::InvalidOrder => "invalid_order",
-                storyos_core::UpdateChapterRefusal::InvalidChapterJoin => "invalid_chapter_join",
-                storyos_core::UpdateChapterRefusal::MissingProject => {
-                    return Err(UpdateChapterError::MissingProject);
-                }
-            };
-            ("refused", format!(r#"{{"reason":"{refused}"}}"#))
-        }
     };
     let commit_ids = authority_sequences
         .as_ref()
@@ -207,8 +180,8 @@ pub(super) async fn persist_update_chapter(
                 &command.ids.command_id,
                 &command.challenge_binding.canonical_command_digest,
                 &command.challenge_binding.idempotency_key,
-                &result_kind,
-                &result_payload,
+                &receipt_result,
+                &receipt_payload,
                 &commit_ids,
             ],
         )

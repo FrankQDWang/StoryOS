@@ -5,6 +5,7 @@ use storyos_application::{
     CreateChapterSettlementEffect, EditorClientBinding, ProjectCommandChallengeBinding,
 };
 
+use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
 use super::project_command_challenge::{
     hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
@@ -189,33 +190,13 @@ fn create_chapter_response(
         CreateChapterSettlementEffect::Conflicted { reason } => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::CreateChapterEffect::Conflicted {
-                reason: match reason {
-                    storyos_core::CreateChapterConflict::StaleTreeRevision => {
-                        contracts::CreateChapterConflictReason::StaleTreeRevision
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
         CreateChapterSettlementEffect::Refused { reason } => (
             contracts::DomainReceiptResult::Refused,
             contracts::CreateChapterEffect::Refused {
-                reason: match reason {
-                    storyos_core::CreateChapterRefusal::ArchivedProject => {
-                        contracts::CreateChapterRefusalReason::ArchivedProject
-                    }
-                    storyos_core::CreateChapterRefusal::InvalidTitle => {
-                        contracts::CreateChapterRefusalReason::InvalidTitle
-                    }
-                    storyos_core::CreateChapterRefusal::InvalidVolumeJoin => {
-                        contracts::CreateChapterRefusalReason::InvalidVolumeJoin
-                    }
-                    storyos_core::CreateChapterRefusal::InvalidPlacement => {
-                        contracts::CreateChapterRefusalReason::InvalidPlacement
-                    }
-                    storyos_core::CreateChapterRefusal::MissingProject => {
-                        return Err(create_chapter_error(CreateChapterError::MissingProject));
-                    }
-                },
+                reason: contract_reason(&reason)?,
             },
         ),
     };
