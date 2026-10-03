@@ -569,13 +569,15 @@ admitted binding under the existing owner contracts.
 
 1. Start with the complete AI-independent editor and its current passage; the
    editor remains usable if the external model is unavailable.
-2. Ask the adjacent Agent for one bounded prose change and inspect the exact
-   Working Target and Context Assembly decision.
+2. Ask the adjacent Agent for one bounded prose change. Verify the exact
+   Working Target and Context Assembly decision through Context Inspect, a
+   verification query that the author does not see (ADR 0040).
 3. Verify that the Host commits the manifest and disclosure evidence before
    the real external attempt, binds the exact destination and credential
    reference without exposing its value, and records the Attempt and fence.
    Continue across Runs in that conversation with native typed streaming and
-   validated continuation; inspect cache behavior and truthful usage. Test
+   validated continuation; verify cache behavior and truthful usage from the
+   recorded evidence. Test
    current instruction/target changes and active compaction under that profile.
 4. Inspect and edit the returned Proposal in the main editor, then explicitly
    Accept it in one run and explicitly Reject it in another.
@@ -585,7 +587,9 @@ admitted binding under the existing owner contracts.
    authority or budget, unresolved effects, and cancellation prevent an
    automatic successor. Separately exercise confirmed reference expiry.
 6. Complete the required reconciliation or separately admitted recovery path,
-   then inspect Run, Proposal, disclosure, Receipt, and authoritative facts.
+   then verify Run, Proposal, disclosure, Receipt, and authoritative facts
+   through queries. The author sees only the result and any required
+   decision (ADR 0040).
 7. Disable the external model and repeat the complete AI-independent journey;
    the editor still passes independently.
 
