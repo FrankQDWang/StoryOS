@@ -92,8 +92,9 @@ pub(super) async fn undo_latest_author_action(
             client_contract_revision: session.client_contract_revision.clone(),
             security_policy_revision: session.security_policy_revision.clone(),
             limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-            challenge_rate_policy_revision:
-                storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
+            challenge_rate_policy_revision: storyos_application::ChallengeRateClass::AuthorEdit
+                .policy_revision()
+                .to_owned(),
             method: contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD.to_owned(),
             route_template: contracts::UNDO_LATEST_AUTHOR_ACTION_PATH.to_owned(),
             command_schema: body.command_schema.clone(),

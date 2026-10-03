@@ -12,17 +12,16 @@ pub enum ChallengeRateClass {
 
 impl ChallengeRateClass {
     pub fn for_command_kind(command_kind: &str) -> Self {
-        if command_kind == "applyAuthorEdit" {
-            Self::AuthorEdit
-        } else {
-            Self::Shared
+        match command_kind {
+            "applyAuthorEdit" | "undoLatestAuthorAction" => Self::AuthorEdit,
+            _ => Self::Shared,
         }
     }
 
     /// Returns the class whose policy issues a Challenge with this revision for the command kind.
     ///
-    /// An Author Edit also accepts the shared revision, so a Challenge issued before ADR 0038
-    /// stays usable until it expires.
+    /// The `author_edit` class also accepts the shared revision, so a Challenge issued before
+    /// the command kind moved to that class stays usable until it expires.
     pub fn accepting(command_kind: &str, policy_revision: &str) -> Option<Self> {
         let class = Self::for_command_kind(command_kind);
         if policy_revision == class.policy_revision() {
