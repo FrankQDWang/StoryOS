@@ -1092,7 +1092,7 @@ The sole StoryOS-owned boundary through which any RunStep invokes a configured e
 _Avoid_: Provider client, model SDK, Tool Gateway, direct provider call
 
 **Model Provider Adapter**:
-The Host-controlled protocol projection that preserves a Model Attempt's typed native items, item order, call correlation, provisional and terminal events, complete output, usage, failure evidence, and any required opaque replay data bound to its original destination and mapping. It cannot decide retryability, select or substitute a model, initiate fallback, execute StoryOS ToolCalls, grant authority, or become durable Run truth; a Provider is an Adapter choice rather than a kernel requirement.
+The Host-controlled protocol projection that preserves a Model Attempt's typed native items, item order, call correlation, provisional and terminal events, complete output, usage, failure evidence, and any required opaque replay data bound to its original destination and mapping. It cannot decide retryability, select or substitute a model, initiate fallback, execute StoryOS ToolCalls, grant authority, or become durable Run truth; a Provider is an Adapter choice rather than a kernel requirement. A Contract-Faithful Fake Destination has its own Model Provider Adapter, but the destination is not a Provider.
 _Avoid_: Provider Adapter, provider-owned router, silent fallback, Tool executor
 
 **Model Registration**:
