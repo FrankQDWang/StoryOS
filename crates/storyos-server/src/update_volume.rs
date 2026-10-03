@@ -2,8 +2,10 @@ use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
     AuthorCommandAdmissionIds, EditorClientBinding, ProjectCommandChallengeBinding,
-    UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlementEffect, VolumeId,
+    ProjectCommandEnvelope, ProjectCommandError, StructureAuthorityEvidence, UpdateVolumeInput,
+    VolumeId,
 };
+use storyos_core::TransitionOutcome;
 
 use super::contract_reason::contract_reason;
 use super::editor_session::{exact_header, session_binding_ref};
@@ -81,7 +83,7 @@ pub(super) async fn update_volume(
         contracts::UPDATE_VOLUME_DIGEST_PROFILE
     );
     let store = project_reader(&state).await?;
-    let command = UpdateVolumeCommand {
+    let envelope = ProjectCommandEnvelope {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: binding_ref.clone(),
@@ -108,64 +110,65 @@ pub(super) async fn update_volume(
         nonce_digest: plain_digest(nonce.as_bytes()),
         canonical_command_bytes,
         correlation_id: input.correlation_id.clone(),
-        volume_id: VolumeId::new(volume_id),
-        title: input.title.clone(),
-        order,
-        expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: Uuid::now_v7().to_string(),
             author_command_admission_id: Uuid::now_v7().to_string(),
             receipt_id: Uuid::now_v7().to_string(),
         },
     };
-    let settlement = storyos_application::update_volume(&store, &command)
+    let update = UpdateVolumeInput {
+        volume_id: VolumeId::new(volume_id),
+        title: input.title.clone(),
+        order,
+        expected_tree_revision,
+    };
+    let settlement = store
+        .update_volume(&envelope, &update)
         .await
         .map_err(update_volume_error)?;
     super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
-    update_volume_response(&command, &digest_hex, settlement)
+    update_volume_response(&envelope, &update, &digest_hex, settlement)
 }
 
 fn update_volume_response(
-    command: &UpdateVolumeCommand,
+    command: &ProjectCommandEnvelope,
+    update: &UpdateVolumeInput,
     digest_hex: &str,
     settlement: storyos_application::UpdateVolumeSettlement,
 ) -> Result<Json<contracts::UpdateVolumeResponse>, ApiError> {
     let project = settlement.response_project;
-    let (commit_ids, action_sequence) = match settlement.authority.as_ref() {
-        Some(authority) => (
-            vec![authority.authoritative_commit_id.clone()],
-            Some(authority.author_action_sequence.to_string()),
-        ),
-        None => (Vec::new(), None),
-    };
-    let (receipt_result, effect) = match settlement.effect {
-        UpdateVolumeSettlementEffect::Applied {
-            title,
-            order,
-            tree_revision,
-        } => (
-            contracts::DomainReceiptResult::AuthoritativeApplied,
-            contracts::UpdateVolumeEffect::AuthoritativeApplied {
-                volume_id: command.volume_id.as_ref().to_owned(),
-                title,
-                tree_revision: tree_revision.to_string(),
-                order: order.to_string(),
-                project_activity_position: settlement.project_activity_position.to_string(),
-            },
-        ),
-        UpdateVolumeSettlementEffect::NoEffect { reason } => (
+    let mut commit_ids = Vec::new();
+    let mut action_sequence = None;
+    let (receipt_result, effect) = match settlement.outcome {
+        TransitionOutcome::Applied(applied) => {
+            if let StructureAuthorityEvidence::Settled(authority) = applied.authority {
+                commit_ids.push(authority.authoritative_commit_id);
+                action_sequence = Some(authority.author_action_sequence.to_string());
+            }
+            (
+                contracts::DomainReceiptResult::AuthoritativeApplied,
+                contracts::UpdateVolumeEffect::AuthoritativeApplied {
+                    volume_id: update.volume_id.as_ref().to_owned(),
+                    title: applied.effect.title,
+                    tree_revision: applied.effect.tree_revision.to_string(),
+                    order: applied.effect.order.to_string(),
+                    project_activity_position: applied.project_activity_position.to_string(),
+                },
+            )
+        }
+        TransitionOutcome::NoEffect(reason) => (
             contracts::DomainReceiptResult::NoEffect,
             contracts::UpdateVolumeEffect::NoEffect {
                 reason: contract_reason(&reason)?,
             },
         ),
-        UpdateVolumeSettlementEffect::Conflicted { reason } => (
+        TransitionOutcome::Conflicted(reason) => (
             contracts::DomainReceiptResult::Conflicted,
             contracts::UpdateVolumeEffect::Conflicted {
                 reason: contract_reason(&reason)?,
             },
         ),
-        UpdateVolumeSettlementEffect::Refused { reason } => (
+        TransitionOutcome::Refused(reason) => (
             contracts::DomainReceiptResult::Refused,
             contracts::UpdateVolumeEffect::Refused {
                 reason: contract_reason(&reason)?,
@@ -239,25 +242,25 @@ fn canonical_json(value: serde_json::Value) -> serde_json::Value {
     }
 }
 
-fn update_volume_error(error: UpdateVolumeError) -> ApiError {
+fn update_volume_error(error: ProjectCommandError) -> ApiError {
     match error {
-        UpdateVolumeError::BindingConflict => problem(
+        ProjectCommandError::BindingConflict => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Update Volume binding conflicts.",
         ),
-        UpdateVolumeError::HistoricalAcknowledgementUnavailable => problem(
+        ProjectCommandError::HistoricalAcknowledgementUnavailable => problem(
             StatusCode::CONFLICT,
             "historical_acknowledgement_unavailable",
             "The original Update Volume acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
-        UpdateVolumeError::InvalidChallenge => problem(
+        ProjectCommandError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,
             "challenge_invalid",
             "The Update Volume challenge is invalid.",
         ),
-        UpdateVolumeError::MissingProject => resource_unavailable(),
-        UpdateVolumeError::Unavailable(_) => problem(
+        ProjectCommandError::MissingProject => resource_unavailable(),
+        ProjectCommandError::Unavailable(_) => problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",
             "The Project store is unavailable.",

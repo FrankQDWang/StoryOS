@@ -78,7 +78,7 @@ async fn undo_volume_reorders_then_delete_restores_the_original_tree() {
             },
         )
         .await;
-        forward_sequences.push(updated.authority.unwrap().author_action_sequence);
+        forward_sequences.push(applied(&updated).1.author_action_sequence);
     }
     let editor_session_id = open_session(&store, &scope, "7069").await;
     let OpenChapter::Found(opened) = open_chapter(&store, &scope, &ChapterId::new(chapter_id))

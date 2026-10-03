@@ -163,6 +163,7 @@ mod storage_activation_proof;
 mod stream_proposal_generation;
 mod stream_proposal_pause;
 mod structural_authority_settlement;
+mod structure_command;
 mod takeover;
 mod undo_acceptance;
 mod undo_current_chapter;

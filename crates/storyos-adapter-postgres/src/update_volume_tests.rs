@@ -4,13 +4,14 @@ use storyos_application::{
     CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
     CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
     GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UpdateVolumeCommand,
-    UpdateVolumeSettlementEffect, UserId, VolumeId, VolumeNode, create_chapter,
-    create_editor_session, create_project, create_volume, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
-    undo_latest_author_action, update_volume,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectCommandError,
+    ProjectId, ProjectScope, StructureAuthority, StructureAuthorityEvidence,
+    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UpdateVolumeInput,
+    UpdateVolumeSettlement, UserId, VolumeId, VolumeNode, create_chapter, create_editor_session,
+    create_project, create_volume, get_manuscript_tree, issue_create_project_challenge,
+    issue_project_command_challenge, open_chapter, undo_latest_author_action,
 };
+use storyos_core::{TransitionOutcome, UpdateVolumeApplied};
 use tokio_postgres::NoTls;
 
 #[path = "update_volume_rank_batch_tests.rs"]
@@ -149,7 +150,7 @@ fn volume_command(
     }
 }
 
-fn update_issue(
+pub(crate) fn update_issue(
     scope: &ProjectScope,
     idempotency_suffix: &str,
     digest: &str,
@@ -176,40 +177,75 @@ fn update_issue(
     }
 }
 
-struct UpdateFixture<'a> {
-    volume_id: &'a str,
-    title: &'a str,
-    order: u64,
-    expected_tree_revision: u64,
-    bytes: &'a [u8],
+pub(crate) struct UpdateFixture<'a> {
+    pub(crate) volume_id: &'a str,
+    pub(crate) title: &'a str,
+    pub(crate) order: u64,
+    pub(crate) expected_tree_revision: u64,
+    pub(crate) bytes: &'a [u8],
 }
 
-fn update_command(
+pub(crate) struct UpdateVolumeCall {
+    pub(crate) envelope: ProjectCommandEnvelope,
+    pub(crate) input: UpdateVolumeInput,
+}
+
+pub(crate) async fn update_volume(
+    store: &PostgresProjectReader,
+    call: &UpdateVolumeCall,
+) -> Result<UpdateVolumeSettlement, ProjectCommandError> {
+    store.update_volume(&call.envelope, &call.input).await
+}
+
+/// The applied effect and settled authority of one Update Volume.
+pub(crate) fn applied(
+    settlement: &UpdateVolumeSettlement,
+) -> (UpdateVolumeApplied, StructureAuthority) {
+    match &settlement.outcome {
+        TransitionOutcome::Applied(applied) => match &applied.authority {
+            StructureAuthorityEvidence::Settled(authority) => {
+                (applied.effect.clone(), authority.clone())
+            }
+            StructureAuthorityEvidence::BeforeAuthorityHistoryFloor => {
+                panic!("Applied Update Volume must write Structural Authority Settlement")
+            }
+        },
+        other => panic!("Update Volume must apply, got {other:?}"),
+    }
+}
+
+pub(crate) fn update_command(
     binding: ProjectCommandChallengeBinding,
     nonce_digest: &str,
     ids_suffix: &str,
     fixture: UpdateFixture<'_>,
-) -> UpdateVolumeCommand {
-    UpdateVolumeCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> UpdateVolumeCall {
+    UpdateVolumeCall {
+        envelope: ProjectCommandEnvelope {
+            project_scope: binding.project_scope.clone(),
+            client_binding: EditorClientBinding {
+                binding_ref: binding.client_session_binding_digest.clone(),
+                session_generation: binding.client_session_generation,
+                client_contract_revision: binding.client_contract_revision.clone(),
+                security_policy_revision: binding.security_policy_revision.clone(),
+            },
+            challenge_binding: binding,
+            nonce_digest: nonce_digest.to_owned(),
+            canonical_command_bytes: fixture.bytes.to_vec(),
+            correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
+            ids: AuthorCommandAdmissionIds {
+                command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
+                author_command_admission_id: format!(
+                    "018f0000-0000-7001-8000-00000002{ids_suffix}"
+                ),
+                receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
+            },
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: fixture.bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        volume_id: VolumeId::new(fixture.volume_id),
-        title: fixture.title.to_owned(),
-        order: fixture.order,
-        expected_tree_revision: fixture.expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
+        input: UpdateVolumeInput {
+            volume_id: VolumeId::new(fixture.volume_id),
+            title: fixture.title.to_owned(),
+            order: fixture.order,
+            expected_tree_revision: fixture.expected_tree_revision,
         },
     }
 }
@@ -317,18 +353,15 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
+    let (effect, authority) = applied(&first);
     assert_eq!(
-        first.effect,
-        UpdateVolumeSettlementEffect::Applied {
+        effect,
+        UpdateVolumeApplied {
             title: "Volume B".to_owned(),
             order: 2,
             tree_revision: 4,
         }
     );
-    let authority = first
-        .authority
-        .clone()
-        .expect("Applied Update Volume must write Structural Authority Settlement");
     assert_eq!(authority.prior_manuscript_tree_revision, 3);
     assert_eq!(authority.resulting_manuscript_tree_revision, 4);
     assert_eq!(authority.author_action_sequence, 3);
@@ -350,9 +383,12 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     };
     assert_eq!(tree.tree_revision, 4);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
+    let TransitionOutcome::Applied(first_applied) = &first.outcome else {
+        panic!("Update Volume must apply");
+    };
     assert_eq!(
         tree.snapshot.project_activity_position,
-        first.project_activity_position
+        first_applied.project_activity_position
     );
     assert_eq!(
         tree.volumes,
@@ -397,12 +433,9 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        stale.effect,
-        UpdateVolumeSettlementEffect::Conflicted {
-            reason: storyos_core::UpdateVolumeConflict::StaleTreeRevision,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(storyos_core::UpdateVolumeConflict::StaleTreeRevision)
     );
-    assert_eq!(stale.authority, None);
 
     let missing_issue = update_issue(&scope, "0b1a", UPDATE_DIGEST);
     issue_project_command_challenge(&store, &missing_issue)
@@ -420,12 +453,9 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        missing.effect,
-        UpdateVolumeSettlementEffect::Refused {
-            reason: storyos_core::UpdateVolumeRefusal::InvalidVolumeJoin,
-        }
+        missing.outcome,
+        TransitionOutcome::Refused(storyos_core::UpdateVolumeRefusal::InvalidVolumeJoin)
     );
-    assert_eq!(missing.authority, None);
 
     let invalid_issue = update_issue(&scope, "0b1c", INVALID_ORDER_DIGEST);
     issue_project_command_challenge(&store, &invalid_issue)
@@ -449,12 +479,9 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        invalid.effect,
-        UpdateVolumeSettlementEffect::Refused {
-            reason: storyos_core::UpdateVolumeRefusal::InvalidOrder,
-        }
+        invalid.outcome,
+        TransitionOutcome::Refused(storyos_core::UpdateVolumeRefusal::InvalidOrder)
     );
-    assert_eq!(invalid.authority, None);
 
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
@@ -554,12 +581,9 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        archived.effect,
-        UpdateVolumeSettlementEffect::Refused {
-            reason: storyos_core::UpdateVolumeRefusal::ArchivedProject,
-        }
+        archived.outcome,
+        TransitionOutcome::Refused(storyos_core::UpdateVolumeRefusal::ArchivedProject)
     );
-    assert_eq!(archived.authority, None);
     let volumes_after_refuse = admin
         .query_one(
             "SELECT count(*) FROM storyos.manuscript_objects
@@ -572,7 +596,7 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     assert_eq!(volumes_after_refuse, 2);
 }
 
-async fn seed_project(store: &PostgresProjectReader, suffix: &str) -> ProjectScope {
+pub(crate) async fn seed_project(store: &PostgresProjectReader, suffix: &str) -> ProjectScope {
     let issue = create_project_issue(&format!("018f0000-0000-7001-8000-00000000{suffix}"), suffix);
     let issued = issue_create_project_challenge(store, &issue).await.unwrap();
     let mut binding = issue.binding.clone();
@@ -618,7 +642,7 @@ fn named_issue(
     }
 }
 
-async fn apply_volume(
+pub(crate) async fn apply_volume(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: &str,
@@ -802,14 +826,9 @@ async fn author_undo_compensates_update_volume_and_restores_title_and_canonical_
         },
     )
     .await;
-    let UpdateVolumeSettlementEffect::Applied { tree_revision, .. } = updated.effect else {
-        panic!("Rename A must apply");
-    };
+    let (UpdateVolumeApplied { tree_revision, .. }, authority) = applied(&updated);
     assert_eq!(tree_revision, 6);
-    let authority = updated
-        .authority
-        .clone()
-        .expect("Applied Update Volume must write authority");
+
     let session_issue = named_issue(
         &scope,
         "0b3a",
@@ -1059,14 +1078,9 @@ async fn author_undo_compensates_update_volume_and_restores_prior_live_sibling_p
         },
     )
     .await;
-    let UpdateVolumeSettlementEffect::Applied { tree_revision, .. } = updated.effect else {
-        panic!("Move A must apply");
-    };
+    let (UpdateVolumeApplied { tree_revision, .. }, authority) = applied(&updated);
     assert_eq!(tree_revision, 5);
-    let authority = updated
-        .authority
-        .clone()
-        .expect("Applied Update Volume must write authority");
+
     let GetManuscriptTree::Found(tree_after_move) =
         get_manuscript_tree(&store, &scope).await.unwrap()
     else {

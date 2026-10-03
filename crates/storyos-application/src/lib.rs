@@ -77,10 +77,10 @@ mod set_current_chapter;
 mod snapshot;
 mod takeover;
 mod undo_latest_author_action;
+mod project_command;
 mod update_chapter;
 mod update_project;
 mod update_project_assistance;
-mod update_volume;
 mod withdraw_proposal;
 
 #[cfg(test)]
@@ -249,6 +249,10 @@ pub use undo_latest_author_action::{
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
     UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore, undo_latest_author_action,
 };
+pub use project_command::{
+    ProjectCommandEnvelope, ProjectCommandError, StructureApplied, StructureAuthority,
+    StructureAuthorityEvidence, StructureSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
+};
 pub use update_chapter::{
     UpdateChapterAuthority, UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
     UpdateChapterSettlementEffect, UpdateChapterStore, update_chapter,
@@ -261,10 +265,6 @@ pub use update_project_assistance::{
     ProjectAssistanceRecord, UpdateProjectAssistanceCommand, UpdateProjectAssistanceError,
     UpdateProjectAssistanceSettlement, UpdateProjectAssistanceSettlementEffect,
     UpdateProjectAssistanceStore, update_project_assistance,
-};
-pub use update_volume::{
-    UpdateVolumeAuthority, UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlement,
-    UpdateVolumeSettlementEffect, UpdateVolumeStore, update_volume,
 };
 pub use withdraw_proposal::{
     ResolvedWithdrawal, WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,

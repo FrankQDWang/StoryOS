@@ -4,13 +4,13 @@ use storyos_application::{
     CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeCommand,
     CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
     IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, SetCurrentChapterCommand,
-    SetCurrentChapterSettlementEffect, UpdateChapterCommand, UpdateChapterSettlementEffect,
-    UpdateVolumeCommand, UpdateVolumeSettlementEffect, UserId, VolumeId, create_chapter,
+    ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectId, ProjectScope,
+    SetCurrentChapterCommand, SetCurrentChapterSettlementEffect, UpdateChapterCommand,
+    UpdateChapterSettlementEffect, UpdateVolumeInput, UserId, VolumeId, create_chapter,
     create_editor_session, create_project, create_volume, issue_create_project_challenge,
     issue_project_command_challenge, open_chapter, set_current_chapter, update_chapter,
-    update_volume,
 };
+use storyos_core::{TransitionOutcome, UpdateVolumeApplied};
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -774,36 +774,41 @@ async fn applied_update_volume_receipt_may_bind_empty_pair_commit_and_author_act
     issue_project_command_challenge(&store, &update_issue)
         .await
         .unwrap();
-    let updated = update_volume(
-        &store,
-        &UpdateVolumeCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: update_issue.binding.client_session_binding_digest.clone(),
-                session_generation: update_issue.binding.client_session_generation,
-                client_contract_revision: update_issue.binding.client_contract_revision.clone(),
-                security_policy_revision: update_issue.binding.security_policy_revision.clone(),
+    let updated = store
+        .update_volume(
+            &ProjectCommandEnvelope {
+                project_scope: scope.clone(),
+                client_binding: EditorClientBinding {
+                    binding_ref: update_issue.binding.client_session_binding_digest.clone(),
+                    session_generation: update_issue.binding.client_session_generation,
+                    client_contract_revision: update_issue.binding.client_contract_revision.clone(),
+                    security_policy_revision: update_issue.binding.security_policy_revision.clone(),
+                },
+                challenge_binding: update_issue.binding,
+                nonce_digest: update_issue.nonce_digest,
+                canonical_command_bytes: update_bytes.to_vec(),
+                correlation_id: "018f0000-0000-7001-8000-000000000864".to_owned(),
+                ids: AuthorCommandAdmissionIds {
+                    command_id: "018f0000-0000-7001-8000-000000010864".to_owned(),
+                    author_command_admission_id: "018f0000-0000-7001-8000-000000020864".to_owned(),
+                    receipt_id: "018f0000-0000-7001-8000-000000030864".to_owned(),
+                },
             },
-            challenge_binding: update_issue.binding,
-            nonce_digest: update_issue.nonce_digest,
-            canonical_command_bytes: update_bytes.to_vec(),
-            correlation_id: "018f0000-0000-7001-8000-000000000864".to_owned(),
-            volume_id: VolumeId::new(volume_id.clone()),
-            title: "Volume B".to_owned(),
-            order: 1,
-            expected_tree_revision: 2,
-            ids: AuthorCommandAdmissionIds {
-                command_id: "018f0000-0000-7001-8000-000000010864".to_owned(),
-                author_command_admission_id: "018f0000-0000-7001-8000-000000020864".to_owned(),
-                receipt_id: "018f0000-0000-7001-8000-000000030864".to_owned(),
+            &UpdateVolumeInput {
+                volume_id: VolumeId::new(volume_id.clone()),
+                title: "Volume B".to_owned(),
+                order: 1,
+                expected_tree_revision: 2,
             },
-        },
-    )
-    .await
-    .unwrap();
+        )
+        .await
+        .unwrap();
+    let TransitionOutcome::Applied(applied) = updated.outcome else {
+        panic!("Update Volume must apply");
+    };
     assert_eq!(
-        updated.effect,
-        UpdateVolumeSettlementEffect::Applied {
+        applied.effect,
+        UpdateVolumeApplied {
             title: "Volume B".to_owned(),
             order: 1,
             tree_revision: 3,
