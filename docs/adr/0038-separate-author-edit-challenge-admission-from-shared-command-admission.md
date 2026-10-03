@@ -29,6 +29,8 @@ The Local Edit Journal has at most one unsettled submission group. While the cli
 
 The rate policy revision controls Challenge issuance only. When the Server consumes a Challenge, and when it resolves an Author Edit outcome, it accepts the revision stored on the Challenge row if that revision is accepted for the command kind. For `applyAuthorEdit`, the accepted revisions are the `author_edit` revision and the earlier `shared` revision. Thus, a Challenge issued before deployment stays usable until it expires (5 minutes). Historical Author Edit outcome queries also stay available. The accepted revision for all other commands stays the `shared` revision.
 
+One case is not covered. A Challenge request for the same idempotency key, repeated after deployment, returns `409 idempotency_binding_conflict` if the earlier Challenge was issued under the `shared` revision. The cause is that the nonce derivation binds the revision. The Web Client repeats a Challenge request only if the page stopped between Challenge issuance and the durable send record in the Local Edit Journal. After the send record exists, the client uses the outcome query, and the outcome query accepts the earlier revision.
+
 A migration changes the rate-window capacity check from one fixed value of 10 to a check for each policy revision. Existing rows stay valid. Acceptance refusal records continue to bind the `shared` revision, because `acceptProposal` stays in the `shared` class. Thus, the bound in [ADR 0013](0013-trust-the-storyos-web-client-for-author-command-admission.md) on new refusal records for each window does not change.
 
 ## Considered options
