@@ -762,3 +762,64 @@ test("undoLatestAuthorAction distinguishes historical absence from damaged new-f
     await stopRealServer(server);
   }
 });
+
+// The shared class admits at most 20 new Challenges in any two adjacent windows,
+// so 21 admitted Undo Challenges prove the author_edit class without a controlled clock.
+test("undoLatestAuthorAction Challenges use the author_edit Challenge Rate Class, not the shared budget", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(
+      baseUrl,
+      "session-a",
+      "018f0000-0000-7001-8000-00000000eb00",
+      "Undo Admission Novel",
+      "018f0000-0000-7001-8000-00000000eb01",
+    );
+    const undoChallenge = async (idempotencyKey: string) => createProjectCommandChallenge({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/author-actions/undo",
+        command_schema: "storyos.command.undo-latest-author-action.request.v1",
+        canonical_command_digest: await digestUndoLatestAuthorAction(undoRequest({
+          expectedFrontier: "1",
+          expectedRevisionId: "018f0000-0000-7001-8000-00000000eb02",
+          editorSessionId: "018f0000-0000-7001-8000-00000000eb03",
+          correlationId: idempotencyKey,
+        })),
+        idempotency_key: idempotencyKey,
+      },
+    });
+    const undoKeys = Array.from({ length: 21 }, (_, index) =>
+      `018f0000-0000-7001-8000-0000000eb1${index.toString(16).padStart(2, "0")}`);
+    const undoNonces: string[] = [];
+    for (const key of undoKeys) undoNonces.push((await undoChallenge(key)).nonce);
+    const exactRetry = await undoChallenge(undoKeys[0]!);
+    const rename = renameRequest("Undo Admission Novel 2", "1", "018f0000-0000-7001-8000-00000000eb04");
+    const shared = await createProjectCommandChallenge({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      request: {
+        method: "PATCH",
+        route_template: "/api/v1/projects/{project_id}",
+        command_schema: rename.command_schema,
+        canonical_command_digest: await digestUpdateProject(rename),
+        idempotency_key: "018f0000-0000-7001-8000-00000000eb05",
+      },
+    });
+
+    assert.deepEqual(
+      {
+        distinctUndoNonces: new Set(undoNonces).size,
+        exactRetry: exactRetry.nonce === undoNonces[0],
+        sharedAdmitted: shared.nonce.length > 0,
+      },
+      { distinctUndoNonces: 21, exactRetry: true, sharedAdmitted: true },
+    );
+  } finally {
+    await stopRealServer(server);
+  }
+});

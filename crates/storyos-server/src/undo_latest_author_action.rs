@@ -12,6 +12,8 @@ use super::project_command_challenge::{
 };
 use super::*;
 
+const UNDO_COMMAND_KIND: &str = "undoLatestAuthorAction";
+
 pub(super) async fn undo_latest_author_action(
     State(state): State<Arc<ServerState>>,
     Path(project_id): Path<String>,
@@ -92,13 +94,14 @@ pub(super) async fn undo_latest_author_action(
             client_contract_revision: session.client_contract_revision.clone(),
             security_policy_revision: session.security_policy_revision.clone(),
             limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-            challenge_rate_policy_revision: storyos_application::ChallengeRateClass::AuthorEdit
-                .policy_revision()
-                .to_owned(),
+            challenge_rate_policy_revision:
+                storyos_application::ChallengeRateClass::for_command_kind(UNDO_COMMAND_KIND)
+                    .policy_revision()
+                    .to_owned(),
             method: contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD.to_owned(),
             route_template: contracts::UNDO_LATEST_AUTHOR_ACTION_PATH.to_owned(),
             command_schema: body.command_schema.clone(),
-            command_kind: "undoLatestAuthorAction".to_owned(),
+            command_kind: UNDO_COMMAND_KIND.to_owned(),
             canonical_command_digest: canonical_command_digest.clone(),
             idempotency_key: idempotency_key.to_owned(),
         },
