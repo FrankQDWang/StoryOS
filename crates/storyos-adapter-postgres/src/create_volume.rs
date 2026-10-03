@@ -1,12 +1,10 @@
 use crate::command_response_project::{
-    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
-    encode_command_response_project, read_command_response_project,
+    COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
 };
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, CreateVolumeAuthority, CreateVolumeCommand,
-    CreateVolumeError, CreateVolumePublicOrder, CreateVolumeSettlement,
-    CreateVolumeSettlementEffect, CreateVolumeStore, Project, ProjectCommandChallengeError,
-    ProjectCommandChallengeUse,
+    ChapterId, CreateVolumeAuthority, CreateVolumeCommand, CreateVolumeError,
+    CreateVolumePublicOrder, CreateVolumeSettlement, CreateVolumeSettlementEffect,
+    CreateVolumeStore, Project, ProjectCommandChallengeError, ProjectCommandChallengeUse,
 };
 use storyos_core::{
     CreateVolume as CoreCreateVolume, CreateVolumeApplied, CreateVolumeResult, ProjectLifecycle,
@@ -17,6 +15,8 @@ use uuid::Uuid;
 use crate::structural_authority_settlement::receipt_reason_payload;
 
 use super::*;
+use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
+use storyos_core::TransitionOutcome;
 
 impl CreateVolumeStore for PostgresProjectReader {
     async fn create_volume(
@@ -453,204 +453,63 @@ async fn read_create_volume_settlement(
     command: &CreateVolumeCommand,
     receipt_id: &str,
 ) -> Result<CreateVolumeSettlement, CreateVolumeError> {
-    let client = store
-        .connect_challenge()
+    read_command_replay(store, &command.challenge_binding, receipt_id)
         .await
-        .map_err(create_volume_challenge_error)?;
-    client
-        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(create_volume_database_error)?;
-    let result = async {
-        set_challenge_scope_on_client(&client, &command.project_scope)
-            .await
-            .map_err(create_volume_challenge_error)?;
-        let row = client
-            .query_opt(
-                "SELECT receipt.command_id::text,
-                        receipt.author_command_admission_id::text,
-                        receipt.receipt_id::text,
-                        to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                        receipt.result_kind,
-                        receipt.result_payload->>'reason',
-                        payload.payload->>'tree_revision',
-                        payload.payload->>'volume_id',
-                        payload.project_activity_position::text,
-                        payload.project_activity_event_id::text,
-                        receipt.result_payload->>'order',
-                        authoritative_commit.authoritative_commit_id::text,
-                        action.author_action_sequence::text,
-                        snapshot.snapshot_id::text,
-                        authoritative_commit.prior_manuscript_tree_revision::text,
-                        authoritative_commit.resulting_manuscript_tree_revision::text,
-                        idempotency.acknowledgement_format,
-                        idempotency.response_project::text
-                   FROM storyos.domain_receipts AS receipt
-                   JOIN storyos.author_command_admission_settlements AS settlement
-                     ON (settlement.owner_user_id, settlement.project_id,
-                         settlement.author_command_admission_id, settlement.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id,
-                         receipt.author_command_admission_id, receipt.receipt_id)
-                   JOIN storyos.command_idempotency AS idempotency
-                     ON (idempotency.owner_user_id, idempotency.project_id,
-                         idempotency.command_kind, idempotency.idempotency_key,
-                         idempotency.result_reference) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
-                         receipt.idempotency_key, receipt.receipt_id::text)
-              LEFT JOIN storyos.project_activity_event_payloads AS payload
-                     ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.authoritative_commits AS authoritative_commit
-                     ON (authoritative_commit.owner_user_id, authoritative_commit.project_id,
-                         authoritative_commit.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.author_action_entries AS action
-                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.project_snapshots AS snapshot
-                     ON (snapshot.owner_user_id, snapshot.project_id,
-                         snapshot.project_activity_position) =
-                        (payload.owner_user_id, payload.project_id,
-                         payload.project_activity_position)
-                    AND snapshot.snapshot_kind = 'canonical'
-                  WHERE receipt.owner_user_id = $1::text::uuid
-                    AND receipt.project_id = $2::text::uuid
-                    AND receipt.receipt_id = $3::text::uuid
-                    AND receipt.command_kind = 'createVolume'
-                    AND receipt.command_digest = $4
-                    AND receipt.idempotency_key = $5::text::uuid
-                    AND settlement.settlement_kind = 'receipt_settled'
-                    AND idempotency.outcome_kind = 'settled'",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &receipt_id,
-                    &command.challenge_binding.canonical_command_digest,
-                    &command.challenge_binding.idempotency_key,
-                ],
-            )
-            .await
-            .map_err(create_volume_database_error)?
-            .ok_or(CreateVolumeError::BindingConflict)?;
-        let result_kind = row.get::<_, String>(4);
-        let reason = row.get::<_, Option<String>>(5);
-        let effect = match (result_kind.as_str(), reason.as_deref()) {
-            ("authoritative_applied", None) => {
-                let tree_revision = row
-                    .get::<_, Option<String>>(6)
-                    .ok_or(CreateVolumeError::BindingConflict)?
-                    .parse::<u64>()
-                    .map_err(create_volume_parse_error)?;
-                let volume_id = row
-                    .get::<_, Option<String>>(7)
-                    .ok_or(CreateVolumeError::BindingConflict)?;
-                let order = match row.get::<_, Option<String>>(10).as_deref() {
-                    Some(order) => {
-                        let rank = order.parse::<u64>().map_err(create_volume_parse_error)?;
-                        if rank < 1 {
-                            return Err(CreateVolumeError::BindingConflict);
-                        }
-                        CreateVolumePublicOrder::CanonicalSiblingOrder(rank)
-                    }
-                    None => CreateVolumePublicOrder::HistoricalCreateVolumeAck,
-                };
-                CreateVolumeSettlementEffect::Applied {
-                    tree_revision,
-                    volume_id,
-                    order,
-                }
+        .and_then(create_volume_replay)
+        .map_err(|fault| match fault {
+            ReplayFault::BindingConflict => CreateVolumeError::BindingConflict,
+            ReplayFault::HistoricalAcknowledgementUnavailable => {
+                CreateVolumeError::HistoricalAcknowledgementUnavailable
             }
-            (result_kind, Some(reason)) => {
-                match storyos_core::CreateVolumeResult::from_zero_authority_codes(
-                    result_kind,
-                    reason,
-                ) {
-                    Some(storyos_core::CreateVolumeResult::NoEffect(reason)) => match reason {},
-                    Some(storyos_core::CreateVolumeResult::Conflicted(reason)) => {
-                        CreateVolumeSettlementEffect::Conflicted { reason }
-                    }
-                    Some(storyos_core::CreateVolumeResult::Refused(reason)) => {
-                        CreateVolumeSettlementEffect::Refused { reason }
-                    }
-                    Some(storyos_core::CreateVolumeResult::Applied(_)) | None => {
-                        return Err(CreateVolumeError::BindingConflict);
-                    }
-                }
-            }
-            _ => return Err(CreateVolumeError::BindingConflict),
-        };
-        let authority = match (
-            row.get::<_, Option<String>>(11),
-            row.get::<_, Option<String>>(12),
-            row.get::<_, Option<String>>(13),
-            row.get::<_, Option<String>>(14),
-            row.get::<_, Option<String>>(15),
-        ) {
-            (
-                Some(authoritative_commit_id),
-                Some(author_action_sequence),
-                Some(snapshot_id),
-                Some(prior_manuscript_tree_revision),
-                Some(resulting_manuscript_tree_revision),
-            ) => Some(CreateVolumeAuthority {
-                authoritative_commit_id,
-                author_action_sequence: author_action_sequence
-                    .parse()
-                    .map_err(create_volume_parse_error)?,
-                snapshot_id,
-                prior_manuscript_tree_revision: prior_manuscript_tree_revision
-                    .parse()
-                    .map_err(create_volume_parse_error)?,
-                resulting_manuscript_tree_revision: resulting_manuscript_tree_revision
-                    .parse()
-                    .map_err(create_volume_parse_error)?,
-            }),
-            _ => None,
-        };
-        let response_project = match read_command_response_project(
-            row.get::<_, Option<String>>(16).as_deref(),
-            row.get::<_, Option<String>>(17).as_deref(),
-        ) {
-            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
-            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
-                return Err(CreateVolumeError::HistoricalAcknowledgementUnavailable);
-            }
-            Err(()) => {
-                return Err(CreateVolumeError::Unavailable(Box::new(
-                    std::io::Error::other("Create Volume acknowledgement evidence is damaged"),
-                )));
-            }
-        };
-        Ok(CreateVolumeSettlement {
-            ids: AuthorCommandAdmissionIds {
-                command_id: row.get(0),
-                author_command_admission_id: row.get(1),
-                receipt_id: row.get(2),
-            },
-            receipt_created_at: row.get(3),
-            effect,
-            project_activity_position: row
-                .get::<_, Option<String>>(8)
-                .unwrap_or_else(|| "0".to_owned())
-                .parse::<u64>()
-                .map_err(create_volume_parse_error)?,
-            project_activity_event_id: row.get::<_, Option<String>>(9).unwrap_or_default(),
-            authority,
-            response_project,
+            ReplayFault::Unavailable(source) => CreateVolumeError::Unavailable(source),
         })
-    }
-    .await;
-    match &result {
-        Ok(_) => client
-            .batch_execute("COMMIT")
-            .await
-            .map_err(create_volume_database_error)?,
-        Err(_) => {
-            let _rollback = client.batch_execute("ROLLBACK").await;
+}
+
+fn create_volume_replay(replay: CommandReplay) -> Result<CreateVolumeSettlement, ReplayFault> {
+    let effect = match replay.outcome::<std::convert::Infallible, _, _>()? {
+        TransitionOutcome::Applied(()) => {
+            let tree_revision = replay.activity_u64("tree_revision")?;
+            let volume_id = replay.activity_text("volume_id")?;
+            let order = match replay.receipt_text("order") {
+                Some(order) => {
+                    let rank = order
+                        .parse::<u64>()
+                        .map_err(|error| ReplayFault::Unavailable(Box::new(error)))?;
+                    if rank < 1 {
+                        return Err(ReplayFault::BindingConflict);
+                    }
+                    CreateVolumePublicOrder::CanonicalSiblingOrder(rank)
+                }
+                None => CreateVolumePublicOrder::HistoricalCreateVolumeAck,
+            };
+            CreateVolumeSettlementEffect::Applied {
+                tree_revision,
+                volume_id,
+                order,
+            }
         }
-    }
-    result
+        TransitionOutcome::NoEffect(reason) => match reason {},
+        TransitionOutcome::Conflicted(reason) => {
+            CreateVolumeSettlementEffect::Conflicted { reason }
+        }
+        TransitionOutcome::Refused(reason) => CreateVolumeSettlementEffect::Refused { reason },
+    };
+    let response_project = replay.response_project()?;
+    Ok(CreateVolumeSettlement {
+        authority: replay.authority.map(|authority| CreateVolumeAuthority {
+            authoritative_commit_id: authority.authoritative_commit_id,
+            author_action_sequence: authority.author_action_sequence,
+            snapshot_id: authority.snapshot_id,
+            prior_manuscript_tree_revision: authority.prior_manuscript_tree_revision,
+            resulting_manuscript_tree_revision: authority.resulting_manuscript_tree_revision,
+        }),
+        ids: replay.ids,
+        receipt_created_at: replay.receipt_created_at,
+        effect,
+        project_activity_position: replay.project_activity_position,
+        project_activity_event_id: replay.project_activity_event_id,
+        response_project,
+    })
 }
 
 fn create_volume_challenge_error(error: ProjectCommandChallengeError) -> CreateVolumeError {

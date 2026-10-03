@@ -1,12 +1,11 @@
 use super::*;
-use crate::command_response_project::{
-    CommandResponseProjectEvidence, read_command_response_project,
-};
+use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
 use storyos_application::{
-    AuthorCommandAdmissionIds, DeleteVolumeAuthority, DeleteVolumeCommand, DeleteVolumeError,
-    DeleteVolumeSettlement, DeleteVolumeSettlementEffect, DeleteVolumeStore,
-    ProjectCommandChallengeError, ProjectCommandChallengeUse,
+    DeleteVolumeAuthority, DeleteVolumeCommand, DeleteVolumeError, DeleteVolumeSettlement,
+    DeleteVolumeSettlementEffect, DeleteVolumeStore, ProjectCommandChallengeError,
+    ProjectCommandChallengeUse,
 };
+use storyos_core::TransitionOutcome;
 
 mod persist;
 use persist::persist_delete_volume;
@@ -63,194 +62,46 @@ async fn read_delete_volume_settlement(
     command: &DeleteVolumeCommand,
     receipt_id: &str,
 ) -> Result<DeleteVolumeSettlement, DeleteVolumeError> {
-    let client = store
-        .connect_challenge()
+    read_command_replay(store, &command.challenge_binding, receipt_id)
         .await
-        .map_err(delete_volume_challenge_error)?;
-    client
-        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(delete_volume_database_error)?;
-    let result = async {
-        set_challenge_scope_on_client(&client, &command.project_scope)
-            .await
-            .map_err(delete_volume_challenge_error)?;
-        let row = client
-            .query_opt(
-                "SELECT receipt.command_id::text,
-                        receipt.author_command_admission_id::text,
-                        receipt.receipt_id::text,
-                        to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                        receipt.result_kind,
-                        receipt.result_payload->>'reason',
-                        payload.payload->>'tree_revision',
-                        payload.payload->>'volume_id',
-                        payload.project_activity_position::text,
-                        payload.project_activity_event_id::text,
-                        authoritative_commit.authoritative_commit_id::text,
-                        action.author_action_sequence::text,
-                        snapshot.snapshot_id::text,
-                        authoritative_commit.prior_manuscript_tree_revision::text,
-                        authoritative_commit.resulting_manuscript_tree_revision::text,
-                        idempotency.acknowledgement_format,
-                        idempotency.response_project::text
-                   FROM storyos.domain_receipts AS receipt
-                   JOIN storyos.author_command_admission_settlements AS settlement
-                     ON (settlement.owner_user_id, settlement.project_id,
-                         settlement.author_command_admission_id, settlement.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id,
-                         receipt.author_command_admission_id, receipt.receipt_id)
-                   JOIN storyos.command_idempotency AS idempotency
-                     ON (idempotency.owner_user_id, idempotency.project_id,
-                         idempotency.command_kind, idempotency.idempotency_key,
-                         idempotency.result_reference) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
-                         receipt.idempotency_key, receipt.receipt_id::text)
-              LEFT JOIN storyos.project_activity_event_payloads AS payload
-                     ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.authoritative_commits AS authoritative_commit
-                     ON (authoritative_commit.owner_user_id, authoritative_commit.project_id,
-                         authoritative_commit.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.author_action_entries AS action
-                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.project_snapshots AS snapshot
-                     ON (snapshot.owner_user_id, snapshot.project_id,
-                         snapshot.project_activity_position) =
-                        (payload.owner_user_id, payload.project_id,
-                         payload.project_activity_position)
-                    AND snapshot.snapshot_kind = 'canonical'
-                  WHERE receipt.owner_user_id = $1::text::uuid
-                    AND receipt.project_id = $2::text::uuid
-                    AND receipt.receipt_id = $3::text::uuid
-                    AND receipt.command_kind = 'deleteVolume'
-                    AND receipt.command_digest = $4
-                    AND receipt.idempotency_key = $5::text::uuid
-                    AND settlement.settlement_kind = 'receipt_settled'
-                    AND idempotency.outcome_kind = 'settled'",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &receipt_id,
-                    &command.challenge_binding.canonical_command_digest,
-                    &command.challenge_binding.idempotency_key,
-                ],
-            )
-            .await
-            .map_err(delete_volume_database_error)?
-            .ok_or(DeleteVolumeError::BindingConflict)?;
-        let result_kind = row.get::<_, String>(4);
-        let reason = row.get::<_, Option<String>>(5);
-        let effect = match (result_kind.as_str(), reason.as_deref()) {
-            ("authoritative_applied", None) => {
-                let tree_revision = row
-                    .get::<_, Option<String>>(6)
-                    .ok_or(DeleteVolumeError::BindingConflict)?
-                    .parse::<u64>()
-                    .map_err(delete_volume_parse_error)?;
-                let volume_id = row
-                    .get::<_, Option<String>>(7)
-                    .ok_or(DeleteVolumeError::BindingConflict)?;
-                DeleteVolumeSettlementEffect::Applied {
-                    tree_revision,
-                    volume_id,
-                }
+        .and_then(delete_volume_replay)
+        .map_err(|fault| match fault {
+            ReplayFault::BindingConflict => DeleteVolumeError::BindingConflict,
+            ReplayFault::HistoricalAcknowledgementUnavailable => {
+                DeleteVolumeError::HistoricalAcknowledgementUnavailable
             }
-            (result_kind, Some(reason)) => {
-                match storyos_core::DeleteVolumeResult::from_zero_authority_codes(
-                    result_kind,
-                    reason,
-                ) {
-                    Some(storyos_core::DeleteVolumeResult::NoEffect(reason)) => {
-                        DeleteVolumeSettlementEffect::NoEffect { reason }
-                    }
-                    Some(storyos_core::DeleteVolumeResult::Conflicted(reason)) => {
-                        DeleteVolumeSettlementEffect::Conflicted { reason }
-                    }
-                    Some(storyos_core::DeleteVolumeResult::Refused(reason)) => {
-                        DeleteVolumeSettlementEffect::Refused { reason }
-                    }
-                    Some(storyos_core::DeleteVolumeResult::Applied(_)) | None => {
-                        return Err(DeleteVolumeError::BindingConflict);
-                    }
-                }
-            }
-            _ => return Err(DeleteVolumeError::BindingConflict),
-        };
-        let authority = match (
-            row.get::<_, Option<String>>(10),
-            row.get::<_, Option<String>>(11),
-            row.get::<_, Option<String>>(12),
-            row.get::<_, Option<String>>(13),
-            row.get::<_, Option<String>>(14),
-        ) {
-            (
-                Some(authoritative_commit_id),
-                Some(author_action_sequence),
-                Some(snapshot_id),
-                Some(prior_manuscript_tree_revision),
-                Some(resulting_manuscript_tree_revision),
-            ) => Some(DeleteVolumeAuthority {
-                authoritative_commit_id,
-                author_action_sequence: author_action_sequence
-                    .parse()
-                    .map_err(delete_volume_parse_error)?,
-                snapshot_id,
-                prior_manuscript_tree_revision: prior_manuscript_tree_revision
-                    .parse()
-                    .map_err(delete_volume_parse_error)?,
-                resulting_manuscript_tree_revision: resulting_manuscript_tree_revision
-                    .parse()
-                    .map_err(delete_volume_parse_error)?,
-            }),
-            _ => None,
-        };
-        let response_project = match read_command_response_project(
-            row.get::<_, Option<String>>(15).as_deref(),
-            row.get::<_, Option<String>>(16).as_deref(),
-        ) {
-            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
-            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
-                return Err(DeleteVolumeError::HistoricalAcknowledgementUnavailable);
-            }
-            Err(()) => {
-                return Err(DeleteVolumeError::Unavailable(Box::new(
-                    std::io::Error::other("Delete Volume acknowledgement evidence is damaged"),
-                )));
-            }
-        };
-        Ok(DeleteVolumeSettlement {
-            ids: AuthorCommandAdmissionIds {
-                command_id: row.get(0),
-                author_command_admission_id: row.get(1),
-                receipt_id: row.get(2),
-            },
-            receipt_created_at: row.get(3),
-            effect,
-            project_activity_position: row
-                .get::<_, Option<String>>(8)
-                .unwrap_or_else(|| "0".to_owned())
-                .parse::<u64>()
-                .map_err(delete_volume_parse_error)?,
-            project_activity_event_id: row.get::<_, Option<String>>(9).unwrap_or_default(),
-            authority,
-            response_project,
+            ReplayFault::Unavailable(source) => DeleteVolumeError::Unavailable(source),
         })
-    }
-    .await;
-    match &result {
-        Ok(_) => client
-            .batch_execute("COMMIT")
-            .await
-            .map_err(delete_volume_database_error)?,
-        Err(_) => {
-            let _rollback = client.batch_execute("ROLLBACK").await;
+}
+
+fn delete_volume_replay(replay: CommandReplay) -> Result<DeleteVolumeSettlement, ReplayFault> {
+    let effect = match replay.outcome()? {
+        TransitionOutcome::Applied(()) => DeleteVolumeSettlementEffect::Applied {
+            tree_revision: replay.activity_u64("tree_revision")?,
+            volume_id: replay.activity_text("volume_id")?,
+        },
+        TransitionOutcome::NoEffect(reason) => DeleteVolumeSettlementEffect::NoEffect { reason },
+        TransitionOutcome::Conflicted(reason) => {
+            DeleteVolumeSettlementEffect::Conflicted { reason }
         }
-    }
-    result
+        TransitionOutcome::Refused(reason) => DeleteVolumeSettlementEffect::Refused { reason },
+    };
+    let response_project = replay.response_project()?;
+    Ok(DeleteVolumeSettlement {
+        authority: replay.authority.map(|authority| DeleteVolumeAuthority {
+            authoritative_commit_id: authority.authoritative_commit_id,
+            author_action_sequence: authority.author_action_sequence,
+            snapshot_id: authority.snapshot_id,
+            prior_manuscript_tree_revision: authority.prior_manuscript_tree_revision,
+            resulting_manuscript_tree_revision: authority.resulting_manuscript_tree_revision,
+        }),
+        ids: replay.ids,
+        receipt_created_at: replay.receipt_created_at,
+        effect,
+        project_activity_position: replay.project_activity_position,
+        project_activity_event_id: replay.project_activity_event_id,
+        response_project,
+    })
 }
 
 pub(super) fn delete_volume_challenge_error(
