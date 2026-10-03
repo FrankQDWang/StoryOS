@@ -69,8 +69,8 @@ impl ApplyAuthorEditOutcomeResolver for PostgresProjectReader {
             && arbiter.get::<_, String>(2) == query.client_binding.client_contract_revision
             && arbiter.get::<_, String>(3) == query.client_binding.security_policy_revision
             && arbiter.get::<_, String>(4) == query.limit_profile_revision
-            && arbiter.get::<_, String>(5)
-                == storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION
+            && ChallengeRateClass::accepting("applyAuthorEdit", &arbiter.get::<_, String>(5))
+                .is_some()
             && arbiter.get::<_, String>(6) == "POST"
             && arbiter.get::<_, String>(7)
                 == "/api/v1/projects/{project_id}/manuscript/author-edits"

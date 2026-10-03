@@ -185,11 +185,11 @@ use std::time::Duration;
 
 use connection_pool::{ConnectionPool, PooledClient};
 use storyos_application::{
-    Chapter, ChapterId, IssueProjectCommandChallenge, PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY,
-    PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION, PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS,
-    Project, ProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectCommandChallengeError,
-    ProjectCommandChallengeStore, ProjectCommandChallengeTransaction, ProjectCommandChallengeUse,
-    ProjectId, ProjectReadError, ProjectReader, ProjectScope, RevisionId,
+    ChallengeRateClass, Chapter, ChapterId, IssueProjectCommandChallenge,
+    PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS, Project, ProjectCommandChallenge,
+    ProjectCommandChallengeBinding, ProjectCommandChallengeError, ProjectCommandChallengeStore,
+    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectId, ProjectReadError,
+    ProjectReader, ProjectScope, RevisionId,
 };
 
 pub use storage_activation::{
@@ -213,6 +213,11 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
         request: &IssueProjectCommandChallenge,
     ) -> Result<ProjectCommandChallenge, ProjectCommandChallengeError> {
         let binding = &request.binding;
+        let rate_class = ChallengeRateClass::accepting(
+            &binding.command_kind,
+            &binding.challenge_rate_policy_revision,
+        )
+        .ok_or(ProjectCommandChallengeError::BindingConflict)?;
         let client_session_generation = binding.client_session_generation.to_string();
         let mut client = self.connect_challenge().await?;
         let transaction = client.transaction().await.map_err(challenge_error)?;
@@ -252,6 +257,7 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
                 apply_challenge_rate_limit(
                     &transaction,
                     binding,
+                    rate_class,
                     self.challenge_rate_clock_unix_seconds,
                 )
                 .await?,
@@ -399,7 +405,14 @@ impl ProjectCommandChallengeTransaction for PostgresProjectCommandTransaction {
             && row.get::<_, String>(2) == binding.client_contract_revision
             && row.get::<_, String>(3) == binding.security_policy_revision
             && row.get::<_, String>(4) == binding.limit_profile_revision
-            && row.get::<_, String>(5) == binding.challenge_rate_policy_revision
+            && [
+                &binding.challenge_rate_policy_revision,
+                &row.get::<_, String>(5),
+            ]
+            .into_iter()
+            .all(|revision| {
+                ChallengeRateClass::accepting(&binding.command_kind, revision).is_some()
+            })
             && row.get::<_, String>(6) == binding.method
             && row.get::<_, String>(7) == binding.route_template
             && row.get::<_, String>(8) == binding.command_schema
@@ -489,9 +502,11 @@ impl PostgresProjectReader {
 async fn apply_challenge_rate_limit(
     transaction: &tokio_postgres::Transaction<'_>,
     binding: &ProjectCommandChallengeBinding,
+    rate_class: ChallengeRateClass,
     clock_unix_seconds: Option<i64>,
 ) -> Result<i64, ProjectCommandChallengeError> {
     let client_session_generation = binding.client_session_generation.to_string();
+    let policy_revision = rate_class.policy_revision();
     transaction
         .execute(
             "INSERT INTO storyos.project_command_challenge_rate_guards
@@ -502,7 +517,7 @@ async fn apply_challenge_rate_limit(
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
                 &client_session_generation,
-                &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
+                &policy_revision,
             ],
         )
         .await
@@ -518,7 +533,7 @@ async fn apply_challenge_rate_limit(
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
                 &client_session_generation,
-                &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
+                &policy_revision,
             ],
         )
         .await
@@ -554,7 +569,7 @@ async fn apply_challenge_rate_limit(
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
                 &client_session_generation,
-                &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
+                &policy_revision,
                 &minute_bucket,
                 &(PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS as i64),
             ],
@@ -573,7 +588,7 @@ async fn apply_challenge_rate_limit(
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
                 &client_session_generation,
-                &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
+                &policy_revision,
                 &minute_bucket,
                 &(PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS as i64),
             ],
@@ -581,7 +596,7 @@ async fn apply_challenge_rate_limit(
         .await
         .map_err(challenge_error)?;
     let issued_count = row.get::<_, i16>(0);
-    if issued_count >= PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY {
+    if issued_count >= rate_class.capacity() {
         let window_seconds = PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS as i64;
         let retry_after_seconds = ((minute_bucket + 1) * window_seconds - selected_unix_seconds)
             .clamp(1, window_seconds) as u64;
@@ -599,7 +614,7 @@ async fn apply_challenge_rate_limit(
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
                 &client_session_generation,
-                &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
+                &policy_revision,
                 &minute_bucket,
                 &(PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS as i64),
             ],

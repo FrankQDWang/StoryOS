@@ -778,11 +778,16 @@ that test database and issued again. The Server must not accept the earlier
 custom SHA-256 derivation as a compatibility fallback.
 
 `project_command_challenge_rate_windows` is a Project-scoped Operational
-Record for policy
-`storyos.project-command-challenge-rate.fixed-window.v1`. Its composite
-identity contains `(owner_user_id, project_id, client_session_generation,
-window_started_at)`. PostgreSQL database time selects a UTC-aligned one-minute
-window. A row lock serializes increments up to the inclusive capacity of 10.
+Record for each Challenge Rate Class policy
+([ADR 0038](../adr/0038-separate-author-edit-challenge-admission-from-shared-command-admission.md)):
+`storyos.project-command-challenge-rate.fixed-window.v1` with an inclusive
+capacity of 10, and
+`storyos.project-command-challenge-rate.author-edit.fixed-window.v1` with an
+inclusive capacity of 120. Its composite identity contains `(owner_user_id,
+project_id, client_session_generation, policy_revision, window_started_at)`,
+and a check constraint binds each revision to its capacity. PostgreSQL
+database time selects a UTC-aligned one-minute window. A row lock serializes
+increments up to the inclusive capacity of the revision.
 The transaction that inserts a new logical challenge increments the same
 window; exact retries and refused attempts do not. A full window changes no
 challenge, idempotency, or counter fact and returns the rounded-up seconds to

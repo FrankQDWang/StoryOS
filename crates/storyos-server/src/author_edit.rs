@@ -79,8 +79,9 @@ pub(super) async fn apply_author_edit(
         client_contract_revision: session_binding.client_contract_revision.clone(),
         security_policy_revision: session_binding.security_policy_revision.clone(),
         limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-        challenge_rate_policy_revision:
-            storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
+        challenge_rate_policy_revision: storyos_application::ChallengeRateClass::AuthorEdit
+            .policy_revision()
+            .to_owned(),
         method: contracts::APPLY_AUTHOR_EDIT_METHOD.to_owned(),
         route_template: contracts::APPLY_AUTHOR_EDIT_PATH.to_owned(),
         command_schema: contracts::APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID.to_owned(),
