@@ -71,7 +71,7 @@ async function waitSaved(root: Element, previousRevisionId: string): Promise<str
   return saveFacts(root).revision;
 }
 
-it("saves sustained Chinese composition with frequent Block boundaries without a quota reset", {
+it("saves sustained Chinese composition, idle pauses, and Block boundaries without a quota reset", {
   timeout: 180_000,
 }, async () => {
   const frame = document.createElement("iframe");
@@ -123,6 +123,10 @@ it("saves sustained Chinese composition with frequent Block boundaries without a
       await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(expected);
       revision = await waitSaved(root, revision);
     }
+    await applyTrustedInput({ operation: "insert_text", text: "。" });
+    expected += "。";
+    await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(expected);
+    revision = await waitSaved(root, revision);
     await applyTrustedInput({ operation: "enter" });
     await expect.poll(() => editor.querySelectorAll("p").length, { timeout: 10_000 }).toBe(2);
     revision = await waitSaved(root, revision);
@@ -148,8 +152,8 @@ it("saves sustained Chinese composition with frequent Block boundaries without a
     challengeStatuses: [...new Set(challenges.map((entry) => entry.responseStatus))],
     text: chapter.chapter.current_revision.blocks.map((block) => block.text),
   }).toEqual({
-    authorEditRequests: ROUNDS * (PHRASES.length + 2),
+    authorEditRequests: ROUNDS * (PHRASES.length + 3),
     challengeStatuses: [200],
-    text: ["我们写作".repeat(ROUNDS)],
+    text: ["我们写作。".repeat(ROUNDS)],
   });
 });
