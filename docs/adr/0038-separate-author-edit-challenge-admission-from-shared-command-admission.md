@@ -29,7 +29,9 @@ When the Server refuses an Author Edit Challenge with `429`, the save state stay
 
 The Local Edit Journal has at most one unsettled submission group. While the client waits, the editor shows new input, and the input waits in the bounded in-memory submission queue (240 operations). The input enters the Journal after the frozen group settles. A crash during the wait can lose the queued input, at most one `Retry-After` window. At the selected capacity, normal writing does not reach this path. If necessary, a later change can let the Journal keep several unsettled groups.
 
-When the Server refuses an Author Undo Challenge with `429`, the editor stays editable and the save state shows `saving`. The client waits for `Retry-After` and then requests a Challenge again for the same Undo request and idempotency key. Another Ctrl/Cmd+Z during the wait does nothing. New editor input abandons the waiting Undo, because the new edit changes the Author Undo Frontier and the Undo can then only conflict. The refused Challenge request inserted no idempotency record, so the abandonment loses nothing. The author can press Ctrl/Cmd+Z again. When the editor closes, the wait ends at once.
+The editor has at most one Author Undo in progress, from the key press until the Undo settles. Another Ctrl/Cmd+Z during that period does nothing. New editor input during that period abandons the Undo, because the new edit changes the Author Undo Frontier and the Undo can then only conflict. The editor keeps the new input and does not apply the Undo result to the editor. If the Undo request was not sent, the abandonment loses nothing: a refused Challenge request inserted no idempotency record. If the Undo request was sent, the Server can still apply the Undo, and the Author Edit of the new input then follows the ordinary conflict path. When the editor closes, the Undo is abandoned in the same way.
+
+When the Server refuses an Author Undo Challenge with `429`, the editor stays editable and the save state shows `saving`. The client waits for `Retry-After` and then requests a Challenge again for the same Undo request and idempotency key. The client continues to retry until the Undo is admitted or abandoned. Each retry occurs at least one second after the prior refusal. Author Edit and Author Undo use the same Web Client unit for this wait.
 
 ## Compatibility and pending Challenges
 
@@ -41,12 +43,17 @@ A migration changes the rate-window capacity check from one fixed value of 10 to
 
 ## Other author commands
 
-Issue 888 examined the other author commands that can occur during writing. Each one stays in the `shared` class:
+Issue 888 examined every other project command kind. Each one stays in the `shared` class:
 
-- Chapter selection (`setCurrentChapter`) and Editor Session creation (`createEditorSession`) are navigation. One Chapter switch uses at most two units. A switch is a deliberate action and does not repeat for each key press.
-- Proposal review (`acceptProposal`, `rejectProposalOperations`, `withdrawProposal`, `replanProposal`, `reopenWithdrawnProposal`, `reopenRejectedOperations`) is one decision for each click. Acceptance already records a `429` problem with its `Retry-After` value.
-- Refused Edit Draft handling (`closeEditorFlowDraft`, `expandRefusedEditDraftToProposal`) occurs only after a refused Author Edit.
-- Manuscript structure, Project settings, AgentRun control, and export and import are infrequent, and some of them are costly. `deleteChapter` and `deleteVolume` already wait for `Retry-After`.
+- Navigation and writer control: `setCurrentChapter`, `createEditorSession`, and `takeOverProjectWriter`. One Chapter switch uses at most two units. A switch or a writer takeover is a deliberate action and does not repeat for each key press.
+- Proposal creation and review: `createReplacementProposal`, `acceptProposal`, `rejectProposalOperations`, `withdrawProposal`, `replanProposal`, `reopenWithdrawnProposal`, `reopenRejectedOperations`, `supersedeProposal`, `completeReadyPartialProposal`, and `continueProposalGeneration`. Each one is one decision for each click. Acceptance already records a `429` problem with its `Retry-After` value.
+- Refused Edit Draft handling: `closeEditorFlowDraft` and `expandRefusedEditDraftToProposal`. These occur only after a refused Author Edit.
+- Manuscript structure: `createVolume`, `updateVolume`, `deleteVolume`, `createChapter`, `updateChapter`, and `deleteChapter`. These are infrequent. `deleteChapter` and `deleteVolume` already wait for `Retry-After`.
+- Project settings and lifecycle: `updateProject`, `updateProjectAssistance`, `archiveProject`, and `deleteProject`. These are infrequent.
+- AgentRun control: `createAgentRun`, `steerAgentRun`, `pauseAgentRun`, `resumeAgentRun`, `cancelAgentRun`, `resolveWait`, `decideApproval`, and `updateConversationMemorySettings`. These are infrequent, and some of them start costly work.
+- Export and import: `exportHumanReadableManuscript`, `exportProjectArchive`, and `importProjectArchive`. These are infrequent and costly.
+
+`createProject` is not a project command. It uses the User-level Create Project Challenge before the Project exists, so no Challenge Rate Class applies to it.
 
 ## Considered options
 
