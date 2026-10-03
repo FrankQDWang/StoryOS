@@ -46,6 +46,7 @@ mod replan_proposal;
 mod revision_comparison;
 mod set_current_chapter;
 mod statistics_profile;
+mod transition_outcome;
 mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
@@ -104,20 +105,24 @@ pub use create_agent_run::{
     CreateAgentRunRefusal, CreateAgentRunResult, create_agent_run,
 };
 pub use create_chapter::{
-    CreateChapter, CreateChapterConflict, CreateChapterCurrent, CreateChapterOpen,
-    CreateChapterPlacement, CreateChapterRefusal, CreateChapterResult, VolumeJoin, create_chapter,
+    CreateChapter, CreateChapterApplied, CreateChapterConflict, CreateChapterCurrent,
+    CreateChapterOpen, CreateChapterPlacement, CreateChapterRefusal, CreateChapterResult,
+    VolumeJoin, create_chapter,
 };
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 pub use create_volume::{
-    CreateVolume, CreateVolumeConflict, CreateVolumeRefusal, CreateVolumeResult, create_volume,
+    CreateVolume, CreateVolumeApplied, CreateVolumeConflict, CreateVolumeRefusal,
+    CreateVolumeResult, create_volume,
 };
 pub use delete_chapter::{
-    ChapterRemovalLifecycle, DeleteChapter, DeleteChapterConflict, DeleteChapterCurrent,
-    DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult, delete_chapter,
+    ChapterRemovalLifecycle, DeleteChapter, DeleteChapterApplied, DeleteChapterConflict,
+    DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult,
+    delete_chapter,
 };
 pub use delete_volume::{
-    DeleteVolume, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    DeleteVolumeResult, VolumeChildPolicy, VolumeRemovalLifecycle, delete_volume,
+    DeleteVolume, DeleteVolumeApplied, DeleteVolumeConflict, DeleteVolumeNoEffect,
+    DeleteVolumeRefusal, DeleteVolumeResult, VolumeChildPolicy, VolumeRemovalLifecycle,
+    delete_volume,
 };
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, BlockReservation, COORDINATE_VERSION,
@@ -201,6 +206,7 @@ pub use set_current_chapter::{
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
 };
+pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{
     AuthorUndoFrontier, AuthorUndoFrontierKind, UndoLatestAuthorAction,
     UndoLatestAuthorActionConflict, UndoLatestAuthorActionResult,
@@ -213,8 +219,8 @@ pub use unknown_create_successor::{
     unknown_create_script,
 };
 pub use update_chapter::{
-    ChapterJoin, UpdateChapter, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
-    UpdateChapterResult, update_chapter,
+    ChapterJoin, UpdateChapter, UpdateChapterApplied, UpdateChapterConflict, UpdateChapterNoEffect,
+    UpdateChapterRefusal, UpdateChapterResult, update_chapter,
 };
 pub use update_project::{
     UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
@@ -226,8 +232,8 @@ pub use update_project_assistance::{
     UpdateProjectAssistanceRefusal, UpdateProjectAssistanceResult, update_project_assistance,
 };
 pub use update_volume::{
-    UpdateVolume, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
-    UpdateVolumeResult, update_volume,
+    UpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict, UpdateVolumeNoEffect,
+    UpdateVolumeRefusal, UpdateVolumeResult, update_volume,
 };
 pub use withdraw_proposal::{
     WithdrawProposal, WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,

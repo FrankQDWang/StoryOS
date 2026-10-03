@@ -51,7 +51,7 @@ async fn undo_volume_reorders_then_delete_restores_the_original_tree() {
     )
     .await;
     let mut prior_trees = vec![original];
-    let mut forward_sequences = vec![deleted.authority.unwrap().author_action_sequence];
+    let mut forward_sequences = vec![applied(&deleted).1.author_action_sequence];
     for (index, order, title) in [(0, 1, "First move"), (1, 3, "Second move")] {
         store.challenge_rate_clock_unix_seconds = Some(120 + index as i64 * 60);
         let GetManuscriptTree::Found(prior) = get_manuscript_tree(&store, &scope).await.unwrap()
@@ -78,7 +78,7 @@ async fn undo_volume_reorders_then_delete_restores_the_original_tree() {
             },
         )
         .await;
-        forward_sequences.push(updated.authority.unwrap().author_action_sequence);
+        forward_sequences.push(applied(&updated).1.author_action_sequence);
     }
     let editor_session_id = open_session(&store, &scope, "7069").await;
     let OpenChapter::Found(opened) = open_chapter(&store, &scope, &ChapterId::new(chapter_id))

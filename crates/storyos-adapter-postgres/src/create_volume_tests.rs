@@ -1,14 +1,16 @@
 use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, CreateVolumePublicOrder, CreateVolumeSettlementEffect,
-    EditorClientBinding, GetManuscriptTree, IssueCreateProjectChallenge,
-    IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    SnapshotLookup, UserId, VolumeId, VolumeNode, create_project, create_volume,
-    get_manuscript_tree, get_snapshot, issue_create_project_challenge,
+    CreateVolumeInput, CreateVolumePublicOrder, EditorClientBinding, GetManuscriptTree,
+    IssueCreateProjectChallenge, IssueProjectCommandChallenge, ProjectCommandChallengeBinding,
+    ProjectId, ProjectScope, SnapshotLookup, UserId, VolumeCreated, VolumeId, VolumeNode,
+    create_project, get_manuscript_tree, get_snapshot, issue_create_project_challenge,
     issue_project_command_challenge,
 };
+use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{CommandCall, applied, command_call, create_volume};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -107,27 +109,17 @@ fn command(
     nonce_digest: &str,
     ids_suffix: &str,
     expected_tree_revision: u64,
-) -> CreateVolumeCommand {
-    CreateVolumeCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        COMMAND_BYTES,
+        CreateVolumeInput {
+            title: TITLE.to_owned(),
+            expected_tree_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: COMMAND_BYTES.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: TITLE.to_owned(),
-        expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 fn titled_command(
@@ -137,11 +129,17 @@ fn titled_command(
     title: &str,
     bytes: &[u8],
     expected_tree_revision: u64,
-) -> CreateVolumeCommand {
-    let mut created = command(binding, nonce_digest, ids_suffix, expected_tree_revision);
-    created.title = title.to_owned();
-    created.canonical_command_bytes = bytes.to_vec();
-    created
+) -> CommandCall<CreateVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        bytes,
+        CreateVolumeInput {
+            title: title.to_owned(),
+            expected_tree_revision,
+        },
+    )
 }
 
 #[tokio::test]
@@ -188,20 +186,16 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied {
-        tree_revision,
-        volume_id,
-        order,
-    } = first.effect.clone()
-    else {
-        panic!("Create Volume on an empty active Project must apply");
-    };
+    let (
+        VolumeCreated {
+            tree_revision,
+            volume_id,
+            order,
+        },
+        authority,
+    ) = applied(&first);
     assert_eq!(tree_revision, 2);
     assert_eq!(order, CreateVolumePublicOrder::CanonicalSiblingOrder(1));
-    let authority = first
-        .authority
-        .clone()
-        .expect("Applied Create Volume must write Structural Authority Settlement");
     assert_eq!(authority.prior_manuscript_tree_revision, 1);
     assert_eq!(authority.resulting_manuscript_tree_revision, 2);
     assert_eq!(authority.author_action_sequence, 1);
@@ -224,9 +218,12 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
     assert_eq!(tree.project_scope, scope);
     assert_eq!(tree.tree_revision, 2);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
+    let TransitionOutcome::Applied(first_applied) = &first.outcome else {
+        panic!("Create Volume on an empty active Project must apply");
+    };
     assert_eq!(
         tree.snapshot.project_activity_position,
-        first.project_activity_position
+        first_applied.project_activity_position
     );
     assert_eq!(
         tree.volumes,
@@ -263,12 +260,9 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        stale.effect,
-        CreateVolumeSettlementEffect::Conflicted {
-            reason: storyos_core::CreateVolumeConflict::StaleTreeRevision,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(storyos_core::CreateVolumeConflict::StaleTreeRevision)
     );
-    assert_eq!(stale.authority, None);
 
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
@@ -347,12 +341,9 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        archived.effect,
-        CreateVolumeSettlementEffect::Refused {
-            reason: storyos_core::CreateVolumeRefusal::ArchivedProject,
-        }
+        archived.outcome,
+        TransitionOutcome::Refused(storyos_core::CreateVolumeRefusal::ArchivedProject)
     );
-    assert_eq!(archived.authority, None);
     let volumes_after_refuse = admin
         .query_one(
             "SELECT count(*) FROM storyos.manuscript_objects
@@ -409,12 +400,12 @@ async fn create_volume_replays_canonical_sibling_order_and_keeps_historical_acks
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied {
-        order: first_order, ..
-    } = first.effect.clone()
-    else {
-        panic!("the first Create Volume must apply");
-    };
+    let (
+        VolumeCreated {
+            order: first_order, ..
+        },
+        _,
+    ) = applied(&first);
     assert_eq!(
         first_order,
         CreateVolumePublicOrder::CanonicalSiblingOrder(1)
@@ -438,24 +429,17 @@ async fn create_volume_replays_canonical_sibling_order_and_keeps_historical_acks
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied {
-        tree_revision,
-        volume_id,
-        order,
-    } = second.effect.clone()
-    else {
-        panic!("the second Create Volume must apply");
-    };
+    let (
+        VolumeCreated {
+            tree_revision,
+            volume_id,
+            order,
+        },
+        second_authority,
+    ) = applied(&second);
     assert_eq!(tree_revision, 3);
     assert_eq!(order, CreateVolumePublicOrder::CanonicalSiblingOrder(2));
-    assert_eq!(
-        second
-            .authority
-            .as_ref()
-            .expect("second Applied Create Volume must write authority")
-            .author_action_sequence,
-        2
-    );
+    assert_eq!(second_authority.author_action_sequence, 2);
     let replay = create_volume(
         &store,
         &titled_command(
@@ -523,8 +507,8 @@ async fn create_volume_replays_canonical_sibling_order_and_keeps_historical_acks
     .await
     .unwrap();
     assert_eq!(
-        historical.effect,
-        CreateVolumeSettlementEffect::Applied {
+        applied(&historical).0,
+        VolumeCreated {
             tree_revision,
             volume_id,
             order: CreateVolumePublicOrder::HistoricalCreateVolumeAck,
@@ -578,10 +562,7 @@ async fn stale_latest_snapshot_resyncs_and_does_not_return_the_live_tree() {
     )
     .await
     .unwrap();
-    let authority = created
-        .authority
-        .clone()
-        .expect("Applied Create Volume writes Structural Authority Settlement");
+    let (_, authority) = applied(&created);
     let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
         panic!("Create Volume must leave a Canonical Manuscript Tree");
     };

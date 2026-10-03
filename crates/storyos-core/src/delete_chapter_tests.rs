@@ -1,12 +1,11 @@
 use super::{
-    ChapterJoin, ChapterRemovalLifecycle, DeleteChapter, DeleteChapterConflict,
-    DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult,
-    ProjectLifecycle, ProjectPresence, delete_chapter,
+    ChapterJoin, ChapterRemovalLifecycle, DeleteChapter, DeleteChapterApplied,
+    DeleteChapterConflict, DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal,
+    DeleteChapterResult, ProjectLifecycle, delete_chapter,
 };
 
 fn command() -> DeleteChapter {
     DeleteChapter {
-        presence: ProjectPresence::Present,
         chapter_join: ChapterJoin::ExactScope,
         chapter_lifecycle: ChapterRemovalLifecycle::Active,
         expected_tree_revision: 4,
@@ -22,10 +21,10 @@ fn command() -> DeleteChapter {
 fn removing_a_non_current_chapter_preserves_the_current_chapter() {
     assert_eq!(
         delete_chapter(&command()),
-        DeleteChapterResult::Applied {
+        DeleteChapterResult::Applied(DeleteChapterApplied {
             tree_revision: 5,
             current: DeleteChapterCurrent::PreserveExisting,
-        }
+        })
     );
 }
 
@@ -36,12 +35,12 @@ fn removing_the_current_chapter_selects_the_next_remaining_chapter() {
     current.current_chapter_id = Some("b".to_owned());
     assert_eq!(
         delete_chapter(&current),
-        DeleteChapterResult::Applied {
+        DeleteChapterResult::Applied(DeleteChapterApplied {
             tree_revision: 5,
             current: DeleteChapterCurrent::SelectSuccessor {
                 chapter_id: "c".to_owned(),
             },
-        }
+        })
     );
 }
 
@@ -52,12 +51,12 @@ fn removing_the_last_current_chapter_selects_the_previous_remaining_chapter() {
     last.current_chapter_id = Some("c".to_owned());
     assert_eq!(
         delete_chapter(&last),
-        DeleteChapterResult::Applied {
+        DeleteChapterResult::Applied(DeleteChapterApplied {
             tree_revision: 5,
             current: DeleteChapterCurrent::SelectSuccessor {
                 chapter_id: "b".to_owned(),
             },
-        }
+        })
     );
 }
 
@@ -71,10 +70,10 @@ fn removing_the_only_current_chapter_opens_an_explicit_empty_state() {
     };
     assert_eq!(
         delete_chapter(&only),
-        DeleteChapterResult::Applied {
+        DeleteChapterResult::Applied(DeleteChapterApplied {
             tree_revision: 5,
             current: DeleteChapterCurrent::Empty,
-        }
+        })
     );
 }
 
@@ -85,9 +84,7 @@ fn an_already_removed_chapter_classifies_as_no_effect() {
     removed.ordered_active_chapter_ids = vec!["a".to_owned(), "c".to_owned()];
     assert_eq!(
         delete_chapter(&removed),
-        DeleteChapterResult::NoEffect {
-            reason: DeleteChapterNoEffect::AlreadyRemoved,
-        }
+        DeleteChapterResult::NoEffect(DeleteChapterNoEffect::AlreadyRemoved)
     );
 }
 
@@ -97,9 +94,7 @@ fn a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect() {
     stale.expected_tree_revision = 3;
     assert_eq!(
         delete_chapter(&stale),
-        DeleteChapterResult::Conflicted {
-            reason: DeleteChapterConflict::StaleTreeRevision,
-        }
+        DeleteChapterResult::Conflicted(DeleteChapterConflict::StaleTreeRevision)
     );
 }
 
@@ -109,9 +104,7 @@ fn an_invalid_chapter_join_classifies_as_refused_with_zero_authority_effect() {
     invalid.chapter_join = ChapterJoin::Invalid;
     assert_eq!(
         delete_chapter(&invalid),
-        DeleteChapterResult::Refused {
-            reason: DeleteChapterRefusal::InvalidChapterJoin,
-        }
+        DeleteChapterResult::Refused(DeleteChapterRefusal::InvalidChapterJoin)
     );
 }
 
@@ -121,20 +114,6 @@ fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
     archived.current_lifecycle = ProjectLifecycle::Archived;
     assert_eq!(
         delete_chapter(&archived),
-        DeleteChapterResult::Refused {
-            reason: DeleteChapterRefusal::ArchivedProject,
-        }
-    );
-}
-
-#[test]
-fn a_missing_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut missing = command();
-    missing.presence = ProjectPresence::Absent;
-    assert_eq!(
-        delete_chapter(&missing),
-        DeleteChapterResult::Refused {
-            reason: DeleteChapterRefusal::MissingProject,
-        }
+        DeleteChapterResult::Refused(DeleteChapterRefusal::ArchivedProject)
     );
 }

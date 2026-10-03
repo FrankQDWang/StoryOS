@@ -1,17 +1,20 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
-    CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UpdateChapterCommand,
-    UpdateChapterSettlementEffect, UserId, VolumeId, VolumeNode, create_chapter,
-    create_editor_session, create_project, create_volume, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
-    open_current_chapter, open_project, undo_latest_author_action, update_chapter,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
+    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
+    EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
+    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UpdateChapterInput,
+    UserId, VolumeCreated, VolumeId, VolumeNode, create_editor_session, create_project,
+    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
+    open_chapter, open_current_chapter, open_project, undo_latest_author_action,
 };
+use storyos_core::{TransitionOutcome, UpdateChapterApplied};
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{
+    CommandCall, applied, command_call, create_chapter, create_volume, update_chapter,
+};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 pub(super) const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -116,27 +119,17 @@ fn volume_command(
     binding: ProjectCommandChallengeBinding,
     nonce_digest: &str,
     ids_suffix: &str,
-) -> CreateVolumeCommand {
-    CreateVolumeCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        VOLUME_BYTES,
+        CreateVolumeInput {
+            title: VOLUME_TITLE.to_owned(),
+            expected_tree_revision: 1,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: VOLUME_BYTES.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: VOLUME_TITLE.to_owned(),
-        expected_tree_revision: 1,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 fn chapter_issue(
@@ -174,29 +167,19 @@ fn chapter_command(
     title: &str,
     expected_tree_revision: u64,
     bytes: &[u8],
-) -> CreateChapterCommand {
-    CreateChapterCommand {
-        placement: storyos_core::CreateChapterPlacement::Append,
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateChapterInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        bytes,
+        CreateChapterInput {
+            placement: storyos_core::CreateChapterPlacement::Append,
+            volume_id: volume_id.to_owned(),
+            title: title.to_owned(),
+            expected_tree_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        volume_id: volume_id.to_owned(),
-        title: title.to_owned(),
-        expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 pub(super) fn update_issue(
@@ -239,29 +222,19 @@ pub(super) fn update_command(
     nonce_digest: &str,
     ids_suffix: &str,
     fixture: UpdateFixture<'_>,
-) -> UpdateChapterCommand {
-    UpdateChapterCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<UpdateChapterInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        fixture.bytes,
+        UpdateChapterInput {
+            chapter_id: ChapterId::new(fixture.chapter_id),
+            title: fixture.title.to_owned(),
+            order: fixture.order,
+            expected_tree_revision: fixture.expected_tree_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: fixture.bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        chapter_id: ChapterId::new(fixture.chapter_id),
-        title: fixture.title.to_owned(),
-        order: fixture.order,
-        expected_tree_revision: fixture.expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 fn applied_fixture(chapter_id: &str) -> UpdateFixture<'_> {
@@ -317,9 +290,7 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied { volume_id, .. } = volume.effect else {
-        panic!("Create Volume on an empty active Project must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&volume);
 
     let first_chapter_issue = chapter_issue(&scope, "0d14", CHAPTER_A_DIGEST);
     issue_project_command_challenge(&store, &first_chapter_issue)
@@ -339,13 +310,13 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied {
-        chapter_id: first_chapter_id,
-        ..
-    } = first_chapter.effect
-    else {
-        panic!("the first Chapter must apply");
-    };
+    let (
+        ChapterCreated {
+            chapter_id: first_chapter_id,
+            ..
+        },
+        _,
+    ) = applied(&first_chapter);
     let second_chapter_issue = chapter_issue(&scope, "0d16", CHAPTER_B_DIGEST);
     issue_project_command_challenge(&store, &second_chapter_issue)
         .await
@@ -364,13 +335,13 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied {
-        chapter_id: second_chapter_id,
-        ..
-    } = second_chapter.effect
-    else {
-        panic!("the second Chapter must apply");
-    };
+    let (
+        ChapterCreated {
+            chapter_id: second_chapter_id,
+            ..
+        },
+        _,
+    ) = applied(&second_chapter);
 
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
@@ -408,18 +379,15 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
+    let (effect, authority) = applied(&first);
     assert_eq!(
-        first.effect,
-        UpdateChapterSettlementEffect::Applied {
+        effect,
+        UpdateChapterApplied {
             title: "Chapter B".to_owned(),
             order: 2,
             tree_revision: 5,
         }
     );
-    let authority = first
-        .authority
-        .clone()
-        .expect("Applied Update Chapter must write Structural Authority Settlement");
     assert_eq!(authority.prior_manuscript_tree_revision, 4);
     assert_eq!(authority.resulting_manuscript_tree_revision, 5);
     assert_eq!(authority.author_action_sequence, 4);
@@ -474,9 +442,12 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     };
     assert_eq!(tree.tree_revision, 5);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
+    let TransitionOutcome::Applied(first_applied) = &first.outcome else {
+        panic!("Update Chapter must apply");
+    };
     assert_eq!(
         tree.snapshot.project_activity_position,
-        first.project_activity_position
+        first_applied.project_activity_position
     );
     assert_eq!(
         tree.volumes,
@@ -524,12 +495,9 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        stale.effect,
-        UpdateChapterSettlementEffect::Conflicted {
-            reason: storyos_core::UpdateChapterConflict::StaleTreeRevision,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(storyos_core::UpdateChapterConflict::StaleTreeRevision)
     );
-    assert_eq!(stale.authority, None);
 
     let missing_issue = update_issue(&scope, "0d1c", UPDATE_DIGEST);
     issue_project_command_challenge(&store, &missing_issue)
@@ -547,12 +515,9 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        missing.effect,
-        UpdateChapterSettlementEffect::Refused {
-            reason: storyos_core::UpdateChapterRefusal::InvalidChapterJoin,
-        }
+        missing.outcome,
+        TransitionOutcome::Refused(storyos_core::UpdateChapterRefusal::InvalidChapterJoin)
     );
-    assert_eq!(missing.authority, None);
 
     let invalid_issue = update_issue(&scope, "0d1e", INVALID_ORDER_DIGEST);
     issue_project_command_challenge(&store, &invalid_issue)
@@ -576,12 +541,9 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        invalid.effect,
-        UpdateChapterSettlementEffect::Refused {
-            reason: storyos_core::UpdateChapterRefusal::InvalidOrder,
-        }
+        invalid.outcome,
+        TransitionOutcome::Refused(storyos_core::UpdateChapterRefusal::InvalidOrder)
     );
-    assert_eq!(invalid.authority, None);
 
     let row = admin
         .query_one(
@@ -677,12 +639,9 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        archived.effect,
-        UpdateChapterSettlementEffect::Refused {
-            reason: storyos_core::UpdateChapterRefusal::ArchivedProject,
-        }
+        archived.outcome,
+        TransitionOutcome::Refused(storyos_core::UpdateChapterRefusal::ArchivedProject)
     );
-    assert_eq!(archived.authority, None);
     let chapters_after_refuse = admin
         .query_one(
             "SELECT count(*) FROM storyos.manuscript_objects
@@ -756,9 +715,7 @@ pub(super) async fn apply_volume(
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied { volume_id, .. } = settlement.effect else {
-        panic!("Volume A must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&settlement);
     volume_id
 }
 
@@ -793,9 +750,7 @@ pub(super) async fn apply_chapter(
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied { chapter_id, .. } = settlement.effect else {
-        panic!("{title} must apply");
-    };
+    let (ChapterCreated { chapter_id, .. }, _) = applied(&settlement);
     chapter_id
 }
 
@@ -883,14 +838,8 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
         },
     )
     .await;
-    let UpdateChapterSettlementEffect::Applied { tree_revision, .. } = updated.effect else {
-        panic!("Rename A must apply");
-    };
+    let (UpdateChapterApplied { tree_revision, .. }, authority) = applied(&updated);
     assert_eq!(tree_revision, 6);
-    let authority = updated
-        .authority
-        .clone()
-        .expect("Applied Update Chapter must write authority");
     let session_issue = named_issue(
         &scope,
         "118c",
@@ -1129,14 +1078,8 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
         },
     )
     .await;
-    let UpdateChapterSettlementEffect::Applied { tree_revision, .. } = updated.effect else {
-        panic!("Move A must apply");
-    };
+    let (UpdateChapterApplied { tree_revision, .. }, authority) = applied(&updated);
     assert_eq!(tree_revision, 5);
-    let authority = updated
-        .authority
-        .clone()
-        .expect("Applied Update Chapter must write authority");
     let GetManuscriptTree::Found(tree_after_move) =
         get_manuscript_tree(&store, &scope).await.unwrap()
     else {

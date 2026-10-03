@@ -37,6 +37,14 @@ pub(crate) struct StructureCommitBinding<'a> {
     pub identity: StructureAffectedIdentity<'a>,
 }
 
+/// The Domain Receipt payload of a zero-authority outcome, or the empty payload of an applied one.
+pub(crate) fn receipt_reason_payload(reason_code: Option<&'static str>) -> String {
+    match reason_code {
+        Some(code) => serde_json::json!({ "reason": code }).to_string(),
+        None => "{}".to_owned(),
+    }
+}
+
 pub(crate) async fn allocate_structure_transition_sequences(
     client: &Client,
     scope: &ProjectScope,
@@ -293,6 +301,63 @@ pub(crate) async fn persist_compensation_author_action(
                 &source_sequence.to_string(),
                 &sequences.authoritative_commit_id,
                 &receipt_id,
+            ],
+        )
+        .await?;
+    Ok(())
+}
+
+/// Moves the current writer base Snapshot to a new canonical Snapshot of one Chapter.
+pub(crate) async fn rebind_writer_base(
+    client: &Client,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    snapshot_id: &str,
+    project_activity_position: u64,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let authoritative_revision_id = client
+        .query_opt(
+            "SELECT head.current_revision_id::text
+               FROM storyos.authoritative_heads AS head
+              WHERE head.owner_user_id = $1::text::uuid AND head.project_id = $2::text::uuid
+                AND head.manuscript_object_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &chapter_id,
+            ],
+        )
+        .await?
+        .map(|row| row.get::<_, String>(0))
+        .ok_or("the Current Chapter has no authoritative head")?;
+    client
+        .execute(
+            "UPDATE storyos.editor_session_base_snapshots AS snapshot
+                SET snapshot_id = $3::text::uuid,
+                    chapter_object_id = $4::text::uuid,
+                    authoritative_revision_id = $5::text::uuid,
+                    project_activity_position = $6::text::numeric,
+                    created_at = clock_timestamp()
+               FROM storyos.project_writer_generations AS writer
+              WHERE snapshot.owner_user_id = $1::text::uuid
+                AND snapshot.project_id = $2::text::uuid
+                AND (writer.owner_user_id, writer.project_id,
+                     writer.current_editor_session_id) =
+                    (snapshot.owner_user_id, snapshot.project_id,
+                     snapshot.editor_session_id)
+                AND writer.writer_generation = (
+                  SELECT max(current_writer.writer_generation)
+                    FROM storyos.project_writer_generations AS current_writer
+                   WHERE current_writer.owner_user_id = snapshot.owner_user_id
+                     AND current_writer.project_id = snapshot.project_id
+                )",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &snapshot_id,
+                &chapter_id,
+                &authoritative_revision_id,
+                &project_activity_position.to_string(),
             ],
         )
         .await?;

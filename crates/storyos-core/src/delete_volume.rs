@@ -1,6 +1,7 @@
 //! Pure Core classification for author-initiated Volume removal.
 
-use super::{ProjectLifecycle, ProjectPresence, VolumeJoin};
+use super::{ProjectLifecycle, TransitionOutcome, VolumeJoin};
+use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VolumeRemovalLifecycle {
@@ -16,7 +17,6 @@ pub enum VolumeChildPolicy {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeleteVolume {
-    pub presence: ProjectPresence,
     pub volume_join: VolumeJoin,
     pub volume_lifecycle: VolumeRemovalLifecycle,
     pub child_chapters: VolumeChildPolicy,
@@ -26,12 +26,16 @@ pub struct DeleteVolume {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum DeleteVolumeResult {
-    Applied { tree_revision: u64 },
-    NoEffect { reason: DeleteVolumeNoEffect },
-    Conflicted { reason: DeleteVolumeConflict },
-    Refused { reason: DeleteVolumeRefusal },
+pub struct DeleteVolumeApplied {
+    pub tree_revision: u64,
 }
+
+pub type DeleteVolumeResult = TransitionOutcome<
+    DeleteVolumeApplied,
+    DeleteVolumeNoEffect,
+    DeleteVolumeConflict,
+    DeleteVolumeRefusal,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeleteVolumeNoEffect {
@@ -45,47 +49,45 @@ pub enum DeleteVolumeConflict {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeleteVolumeRefusal {
-    MissingProject,
     InvalidVolumeJoin,
     ArchivedProject,
     NonemptyVolume,
 }
 
+reason_codes!(DeleteVolumeNoEffect {
+    AlreadyRemoved => "already_removed",
+});
+
+reason_codes!(DeleteVolumeConflict {
+    StaleTreeRevision => "stale_tree_revision",
+});
+
+reason_codes!(DeleteVolumeRefusal {
+    InvalidVolumeJoin => "invalid_volume_join",
+    ArchivedProject => "archived_project",
+    NonemptyVolume => "nonempty_volume",
+});
+
 /// Classify one Volume removal against exact Scope, join, revision, and active child Chapters.
 pub fn delete_volume(command: &DeleteVolume) -> DeleteVolumeResult {
-    if command.presence == ProjectPresence::Absent {
-        return DeleteVolumeResult::Refused {
-            reason: DeleteVolumeRefusal::MissingProject,
-        };
-    }
     if command.volume_join == VolumeJoin::Invalid {
-        return DeleteVolumeResult::Refused {
-            reason: DeleteVolumeRefusal::InvalidVolumeJoin,
-        };
+        return DeleteVolumeResult::Refused(DeleteVolumeRefusal::InvalidVolumeJoin);
     }
     if command.current_lifecycle == ProjectLifecycle::Archived {
-        return DeleteVolumeResult::Refused {
-            reason: DeleteVolumeRefusal::ArchivedProject,
-        };
+        return DeleteVolumeResult::Refused(DeleteVolumeRefusal::ArchivedProject);
     }
     if command.expected_tree_revision != command.current_tree_revision {
-        return DeleteVolumeResult::Conflicted {
-            reason: DeleteVolumeConflict::StaleTreeRevision,
-        };
+        return DeleteVolumeResult::Conflicted(DeleteVolumeConflict::StaleTreeRevision);
     }
     if command.volume_lifecycle == VolumeRemovalLifecycle::Removed {
-        return DeleteVolumeResult::NoEffect {
-            reason: DeleteVolumeNoEffect::AlreadyRemoved,
-        };
+        return DeleteVolumeResult::NoEffect(DeleteVolumeNoEffect::AlreadyRemoved);
     }
     if command.child_chapters == VolumeChildPolicy::Nonempty {
-        return DeleteVolumeResult::Refused {
-            reason: DeleteVolumeRefusal::NonemptyVolume,
-        };
+        return DeleteVolumeResult::Refused(DeleteVolumeRefusal::NonemptyVolume);
     }
-    DeleteVolumeResult::Applied {
+    DeleteVolumeResult::Applied(DeleteVolumeApplied {
         tree_revision: command.current_tree_revision + 1,
-    }
+    })
 }
 
 #[cfg(test)]

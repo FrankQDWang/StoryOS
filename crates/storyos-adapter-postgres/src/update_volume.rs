@@ -1,286 +1,170 @@
-use crate::command_response_project::{
-    CommandResponseProjectEvidence, read_command_response_project,
-};
 use storyos_application::{
-    AuthorCommandAdmissionIds, ProjectCommandChallengeError, ProjectCommandChallengeUse,
-    UpdateVolumeAuthority, UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlement,
-    UpdateVolumeSettlementEffect, UpdateVolumeStore,
+    ProjectCommandEnvelope, ProjectCommandError, UpdateVolumeInput, UpdateVolumeSettlement,
+};
+use storyos_core::{
+    UpdateVolume as CoreUpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict,
+    UpdateVolumeNoEffect, UpdateVolumeRefusal, VolumeJoin, update_volume as classify_update_volume,
+};
+use tokio_postgres::Client;
+
+use crate::PostgresProjectReader;
+use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::structure_command::{
+    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
+    unavailable,
 };
 
-use super::*;
-
-mod persist;
-use persist::persist_update_volume;
-
-impl UpdateVolumeStore for PostgresProjectReader {
-    async fn update_volume(
+impl PostgresProjectReader {
+    /// Settles one Update Volume (rename and reorder) as a Manuscript Structure Transition.
+    pub async fn update_volume(
         &self,
-        command: &UpdateVolumeCommand,
-    ) -> Result<UpdateVolumeSettlement, UpdateVolumeError> {
-        let mut transaction = self
-            .begin_serializable_project_command_transaction(&command.project_scope)
-            .await
-            .map_err(update_volume_challenge_error)?;
-        let challenge_use = transaction
-            .consume(&command.challenge_binding, &command.nonce_digest)
-            .await
-            .map_err(update_volume_challenge_error)?;
-        match challenge_use {
-            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(update_volume_challenge_error)?;
-                read_update_volume_settlement(self, command, &result_reference).await
-            }
-            ProjectCommandChallengeUse::ExactRetryInProgress => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(update_volume_challenge_error)?;
-                Err(UpdateVolumeError::BindingConflict)
-            }
-            ProjectCommandChallengeUse::FirstUse => {
-                match persist_update_volume(&transaction.client, command).await {
-                    Ok(settlement) => {
-                        transaction
-                            .commit()
-                            .await
-                            .map_err(update_volume_challenge_error)?;
-                        Ok(settlement)
-                    }
-                    Err(error) => {
-                        let _rollback = transaction.rollback().await;
-                        Err(error)
-                    }
-                }
-            }
-        }
+        envelope: &ProjectCommandEnvelope,
+        input: &UpdateVolumeInput,
+    ) -> Result<UpdateVolumeSettlement, ProjectCommandError> {
+        settle_structure_command(self, envelope, input).await
     }
 }
 
-async fn read_update_volume_settlement(
-    store: &PostgresProjectReader,
-    command: &UpdateVolumeCommand,
-    receipt_id: &str,
-) -> Result<UpdateVolumeSettlement, UpdateVolumeError> {
-    let client = store
-        .connect_challenge()
-        .await
-        .map_err(update_volume_challenge_error)?;
-    client
-        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(update_volume_database_error)?;
-    let result = async {
-        set_challenge_scope_on_client(&client, &command.project_scope)
-            .await
-            .map_err(update_volume_challenge_error)?;
-        let row = client
-            .query_opt(
-                "SELECT receipt.command_id::text,
-                        receipt.author_command_admission_id::text,
-                        receipt.receipt_id::text,
-                        to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                        receipt.result_kind,
-                        receipt.result_payload->>'reason',
-                        payload.payload->>'tree_revision',
-                        payload.payload->>'title',
-                        payload.payload->>'order',
-                        payload.project_activity_position::text,
-                        payload.project_activity_event_id::text,
-                        authoritative_commit.authoritative_commit_id::text,
-                        action.author_action_sequence::text,
-                        snapshot.snapshot_id::text,
-                        authoritative_commit.prior_manuscript_tree_revision::text,
-                        authoritative_commit.resulting_manuscript_tree_revision::text,
-                        idempotency.acknowledgement_format,
-                        idempotency.response_project::text
-                   FROM storyos.domain_receipts AS receipt
-                   JOIN storyos.author_command_admission_settlements AS settlement
-                     ON (settlement.owner_user_id, settlement.project_id,
-                         settlement.author_command_admission_id, settlement.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id,
-                         receipt.author_command_admission_id, receipt.receipt_id)
-                   JOIN storyos.command_idempotency AS idempotency
-                     ON (idempotency.owner_user_id, idempotency.project_id,
-                         idempotency.command_kind, idempotency.idempotency_key,
-                         idempotency.result_reference) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
-                         receipt.idempotency_key, receipt.receipt_id::text)
-              LEFT JOIN storyos.project_activity_event_payloads AS payload
-                     ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.authoritative_commits AS authoritative_commit
-                     ON (authoritative_commit.owner_user_id, authoritative_commit.project_id,
-                         authoritative_commit.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.author_action_entries AS action
-                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.project_snapshots AS snapshot
-                     ON (snapshot.owner_user_id, snapshot.project_id,
-                         snapshot.project_activity_position) =
-                        (payload.owner_user_id, payload.project_id,
-                         payload.project_activity_position)
-                    AND snapshot.snapshot_kind = 'canonical'
-                  WHERE receipt.owner_user_id = $1::text::uuid
-                    AND receipt.project_id = $2::text::uuid
-                    AND receipt.receipt_id = $3::text::uuid
-                    AND receipt.command_kind = 'updateVolume'
-                    AND receipt.command_digest = $4
-                    AND receipt.idempotency_key = $5::text::uuid
-                    AND settlement.settlement_kind = 'receipt_settled'
-                    AND idempotency.outcome_kind = 'settled'",
+/// The live Volume order that `classify` locks and `apply` reuses.
+pub(crate) struct LiveVolumes {
+    ordered_ids: Vec<String>,
+    current_title: String,
+    current_order: u64,
+}
+
+impl StructureCommand for UpdateVolumeInput {
+    const SPEC: CommandSpec = CommandSpec {
+        kind: "updateVolume",
+        isolation: CommandIsolation::Serializable,
+        activity_kind: "volume_updated",
+    };
+    type Applied = UpdateVolumeApplied;
+    type Plan = LiveVolumes;
+    type Effect = UpdateVolumeApplied;
+    type NoEffect = UpdateVolumeNoEffect;
+    type Conflict = UpdateVolumeConflict;
+    type Refusal = UpdateVolumeRefusal;
+
+    async fn classify(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+    ) -> Result<(Classified<Self>, LiveVolumes), ProjectCommandError> {
+        let volumes = client
+            .query(
+                "SELECT manuscript_object_id::text, title
+                   FROM storyos.manuscript_objects AS volume
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND object_kind = 'volume'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM storyos.volume_removal_decisions AS removal
+                       WHERE removal.owner_user_id = volume.owner_user_id
+                         AND removal.project_id = volume.project_id
+                         AND removal.volume_id = volume.manuscript_object_id
+                    )
+                  ORDER BY tree_order
+                  FOR UPDATE",
                 &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &receipt_id,
-                    &command.challenge_binding.canonical_command_digest,
-                    &command.challenge_binding.idempotency_key,
+                    &envelope.project_scope.owner_user_id.as_ref(),
+                    &envelope.project_scope.project_id.as_ref(),
                 ],
             )
             .await
-            .map_err(update_volume_database_error)?
-            .ok_or(UpdateVolumeError::BindingConflict)?;
-        let result_kind = row.get::<_, String>(4);
-        let reason = row.get::<_, Option<String>>(5);
-        let effect = match (result_kind.as_str(), reason.as_deref()) {
-            ("authoritative_applied", None) => {
-                let tree_revision = row
-                    .get::<_, Option<String>>(6)
-                    .ok_or(UpdateVolumeError::BindingConflict)?
-                    .parse::<u64>()
-                    .map_err(update_volume_parse_error)?;
-                let title = row
-                    .get::<_, Option<String>>(7)
-                    .ok_or(UpdateVolumeError::BindingConflict)?;
-                let order = row
-                    .get::<_, Option<String>>(8)
-                    .ok_or(UpdateVolumeError::BindingConflict)?
-                    .parse::<u64>()
-                    .map_err(update_volume_parse_error)?;
-                UpdateVolumeSettlementEffect::Applied {
-                    title,
-                    order,
-                    tree_revision,
-                }
-            }
-            ("no_effect", Some("unchanged")) => UpdateVolumeSettlementEffect::NoEffect {
-                reason: storyos_core::UpdateVolumeNoEffect::Unchanged,
-            },
-            ("conflicted", Some("stale_tree_revision")) => {
-                UpdateVolumeSettlementEffect::Conflicted {
-                    reason: storyos_core::UpdateVolumeConflict::StaleTreeRevision,
-                }
-            }
-            ("refused", Some("archived_project")) => UpdateVolumeSettlementEffect::Refused {
-                reason: storyos_core::UpdateVolumeRefusal::ArchivedProject,
-            },
-            ("refused", Some("invalid_title")) => UpdateVolumeSettlementEffect::Refused {
-                reason: storyos_core::UpdateVolumeRefusal::InvalidTitle,
-            },
-            ("refused", Some("invalid_order")) => UpdateVolumeSettlementEffect::Refused {
-                reason: storyos_core::UpdateVolumeRefusal::InvalidOrder,
-            },
-            ("refused", Some("invalid_volume_join")) => UpdateVolumeSettlementEffect::Refused {
-                reason: storyos_core::UpdateVolumeRefusal::InvalidVolumeJoin,
-            },
-            _ => return Err(UpdateVolumeError::BindingConflict),
+            .map_err(unavailable)?;
+        let ordered_ids = volumes
+            .iter()
+            .map(|volume| volume.get::<_, String>(0))
+            .collect::<Vec<_>>();
+        let (volume_join, current_title, current_order) = match ordered_ids
+            .iter()
+            .position(|volume_id| volume_id == self.volume_id.as_ref())
+        {
+            Some(index) => (
+                VolumeJoin::ExactScope,
+                volumes[index].get::<_, String>(1),
+                index as u64 + 1,
+            ),
+            None => (VolumeJoin::Invalid, String::new(), 1),
         };
-        let authority = match (
-            row.get::<_, Option<String>>(11),
-            row.get::<_, Option<String>>(12),
-            row.get::<_, Option<String>>(13),
-            row.get::<_, Option<String>>(14),
-            row.get::<_, Option<String>>(15),
-        ) {
-            (
-                Some(authoritative_commit_id),
-                Some(author_action_sequence),
-                Some(snapshot_id),
-                Some(prior_manuscript_tree_revision),
-                Some(resulting_manuscript_tree_revision),
-            ) => Some(UpdateVolumeAuthority {
-                authoritative_commit_id,
-                author_action_sequence: author_action_sequence
-                    .parse()
-                    .map_err(update_volume_parse_error)?,
-                snapshot_id,
-                prior_manuscript_tree_revision: prior_manuscript_tree_revision
-                    .parse()
-                    .map_err(update_volume_parse_error)?,
-                resulting_manuscript_tree_revision: resulting_manuscript_tree_revision
-                    .parse()
-                    .map_err(update_volume_parse_error)?,
+        let classified = classify_update_volume(&CoreUpdateVolume {
+            volume_join,
+            expected_tree_revision: self.expected_tree_revision,
+            current_tree_revision: project.tree_revision,
+            current_lifecycle: project.lifecycle,
+            title: self.title.clone(),
+            current_title: current_title.clone(),
+            order: self.order,
+            current_order,
+            volume_count: ordered_ids.len() as u64,
+        });
+        Ok((
+            classified,
+            LiveVolumes {
+                ordered_ids,
+                current_title,
+                current_order,
+            },
+        ))
+    }
+
+    async fn apply(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        _project: &LockedProject,
+        live: LiveVolumes,
+        applied: UpdateVolumeApplied,
+    ) -> Result<StructureWrite<UpdateVolumeApplied>, ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        let renamed = client
+            .execute(
+                "UPDATE storyos.manuscript_objects
+                    SET title = $3
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND manuscript_object_id = $4::text::uuid AND object_kind = 'volume'",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &applied.title,
+                    &self.volume_id.as_ref(),
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        if renamed != 1 {
+            return Err(unavailable("Volume row changed under FOR UPDATE"));
+        }
+        if live.current_order != applied.order {
+            let mut ids = live.ordered_ids;
+            let moved = ids.remove((live.current_order - 1) as usize);
+            ids.insert((applied.order - 1) as usize, moved);
+            crate::volume_storage_order::persist_volume_storage_order(client, scope, &ids)
+                .await
+                .map_err(ProjectCommandError::Unavailable)?;
+        }
+        Ok(StructureWrite {
+            resulting_tree_revision: applied.tree_revision,
+            identity: StructureIdentity::Volume(self.volume_id.as_ref().to_owned()),
+            current_chapter: CurrentChapterChange::Preserve,
+            writer_base: WriterBase::Keep,
+            activity: serde_json::json!({
+            "volume_id": self.volume_id.as_ref(),
+            "title": applied.title,
+            "order": applied.order.to_string(),
+            "prior_title": live.current_title,
+            "prior_order": live.current_order.to_string(),
             }),
-            _ => None,
-        };
-        let response_project = match read_command_response_project(
-            row.get::<_, Option<String>>(16).as_deref(),
-            row.get::<_, Option<String>>(17).as_deref(),
-        ) {
-            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
-            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
-                return Err(UpdateVolumeError::HistoricalAcknowledgementUnavailable);
-            }
-            Err(()) => {
-                return Err(UpdateVolumeError::Unavailable(Box::new(
-                    std::io::Error::other("Update Volume acknowledgement evidence is damaged"),
-                )));
-            }
-        };
-        Ok(UpdateVolumeSettlement {
-            ids: AuthorCommandAdmissionIds {
-                command_id: row.get(0),
-                author_command_admission_id: row.get(1),
-                receipt_id: row.get(2),
-            },
-            receipt_created_at: row.get(3),
-            effect,
-            project_activity_position: row
-                .get::<_, Option<String>>(9)
-                .unwrap_or_else(|| "0".to_owned())
-                .parse::<u64>()
-                .map_err(update_volume_parse_error)?,
-            project_activity_event_id: row.get::<_, Option<String>>(10).unwrap_or_default(),
-            authority,
-            response_project,
+            effect: applied,
         })
     }
-    .await;
-    match &result {
-        Ok(_) => client
-            .batch_execute("COMMIT")
-            .await
-            .map_err(update_volume_database_error)?,
-        Err(_) => {
-            let _rollback = client.batch_execute("ROLLBACK").await;
-        }
+
+    fn decode(&self, replay: &CommandReplay) -> Result<UpdateVolumeApplied, ReplayFault> {
+        Ok(UpdateVolumeApplied {
+            title: replay.activity_text("title")?,
+            order: replay.activity_u64("order")?,
+            tree_revision: replay.activity_u64("tree_revision")?,
+        })
     }
-    result
-}
-
-pub(super) fn update_volume_challenge_error(
-    error: ProjectCommandChallengeError,
-) -> UpdateVolumeError {
-    match error {
-        ProjectCommandChallengeError::BindingConflict => UpdateVolumeError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired => UpdateVolumeError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
-        | ProjectCommandChallengeError::Unavailable(_) => {
-            UpdateVolumeError::Unavailable(Box::new(error))
-        }
-    }
-}
-
-pub(super) fn update_volume_database_error(error: tokio_postgres::Error) -> UpdateVolumeError {
-    UpdateVolumeError::Unavailable(Box::new(error))
-}
-
-pub(super) fn update_volume_parse_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> UpdateVolumeError {
-    UpdateVolumeError::Unavailable(Box::new(error))
 }

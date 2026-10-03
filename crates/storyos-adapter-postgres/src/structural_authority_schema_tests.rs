@@ -1,17 +1,20 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, CreateChapterCommand, CreateChapterSettlementEffect,
-    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeCommand,
-    CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, SetCurrentChapterCommand,
-    SetCurrentChapterSettlementEffect, UpdateChapterCommand, UpdateChapterSettlementEffect,
-    UpdateVolumeCommand, UpdateVolumeSettlementEffect, UserId, VolumeId, create_chapter,
-    create_editor_session, create_project, create_volume, issue_create_project_challenge,
-    issue_project_command_challenge, open_chapter, set_current_chapter, update_chapter,
-    update_volume,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, CreateChapterInput,
+    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
+    EditorSessionId, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectId,
+    ProjectScope, SetCurrentChapterCommand, SetCurrentChapterSettlementEffect, UpdateChapterInput,
+    UpdateVolumeInput, UserId, VolumeCreated, VolumeId, create_editor_session, create_project,
+    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
+    set_current_chapter,
 };
+use storyos_core::{TransitionOutcome, UpdateChapterApplied, UpdateVolumeApplied};
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{
+    CommandCall, applied, command_call, create_chapter, create_volume, update_chapter,
+};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const CLIENT: &str = "storyos.web-client.release-1.v3";
@@ -111,27 +114,17 @@ fn volume_command(
     nonce_digest: &str,
     ids_suffix: &str,
     expected_tree_revision: u64,
-) -> CreateVolumeCommand {
-    CreateVolumeCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        COMMAND_BYTES,
+        CreateVolumeInput {
+            title: TITLE.to_owned(),
+            expected_tree_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: COMMAND_BYTES.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: TITLE.to_owned(),
-        expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 fn command_issue(
@@ -173,29 +166,19 @@ fn chapter_command(
     title: &str,
     expected_tree_revision: u64,
     bytes: &[u8],
-) -> CreateChapterCommand {
-    CreateChapterCommand {
-        placement: storyos_core::CreateChapterPlacement::Append,
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateChapterInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        bytes,
+        CreateChapterInput {
+            placement: storyos_core::CreateChapterPlacement::Append,
+            volume_id: volume_id.to_owned(),
+            title: title.to_owned(),
+            expected_tree_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        volume_id: volume_id.to_owned(),
-        title: title.to_owned(),
-        expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 async fn open_admin() -> tokio_postgres::Client {
@@ -246,9 +229,7 @@ async fn seed_project_with_volume(
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied { volume_id, .. } = first.effect else {
-        panic!("Create Volume on an empty active Project must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&first);
     (scope, volume_id)
 }
 
@@ -292,9 +273,7 @@ async fn seed_chapter(
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied { chapter_id, .. } = created.effect else {
-        panic!("Create Chapter on an active Volume must apply");
-    };
+    let (ChapterCreated { chapter_id, .. }, _) = applied(&created);
     chapter_id
 }
 
@@ -462,10 +441,7 @@ async fn unsuccessful_structure_receipt_still_rejects_commit_ids() {
     )
     .await
     .unwrap();
-    assert!(matches!(
-        stale.effect,
-        CreateVolumeSettlementEffect::Conflicted { .. }
-    ));
+    assert!(matches!(stale.outcome, TransitionOutcome::Conflicted(_)));
     let admin = open_admin().await;
     let error = admin
         .execute(
@@ -774,36 +750,41 @@ async fn applied_update_volume_receipt_may_bind_empty_pair_commit_and_author_act
     issue_project_command_challenge(&store, &update_issue)
         .await
         .unwrap();
-    let updated = update_volume(
-        &store,
-        &UpdateVolumeCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: update_issue.binding.client_session_binding_digest.clone(),
-                session_generation: update_issue.binding.client_session_generation,
-                client_contract_revision: update_issue.binding.client_contract_revision.clone(),
-                security_policy_revision: update_issue.binding.security_policy_revision.clone(),
+    let updated = store
+        .update_volume(
+            &ProjectCommandEnvelope {
+                project_scope: scope.clone(),
+                client_binding: EditorClientBinding {
+                    binding_ref: update_issue.binding.client_session_binding_digest.clone(),
+                    session_generation: update_issue.binding.client_session_generation,
+                    client_contract_revision: update_issue.binding.client_contract_revision.clone(),
+                    security_policy_revision: update_issue.binding.security_policy_revision.clone(),
+                },
+                challenge_binding: update_issue.binding,
+                nonce_digest: update_issue.nonce_digest,
+                canonical_command_bytes: update_bytes.to_vec(),
+                correlation_id: "018f0000-0000-7001-8000-000000000864".to_owned(),
+                ids: AuthorCommandAdmissionIds {
+                    command_id: "018f0000-0000-7001-8000-000000010864".to_owned(),
+                    author_command_admission_id: "018f0000-0000-7001-8000-000000020864".to_owned(),
+                    receipt_id: "018f0000-0000-7001-8000-000000030864".to_owned(),
+                },
             },
-            challenge_binding: update_issue.binding,
-            nonce_digest: update_issue.nonce_digest,
-            canonical_command_bytes: update_bytes.to_vec(),
-            correlation_id: "018f0000-0000-7001-8000-000000000864".to_owned(),
-            volume_id: VolumeId::new(volume_id.clone()),
-            title: "Volume B".to_owned(),
-            order: 1,
-            expected_tree_revision: 2,
-            ids: AuthorCommandAdmissionIds {
-                command_id: "018f0000-0000-7001-8000-000000010864".to_owned(),
-                author_command_admission_id: "018f0000-0000-7001-8000-000000020864".to_owned(),
-                receipt_id: "018f0000-0000-7001-8000-000000030864".to_owned(),
+            &UpdateVolumeInput {
+                volume_id: VolumeId::new(volume_id.clone()),
+                title: "Volume B".to_owned(),
+                order: 1,
+                expected_tree_revision: 2,
             },
-        },
-    )
-    .await
-    .unwrap();
+        )
+        .await
+        .unwrap();
+    let TransitionOutcome::Applied(applied) = updated.outcome else {
+        panic!("Update Volume must apply");
+    };
     assert_eq!(
-        updated.effect,
-        UpdateVolumeSettlementEffect::Applied {
+        applied.effect,
+        UpdateVolumeApplied {
             title: "Volume B".to_owned(),
             order: 1,
             tree_revision: 3,
@@ -909,34 +890,24 @@ async fn applied_update_chapter_receipt_may_bind_empty_pair_commit_and_author_ac
         .unwrap();
     let updated = update_chapter(
         &store,
-        &UpdateChapterCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: update_issue.binding.client_session_binding_digest.clone(),
-                session_generation: update_issue.binding.client_session_generation,
-                client_contract_revision: update_issue.binding.client_contract_revision.clone(),
-                security_policy_revision: update_issue.binding.security_policy_revision.clone(),
+        &command_call(
+            update_issue.binding,
+            &update_issue.nonce_digest,
+            "0874",
+            update_bytes,
+            UpdateChapterInput {
+                chapter_id: ChapterId::new(chapter_id.clone()),
+                title: "Chapter B".to_owned(),
+                order: 1,
+                expected_tree_revision: 3,
             },
-            challenge_binding: update_issue.binding,
-            nonce_digest: update_issue.nonce_digest,
-            canonical_command_bytes: update_bytes.to_vec(),
-            correlation_id: "018f0000-0000-7001-8000-000000000874".to_owned(),
-            chapter_id: ChapterId::new(chapter_id.clone()),
-            title: "Chapter B".to_owned(),
-            order: 1,
-            expected_tree_revision: 3,
-            ids: AuthorCommandAdmissionIds {
-                command_id: "018f0000-0000-7001-8000-000000010874".to_owned(),
-                author_command_admission_id: "018f0000-0000-7001-8000-000000020874".to_owned(),
-                receipt_id: "018f0000-0000-7001-8000-000000030874".to_owned(),
-            },
-        },
+        ),
     )
     .await
     .unwrap();
     assert_eq!(
-        updated.effect,
-        UpdateChapterSettlementEffect::Applied {
+        applied(&updated).0,
+        UpdateChapterApplied {
             title: "Chapter B".to_owned(),
             order: 1,
             tree_revision: 4,

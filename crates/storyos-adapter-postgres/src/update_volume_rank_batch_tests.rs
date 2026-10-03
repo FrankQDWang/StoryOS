@@ -1,6 +1,6 @@
 use super::*;
 use crate::delete_volume_tests::apply_delete;
-use storyos_application::UpdateVolumeError;
+use storyos_application::ProjectCommandError;
 
 async fn durable_project_rows(
     admin: &tokio_postgres::Client,
@@ -176,7 +176,7 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
         .unwrap();
     let result = update_volume(&store, &command).await;
     match result {
-        Err(UpdateVolumeError::Unavailable(error)) => {
+        Err(ProjectCommandError::Unavailable(error)) => {
             assert!(format!("{error:?}").contains("injected Volume rank failure"));
         }
         other => panic!("expected the injected rank failure, got {other:?}"),
@@ -204,7 +204,7 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
         .await
         .unwrap();
     let before_overflow = durable_project_rows(&admin, &scope).await;
-    let Err(UpdateVolumeError::Unavailable(error)) = update_volume(&store, &command).await else {
+    let Err(ProjectCommandError::Unavailable(error)) = update_volume(&store, &command).await else {
         panic!("storage-key exhaustion must fail atomically");
     };
     assert!(format!("{error:?}").contains("E22003"));
@@ -319,9 +319,10 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
             },
         );
         let settlement = update_volume(&store, &command).await.unwrap();
+        let (effect, authority) = applied(&settlement);
         assert_eq!(
-            settlement.effect,
-            UpdateVolumeSettlementEffect::Applied {
+            effect,
+            UpdateVolumeApplied {
                 title: title.to_owned(),
                 order,
                 tree_revision: revision + 1,
@@ -361,7 +362,6 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
                 })
                 .collect::<Vec<_>>()
         );
-        let authority = settlement.authority.as_ref().unwrap();
         assert_eq!(
             (
                 tree.tree_revision,
@@ -371,7 +371,10 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
             (
                 revision + 1,
                 authority.snapshot_id.clone(),
-                settlement.project_activity_position
+                match &settlement.outcome {
+                    TransitionOutcome::Applied(applied) => applied.project_activity_position,
+                    other => panic!("the reorder must apply, got {other:?}"),
+                }
             )
         );
         assert_eq!(removed_volume_state(&admin, &scope).await, removed_before);

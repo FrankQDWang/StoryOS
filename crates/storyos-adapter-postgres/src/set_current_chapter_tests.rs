@@ -1,12 +1,16 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, CreateChapterCommand, CreateChapterSettlementEffect,
-    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeCommand, EditorClientBinding,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, CreateChapterInput,
+    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
     EditorSessionId, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
     OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    SetCurrentChapterCommand, SetCurrentChapterSettlementEffect, UserId, create_chapter,
-    create_editor_session, create_project, create_volume, issue_create_project_challenge,
+    SetCurrentChapterCommand, SetCurrentChapterSettlementEffect, UserId, VolumeCreated,
+    create_editor_session, create_project, issue_create_project_challenge,
     issue_project_command_challenge, open_chapter, open_project, set_current_chapter,
+};
+
+use crate::structure_command::tests::{
+    CommandCall, applied, command_call, create_chapter, create_volume,
 };
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -143,18 +147,17 @@ fn volume_command(
     binding: ProjectCommandChallengeBinding,
     nonce_digest: &str,
     ids_suffix: &str,
-) -> CreateVolumeCommand {
-    CreateVolumeCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: client_binding(&binding),
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: VOLUME_BYTES.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: "Volume A".to_owned(),
-        expected_tree_revision: 1,
-        ids: admission_ids(ids_suffix),
-    }
+) -> CommandCall<CreateVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        VOLUME_BYTES,
+        CreateVolumeInput {
+            title: "Volume A".to_owned(),
+            expected_tree_revision: 1,
+        },
+    )
 }
 
 fn chapter_command(
@@ -165,20 +168,19 @@ fn chapter_command(
     title: &str,
     expected_tree_revision: u64,
     bytes: &[u8],
-) -> CreateChapterCommand {
-    CreateChapterCommand {
-        placement: storyos_core::CreateChapterPlacement::Append,
-        project_scope: binding.project_scope.clone(),
-        client_binding: client_binding(&binding),
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        volume_id: volume_id.to_owned(),
-        title: title.to_owned(),
-        expected_tree_revision,
-        ids: admission_ids(ids_suffix),
-    }
+) -> CommandCall<CreateChapterInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        bytes,
+        CreateChapterInput {
+            placement: storyos_core::CreateChapterPlacement::Append,
+            volume_id: volume_id.to_owned(),
+            title: title.to_owned(),
+            expected_tree_revision,
+        },
+    )
 }
 
 fn current_command(
@@ -262,11 +264,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     )
     .await
     .unwrap();
-    let storyos_application::CreateVolumeSettlementEffect::Applied { volume_id, .. } =
-        volume.effect
-    else {
-        panic!("Create Volume on an empty active Project must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&volume);
     let first_issue = chapter_issue(&scope, "0e14", CHAPTER_A_DIGEST);
     issue_project_command_challenge(&store, &first_issue)
         .await
@@ -285,13 +283,13 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied {
-        chapter_id: chapter_a,
-        ..
-    } = first.effect
-    else {
-        panic!("the first Chapter must apply");
-    };
+    let (
+        ChapterCreated {
+            chapter_id: chapter_a,
+            ..
+        },
+        _,
+    ) = applied(&first);
     let second_issue = chapter_issue(&scope, "0e16", CHAPTER_B_DIGEST);
     issue_project_command_challenge(&store, &second_issue)
         .await
@@ -310,13 +308,13 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied {
-        chapter_id: chapter_b,
-        ..
-    } = second.effect
-    else {
-        panic!("the second Chapter must apply");
-    };
+    let (
+        ChapterCreated {
+            chapter_id: chapter_b,
+            ..
+        },
+        _,
+    ) = applied(&second);
     let session_issue = command_issue(
         &scope,
         "0e18",
