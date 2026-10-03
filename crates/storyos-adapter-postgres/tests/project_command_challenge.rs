@@ -486,7 +486,8 @@ async fn an_author_edit_challenge_issued_under_the_shared_revision_stays_consuma
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let mut issued_before_deployment = numbered_challenge_request(1_001, 1_001);
+    let mut issued_before_deployment =
+        numbered_challenge_request(/*index*/ 1_001, /*session_generation*/ 1_001);
     let binding = &mut issued_before_deployment.binding;
     binding.method = "POST".to_owned();
     binding.route_template = "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned();

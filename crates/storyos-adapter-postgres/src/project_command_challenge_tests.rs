@@ -211,18 +211,29 @@ fn author_edit_request(index: u64, generation: u64) -> IssueProjectCommandChalle
 async fn author_edit_and_shared_challenges_use_separate_rate_budgets() {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
-    let store = fixed_clock_store(runtime_url, 30_015);
+    let store = fixed_clock_store(runtime_url, /*unix_seconds*/ 30_015);
     let mut shared = Vec::new();
     for index in 8_901..=8_911 {
-        shared.push(issue_project_command_challenge(&store, &numbered_request(index, 901)).await);
+        shared.push(
+            issue_project_command_challenge(&store, &numbered_request(index, /*generation*/ 901))
+                .await,
+        );
     }
     let mut author_edits = Vec::new();
     for index in 9_001..=9_121 {
-        author_edits
-            .push(issue_project_command_challenge(&store, &author_edit_request(index, 901)).await);
+        author_edits.push(
+            issue_project_command_challenge(
+                &store,
+                &author_edit_request(index, /*generation*/ 901),
+            )
+            .await,
+        );
     }
-    let shared_after_author_edits =
-        issue_project_command_challenge(&store, &numbered_request(8_912, 901)).await;
+    let shared_after_author_edits = issue_project_command_challenge(
+        &store,
+        &numbered_request(/*index*/ 8_912, /*generation*/ 901),
+    )
+    .await;
 
     let admitted = |results: &[Result<_, ProjectCommandChallengeError>]| {
         results.iter().filter(|result| result.is_ok()).count()
