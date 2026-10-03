@@ -310,9 +310,15 @@ export function ManuscriptEditor({
     // One Author Undo is in progress from the key press until it settles.
     if (abandonUndoRef.current !== undefined || editor === null || workspace === undefined) return true;
     const started = undoLifetime.current;
-    const isCurrent = () => started === undoLifetime.current && persistWorkspaceRef.current === workspace && !editor.isDestroyed;
+    let abandoned = false;
+    const isCurrent = () => !abandoned && started === undoLifetime.current
+      && persistWorkspaceRef.current === workspace && !editor.isDestroyed;
     const challengeAdmission = createChallengeAdmissionWait(undoChallengeTimers);
-    const abandon = () => { undoLifetime.current += 1; challengeAdmission.cancel(); };
+    const abandon = () => {
+      abandoned = true;
+      challengeAdmission.cancel();
+      if (abandonUndoRef.current === abandon) abandonUndoRef.current = undefined;
+    };
     abandonUndoRef.current = abandon;
     void (async () => {
       await idleRef.current?.flush();

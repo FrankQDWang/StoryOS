@@ -10,9 +10,12 @@ export interface ChallengeAdmissionTimers {
 
 /** Repeats one command request while the Server refuses its Command Challenge with a rate limit. */
 export interface ChallengeAdmissionWait {
-  /** Returns the request result, or `undefined` after `cancel`. Other errors propagate. */
+  /**
+   * Returns the result of a completed request, also when `cancel` occurred during that request.
+   * Returns `undefined` when `cancel` occurs before or during a `Retry-After` wait. Other errors propagate.
+   */
   retry<Result>(request: () => Promise<Result>, onWait?: () => void): Promise<Result | undefined>;
-  /** Ends a current `Retry-After` wait at once and stops later attempts. */
+  /** Ends a current `Retry-After` wait at once and prevents later waits and attempts. */
   cancel(): void;
 }
 
@@ -30,6 +33,7 @@ export function createChallengeAdmissionWait({
         } catch (error) {
           // A Challenge rate limit only delays the command. The same request and idempotency key retry.
           if (!(error instanceof StoryOSProtocolError && error.status === 429)) throw error;
+          if (cancelled) return undefined;
           onWait?.();
           const retryAfterSeconds = Math.max(1, error.retryAfterSeconds ?? 1);
           await new Promise<void>((resolve) => {

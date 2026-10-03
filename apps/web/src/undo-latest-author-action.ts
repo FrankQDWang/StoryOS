@@ -28,7 +28,7 @@ const positiveU64 = (value: unknown): value is string =>
   typeof value === "string" && U64.test(value) && BigInt(value) > 0n
     && BigInt(value) <= 18446744073709551615n;
 
-type InFlightUndo = {
+type UndoSubmission = {
   idempotencyKey: string;
   correlationId: string;
   nonce?: string;
@@ -116,7 +116,7 @@ export async function undoOwnedLatestAuthorAction(options: {
   const expectedHead = durable?.group.frozen_request_body.undo_latest_author_action_input.expected_authoritative_revision_id
     ?? canonical.base_snapshot.authoritative_head_revision_id;
   if (!positiveU64(frontier)) return undefined;
-  const flight: InFlightUndo = {
+  const flight: UndoSubmission = {
     idempotencyKey: uuidV7(options.cryptoImpl),
     correlationId: uuidV7(options.cryptoImpl),
   };
@@ -227,12 +227,13 @@ async function submitUndo(
     baseUrl: string;
     fetchImpl: typeof fetch;
     cryptoImpl: Crypto;
+    isCurrent: () => boolean;
     challengeAdmission: ChallengeAdmissionWait;
     onChallengeWait: () => void;
   },
   frontier: string,
   expectedHead: string,
-  flight: InFlightUndo,
+  flight: UndoSubmission,
   frozen?: UndoLatestAuthorActionRequest,
 ): Promise<UndoLatestAuthorActionResponse> {
   const request = frozen ?? undoRequest(options.workspace, frontier, expectedHead, flight.correlationId);
@@ -255,16 +256,14 @@ async function submitUndo(
     if (challenge === undefined) throw new Error("Undo view changed");
     flight.nonce = challenge.nonce;
   }
-  const nonce = flight.nonce;
-  if (nonce === undefined) {
-    throw new Error("the Undo Latest Author Action challenge nonce is missing");
-  }
+  // An abandoned Undo is never sent, also when its Challenge request completed after the abandon.
+  if (!options.isCurrent()) throw new Error("Undo view changed");
   return undoLatestAuthorAction({
     baseUrl: options.baseUrl,
     projectId: options.workspace.partition.project_scope.project_id,
     fetchImpl: options.fetchImpl,
     idempotencyKey: flight.idempotencyKey,
-    antiForgery: nonce,
+    antiForgery: flight.nonce,
     request,
   });
 }
