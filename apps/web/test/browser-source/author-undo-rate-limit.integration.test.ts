@@ -100,7 +100,7 @@ async function openUndoEditor() {
     },
     waitForRetryTimer: () => expect.poll(() => timers.some((timer) => timer.timeout === 7_000)).toBe(true),
     retryTimers: () => timers.filter((timer) => timer.timeout === 7_000),
-    // A Journal transaction created now completes after any base install that started before it.
+    // A Journal transaction created now completes after a base install that started before it.
     journalSettled: () => new Promise<void>((resolve) => {
       test.workspace.database.transaction(["metadata"], "readonly").oncomplete = () => resolve();
     }),

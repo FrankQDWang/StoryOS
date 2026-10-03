@@ -763,7 +763,7 @@ test("undoLatestAuthorAction distinguishes historical absence from damaged new-f
   }
 });
 
-// The shared class admits at most 20 new Challenges in any two adjacent windows,
+// The shared class admits at most 20 new Challenges in two adjacent windows,
 // so 21 admitted Undo Challenges prove the author_edit class without a controlled clock.
 test("undoLatestAuthorAction Challenges use the author_edit Challenge Rate Class, not the shared budget", async () => {
   const { baseUrl, server } = await startRealServer();
