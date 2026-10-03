@@ -88,6 +88,7 @@ export function createAuthorEditIdleController({
   let undoGroupId: string | undefined;
   let lastCompletedAt: number | undefined;
   let idleTimer: TimerHandle | undefined;
+  let rateLimitWait: { timer: TimerHandle; resolve: () => void } | undefined;
   let stopped = false;
   let failed = false;
   let holdSubmission = false;
@@ -135,8 +136,9 @@ export function createAuthorEditIdleController({
         if (!(error instanceof StoryOSProtocolError && error.status === 429)) throw error;
         const retryAfterSeconds = Math.max(1, error.retryAfterSeconds ?? 1);
         await new Promise<void>((resolve) => {
-          setTimeoutImpl(resolve, retryAfterSeconds * 1000);
+          rateLimitWait = { timer: setTimeoutImpl(resolve, retryAfterSeconds * 1000), resolve };
         });
+        rateLimitWait = undefined;
         if (stopped) return;
       }
     }
@@ -286,6 +288,10 @@ export function createAuthorEditIdleController({
     close() {
       stopped = true;
       clearIdle();
+      if (rateLimitWait !== undefined) {
+        clearTimeoutImpl(rateLimitWait.timer);
+        rateLimitWait.resolve();
+      }
     },
   };
 }

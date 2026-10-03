@@ -25,7 +25,7 @@ import {
 
 const APPLIED_REVISION = "018f0000-0000-7001-8000-000000000034";
 
-it("keeps an Author Edit saving through a Challenge rate limit and retries the same group", async () => {
+async function openRateLimitedEditor() {
   const scenario = createBrowserScenario();
   let canonicalSession: GetEditorSessionResponse = {
     ...scenario.session,
@@ -87,32 +87,57 @@ it("keeps an Author Edit saving through a Challenge rate limit and retries the s
     chapter: scenario.chapter, profile: scenario.profile, fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
   requireEditorReady(workspace);
   trackDatabase(workspace.database, openDatabases);
-  const timers: Array<{ callback: () => void; timeout: number }> = [];
+  const timers: Array<{ callback: () => void; timeout: number; cleared: boolean }> = [];
   const projections: PendingEditProjection[] = [];
   const failures: unknown[] = [];
   const idle = createAuthorEditIdleController({ workspace, baseUrl: location.origin, fetchImpl,
     onProjection: (projection) => { projections.push(projection); },
     onFailure: (error) => { failures.push(error); },
-    setTimeoutImpl: (callback, timeout) => timers.push({ callback, timeout }),
-    clearTimeoutImpl: () => {} });
-  try {
-    await idle.persist(FIRST_APPEND_EDIT, "typing", "2026-08-15T08:00:00.000Z");
-    await idle.persist(SECOND_APPEND_EDIT, "typing", "2026-08-15T08:00:00.001Z");
-    const flushed = idle.flush();
-    await expect.poll(() => timers.some((timer) => timer.timeout === 7_000)).toBe(true);
+    setTimeoutImpl: (callback, timeout) => timers.push({ callback, timeout, cleared: false }) - 1,
+    clearTimeoutImpl: (timer) => { if (typeof timer === "number" && timers[timer]) timers[timer].cleared = true; } });
+  await idle.persist(FIRST_APPEND_EDIT, "typing", "2026-08-15T08:00:00.000Z");
+  await idle.persist(SECOND_APPEND_EDIT, "typing", "2026-08-15T08:00:00.001Z");
+  const flushed = idle.flush();
+  await expect.poll(() => timers.some((timer) => timer.timeout === 7_000)).toBe(true);
+  return {
+    workspace, idle, flushed, timers, projections, failures, challengeKeys,
+    retryTimer: () => timers.find((timer) => timer.timeout === 7_000)!,
+    async close() {
+      idle.close();
+      closeTrackedDatabases(openDatabases);
+      await deleteJournal(scenario.journalName);
+    },
+  };
+}
 
-    expect({ failures, saveState: workspace.pending.save_state, challengeCount: challengeKeys.length })
+it("keeps an Author Edit saving through a Challenge rate limit and retries the same group", async () => {
+  const editor = await openRateLimitedEditor();
+  try {
+    expect({ failures: editor.failures, saveState: editor.workspace.pending.save_state,
+      challengeCount: editor.challengeKeys.length })
       .toEqual({ failures: [], saveState: "saving", challengeCount: 1 });
 
-    timers.find((timer) => timer.timeout === 7_000)!.callback();
-    await flushed;
+    editor.retryTimer().callback();
+    await editor.flushed;
 
-    expect({ failures, challengeKeys: new Set(challengeKeys).size, challengeCount: challengeKeys.length,
-      last: projections.at(-1) }).toEqual({ failures: [], challengeKeys: 1, challengeCount: 2,
-      last: expect.objectContaining({ body: "Base!?", save_state: "saved", unsettled_intent_count: 0 }) });
+    expect({ failures: editor.failures, challengeKeys: new Set(editor.challengeKeys).size,
+      challengeCount: editor.challengeKeys.length, last: editor.projections.at(-1) })
+      .toEqual({ failures: [], challengeKeys: 1, challengeCount: 2,
+        last: expect.objectContaining({ body: "Base!?", save_state: "saved", unsettled_intent_count: 0 }) });
   } finally {
-    idle.close();
-    closeTrackedDatabases(openDatabases);
-    await deleteJournal(scenario.journalName);
+    await editor.close();
+  }
+});
+
+it("ends a Challenge rate-limit wait when the editor closes", async () => {
+  const editor = await openRateLimitedEditor();
+  try {
+    editor.idle.close();
+    await editor.idle.whenIdle();
+
+    expect({ cleared: editor.retryTimer().cleared, challengeCount: editor.challengeKeys.length,
+      failures: editor.failures }).toEqual({ cleared: true, challengeCount: 1, failures: [] });
+  } finally {
+    await editor.close();
   }
 });
