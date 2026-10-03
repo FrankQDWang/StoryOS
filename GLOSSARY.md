@@ -16,6 +16,14 @@ _Avoid_: Any browser page, browser as author, trusted human gesture, local edito
 The opaque server-held request-authentication binding established by a trusted local bootstrap or a future identity flow for one server-derived User, exact allowed Host and first-party Origin, current session generation, accepted Protected Web Client contract and security-policy identities, bounded lifetime, and browser session handle. Every state-changing request also consumes a non-reusable anti-forgery nonce bound to that Binding, exact Project Scope, method, command kind, idempotency record, and canonical command digest; the Binding is an authenticated input to Author Command Admission.
 _Avoid_: Login session as User identity, client-asserted role, URL access token, reusable command nonce
 
+**Command Challenge**:
+The single-use anti-forgery nonce that the Server issues for one exact project command and its pre-domain idempotency record. It binds the Client Session Binding generation, Project Scope, command kind, canonical command digest, and the Challenge Rate Class policy revision. An exact retry returns the same Challenge; a Challenge grants no authority after consumption or expiry.
+_Avoid_: Reusable token, author confirmation step, CSRF cookie
+
+**Challenge Rate Class**:
+The Server-derived class of a project command kind that selects which rate budget a new Command Challenge uses. Release 1 has an `author_edit` class for Author Edit submissions and a `shared` class for all other project commands; each class has its own versioned policy and counter for each User, Project, and session generation.
+_Avoid_: Client-selected class, per-command quota, author-tunable rate limit, one shared writing quota
+
 **Trusted Local Session Bootstrap**:
 The packaged Server issues one Client Session Binding for the single configured User when the author opens the printed Protected Web origin, without a login product or cookie injection as the product path. Local names that single-User path, not a loopback-only transport; the printed origin may be the loopback HTTP origin or the Foundation Validation Public Origin.
 _Avoid_: Login, account signup, operator cookie injection, test cookie injection as product issuance, multi-user identity picker, treating local as loopback-only, Release 1 Storage Activation, database bootstrap

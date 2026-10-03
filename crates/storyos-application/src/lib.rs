@@ -45,6 +45,8 @@ pub use refused_edit_draft::{
     RefusedEditDraftReader, RefusedEditDraftRecord,
 };
 mod author_edit_outcome;
+mod challenge_rate_class;
+pub use challenge_rate_class::ChallengeRateClass;
 mod chapter_query;
 mod create_agent_run;
 mod create_chapter;
@@ -287,10 +289,10 @@ pub use snapshot::{
     get_snapshot,
 };
 
+/// The rate policy revision of the shared Challenge Rate Class.
 pub const PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION: &str =
     "storyos.project-command-challenge-rate.fixed-window.v1";
 pub const PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS: u64 = 60;
-pub const PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY: i16 = 10;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UserId(String);

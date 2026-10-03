@@ -240,7 +240,7 @@ function appliedId(created: { effect: { kind: string; chapter_id?: string } }): 
   return created.effect.chapter_id;
 }
 
-// One Project admits at most PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY (10) Command
+// One Project admits at most 10 shared Challenge Rate Class Command
 // Challenges in one 60-second window. The eleventh waits for the next window, so each
 // test in this file stays at or under 10 Command Challenges on one Project.
 test("deleteChapter removes a Chapter, honors deletion, and selects next then previous then empty", async () => {

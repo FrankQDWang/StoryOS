@@ -479,3 +479,43 @@ async fn an_expired_unconsumed_challenge_cannot_enter_the_command_transaction() 
     ));
     transaction.rollback().await.unwrap();
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_author_edit_challenge_issued_under_the_shared_revision_stays_consumable() {
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let mut issued_before_deployment =
+        numbered_challenge_request(/*index*/ 1_001, /*session_generation*/ 1_001);
+    let binding = &mut issued_before_deployment.binding;
+    binding.method = "POST".to_owned();
+    binding.route_template = "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned();
+    binding.command_schema = "storyos.command.apply-author-edit.request.v1".to_owned();
+    binding.command_kind = "applyAuthorEdit".to_owned();
+    binding.canonical_command_digest = binding
+        .canonical_command_digest
+        .replace("updateProject", "applyAuthorEdit");
+    issue_project_command_challenge(&store, &issued_before_deployment)
+        .await
+        .unwrap();
+
+    let mut current_binding = issued_before_deployment.binding.clone();
+    current_binding.challenge_rate_policy_revision =
+        "storyos.project-command-challenge-rate.author-edit.fixed-window.v1".to_owned();
+    let mut transaction = store
+        .begin_project_command_transaction(&current_binding.project_scope)
+        .await
+        .unwrap();
+    assert_eq!(
+        consume_project_command_challenge(
+            &mut transaction,
+            &current_binding,
+            &issued_before_deployment.nonce_digest
+        )
+        .await
+        .unwrap(),
+        ProjectCommandChallengeUse::FirstUse,
+    );
+    transaction.rollback().await.unwrap();
+}

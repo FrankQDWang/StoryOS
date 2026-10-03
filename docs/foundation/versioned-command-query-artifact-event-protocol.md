@@ -366,20 +366,26 @@ confirmation step.
 
 The Server derives the opaque session-binding digest with profile `storyos.project-command-challenge.session-binding.hmac-sha256.v1` and the nonce with profile `storyos.project-command-challenge.nonce.hmac-sha256.v1`. Each profile uses HMAC-SHA256 with the Server challenge secret as its key. Its message starts with the profile string and then the ordered binding values. Every message value uses an unsigned 64-bit big-endian byte-length prefix followed by its exact bytes. The separate profile strings give the two derivations distinct domains. The lowercase hexadecimal result preserves the Release 1 public nonce shape. The Server never stores or discloses the HMAC key.
 
-Project-scoped challenge issuance uses the immutable admission-rate policy
-`storyos.project-command-challenge-rate.fixed-window.v1`. Its key is the
-Server-derived `(owner_user_id, project_id, client_session_generation)` tuple.
+Project-scoped challenge issuance selects one immutable admission-rate policy
+from the Server-derived Challenge Rate Class of the command kind
+([ADR 0038](../adr/0038-separate-author-edit-challenge-admission-from-shared-command-admission.md)).
+`applyAuthorEdit` uses `storyos.project-command-challenge-rate.author-edit.fixed-window.v1`
+with an inclusive capacity of 120. Every other command kind uses
+`storyos.project-command-challenge-rate.fixed-window.v1` with an inclusive
+capacity of 10. The key of each counter is the Server-derived
+`(owner_user_id, project_id, client_session_generation, policy_revision)` tuple.
 PostgreSQL database time assigns each new logical challenge to one UTC-aligned
-one-minute half-open window. The inclusive capacity is 10 new logical
-challenges per key and window. An eligible exact retry returns the original
+one-minute half-open window. An eligible exact retry returns the original
 challenge and does not consume another unit. A changed-input conflict and any
 refusal before challenge insertion consume no unit. The transaction that
 inserts a new challenge locks and increments the exact rate-window row; an
-eleventh concurrent or serial insertion changes nothing and returns
+insertion over the capacity, concurrent or serial, changes nothing and returns
 `429 rate_limited` with a `Retry-After` delta-seconds value rounded up to the
 end of that database-time window. The response discloses no other Scope,
 session, counter, or request identity. A policy, key, window, capacity, or
-retry-semantics change requires a new rate-policy revision.
+retry-semantics change requires a new rate-policy revision. The revision
+controls issuance only: consumption and outcome queries accept the revision
+stored on the challenge when it is accepted for that command kind.
 
 Every state-changing request:
 

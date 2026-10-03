@@ -307,7 +307,7 @@ async function putCurrent(
   return { challenge, switched };
 }
 
-// One Project admits at most PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY (10) Command
+// One Project admits at most 10 shared Challenge Rate Class Command
 // Challenges in one 60-second window. The eleventh waits for the next window, so each
 // test in this file stays at or under 10 Command Challenges on one Project.
 test("setCurrentChapter switches the current Chapter, replays, and fails closed", async () => {

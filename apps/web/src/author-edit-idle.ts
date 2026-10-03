@@ -1,3 +1,5 @@
+import { StoryOSProtocolError }
+  from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { submitOnePendingAuthorEdit } from "./author-edit-submission.ts";
 import {
   AUTHOR_EDIT_BATCH_IDLE_MS,
@@ -86,6 +88,7 @@ export function createAuthorEditIdleController({
   let undoGroupId: string | undefined;
   let lastCompletedAt: number | undefined;
   let idleTimer: TimerHandle | undefined;
+  let rateLimitWait: { timer: TimerHandle; resolve: () => void } | undefined;
   let stopped = false;
   let failed = false;
   let holdSubmission = false;
@@ -121,10 +124,24 @@ export function createAuthorEditIdleController({
     clearIdle();
     if (pendingIntentCount === 0 || holdSubmission || workspace.pending.save_state === "needs_attention") return;
     submissionClosed = true;
-    const projection = await submitGroup({
-      workspace, baseUrl, fetchImpl, cryptoImpl,
-      onWriterFenced: () => fail(new Error("Editor Session is read only")),
-    });
+    let projection: PendingEditProjection | undefined;
+    while (projection === undefined) {
+      try {
+        projection = await submitGroup({
+          workspace, baseUrl, fetchImpl, cryptoImpl,
+          onWriterFenced: () => fail(new Error("Editor Session is read only")),
+        });
+      } catch (error) {
+        // A Challenge rate limit only delays the save. The same frozen group retries.
+        if (!(error instanceof StoryOSProtocolError && error.status === 429)) throw error;
+        const retryAfterSeconds = Math.max(1, error.retryAfterSeconds ?? 1);
+        await new Promise<void>((resolve) => {
+          rateLimitWait = { timer: setTimeoutImpl(resolve, retryAfterSeconds * 1000), resolve };
+        });
+        rateLimitWait = undefined;
+        if (stopped) return;
+      }
+    }
     workspace.pending = projection;
     pendingIntentCount = projection.author_edit_unsettled_intent_count ?? projection.unsettled_intent_count;
     if (pendingIntentCount === 0) pendingTarget = undefined;
@@ -271,6 +288,10 @@ export function createAuthorEditIdleController({
     close() {
       stopped = true;
       clearIdle();
+      if (rateLimitWait !== undefined) {
+        clearTimeoutImpl(rateLimitWait.timer);
+        rateLimitWait.resolve();
+      }
     },
   };
 }

@@ -251,8 +251,9 @@ fn reconstruct_command(
             client_contract_revision: query.client_binding.client_contract_revision.clone(),
             security_policy_revision: query.client_binding.security_policy_revision.clone(),
             limit_profile_revision: query.limit_profile_revision.clone(),
-            challenge_rate_policy_revision:
-                storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
+            challenge_rate_policy_revision: storyos_application::ChallengeRateClass::AuthorEdit
+                .policy_revision()
+                .to_owned(),
             method: admission.method.clone(),
             route_template: admission.route_template.clone(),
             command_schema: admission.command_schema.clone(),

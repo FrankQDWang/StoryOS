@@ -98,8 +98,11 @@ pub(super) async fn create_project_command_challenge(
         client_contract_revision: binding.client_contract_revision.clone(),
         security_policy_revision: binding.security_policy_revision.clone(),
         limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-        challenge_rate_policy_revision:
-            storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
+        challenge_rate_policy_revision: storyos_application::ChallengeRateClass::for_command_kind(
+            command_kind,
+        )
+        .policy_revision()
+        .to_owned(),
         method: request.method,
         route_template: request.route_template,
         command_schema: request.command_schema,

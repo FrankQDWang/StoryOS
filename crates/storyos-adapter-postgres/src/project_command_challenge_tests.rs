@@ -190,3 +190,68 @@ async fn exact_retry_uses_one_rate_unit_and_rate_rows_obey_forced_rls() {
         (0, 0)
     );
 }
+
+fn author_edit_request(index: u64, generation: u64) -> IssueProjectCommandChallenge {
+    let mut request = numbered_request(index, generation);
+    let binding = &mut request.binding;
+    binding.challenge_rate_policy_revision =
+        "storyos.project-command-challenge-rate.author-edit.fixed-window.v1".to_owned();
+    binding.method = "POST".to_owned();
+    binding.route_template = "/api/v1/projects/{project_id}/manuscript/author-edits".to_owned();
+    binding.command_schema = "storyos.command.apply-author-edit.request.v1".to_owned();
+    binding.command_kind = "applyAuthorEdit".to_owned();
+    binding.canonical_command_digest = binding
+        .canonical_command_digest
+        .replace("updateProject", "applyAuthorEdit");
+    request
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn author_edit_and_shared_challenges_use_separate_rate_budgets() {
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = fixed_clock_store(runtime_url, /*unix_seconds*/ 30_015);
+    let mut shared = Vec::new();
+    for index in 8_901..=8_911 {
+        shared.push(
+            issue_project_command_challenge(&store, &numbered_request(index, /*generation*/ 901))
+                .await,
+        );
+    }
+    let mut author_edits = Vec::new();
+    for index in 9_001..=9_121 {
+        author_edits.push(
+            issue_project_command_challenge(
+                &store,
+                &author_edit_request(index, /*generation*/ 901),
+            )
+            .await,
+        );
+    }
+    let shared_after_author_edits = issue_project_command_challenge(
+        &store,
+        &numbered_request(/*index*/ 8_912, /*generation*/ 901),
+    )
+    .await;
+
+    let admitted = |results: &[Result<_, ProjectCommandChallengeError>]| {
+        results.iter().filter(|result| result.is_ok()).count()
+    };
+    let retry_after = |result: &Result<_, ProjectCommandChallengeError>| match result {
+        Err(ProjectCommandChallengeError::RateLimited {
+            retry_after_seconds,
+        }) => Some(*retry_after_seconds),
+        Ok(_) | Err(_) => None,
+    };
+    assert_eq!(
+        (
+            admitted(&shared),
+            retry_after(shared.last().unwrap()),
+            admitted(&author_edits),
+            retry_after(author_edits.last().unwrap()),
+            retry_after(&shared_after_author_edits),
+        ),
+        (10, Some(45), 120, Some(45), Some(45))
+    );
+}
