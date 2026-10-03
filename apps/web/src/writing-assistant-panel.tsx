@@ -16,7 +16,6 @@ import { AssistantComposer } from "./assistant-composer.tsx";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
-import { type SelectedRunDetails } from "./assistant-run-details.tsx";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -43,7 +42,6 @@ type RequestReference = {
   conversationId?: string;
   conversationChoice?: "new";
   history?: TranscriptExchange[];
-  selectedRequestId?: string;
 };
 
 export type AssistantContext = {
@@ -90,7 +88,6 @@ function readReference(scope: ProjectScope): RequestReference | undefined {
       || (ref.runId !== undefined && !UUID.test(ref.runId))
       || (ref.conversationId !== undefined && !UUID.test(ref.conversationId))
       || (ref.conversationChoice !== undefined && ref.conversationChoice !== "new")
-      || (ref.selectedRequestId !== undefined && !UUID.test(ref.selectedRequestId))
       || (ref.history !== undefined && (!Array.isArray(ref.history)
         || !ref.history.every((exchange) => exchange !== null && typeof exchange === "object"
           && UUID.test(exchange.requestId) && UUID.test(exchange.conversationId)
@@ -175,8 +172,8 @@ export function WritingAssistantPanel({
   const [status, setStatus] = useState("");
   const [sending, setSending] = useState(false);
   const [refused, setRefused] = useState(false);
-  const [details, setDetails] = useState<SelectedRunDetails>({ kind: "loading" });
-  const detailSequence = useRef(0);
+  const [resultUnavailable, setResultUnavailable] = useState(false);
+  const inspectSequence = useRef(0);
 
   useEffect(() => {
     if (context === undefined) {
@@ -263,49 +260,25 @@ export function WritingAssistantPanel({
     return result;
   };
 
-  const inspectDetails = async (requestId: string): Promise<void> => {
+  const inspectResult = async (): Promise<void> => {
     if (context === undefined) return;
-    const cached = readReference(context.scope);
-    if (cached === undefined) return;
-    const exchange = cached.history?.find((entry) => entry.requestId === requestId);
-    const latest = requestId === cached.correlationId;
-    if (!latest && exchange === undefined) return;
-    const chosen = { ...cached, selectedRequestId: requestId };
-    const expectedRunId = latest ? cached.runId : exchange?.runId;
-    const expectedConversationId = latest ? cached.conversationId : exchange?.conversationId;
-    const sequence = ++detailSequence.current;
-    const stillSelected = () => sequence === detailSequence.current
-      && readReference(context.scope)?.selectedRequestId === requestId;
-    saveReference(chosen);
-    setReference(chosen);
-    setDetails({ kind: "loading" });
+    const current = readReference(context.scope);
+    if (current === undefined) return;
+    const sequence = ++inspectSequence.current;
+    const stillCurrent = () => sequence === inspectSequence.current
+      && readReference(context.scope)?.correlationId === current.correlationId;
+    setResultUnavailable(false);
     try {
-      const result = latest ? await inspect(chosen) : expectedRunId === undefined ? undefined
-        : await getAgentRun({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
-          projectId: context.scope.project_id, runId: expectedRunId });
-      if (!stillSelected()) return;
-      if (result === undefined
-        || result.project_scope.owner_user_id !== context.scope.owner_user_id
-        || result.project_scope.project_id !== context.scope.project_id
-        || (expectedRunId !== undefined && result.run_id !== expectedRunId)
-        || (expectedConversationId !== undefined && result.conversation_id !== expectedConversationId)) {
-        setDetails({ kind: "unavailable" });
-        return;
-      }
-      setDetails({ kind: "known", run: result, selection: { projectScope: context.scope,
-        runId: result.run_id, conversationId: result.conversation_id } });
+      if (await inspect(current) === undefined && stillCurrent()) setResultUnavailable(true);
     } catch {
-      if (stillSelected()) setDetails({ kind: "unavailable" });
+      if (stillCurrent()) setResultUnavailable(true);
     }
   };
 
   useEffect(() => {
     if (reference === undefined || context === undefined) return;
-    if (reference.selectedRequestId !== undefined) void inspectDetails(reference.selectedRequestId);
-    if (reference.selectedRequestId !== reference.correlationId) {
-      void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
-    }
-    return () => { detailSequence.current += 1; };
+    void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
+    return () => { inspectSequence.current += 1; };
   }, [context?.scope.owner_user_id, context?.scope.project_id]);
 
   const terminal = run !== undefined
@@ -514,9 +487,9 @@ export function WritingAssistantPanel({
               {run === undefined ? null : <><p className="assistant-result" data-assistant-result="">{resultText(run) ?? "结果尚未生成。"}</p>
                 <ProposalLocationLinks run={run} tree={context?.tree} sourceChapterId={reference.chapterId} onNavigate={onNavigateProposal} /></>}
               {!terminal ? <button type="button" data-assistant-inspect="" onClick={() => {
-                void inspectDetails(reference.correlationId);
+                void inspectResult();
               }}>检查结果</button> : null}
-              {details.kind === "unavailable" ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
+              {resultUnavailable ? <p role="status">请求结果暂不可读取，请稍后检查。</p> : null}
             </section>
           )}
           {reference?.conversationChoice === "new"
