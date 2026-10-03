@@ -1,154 +1,58 @@
-use axum::body::to_bytes;
-use sha2::{Digest, Sha256};
-use storyos_application::{
-    AuthorCommandAdmissionIds, EditorClientBinding, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectCommandError, StructureAuthorityEvidence, UpdateVolumeInput,
-    VolumeId,
-};
+use storyos_application::{UpdateVolumeInput, VolumeId};
 use storyos_core::TransitionOutcome;
 
 use super::contract_reason::contract_reason;
-use super::editor_session::{exact_header, session_binding_ref};
-use super::project_command_challenge::{
-    hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
+use super::structure_admission::{
+    SettledReceipt, StructureRoute, admit, positive, structure_title,
 };
 use super::*;
+
+const UPDATE_VOLUME: StructureRoute = StructureRoute {
+    display_name: "Update Volume",
+    command_kind: "updateVolume",
+    method: contracts::UPDATE_VOLUME_METHOD,
+    path: contracts::UPDATE_VOLUME_PATH,
+    schema_id: contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
+    digest_profile: contracts::UPDATE_VOLUME_DIGEST_PROFILE,
+    receipt_kind: contracts::DomainReceiptCommandKind::UpdateVolume,
+};
 
 pub(super) async fn update_volume(
     State(state): State<Arc<ServerState>>,
     Path((project_id, volume_id)): Path<(String, String)>,
     request: Request,
 ) -> Result<Json<contracts::UpdateVolumeResponse>, ApiError> {
-    let (parts, body_stream) = request.into_parts();
-    let headers = parts.headers;
-    let scope = authenticate_scope(
+    let admitted = admit(
         &state,
-        &headers,
         &project_id,
-        RequestOriginPolicy::StateChanging,
-    )?;
-    valid_uuid(&volume_id)?;
-    validate_json_content_type(&headers)?;
-    let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
+        &[&volume_id],
+        request,
+        &UPDATE_VOLUME,
+        |body: &contracts::UpdateVolumeRequest| {
+            let input = &body.update_volume_input;
+            Ok(UpdateVolumeInput {
+                expected_tree_revision: positive(&input.expected_tree_revision)?,
+                order: positive(&input.order)?,
+                title: structure_title(&input.title)?,
+                volume_id: VolumeId::new(volume_id.clone()),
+            })
+        },
+    )
+    .await?;
+    let settlement = admitted
+        .store
+        .update_volume(&admitted.envelope, &admitted.input)
         .await
-        .map_err(|_| payload_too_large())?;
-    let body = serde_json::from_slice::<contracts::UpdateVolumeRequest>(&bytes)
-        .map_err(|_| invalid_request_shape())?;
-    let input = &body.update_volume_input;
-    let Some(expected_tree_revision) = input
-        .expected_tree_revision
-        .parse::<u64>()
-        .ok()
-        .filter(|revision| *revision >= 1)
-    else {
-        return Err(invalid_request());
-    };
-    let Some(order) = input.order.parse::<u64>().ok().filter(|order| *order >= 1) else {
-        return Err(invalid_request());
-    };
-    let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
-    let session = state
-        .client_session_binding(session_handle)
-        .ok_or_else(authentication_required)?;
-    if body.command_schema != contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID
-        || input.client_contract_revision != session.client_contract_revision
-        || input.security_policy_revision != session.security_policy_revision
-        || input.title.is_empty()
-        || input.title.len() > 1024
-    {
-        return Err(invalid_request());
-    }
-    valid_uuid(&input.correlation_id)?;
-    let idempotency_key = exact_header(&headers, "idempotency-key")?;
-    let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
-    if !valid_uuid_v7(idempotency_key)
-        || nonce.len() != 64
-        || !nonce
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err(invalid_request());
-    }
-    let secret = state
-        .config
-        .project_command_challenge_secret
-        .as_deref()
-        .filter(|secret| secret.len() >= 32)
-        .ok_or_else(challenge_store_unavailable)?;
-    let binding_ref = session_binding_ref(secret, session_handle);
-    let canonical_command_bytes = canonical_body_bytes(&body)?;
-    let digest_hex = hex_bytes(&Sha256::digest(&canonical_command_bytes));
-    let canonical_command_digest = format!(
-        "sha256:{}:{digest_hex}",
-        contracts::UPDATE_VOLUME_DIGEST_PROFILE
-    );
-    let store = project_reader(&state).await?;
-    let envelope = ProjectCommandEnvelope {
-        project_scope: scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding_ref.clone(),
-            session_generation: session.session_generation,
-            client_contract_revision: session.client_contract_revision.clone(),
-            security_policy_revision: session.security_policy_revision.clone(),
-        },
-        challenge_binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: binding_ref,
-            client_session_generation: session.session_generation,
-            client_contract_revision: session.client_contract_revision.clone(),
-            security_policy_revision: session.security_policy_revision.clone(),
-            limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-            challenge_rate_policy_revision:
-                storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
-            method: contracts::UPDATE_VOLUME_METHOD.to_owned(),
-            route_template: contracts::UPDATE_VOLUME_PATH.to_owned(),
-            command_schema: body.command_schema.clone(),
-            command_kind: "updateVolume".to_owned(),
-            canonical_command_digest: canonical_command_digest.clone(),
-            idempotency_key: idempotency_key.to_owned(),
-        },
-        nonce_digest: plain_digest(nonce.as_bytes()),
-        canonical_command_bytes,
-        correlation_id: input.correlation_id.clone(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: Uuid::now_v7().to_string(),
-            author_command_admission_id: Uuid::now_v7().to_string(),
-            receipt_id: Uuid::now_v7().to_string(),
-        },
-    };
-    let update = UpdateVolumeInput {
-        volume_id: VolumeId::new(volume_id),
-        title: input.title.clone(),
-        order,
-        expected_tree_revision,
-    };
-    let settlement = store
-        .update_volume(&envelope, &update)
-        .await
-        .map_err(update_volume_error)?;
-    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
-    update_volume_response(&envelope, &update, &digest_hex, settlement)
-}
-
-fn update_volume_response(
-    command: &ProjectCommandEnvelope,
-    update: &UpdateVolumeInput,
-    digest_hex: &str,
-    settlement: storyos_application::UpdateVolumeSettlement,
-) -> Result<Json<contracts::UpdateVolumeResponse>, ApiError> {
-    let project = settlement.response_project;
-    let mut commit_ids = Vec::new();
-    let mut action_sequence = None;
-    let (receipt_result, effect) = match settlement.outcome {
+        .map_err(|error| UPDATE_VOLUME.problem(error))?;
+    admitted.hold_first_acknowledgement().await;
+    let mut authority = None;
+    let (result, effect) = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
-            if let StructureAuthorityEvidence::Settled(authority) = applied.authority {
-                commit_ids.push(authority.authoritative_commit_id);
-                action_sequence = Some(authority.author_action_sequence.to_string());
-            }
+            authority = applied.authority.into_settled();
             (
                 contracts::DomainReceiptResult::AuthoritativeApplied,
                 contracts::UpdateVolumeEffect::AuthoritativeApplied {
-                    volume_id: update.volume_id.as_ref().to_owned(),
+                    volume_id,
                     title: applied.effect.title,
                     tree_revision: applied.effect.tree_revision.to_string(),
                     order: applied.effect.order.to_string(),
@@ -175,95 +79,24 @@ fn update_volume_response(
             },
         ),
     };
-    let contract_project_scope = contract_scope(&command.project_scope);
+    let ack = admitted.acknowledgement(
+        &UPDATE_VOLUME,
+        SettledReceipt {
+            ids: settlement.ids,
+            receipt_created_at: settlement.receipt_created_at,
+            result,
+            authority,
+            project: settlement.response_project,
+        },
+    );
     Ok(Json(contracts::UpdateVolumeResponse {
         schema_id: contracts::UPDATE_VOLUME_RESPONSE_SCHEMA_ID.to_owned(),
-        correlation_id: command.correlation_id.clone(),
-        project_scope: contract_project_scope.clone(),
-        command_id: settlement.ids.command_id,
-        author_command_admission_id: settlement.ids.author_command_admission_id.clone(),
-        receipt: contracts::DomainReceipt {
-            receipt_id: settlement.ids.receipt_id.clone(),
-            project_scope: contract_project_scope,
-            command_kind: contracts::DomainReceiptCommandKind::UpdateVolume,
-            command_digest: contracts::DigestValue {
-                algorithm: contracts::DigestAlgorithm::Sha256,
-                profile: contracts::UPDATE_VOLUME_DIGEST_PROFILE.to_owned(),
-                value_hex_lowercase: digest_hex.to_owned(),
-            },
-            idempotency_key: command.challenge_binding.idempotency_key.clone(),
-            producer_cause: contracts::DomainReceiptProducerCause::AuthorCommandAdmission,
-            author_command_admission_id: settlement.ids.author_command_admission_id,
-            expected_heads: Vec::new(),
-            prior_heads: Vec::new(),
-            resulting_heads: Vec::new(),
-            authoritative_revision_ids: Vec::new(),
-            proposal_revision_ids: Vec::new(),
-            authoritative_commit_ids: commit_ids,
-            author_action_sequence: action_sequence,
-            draft_artifact_refs: Vec::new(),
-            artifact_lifecycle_event_refs: Vec::new(),
-            condition_refs: Vec::new(),
-            result: receipt_result,
-            created_at: settlement.receipt_created_at,
-        },
-        project: contracts::ControlledProject {
-            project_id: project.project_id.as_ref().to_owned(),
-            title: project.title,
-            open: match project.current_chapter_id {
-                Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {
-                    current_chapter_id: chapter_id.as_ref().to_owned(),
-                },
-                None => contracts::ProjectOpenState::Empty,
-            },
-        },
+        correlation_id: ack.correlation_id,
+        project_scope: ack.project_scope,
+        command_id: ack.command_id,
+        author_command_admission_id: ack.author_command_admission_id,
+        receipt: ack.receipt,
+        project: ack.project,
         effect,
     }))
-}
-
-fn canonical_body_bytes(body: &contracts::UpdateVolumeRequest) -> Result<Vec<u8>, ApiError> {
-    let canonical =
-        canonical_json(serde_json::to_value(body).map_err(|_| invalid_request_shape())?);
-    serde_json::to_vec(&canonical).map_err(|_| invalid_request_shape())
-}
-
-fn canonical_json(value: serde_json::Value) -> serde_json::Value {
-    match value {
-        serde_json::Value::Array(values) => {
-            serde_json::Value::Array(values.into_iter().map(canonical_json).collect())
-        }
-        serde_json::Value::Object(values) => serde_json::Value::Object(
-            values
-                .into_iter()
-                .map(|(key, value)| (key, canonical_json(value)))
-                .collect(),
-        ),
-        scalar => scalar,
-    }
-}
-
-fn update_volume_error(error: ProjectCommandError) -> ApiError {
-    match error {
-        ProjectCommandError::BindingConflict => problem(
-            StatusCode::CONFLICT,
-            "idempotency_binding_conflict",
-            "The Update Volume binding conflicts.",
-        ),
-        ProjectCommandError::HistoricalAcknowledgementUnavailable => problem(
-            StatusCode::CONFLICT,
-            "historical_acknowledgement_unavailable",
-            "The original Update Volume acknowledgement cannot be recovered. Refresh to inspect the current Project.",
-        ),
-        ProjectCommandError::InvalidChallenge => problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "challenge_invalid",
-            "The Update Volume challenge is invalid.",
-        ),
-        ProjectCommandError::MissingProject => resource_unavailable(),
-        ProjectCommandError::Unavailable(_) => problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "project_store_unavailable",
-            "The Project store is unavailable.",
-        ),
-    }
 }

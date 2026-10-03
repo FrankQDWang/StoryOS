@@ -78,6 +78,16 @@ pub enum StructureAuthorityEvidence {
     BeforeAuthorityHistoryFloor,
 }
 
+impl StructureAuthorityEvidence {
+    /// The settled authority, or `None` before the Authority History Floor.
+    pub fn into_settled(self) -> Option<StructureAuthority> {
+        match self {
+            Self::Settled(authority) => Some(authority),
+            Self::BeforeAuthorityHistoryFloor => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StructureAuthority {
     pub authoritative_commit_id: String,

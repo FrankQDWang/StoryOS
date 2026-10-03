@@ -1,157 +1,55 @@
-use axum::body::to_bytes;
-use sha2::{Digest, Sha256};
-use storyos_application::{
-    AuthorCommandAdmissionIds, DeleteVolumeInput, EditorClientBinding,
-    ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectCommandError, StructureApplied,
-    StructureAuthorityEvidence, VolumeDeleted, VolumeId,
-};
+use storyos_application::{DeleteVolumeInput, VolumeId};
 use storyos_core::TransitionOutcome;
 
 use super::contract_reason::contract_reason;
-use super::editor_session::{exact_header, session_binding_ref};
-use super::project_command_challenge::{
-    hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
-};
+use super::structure_admission::{SettledReceipt, StructureRoute, admit, positive};
 use super::*;
+
+const DELETE_VOLUME: StructureRoute = StructureRoute {
+    display_name: "Delete Volume",
+    command_kind: "deleteVolume",
+    method: contracts::DELETE_VOLUME_METHOD,
+    path: contracts::DELETE_VOLUME_PATH,
+    schema_id: contracts::DELETE_VOLUME_REQUEST_SCHEMA_ID,
+    digest_profile: contracts::DELETE_VOLUME_DIGEST_PROFILE,
+    receipt_kind: contracts::DomainReceiptCommandKind::DeleteVolume,
+};
 
 pub(super) async fn delete_volume(
     State(state): State<Arc<ServerState>>,
     Path((project_id, volume_id)): Path<(String, String)>,
     request: Request,
 ) -> Result<Json<contracts::DeleteVolumeResponse>, ApiError> {
-    let (parts, body_stream) = request.into_parts();
-    let headers = parts.headers;
-    let scope = authenticate_scope(
+    let admitted = admit(
         &state,
-        &headers,
         &project_id,
-        RequestOriginPolicy::StateChanging,
-    )?;
-    valid_uuid(&volume_id)?;
-    validate_json_content_type(&headers)?;
-    let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
+        &[&volume_id],
+        request,
+        &DELETE_VOLUME,
+        |body: &contracts::DeleteVolumeRequest| {
+            Ok(DeleteVolumeInput {
+                expected_tree_revision: positive(&body.delete_volume_input.expected_tree_revision)?,
+                volume_id: VolumeId::new(volume_id.clone()),
+            })
+        },
+    )
+    .await?;
+    let settlement = admitted
+        .store
+        .delete_volume(&admitted.envelope, &admitted.input)
         .await
-        .map_err(|_| payload_too_large())?;
-    let body = serde_json::from_slice::<contracts::DeleteVolumeRequest>(&bytes)
-        .map_err(|_| invalid_request_shape())?;
-    let input = &body.delete_volume_input;
-    let Some(expected_tree_revision) = input
-        .expected_tree_revision
-        .parse::<u64>()
-        .ok()
-        .filter(|revision| *revision >= 1)
-    else {
-        return Err(invalid_request());
-    };
-    let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
-    let session = state
-        .client_session_binding(session_handle)
-        .ok_or_else(authentication_required)?;
-    if body.command_schema != contracts::DELETE_VOLUME_REQUEST_SCHEMA_ID
-        || input.client_contract_revision != session.client_contract_revision
-        || input.security_policy_revision != session.security_policy_revision
-    {
-        return Err(invalid_request());
-    }
-    valid_uuid(&input.correlation_id)?;
-    let idempotency_key = exact_header(&headers, "idempotency-key")?;
-    let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
-    if !valid_uuid_v7(idempotency_key)
-        || nonce.len() != 64
-        || !nonce
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err(invalid_request());
-    }
-    let secret = state
-        .config
-        .project_command_challenge_secret
-        .as_deref()
-        .filter(|secret| secret.len() >= 32)
-        .ok_or_else(challenge_store_unavailable)?;
-    let binding_ref = session_binding_ref(secret, session_handle);
-    let canonical_command_bytes = canonical_body_bytes(&body)?;
-    let digest_hex = hex_bytes(&Sha256::digest(&canonical_command_bytes));
-    let canonical_command_digest = format!(
-        "sha256:{}:{digest_hex}",
-        contracts::DELETE_VOLUME_DIGEST_PROFILE
-    );
-    let store = project_reader(&state).await?;
-    let command = ProjectCommandEnvelope {
-        project_scope: scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding_ref.clone(),
-            session_generation: session.session_generation,
-            client_contract_revision: session.client_contract_revision.clone(),
-            security_policy_revision: session.security_policy_revision.clone(),
-        },
-        challenge_binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: binding_ref,
-            client_session_generation: session.session_generation,
-            client_contract_revision: session.client_contract_revision.clone(),
-            security_policy_revision: session.security_policy_revision.clone(),
-            limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-            challenge_rate_policy_revision:
-                storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
-            method: contracts::DELETE_VOLUME_METHOD.to_owned(),
-            route_template: contracts::DELETE_VOLUME_PATH.to_owned(),
-            command_schema: body.command_schema.clone(),
-            command_kind: "deleteVolume".to_owned(),
-            canonical_command_digest: canonical_command_digest.clone(),
-            idempotency_key: idempotency_key.to_owned(),
-        },
-        nonce_digest: plain_digest(nonce.as_bytes()),
-        canonical_command_bytes,
-        correlation_id: input.correlation_id.clone(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: Uuid::now_v7().to_string(),
-            author_command_admission_id: Uuid::now_v7().to_string(),
-            receipt_id: Uuid::now_v7().to_string(),
-        },
-    };
-    let delete_volume_input = DeleteVolumeInput {
-        volume_id: VolumeId::new(volume_id),
-        expected_tree_revision,
-    };
-    let settlement = store
-        .delete_volume(&command, &delete_volume_input)
-        .await
-        .map_err(delete_volume_error)?;
-    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
-    delete_volume_response(&command, &digest_hex, settlement)
-}
-
-fn delete_volume_response(
-    command: &ProjectCommandEnvelope,
-    digest_hex: &str,
-    settlement: storyos_application::DeleteVolumeSettlement,
-) -> Result<Json<contracts::DeleteVolumeResponse>, ApiError> {
-    let project = settlement.response_project;
-    let mut commit_ids = Vec::new();
-    let mut action_sequence = None;
-    let (receipt_result, effect) = match settlement.outcome {
-        TransitionOutcome::Applied(StructureApplied {
-            effect,
-            project_activity_position,
-            authority,
-            ..
-        }) => {
-            if let StructureAuthorityEvidence::Settled(authority) = authority {
-                commit_ids.push(authority.authoritative_commit_id);
-                action_sequence = Some(authority.author_action_sequence.to_string());
-            }
-            let VolumeDeleted {
-                tree_revision,
-                volume_id,
-            } = effect;
+        .map_err(|error| DELETE_VOLUME.problem(error))?;
+    admitted.hold_first_acknowledgement().await;
+    let mut authority = None;
+    let (result, effect) = match settlement.outcome {
+        TransitionOutcome::Applied(applied) => {
+            authority = applied.authority.into_settled();
             (
                 contracts::DomainReceiptResult::AuthoritativeApplied,
                 contracts::DeleteVolumeEffect::AuthoritativeApplied {
-                    volume_id,
-                    tree_revision: tree_revision.to_string(),
-                    project_activity_position: project_activity_position.to_string(),
+                    volume_id: applied.effect.volume_id,
+                    tree_revision: applied.effect.tree_revision.to_string(),
+                    project_activity_position: applied.project_activity_position.to_string(),
                 },
             )
         }
@@ -174,95 +72,24 @@ fn delete_volume_response(
             },
         ),
     };
-    let contract_project_scope = contract_scope(&command.project_scope);
+    let ack = admitted.acknowledgement(
+        &DELETE_VOLUME,
+        SettledReceipt {
+            ids: settlement.ids,
+            receipt_created_at: settlement.receipt_created_at,
+            result,
+            authority,
+            project: settlement.response_project,
+        },
+    );
     Ok(Json(contracts::DeleteVolumeResponse {
         schema_id: contracts::DELETE_VOLUME_RESPONSE_SCHEMA_ID.to_owned(),
-        correlation_id: command.correlation_id.clone(),
-        project_scope: contract_project_scope.clone(),
-        command_id: settlement.ids.command_id,
-        author_command_admission_id: settlement.ids.author_command_admission_id.clone(),
-        receipt: contracts::DomainReceipt {
-            receipt_id: settlement.ids.receipt_id.clone(),
-            project_scope: contract_project_scope,
-            command_kind: contracts::DomainReceiptCommandKind::DeleteVolume,
-            command_digest: contracts::DigestValue {
-                algorithm: contracts::DigestAlgorithm::Sha256,
-                profile: contracts::DELETE_VOLUME_DIGEST_PROFILE.to_owned(),
-                value_hex_lowercase: digest_hex.to_owned(),
-            },
-            idempotency_key: command.challenge_binding.idempotency_key.clone(),
-            producer_cause: contracts::DomainReceiptProducerCause::AuthorCommandAdmission,
-            author_command_admission_id: settlement.ids.author_command_admission_id,
-            expected_heads: Vec::new(),
-            prior_heads: Vec::new(),
-            resulting_heads: Vec::new(),
-            authoritative_revision_ids: Vec::new(),
-            proposal_revision_ids: Vec::new(),
-            authoritative_commit_ids: commit_ids,
-            author_action_sequence: action_sequence,
-            draft_artifact_refs: Vec::new(),
-            artifact_lifecycle_event_refs: Vec::new(),
-            condition_refs: Vec::new(),
-            result: receipt_result,
-            created_at: settlement.receipt_created_at,
-        },
-        project: contracts::ControlledProject {
-            project_id: project.project_id.as_ref().to_owned(),
-            title: project.title,
-            open: match project.current_chapter_id {
-                Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {
-                    current_chapter_id: chapter_id.as_ref().to_owned(),
-                },
-                None => contracts::ProjectOpenState::Empty,
-            },
-        },
+        correlation_id: ack.correlation_id,
+        project_scope: ack.project_scope,
+        command_id: ack.command_id,
+        author_command_admission_id: ack.author_command_admission_id,
+        receipt: ack.receipt,
+        project: ack.project,
         effect,
     }))
-}
-
-fn canonical_body_bytes(body: &contracts::DeleteVolumeRequest) -> Result<Vec<u8>, ApiError> {
-    let canonical =
-        canonical_json(serde_json::to_value(body).map_err(|_| invalid_request_shape())?);
-    serde_json::to_vec(&canonical).map_err(|_| invalid_request_shape())
-}
-
-fn canonical_json(value: serde_json::Value) -> serde_json::Value {
-    match value {
-        serde_json::Value::Array(values) => {
-            serde_json::Value::Array(values.into_iter().map(canonical_json).collect())
-        }
-        serde_json::Value::Object(values) => serde_json::Value::Object(
-            values
-                .into_iter()
-                .map(|(key, value)| (key, canonical_json(value)))
-                .collect(),
-        ),
-        scalar => scalar,
-    }
-}
-
-fn delete_volume_error(error: ProjectCommandError) -> ApiError {
-    match error {
-        ProjectCommandError::BindingConflict => problem(
-            StatusCode::CONFLICT,
-            "idempotency_binding_conflict",
-            "The Delete Volume binding conflicts.",
-        ),
-        ProjectCommandError::HistoricalAcknowledgementUnavailable => problem(
-            StatusCode::CONFLICT,
-            "historical_acknowledgement_unavailable",
-            "The original Delete Volume acknowledgement cannot be recovered. Refresh to inspect the current Project.",
-        ),
-        ProjectCommandError::InvalidChallenge => problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "challenge_invalid",
-            "The Delete Volume challenge is invalid.",
-        ),
-        ProjectCommandError::MissingProject => resource_unavailable(),
-        ProjectCommandError::Unavailable(_) => problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "project_store_unavailable",
-            "The Project store is unavailable.",
-        ),
-    }
 }

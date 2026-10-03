@@ -54,6 +54,7 @@ mod request_origin;
 mod session_bootstrap;
 mod set_current_chapter;
 mod snapshot;
+mod structure_admission;
 mod takeover;
 mod undo_latest_author_action;
 mod update_chapter;
