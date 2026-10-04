@@ -11,6 +11,7 @@ The presentation follows PR 927, `Removed test assertions and reasons`: one reas
 | D3 | The oracle can pass after the intended protection is removed because another failure masks it or its observation cannot measure the claimed behavior. Named coverage owns the meaningful behavior. |
 | D4 | A test checks a helper or reimplementation with no product consumer. Named coverage owns the product behavior, not that dead helper. |
 | D5 | A synthetic internal input cannot reach this rule through current product callers. The public refusal is covered elsewhere; a mutation only in the unreachable guard is not claimed to be covered. |
+| D6 | A reachable internal guard duplicates a separately enforced product invariant. The named public test protects the behavior, but can remain green when only that guard is removed. |
 | M1 | Merge the named unique case into an existing public-boundary test, then remove the redundant test. |
 | L1 | Move the scenario to its public boundary with a discriminating oracle; current setup does not prove its intended protection. |
 | K1 | A concrete distinct input or invariant has no equivalent assertion in the compared tests. |
@@ -25,3 +26,5 @@ KEEP evidence states a concrete failure and the closest competing test, includin
 ## Mutation protocol
 
 Freeze the complete DELETE population and choose 30 without replacement with a saved random seed. For each: run the named covering test on clean sources, save a minimal product defect patch, run that test alone, restore exact bytes in finally, and run the restored test. A compile error, unrelated setup failure, timeout, zero selected tests, skipped test, or a failure only in the proposed removed test is not a kill. Save all outputs and classify misses and blocked runs. Revise all verdicts that depend on the invalidated assumption. Use only the audit worktree and `scripts/dev-postgres.sh run` for database checks.
+
+Samples18 and29 distinguish two different misses: independent database enforcement can preserve a public result after a redundant Core guard changes (D6), while an invalid nonce can hide a broken public count limit (transfer required). Do not use a surviving mutation alone to infer unreachability or test redundancy.

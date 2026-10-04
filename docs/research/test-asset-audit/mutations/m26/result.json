@@ -1,0 +1,112 @@
+{
+  "sample": 26,
+  "id": "AD089",
+  "status": "candidate-kill",
+  "source": "crates/storyos-core/src/delete_volume.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m26-baseline",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/delete-volume-http.integration.test.ts",
+        "-t",
+        "^deleteVolume\\ removes\\ an\\ empty\\ Volume,\\ refuses\\ a\\ nonempty\\ Volume,\\ and\\ honors\\ deletion$"
+      ],
+      "exit": 0,
+      "seconds": 9.36,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m26/baseline.log"
+    },
+    {
+      "phase": "build",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m26-build",
+        "--",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--target-dir",
+        "target/web-release",
+        "-p",
+        "storyos-server",
+        "-p",
+        "storyos-worker-bin",
+        "-p",
+        "storyos-adapter-postgres"
+      ],
+      "exit": 0,
+      "seconds": 94.676,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m26/build.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m26-mutant",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/delete-volume-http.integration.test.ts",
+        "-t",
+        "^deleteVolume\\ removes\\ an\\ empty\\ Volume,\\ refuses\\ a\\ nonempty\\ Volume,\\ and\\ honors\\ deletion$"
+      ],
+      "exit": 1,
+      "seconds": 8.723,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m26/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m26-restored",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/delete-volume-http.integration.test.ts",
+        "-t",
+        "^deleteVolume\\ removes\\ an\\ empty\\ Volume,\\ refuses\\ a\\ nonempty\\ Volume,\\ and\\ honors\\ deletion$"
+      ],
+      "exit": 0,
+      "seconds": 9.133,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m26/restored.log"
+    }
+  ]
+}

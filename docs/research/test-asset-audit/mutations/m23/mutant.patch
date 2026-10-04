@@ -1,0 +1,12 @@
+--- a/crates/storyos-core/src/update_volume.rs
++++ b/crates/storyos-core/src/update_volume.rs
+@@ -62,9 +62,6 @@
+     if command.volume_join == VolumeJoin::Invalid {
+         return UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidVolumeJoin);
+     }
+-    if command.title.is_empty() || command.title.len() > 1024 {
+-        return UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidTitle);
+-    }
+     if command.order < 1 || command.order > command.volume_count {
+         return UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidOrder);
+     }

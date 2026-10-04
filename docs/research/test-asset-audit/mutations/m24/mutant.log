@@ -1,0 +1,65 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/delete-chapter-http.integration.test.ts (4 tests | 1 failed | 3 skipped) 1713ms
+   × deleteChapter freezes applied empty Current Chapter, no-effect, and conflict acknowledgements after later title and Current Chapter changes 1711ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/delete-chapter-http.integration.test.ts > deleteChapter freezes applied empty Current Chapter, no-effect, and conflict acknowledgements after later title and Current Chapter changes
+AssertionError: Expected values to be strictly deep-equal:
++ actual - expected
+... Skipped lines
+
+  {
+    author_command_admission_id: '01a108dd-8ffc-7aa3-92c0-c57acc36769e',
+    command_id: '01a108dd-8ffc-7aa3-92c0-c565f0990816',
+    correlation_id: '018f0000-0000-7001-8000-00000000e907',
+    effect: {
+...
+      project_id: '01a108dd-8d72-7052-8d29-a12b82746a1a',
++     title: 'Changed replay title'
+-     title: 'Delete Chapter Freeze Novel'
+    },
+    project_scope: {
+      owner_user_id: '018f0000-0000-7001-8000-000000000001',
+      project_id: '01a108dd-8d72-7052-8d29-a12b82746a1a'
+    },
+
+
+- Expected
++ Received
+
+@@ -12,11 +12,11 @@
+    "project": {
+      "open": {
+        "kind": "empty",
+      },
+      "project_id": "01a108dd-8d72-7052-8d29-a12b82746a1a",
+-     "title": "Delete Chapter Freeze Novel",
++     "title": "Changed replay title",
+    },
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "01a108dd-8d72-7052-8d29-a12b82746a1a",
+    },
+
+ ❯ test/node-postgresql/delete-chapter-http.integration.test.ts:686:12
+    684|       request: appliedRequest,
+    685|     });
+    686|     assert.deepEqual(frozen, applied.deleted);
+       |            ^
+    687|     assert.equal(frozenCapture.lastDeleteBody(), appliedBody);
+    688|     assert.equal(frozen.project.title, "Delete Chapter Freeze Novel");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  05:41:39
+   Duration  2.08s (transform 102ms, setup 0ms, import 132ms, tests 1.71s, environment 0ms)
+
+Verification failed: 11.77s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/1f2d6ee1e835470e8347f5798fa75989/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

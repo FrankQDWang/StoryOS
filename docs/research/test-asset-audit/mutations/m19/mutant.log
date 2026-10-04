@@ -1,0 +1,39 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/project-http.integration.test.ts (8 tests | 1 failed | 7 skipped) 350ms
+   × hostile Origin and Referer inputs refuse without Project disclosure 349ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/project-http.integration.test.ts > hostile Origin and Referer inputs refuse without Project disclosure
+AssertionError: fragment Referer
+
+200 !== 403
+
+
+- Expected
++ Received
+
+- 403
++ 200
+
+ ❯ test/node-postgresql/project-http.integration.test.ts:1065:14
+    1063|
+    1064|     for (const [name, response] of cases) {
+    1065|       assert.equal(response.status, 403, name);
+       |              ^
+    1066|       assert.doesNotMatch(response.body, /Project A|Authoritative A|01…
+    1067|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 skipped (8)
+   Start at  05:31:42
+   Duration  715ms (transform 110ms, setup 0ms, import 191ms, tests 350ms, environment 0ms)
+
+Verification failed: 8.99s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/ff835660185b4884aa19abb7318f1b24/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

@@ -31,7 +31,6 @@ The following DELETE rows still cite a current MERGE/MOVE owner. They can be rem
 | CO058 | BD021 |
 | CO082 | NP083 |
 | CO085 | NP135 |
-| CO134 | NP128 |
 | CO142 | NP135, NP111 |
 | CO143 | NP111 |
 | CO158 | NP104 |
@@ -51,7 +50,6 @@ The following DELETE rows still cite a current MERGE/MOVE owner. They can be rem
 | AD098 | NP138 |
 | SV026 | NP006 |
 | SV035 | NP006 |
-| CT012 | NP138 |
 | CT016 | NP006 |
 | NP001 | BD003 |
 | BD035 | NP129, NP135 |
@@ -68,3 +66,9 @@ Samples 2 (AP004), 3 (AP055) and 22 (CT033) each pass the cited coverage after g
 - CT010, CT011 and CT012 change DELETE to MERGE after sample 14. The registry checks IDs, route bindings and request closure but does not validate individual field grammars. Transfer Outcome, Activity and Takeover document-consumer cases before removing their inventories. CT009 remains DELETE for route/export substring checks; it does not assert those schema field constraints. Existing executable malformed-schema cases CT001-CT003, CT013 and CT017 remain KEEP.
 - AD046 changes DELETE to MERGE after sample 13. Dropped Archive fallback triggers only the HTTP bounded readiness wait. Preserve the exact immediate claim assertion by adding the second Archive selection to AD045 before removing AD046. This is a no-timeout evidence correction, not a claim that the mutation had no product effect.
 - Sample 4's optional original-test probe selected zero tests due to an incorrect module filter; it is not evidence. Its primary HTTP failure is valid. A separate corrected unit probe is retained rather than overwriting the zero-test log.
+
+## Mutation correction: redundant storage enforcement and count masking
+
+- CO134 changes D1 to D6 after sample18. Busy Conversation reaches Core, but the live-Conversation unique index plus same-command rollback and ConversationBusy mapping preserves the public result. This is not D5. The adjacent inaccessible-Conversation and unavailable-Assistance classifiers were reviewed; their different public mappings do not get this conclusion automatically.
+- CT007 changes DELETE to MERGE after sample29. Both coupled count ceilings were raised, both cited cover tests executed and stayed green, and the original policy unit failed. NP008 must receive genuine-Challenge requests and exact command_target_refused checks before CT007 is removed. The existing body-byte413 case remains distinct. No other DELETE row claims the masked count cases as its sole evidence.
+- D5 samples17/21/23/25/28/30 retain the explicit distinction between a synthetic internal input and current public behavior. Their mutant-only original-test failures are diagnostics; only the named covering test has the clean/restored pair unless a supplemental record says otherwise.

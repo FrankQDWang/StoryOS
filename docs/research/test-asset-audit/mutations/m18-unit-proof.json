@@ -1,0 +1,23 @@
+{
+  "sample": 18,
+  "id": "CO134",
+  "source": "crates/storyos-core/src/create_agent_run.rs",
+  "source_sha256": "81bbcbccf37acd0f31ab51f3424fe2c15dc06b505b53558daada3247cdd2eb9c",
+  "old": "        ConversationAdmission::ExistingBusy => CreateAgentRunResult::Refused {\n            reason: CreateAgentRunRefusal::ConversationBusy,\n        },",
+  "new": "        ConversationAdmission::ExistingBusy => CreateAgentRunResult::Admitted,",
+  "release": false,
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-core",
+    "--lib",
+    "create_agent_run::tests::refuses_a_busy_existing_conversation",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "defect": "Admit a second Run in a busy Conversation.",
+  "attempt": "unit-proof"
+}

@@ -1,0 +1,23 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
+     Running unittests src/lib.rs (target/rust-cache/gen-f249a5399a7e4905b98070796744bffd/debug/deps/storyos_contracts-c385fe4a9fcf1a53)
+
+running 1 test
+
+thread 'release1::tests::apply_author_edit_contract_activates_the_bounded_batch_policy' (104142842) panicked at crates/storyos-contracts/src/release1_tests.rs:119:5:
+assertion `left == right` failed
+  left: Number(240)
+ right: 241
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test release1::tests::apply_author_edit_contract_activates_the_bounded_batch_policy ... FAILED
+
+failures:
+
+failures:
+    release1::tests::apply_author_edit_contract_activates_the_bounded_batch_policy
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p storyos-contracts --lib`
+Verification failed: 1.23s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/5ae6ec0f7d0444ab8a4dd3104153c65c/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

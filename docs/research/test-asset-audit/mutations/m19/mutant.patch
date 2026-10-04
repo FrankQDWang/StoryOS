@@ -1,0 +1,10 @@
+--- a/crates/storyos-server/src/request_origin.rs
++++ b/crates/storyos-server/src/request_origin.rs
+@@ -63,7 +63,6 @@
+             || !matches!(parsed.scheme(), "http" | "https")
+             || !parsed.username().is_empty()
+             || parsed.password().is_some()
+-            || parsed.fragment().is_some()
+             || matches!(input, UrlInput::SerializedOrigin) && !has_serialized_origin_shape
+         {
+             return None;

@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/delete_chapter.rs
++++ b/crates/storyos-core/src/delete_chapter.rs
+@@ -103,7 +103,7 @@
+     };
+     if let Some(next) = command.ordered_active_chapter_ids.get(index + 1) {
+         return DeleteChapterCurrent::SelectSuccessor {
+-            chapter_id: next.clone(),
++            chapter_id: command.chapter_id.clone(),
+         };
+     }
+     if index > 0 {

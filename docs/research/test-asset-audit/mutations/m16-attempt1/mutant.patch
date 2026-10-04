@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/accept_proposal.rs
++++ b/crates/storyos-core/src/accept_proposal.rs
+@@ -196,7 +196,7 @@
+             reason: AcceptProposalRefusal::IncompleteBundleClosure,
+         };
+     }
+-    if !command.expected_target_matches_head {
++    if false && !command.expected_target_matches_head {
+         return AcceptProposalResult::Conflicted {
+             reason: AcceptProposalConflict::ChangedHead,
+         };

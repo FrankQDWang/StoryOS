@@ -1,0 +1,112 @@
+{
+  "sample": 19,
+  "id": "SV023",
+  "status": "candidate-kill",
+  "source": "crates/storyos-server/src/request_origin.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m19-baseline",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/project-http.integration.test.ts",
+        "-t",
+        "^hostile\\ Origin\\ and\\ Referer\\ inputs\\ refuse\\ without\\ Project\\ disclosure$"
+      ],
+      "exit": 0,
+      "seconds": 10.738,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m19/baseline.log"
+    },
+    {
+      "phase": "build",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m19-build",
+        "--",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--target-dir",
+        "target/web-release",
+        "-p",
+        "storyos-server",
+        "-p",
+        "storyos-worker-bin",
+        "-p",
+        "storyos-adapter-postgres"
+      ],
+      "exit": 0,
+      "seconds": 91.107,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m19/build.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m19-mutant",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/project-http.integration.test.ts",
+        "-t",
+        "^hostile\\ Origin\\ and\\ Referer\\ inputs\\ refuse\\ without\\ Project\\ disclosure$"
+      ],
+      "exit": 1,
+      "seconds": 9.391,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m19/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m19-restored",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/project-http.integration.test.ts",
+        "-t",
+        "^hostile\\ Origin\\ and\\ Referer\\ inputs\\ refuse\\ without\\ Project\\ disclosure$"
+      ],
+      "exit": 0,
+      "seconds": 8.714,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m19/restored.log"
+    }
+  ]
+}

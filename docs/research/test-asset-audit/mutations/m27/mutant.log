@@ -1,0 +1,33 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/reopen-rejected-operations-http.integration.test.ts (1 test | 1 failed) 2394ms
+   × reopenRejectedOperations appends a pending Revision without rewriting Rejection 2393ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/reopen-rejected-operations-http.integration.test.ts > reopenRejectedOperations appends a pending Revision without rewriting Rejection
+AssertionError: Missing expected rejection.
+
+simple
+
+ ❯ test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:171:11
+    169|           FOR EACH ROW EXECUTE FUNCTION storyos.test_reopen_failure();…
+    170|         try {
+    171|           await assert.rejects(
+       |           ^
+    172|             () => reopenRejectedOperations({ ...reopenOptions, antiFor…
+    173|             (error) => requireStoryOSProtocolError(error).status === 5…
+ ❯ test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:156:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  05:48:12
+   Duration  2.73s (transform 116ms, setup 0ms, import 151ms, tests 2.39s, environment 0ms)
+
+Verification failed: 11.62s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/92c54c4b9e0240139b8629bc8bf916ea/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

@@ -1,0 +1,12 @@
+--- a/crates/storyos-core/src/create_chapter.rs
++++ b/crates/storyos-core/src/create_chapter.rs
+@@ -81,9 +81,6 @@
+ 
+ /// Classify one Create Chapter against exact Scope, Volume join, lifecycle, tree revision, and title.
+ pub fn create_chapter(command: &CreateChapter) -> CreateChapterResult {
+-    if command.title.is_empty() || command.title.len() > 1024 {
+-        return CreateChapterResult::Refused(CreateChapterRefusal::InvalidTitle);
+-    }
+     if command.current_lifecycle == ProjectLifecycle::Archived {
+         return CreateChapterResult::Refused(CreateChapterRefusal::ArchivedProject);
+     }

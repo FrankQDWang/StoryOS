@@ -1,0 +1,112 @@
+{
+  "sample": 18,
+  "id": "CO134",
+  "status": "candidate-miss",
+  "source": "crates/storyos-core/src/create_agent_run.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m18-baseline",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/create-agent-run-http.integration.test.ts",
+        "-t",
+        "^createAgentRun\\ admits\\ one\\ conversation\\ and\\ keeps\\ query\\ scope\\ closed$"
+      ],
+      "exit": 0,
+      "seconds": 14.668,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m18/baseline.log"
+    },
+    {
+      "phase": "build",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m18-build",
+        "--",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--target-dir",
+        "target/web-release",
+        "-p",
+        "storyos-server",
+        "-p",
+        "storyos-worker-bin",
+        "-p",
+        "storyos-adapter-postgres"
+      ],
+      "exit": 0,
+      "seconds": 117.369,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m18/build.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m18-mutant",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/create-agent-run-http.integration.test.ts",
+        "-t",
+        "^createAgentRun\\ admits\\ one\\ conversation\\ and\\ keeps\\ query\\ scope\\ closed$"
+      ],
+      "exit": 0,
+      "seconds": 12.932,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m18/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m18-restored",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/create-agent-run-http.integration.test.ts",
+        "-t",
+        "^createAgentRun\\ admits\\ one\\ conversation\\ and\\ keeps\\ query\\ scope\\ closed$"
+      ],
+      "exit": 0,
+      "seconds": 14.547,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m18/restored.log"
+    }
+  ]
+}

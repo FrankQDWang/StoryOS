@@ -89,7 +89,7 @@
     "test": "one current writer settles one Author Edit and exact retries return one result",
     "verdict": "KEEP",
     "reason": "K2",
-    "evidence": "Keep real one-writer admission, the distinct authenticated outcome-query proof cases, all terminal zero-authority outcomes and GET RequiresReconfirmation after damaged retained payload. Process-cut recovery does not cover this entire query/proof/HTTP matrix. The 241-unit and 241-primitive subcases use an unissued all-zero nonce and assert only 422: later Challenge refusal can mask a missing count guard. They require a discriminating problem-code or valid-Challenge replacement before they can justify deleting count-regression coverage; the 413 body case remains distinct.",
+    "evidence": "Keep real one-writer admission, the distinct authenticated outcome-query proof cases, all terminal zero-authority outcomes and GET RequiresReconfirmation after damaged retained payload. Process-cut recovery does not cover this entire query/proof/HTTP matrix. The 241-unit and 241-primitive subcases use an unissued all-zero nonce and assert only 422: later Challenge refusal can mask a missing count guard. They require a discriminating problem-code or valid-Challenge replacement before they can justify deleting count-regression coverage; the 413 body case remains distinct. Sample29 confirms the masking after both count ceilings increase to241: this HTTP case still passes. Receive CT007 genuine-Challenge count refusals with exact command_target_refused before removing that policy test.",
     "coverage": "apps/web/test/node-process-cut/apply-author-edit-process-cut.integration.test.ts:179; crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs:162",
     "remove": null
   },

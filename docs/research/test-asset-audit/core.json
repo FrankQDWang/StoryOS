@@ -1684,16 +1684,14 @@
     "line": 72,
     "test": "refuses_a_busy_existing_conversation",
     "verdict": "DELETE",
-    "reason": "D1",
-    "evidence": "Public admission tries an existing busy Conversation and requires conversation_busy; the competing-admission case also proves only one queued Run can exist. Execution order: keep the cited covering test until NP128 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
-    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:833",
+    "reason": "D6",
+    "evidence": "Sample18 changes ExistingBusy to Admitted and the HTTP case still passes. This input is reachable: create_agent_run.rs:330-347 produces ExistingBusy. Migration0059:12-14 independently forbids two live Runs per Conversation; write errors map to ConversationBusy at create_agent_run.rs:394-403, and the entire command transaction rolls back at :63-65. Thus removing this isolated classifier guard changes no current durable/public result. DELETE rests on separately enforced storage exclusivity, not an equivalent Core-guard assertion or an unreachable input. Missing-Conversation and Assistance decisions have different mappings and are not generalized to this class.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
     "remove": [
       71,
       81
     ],
-    "coverage_dependencies": [
-      "NP128"
-    ]
+    "coverage_note": "The covering HTTP test owns the observable exclusivity rule; it does not kill this isolated redundant-guard mutation. See sample18."
   },
   {
     "id": "CO135",

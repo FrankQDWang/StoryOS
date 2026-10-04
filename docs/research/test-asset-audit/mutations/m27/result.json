@@ -1,0 +1,112 @@
+{
+  "sample": 27,
+  "id": "CO152",
+  "status": "candidate-kill",
+  "source": "crates/storyos-core/src/reopen_rejected_operations.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m27-baseline",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/reopen-rejected-operations-http.integration.test.ts",
+        "-t",
+        "^reopenRejectedOperations\\ appends\\ a\\ pending\\ Revision\\ without\\ rewriting\\ Rejection$"
+      ],
+      "exit": 0,
+      "seconds": 10.258,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m27/baseline.log"
+    },
+    {
+      "phase": "build",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m27-build",
+        "--",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--target-dir",
+        "target/web-release",
+        "-p",
+        "storyos-server",
+        "-p",
+        "storyos-worker-bin",
+        "-p",
+        "storyos-adapter-postgres"
+      ],
+      "exit": 0,
+      "seconds": 100.886,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m27/build.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m27-mutant",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/reopen-rejected-operations-http.integration.test.ts",
+        "-t",
+        "^reopenRejectedOperations\\ appends\\ a\\ pending\\ Revision\\ without\\ rewriting\\ Rejection$"
+      ],
+      "exit": 1,
+      "seconds": 12.067,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m27/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m27-restored",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/reopen-rejected-operations-http.integration.test.ts",
+        "-t",
+        "^reopenRejectedOperations\\ appends\\ a\\ pending\\ Revision\\ without\\ rewriting\\ Rejection$"
+      ],
+      "exit": 0,
+      "seconds": 13.857,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m27/restored.log"
+    }
+  ]
+}

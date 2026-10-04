@@ -1,0 +1,61 @@
+{
+  "sample": 16,
+  "id": "CO074",
+  "status": "blocked",
+  "source": "crates/storyos-core/src/accept_proposal.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m16-baseline",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/accept-proposal-http.integration.test.ts",
+        "-t",
+        "^acceptProposal\\ retains\\ changed_head\\ across\\ reload\\ and\\ refuses\\ another\\ attempt\\ until\\ revision$"
+      ],
+      "exit": 1,
+      "seconds": 8.633,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m16/baseline.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m16-restored",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/accept-proposal-http.integration.test.ts",
+        "-t",
+        "^acceptProposal\\ retains\\ changed_head\\ across\\ reload\\ and\\ refuses\\ another\\ attempt\\ until\\ revision$"
+      ],
+      "exit": 0,
+      "seconds": 17.845,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m16/restored.log"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+   Compiling storyos-contracts v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-contracts)
+   Compiling storyos-application v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-application)
+   Compiling storyos-adapter-postgres v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-adapter-postgres)
+   Compiling storyos-adapter-fake-destination v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-adapter-fake-destination)
+   Compiling storyos-worker v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-worker)
+   Compiling storyos-server v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-server)
+   Compiling storyos-worker-bin v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-worker-bin)
+    Finished `release` profile [optimized] target(s) in 2m 15s
+Verification passed: 136.98s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/95365b91eae04d3083a27d1f2d7c457a/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

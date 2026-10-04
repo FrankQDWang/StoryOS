@@ -195,7 +195,11 @@
       "test": "conflicts_a_changed_target_head",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166",
-      "status": "pending"
+      "status": "pending",
+      "previous_attempts": [
+        "mutations/m16-attempt1/result.json"
+      ],
+      "finding": "Attempt1 blocked by disposable-database activation failure before test or mutation. Immediate restored covering run passed one case. Retry the same sample."
     },
     {
       "sample": 17,
@@ -205,7 +209,9 @@
       "test": "an_invalid_title_classifies_as_refused_with_zero_authority_effect",
       "reason": "D5",
       "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m17/result.json",
+      "finding": "Core invalid-title unit fails; public Chapter creation still passes because title rejection occurs before Core."
     },
     {
       "sample": 18,
@@ -215,7 +221,9 @@
       "test": "refuses_a_busy_existing_conversation",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:833",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m18/result.json",
+      "finding": "Busy Core classification is bypassed, but the live-Conversation UNIQUE index and same-transaction rollback preserve ConversationBusy at HTTP. This is reachable redundant enforcement, not D5 unreachability; CO134 changes to D6."
     },
     {
       "sample": 19,
@@ -225,7 +233,9 @@
       "test": "unsupported_or_malformed_url_classes_refuse",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m19/result.json",
+      "finding": "Fragment Referer receives200 instead of403 at project-http:1065."
     },
     {
       "sample": 20,
@@ -235,7 +245,9 @@
       "test": "delete_chapter_is_atomic_replayable_and_scope_safe",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:417; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:767; crates/storyos-adapter-postgres/src/structure_command_tests.rs:313; crates/storyos-adapter-postgres/src/delete_chapter_tests.rs:611",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m20/result.json",
+      "finding": "Deleted Current Chapter remains selected instead of the next sibling at delete-chapter:359."
     },
     {
       "sample": 21,
@@ -245,7 +257,9 @@
       "test": "usable_reference_does_not_rebuild_or_erase_an_ordinary_correction",
       "reason": "D5",
       "coverage": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m21/result.json",
+      "finding": "Usable reference Core unit fails; Adapter returns ordinary Dispatch before that classifier, so continuation HTTP passes."
     },
     {
       "sample": 22,
@@ -267,7 +281,9 @@
       "test": "an_invalid_title_classifies_as_refused_with_zero_authority_effect",
       "reason": "D5",
       "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m23/result.json",
+      "finding": "Core invalid Volume title unit fails; public title validation still rejects before Core."
     },
     {
       "sample": 24,
@@ -277,7 +293,9 @@
       "test": "createVolume freezes the acknowledgement after later title and Current Chapter changes",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:571; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/node-postgresql/create-volume-http.integration.test.ts:392",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m24/result.json",
+      "finding": "Frozen replay full response has a changed Project title at delete-chapter:686."
     },
     {
       "sample": 25,
@@ -287,7 +305,9 @@
       "test": "a_chapter_identity_mismatch_fails_closed",
       "reason": "D5",
       "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m25/result.json",
+      "finding": "Fake Reader Chapter mismatch unit fails; the real scoped exact-ID reader cannot emit that tuple and HTTP passes."
     },
     {
       "sample": 26,
@@ -297,7 +317,9 @@
       "test": "delete_volume_is_atomic_replayable_and_scope_safe",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238; crates/storyos-adapter-postgres/src/structure_command_tests.rs:313; crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs:7",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m26/result.json",
+      "finding": "Nonempty Volume removal returns authoritative_applied instead of refused at delete-volume:284."
     },
     {
       "sample": 27,
@@ -307,7 +329,9 @@
       "test": "resolves_one_rejected_operation_without_authority",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:17",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m27/result.json",
+      "finding": "Refusing valid Reopen skips its expected persistence stage; the deliberately faulted-write case no longer gets its expected rejection at reopen-rejected:171."
     },
     {
       "sample": 28,
@@ -317,7 +341,9 @@
       "test": "a_changed_archive_project_binding_is_refused_before_the_store",
       "reason": "D5",
       "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m28/result.json",
+      "finding": "Internal Archive command-kind unit fails; the real Server always supplies the correct literal and HTTP passes."
     },
     {
       "sample": 29,
@@ -327,7 +353,9 @@
       "test": "apply_author_edit_contract_activates_the_bounded_batch_policy",
       "reason": "D2",
       "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-contracts/src/release1_artifacts_tests.rs:735",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m29/result.json",
+      "finding": "Both count ceilings changed240->241. HTTP and registry each execute one test and pass; original policy-alignment unit fails. CT007 becomes MERGE with genuine Challenge and exact problem-code count checks in NP008."
     },
     {
       "sample": 30,
@@ -337,7 +365,9 @@
       "test": "an_invalid_title_is_refused_before_the_store",
       "reason": "D5",
       "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m30/result.json",
+      "finding": "Application title guard unit fails; public title validation still rejects before Application."
     }
   ]
 }

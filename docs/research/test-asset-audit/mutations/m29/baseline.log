@@ -1,0 +1,21 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 7 skipped (8)
+   Start at  05:50:54
+   Duration  3.41s (transform 85ms, setup 0ms, import 131ms, tests 3.14s, environment 0ms)
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+     Running unittests src/lib.rs (target/rust-cache/gen-f249a5399a7e4905b98070796744bffd/debug/deps/storyos_contracts-c385fe4a9fcf1a53)
+
+running 1 test
+test release1_artifacts::tests::every_registered_operation_matches_the_reviewed_catalog_and_generated_wire ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.22s
+
+COVERAGE_EXIT_CODES [0, 0]
+Verification passed: 11.33s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/67b7d31f747b4f8e87e67056b322ccff/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

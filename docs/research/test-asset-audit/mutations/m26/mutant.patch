@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/delete_volume.rs
++++ b/crates/storyos-core/src/delete_volume.rs
+@@ -82,7 +82,7 @@
+     if command.volume_lifecycle == VolumeRemovalLifecycle::Removed {
+         return DeleteVolumeResult::NoEffect(DeleteVolumeNoEffect::AlreadyRemoved);
+     }
+-    if command.child_chapters == VolumeChildPolicy::Nonempty {
++    if false && command.child_chapters == VolumeChildPolicy::Nonempty {
+         return DeleteVolumeResult::Refused(DeleteVolumeRefusal::NonemptyVolume);
+     }
+     DeleteVolumeResult::Applied(DeleteVolumeApplied {

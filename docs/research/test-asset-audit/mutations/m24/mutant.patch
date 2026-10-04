@@ -1,0 +1,11 @@
+--- a/crates/storyos-adapter-postgres/src/command_replay.rs
++++ b/crates/storyos-adapter-postgres/src/command_replay.rs
+@@ -95,7 +95,7 @@
+             self.acknowledgement_format.as_deref(),
+             self.response_project.as_deref(),
+         ) {
+-            Ok(CommandResponseProjectEvidence::Captured(project)) => Ok(project),
++            Ok(CommandResponseProjectEvidence::Captured(mut project)) => { project.title = "Changed replay title".to_owned(); Ok(project) },
+             Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                 Err(ReplayFault::HistoricalAcknowledgementUnavailable)
+             }
