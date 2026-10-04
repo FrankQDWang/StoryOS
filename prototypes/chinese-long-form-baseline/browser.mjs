@@ -14,7 +14,9 @@ export async function browserRun({ baseUrl, projectId, chapters, out, measure, b
     if (!response.url().includes('/api/')) return;
     network.push((async () => {
       const body = await response.body();
-      recordWire({ method: response.request().method(), path: new URL(response.url()).pathname, status: response.status(), request_bytes: Buffer.byteLength(response.request().postData() ?? ''), response_bytes: body.length });
+      let data; try { data = JSON.parse(body); } catch {}
+      const positions = data ? { chapter: data.chapter ? data.project_activity_position : undefined, snapshot: data.snapshot?.project_activity_position, session_base: data.base_snapshot?.project_activity_position, writer_generation: data.writer?.writer_generation } : undefined;
+      recordWire({ method: response.request().method(), path: new URL(response.url()).pathname, status: response.status(), request_bytes: Buffer.byteLength(response.request().postData() ?? ''), response_bytes: body.length, positions });
     })().catch(() => {}));
   });
   await context.addInitScript(() => {
@@ -61,7 +63,10 @@ export async function browserRun({ baseUrl, projectId, chapters, out, measure, b
     });
   }
   async function sample(name, action) {
-    if (page.url() !== 'about:blank') await page.evaluate(() => { window.baselineIdb.calls = {}; window.baselineIdb.returned_records = 0; window.baselineIdb.writes = 0; });
+    if (page.url() !== 'about:blank') {
+      await facts();
+      await page.evaluate(() => { window.baselineIdb.calls = {}; window.baselineIdb.returned_records = 0; window.baselineIdb.writes = 0; });
+    }
     return measure(`web-${name}`, async () => {
       try { await action(); return { browser: await facts() }; }
       catch (error) { error.baselineBrowser = await facts(); writeFileSync(resolve(out, `web-${name}-failure.json`), JSON.stringify({ error: String(error), body: await page.locator('body').innerText(), editor: await page.locator('[data-manuscript-editor]').getAttribute('contenteditable'), browser: error.baselineBrowser })); throw error; }
@@ -137,6 +142,26 @@ export async function browserRun({ baseUrl, projectId, chapters, out, measure, b
     }
     await open(); await saved(); await capture('reload');
     writeFileSync(resolve(out, 'coordinates.json'), JSON.stringify({ probe, utf16_units: probe.length, scalars: [...probe].length, observations }, null, 2));
+    budget();
+    await page.locator('[name="assistant-message"]').fill('Revise this passage: keep the voice.');
+    const admittedResponse = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/agent-runs'));
+    await page.locator('[data-writing-assistant-composer] button[type="submit"]').click();
+    const admitted = await (await admittedResponse).json();
+    worker();
+    const inspect = page.locator('[data-assistant-inspect]');
+    if (await inspect.count()) await inspect.click();
+    await page.locator('[data-proposal-location]').last().waitFor();
+    writeFileSync(resolve(out, 'web-proposal-setup.json'), JSON.stringify({ run_id: admitted.effect.run_id }));
+    await sample('proposal-open', async () => {
+      await page.locator('[data-proposal-location]').last().click();
+      await page.locator('[data-proposal-accept]').last().waitFor();
+    });
+    await sample('proposal-accept', async () => {
+      const previous = await page.locator('[data-save-state]').getAttribute('data-authoritative-revision-id');
+      await page.locator('[data-proposal-accept]').last().click();
+      await page.waitForFunction(previous => document.querySelector('[data-save-state]')?.getAttribute('data-authoritative-revision-id') !== previous, previous);
+      await saved();
+    });
     let newVolume, newChapter;
     await sample('create-volume', async () => {
       await page.locator('[data-add-chapter]').click(); await page.locator('[data-create-volume-action]').click();

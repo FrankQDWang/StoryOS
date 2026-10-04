@@ -124,9 +124,15 @@ try {
   await stopStoryOSServer(started.server);
   sql('ALTER ROLE storyos_runtime SET auto_explain.log_min_duration = 0');
   await start(bind);
+  await measure('statistics-before-analyze', () => query('getStatistics'));
+  const planner = () => JSON.parse(sql("SELECT json_agg(t) FROM (SELECT relname,n_live_tup,last_analyze,last_autoanalyze FROM pg_stat_user_tables WHERE schemaname='storyos' ORDER BY relname) t"));
+  const beforeAnalyze = planner();
+  sql('ANALYZE');
+  writeFileSync(resolve(out, 'planner-state.json'), JSON.stringify({ before: beforeAnalyze, after: planner() }, null, 2));
   await measure('open-project', () => query('getProject'));
-  await measure('tree', () => query('getManuscriptTree'));
-  await measure('read-chapter', () => query('getChapter', { chapterId: chapters.at(-1) }));
+  const tree = await measure('tree', () => query('getManuscriptTree'));
+  writeFileSync(resolve(out, 'tree-order.json'), JSON.stringify({ expected_volumes: volumes, expected_chapters: chapters, actual: tree.volumes }, null, 2));
+  await measure('read-chapter', () => query('getChapter', { chapterId: chapters[0] }));
   await measure('statistics', () => query('getStatistics'));
   for (const selection of ['current_chapter', 'manuscript']) await measure(`search-${selection}`, () => query('searchManuscript', { request: { schema_id: 'storyos.query.manuscript-search.request.v1', selection, query_text: '不存在的紫色星河', required_watermark: null } }));
   await measure('session-read', () => query('getEditorSession', { editorSessionId: session.editor_session.editor_session_id }));
@@ -146,7 +152,7 @@ try {
     const admitted = await command('ExportHumanReadableManuscript', {});
     worker();
     const result = await query('getHumanReadableManuscriptExport', { exportId: admitted.effect.export_id });
-    writeFileSync(resolve(out, 'export-result.json'), JSON.stringify({ status: result.status, content_sha256: result.content_sha256, utf8_bytes: Buffer.byteLength(result.manuscript_utf8 ?? '') }));
+    writeFileSync(resolve(out, 'export-result.json'), JSON.stringify({ status: result.status, content_sha256: result.content_sha256, utf8_bytes: Buffer.byteLength(result.manuscript_utf8 ?? ''), headings: (result.manuscript_utf8 ?? '').split('\n').filter(line => /^#{1,2} /.test(line)) }, null, 2));
     return result;
   });
   budget();
@@ -178,6 +184,9 @@ try {
     await command('SetCurrentChapter', { chapter_id: chapters[1], expected_current_chapter_id: chapters[0], expected_target_revision_id: target.current_revision.revision_id, editor_session_id: editorSessionId });
     await browserRun({ baseUrl, projectId, chapters, out, measure, budget, recordWire: row => wire.push(row), sql, user, worker, editorSessionId });
   }
+  const lastTree = await query('getManuscriptTree');
+  treeRevision = lastTree.tree_revision;
+  await measure('delete-populated-volume', () => command('DeleteVolume', { expected_tree_revision: treeRevision }, { volumeId: volumes.at(-1) }));
 } finally {
   if (started) await stopStoryOSServer(started.server);
   const logs = spawnSync('docker', ['logs', container], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 });

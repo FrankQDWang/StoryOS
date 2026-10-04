@@ -43,7 +43,7 @@ for directory in sorted(out.iterdir()):
         rows.append(result)
         packed = json.dumps({'observation': data, 'plans': captured}, ensure_ascii=False, separators=(',', ':')).encode()
         (destination / f'{directory.name}-{data["operation"]}.json.gz').write_bytes(gzip.compress(packed, mtime=0))
-    for name in ['import.json', 'coordinates.json', 'export-result.json', 'browser-error.json']:
+    for name in ['import.json', 'coordinates.json', 'export-result.json', 'browser-error.json', 'planner-state.json', 'tree-order.json', 'web-proposal-setup.json'] + [p.name for p in directory.glob('web-*-failure.json')]:
         path = directory / name
         if path.exists():
             shutil.copyfile(path, destination / f'{directory.name}-{name}')

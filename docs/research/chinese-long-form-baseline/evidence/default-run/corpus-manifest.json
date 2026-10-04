@@ -1,0 +1,54 @@
+[
+  {
+    "scale": 30000,
+    "chapters": 15,
+    "scalars": 30000,
+    "utf8_bytes": 89312,
+    "blocks": 352,
+    "paragraph_min": 1,
+    "paragraph_median": 72.0,
+    "paragraph_max": 160,
+    "chapter_min": 1779,
+    "chapter_max": 2272,
+    "sha256": "51574d9a9bbb9428392ef461c49a5b4bb5ae06d8b60620a2d580eeb96919065f"
+  },
+  {
+    "scale": 300000,
+    "chapters": 150,
+    "scalars": 300000,
+    "utf8_bytes": 893206,
+    "blocks": 3442,
+    "paragraph_min": 1,
+    "paragraph_median": 72.0,
+    "paragraph_max": 160,
+    "chapter_min": 963,
+    "chapter_max": 2984,
+    "sha256": "8a1f988fec4e58234c63c814feac71ccec44a867814dac584b5b3df721974e86"
+  },
+  {
+    "scale": 1000000,
+    "chapters": 500,
+    "scalars": 1000000,
+    "utf8_bytes": 2977186,
+    "blocks": 11557,
+    "paragraph_min": 1,
+    "paragraph_median": 72,
+    "paragraph_max": 160,
+    "chapter_min": 963,
+    "chapter_max": 3214,
+    "sha256": "18eefd3afe11e970c5a89a0cf88bca603b90f08b80fa4a88f795aad8dedaaa01"
+  },
+  {
+    "scale": 3000000,
+    "chapters": 1500,
+    "scalars": 3000000,
+    "utf8_bytes": 8931648,
+    "blocks": 34626,
+    "paragraph_min": 1,
+    "paragraph_median": 72.0,
+    "paragraph_max": 161,
+    "chapter_min": 951,
+    "chapter_max": 3214,
+    "sha256": "0b260d20f0516fed3b1c225a0f79af2ab1e92d874a3fef8e57a1a877690db8e3"
+  }
+]

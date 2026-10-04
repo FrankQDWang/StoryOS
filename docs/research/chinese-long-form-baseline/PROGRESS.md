@@ -2,12 +2,12 @@
 
 ## Resume here
 
-- Status: active. Step 1 (scope and baseline) complete.
+- Status: active. First four-scale run complete; controlled-plan repeat in progress.
 - Baseline: `origin/main@479224809cdaae997cda51cb8853e3fafa242b65`.
 - Branch: `codex/chinese-long-form-baseline`.
 - Worktree: `/Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS`.
 - Date: 2026-10-05 (Asia/Singapore).
-- Next: read owning contracts and public command entry points; build the seeded corpus and disposable measurement runner.
+- Next: run the frozen apparatus with a paired ANALYZE observation, complete the scale report, and finalize all evidence.
 
 ## Scope and decisions
 
@@ -119,3 +119,23 @@ measurement, integration, progress, and commits.
   recovery observations. The main apparatus now archives every prior run directory.
 - Next: freeze the apparatus, run the single command at all four scales, inspect
   the counts and retained failures, and write the scale and final reports.
+
+### Step 5: first four-scale evidence and controlled-plan preparation
+
+- Completed 136 operation observations across all four sizes. Preserved the raw
+  counters and actual plans under `evidence/default-run/` with SHA-256 hashes.
+- All 24 Unicode observations passed: six edits/reloads per size; the probe has
+  27 scalars and 36 UTF-16 units. The post-export reload was read-only at every size.
+- Default statistics buffer counts are non-monotonic: 1,806 / 691,924 / 33,351 /
+  133,148. Actual plans show stale estimates and repeated joins at 300,000 scalars.
+  Do not treat this as an unconditional measured quadratic growth rate.
+- Add a paired statistics request before and after explicit ANALYZE, outside
+  measured actions. Preserve the default run separately. Repeat other actions
+  after ANALYZE to make the planner-state assumption explicit.
+- Capture public tree order and export headings for the observed lexical sort;
+  capture response positions for the post-export session recovery mismatch.
+- Add actual Web Proposal open/accept and populated-Volume deletion measurements.
+  Drain pending browser traffic before counter reset to keep sample attribution clear.
+- The first command completed database measurements but its final count step
+  included `corpus-manifest.json` in a glob. Narrowed that glob to numeric corpus
+  names. Existing native Word evidence is intact. No product changes were made.
