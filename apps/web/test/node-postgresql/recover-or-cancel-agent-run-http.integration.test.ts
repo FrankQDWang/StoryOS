@@ -132,7 +132,7 @@ async function drainLeftoverWork() {
     const leftover = await queryPostgres(`
       SELECT count(*)::text
         FROM storyos.agent_runs
-       WHERE status IN ('queued', 'claimed');
+       WHERE status IN ('queued', 'claimed') OR (status = 'cancelled' AND wakeup_pending);
     `);
     if (leftover === "0") return;
     await settleOnce();
