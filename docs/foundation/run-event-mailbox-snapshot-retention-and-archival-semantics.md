@@ -53,11 +53,11 @@ cleanup is still pending.
 ### 1.1 Author journey and acceptance surface
 
 The retention contract is complete only when one consistent history surface
-supports these steps. Under ADR 0040, steps 1, 3, and 4 and the in-flight
-evidence check in step 6 are audit and verification steps through the
-read-only Query in section 11. No author-facing view shows these Run internals.
-Step 2 is Protected Web Client behavior. The author performs the other parts of
-steps 5 and 6.
+supports these steps. Under ADR 0040, steps 1, 3, and 4 are audit and
+verification steps. The in-flight evidence check in step 6 is also an audit
+step. These steps use the read-only Query in section 11. No author-facing view
+shows these Run internals. Step 2 is Protected Web Client behavior. The author
+performs the other parts of steps 5 and 6.
 
 1. Query Project Activity or a Run and distinguish historical occurrence,
    current payload eligibility, and service availability.
@@ -73,10 +73,10 @@ steps 5 and 6.
 5. Export a consistent Project archive, verify manifest/digest/provenance/gaps,
    and restore only the same absent Scope after lifecycle and Recovery
    Visibility Proof; projections rebuild and a new Snapshot/resync is used.
-6. Request Project deletion, observe new work/disclosure/export/restore fenced,
-   find settled or `OutcomeUnknown` in-flight evidence through the audit
-   Query, and never see the deleted Scope become readable through Project
-   Restore.
+6. Request Project deletion. Make sure that new work, disclosure, export, and
+   restore are fenced. Find settled or `OutcomeUnknown` in-flight evidence
+   through the audit Query. Make sure that Project Restore never makes the
+   deleted Scope readable.
 
 An inspection surface reports the truth available under current authorization;
 it does not dispatch a Provider, Tool, MCP server, embedding service, or
