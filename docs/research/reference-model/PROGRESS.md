@@ -109,3 +109,11 @@ Seed 302 now creates two Blocks through one public Author Edit, generates a Prop
 The first Draft query used the wrong URL and stopped in the harness. The route now comes directly from the generated route catalog. The multi-Block model checks semantic Blocks and identity; it treats the separate body string as an opaque display projection for this setup.
 
 Next: finish negative Proposal branches and run the 20-hit Author Edit/Undo and Proposal batches. The no-frontier Undo probe uses the unmodified command-owned fixture's empty action history; all novel changes in the main scenarios still enter through HTTP.
+
+## Step 10: Expanded Proposal survey
+
+Seed 303 exercised 15 independent Proposal scenarios, including producer withdrawal, changed-Head conflicts, stale Revision refusals, mixed Draft preservation, and close/reopen. Evidence: `proposals-expanded-survey.json.gz`. Three candidate probes exposed model assumptions: a Proposal target with no expected Proposal Head is malformed at Admission; an unknown operation is a typed target mismatch; Replan Undo uses a registered Proposal handler. Keep these observations and use a well-formed no-target stale-ownership request next. Do not count the initial expected Barrier assertion as a product defect.
+
+A-007: section 10.1 names typed Proposal edit, rejection, and withdrawal handlers but does not explicitly map Replan. The observed Replan compensation has no authoritative Commit and returns an empty projected authoritative body. The routing and response projection need separate contract/schema review.
+
+Next: verify Acceptance reversal, then collect bounded 20-seed batches.

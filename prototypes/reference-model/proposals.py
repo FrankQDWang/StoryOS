@@ -163,7 +163,7 @@ class Proposal:
 
 
 def run(http, seed, differences, coverage, selected=None):
-    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect', 'conflict_reject', 'conflict_withdraw', 'refuse_replan', 'draft', 'edit_conflicts', 'producer', 'closed']
+    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect', 'conflict_reject', 'conflict_withdraw', 'refuse_replan', 'draft', 'edit_conflicts', 'producer', 'closed', 'reversal']
     http.rng.shuffle(modes)
     for mode in modes:
         http.rng = random.Random(f'{seed}/proposal/{mode}')
@@ -189,7 +189,7 @@ def run(http, seed, differences, coverage, selected=None):
             p.command('replanProposal', 'conflicted', mutation={'expected_current_target_revisions': [p.prior_head]})
             p.command('replanProposal', 'refused', mutation={'source_condition': {'kind': 'proposal_conflict', 'proposal_conflict_ref': http.identity()}})
             p.command('replanProposal', 'resolved', {'validation': 'pending'})
-            p.editor.undo('unavailable')
+            # Undo routing for Replan is an explicit contract question (A-007).
         elif mode == 'invalid':
             p.command('acceptProposal', 'invalid', mutation={'validation_receipt_id': http.identity()})
             p.command('acceptProposal', 'refused')
@@ -217,8 +217,8 @@ def run(http, seed, differences, coverage, selected=None):
             from mixed import run as run_mixed
             run_mixed(p)
         elif mode == 'edit_conflicts':
-            p.edit('conflicted', {'expected_proposal_head_revision_ids': [], 'observed_ownership_partition': 'authoritative'})
-            p.edit('conflicted', {'proposal_target': dict(proposal_id=p.proposal_id, operation_id=http.identity(),
+            p.editor.edit(units('stale ownership'), 'conflicted')
+            p.edit('refused', {'proposal_target': dict(proposal_id=p.proposal_id, operation_id=http.identity(),
                 revision_id=p.p['revision_id'], manuscript_block_id=p.p['manuscript_block_id'])})
         elif mode == 'producer':
             cause = dict(cause='current_producer', withdrawal_reason={'kind': 'current_producer_withdrew'},
@@ -231,3 +231,17 @@ def run(http, seed, differences, coverage, selected=None):
             p.command('rejectProposalOperations', 'refused')
             p.rejections = [http.identity()]
             p.command('reopenRejectedOperations', 'refused')
+
+        elif mode == 'reversal':
+            prior = p.editor.text
+            p.command('acceptProposal', 'applied', {'operation_resolution': 'applied'})
+            e = p.editor
+            e.history.append((prior, e.actions))
+            e.refresh()
+            e.edit(units('Later '), 'authoritative_applied', 'Later ' + e.text)
+            e.undo()
+            before = e.text
+            response = e.undo('reversal_required')
+            compare(p.label + '/reversal has no Commit', [], response['receipt']['authoritative_commit_ids'], differences)
+            e.refresh()
+            compare(p.label + '/reversal leaves authority', before, e.session['base_snapshot']['materialized_revision']['body'], differences)
