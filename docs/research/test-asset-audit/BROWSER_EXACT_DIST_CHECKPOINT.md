@@ -1,6 +1,6 @@
 # Browser exact-dist checkpoint
 
-Source review is partial: 33 cases in 32 test files; 21 KEEP, one DELETE, 11 MERGE. Direct candidate lines: 67.
+Source review is partial: 35 cases in 34 test files; 21 KEEP, three DELETE, 11 MERGE. Direct test candidate lines: 83. Exclusive support candidate lines: 434 (support-removals.json).
 
 | Reviewed file | Verdict |
 |---|---|
@@ -103,3 +103,13 @@ Source review is partial: 33 cases in 32 test files; 21 KEEP, one DELETE, 11 MER
 - Reconcile manual-input:579 validated stale refusal against production-host:5: the latter already holds an actual old-writer POST across Takeover and checks the rendered read-only editor/local text. The other manual parameters have distinct unknown schema and earlier challenge/admission/terminal evidence. Do not change those verdicts until the covering production file is fully entered.
 - Remaining helper work includes production-prose-request-command (routes prose/refused/conflict/restore) and its Draft helpers, Inline, captured Memory, Run evidence, composer and multi-location. No partial helper read is treated as a finished disposition.
 - Current totals: 33 cases in 32 files, 21 KEEP, one DELETE, 11 MERGE; 67 direct candidate lines. No active process or temporary mutation.
+
+## Direct API assertions behind browser titles
+
+- BD034/BD035 DELETE captured Memory and Run evidence wrappers. Both full helper bodies are read (the truncated retrieval/cancel section was separately read). Their titles claim display/selection, but the evidence checks call generated getAgentRun directly after ordinary composer operations and reloads. No Memory/evidence DOM content is asserted.
+- Memory's exact use=false/contribution=true current revision, old capture and withheld evidence are already in create-agent-run:554. Current versus historical withheld lookup follows the same exact revision join in create_agent_run_read.rs:146-150 and optional booleans :237-245. The real prose flow already checks same Conversation after reload/lost acknowledgement.
+- Run evidence repeats retained HTTP cases for nonempty superseded Context, oversized exact input, compaction installed/refused, reference rebuilt/blocked/unknown, retained-result settled/missing/cancelled, successor dispatched/budget/fence-cancelled. Each corresponding public test is cited in BD035. Reload before a direct GET does not create an additional browser reader boundary.
+- These deletions require removing exclusive command routes/imports and the corresponding exact-dist-global-setup expected Project/Receipt/action counter blocks. No product behavior is represented by keeping now-unused fixture counts. Preserve the other authority oracle groups.
+- support-removals.json records 434 additional exclusive helper lines (177 Memory + 257 Run evidence). Include these spans, unioned by path, in future directory/top-file totals; they are not additional runtime tests or separate sample rows. Do not count shared dispatcher/teardown cleanup yet.
+- acceptance.ts and production-composer-controls.ts are fully reviewed. Composer has real UI controls, held dispatch, lost steering acknowledgement plus exact reload retry, and read-only writer refusal; eventual production-host:30 verdict is KEEP. Other production-host scenarios still require the prose/mixed/conflict/multi helpers.
+- Current source totals: 35 exact-dist cases / 34 files, 21 KEEP, three DELETE, 11 MERGE. Test spans 83 lines plus 434 support lines. No runtime mutation or active process.
