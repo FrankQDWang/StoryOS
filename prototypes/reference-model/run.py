@@ -26,6 +26,7 @@ def wire(value):
 class HTTP:
     def __init__(self, url, rng, trace):
         self.url, self.rng, self.trace = url, rng, trace
+        self.replay = False
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         self.opener.open(url).read()
         profile = self.request('GET', '/api/v1/protocol')[1]
@@ -51,6 +52,7 @@ class HTTP:
         except urllib.error.HTTPError as error:
             response = error
         raw = response.read()
+        self.last_raw = raw
         result = json.loads(raw)
         safe = {k: v for k, v in result.items() if k != 'nonce'}
         self.trace.append(dict(method=method, path=path, request=body, status=response.status, response=safe))
@@ -65,21 +67,37 @@ class HTTP:
             body = {'command_schema': schema, **self.meta(), **values}
         key = self.identity()
         if name == 'createProject':
-            status, challenge = self.request('POST', '/api/v1/anti-forgery-challenges', {**body, 'idempotency_key': key})
+            challenge_path = '/api/v1/anti-forgery-challenges'
+            challenge_body = {**body, 'idempotency_key': key}
+            status, challenge = self.request('POST', challenge_path, challenge_body)
             if status != 200:
                 return status, challenge
             body['prospective_project_id'] = challenge['prospective_project_id']
         else:
             digest = dict(algorithm='sha256', profile=f'storyos.command.{name}.jcs.v1',
                           value_hex_lowercase=hashlib.sha256(wire(body)).hexdigest())
-            status, challenge = self.request('POST', f"/api/v1/projects/{targets['project_id']}/anti-forgery-challenges",
-                dict(method=route['method'], route_template=route['path'], command_schema=schema,
-                     canonical_command_digest=digest, idempotency_key=key))
+            challenge_path = f"/api/v1/projects/{targets['project_id']}/anti-forgery-challenges"
+            challenge_body = dict(method=route['method'], route_template=route['path'], command_schema=schema,
+                                  canonical_command_digest=digest, idempotency_key=key)
+            status, challenge = self.request('POST', challenge_path, challenge_body)
             if status != 200:
                 return status, challenge
         path = route['path'].format(**targets)
-        return self.request(route['method'], path, body,
-            {'Idempotency-Key': key, 'X-StoryOS-Anti-Forgery': challenge['nonce']})
+        self.last_challenge = (challenge_path, challenge_body, challenge)
+        if self.replay:
+            retry_status, retry = self.request('POST', challenge_path, challenge_body)
+            equal = retry_status == 200 and retry == challenge
+            compare(name + '/Challenge exact retry', True, equal, self.differences)
+            self.coverage['challenge:exact_retry:' + str(equal)] += 1
+        headers = {'Idempotency-Key': key, 'X-StoryOS-Anti-Forgery': challenge['nonce']}
+        status, response = self.request(route['method'], path, body, headers)
+        self.last_command = (route['method'], path, body, headers, self.last_raw)
+        if self.replay and status == 200:
+            retry_status, _ = self.request(route['method'], path, body, headers)
+            equal = retry_status == status and self.last_raw == self.last_command[4]
+            compare(name + '/Command exact retry bytes', True, equal, self.differences)
+            self.coverage['replay:' + name + ':' + str(equal)] += 1
+        return status, response
 
 
 class Structure:
@@ -148,6 +166,7 @@ def main():
     parser.add_argument('--count', type=int, default=1)
     parser.add_argument('--stage', default='bootstrap')
     parser.add_argument('--case')
+    parser.add_argument('--replay', action='store_true')
     parser.add_argument('--output', default='target/reference-model/bootstrap.json')
     args = parser.parse_args()
     package = ROOT / 'target/release-package'
@@ -161,6 +180,7 @@ def main():
         line = server.stdout.readline().strip()
         assert line.startswith('STORYOS_SERVER_URL='), line
         http = HTTP(line.split('=', 1)[1], random.Random(args.seed), trace)
+        http.replay, http.coverage, http.differences = args.replay, coverage, differences
         for seed in range(args.seed, args.seed + args.count):
             http.rng = random.Random(seed)
             if args.stage == 'bootstrap':

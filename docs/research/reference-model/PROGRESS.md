@@ -65,3 +65,13 @@ The 20-seed structure run was interrupted by `RemoteDisconnected` during Create 
 New finding to verify: successful Create Project, Update Project, and Archive Project return no Author Action. Manuscript State Machine section 3.2 requires one for each successful author-owned Core Transition. The current structure sequence comparison starts after Project creation; it does not excuse this missing allocation. Add a separate allocation audit and minimal replay instead of changing the contract model to match it.
 
 Next: run the Author Edit/Undo smoke chain, then use a fresh database for six structure seeds (114 through 119) and aggregate actual counts. Keep all earlier failed evidence. The Author Edit model calculates text from input units independently and uses returned IDs only as opaque future preconditions.
+
+## Step 5: Author Edit and Undo smoke
+
+Seed 200 passed the revised direct-edit comparison: no effect, invalid selection, same-Scope stale Head conflict, four independent UTF-16 replacements (including Chinese and supplementary characters), frontier mismatch, wrong target Head, and one successful compensation. `edits-smoke.json` retains the public evidence; managed run `98a33de474bf45698a227dcc8ca98d51` passed.
+
+M-004: a random absent Revision is not a stale same-Scope Revision. It failed Admission with 409. The generator now retains a real prior Revision before a successful edit and submits that old Head; this reaches the contracted `stale_authoritative_head` Receipt. A foreign `target_refs` value is a pre-Admission 422, not the Core target-mismatch outcome. `edits-first-survey.json` retains the original probes.
+
+A-005: after the newest manual edit is compensated, a second undo reaches the correct prior frontier but returns `wrong_target_head`: the first compensation created a new Head. Section 10.1 specifies routing but does not define direct-edit eligibility after a later compensation. The model records both possible typed outcomes for this unresolved contract case and continues to require exact text for any compensation. Core location: `crates/storyos-core/src/undo_latest_author_action.rs:134`. This is not proof of a complete multi-step undo experience.
+
+The transport can now compare exact Challenge retry results and exact command acknowledgement bytes, without writing nonce or cookie values into evidence. It remains separate from model expectations.

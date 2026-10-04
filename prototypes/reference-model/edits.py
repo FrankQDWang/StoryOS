@@ -78,8 +78,9 @@ class Editor:
         status, response = self.http.command('undoLatestAuthorAction', values, project_id=self.s.project)
         effect = response.get('effect', {'kind': f'HTTP_{status}', 'reason': response.get('code')})
         self.coverage['undoLatestAuthorAction:' + effect['kind'] + (':' + effect['reason'] if effect.get('reason') else '')] += 1
-        compare(self.s.label + '/undo kind', outcome, effect['kind'], self.differences)
-        if effect['kind'] == 'compensated' and outcome == 'compensated':
+        allowed = outcome if isinstance(outcome, tuple) else (outcome,)
+        compare(self.s.label + '/undo kind allowed', True, effect['kind'] in allowed, self.differences)
+        if effect['kind'] == 'compensated':
             prior, source_sequence = self.history.pop()
             compare(self.s.label + '/undo source', str(source_sequence), effect['source_sequence'], self.differences)
             self.actions += 1
@@ -100,10 +101,10 @@ def run(http, seed, differences, coverage, selected=None):
     editor = Editor(http, seed, differences, coverage)
     print(f'Seed {seed}: Author Edit and Undo', flush=True)
     editor.edit(units(''), 'no_effect')
-    editor.edit(units('stale'), 'conflicted', mutation={'expected_authoritative_revision_id': http.identity()})
     editor.edit(units('bad', 0, 99999), 'refused')
-    editor.edit(units('target'), 'refused', mutation={'target_refs': ['manuscript:' + http.identity()]})
-    for _ in range(4):
+    editor.edit(units('target'), 'HTTP_422', mutation={'target_refs': ['manuscript:' + http.identity()]})
+    original_revision = editor.revision
+    for index in range(4):
         text = editor.text
         left = http.rng.randrange(len(text) + 1)
         right = http.rng.randrange(left, len(text) + 1)
@@ -112,7 +113,10 @@ def run(http, seed, differences, coverage, selected=None):
         end = len(text[:right].encode('utf-16-le')) // 2
         expected = text[:left] + replacement + text[right:]
         editor.edit(units(replacement, start, end), 'authoritative_applied', expected)
+        if index == 0:
+            editor.edit(units('stale'), 'conflicted', mutation={'expected_authoritative_revision_id': original_revision})
     editor.undo('conflicted', {'expected_author_undo_frontier_sequence': '999999'})
     editor.undo('conflicted', {'expected_authoritative_revision_id': http.identity()})
-    for _ in range(4):
-        editor.undo()
+    editor.undo()
+    # A-005: the contract does not define the next direct-edit handler's eligibility after compensation.
+    editor.undo(('compensated', 'conflicted'))
