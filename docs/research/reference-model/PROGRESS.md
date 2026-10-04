@@ -125,3 +125,9 @@ Step 10 follow-up: the empty fixture frontier is an omitted optional property, n
 Seeds 220-239 completed with zero differences. The run reached 20 content-unchanged results, 20 invalid-selection refusals, 20 unsupported-intent refusals, 20 stale-Head conflicts, 80 applied edits, 20 frontier conflicts, 40 wrong-Head conflicts, 20 direct compensations, and 20 no-frontier results. Evidence: `edits-220-239.json.gz`; managed run `5d22458b0d2045ed88d4d92cf81905c1` completed in 125 seconds. All 361 exact Challenge retries and 341 immediate command retries were stable.
 
 A parallel launch was refused by the repository resource budget before database startup. Keep subsequent managed runs serial. Next: verify the remaining Proposal-derived edit and Undo outcomes and then collect their 20-hit counts.
+
+## Step 12: Reversal and full lifecycle smoke
+
+Seed 304 passed all 17 scenarios with zero differences. This includes a public Acceptance, later Author Edit, compensation, and UndoAcceptance reaching ReversalRequired without changing current prose. It also reaches Proposal-head conflict and typed Proposal-target mismatch through well-formed requests. Thus target mismatch is reachable through Proposal targets even though the direct-author target check is pre-Admission. All 171 immediate Challenge and command retries were stable. Evidence: `proposals-304.json.gz`; run `d1910035c0b64f4b86cc82ecd8cd65b4`, 67 seconds.
+
+Next: add two-Operation ordered and atomic Bundle negative selections, then run 20 complete Proposal seeds. The fake destination prompt switches are input-fixture mechanics; dependency and Bundle expectations remain from the Manuscript State Machine contract.

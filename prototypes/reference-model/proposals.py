@@ -14,7 +14,7 @@ class Proposal:
         self.label = f'{seed}/proposal/{label}'
         self.prior_head = self.editor.revision
         self.editor.edit(units('A quiet room before dawn.'), 'authoritative_applied', 'A quiet room before dawn.')
-        if label == 'draft':
+        if label in ['draft', 'ordered', 'bundle']:
             from mixed import prepare
             self.blocks = prepare(self.editor)
         self.body = self.editor.text
@@ -26,12 +26,12 @@ class Proposal:
             project_id=self.editor.s.project)
         assert status == 200, enabled
         target = {'kind': 'current_chapter', 'chapter_id': self.editor.chapter}
-        if label == 'draft':
+        if label in ['draft', 'ordered', 'bundle']:
             target = dict(kind='passage_collection', source_chapter_id=self.editor.chapter,
                 targets=[dict(chapter_id=self.editor.chapter, base_authoritative_revision_id=self.editor.revision,
-                              manuscript_block_ids=[self.blocks[0]['manuscript_block_id']])])
+                              manuscript_block_ids=[b['manuscript_block_id'] for b in (self.blocks[:1] if label == 'draft' else self.blocks)])])
         status, result = http.command('createAgentRun',
-            dict(conversation={'kind': 'new'}, author_message={'text': 'Revise this passage: keep the narrator voice.'},
+            dict(conversation={'kind': 'new'}, author_message={'text': 'Revise this passage: keep the narrator voice.' + {'ordered': ' in order', 'bundle': ' as a bundle'}.get(label, '')},
                  working_target=target,
                  instruction={'kind': 'absent'}, cause={'kind': 'author_request'}),
             project_id=self.editor.s.project)
@@ -163,7 +163,7 @@ class Proposal:
 
 
 def run(http, seed, differences, coverage, selected=None):
-    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect', 'conflict_reject', 'conflict_withdraw', 'refuse_replan', 'draft', 'edit_conflicts', 'producer', 'closed', 'reversal', 'duplicates']
+    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect', 'conflict_reject', 'conflict_withdraw', 'refuse_replan', 'draft', 'edit_conflicts', 'producer', 'closed', 'reversal', 'duplicates', 'ordered', 'bundle']
     http.rng.shuffle(modes)
     for mode in modes:
         http.rng = random.Random(f'{seed}/proposal/{mode}')
@@ -252,3 +252,10 @@ def run(http, seed, differences, coverage, selected=None):
             p.command('rejectProposalOperations', 'refused', mutation={'selected_pending_operation_ids': [p.p['operation_id']] * 2})
             p.rejections = [http.identity()]
             p.command('reopenRejectedOperations', 'refused')
+
+        elif mode in ['ordered', 'bundle']:
+            operations = p.p['operations']
+            assert len(operations) == 2
+            selected = operations[1 if mode == 'ordered' else 0]['operation_id']
+            p.command('acceptProposal', 'refused', mutation={'selected_operation_ids': [selected]})
+            p.command('rejectProposalOperations', 'refused', mutation={'selected_pending_operation_ids': [selected]})
