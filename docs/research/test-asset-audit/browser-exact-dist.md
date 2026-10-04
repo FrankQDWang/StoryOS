@@ -1,6 +1,6 @@
 # browser-exact-dist test verdicts
 
-Reviewed: 22 cases in 22 files. See PROGRESS.md for directory completion.
+Reviewed: 28 cases in 28 files. See PROGRESS.md for directory completion.
 
 Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 
@@ -112,17 +112,47 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 |---|---|---|---|---|---|---|
 | BD018 | 95 — recovers Local Edit Journal text after reload without a second Author Edit | MERGE | M1 | Transfer the repeated reload and complete authoritative Revision equality check into Stage 1 journey after its recovered saved state. That journey already observes a retained pending Journal intent before reloading and settles the same visible text. This test accepts either pending or already saved before its supposed interruption, so it can exercise only ordinary reload. It counts no POSTs; unchanged Revision on the final reload proves no new authoritative revision, not necessarily no duplicate request. | apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307; apps/web/test/browser-source/reload-recovery.integration.test.ts:68 |
 
+## apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD028 | 130 — runs the AI-disabled production journey without losing Chapter work | MERGE | M1 | Its two-Chapter write/reopen, single positive search, ready statistics and one export are covered more precisely by the focused save/search/statistics/export tests. Carry its exact final GET equality for both Chapters into save-truth and the unavailable-assistant/no-AI presentation checks into readable export (workspace already checks the unavailable assistant). Then retire this second aggregate setup or point its release evidence at those retained cases. Preserve the product release gate; no gate change is part of this audit. | apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-exact-dist/s2-search.integration.test.ts:127; apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts:120; apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts:115; apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts:65 |
+
 ## apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | BD020 | 123 — repeats Chapter switching, Undo, search, and reload without losing work | KEEP | K2 | After 2401 individual trusted inputs, the packaged editor must complete automatic batching/collection, switch Chapters, reload and save another input without losing either Chapter. The source working-set test calls persist/collect directly and cannot detect broken mounted-controller collection or post-reload continued input. Search/statistics smoke is incidental. This journey resets Challenge windows and logs timings with no performance thresholds; it proves neither sustained quota behavior nor a latency/RPO/RTO bound. | apps/web/test/browser-source/journal-working-set.integration.test.ts:16; apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77 |
 
+## apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD026 | 89 — writes Chinese and English after restore, settles, reloads, and keeps isolation | KEEP | K2 | The physical-restore runner replays a post-backup WAL title, opens that restored Project through the real library, continues writing, reloads and checks isolation from foreign/stale fixture content. Ordinary new-Project journeys cannot detect inability to resume with restored Session/base/storage state. vitest.config selects this file only in the restore suite, and verify-recovery-hold.sh checks the WAL marker before invoking it. This source audit did not execute the physical drill. | apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123 |
+
+## apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD025 | 115 — exports a durable human-readable manuscript through the Worker | KEEP | K2 | After one ready export, creating and editing a second Chapter then requesting another must render a new export identity and exact updated manuscript bytes with a download control. This catches a panel reusing the earlier ready result. HTTP pinned-source tests own durable capture/output but not browser polling/render identity; the aggregate journey requests only one export. A visible download button is not proof that downloading works. | apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130 |
+
 ## apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | BD016 | 77 — shows pending, saving, and saved without calling local input saved, across Chapters | KEEP | K2 | The first sampled state with newly visible local text must be pending/saving rather than saved, and later saved labels must follow settled prose through current-Chapter change, read-only inspection and reopen. The ordinary current-Chapter case waits for saving eventually but does not reject saved at this first sample. This is a sampled observation with no held server response; it does not prove that every frame remains unsaved until acknowledgement. Receive conflicting reopen hints and remaining two-Chapter query/editability checks from navigation/current-Chapter duplicates. | apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts:84; apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307 |
+
+## apps/web/test/browser-exact-dist/s2-search.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD023 | 127 — searches the current Chapter and manuscript with bounded Snapshot identity | KEEP | K2 | The packaged search radio/form must distinguish current-Chapter misses from manuscript hits, render exact Chapter/Block/range identities, clear prior hits for no-match, and exclude a deleted Chapter on later search while preserving another Chapter's hit. HTTP query logic cannot detect a radio value ignored by the client or stale result DOM; the aggregate journey checks only one positive hit. | apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts:78; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130 |
+
+## apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD024 | 120 — rebuilds Chapter and manuscript statistics after edit, switch, and deletion | KEEP | K2 | The mounted statistics panel must refresh exact Chapter versus manuscript counts after editing a different Chapter and deleting that Current Chapter. Distinct word/character totals expose swapped fields or stale selection/aggregate display. Core Unicode golden cases own counting semantics but do not execute panel refresh, and the aggregate/long journeys check only lag and Snapshot shape. | crates/storyos-core/src/statistics_profile_tests.rs:4; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123 |
 
 ## apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts
 
@@ -135,3 +165,9 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | BD021 | 162 — undoes one exact admitted Author Action and restores identity after reload | MERGE | M1 | Frequent Undo already types two distinct settled edits, reverses only the latest and continues editing. Transfer the exact stable Block identity, before/after undo frontier and final reload/restored frontier checks into a selected cycle and final reload of that case. The current receiver checks text/request counts but not these identities; complete the transfer before removing this duplicate setup. | apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69 |
+
+## apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD027 | 65 — the production page uses the approved workspace without losing writing state | KEEP | K2 | Collapsing and reopening the unavailable assistant beside newly typed text must preserve the same writable editor, Chapter and writer generation; disabled composer submission must stay idle and further typing must work. Other journeys use the composer enabled or never collapse it. Fixed width/font and repeated label/selector inventories are not separate KEEP reasons. The test observes DOM/state continuity, not a held unsaved interval or final server persistence. | apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130; apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77 |

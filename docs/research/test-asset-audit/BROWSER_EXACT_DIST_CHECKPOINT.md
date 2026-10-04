@@ -1,6 +1,6 @@
 # Browser exact-dist checkpoint
 
-Source review is partial: 22 cases in 22 test files; 11 KEEP, one DELETE, 10 MERGE. Direct candidate lines: 67.
+Source review is partial: 28 cases in 28 test files; 16 KEEP, one DELETE, 11 MERGE. Direct candidate lines: 67.
 
 | Reviewed file | Verdict |
 |---|---|
@@ -26,6 +26,12 @@ Source review is partial: 22 cases in 22 test files; 11 KEEP, one DELETE, 10 MER
 | apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts | KEEP |
 | apps/web/test/browser-exact-dist/s2-undo.integration.test.ts | MERGE |
 | apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-search.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts | MERGE |
 
 ## Pending files
 
@@ -36,14 +42,8 @@ Source review is partial: 22 cases in 22 test files; 11 KEEP, one DELETE, 10 MER
 - apps/web/test/browser-exact-dist/restored-discard.integration.test.ts
 - apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-input.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-search.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts
 - apps/web/test/browser-exact-dist/stage1-journey-expectation.ts
 
 ## Decisions and evidence
@@ -53,8 +53,8 @@ Source review is partial: 22 cases in 22 test files; 11 KEEP, one DELETE, 10 MER
 - MERGE empty library reopen's tree assertion into Project rename:46, and first-Volume empty/zero-Chapter checks into Volume rename/reorder:65. Both receiving cases already perform the relevant real setup.
 - KEEP Project rename, archived disabled-open, relative Chapter creation and Volume rename/reorder at their real UI boundary. HTTP persistence cannot detect wrong menu targets, stale library rendering or inline placement/cancel behavior.
 - Archive is performed with a directly imported wrapper; its retained observation is the disabled archived library button. Old form/textarea absence selectors do not establish that all current write menus are disabled. Chapter menu fixed 12px font and screenshot output are not separate KEEP grounds.
-- exact-dist-plugin.ts and inline-chapter-creation.ts are fully read and have support dispositions. exact-dist-global-setup.ts has been read only through line 145; finish it before marking support complete. Its optional authority oracle has dependencies on production-host/prose/Inline/Memory/Run/composer/multi-location fixtures; do not remove those tests before checking all counters.
-- Read-ahead: s2-jrn-001.integration.test.ts is fully read but not adjudicated; compare its aggregate workflow to focused search/statistics/export/Chapter tests. s1-jrn-001 has only imports and the test body (307-439) reviewed; helpers remain. stage1-journey-expectation.ts has only lines 1-160 reviewed; remaining normalization and expected objects remain.
+- exact-dist-plugin.ts and inline-chapter-creation.ts are fully read and have support dispositions. exact-dist-global-setup.ts is fully reviewed and recorded in SUPPORT.md. Its optional authority oracle has exact dependencies on production-host/prose/Inline/Memory/Run/composer/multi-location fixtures; do not remove those tests before reconciling the counters.
+- Read-ahead: s2-jrn-001 is now adjudicated as MERGE (BD028). s1-jrn-001 has only imports and the test body (307-439) reviewed; helpers remain. stage1-journey-expectation.ts has only lines 1-160 reviewed; remaining normalization and expected objects remain.
 - All completed declarations and cited starts checked. No runtime test, mutation or product/test change occurred.
 
 ## Chapter operations and save display
@@ -75,3 +75,13 @@ Source review is partial: 22 cases in 22 test files; 11 KEEP, one DELETE, 10 MER
 - KEEP long-session for 2401 trusted inputs through mounted automatic collection, Chapter switching and continued writing after reload. Source working-set directly invokes collection. Long-session explicitly resets rate windows and has no asserted latency/RPO/RTO target.
 - KEEP sustained writing for 50 real submissions through repeated IME, punctuation, split and join without quota reset. It complements Undo's different command family and the long-session fixture's reset windows. Do not count printed timings as performance assertions.
 - Current totals: 22 cases/files, 11 KEEP, one DELETE, 10 MERGE; 67 direct candidate lines. No runtime test or source mutation.
+
+## Derived panels, physical restore and aggregate journey
+
+- BD023-BD028 add search, statistics, readable export, physical drill, workspace and the Stage 2 aggregate journey. All six full files reviewed.
+- KEEP search scope selection, precise result identity and deletion refresh; statistics field/Chapter/aggregate refresh; and a second export with new identity and newly rendered bytes. HTTP/Core tests cannot detect stale panel state or wrong client selection. Visible download control is not executed download coverage.
+- KEEP unavailable-assistant collapse/reopen with current text and continued typing. Its pixel width/font and label inventories are not independent regressions; no held pre-settlement interval is proved.
+- KEEP physical drill: verify-recovery-hold.sh validates the post-backup WAL title before running the restore-only browser selection. The test consumes that actual restored context and continues writing. No physical recovery was executed during this audit.
+- MERGE the Stage 2 aggregate journey into the focused retained cases, transferring final two-Chapter GET equality to save-truth and unavailable/no-AI presentation to readable export. Preserve release-gate evidence when implementing consolidation; this audit changes no gate.
+- exact-dist-global-setup.ts is fully reviewed. With STORYOS_STAGE1_AUTHORITY_ORACLE=1, its required teardown compares exact production-host and assistance scenario counters, Stage 1's four edits/activities/actions and no foreign or unexpected receipts. Production tests/support remain pending; their fixture counts cannot be silently dropped.
+- Current totals: 28 cases/files, 16 KEEP, one DELETE, 11 MERGE; 67 direct candidate lines. No runtime execution or source mutation.

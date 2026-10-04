@@ -243,5 +243,71 @@
     "evidence": "Repeated Chinese composition, punctuation, split and join must yield exactly 50 Author Edit requests, successful Challenge responses and exact final text without quota-window resets. Packaged input exercises only a few such operations; long-session explicitly resets quota windows and uses plain characters, while frequent Undo exercises a different command family. This case detects additional composition submissions or boundary edits that exhaust real admission during sustained writing. Runtime measurements are logged, not a declared latency target.",
     "coverage": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69",
     "remove": null
+  },
+  {
+    "id": "BD023",
+    "path": "apps/web/test/browser-exact-dist/s2-search.integration.test.ts",
+    "line": 127,
+    "test": "searches the current Chapter and manuscript with bounded Snapshot identity",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The packaged search radio/form must distinguish current-Chapter misses from manuscript hits, render exact Chapter/Block/range identities, clear prior hits for no-match, and exclude a deleted Chapter on later search while preserving another Chapter's hit. HTTP query logic cannot detect a radio value ignored by the client or stale result DOM; the aggregate journey checks only one positive hit.",
+    "coverage": "apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts:78; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130",
+    "remove": null
+  },
+  {
+    "id": "BD024",
+    "path": "apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts",
+    "line": 120,
+    "test": "rebuilds Chapter and manuscript statistics after edit, switch, and deletion",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The mounted statistics panel must refresh exact Chapter versus manuscript counts after editing a different Chapter and deleting that Current Chapter. Distinct word/character totals expose swapped fields or stale selection/aggregate display. Core Unicode golden cases own counting semantics but do not execute panel refresh, and the aggregate/long journeys check only lag and Snapshot shape.",
+    "coverage": "crates/storyos-core/src/statistics_profile_tests.rs:4; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123",
+    "remove": null
+  },
+  {
+    "id": "BD025",
+    "path": "apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts",
+    "line": 115,
+    "test": "exports a durable human-readable manuscript through the Worker",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "After one ready export, creating and editing a second Chapter then requesting another must render a new export identity and exact updated manuscript bytes with a download control. This catches a panel reusing the earlier ready result. HTTP pinned-source tests own durable capture/output but not browser polling/render identity; the aggregate journey requests only one export. A visible download button is not proof that downloading works.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130",
+    "remove": null
+  },
+  {
+    "id": "BD026",
+    "path": "apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts",
+    "line": 89,
+    "test": "writes Chinese and English after restore, settles, reloads, and keeps isolation",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The physical-restore runner replays a post-backup WAL title, opens that restored Project through the real library, continues writing, reloads and checks isolation from foreign/stale fixture content. Ordinary new-Project journeys cannot detect inability to resume with restored Session/base/storage state. vitest.config selects this file only in the restore suite, and verify-recovery-hold.sh checks the WAL marker before invoking it. This source audit did not execute the physical drill.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123",
+    "remove": null
+  },
+  {
+    "id": "BD027",
+    "path": "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
+    "line": 65,
+    "test": "the production page uses the approved workspace without losing writing state",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Collapsing and reopening the unavailable assistant beside newly typed text must preserve the same writable editor, Chapter and writer generation; disabled composer submission must stay idle and further typing must work. Other journeys use the composer enabled or never collapse it. Fixed width/font and repeated label/selector inventories are not separate KEEP reasons. The test observes DOM/state continuity, not a held unsaved interval or final server persistence.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130; apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77",
+    "remove": null
+  },
+  {
+    "id": "BD028",
+    "path": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
+    "line": 130,
+    "test": "runs the AI-disabled production journey without losing Chapter work",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Its two-Chapter write/reopen, single positive search, ready statistics and one export are covered more precisely by the focused save/search/statistics/export tests. Carry its exact final GET equality for both Chapters into save-truth and the unavailable-assistant/no-AI presentation checks into readable export (workspace already checks the unavailable assistant). Then retire this second aggregate setup or point its release evidence at those retained cases. Preserve the product release gate; no gate change is part of this audit.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-exact-dist/s2-search.integration.test.ts:127; apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts:120; apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts:115; apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts:65",
+    "remove": null
   }
 ]
