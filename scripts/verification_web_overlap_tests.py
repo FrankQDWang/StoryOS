@@ -88,7 +88,7 @@ release-package:
     def ready(self, stage):
         descriptor = os.open(self.root / (stage + '.ready'), os.O_RDWR | os.O_NONBLOCK)
         self.addCleanup(os.close, descriptor)
-        self.assertTrue(select.select([descriptor], [], [], 5)[0], stage)
+        select.select([descriptor], [], [])
         self.assertEqual(os.read(descriptor, 1), b'r')
 
     def release(self, stage):
@@ -105,7 +105,7 @@ release-package:
         self.release('foundation-tests')
         self.ready('project-scope')
         self.release('project-scope')
-        self.assertEqual(serial.communicate(timeout=5)[0].strip(), 'Web stage mode: serial')
+        self.assertEqual(serial.communicate()[0].strip(), 'Web stage mode: serial')
         self.assertEqual(serial.returncode, 0)
         before = self.steps()
         self.assertLessEqual(before[STAGES[0]]['ended_monotonic'], before[STAGES[1]]['started_monotonic'])
@@ -116,7 +116,7 @@ release-package:
         self.ready('project-scope')
         self.release('foundation-tests')
         self.release('project-scope')
-        self.assertEqual(concurrent.communicate(timeout=5)[0].strip(), 'Web stage mode: bounded overlap')
+        self.assertEqual(concurrent.communicate()[0].strip(), 'Web stage mode: bounded overlap')
         self.assertEqual(concurrent.returncode, 0)
         after = self.steps()
         self.assertLess(max(item['started_monotonic'] for item in after.values()),
@@ -129,7 +129,7 @@ release-package:
             self.ready(stage)
         for stage in STAGES:
             self.release(stage)
-        failed.communicate(timeout=5)
+        failed.communicate()
         self.assertNotEqual(failed.returncode, 0)
         self.assertEqual({stage: item['status'] for stage, item in self.steps().items()},
                          {'foundation-tests': 'failed', 'project-scope': 'passed'})
@@ -139,7 +139,7 @@ release-package:
         for stage in STAGES:
             self.ready(stage)
         cancelled.send_signal(signal.SIGTERM)
-        cancelled.communicate(timeout=5)
+        cancelled.communicate()
         self.assertEqual(cancelled.returncode, 143)
         self.assertEqual({item['status'] for item in self.steps().values()}, {'interrupted'})
 

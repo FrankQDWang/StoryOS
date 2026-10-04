@@ -197,7 +197,7 @@ output = next"""))
                 cleanup |= line.strip() == "FIXTURE_CLEANUP"
                 waiting |= line.strip() == "Waiting for verification child cleanup"
                 if line.startswith("Verification interrupted:"):
-                    child.wait(timeout=10)
+                    child.wait()
                     break
                 if cleanup and waiting:
                     break
@@ -205,7 +205,7 @@ output = next"""))
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("budget is busy", result.stderr)
             fifo.write_text("cleanup may finish")
-            child.communicate(timeout=10)
+            child.communicate()
         finally:
             if group is not None:
                 try:

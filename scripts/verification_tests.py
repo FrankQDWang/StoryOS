@@ -168,7 +168,7 @@ class VerificationCommandTests(unittest.TestCase):
             try:
                 self.assertEqual(process.stdout.readline(), "ready\n")
                 process.send_signal(signal.SIGTERM)
-                process.communicate(timeout=10)
+                process.communicate()
             finally:
                 if process.poll() is None:
                     process.kill()

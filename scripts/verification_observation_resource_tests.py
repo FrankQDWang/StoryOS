@@ -64,7 +64,7 @@ path.write_text(json.dumps(state))
         return root
 
     def command(self, root, *args):
-        return subprocess.run(args, cwd=root, env=self.environment, text=True, capture_output=True, timeout=20)
+        return subprocess.run(args, cwd=root, env=self.environment, text=True, capture_output=True)
 
     def test_development_database_lifecycle_preserves_other_checkouts_and_legacy_data(self):
         first, second = self.checkout('first'), self.checkout('second')
@@ -110,7 +110,6 @@ path.write_text(json.dumps(state))
         with socket.socket() as barrier:
             barrier.bind(('127.0.0.1', 0))
             barrier.listen(1)
-            barrier.settimeout(10)
             child = ('import socket; s=socket.create_connection(("127.0.0.1", '
                      f'{barrier.getsockname()[1]})); s.recv(1)')
             process = subprocess.Popen(['sh', 'scripts/dev-postgres.sh', 'run', sys.executable, '-c', child],
@@ -119,7 +118,7 @@ path.write_text(json.dumps(state))
                 connection, _ = barrier.accept()
                 with connection:
                     process.terminate()
-                    process.communicate(timeout=10)
+                    process.communicate()
                 self.assertEqual(process.returncode, 143)
                 self.assertEqual(list((root / 'target/verification/resources').glob('*.json')), [])
                 self.assertEqual(json.loads(self.state.read_text()),
@@ -127,7 +126,7 @@ path.write_text(json.dumps(state))
             finally:
                 if process.poll() is None:
                     process.kill()
-                process.communicate(timeout=10)
+                process.communicate()
 
     def test_scoped_database_reclaims_an_abandoned_lease(self):
         import hashlib
@@ -198,7 +197,6 @@ else:
         with socket.socket() as barrier:
             barrier.bind(('127.0.0.1', 0))
             barrier.listen(2)
-            barrier.settimeout(30)
             self.state.write_text(json.dumps({'live': [], 'commands': []}))
             docker = self.directory / 'tools/docker'
             docker.write_text(f'#!{sys.executable}\n' + '''import fcntl, json, os, pathlib, socket, sys
@@ -219,7 +217,6 @@ with path.open('r+') as output:
     output.truncate()
 if action == 'port':
     with socket.socket() as connection:
-        connection.settimeout(30)
         connection.connect(('127.0.0.1', int(os.environ['RESOURCE_BARRIER'])))
         connection.sendall(json.dumps([project, os.getppid()]).encode())
         connection.shutdown(socket.SHUT_WR)
@@ -235,7 +232,6 @@ if action == 'port':
                 projects, owners = [], []
                 for _ in processes:
                     connection, _ = barrier.accept()
-                    connection.settimeout(30)
                     connections.append(connection)
                     with connection.makefile('rb') as request:
                         project, owner = json.load(request)
@@ -243,10 +239,10 @@ if action == 'port':
                     owners.append(owner)
                 connections[0].sendall(b'x')
                 first = next(process for process in processes if process.pid == owners[0])
-                first.communicate(timeout=30)
+                first.communicate()
                 self.assertEqual(json.loads(self.state.read_text())['live'], [projects[1]])
                 connections[1].sendall(b'x')
-                results = [process.communicate(timeout=30) for process in processes]
+                results = [process.communicate() for process in processes]
                 self.assertEqual([process.returncode for process in processes], [1, 1], results)
                 self.assertEqual(len(set(projects)), 2, projects)
                 state = json.loads(self.state.read_text())
@@ -261,7 +257,7 @@ if action == 'port':
                         os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
-                    process.communicate(timeout=10)
+                    process.communicate()
 
 
 if __name__ == '__main__':

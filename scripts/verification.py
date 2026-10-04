@@ -187,29 +187,42 @@ def write_json(path, value):
 
 def execute(command, environment, new_group, observation=None, stdout=None, timeout=None):
     interrupted = 0
-    try:
-        child = subprocess.Popen(command, env=environment, start_new_session=new_group, stdout=stdout)
-    except OSError as error:
-        if observation:
-            observation({"launch_error": type(error).__name__})
-        print(str(error), file=sys.stderr)
-        return 127, interrupted
-
-    if observation:
-        observation({"child_group": child.pid})
+    pending = 0
+    child = None
 
     def interrupt(signum, _frame):
-        nonlocal interrupted
+        nonlocal interrupted, pending
         interrupted = signum
-        if new_group:
+        if not new_group:
+            return
+        if child is None:
+            pending = signum
+            return
+        try:
+            os.killpg(child.pid, signum)
+        except ProcessLookupError:
+            pass
+
+    # Install the handler before the launch so that an early interruption cannot orphan the child session.
+    previous = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        try:
+            child = subprocess.Popen(command, env=environment, start_new_session=new_group, stdout=stdout)
+        except OSError as error:
+            if observation:
+                observation({"launch_error": type(error).__name__})
+            print(str(error), file=sys.stderr)
+            return 127, interrupted
+        if pending:
             try:
-                os.killpg(child.pid, signum)
+                os.killpg(child.pid, pending)
             except ProcessLookupError:
                 pass
 
-    deadline = time.monotonic() + timeout if timeout else None
-    previous = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGINT, signal.SIGTERM)}
-    try:
+        if observation:
+            observation({"child_group": child.pid})
+
+        deadline = time.monotonic() + timeout if timeout else None
         while True:
             try:
                 remaining = deadline - time.monotonic() if deadline else 5
