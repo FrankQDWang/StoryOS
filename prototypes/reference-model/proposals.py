@@ -146,7 +146,8 @@ class Proposal:
         status, result = self.http.command('applyAuthorEdit', values, project_id=e.s.project)
         effect = result.get('effect', {'kind': f'HTTP_{status}'})
         self.coverage['applyAuthorEdit:' + effect['kind'] + (':' + effect['reason'] if effect.get('reason') else '')] += 1
-        compare(self.label + '/candidate edit', outcome, effect['kind'], self.differences)
+        allowed = outcome if isinstance(outcome, tuple) else (outcome,)
+        compare(self.label + '/candidate edit kind allowed', True, effect['kind'] in allowed, self.differences)
         if effect['kind'] == 'proposal_revised':
             e.actions += 1
             self.candidate = expected
@@ -160,6 +161,16 @@ class Proposal:
             compare(self.label + '/edited candidate', expected, self.p['candidate_text'], self.differences)
             compare(self.label + '/edited axes', self.expected, {key: self.p[key] for key in self.expected}, self.differences)
             compare(self.label + '/candidate edit Commit', [], result['receipt']['authoritative_commit_ids'], self.differences)
+        if effect['kind'] != 'proposal_revised':
+            current = self.query()
+            compare(self.label + '/refusal preserves candidate Head', p['revision_id'], current['revision_id'], self.differences)
+            compare(self.label + '/refusal preserves candidate', self.candidate, current['candidate_text'], self.differences)
+            compare(self.label + '/refusal preserves axes', self.expected, {k: current[k] for k in self.expected}, self.differences)
+            if status == 200:
+                compare(self.label + '/refusal no Commit', [], result['receipt']['authoritative_commit_ids'], self.differences)
+                compare(self.label + '/refusal no Action', None, result['receipt'].get('author_action_sequence'), self.differences)
+            _, chapter = self.http.request('GET', f'/api/v1/projects/{e.s.project}/chapters/{e.chapter}')
+            compare(self.label + '/refusal leaves prose', self.body, chapter['chapter']['current_revision']['body'], self.differences)
         return result
 
 
@@ -227,7 +238,7 @@ def run(http, seed, differences, coverage, selected=None):
             run_mixed(p)
         elif mode == 'edit_conflicts':
             p.editor.edit(units('stale ownership'), 'conflicted')
-            p.edit('refused', {'proposal_target': dict(proposal_id=p.proposal_id, operation_id=http.identity(),
+            p.edit(('refused', 'conflicted', 'HTTP_404', 'HTTP_409', 'HTTP_422'), {'proposal_target': dict(proposal_id=p.proposal_id, operation_id=http.identity(),
                 revision_id=p.p['revision_id'], manuscript_block_id=p.p['manuscript_block_id'])})
         elif mode == 'producer':
             cause = dict(cause='current_producer', withdrawal_reason={'kind': 'current_producer_withdrew'},

@@ -20,7 +20,8 @@
     "proposal-undo-353.json.gz",
     "withdrawal-undo-354.json.gz",
     "rejection-undo-355.json.gz",
-    "proposal-structure-356.json.gz"
+    "proposal-structure-356.json.gz",
+    "expiry-450.json.gz"
   ],
   "policy": "Count only actual recorded outcomes. Exact retries do not multiply ordinary domain outcome counts. Partial structure evidence is explicitly retained; seed 114 restarts in a fresh database.",
   "excluded": "Earlier smoke and model-correction traces remain retained as historical observations; they are not needed for the 20-hit threshold."

@@ -227,3 +227,9 @@ The run output now records candidate package source, manifest/server digests, an
 Seed 356 records HTTP 422 for a structural primitive with an explicit Proposal target, without changing prose. A-011 explains why the foundation's StructuralReshapeConflict sub-outcome cannot be selected through this current wire profile. A-008 separately records missing Acceptance NoEffect. Neither missing branch is silently removed from the report.
 
 Created the explicit counted-evidence manifest. Future result files record completed seeds separately from the requested count, so partial runs cannot look complete from their header alone. Next: the real-clock expiry run and final ledger/report.
+
+## Step 21: Real expiry evidence
+
+Seed 450 waited for the real returned Challenge deadline. All 20 distinct pending challenges were refused without a Receipt; all 20 distinct committed Author Edit acknowledgements remained byte-stable after expiry. Current prose stayed at the final committed edit. Evidence: `expiry-450.json.gz`; run `084d377ede7145e791067fa1142e2f79`, 317 seconds, zero differences.
+
+A final oracle review identified A-012: Admission-versus-Core precedence for a missing Proposal Operation is not explicit. Its model now permits the documented refusal alternatives and separately asserts zero allocations and unchanged state. Recheck that narrow case for 20 seeds, then finalize the report.
