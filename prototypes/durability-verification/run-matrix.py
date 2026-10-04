@@ -29,7 +29,8 @@ for case in cases:
     data['command'] = ['scripts/dev-postgres.sh', 'run', 'node', 'prototypes/durability-verification/driver.mjs', case]
     (evidence / f'{case}.json').write_text(json.dumps(data, separators=(',', ':')) + '\n')
     errors = [e['data'] for e in data['events'] if e['name'] == 'blocked_or_probe_error']
-    verdict = 'invariant failure' if result.returncode == 1 else 'completed' if result.returncode == 0 else 'blocked'
+    failed = any(e['name'] == 'verdict' and e['data'] == 'fails' for e in data['events'])
+    verdict = 'invariant failure' if result.returncode == 1 and failed else 'completed' if result.returncode == 0 and data['events'] else 'blocked'
     with (root / 'docs/research/durability-verification/PROGRESS.md').open('a') as progress:
         progress.write(f'- Matrix {round_name}, `{case}`: {verdict} (exit {result.returncode}). '
                        f'Evidence: `evidence/{round_name}/{case}.json`.\n')

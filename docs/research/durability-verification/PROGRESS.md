@@ -109,3 +109,17 @@
   Reason: fetch failed
 - Matrix round-1, `takeover-database`: invariant failure (exit 1). Evidence: `evidence/round-1/takeover-database.json`.
 - Matrix round-1, `takeover-concurrent`: invariant failure (exit 1). Evidence: `evidence/round-1/takeover-concurrent.json`.
+- Step 7: round 1 covered all 16 cases. New findings: F1 (old Admission
+  recovery crosses takeover), F2 (serialization failures escape as 503), and
+  F3 (CreateEditorSession exact retry reads current state). D1 passed every
+  applicable case. The concurrent Author Edit also exposed F2; its prior
+  acknowledged edit remained intact. SQL logs include a secondary empty UUID
+  scope error on that error path; this does not form a separate public failure.
+- `takeover-server` reached F1 but its later optional session-recovery control
+  got a fetch error. Other takeover variants completed that control. Retain
+  the blocked run. Use fresh HTTP connections (`Connection: close`) and retain
+  Server stderr to remove client connection reuse from later schedules. The
+  first fetch error's cause is unproved; do not report a Server crash.
+- Minimize F3 to takeover plus replay, without a preceding edit. `--minimal`
+  omits follow-up controls for the F1/F2 reproducers. No product input changes.
+  Next: replay the complete 16-case matrix with these fixed probe inputs.

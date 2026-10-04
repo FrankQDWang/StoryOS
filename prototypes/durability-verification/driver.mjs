@@ -14,6 +14,7 @@ const scope = `owner_user_id='${USER}' AND project_id='${PROJECT}'`;
 const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
 assert.ok(container, 'Use scripts/dev-postgres.sh run');
 const scenario = process.argv[2];
+const minimal = process.argv.includes('--minimal');
 const events = [];
 const record = (name, data) => { events.push({ name, data }); console.log(name, JSON.stringify(data));
   if (name === 'verdict' && data === 'fails') process.exitCode = 1; };
@@ -59,7 +60,7 @@ async function start() {
       STORYOS_CHALLENGE_SECRET: 'local-durability-probe-secret-never-used-outside-this-fixture' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  let errors = ''; server.stderr.on('data', b => { errors += b; });
+  let errors = ''; server.stderr.on('data', b => { errors += b; record('server_stderr', String(b)); });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Server start deadline: ' + errors)), 15000);
     createInterface({ input: server.stdout }).on('line', line => {
@@ -77,7 +78,7 @@ async function stop() {
 }
 const options = (session = 'a') => ({ baseUrl, projectId: PROJECT,
   fetchImpl: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(20000),
-    headers: { ...init?.headers, origin: baseUrl, cookie: `storyos_session=session-${session}` } }) });
+    headers: { ...init?.headers, origin: baseUrl, cookie: `storyos_session=session-${session}`, connection: 'close' } }) });
 async function command(kind, route, request, session = 'a', extra = {}, method = 'POST') {
   const key = id();
   const nonce = await api.createProjectCommandChallenge({ ...options(session), request: {
@@ -209,7 +210,7 @@ async function run() {
     const p2 = capture(second.send()); await blocked(2); await gate.query('ROLLBACK');
     const replies = await Promise.all([p1, p2]); record('concurrent_results', replies);
     const ack = await first.send(); assert.deepEqual(await first.send(), ack);
-    record('settled_counts', await counts()); writer = await open(); await smoke(writer);
+    record('settled_counts', await counts()); if (!minimal) { writer = await open(); await smoke(writer); }
     record('verdict', replies.every(x => x.ok) ? 'holds' : 'fails');
   } else if (scenario === 'concurrent-author') {
     writer = await open(); const seed = await edit(writer, 'SEED'); const ack = await seed.send();
@@ -223,7 +224,7 @@ async function run() {
     record('acknowledged_seed_preserved', { ack, before, after: await counts() }); await smoke(writer);
   } else if (scenario === 'session-replay') {
     const before = writer.value;
-    await smoke(writer); const observer = await open('b'), take = await takeover(observer, before.writer.writer_generation);
+    const observer = await open('b'), take = await takeover(observer, before.writer.writer_generation);
     await take.send(); const authority = await counts();
     for (const mode of ['concurrent-history', 'restart']) {
       if (mode === 'restart') { await stop(); await start(); }
@@ -231,7 +232,7 @@ async function run() {
       record('session_replay_' + mode, { original: before, replay, equal: isDeepStrictEqual(before, replay) });
     }
     record('verdict', isDeepStrictEqual(before, await writer.cmd.send()) ? 'holds' : 'fails');
-    await smoke(observer);
+    if (!minimal) await smoke(observer);
   } else if (scenario.startsWith('takeover-')) {
     const mode = scenario.slice('takeover-'.length), observer = await open('b');
     const old = await edit(writer, 'OLD'), take = await takeover(observer, writer.value.writer.writer_generation);
@@ -244,16 +245,17 @@ async function run() {
     if (mode === 'concurrent') record('old_reply', await pending);
     const outcome = await capture(old.outcome()); record('old_outcome', outcome);
     const after = await counts(); record('authority_after_old', { before, after, chapter: await chapter() });
+    record('verdict', after.commits === before.commits ? 'holds' : 'fails');
+    if (minimal) return;
     const stale = await command('applyAuthorEdit', '/manuscript/author-edits', {
       ...old.request, correlation_id: id(), completed_intent_record_id: id(), local_intent_sequence: String(serial) });
     record('fresh_stale_request', await capture(stale.send()));
-    record('verdict', after.commits === before.commits ? 'holds' : 'fails');
     const next = await edit(observer, '+'); record('winner_next_edit', await next.send());
     const recovered = await open('b'); await (await takeover(recovered, String(after.writer))).send(); await smoke(recovered);
   } else throw new Error('Unknown scenario: ' + scenario);
 }
 try { await run(); }
-catch (e) { record('blocked_or_probe_error', { message: e.message, stack: e.stack }); process.exitCode = 2; }
+catch (e) { record('blocked_or_probe_error', { message: e.message, cause: String(e.cause ?? ''), stack: e.stack }); process.exitCode = 2; }
 finally {
   await stop(); await gate.close(); await tailGate.close(); await monitor.close();
   const logs = spawnSync('docker', ['logs', container], { encoding: 'utf8' });
