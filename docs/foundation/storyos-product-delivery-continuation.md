@@ -332,13 +332,13 @@ stage, and successor without treating the historical Stage 1 crosswalk as
 current route verification. It also owns the mechanism that detects a missing
 source disposition, duplicate owner, unknown identifier, or stale ticket graph.
 
-After the proof owner consumes this release revision, `/to-spec` refreshes the
+After the proof owner consumes this release revision, the `to-spec` skill refreshes the
 existing [Deliver Stage 3: The Complete Fake-Model Proposal Loop](https://github.com/FrankQDWang/StoryOS/issues/361),
 [Deliver Stage 4: One Authorized Real-Model Journey](https://github.com/FrankQDWang/StoryOS/issues/362),
 [Deliver Stage 5: Governed Research Tools and MCP](https://github.com/FrankQDWang/StoryOS/issues/363), and
 [Deliver Stage 7: Project Continuity and Inspectable Memory](https://github.com/FrankQDWang/StoryOS/issues/365)
 parent specifications.
-Then `/to-tickets` presents any changed child breakdown and actual native
+Then the `to-tickets` skill presents any changed child breakdown and actual native
 blocking edges for user approval before publication. Reuse current child
 owners and stable requirements, preserve Stage 1/2 historical evidence and
 unaffected Stage 6/8/9 promises, and audit forward/reverse coverage. Existing
