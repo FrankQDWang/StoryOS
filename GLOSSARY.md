@@ -235,6 +235,10 @@ _Avoid_: Blob cache, derived projection, Provider-held source of truth
 The single logical atomic boundary in which StoryOS Core validates one idempotent domain command and durably records its complete outcome. Revisions, Commits, resolutions, heads, Receipts, Author Actions, lifecycle events, the author command Admission's `ReceiptSettled` link when applicable, and required follow-up intent become visible together. A refusal or conflict records no partial domain effect and only the no-authority Receipt, Refused Edit Draft, or Proposal condition allocated by its exhaustive result.
 _Avoid_: Partial commit, database rollback as undo, external effect as transaction truth
 
+**Core Transition Outcome**:
+The exhaustive Core classification of one admitted command as Applied, NoEffect, Conflicted, or Refused, with one stable reason code for each non-applied reason. Core owns which outcome kind a Receipt records; only Applied changes Authoritative State and allocates an Authoritative Commit and an Author Action. A pre-Admission refusal is not an Outcome.
+_Avoid_: Success boolean, HTTP status, Receipt result text, adapter-chosen outcome
+
 **Command Acknowledgement**:
 The idempotently replayable public result of submitting one exact command, returned as Committed with its immutable Receipt only after the complete Core Transition commits, or as Accepted with a durable operation reference when later asynchronous settlement remains. Accepted proves only durable admission and never success; its settlement is observed through a bounded query or the Project Activity Stream rather than a delayed HTTP result.
 _Avoid_: HTTP success as domain success, in-memory job acknowledgement, long-poll completion, duplicate execution after lost response

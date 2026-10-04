@@ -1,16 +1,17 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
-    CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeId,
-    VolumeNode, create_chapter, create_editor_session, create_project, create_volume,
-    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
-    open_chapter, open_project, undo_latest_author_action,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
+    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
+    EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
+    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeCreated,
+    VolumeId, VolumeNode, create_editor_session, create_project, get_manuscript_tree,
+    issue_create_project_challenge, issue_project_command_challenge, open_chapter, open_project,
+    undo_latest_author_action,
 };
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{applied, command_call, create_chapter, create_volume};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -154,26 +155,16 @@ async fn post_volume(
         .unwrap();
     create_volume(
         store,
-        &CreateVolumeCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+        &command_call(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            VOLUME_A_BYTES,
+            CreateVolumeInput {
+                title: "Volume A".to_owned(),
+                expected_tree_revision: 1,
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: VOLUME_A_BYTES.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            title: "Volume A".to_owned(),
-            expected_tree_revision: 1,
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-            },
-        },
+        ),
     )
     .await
     .unwrap()
@@ -214,28 +205,18 @@ async fn post_chapter(
         .unwrap();
     create_chapter(
         store,
-        &CreateChapterCommand {
-            placement: storyos_core::CreateChapterPlacement::Append,
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+        &command_call(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            bytes,
+            CreateChapterInput {
+                placement: storyos_core::CreateChapterPlacement::Append,
+                volume_id: volume_id.to_owned(),
+                title: title.to_owned(),
+                expected_tree_revision,
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            volume_id: volume_id.to_owned(),
-            title: title.to_owned(),
-            expected_tree_revision,
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-            },
-        },
+        ),
     )
     .await
     .unwrap()
@@ -331,27 +312,27 @@ async fn two_users_and_two_projects_keep_separate_chapter_sequences() {
     let first_volume = post_volume(&store, &first, "f716").await;
     let second_volume = post_volume(&store, &second, "f718").await;
     let other_volume = post_volume(&store, &other_user, "f71a").await;
-    let CreateVolumeSettlementEffect::Applied {
-        volume_id: first_volume_id,
-        ..
-    } = first_volume.effect
-    else {
-        panic!("first Volume must apply");
-    };
-    let CreateVolumeSettlementEffect::Applied {
-        volume_id: second_volume_id,
-        ..
-    } = second_volume.effect
-    else {
-        panic!("second Volume must apply");
-    };
-    let CreateVolumeSettlementEffect::Applied {
-        volume_id: other_volume_id,
-        ..
-    } = other_volume.effect
-    else {
-        panic!("second User Volume must apply");
-    };
+    let (
+        VolumeCreated {
+            volume_id: first_volume_id,
+            ..
+        },
+        _,
+    ) = applied(&first_volume);
+    let (
+        VolumeCreated {
+            volume_id: second_volume_id,
+            ..
+        },
+        _,
+    ) = applied(&second_volume);
+    let (
+        VolumeCreated {
+            volume_id: other_volume_id,
+            ..
+        },
+        _,
+    ) = applied(&other_volume);
     let first_chapter = post_chapter(
         &store,
         &first,
@@ -391,9 +372,9 @@ async fn two_users_and_two_projects_keep_separate_chapter_sequences() {
         },
     )
     .await;
-    let first_authority = first_chapter.authority.expect("first Project authority");
-    let second_authority = second_chapter.authority.expect("second Project authority");
-    let other_authority = other_chapter.authority.expect("second User authority");
+    let (_, first_authority) = applied(&first_chapter);
+    let (_, second_authority) = applied(&second_chapter);
+    let (_, other_authority) = applied(&other_chapter);
     assert_eq!(first_authority.author_action_sequence, 2);
     assert_eq!(second_authority.author_action_sequence, 2);
     assert_eq!(other_authority.author_action_sequence, 2);
@@ -418,9 +399,7 @@ async fn author_undo_compensates_create_chapter_and_restores_the_initial_revisio
     let store = PostgresProjectReader::new(runtime_url);
     let scope = seed_project(&store, USER_A, "f722").await;
     let volume = post_volume(&store, &scope, "f724").await;
-    let CreateVolumeSettlementEffect::Applied { volume_id, .. } = volume.effect else {
-        panic!("Volume A must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&volume);
     let chapter_a = post_chapter(
         &store,
         &scope,
@@ -434,14 +413,13 @@ async fn author_undo_compensates_create_chapter_and_restores_the_initial_revisio
         },
     )
     .await;
-    let CreateChapterSettlementEffect::Applied {
-        chapter_id: chapter_a_id,
-        ..
-    } = chapter_a.effect.clone()
-    else {
-        panic!("Chapter A must apply");
-    };
-    let chapter_a_authority = chapter_a.authority.clone().expect("Chapter A authority");
+    let (
+        ChapterCreated {
+            chapter_id: chapter_a_id,
+            ..
+        },
+        chapter_a_authority,
+    ) = applied(&chapter_a);
     let chapter_b = post_chapter(
         &store,
         &scope,
@@ -455,18 +433,13 @@ async fn author_undo_compensates_create_chapter_and_restores_the_initial_revisio
         },
     )
     .await;
-    let CreateChapterSettlementEffect::Applied {
-        chapter_id: chapter_b_id,
-        ..
-    } = chapter_b.effect.clone()
-    else {
-        panic!("Chapter B must apply");
-    };
-    let chapter_b_authority = chapter_b
-        .authority
-        .as_ref()
-        .expect("Chapter B authority")
-        .clone();
+    let (
+        ChapterCreated {
+            chapter_id: chapter_b_id,
+            ..
+        },
+        chapter_b_authority,
+    ) = applied(&chapter_b);
     let session_issue = command_issue(
         &scope,
         "f72a",
@@ -506,8 +479,8 @@ async fn author_undo_compensates_create_chapter_and_restores_the_initial_revisio
         panic!("Chapter A must open");
     };
     assert_eq!(
-        opened.chapter.revision_id.as_ref(),
-        chapter_a_authority.resulting_revision_id
+        Some(opened.chapter.revision_id.as_ref()),
+        chapter_a_authority.resulting_revision_id.as_deref()
     );
     let chapter_b_undo = undo_named(
         &store,

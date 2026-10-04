@@ -1,17 +1,18 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
-    CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
+    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
+    EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
+    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
     SetCurrentChapterCommand, SetCurrentChapterSettlementEffect, UndoLatestAuthorActionCommand,
-    UndoLatestAuthorActionSettlementEffect, UserId, VolumeId, VolumeNode, create_chapter,
-    create_editor_session, create_project, create_volume, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter, open_project,
-    set_current_chapter, undo_latest_author_action,
+    UndoLatestAuthorActionSettlementEffect, UserId, VolumeCreated, VolumeId, VolumeNode,
+    create_editor_session, create_project, get_manuscript_tree, issue_create_project_challenge,
+    issue_project_command_challenge, open_chapter, open_project, set_current_chapter,
+    undo_latest_author_action,
 };
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{applied, command_call, create_chapter, create_volume};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -153,32 +154,20 @@ async fn post_volume(store: &PostgresProjectReader, scope: &ProjectScope, suffix
         .unwrap();
     let settlement = create_volume(
         store,
-        &CreateVolumeCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+        &command_call(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            VOLUME_BYTES,
+            CreateVolumeInput {
+                title: "Volume A".to_owned(),
+                expected_tree_revision: 1,
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: VOLUME_BYTES.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            title: "Volume A".to_owned(),
-            expected_tree_revision: 1,
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-            },
-        },
+        ),
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied { volume_id, .. } = settlement.effect else {
-        panic!("Create Volume must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&settlement);
     volume_id
 }
 
@@ -217,34 +206,22 @@ async fn post_chapter(
         .unwrap();
     let settlement = create_chapter(
         store,
-        &CreateChapterCommand {
-            placement: storyos_core::CreateChapterPlacement::Append,
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+        &command_call(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            bytes,
+            CreateChapterInput {
+                placement: storyos_core::CreateChapterPlacement::Append,
+                volume_id: volume_id.to_owned(),
+                title: title.to_owned(),
+                expected_tree_revision,
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            volume_id: volume_id.to_owned(),
-            title: title.to_owned(),
-            expected_tree_revision,
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-            },
-        },
+        ),
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied { chapter_id, .. } = settlement.effect else {
-        panic!("Create Chapter must apply");
-    };
+    let (ChapterCreated { chapter_id, .. }, _) = applied(&settlement);
     chapter_id
 }
 

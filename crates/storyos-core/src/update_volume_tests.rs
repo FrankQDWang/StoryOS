@@ -1,11 +1,10 @@
 use super::{
-    ProjectLifecycle, ProjectPresence, UpdateVolume, UpdateVolumeConflict, UpdateVolumeNoEffect,
-    UpdateVolumeRefusal, UpdateVolumeResult, VolumeJoin, update_volume,
+    ProjectLifecycle, UpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict,
+    UpdateVolumeNoEffect, UpdateVolumeRefusal, UpdateVolumeResult, VolumeJoin, update_volume,
 };
 
 fn command() -> UpdateVolume {
     UpdateVolume {
-        presence: ProjectPresence::Present,
         volume_join: VolumeJoin::ExactScope,
         expected_tree_revision: 2,
         current_tree_revision: 2,
@@ -22,11 +21,11 @@ fn command() -> UpdateVolume {
 fn a_matching_revision_rename_and_reorder_classifies_as_applied() {
     assert_eq!(
         update_volume(&command()),
-        UpdateVolumeResult::Applied {
+        UpdateVolumeResult::Applied(UpdateVolumeApplied {
             title: "Volume B".to_owned(),
             order: 2,
             tree_revision: 3,
-        }
+        })
     );
 }
 
@@ -36,9 +35,7 @@ fn a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect() {
     stale.current_tree_revision = 3;
     assert_eq!(
         update_volume(&stale),
-        UpdateVolumeResult::Conflicted {
-            reason: UpdateVolumeConflict::StaleTreeRevision,
-        }
+        UpdateVolumeResult::Conflicted(UpdateVolumeConflict::StaleTreeRevision)
     );
 }
 
@@ -49,9 +46,7 @@ fn an_unchanged_title_and_order_classifies_as_no_effect() {
     unchanged.order = unchanged.current_order;
     assert_eq!(
         update_volume(&unchanged),
-        UpdateVolumeResult::NoEffect {
-            reason: UpdateVolumeNoEffect::Unchanged,
-        }
+        UpdateVolumeResult::NoEffect(UpdateVolumeNoEffect::Unchanged)
     );
 }
 
@@ -61,9 +56,7 @@ fn a_wrong_scope_volume_classifies_as_refused_with_zero_authority_effect() {
     wrong_scope.volume_join = VolumeJoin::Invalid;
     assert_eq!(
         update_volume(&wrong_scope),
-        UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::InvalidVolumeJoin,
-        }
+        UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidVolumeJoin)
     );
 }
 
@@ -73,17 +66,13 @@ fn an_invalid_order_classifies_as_refused_with_zero_authority_effect() {
     zero.order = 0;
     assert_eq!(
         update_volume(&zero),
-        UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::InvalidOrder,
-        }
+        UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidOrder)
     );
     let mut past_end = command();
     past_end.order = 3;
     assert_eq!(
         update_volume(&past_end),
-        UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::InvalidOrder,
-        }
+        UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidOrder)
     );
 }
 
@@ -93,21 +82,7 @@ fn an_archived_project_classifies_as_refused_with_zero_authority_effect() {
     archived.current_lifecycle = ProjectLifecycle::Archived;
     assert_eq!(
         update_volume(&archived),
-        UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::ArchivedProject,
-        }
-    );
-}
-
-#[test]
-fn a_missing_project_classifies_as_refused_with_zero_authority_effect() {
-    let mut missing = command();
-    missing.presence = ProjectPresence::Absent;
-    assert_eq!(
-        update_volume(&missing),
-        UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::MissingProject,
-        }
+        UpdateVolumeResult::Refused(UpdateVolumeRefusal::ArchivedProject)
     );
 }
 
@@ -117,16 +92,12 @@ fn an_invalid_title_classifies_as_refused_with_zero_authority_effect() {
     empty.title.clear();
     assert_eq!(
         update_volume(&empty),
-        UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::InvalidTitle,
-        }
+        UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidTitle)
     );
     let mut too_long = command();
     too_long.title = "n".repeat(1025);
     assert_eq!(
         update_volume(&too_long),
-        UpdateVolumeResult::Refused {
-            reason: UpdateVolumeRefusal::InvalidTitle,
-        }
+        UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidTitle)
     );
 }

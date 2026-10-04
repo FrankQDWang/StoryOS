@@ -1,675 +1,270 @@
-use crate::command_response_project::{
-    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
-    encode_command_response_project, read_command_response_project,
-};
+use std::convert::Infallible;
+
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, CreateChapterAuthority, CreateChapterCommand,
-    CreateChapterError, CreateChapterPublicOrder, CreateChapterSettlement,
-    CreateChapterSettlementEffect, CreateChapterStore, Project, ProjectCommandChallengeError,
-    ProjectCommandChallengeUse,
+    ChapterCreated, CreateChapterInput, CreateChapterPublicOrder, CreateChapterSettlement,
+    ProjectCommandEnvelope, ProjectCommandError,
 };
 use storyos_core::{
-    CreateChapter as CoreCreateChapter, CreateChapterCurrent, CreateChapterOpen,
-    CreateChapterResult, ProjectLifecycle, ProjectPresence, VolumeJoin,
-    create_chapter as classify_create_chapter,
+    CreateChapter as CoreCreateChapter, CreateChapterApplied, CreateChapterConflict,
+    CreateChapterCurrent, CreateChapterOpen, CreateChapterPlacement, CreateChapterRefusal,
+    VolumeJoin, create_chapter as classify_create_chapter,
 };
+use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::*;
-
-mod persist;
-use persist::{
-    insert_create_chapter_admission, insert_created_chapter_object, next_chapter_order,
-    persist_created_chapter,
+use crate::PostgresProjectReader;
+use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::structure_command::{
+    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
+    unavailable,
 };
 
-impl CreateChapterStore for PostgresProjectReader {
-    async fn create_chapter(
+impl PostgresProjectReader {
+    /// Settles one Create Chapter as a Manuscript Structure Transition.
+    pub async fn create_chapter(
         &self,
-        command: &CreateChapterCommand,
-    ) -> Result<CreateChapterSettlement, CreateChapterError> {
-        let mut transaction = self
-            .begin_serializable_project_command_transaction(&command.project_scope)
-            .await
-            .map_err(create_chapter_challenge_error)?;
-        let challenge_use = transaction
-            .consume(&command.challenge_binding, &command.nonce_digest)
-            .await
-            .map_err(create_chapter_challenge_error)?;
-        match challenge_use {
-            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(create_chapter_challenge_error)?;
-                read_create_chapter_settlement(self, command, &result_reference).await
-            }
-            ProjectCommandChallengeUse::ExactRetryInProgress => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(create_chapter_challenge_error)?;
-                Err(CreateChapterError::BindingConflict)
-            }
-            ProjectCommandChallengeUse::FirstUse => {
-                match persist_create_chapter(&transaction.client, command).await {
-                    Ok(settlement) => {
-                        transaction
-                            .commit()
-                            .await
-                            .map_err(create_chapter_challenge_error)?;
-                        Ok(settlement)
-                    }
-                    Err(error) => {
-                        let _rollback = transaction.rollback().await;
-                        Err(error)
-                    }
-                }
-            }
-        }
+        envelope: &ProjectCommandEnvelope,
+        input: &CreateChapterInput,
+    ) -> Result<CreateChapterSettlement, ProjectCommandError> {
+        settle_structure_command(self, envelope, input).await
     }
 }
 
-async fn persist_create_chapter(
-    client: &tokio_postgres::Client,
-    command: &CreateChapterCommand,
-) -> Result<CreateChapterSettlement, CreateChapterError> {
-    let row = client
-        .query_opt(
-            "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text, title
-               FROM storyos.projects
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-              FOR UPDATE",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(create_chapter_database_error)?;
-    let Some(row) = row else {
-        return Err(CreateChapterError::MissingProject);
+/// The live Chapter order of the target Volume, locked by `classify`.
+pub(crate) struct LiveChapters(Vec<String>);
+
+impl StructureCommand for CreateChapterInput {
+    const SPEC: CommandSpec = CommandSpec {
+        kind: "createChapter",
+        isolation: CommandIsolation::Serializable,
+        activity_kind: "chapter_created",
     };
-    let current_lifecycle = match row.get::<_, String>(0).as_str() {
-        "active" => ProjectLifecycle::Active,
-        "archived" => ProjectLifecycle::Archived,
-        other => {
-            return Err(CreateChapterError::Unavailable(Box::new(
-                std::io::Error::other(format!("unsupported Project lifecycle {other}")),
-            )));
-        }
-    };
-    let current_tree_revision = row
-        .get::<_, String>(1)
-        .parse::<u64>()
-        .map_err(create_chapter_parse_error)?;
-    let current_chapter_id = row.get::<_, Option<String>>(2);
-    let current_title = row.get::<_, String>(3);
-    let volume_join = if client
-        .query_opt(
-            "SELECT manuscript_object_id
-               FROM storyos.manuscript_objects AS volume
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND manuscript_object_id = $3::text::uuid AND object_kind = 'volume'
-                AND NOT EXISTS (
-                  SELECT 1 FROM storyos.volume_removal_decisions AS removal
-                   WHERE removal.owner_user_id = volume.owner_user_id
-                     AND removal.project_id = volume.project_id
-                     AND removal.volume_id = volume.manuscript_object_id
-                )",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.volume_id,
-            ],
-        )
-        .await
-        .map_err(create_chapter_database_error)?
-        .is_some()
-    {
-        VolumeJoin::ExactScope
-    } else {
-        VolumeJoin::Invalid
-    };
-    let mut ordered_chapter_ids = client.query(
-        "SELECT manuscript_object_id::text FROM storyos.manuscript_objects AS chapter
-          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-            AND object_kind = 'chapter' AND parent_volume_id = $3::text::uuid
-            AND NOT EXISTS (SELECT 1 FROM storyos.chapter_removal_decisions AS removal
-              WHERE removal.owner_user_id = chapter.owner_user_id AND removal.project_id = chapter.project_id
-                AND removal.chapter_id = chapter.manuscript_object_id)
-          ORDER BY tree_order FOR UPDATE",
-        &[&command.project_scope.owner_user_id.as_ref(), &command.project_scope.project_id.as_ref(), &command.volume_id],
-    ).await.map_err(create_chapter_database_error)?.iter().map(|row| row.get::<_, String>(0)).collect::<Vec<_>>();
-    let classified = classify_create_chapter(&CoreCreateChapter {
-        presence: ProjectPresence::Present,
-        volume_join,
-        expected_tree_revision: command.expected_tree_revision,
-        current_tree_revision,
-        current_lifecycle,
-        current_open: match current_chapter_id {
-            None => CreateChapterOpen::Empty,
-            Some(_) => CreateChapterOpen::CurrentChapter,
-        },
-        title: command.title.clone(),
-        placement: command.placement.clone(),
-        ordered_chapter_ids: ordered_chapter_ids.clone(),
-    });
-    let effect = match classified {
-        CreateChapterResult::Applied {
-            tree_revision,
-            current,
-            order,
-        } => {
-            let tree_order = next_chapter_order(client, command).await?;
-            let chapter_id = Uuid::now_v7().to_string();
-            insert_created_chapter_object(client, command, &chapter_id, tree_order).await?;
-            if command.placement != storyos_core::CreateChapterPlacement::Append {
-                ordered_chapter_ids.insert((order - 1) as usize, chapter_id.clone());
-                crate::update_chapter::sibling_order::write_chapter_order(
-                    client,
-                    &command.project_scope,
-                    &command.volume_id,
-                    &ordered_chapter_ids,
-                )
-                .await
-                .map_err(create_chapter_database_error)?;
-            }
-            CreateChapterSettlementEffect::Applied {
-                tree_revision,
-                chapter_id,
-                current,
-                order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
-            }
-        }
-        CreateChapterResult::Conflicted { reason } => {
-            CreateChapterSettlementEffect::Conflicted { reason }
-        }
-        CreateChapterResult::Refused {
-            reason: storyos_core::CreateChapterRefusal::MissingProject,
-        } => return Err(CreateChapterError::MissingProject),
-        CreateChapterResult::Refused { reason } => {
-            CreateChapterSettlementEffect::Refused { reason }
-        }
-    };
-    insert_create_chapter_admission(client, command).await?;
-    let authority_sequences = match &effect {
-        CreateChapterSettlementEffect::Applied { .. } => {
-            let sequences =
-                crate::structural_authority_settlement::allocate_structure_transition_sequences(
-                    client,
-                    &command.project_scope,
-                )
-                .await
-                .map_err(CreateChapterError::Unavailable)?;
-            Some(sequences)
-        }
-        CreateChapterSettlementEffect::Conflicted { .. }
-        | CreateChapterSettlementEffect::Refused { .. } => None,
-    };
-    let (result_kind, result_payload) = match &effect {
-        CreateChapterSettlementEffect::Applied {
-            order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
-            ..
-        } => ("authoritative_applied", format!(r#"{{"order":"{order}"}}"#)),
-        CreateChapterSettlementEffect::Applied {
-            order: CreateChapterPublicOrder::HistoricalCreateChapterAck(_),
-            ..
-        } => {
-            return Err(CreateChapterError::Unavailable(Box::new(
-                std::io::Error::other("Create Chapter first use cannot replay a historical ack"),
-            )));
-        }
-        CreateChapterSettlementEffect::Conflicted { .. } => (
-            "conflicted",
-            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
-        ),
-        CreateChapterSettlementEffect::Refused { reason } => {
-            let refused = match reason {
-                storyos_core::CreateChapterRefusal::ArchivedProject => "archived_project",
-                storyos_core::CreateChapterRefusal::InvalidTitle => "invalid_title",
-                storyos_core::CreateChapterRefusal::InvalidVolumeJoin => "invalid_volume_join",
-                storyos_core::CreateChapterRefusal::InvalidPlacement => "invalid_placement",
-                storyos_core::CreateChapterRefusal::MissingProject => {
-                    return Err(CreateChapterError::MissingProject);
-                }
-            };
-            ("refused", format!(r#"{{"reason":"{refused}"}}"#))
-        }
-    };
-    let commit_ids = authority_sequences
-        .as_ref()
-        .map(|sequences| vec![sequences.authoritative_commit_id.clone()])
-        .unwrap_or_default();
-    let receipt_created_at = client
-        .query_one(
-            "INSERT INTO storyos.domain_receipts
-               (owner_user_id, project_id, receipt_id, author_command_admission_id,
-                command_id, command_kind, command_digest, idempotency_key, producer_cause,
-                expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
-                proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
-                artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'createChapter', $6, $7::text::uuid,
-                     'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::uuid[], $10::text[]::uuid[], '{}'::text[], '{}'::text[],
-                     '{}'::text[], $8, $9::text::jsonb)
-          RETURNING to_char(created_at AT TIME ZONE 'UTC',
-                            'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.command_id,
-                &command.challenge_binding.canonical_command_digest,
-                &command.challenge_binding.idempotency_key,
-                &result_kind,
-                &result_payload,
-                &commit_ids,
-            ],
-        )
-        .await
-        .map_err(create_chapter_database_error)?
-        .get::<_, String>(0);
-    client
-        .execute(
-            "INSERT INTO storyos.author_command_admission_settlements
-               (owner_user_id, project_id, author_command_admission_id, settlement_kind, receipt_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
-                     'receipt_settled', $4::text::uuid)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(create_chapter_database_error)?;
-    let mut project_activity_position = 0;
-    let mut project_activity_event_id = String::new();
-    let mut authority = None;
-    let mut response_chapter_id = current_chapter_id.clone().map(ChapterId::new);
-    if let (
-        CreateChapterSettlementEffect::Applied {
-            tree_revision,
-            chapter_id,
-            current,
-            order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
-        },
-        Some(sequences),
-    ) = (&effect, authority_sequences)
-    {
-        let resulting_revision_id =
-            persist_created_chapter(client, command, tree_revision, chapter_id, current).await?;
-        project_activity_position = sequences.project_activity_position;
-        project_activity_event_id = sequences.project_activity_event_id.clone();
-        let resulting_current = client
-            .query_one(
-                "SELECT current_chapter_id::text FROM storyos.projects
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+    type Applied = CreateChapterApplied;
+    type Plan = LiveChapters;
+    type Effect = ChapterCreated;
+    type NoEffect = Infallible;
+    type Conflict = CreateChapterConflict;
+    type Refusal = CreateChapterRefusal;
+
+    async fn classify(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+    ) -> Result<Classified<Self>, ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        let volume_join = match client
+            .query_opt(
+                "SELECT manuscript_object_id
+                   FROM storyos.manuscript_objects AS volume
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND manuscript_object_id = $3::text::uuid AND object_kind = 'volume'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM storyos.volume_removal_decisions AS removal
+                       WHERE removal.owner_user_id = volume.owner_user_id
+                         AND removal.project_id = volume.project_id
+                         AND removal.volume_id = volume.manuscript_object_id
+                    )",
                 &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &self.volume_id,
                 ],
             )
             .await
-            .map_err(create_chapter_database_error)?
-            .get::<_, String>(0);
-        response_chapter_id = Some(ChapterId::new(resulting_current.clone()));
-        let payload = serde_json::json!({
-            "kind": "chapter_created",
-            "volume_id": command.volume_id,
-            "chapter_id": chapter_id,
-            "title": command.title,
-            "tree_revision": tree_revision.to_string(),
-            "order": order.to_string(),
-            "current_chapter_id": resulting_current,
-        })
-        .to_string();
+            .map_err(unavailable)?
+        {
+            Some(_) => VolumeJoin::ExactScope,
+            None => VolumeJoin::Invalid,
+        };
+        let ordered_chapter_ids = client
+            .query(
+                "SELECT manuscript_object_id::text FROM storyos.manuscript_objects AS chapter
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND object_kind = 'chapter' AND parent_volume_id = $3::text::uuid
+                    AND NOT EXISTS (
+                      SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                       WHERE removal.owner_user_id = chapter.owner_user_id
+                         AND removal.project_id = chapter.project_id
+                         AND removal.chapter_id = chapter.manuscript_object_id
+                    )
+                  ORDER BY tree_order FOR UPDATE",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &self.volume_id,
+                ],
+            )
+            .await
+            .map_err(unavailable)?
+            .iter()
+            .map(|row| row.get::<_, String>(0))
+            .collect::<Vec<_>>();
+        let classified = classify_create_chapter(&CoreCreateChapter {
+            volume_join,
+            expected_tree_revision: self.expected_tree_revision,
+            current_tree_revision: project.tree_revision,
+            current_lifecycle: project.lifecycle,
+            current_open: match project.current_chapter_id {
+                None => CreateChapterOpen::Empty,
+                Some(_) => CreateChapterOpen::CurrentChapter,
+            },
+            title: self.title.clone(),
+            placement: self.placement.clone(),
+            ordered_chapter_ids: ordered_chapter_ids.clone(),
+        });
+        Ok(classified.map_applied(|applied| (applied, LiveChapters(ordered_chapter_ids))))
+    }
+
+    fn applied_receipt_payload(
+        &self,
+        applied: &CreateChapterApplied,
+        _plan: &LiveChapters,
+    ) -> String {
+        serde_json::json!({ "order": applied.order.to_string() }).to_string()
+    }
+
+    async fn apply(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+        LiveChapters(mut ordered_chapter_ids): LiveChapters,
+        applied: CreateChapterApplied,
+    ) -> Result<StructureWrite<ChapterCreated>, ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        let owner = scope.owner_user_id.as_ref();
+        let project_id = scope.project_id.as_ref();
+        let chapter_id = Uuid::now_v7().to_string();
         client
             .execute(
-                "INSERT INTO storyos.project_activity_event_payloads
-                   (owner_user_id, project_id, project_activity_position, project_activity_event_id,
-                    event_kind, receipt_id, receipt_result_kind, payload)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                         'chapter_created', $5::text::uuid, 'authoritative_applied',
-                         $6::text::jsonb)",
+                "INSERT INTO storyos.manuscript_objects
+                   (owner_user_id, project_id, manuscript_object_id, object_kind, title, tree_order,
+                    parent_volume_id)
+                 SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, 'chapter', $4,
+                        COALESCE(MAX(tree_order), 0) + 1, $5::text::uuid
+                   FROM storyos.manuscript_objects
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND object_kind = 'chapter' AND parent_volume_id = $5::text::uuid",
                 &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &project_activity_position.to_string(),
-                    &project_activity_event_id,
-                    &command.ids.receipt_id,
-                    &payload,
+                    &owner,
+                    &project_id,
+                    &chapter_id,
+                    &self.title,
+                    &self.volume_id,
                 ],
             )
             .await
-            .map_err(create_chapter_database_error)?;
-        crate::structural_authority_settlement::persist_structure_commit(
-            client,
-            &command.project_scope,
-            &sequences,
-            &command.ids.author_command_admission_id,
-            &command.ids.receipt_id,
-            crate::structural_authority_settlement::StructureCommitBinding {
-                prior_manuscript_tree_revision: command.expected_tree_revision,
-                resulting_manuscript_tree_revision: *tree_revision,
-                identity:
-                    crate::structural_authority_settlement::StructureAffectedIdentity::ChapterInitialRevision {
-                        chapter_id,
-                        resulting_revision_id: &resulting_revision_id,
-                    },
-            },
-        )
-        .await
-        .map_err(create_chapter_database_error)?;
-        crate::structural_authority_settlement::persist_forward_author_action(
-            client,
-            &command.project_scope,
-            &sequences,
-            &command.ids.receipt_id,
-        )
-        .await
-        .map_err(create_chapter_database_error)?;
-        crate::snapshot::persist_canonical_snapshot(
-            client,
-            &command.project_scope,
-            &sequences.snapshot_id,
-            project_activity_position,
-        )
-        .await
-        .map_err(create_chapter_database_error)?;
-        authority = Some(CreateChapterAuthority {
-            authoritative_commit_id: sequences.authoritative_commit_id,
-            author_action_sequence: sequences.author_action_sequence,
-            snapshot_id: sequences.snapshot_id,
-            prior_manuscript_tree_revision: command.expected_tree_revision,
-            resulting_manuscript_tree_revision: *tree_revision,
-            resulting_revision_id,
-        });
-    }
-    let response_project = Project {
-        project_id: command.project_scope.project_id.clone(),
-        title: current_title,
-        current_chapter_id: response_chapter_id,
-    };
-    let encoded_project = encode_command_response_project(&response_project);
-    client
-        .execute(
-            "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled',
-                    result_reference = $3,
-                    acknowledgement_format = $5,
-                    response_project = $6::text::jsonb
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'createChapter' AND idempotency_key = $4::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.challenge_binding.idempotency_key,
-                &COMMAND_RESPONSE_PROJECT_FORMAT,
-                &encoded_project,
-            ],
-        )
-        .await
-        .map_err(create_chapter_database_error)?;
-    Ok(CreateChapterSettlement {
-        ids: command.ids.clone(),
-        effect,
-        receipt_created_at,
-        project_activity_position,
-        project_activity_event_id,
-        authority,
-        response_project,
-    })
-}
-
-async fn read_create_chapter_settlement(
-    store: &PostgresProjectReader,
-    command: &CreateChapterCommand,
-    receipt_id: &str,
-) -> Result<CreateChapterSettlement, CreateChapterError> {
-    let client = store
-        .connect_challenge()
-        .await
-        .map_err(create_chapter_challenge_error)?;
-    client
-        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(create_chapter_database_error)?;
-    let result = async {
-        set_challenge_scope_on_client(&client, &command.project_scope)
-            .await
-            .map_err(create_chapter_challenge_error)?;
-        let row = client
-            .query_opt(
-                "SELECT receipt.command_id::text,
-                        receipt.author_command_admission_id::text,
-                        receipt.receipt_id::text,
-                        to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                        receipt.result_kind,
-                        receipt.result_payload->>'reason',
-                        payload.payload->>'tree_revision',
-                        payload.payload->>'chapter_id',
-                        payload.payload->>'current_chapter_id',
-                        payload.payload->>'order',
-                        payload.project_activity_position::text,
-                        payload.project_activity_event_id::text,
-                        receipt.result_payload->>'order',
-                        authoritative_commit.authoritative_commit_id::text,
-                        action.author_action_sequence::text,
-                        snapshot.snapshot_id::text,
-                        authoritative_commit.prior_manuscript_tree_revision::text,
-                        authoritative_commit.resulting_manuscript_tree_revision::text,
-                        authoritative_commit.resulting_revision_id::text,
-                        idempotency.acknowledgement_format,
-                        idempotency.response_project::text
-                   FROM storyos.domain_receipts AS receipt
-                   JOIN storyos.author_command_admission_settlements AS settlement
-                     ON (settlement.owner_user_id, settlement.project_id,
-                         settlement.author_command_admission_id, settlement.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id,
-                         receipt.author_command_admission_id, receipt.receipt_id)
-                   JOIN storyos.command_idempotency AS idempotency
-                     ON (idempotency.owner_user_id, idempotency.project_id,
-                         idempotency.command_kind, idempotency.idempotency_key,
-                         idempotency.result_reference) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
-                         receipt.idempotency_key, receipt.receipt_id::text)
-              LEFT JOIN storyos.project_activity_event_payloads AS payload
-                     ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.authoritative_commits AS authoritative_commit
-                     ON (authoritative_commit.owner_user_id, authoritative_commit.project_id,
-                         authoritative_commit.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.author_action_entries AS action
-                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.project_snapshots AS snapshot
-                     ON (snapshot.owner_user_id, snapshot.project_id,
-                         snapshot.project_activity_position) =
-                        (payload.owner_user_id, payload.project_id,
-                         payload.project_activity_position)
-                    AND snapshot.snapshot_kind = 'canonical'
-                  WHERE receipt.owner_user_id = $1::text::uuid
-                    AND receipt.project_id = $2::text::uuid
-                    AND receipt.receipt_id = $3::text::uuid
-                    AND receipt.command_kind = 'createChapter'
-                    AND receipt.command_digest = $4
-                    AND receipt.idempotency_key = $5::text::uuid
-                    AND settlement.settlement_kind = 'receipt_settled'
-                    AND idempotency.outcome_kind = 'settled'",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &receipt_id,
-                    &command.challenge_binding.canonical_command_digest,
-                    &command.challenge_binding.idempotency_key,
-                ],
+            .map_err(unavailable)?;
+        if self.placement != CreateChapterPlacement::Append {
+            ordered_chapter_ids.insert((applied.order - 1) as usize, chapter_id.clone());
+            crate::update_chapter::sibling_order::write_chapter_order(
+                client,
+                scope,
+                &self.volume_id,
+                &ordered_chapter_ids,
             )
             .await
-            .map_err(create_chapter_database_error)?
-            .ok_or(CreateChapterError::BindingConflict)?;
-        let result_kind = row.get::<_, String>(4);
-        let reason = row.get::<_, Option<String>>(5);
-        let effect = match (result_kind.as_str(), reason.as_deref()) {
-            ("authoritative_applied", None) => {
-                let tree_revision = row
-                    .get::<_, Option<String>>(6)
-                    .ok_or(CreateChapterError::BindingConflict)?
-                    .parse::<u64>()
-                    .map_err(create_chapter_parse_error)?;
-                let chapter_id = row
-                    .get::<_, Option<String>>(7)
-                    .ok_or(CreateChapterError::BindingConflict)?;
-                let resulting_current = row
-                    .get::<_, Option<String>>(8)
-                    .ok_or(CreateChapterError::BindingConflict)?;
-                let activity_order = row
-                    .get::<_, Option<String>>(9)
-                    .ok_or(CreateChapterError::BindingConflict)?
-                    .parse::<u64>()
-                    .map_err(create_chapter_parse_error)?;
-                let order = match row.get::<_, Option<String>>(12).as_deref() {
-                    Some(order) => {
-                        let rank = order.parse::<u64>().map_err(create_chapter_parse_error)?;
-                        if rank < 1 {
-                            return Err(CreateChapterError::BindingConflict);
-                        }
-                        CreateChapterPublicOrder::CanonicalSiblingOrder(rank)
-                    }
-                    None => CreateChapterPublicOrder::HistoricalCreateChapterAck(activity_order),
-                };
-                CreateChapterSettlementEffect::Applied {
-                    tree_revision,
-                    current: if resulting_current == chapter_id {
-                        CreateChapterCurrent::SelectCreated
-                    } else {
-                        CreateChapterCurrent::PreserveExisting
-                    },
-                    chapter_id,
-                    order,
-                }
-            }
-            ("conflicted", Some("stale_tree_revision")) => {
-                CreateChapterSettlementEffect::Conflicted {
-                    reason: storyos_core::CreateChapterConflict::StaleTreeRevision,
-                }
-            }
-            ("refused", Some("archived_project")) => CreateChapterSettlementEffect::Refused {
-                reason: storyos_core::CreateChapterRefusal::ArchivedProject,
-            },
-            ("refused", Some("invalid_title")) => CreateChapterSettlementEffect::Refused {
-                reason: storyos_core::CreateChapterRefusal::InvalidTitle,
-            },
-            ("refused", Some("invalid_volume_join")) => CreateChapterSettlementEffect::Refused {
-                reason: storyos_core::CreateChapterRefusal::InvalidVolumeJoin,
-            },
-            ("refused", Some("invalid_placement")) => CreateChapterSettlementEffect::Refused {
-                reason: storyos_core::CreateChapterRefusal::InvalidPlacement,
-            },
-            _ => return Err(CreateChapterError::BindingConflict),
+            .map_err(unavailable)?;
+        }
+        let payload_id = Uuid::now_v7().to_string();
+        let revision_id = Uuid::now_v7().to_string();
+        let empty: &[u8] = &[];
+        client
+            .execute(
+                "INSERT INTO storyos.authoritative_payloads
+                   (owner_user_id, project_id, payload_id, canonical_bytes)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4)",
+                &[&owner, &project_id, &payload_id, &empty],
+            )
+            .await
+            .map_err(unavailable)?;
+        client
+            .execute(
+                "INSERT INTO storyos.authoritative_revisions
+                   (owner_user_id, project_id, manuscript_object_id, revision_id, payload_id)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                         $5::text::uuid)",
+                &[&owner, &project_id, &chapter_id, &revision_id, &payload_id],
+            )
+            .await
+            .map_err(unavailable)?;
+        client
+            .execute(
+                "INSERT INTO storyos.authoritative_heads
+                   (owner_user_id, project_id, manuscript_object_id, current_revision_id)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)",
+                &[&owner, &project_id, &chapter_id, &revision_id],
+            )
+            .await
+            .map_err(unavailable)?;
+        crate::manuscript_block::insert_paragraph_block(
+            client,
+            owner,
+            project_id,
+            &chapter_id,
+            &revision_id,
+            &Uuid::now_v7().to_string(),
+        )
+        .await
+        .map_err(unavailable)?;
+        let (current_chapter, resulting_current) = match applied.current {
+            CreateChapterCurrent::SelectCreated => (
+                CurrentChapterChange::Select(chapter_id.clone()),
+                Some(chapter_id.clone()),
+            ),
+            CreateChapterCurrent::PreserveExisting => (
+                CurrentChapterChange::Preserve,
+                project.current_chapter_id.clone(),
+            ),
         };
-        let authority = match (
-            row.get::<_, Option<String>>(13),
-            row.get::<_, Option<String>>(14),
-            row.get::<_, Option<String>>(15),
-            row.get::<_, Option<String>>(16),
-            row.get::<_, Option<String>>(17),
-            row.get::<_, Option<String>>(18),
-        ) {
-            (
-                Some(authoritative_commit_id),
-                Some(author_action_sequence),
-                Some(snapshot_id),
-                Some(prior_manuscript_tree_revision),
-                Some(resulting_manuscript_tree_revision),
-                Some(resulting_revision_id),
-            ) => Some(CreateChapterAuthority {
-                authoritative_commit_id,
-                author_action_sequence: author_action_sequence
-                    .parse()
-                    .map_err(create_chapter_parse_error)?,
-                snapshot_id,
-                prior_manuscript_tree_revision: prior_manuscript_tree_revision
-                    .parse()
-                    .map_err(create_chapter_parse_error)?,
-                resulting_manuscript_tree_revision: resulting_manuscript_tree_revision
-                    .parse()
-                    .map_err(create_chapter_parse_error)?,
-                resulting_revision_id,
+        Ok(StructureWrite {
+            resulting_tree_revision: applied.tree_revision,
+            identity: StructureIdentity::ChapterInitialRevision {
+                chapter_id: chapter_id.clone(),
+                revision_id,
+            },
+            current_chapter,
+            writer_base: WriterBase::Keep,
+            activity: serde_json::json!({
+                "volume_id": self.volume_id,
+                "chapter_id": chapter_id,
+                "title": self.title,
+                "order": applied.order.to_string(),
+                "current_chapter_id": resulting_current,
             }),
-            _ => None,
-        };
-        let response_project = match read_command_response_project(
-            row.get::<_, Option<String>>(19).as_deref(),
-            row.get::<_, Option<String>>(20).as_deref(),
-        ) {
-            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
-            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
-                return Err(CreateChapterError::HistoricalAcknowledgementUnavailable);
-            }
-            Err(()) => {
-                return Err(CreateChapterError::Unavailable(Box::new(
-                    std::io::Error::other("Create Chapter acknowledgement evidence is damaged"),
-                )));
-            }
-        };
-        Ok(CreateChapterSettlement {
-            ids: AuthorCommandAdmissionIds {
-                command_id: row.get(0),
-                author_command_admission_id: row.get(1),
-                receipt_id: row.get(2),
+            effect: ChapterCreated {
+                chapter_id,
+                tree_revision: applied.tree_revision,
+                current: applied.current,
+                order: CreateChapterPublicOrder::CanonicalSiblingOrder(applied.order),
             },
-            receipt_created_at: row.get(3),
-            effect,
-            project_activity_position: row
-                .get::<_, Option<String>>(10)
-                .unwrap_or_else(|| "0".to_owned())
-                .parse::<u64>()
-                .map_err(create_chapter_parse_error)?,
-            project_activity_event_id: row.get::<_, Option<String>>(11).unwrap_or_default(),
-            authority,
-            response_project,
         })
     }
-    .await;
-    match &result {
-        Ok(_) => client
-            .batch_execute("COMMIT")
-            .await
-            .map_err(create_chapter_database_error)?,
-        Err(_) => {
-            let _rollback = client.batch_execute("ROLLBACK").await;
-        }
+
+    fn decode(&self, replay: &CommandReplay) -> Result<ChapterCreated, ReplayFault> {
+        let tree_revision = replay.activity_u64("tree_revision")?;
+        let chapter_id = replay.activity_text("chapter_id")?;
+        let resulting_current = replay.activity_text("current_chapter_id")?;
+        let activity_order = replay.activity_u64("order")?;
+        let order = match replay.receipt_text("order") {
+            Some(order) => match order.parse::<u64>() {
+                Ok(0) => return Err(ReplayFault::BindingConflict),
+                Ok(rank) => CreateChapterPublicOrder::CanonicalSiblingOrder(rank),
+                Err(error) => return Err(ReplayFault::Unavailable(Box::new(error))),
+            },
+            None => CreateChapterPublicOrder::HistoricalCreateChapterAck(activity_order),
+        };
+        Ok(ChapterCreated {
+            tree_revision,
+            current: if resulting_current == chapter_id {
+                CreateChapterCurrent::SelectCreated
+            } else {
+                CreateChapterCurrent::PreserveExisting
+            },
+            chapter_id,
+            order,
+        })
     }
-    result
-}
-
-pub(super) fn create_chapter_challenge_error(
-    error: ProjectCommandChallengeError,
-) -> CreateChapterError {
-    match error {
-        ProjectCommandChallengeError::BindingConflict => CreateChapterError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired => CreateChapterError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
-        | ProjectCommandChallengeError::Unavailable(_) => {
-            CreateChapterError::Unavailable(Box::new(error))
-        }
-    }
-}
-
-pub(super) fn create_chapter_database_error(error: tokio_postgres::Error) -> CreateChapterError {
-    CreateChapterError::Unavailable(Box::new(error))
-}
-
-pub(super) fn create_chapter_parse_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> CreateChapterError {
-    CreateChapterError::Unavailable(Box::new(error))
 }

@@ -1,6 +1,7 @@
 //! Pure Core classification for Update Chapter (rename and reorder).
 
-use super::{ProjectLifecycle, ProjectPresence};
+use super::{ProjectLifecycle, TransitionOutcome};
+use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ChapterJoin {
@@ -10,7 +11,6 @@ pub enum ChapterJoin {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpdateChapter {
-    pub presence: ProjectPresence,
     pub chapter_join: ChapterJoin,
     pub expected_tree_revision: u64,
     pub current_tree_revision: u64,
@@ -23,22 +23,18 @@ pub struct UpdateChapter {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UpdateChapterResult {
-    Applied {
-        title: String,
-        order: u64,
-        tree_revision: u64,
-    },
-    NoEffect {
-        reason: UpdateChapterNoEffect,
-    },
-    Conflicted {
-        reason: UpdateChapterConflict,
-    },
-    Refused {
-        reason: UpdateChapterRefusal,
-    },
+pub struct UpdateChapterApplied {
+    pub title: String,
+    pub order: u64,
+    pub tree_revision: u64,
 }
+
+pub type UpdateChapterResult = TransitionOutcome<
+    UpdateChapterApplied,
+    UpdateChapterNoEffect,
+    UpdateChapterConflict,
+    UpdateChapterRefusal,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateChapterNoEffect {
@@ -52,55 +48,52 @@ pub enum UpdateChapterConflict {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateChapterRefusal {
-    MissingProject,
     InvalidChapterJoin,
     ArchivedProject,
     InvalidTitle,
     InvalidOrder,
 }
 
+reason_codes!(UpdateChapterNoEffect {
+    Unchanged => "unchanged",
+});
+
+reason_codes!(UpdateChapterConflict {
+    StaleTreeRevision => "stale_tree_revision",
+});
+
+reason_codes!(UpdateChapterRefusal {
+    InvalidChapterJoin => "invalid_chapter_join",
+    ArchivedProject => "archived_project",
+    InvalidTitle => "invalid_title",
+    InvalidOrder => "invalid_order",
+});
+
 /// Classify one Update Chapter against exact Scope, Chapter join, expected revision, title, and order.
 pub fn update_chapter(command: &UpdateChapter) -> UpdateChapterResult {
-    if command.presence == ProjectPresence::Absent {
-        return UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::MissingProject,
-        };
-    }
     if command.chapter_join == ChapterJoin::Invalid {
-        return UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::InvalidChapterJoin,
-        };
+        return UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidChapterJoin);
     }
     if command.title.is_empty() || command.title.len() > 1024 {
-        return UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::InvalidTitle,
-        };
+        return UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidTitle);
     }
     if command.order < 1 || command.order > command.chapter_count {
-        return UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::InvalidOrder,
-        };
+        return UpdateChapterResult::Refused(UpdateChapterRefusal::InvalidOrder);
     }
     if command.current_lifecycle == ProjectLifecycle::Archived {
-        return UpdateChapterResult::Refused {
-            reason: UpdateChapterRefusal::ArchivedProject,
-        };
+        return UpdateChapterResult::Refused(UpdateChapterRefusal::ArchivedProject);
     }
     if command.expected_tree_revision != command.current_tree_revision {
-        return UpdateChapterResult::Conflicted {
-            reason: UpdateChapterConflict::StaleTreeRevision,
-        };
+        return UpdateChapterResult::Conflicted(UpdateChapterConflict::StaleTreeRevision);
     }
     if command.title == command.current_title && command.order == command.current_order {
-        return UpdateChapterResult::NoEffect {
-            reason: UpdateChapterNoEffect::Unchanged,
-        };
+        return UpdateChapterResult::NoEffect(UpdateChapterNoEffect::Unchanged);
     }
-    UpdateChapterResult::Applied {
+    UpdateChapterResult::Applied(UpdateChapterApplied {
         title: command.title.clone(),
         order: command.order,
         tree_revision: command.current_tree_revision + 1,
-    }
+    })
 }
 
 #[cfg(test)]

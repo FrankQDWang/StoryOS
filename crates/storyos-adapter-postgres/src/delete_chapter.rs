@@ -1,290 +1,208 @@
-use crate::command_response_project::{
-    CommandResponseProjectEvidence, read_command_response_project,
-};
 use storyos_application::{
-    AuthorCommandAdmissionIds, DeleteChapterAuthority, DeleteChapterCommand, DeleteChapterError,
-    DeleteChapterSettlement, DeleteChapterSettlementEffect, DeleteChapterStore,
-    ProjectCommandChallengeError, ProjectCommandChallengeUse,
+    ChapterDeleted, DeleteChapterInput, DeleteChapterSettlement, ProjectCommandEnvelope,
+    ProjectCommandError,
 };
-use storyos_core::DeleteChapterCurrent;
+use storyos_core::{
+    ChapterJoin, ChapterRemovalLifecycle, DeleteChapter as CoreDeleteChapter, DeleteChapterApplied,
+    DeleteChapterConflict, DeleteChapterCurrent, DeleteChapterNoEffect, DeleteChapterRefusal,
+    delete_chapter as classify_delete_chapter,
+};
+use tokio_postgres::Client;
+use uuid::Uuid;
 
-use super::*;
+use crate::PostgresProjectReader;
+use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::structure_command::{
+    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
+    unavailable,
+};
 
-mod persist;
-use persist::persist_delete_chapter;
-
-impl DeleteChapterStore for PostgresProjectReader {
-    async fn delete_chapter(
+impl PostgresProjectReader {
+    /// Settles one author-initiated Chapter removal as a Manuscript Structure Transition.
+    pub async fn delete_chapter(
         &self,
-        command: &DeleteChapterCommand,
-    ) -> Result<DeleteChapterSettlement, DeleteChapterError> {
-        let mut transaction = self
-            .begin_serializable_project_command_transaction(&command.project_scope)
-            .await
-            .map_err(delete_chapter_challenge_error)?;
-        let challenge_use = transaction
-            .consume(&command.challenge_binding, &command.nonce_digest)
-            .await
-            .map_err(delete_chapter_challenge_error)?;
-        match challenge_use {
-            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(delete_chapter_challenge_error)?;
-                read_delete_chapter_settlement(self, command, &result_reference).await
-            }
-            ProjectCommandChallengeUse::ExactRetryInProgress => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(delete_chapter_challenge_error)?;
-                Err(DeleteChapterError::BindingConflict)
-            }
-            ProjectCommandChallengeUse::FirstUse => {
-                match persist_delete_chapter(&transaction.client, command).await {
-                    Ok(settlement) => {
-                        transaction
-                            .commit()
-                            .await
-                            .map_err(delete_chapter_challenge_error)?;
-                        Ok(settlement)
-                    }
-                    Err(error) => {
-                        let _rollback = transaction.rollback().await;
-                        Err(error)
-                    }
-                }
-            }
-        }
+        envelope: &ProjectCommandEnvelope,
+        input: &DeleteChapterInput,
+    ) -> Result<DeleteChapterSettlement, ProjectCommandError> {
+        settle_structure_command(self, envelope, input).await
     }
 }
 
-async fn read_delete_chapter_settlement(
-    store: &PostgresProjectReader,
-    command: &DeleteChapterCommand,
-    receipt_id: &str,
-) -> Result<DeleteChapterSettlement, DeleteChapterError> {
-    let client = store
-        .connect_challenge()
-        .await
-        .map_err(delete_chapter_challenge_error)?;
-    client
-        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(delete_chapter_database_error)?;
-    let result = async {
-        set_challenge_scope_on_client(&client, &command.project_scope)
-            .await
-            .map_err(delete_chapter_challenge_error)?;
-        let row = client
+/// The parent Volume of the target Chapter.
+pub(crate) struct ParentVolume(String);
+
+impl StructureCommand for DeleteChapterInput {
+    const SPEC: CommandSpec = CommandSpec {
+        kind: "deleteChapter",
+        isolation: CommandIsolation::Serializable,
+        activity_kind: "chapter_deleted",
+    };
+    type Applied = DeleteChapterApplied;
+    type Plan = ParentVolume;
+    type Effect = ChapterDeleted;
+    type NoEffect = DeleteChapterNoEffect;
+    type Conflict = DeleteChapterConflict;
+    type Refusal = DeleteChapterRefusal;
+
+    async fn classify(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+    ) -> Result<Classified<Self>, ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        let target = client
             .query_opt(
-                "SELECT receipt.command_id::text,
-                        receipt.author_command_admission_id::text,
-                        receipt.receipt_id::text,
-                        to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                        receipt.result_kind,
-                        receipt.result_payload->>'reason',
-                        payload.payload->>'tree_revision',
-                        payload.payload->>'volume_id',
-                        payload.payload->>'current_chapter_id',
-                        payload.project_activity_position::text,
-                        payload.project_activity_event_id::text,
-                        authoritative_commit.authoritative_commit_id::text,
-                        action.author_action_sequence::text,
-                        snapshot.snapshot_id::text,
-                        authoritative_commit.prior_manuscript_tree_revision::text,
-                        authoritative_commit.resulting_manuscript_tree_revision::text,
-                        payload.payload->>'prior_current_chapter_id',
-                        idempotency.acknowledgement_format,
-                        idempotency.response_project::text
-                   FROM storyos.domain_receipts AS receipt
-                   JOIN storyos.author_command_admission_settlements AS settlement
-                     ON (settlement.owner_user_id, settlement.project_id,
-                         settlement.author_command_admission_id, settlement.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id,
-                         receipt.author_command_admission_id, receipt.receipt_id)
-                   JOIN storyos.command_idempotency AS idempotency
-                     ON (idempotency.owner_user_id, idempotency.project_id,
-                         idempotency.command_kind, idempotency.idempotency_key,
-                         idempotency.result_reference) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
-                         receipt.idempotency_key, receipt.receipt_id::text)
-              LEFT JOIN storyos.project_activity_event_payloads AS payload
-                     ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.authoritative_commits AS authoritative_commit
-                     ON (authoritative_commit.owner_user_id, authoritative_commit.project_id,
-                         authoritative_commit.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.author_action_entries AS action
-                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.project_snapshots AS snapshot
-                     ON (snapshot.owner_user_id, snapshot.project_id,
-                         snapshot.project_activity_position) =
-                        (payload.owner_user_id, payload.project_id,
-                         payload.project_activity_position)
-                    AND snapshot.snapshot_kind = 'canonical'
-                  WHERE receipt.owner_user_id = $1::text::uuid
-                    AND receipt.project_id = $2::text::uuid
-                    AND receipt.receipt_id = $3::text::uuid
-                    AND receipt.command_kind = 'deleteChapter'
-                    AND receipt.command_digest = $4
-                    AND receipt.idempotency_key = $5::text::uuid
-                    AND settlement.settlement_kind = 'receipt_settled'
-                    AND idempotency.outcome_kind = 'settled'",
+                "SELECT chapter.parent_volume_id::text, removal.chapter_id IS NOT NULL
+                   FROM storyos.manuscript_objects AS chapter
+                   LEFT JOIN storyos.chapter_removal_decisions AS removal
+                     ON (removal.owner_user_id, removal.project_id, removal.chapter_id) =
+                        (chapter.owner_user_id, chapter.project_id, chapter.manuscript_object_id)
+                  WHERE chapter.owner_user_id = $1::text::uuid
+                    AND chapter.project_id = $2::text::uuid
+                    AND chapter.manuscript_object_id = $3::text::uuid
+                    AND chapter.object_kind = 'chapter'
+                  FOR UPDATE OF chapter",
                 &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &receipt_id,
-                    &command.challenge_binding.canonical_command_digest,
-                    &command.challenge_binding.idempotency_key,
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &self.chapter_id.as_ref(),
                 ],
             )
             .await
-            .map_err(delete_chapter_database_error)?
-            .ok_or(DeleteChapterError::BindingConflict)?;
-        let result_kind = row.get::<_, String>(4);
-        let reason = row.get::<_, Option<String>>(5);
-        let effect = match (result_kind.as_str(), reason.as_deref()) {
-            ("authoritative_applied", None) => {
-                let tree_revision = row
-                    .get::<_, Option<String>>(6)
-                    .ok_or(DeleteChapterError::BindingConflict)?
-                    .parse::<u64>()
-                    .map_err(delete_chapter_parse_error)?;
-                let volume_id = row
-                    .get::<_, Option<String>>(7)
-                    .ok_or(DeleteChapterError::BindingConflict)?;
-                DeleteChapterSettlementEffect::Applied {
-                    tree_revision,
-                    volume_id,
-                    current: match (
-                        row.get::<_, Option<String>>(16).as_deref(),
-                        row.get::<_, Option<String>>(8),
-                    ) {
-                        // Prior Current that is not the removed Chapter stayed
-                        // in place. Resulting Current alone cannot name that.
-                        (Some(prior), _) if prior != command.chapter_id.as_ref() => {
-                            DeleteChapterCurrent::PreserveExisting
-                        }
-                        (_, None) => DeleteChapterCurrent::Empty,
-                        (_, Some(chapter_id)) => {
-                            DeleteChapterCurrent::SelectSuccessor { chapter_id }
-                        }
-                    },
-                }
-            }
-            ("no_effect", Some("already_removed")) => DeleteChapterSettlementEffect::NoEffect {
-                reason: storyos_core::DeleteChapterNoEffect::AlreadyRemoved,
-            },
-            ("conflicted", Some("stale_tree_revision")) => {
-                DeleteChapterSettlementEffect::Conflicted {
-                    reason: storyos_core::DeleteChapterConflict::StaleTreeRevision,
-                }
-            }
-            ("refused", Some("archived_project")) => DeleteChapterSettlementEffect::Refused {
-                reason: storyos_core::DeleteChapterRefusal::ArchivedProject,
-            },
-            ("refused", Some("invalid_chapter_join")) => DeleteChapterSettlementEffect::Refused {
-                reason: storyos_core::DeleteChapterRefusal::InvalidChapterJoin,
-            },
-            _ => return Err(DeleteChapterError::BindingConflict),
+            .map_err(unavailable)?;
+        let (chapter_join, chapter_lifecycle, volume_id) = match target {
+            Some(target) => (
+                ChapterJoin::ExactScope,
+                if target.get::<_, bool>(1) {
+                    ChapterRemovalLifecycle::Removed
+                } else {
+                    ChapterRemovalLifecycle::Active
+                },
+                target.get::<_, String>(0),
+            ),
+            None => (
+                ChapterJoin::Invalid,
+                ChapterRemovalLifecycle::Active,
+                String::new(),
+            ),
         };
-        let authority = match (
-            row.get::<_, Option<String>>(11),
-            row.get::<_, Option<String>>(12),
-            row.get::<_, Option<String>>(13),
-            row.get::<_, Option<String>>(14),
-            row.get::<_, Option<String>>(15),
-        ) {
-            (
-                Some(authoritative_commit_id),
-                Some(author_action_sequence),
-                Some(snapshot_id),
-                Some(prior_manuscript_tree_revision),
-                Some(resulting_manuscript_tree_revision),
-            ) => Some(DeleteChapterAuthority {
-                authoritative_commit_id,
-                author_action_sequence: author_action_sequence
-                    .parse()
-                    .map_err(delete_chapter_parse_error)?,
-                snapshot_id,
-                prior_manuscript_tree_revision: prior_manuscript_tree_revision
-                    .parse()
-                    .map_err(delete_chapter_parse_error)?,
-                resulting_manuscript_tree_revision: resulting_manuscript_tree_revision
-                    .parse()
-                    .map_err(delete_chapter_parse_error)?,
+        let ordered_active_chapter_ids = client
+            .query(
+                "SELECT chapter.manuscript_object_id::text
+                   FROM storyos.manuscript_objects AS chapter
+                   JOIN storyos.manuscript_objects AS volume
+                     ON (volume.owner_user_id, volume.project_id, volume.manuscript_object_id) =
+                        (chapter.owner_user_id, chapter.project_id, chapter.parent_volume_id)
+                    AND volume.object_kind = 'volume'
+                  WHERE chapter.owner_user_id = $1::text::uuid
+                    AND chapter.project_id = $2::text::uuid
+                    AND chapter.object_kind = 'chapter'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                       WHERE removal.owner_user_id = chapter.owner_user_id
+                         AND removal.project_id = chapter.project_id
+                         AND removal.chapter_id = chapter.manuscript_object_id
+                    )
+                  ORDER BY volume.tree_order, chapter.tree_order
+                  FOR UPDATE",
+                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+            )
+            .await
+            .map_err(unavailable)?
+            .iter()
+            .map(|chapter| chapter.get::<_, String>(0))
+            .collect::<Vec<_>>();
+        let classified = classify_delete_chapter(&CoreDeleteChapter {
+            chapter_join,
+            chapter_lifecycle,
+            expected_tree_revision: self.expected_tree_revision,
+            current_tree_revision: project.tree_revision,
+            current_lifecycle: project.lifecycle,
+            chapter_id: self.chapter_id.as_ref().to_owned(),
+            current_chapter_id: project.current_chapter_id.clone(),
+            ordered_active_chapter_ids,
+        });
+        Ok(classified.map_applied(|applied| (applied, ParentVolume(volume_id))))
+    }
+
+    async fn apply(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+        ParentVolume(volume_id): ParentVolume,
+        applied: DeleteChapterApplied,
+    ) -> Result<StructureWrite<ChapterDeleted>, ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        client
+            .execute(
+                "INSERT INTO storyos.chapter_removal_decisions
+                   (owner_user_id, project_id, chapter_removal_decision_id, receipt_id,
+                    chapter_id, volume_id, tree_revision)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                         $5::text::uuid, $6::text::uuid, $7::text::bigint)",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &Uuid::now_v7().to_string(),
+                    &envelope.ids.receipt_id,
+                    &self.chapter_id.as_ref(),
+                    &volume_id,
+                    &applied.tree_revision.to_string(),
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        let (current_chapter, resulting_current) = match &applied.current {
+            DeleteChapterCurrent::PreserveExisting => (
+                CurrentChapterChange::Preserve,
+                project.current_chapter_id.clone(),
+            ),
+            DeleteChapterCurrent::SelectSuccessor { chapter_id } => (
+                CurrentChapterChange::Select(chapter_id.clone()),
+                Some(chapter_id.clone()),
+            ),
+            DeleteChapterCurrent::Empty => (CurrentChapterChange::Clear, None),
+        };
+        Ok(StructureWrite {
+            resulting_tree_revision: applied.tree_revision,
+            identity: StructureIdentity::Chapter(self.chapter_id.as_ref().to_owned()),
+            current_chapter,
+            writer_base: WriterBase::RebindToCurrentChapter,
+            activity: serde_json::json!({
+                "chapter_id": self.chapter_id.as_ref(),
+                "volume_id": volume_id,
+                "current_chapter_id": resulting_current,
+                "prior_current_chapter_id": project.current_chapter_id,
             }),
-            _ => None,
-        };
-        let response_project = match read_command_response_project(
-            row.get::<_, Option<String>>(17).as_deref(),
-            row.get::<_, Option<String>>(18).as_deref(),
-        ) {
-            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
-            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
-                return Err(DeleteChapterError::HistoricalAcknowledgementUnavailable);
-            }
-            Err(()) => {
-                return Err(DeleteChapterError::Unavailable(Box::new(
-                    std::io::Error::other("Delete Chapter acknowledgement evidence is damaged"),
-                )));
-            }
-        };
-        Ok(DeleteChapterSettlement {
-            ids: AuthorCommandAdmissionIds {
-                command_id: row.get(0),
-                author_command_admission_id: row.get(1),
-                receipt_id: row.get(2),
+            effect: ChapterDeleted {
+                volume_id,
+                tree_revision: applied.tree_revision,
+                current: applied.current,
             },
-            receipt_created_at: row.get(3),
-            effect,
-            project_activity_position: row
-                .get::<_, Option<String>>(9)
-                .unwrap_or_else(|| "0".to_owned())
-                .parse::<u64>()
-                .map_err(delete_chapter_parse_error)?,
-            project_activity_event_id: row.get::<_, Option<String>>(10).unwrap_or_default(),
-            authority,
-            response_project,
         })
     }
-    .await;
-    match &result {
-        Ok(_) => client
-            .batch_execute("COMMIT")
-            .await
-            .map_err(delete_chapter_database_error)?,
-        Err(_) => {
-            let _rollback = client.batch_execute("ROLLBACK").await;
-        }
+
+    fn decode(&self, replay: &CommandReplay) -> Result<ChapterDeleted, ReplayFault> {
+        let tree_revision = replay.activity_u64("tree_revision")?;
+        let volume_id = replay.activity_text("volume_id")?;
+        let current = match (
+            replay.activity_optional_text("prior_current_chapter_id"),
+            replay.activity_optional_text("current_chapter_id"),
+        ) {
+            // The resulting Current alone cannot show that a different prior Current stayed.
+            (Some(prior), _) if prior != self.chapter_id.as_ref() => {
+                DeleteChapterCurrent::PreserveExisting
+            }
+            (_, None) => DeleteChapterCurrent::Empty,
+            (_, Some(chapter_id)) => DeleteChapterCurrent::SelectSuccessor { chapter_id },
+        };
+        Ok(ChapterDeleted {
+            volume_id,
+            tree_revision,
+            current,
+        })
     }
-    result
-}
-
-pub(super) fn delete_chapter_challenge_error(
-    error: ProjectCommandChallengeError,
-) -> DeleteChapterError {
-    match error {
-        ProjectCommandChallengeError::BindingConflict => DeleteChapterError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired => DeleteChapterError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
-        | ProjectCommandChallengeError::Unavailable(_) => {
-            DeleteChapterError::Unavailable(Box::new(error))
-        }
-    }
-}
-
-pub(super) fn delete_chapter_database_error(error: tokio_postgres::Error) -> DeleteChapterError {
-    DeleteChapterError::Unavailable(Box::new(error))
-}
-
-pub(super) fn delete_chapter_parse_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> DeleteChapterError {
-    DeleteChapterError::Unavailable(Box::new(error))
 }

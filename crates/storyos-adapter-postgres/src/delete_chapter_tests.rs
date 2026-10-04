@@ -1,17 +1,20 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
-    CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, CreateVolumeSettlementEffect, DeleteChapterCommand,
-    DeleteChapterSettlementEffect, EditorClientBinding, EditorSessionId, GetManuscriptTree,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterDeleted, ChapterId, ChapterNode,
+    CreateChapterInput, CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput,
+    DeleteChapterInput, EditorClientBinding, EditorSessionId, GetManuscriptTree,
     IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
     ProjectCommandChallengeBinding, ProjectId, ProjectScope, UndoLatestAuthorActionCommand,
-    UndoLatestAuthorActionSettlementEffect, UserId, VolumeId, VolumeNode, create_chapter,
-    create_editor_session, create_project, create_volume, delete_chapter, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter, open_project,
-    undo_latest_author_action,
+    UndoLatestAuthorActionSettlementEffect, UserId, VolumeCreated, VolumeId, VolumeNode,
+    create_editor_session, create_project, get_manuscript_tree, issue_create_project_challenge,
+    issue_project_command_challenge, open_chapter, open_project, undo_latest_author_action,
 };
+use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
+
+use crate::structure_command::tests::{
+    CommandCall, applied, command_call, create_chapter, create_volume, delete_chapter,
+};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -109,27 +112,17 @@ fn volume_command(
     binding: ProjectCommandChallengeBinding,
     nonce_digest: &str,
     ids_suffix: &str,
-) -> CreateVolumeCommand {
-    CreateVolumeCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateVolumeInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        VOLUME_BYTES,
+        CreateVolumeInput {
+            title: VOLUME_TITLE.to_owned(),
+            expected_tree_revision: 1,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: VOLUME_BYTES.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: VOLUME_TITLE.to_owned(),
-        expected_tree_revision: 1,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 fn chapter_issue(
@@ -167,29 +160,19 @@ fn chapter_command(
     title: &str,
     expected_tree_revision: u64,
     bytes: &[u8],
-) -> CreateChapterCommand {
-    CreateChapterCommand {
-        placement: storyos_core::CreateChapterPlacement::Append,
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateChapterInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        bytes,
+        CreateChapterInput {
+            placement: storyos_core::CreateChapterPlacement::Append,
+            volume_id: volume_id.to_owned(),
+            title: title.to_owned(),
+            expected_tree_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        volume_id: volume_id.to_owned(),
-        title: title.to_owned(),
-        expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 fn delete_issue(
@@ -226,27 +209,17 @@ fn delete_command(
     chapter_id: &str,
     expected_tree_revision: u64,
     bytes: &[u8],
-) -> DeleteChapterCommand {
-    DeleteChapterCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<DeleteChapterInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        bytes,
+        DeleteChapterInput {
+            chapter_id: ChapterId::new(chapter_id),
+            expected_tree_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        chapter_id: ChapterId::new(chapter_id),
-        expected_tree_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
 }
 
 fn named_issue(
@@ -306,9 +279,7 @@ async fn apply_volume(store: &PostgresProjectReader, scope: &ProjectScope, suffi
     )
     .await
     .unwrap();
-    let CreateVolumeSettlementEffect::Applied { volume_id, .. } = settlement.effect else {
-        panic!("Volume A must apply");
-    };
+    let (VolumeCreated { volume_id, .. }, _) = applied(&settlement);
     volume_id
 }
 
@@ -343,9 +314,7 @@ async fn apply_chapter(
     )
     .await
     .unwrap();
-    let CreateChapterSettlementEffect::Applied { chapter_id, .. } = settlement.effect else {
-        panic!("{title} must apply");
-    };
+    let (ChapterCreated { chapter_id, .. }, _) = applied(&settlement);
     chapter_id
 }
 
@@ -436,18 +405,15 @@ async fn delete_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await
     .unwrap();
+    let (effect, authority) = applied(&first);
     assert_eq!(
-        first.effect,
-        DeleteChapterSettlementEffect::Applied {
+        effect,
+        ChapterDeleted {
             tree_revision: 5,
             volume_id: volume_id.clone(),
             current: storyos_core::DeleteChapterCurrent::PreserveExisting,
         }
     );
-    let authority = first
-        .authority
-        .clone()
-        .expect("Applied Delete Chapter must write Structural Authority Settlement");
     assert_eq!(authority.prior_manuscript_tree_revision, 4);
     assert_eq!(authority.resulting_manuscript_tree_revision, 5);
     assert_eq!(authority.author_action_sequence, 4);
@@ -471,9 +437,12 @@ async fn delete_chapter_is_atomic_replayable_and_scope_safe() {
     };
     assert_eq!(tree.tree_revision, 5);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
+    let TransitionOutcome::Applied(first_applied) = &first.outcome else {
+        panic!("Delete Chapter must apply");
+    };
     assert_eq!(
         tree.snapshot.project_activity_position,
-        first.project_activity_position
+        first_applied.project_activity_position
     );
     assert_eq!(
         tree.volumes,
@@ -522,12 +491,9 @@ async fn delete_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await;
     assert_eq!(
-        already.effect,
-        DeleteChapterSettlementEffect::NoEffect {
-            reason: storyos_core::DeleteChapterNoEffect::AlreadyRemoved,
-        }
+        already.outcome,
+        TransitionOutcome::NoEffect(storyos_core::DeleteChapterNoEffect::AlreadyRemoved)
     );
-    assert_eq!(already.authority, None);
 
     let stale = apply_delete(
         &store,
@@ -539,12 +505,9 @@ async fn delete_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await;
     assert_eq!(
-        stale.effect,
-        DeleteChapterSettlementEffect::Conflicted {
-            reason: storyos_core::DeleteChapterConflict::StaleTreeRevision,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(storyos_core::DeleteChapterConflict::StaleTreeRevision)
     );
-    assert_eq!(stale.authority, None);
 
     let invalid = apply_delete(
         &store,
@@ -556,12 +519,9 @@ async fn delete_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await;
     assert_eq!(
-        invalid.effect,
-        DeleteChapterSettlementEffect::Refused {
-            reason: storyos_core::DeleteChapterRefusal::InvalidChapterJoin,
-        }
+        invalid.outcome,
+        TransitionOutcome::Refused(storyos_core::DeleteChapterRefusal::InvalidChapterJoin)
     );
-    assert_eq!(invalid.authority, None);
 
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
@@ -641,12 +601,9 @@ async fn delete_chapter_is_atomic_replayable_and_scope_safe() {
     )
     .await;
     assert_eq!(
-        archived.effect,
-        DeleteChapterSettlementEffect::Refused {
-            reason: storyos_core::DeleteChapterRefusal::ArchivedProject,
-        }
+        archived.outcome,
+        TransitionOutcome::Refused(storyos_core::DeleteChapterRefusal::ArchivedProject)
     );
-    assert_eq!(archived.authority, None);
 }
 
 #[tokio::test]
@@ -691,19 +648,13 @@ async fn author_undo_compensates_delete_chapter_and_restores_prior_chapter_ident
         br#"{"expected_tree_revision":"4"}"#,
     )
     .await;
-    let DeleteChapterSettlementEffect::Applied { current, .. } = deleted.effect.clone() else {
-        panic!("Delete Chapter A must apply");
-    };
+    let (ChapterDeleted { current, .. }, authority) = applied(&deleted);
     assert_eq!(
         current,
         storyos_core::DeleteChapterCurrent::SelectSuccessor {
             chapter_id: chapter_b.clone(),
         }
     );
-    let authority = deleted
-        .authority
-        .clone()
-        .expect("Applied Delete Chapter must write authority");
     let session_issue = named_issue(
         &scope,
         "e43a",
