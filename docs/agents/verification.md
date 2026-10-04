@@ -5,10 +5,10 @@ The main flow comes first; reference sections follow it.
 
 ## Daily loop
 
-1. At task start, run `make verify-status BASE=origin/main` and follow its `nextAction`.
-2. After each product or test edit, run the smallest check that can fail on that edit:
-   `make verify-targeted CHECK=<check>`, or `make verify-changed BASE=<base>` for the
-   whole selected scope. Set `BASE` to the actual comparison commit.
+1. At task start, run `make verify-status BASE=origin/main`. Then do its `nextAction`.
+2. After each product or test edit, run the smallest check that can fail on that edit.
+   For one check, use `make verify-targeted CHECK=<check>`. For the full selected scope,
+   use `make verify-changed BASE=<base>`. Set `BASE` to the actual comparison commit.
 3. After a test lifecycle change, run `make verify-policy`. A test lifecycle change
    adds, renames, or deletes a test, or changes the runner or the
    [input policy](verification-policy.json).
@@ -23,15 +23,15 @@ current PASS. A pending check is not a PASS.
 ## Candidate review and admission
 
 The implementation session is the executor. It opens the PR and runs the steps
-below. It does not merge. A coordinator session checks the evidence and merges the
-PR with an ordinary merge commit.
+below. It does not merge. A coordinator session examines the evidence. Then it merges
+the PR with an ordinary merge commit.
 
 1. Open the PR and wait for current `verify` success. On the clean candidate, run `python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
 2. Start two independent read-only reviews, one for each axis. Each review runs in
    a new context of an agent tool that is different from the implementer's tool.
    Give each reviewer the printed request and the scoped diff `git diff <base>...HEAD`.
-   The Standards reviewer checks the diff against `AGENTS.md`, `GLOSSARY.md`, and
-   ASD-STE100. The Spec reviewer checks the diff against the ticket or task contract.
+   The Standards reviewer compares the diff with `AGENTS.md`, `GLOSSARY.md`, and
+   ASD-STE100. The Spec reviewer compares the diff with the ticket or task contract.
    Each reviewer returns `PASS` or `FAIL` with `file:line` evidence.
    - Current example when Claude Code implements: the Codex plugin, with one new
      thread for each axis and without `--write`:
@@ -39,7 +39,7 @@ PR with an ordinary merge commit.
    - When Codex implements, use a different agent tool or a separate Claude Code
      session for each axis.
 3. Post each verdict as a PR comment. If a verdict is `FAIL`, fix the findings.
-   Commit and push the fix. Then do steps 1 and 2 again. Continue until both axes
+   Commit the fix. Push the fix. Then do steps 1 and 2 again. Continue until both axes
    PASS.
 4. Write one review record for each axis as JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context` (for example `codex-standards-pr<pr>` or `codex-spec-pr<pr>`), `result` (`PASS` or `FAIL`), and `evidence`. The executor context and the two reviewer contexts must differ; IDs assert consistency, not authenticated identity.
 5. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
