@@ -1,21 +1,28 @@
 # Browser source checkpoint
 
-Source review is partial: 19 runtime cases in 15 test files. No mutation samples selected.
+Source review is partial: 56 runtime cases in 22 test files. No mutation samples selected.
 
 | Reviewed file | Cases | Verdict counts |
 |---|---|---|
 | apps/web/test/browser-source/accept-block-proposal.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/acceptance-journal.integration.test.ts | 1 | {'MERGE': 1} |
+| apps/web/test/browser-source/activity-reorder.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/browser-source/activity-resync.integration.test.ts | 17 | {'DELETE': 3, 'KEEP': 14} |
+| apps/web/test/browser-source/activity-stream-consume.integration.test.ts | 4 | {'KEEP': 3, 'MERGE': 1} |
 | apps/web/test/browser-source/archive-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/author-edit-outcome.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/browser-source/author-edit-rate-limit.integration.test.ts | 2 | {'KEEP': 2} |
+| apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts | 7 | {'KEEP': 6, 'MERGE': 1} |
 | apps/web/test/browser-source/browser-command-foundation.test.ts | 2 | {'DELETE': 1, 'MOVE': 1} |
 | apps/web/test/browser-source/chapter-navigation.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/create-historical-acknowledgement.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/browser-source/current-chapter-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/delete-historical-acknowledgement.integration.test.ts | 2 | {'KEEP': 2} |
+| apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts | 4 | {'DELETE': 1, 'KEEP': 3} |
 | apps/web/test/browser-source/list-open.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/project-entry.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/readable-export-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/browser-source/refused-edit-discard.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/browser-source/rename-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/undo-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/update-historical-acknowledgement.integration.test.ts | 2 | {'KEEP': 2} |
@@ -23,12 +30,6 @@ Source review is partial: 19 runtime cases in 15 test files. No mutation samples
 ## Pending files
 
 - apps/web/test/browser-source/acknowledgement-loss.integration.test.ts
-- apps/web/test/browser-source/activity-reorder.integration.test.ts
-- apps/web/test/browser-source/activity-resync.integration.test.ts
-- apps/web/test/browser-source/activity-stream-consume.integration.test.ts
-- apps/web/test/browser-source/author-edit-rate-limit.integration.test.ts
-- apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts
-- apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts
 - apps/web/test/browser-source/editor-session.integration.test.ts
 - apps/web/test/browser-source/journal-gc-fenced.integration.test.ts
 - apps/web/test/browser-source/journal-gc.integration.test.ts
@@ -40,7 +41,6 @@ Source review is partial: 19 runtime cases in 15 test files. No mutation samples
 - apps/web/test/browser-source/local-recovery-panel.integration.test.ts
 - apps/web/test/browser-source/manual-input.integration.test.ts
 - apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts
-- apps/web/test/browser-source/refused-edit-discard.integration.test.ts
 - apps/web/test/browser-source/reload-recovery.integration.test.ts
 - apps/web/test/browser-source/scenario.ts
 - apps/web/test/browser-source/takeover-late-result.integration.test.ts
@@ -57,3 +57,18 @@ Source review is partial: 19 runtime cases in 15 test files. No mutation samples
 - BS016 MOVE keeps malformed production-command rejection at the pure Node parser layer; proposed destination: apps/web/test/node-contract/browser-command-contract.test.ts. No destination was created. The privileged browser-command dispatcher invokes this parser; valid journeys do not cover malformed inputs.
 - BS017-BS019 keep stale library-title replacement, pending Chapter text across inspection/query failure, and invalid URL entry before requests. Packaged library/navigation use matching live titles and empty Chapters. Ordinary heading/query-order/credential checks can be trimmed while preserving unique assertions.
 - Browser declaration and citation starts checked against fixed source. Current totals: 16 KEEP, one DELETE, one MERGE, one MOVE; 40 immediate candidate lines. No runtime test, product edit, source mutation or database command occurred.
+
+## Challenge waits, Activity, Takeover and Draft lifecycle
+
+- BS020-BS056 add 37 runtime cases across seven files: Author Edit rate-limit two, Author Undo rate-limit seven, Activity reorder one, Activity resync 17, Activity SSE consumption four, Draft Undo lifetime four, and Discard two. JSON expands all test.each parameters; internal loops remain in their owning runtime test.
+- Author Edit and Undo use the same ChallengeAdmissionWait helper but own separate persistence, projection and cancellation consumers. Keep consumer-level saving/retry-key and close behavior. MERGE repeated Ctrl/Cmd+Z exclusion into the successful Undo wait case before its Challenge release and during its retry wait.
+- Keep the three Undo timing cuts: new input during an existing timer; successful Challenge returning after abandonment; and an already sent Undo returning after new input. A late 429 after workspace replacement must schedule no new timer or saving state and must release the keypress latch.
+- Keep Activity gap holding/duplicate convergence separately from SSE cursor consumption. DELETE activity-resync:48: the retained consumer invokes the same helper with the same generation/position transition and requires unchanged Journal plus correct resumed ingest. Its no-Activity-request assertion describes the helper step, not a separate public outcome.
+- Takeover valid, valid_other_session and valid_activity_advance differ: same-Session versus retained-other-Session binding reconstruction, and a canonical/Chapter position later than the writer base. The latter returns early after ingest/reload checks and does not prove the full old-evidence/new-input sequence of the first two.
+- DELETE position_before_base and position_invalid. Both also disagree with the Chapter position, so they can still return read-only if the intended lower-bound/overflow guard is removed. position_after_chapter owns that observed mismatch. A discriminating lower-bound test would set both canonical and Chapter positions below base; this input is currently absent. No overflow-only kill is claimed.
+- Keep independent Session scope, locator scope, requested Session identity, canonical generation, retained binding, reused base, payload digest, returned Snapshot identity, expiry and second-read drift inputs. The expiry check runs during staged atomic ingest installation. All compare unchanged stored data after refusal.
+- MERGE the Activity foreign-locator scenario into stream-consume:105 with a specific Canonical Snapshot invalid assertion and complete downstream fixture responses. Its existing broad rejects.toThrow can pass on an unconfigured Snapshot request after the intended scope guard is removed. This is an oracle defect, not proved product isolation.
+- Keep unknown Activity rejection and unchanged Last-Event-ID. The positive Assistance/Run setup overlaps the packaged input journey, but the latter never emits an unknown kind. This source test proves another edit can be persisted, not that an actual rendered control remains enabled.
+- DELETE the Draft Undo unmount parameter in favor of workspace replacement: both invalidate the same lifetime effect while a source GET is held; replacement additionally protects a live successor. Ordinary Undo's unmount parameter separately owns timer cleanup. Keep Draft Undo schema drift and stored secret contamination because they reach distinct Journal phases/parsers.
+- Discard tests retain nonce-free freeze before Challenge, digest-time abandonment, exact public-event reconciliation, monotone settled observation despite stale unresolved observations, and Receipt-backed refusal/conflict settlement. Database Discard tests cannot observe these browser Journal decisions.
+- Current browser-source total: 56 cases / 22 files; 47 KEEP, five DELETE, three MERGE, one MOVE; 188 immediate candidate lines. All declaration lines and parameter multiplicities checked. No runtime execution, mutation, product/test/generated changes or active process.

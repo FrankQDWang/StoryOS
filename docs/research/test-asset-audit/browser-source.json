@@ -210,5 +210,503 @@
     "evidence": "Entry must use the URL Project rather than stale document metadata, and malformed/extra-segment Project URLs must render a blocked state without any request or stale page content. The Node Project opener receives an already selected ID; library opening has a valid ID and no invalid URL. Keep these entry/DOM cases; the normal query order/credentials and protected-home wording repeat other owners.",
     "coverage": "apps/web/test/node-contract/project-open.test.ts:31; apps/web/test/browser-source/list-open.integration.test.ts:11",
     "remove": null
+  },
+  {
+    "path": "apps/web/test/browser-source/author-edit-rate-limit.integration.test.ts",
+    "line": 113,
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A 429 Challenge must leave the Author Edit saving without failure, then submit the same frozen group/key after the seven-second scheduled delay and reach the exact saved projection. Author Undo uses the shared wait helper but a different consumer, group creation and projection installation path; real server rate tests cannot prove browser retention/retry identity.",
+    "coverage": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:143; apps/web/test/node-postgresql/project-http.integration.test.ts:938",
+    "remove": null,
+    "test": "keeps an Author Edit saving through a Challenge rate limit and retries the same group",
+    "id": "BS020"
+  },
+  {
+    "path": "apps/web/test/browser-source/author-edit-rate-limit.integration.test.ts",
+    "line": 132,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Closing the Author Edit idle controller during Retry-After must clear its timer, resolve idle and issue no second Challenge. Undo teardown invokes a separate controller/cancel path; successful delayed submission cannot detect a stuck idle promise or retry after this controller closes.",
+    "coverage": "apps/web/test/browser-source/author-edit-rate-limit.integration.test.ts:113; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [unmount]",
+    "remove": null,
+    "test": "ends a Challenge rate-limit wait when the editor closes",
+    "id": "BS021"
+  },
+  {
+    "path": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts",
+    "line": 143,
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Undo rate waiting must keep the mounted editor editable with saving state, make no Undo POST before retry, then send exactly one Undo with the same Challenge key and return to saved. Author Edit retries operate on a submission group rather than Undo's frontier and keyboard lifecycle. Receive duplicate-shortcut assertions before and during the wait from :164.",
+    "coverage": "apps/web/test/browser-source/author-edit-rate-limit.integration.test.ts:113; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:164",
+    "remove": null,
+    "test": "keeps the editor editable while an Author Undo waits for Challenge admission and retries the same Undo",
+    "id": "BS022"
+  },
+  {
+    "path": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts",
+    "line": 164,
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Transfer the second Ctrl/Cmd+Z while the first Challenge is held and again during Retry-After into the successful Undo rate-limit case. Require one Challenge and one retry timer before releasing its existing successful path. This is the same fixture/Undo consumer and can verify exclusion plus eventual completion together; do not remove the repeated-key assertions before transfer.",
+    "coverage": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:143",
+    "remove": null,
+    "test": "ignores another Ctrl/Cmd+Z while an Author Undo is in progress",
+    "id": "BS023"
+  },
+  {
+    "path": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts",
+    "line": 183,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "New trusted input during an Undo Retry-After wait must abandon that Undo, clear the timer and send no Undo request. Unmount uses effect cleanup rather than the input callback; late successful Challenge coverage starts before a timer exists and cannot prove cancellation of an already scheduled wait.",
+    "coverage": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [unmount]; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:225",
+    "remove": null,
+    "case": {
+      "value": "input",
+      "source_line": 183
+    },
+    "test": "abandons an Author Undo Challenge wait at the editor input boundary",
+    "id": "BS024"
+  },
+  {
+    "path": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts",
+    "line": 183,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Unmount during Undo Retry-After must clear its timer and prevent an Undo request with no failure callback. Input cancellation uses a different trigger; Draft Undo teardown holds a source GET rather than a live Challenge timer and does not measure this scheduled-wait cleanup.",
+    "coverage": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [input]; apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts:14 [replace]",
+    "remove": null,
+    "case": {
+      "value": "unmount",
+      "source_line": 183
+    },
+    "test": "abandons an Author Undo Challenge wait at the editor unmount boundary",
+    "id": "BS025"
+  },
+  {
+    "path": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts",
+    "line": 200,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "If the Undo POST is already in flight, new text must survive the delayed successful Undo response, Session refresh and queued Journal work. Cancelling a pre-admission wait sends no Undo POST, so it cannot detect late base installation clobbering new input.",
+    "coverage": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [input]; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:225",
+    "remove": null,
+    "test": "keeps new input when the author types while the retried Author Undo request is in flight",
+    "id": "BS026"
+  },
+  {
+    "path": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts",
+    "line": 225,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Composition that abandons Undo while a successful Challenge response is held must prevent the subsequent Undo POST after response release. Existing Retry-After cancellation occurs after 429; the delayed-Undo-response case already submitted the command. This specifically checks currency after Challenge acquisition and before command submission.",
+    "coverage": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [input]; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:200",
+    "remove": null,
+    "test": "does not send an abandoned Author Undo when its Challenge request completes after new input",
+    "id": "BS027"
+  },
+  {
+    "path": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts",
+    "line": 243,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Replacing the workspace while a Challenge is in flight must ignore its later 429 without scheduling a wait or publishing saving, and immediately accept the next Undo shortcut. Existing scheduled-wait cancellation cannot prove the post-cancel error continuation or release of the in-progress latch.",
+    "coverage": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [unmount]; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:225",
+    "remove": null,
+    "test": "starts no Retry-After wait for an abandoned Author Undo and accepts the next Ctrl/Cmd+Z at once",
+    "id": "BS028"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-reorder.integration.test.ts",
+    "line": 28,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Out-of-order sequence 2 must be held until sequence 1 arrives; repeated/reversed duplicate frames must converge to one ordered durable event set without changing pending prose. SSE consumption tests return ordered single frames and never force the held-gap buffer. The fresh in-order comparison confirms equivalent final ingest, not a measured performance property.",
+    "coverage": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts:105; apps/web/test/node-postgresql/activity-stream-cross-table-http.integration.test.ts:168",
+    "remove": null,
+    "test": "converges duplicate and reordered Activity frames to one durable ingest",
+    "id": "BS029"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 48,
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The retained SSE consumer drives the same resyncProjectActivityFromSnapshot implementation with generation 1/position 1, a generation 2/position 5 Snapshot and a sequence-6 event, then requires the same durable ingest and unchanged full Journal. The direct helper's no-Activity-request count describes its internal step; the public consumer intentionally resumes Activity afterward. Unchanged Journal retains the same pending projection inputs.",
+    "coverage": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts:105",
+    "remove": [
+      48,
+      195
+    ],
+    "test": "preserves local payload and resumes after a new Snapshot generation",
+    "id": "BS030"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A same-Session Takeover winner with a higher generation must install a new partition, fence the old one, preserve all old journal evidence and reject writes through the old workspace. Fresh input must use the new base with a continuing local sequence and survive reload; generation downgrade must refuse without writes. Other-Session recovery reconstructs older bindings through a different branch.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid_other_session]",
+    "remove": null,
+    "case": {
+      "value": "valid",
+      "source_line": 198
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: valid",
+    "id": "BS031"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A winning different Editor Session must fence the older Session without rebinding its retained client binding/profile/base. Same-Session recovery computes the old expected partition from the new Session instead, so it cannot catch use of the winner's binding for a different Session. New input, reload and generation downgrade remain checked.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid]",
+    "remove": null,
+    "case": {
+      "value": "valid_other_session",
+      "source_line": 198
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: valid_other_session",
+    "id": "BS032"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A canonical query/Chapter position later than the winner's base must be accepted and initialize ingest at that later position, then reload the same partition. The two full winner journeys set canonical and base position equal, so they cannot detect an incorrect equality requirement. This early-return variant does not run their full old-evidence/new-input checks.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "valid_activity_advance",
+      "source_line": 198
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: valid_activity_advance",
+    "id": "BS033"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A resumed Session claiming another Project Scope must not install a writable partition or alter any stored row. Valid winner tests do not inject a mismatched response scope; tree-locator scope is a later, separate response.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "scope",
+      "source_line": 198
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: scope",
+    "id": "BS034"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A tree locator for another Project must prevent winner installation while preserving every old journal store. Session-scope and returned-Snapshot-ID faults affect other responses; ordinary Activity resync has a separate locator guard.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "locator_scope",
+      "source_line": 198
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: locator_scope",
+    "id": "BS035"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A resumed Session response with an identity different from the requested active Session must stay read-only without local writes. The valid other-Session case deliberately updates the active locator to match its response, so it does not exercise identity substitution.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "session",
+      "source_line": 198
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: session",
+    "id": "BS036"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A noncanonical writer generation '03' must not be installed as a new writer partition even though BigInt can parse it. Valid greater/lower generations contain canonical decimal strings; malformed canonical Snapshot position is another field and has an additional masking mismatch.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "generation",
+      "source_line": 199
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: generation",
+    "id": "BS037"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Changed client Session binding for the same retained Editor Session must not relabel old journal evidence. Both valid winner cases keep the appropriate immutable old binding; generic transport scope refusal cannot prove retained-partition comparison.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "binding",
+      "source_line": 199
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: binding",
+    "id": "BS038"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A higher writer generation must not reuse the old journal's base Snapshot identity while claiming a later activity position. Valid winner cases mint a new base ID; scope/digest checks permit this internally consistent response and cannot replace the retained-base comparison.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "reused_base",
+      "source_line": 199
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: reused_base",
+    "id": "BS039"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A Session base with a false materialized-payload digest must not enter a writable workspace or change stored rows. The Snapshot locator and identity remain valid here; those faults do not exercise content verification.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "digest",
+      "source_line": 199
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: digest",
+    "id": "BS040"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A getSnapshot result with another Snapshot identity than its locator must not install the winner even when the Project and positions match. Locator-scope coverage changes another response; position mismatch keeps the requested identity.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "snapshot",
+      "source_line": 199
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: snapshot",
+    "id": "BS041"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "DELETE",
+    "reason": "D3",
+    "evidence": "Canonical position 4 is below base 5 but also differs from Chapter position 5. The equality-to-Chapter guard still rejects this input if the intended lower-bound guard is removed. The retained position_after_chapter case proves the same observed mismatch; this is not independent proof of the lower bound. A discriminating lower-bound case would need canonical and Chapter both below the base.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "position_before_base",
+      "source_line": 199
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: position_before_base",
+    "id": "BS042"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A canonical Snapshot at position 6 while the loaded Chapter is at 5 must not install a mixed-generation writable view. Valid activity advance sets both to 6; reused base changes identity instead. This is the retained owner for mismatched canonical/Chapter positions.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "position_after_chapter",
+      "source_line": 200
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: position_after_chapter",
+    "id": "BS043"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "DELETE",
+    "reason": "D3",
+    "evidence": "The oversized canonical position also differs from the Chapter position. Removing bounded-u64 validation can still yield read-only recovery at that mismatch, so this oracle does not isolate overflow refusal. The retained position_after_chapter case owns the observable mismatch. Do not claim it kills a mutation confined to the numeric validator.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "position_invalid",
+      "source_line": 200
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: position_invalid",
+    "id": "BS044"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An expired canonical Snapshot must prevent the atomic ingest/partition installation and leave all old stores unchanged. Identity and position are otherwise correct, so mismatch tests do not cover the expiry check in stageProjectActivitySnapshot.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "expired",
+      "source_line": 200
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: expired",
+    "id": "BS045"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+    "line": 197,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "If the Session changes generation/base between the first read and the post-Snapshot recheck, winner installation must refuse with no local writes. All other invalid inputs are stable across both reads and cannot detect removal of that recheck.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:197 [valid; position_after_chapter]",
+    "remove": null,
+    "case": {
+      "value": "drift",
+      "source_line": 200
+    },
+    "test": "resumes a Takeover winner without rebinding old journal evidence: drift",
+    "id": "BS046"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts",
+    "line": 105,
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "SSE consumption must persist Last-Event-ID, return idle without losing it, then replace an expired cursor using an owned Snapshot and resume the new generation without sending the old cursor. Exact request sequence and full unchanged Journal distinguish it from direct resync helper calls; HTTP stream production never runs this browser cursor store. Receive the discriminating foreign-locator check from :277.",
+    "coverage": "apps/web/test/browser-source/activity-resync.integration.test.ts:48; apps/web/test/browser-source/activity-stream-consume.integration.test.ts:277",
+    "remove": null,
+    "test": "resumes a retained cursor and resynchronizes from an authorized Snapshot after 409",
+    "id": "BS047"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts",
+    "line": 228,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An expired cursor whose authorized Snapshot cannot be fetched must return unavailable/resource_unavailable and preserve prior ingest. A successful resync has a real Snapshot and cannot detect treating recovery failure as idle success or advancing the cursor without evidence.",
+    "coverage": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts:105",
+    "remove": null,
+    "test": "does not treat an unrecoverable expired cursor as an empty successful replay",
+    "id": "BS048"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts",
+    "line": 277,
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move the invalid locator-scope scenario into the public resync case, with an exact Canonical Snapshot invalid rejection and a fetch setup that would allow later reads if the scope guard were removed. Currently any thrown error passes: removing the scope check reaches an unconfigured Snapshot request that also throws, leaving ingest unchanged. Preserve scope rejection with a discriminating oracle before removing this fixture.",
+    "coverage": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts:105; apps/web/test/browser-source/activity-resync.integration.test.ts:197 [locator_scope]",
+    "remove": null,
+    "test": "refuses a Snapshot whose Scope does not match the Editor Session",
+    "id": "BS049"
+  },
+  {
+    "path": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts",
+    "line": 322,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An unknown future Activity kind must reject twice without advancing the retained cursor or stored events, while supported Assistance/Run events remain ingested and manual input remains possible. Real Activity emits only known kinds; reordered known frames cannot catch skipping an unknown event and losing its replay position. The test persists a new edit but does not exercise a rendered editable control.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts:188; apps/web/test/browser-source/activity-reorder.integration.test.ts:28",
+    "remove": null,
+    "test": "ingests assistance and Run Activity without disabling manual writing or skipping unknown Events",
+    "id": "BS050"
+  },
+  {
+    "path": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts",
+    "line": 14,
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The replacement-workspace variant holds the same Draft source GET and requires the same absence of Draft Undo records, network mutations and stale callbacks after release. Both invalidate the same ManuscriptEditor lifetime effect; replacement also preserves a live successor workspace. Ordinary Undo's unmount-during-wait case separately observes timer cleanup. Delete only this parameter; no immediate whole-line saving.",
+    "coverage": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts:14 [replace]; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [unmount]; apps/web/test/browser-source/refused-edit-discard.integration.test.ts:13",
+    "remove": null,
+    "case": {
+      "value": "unmount",
+      "source_line": 14
+    },
+    "test": "Draft Undo respects the editor unmount boundary",
+    "id": "BS051"
+  },
+  {
+    "path": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts",
+    "line": 14,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Replacing the live workspace during the held Draft source GET must prevent freezing/submitting old Draft Undo and prevent callbacks or pending-state changes in the successor. A missing workspace dependency/lifetime invalidation can pass a pure unmount case because the editor is destroyed there. Ordinary Undo rate cases do not reach Draft Undo journal freezing.",
+    "coverage": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts:14 [schema]; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [unmount]; apps/web/test/browser-source/refused-edit-discard.integration.test.ts:13",
+    "remove": null,
+    "case": {
+      "value": "replace",
+      "source_line": 14
+    },
+    "test": "Draft Undo respects the editor replace boundary",
+    "id": "BS052"
+  },
+  {
+    "path": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts",
+    "line": 14,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An unresolved stored Draft Undo record contaminated with an anti-forgery nonce must fail reread without another mutation request or rewriting the record. Discard corruption uses another journal record parser; lifecycle abandonment does not read a corrupted replay record.",
+    "coverage": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts:14 [replace]; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [unmount]; apps/web/test/browser-source/refused-edit-discard.integration.test.ts:13",
+    "remove": null,
+    "case": {
+      "value": "secret",
+      "source_line": 14
+    },
+    "test": "Draft Undo respects the editor secret boundary",
+    "id": "BS053"
+  },
+  {
+    "path": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts",
+    "line": 14,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Changing the Journal schema while Draft source GET is held must prevent freezing any Draft Undo record and send no mutation, with one failure callback. Workspace replacement changes in-memory ownership; secret-field replay fails after a record already exists. Neither exercises schema drift before the freeze transaction.",
+    "coverage": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts:14 [replace]; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:183 [unmount]; apps/web/test/browser-source/refused-edit-discard.integration.test.ts:13",
+    "remove": null,
+    "case": {
+      "value": "schema",
+      "source_line": 14
+    },
+    "test": "Draft Undo respects the editor schema boundary",
+    "id": "BS054"
+  },
+  {
+    "path": "apps/web/test/browser-source/refused-edit-discard.integration.test.ts",
+    "line": 13,
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Discard must freeze its complete nonce-free Journal record before Challenge admission, abandon a paused digest when the view changes, and keep response loss unresolved until the exact matching closure event arrives. Repeated stale unresolved observations must not regress a settled record, changed partition must prevent another send, and stored secret contamination must refuse reading. HTTP Discard owns durable database settlement, not IndexedDB freeze/reconciliation or secret-free replay.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1499; apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts:14 [secret]",
+    "remove": null,
+    "test": "persists the complete immutable explicit Discard before Admission and only reconciles its exact public event",
+    "id": "BS055"
+  },
+  {
+    "path": "apps/web/test/browser-source/refused-edit-discard.integration.test.ts",
+    "line": 90,
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Receipt-backed Refused and Conflicted Discard results must both settle the exact Journal decision and clear needs_attention despite the Draft remaining open. The response-loss case reconciles a closed event; treating every open Draft as unresolved would pass that positive closure scenario but fail these terminal refusal/conflict outcomes.",
+    "coverage": "apps/web/test/browser-source/refused-edit-discard.integration.test.ts:13; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1499",
+    "remove": null,
+    "test": "keeps exact Receipt-backed refusal and conflict distinct from an infrastructure outcome",
+    "id": "BS056"
   }
 ]
