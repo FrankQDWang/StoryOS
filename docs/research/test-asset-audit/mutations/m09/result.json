@@ -108,5 +108,7 @@
       "seconds": 14.841,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m09/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "First Chapter creation returns 503 when Current Chapter is not selected."
 }

@@ -131,5 +131,7 @@
       "seconds": 7.862,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m04/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Invalid Volume join becomes conflicted instead of refused at HTTP:565. Optional removed-test probe selected zero tests and is excluded. Corrected original-test probe now passes clean/restored and fails the same mutant."
 }

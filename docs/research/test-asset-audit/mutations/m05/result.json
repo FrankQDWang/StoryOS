@@ -108,5 +108,7 @@
       "seconds": 10.76,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m05/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Damaged replay evidence returns historical 409 instead of service failure at retained Create Volume:812."
 }

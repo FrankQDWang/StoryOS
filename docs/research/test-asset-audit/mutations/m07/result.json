@@ -81,5 +81,7 @@
       "seconds": 13.812,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m07/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Real browser full Block comparison sees paragraph instead of heading at :252."
 }

@@ -97,5 +97,7 @@
       "seconds": 11.424,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m14/restored.log"
     }
-  ]
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Generated Takeover generation type changes to integer; registry test still passes and original field test fails. CT010-CT012 now require schema-consumer assertion transfer before removal."
 }

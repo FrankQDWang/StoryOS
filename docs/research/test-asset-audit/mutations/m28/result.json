@@ -131,5 +131,7 @@
       "seconds": 10.978,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m28/restored.log"
     }
-  ]
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Internal Archive command-kind unit fails; the real Server always supplies the correct literal and HTTP passes."
 }

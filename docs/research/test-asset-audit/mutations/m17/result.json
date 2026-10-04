@@ -131,5 +131,7 @@
       "seconds": 14.303,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m17/restored.log"
     }
-  ]
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Core invalid-title unit fails; public Chapter creation still passes because title rejection occurs before Core."
 }

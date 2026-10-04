@@ -108,5 +108,7 @@
       "seconds": 14.547,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m18/restored.log"
     }
-  ]
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Busy Core classification is bypassed, but the live-Conversation UNIQUE index and same-transaction rollback preserve ConversationBusy at HTTP. This is reachable redundant enforcement, not D5 unreachability; CO134 changes to D6. A supplemental original-unit probe passes clean/restored and fails with Admitted instead of ConversationBusy; this does not change the HTTP MISS."
 }

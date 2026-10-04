@@ -108,5 +108,7 @@
       "seconds": 11.438,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m24/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Frozen replay full response has a changed Project title at delete-chapter:686."
 }

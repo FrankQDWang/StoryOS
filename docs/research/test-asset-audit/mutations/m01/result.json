@@ -108,5 +108,7 @@
       "seconds": 8.787,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m01/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Active Project export was refused as archived (422); one selected HTTP case failed, clean/restored cases passed. Earlier manifest-binding startup failure retained separately and excluded."
 }

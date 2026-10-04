@@ -108,5 +108,7 @@
       "seconds": 9.133,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m26/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Nonempty Volume removal returns authoritative_applied instead of refused at delete-volume:284."
 }

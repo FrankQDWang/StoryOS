@@ -131,5 +131,7 @@
       "seconds": 7.423,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m03/restored.log"
     }
-  ]
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Named covering test passes the mutant; original proposed-removal test fails. Clean and restored covering tests pass. The isolated guard is not equivalent coverage; D5 deletion depends on current producer reachability, not redundancy."
 }

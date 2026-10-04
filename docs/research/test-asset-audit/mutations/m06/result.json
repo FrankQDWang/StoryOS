@@ -131,5 +131,7 @@
       "seconds": 6.235,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m06/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Required search watermark is no longer rejected at HTTP:122; original Application test also fails."
 }

@@ -108,5 +108,7 @@
       "seconds": 18.429,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m11/restored.log"
     }
-  ]
+  ],
+  "manual_result": "miss",
+  "manual_finding": "In-progress HTTP download is rejected before Core packaging. Missing-root Core guard remains unexecuted; corrected CO124 from D1 to D5. Separate original Core probe passes clean/restored and fails the same empty-root mutant; primary coverage remains MISS."
 }

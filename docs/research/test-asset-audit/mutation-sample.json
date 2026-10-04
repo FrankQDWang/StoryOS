@@ -195,11 +195,12 @@
       "test": "conflicts_a_changed_target_head",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166",
-      "status": "pending",
+      "status": "kill",
       "previous_attempts": [
         "mutations/m16-attempt1/result.json"
       ],
-      "finding": "Attempt1 blocked by disposable-database activation failure before test or mutation. Immediate restored covering run passed one case. Retry the same sample."
+      "finding": "Bypassing changed-Head classification skips the condition write: HTTP:286 fails its expected injected-write-fault rejection. The selected changed_head case passes clean/restored. Attempt1 database activation failure occurred before mutation and is excluded.",
+      "evidence": "mutations/m16-retry2/result.json"
     },
     {
       "sample": 17,
@@ -223,7 +224,8 @@
       "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:833",
       "status": "miss",
       "evidence": "mutations/m18/result.json",
-      "finding": "Busy Core classification is bypassed, but the live-Conversation UNIQUE index and same-transaction rollback preserve ConversationBusy at HTTP. This is reachable redundant enforcement, not D5 unreachability; CO134 changes to D6."
+      "finding": "Busy Core classification is bypassed, but the live-Conversation UNIQUE index and same-transaction rollback preserve ConversationBusy at HTTP. This is reachable redundant enforcement, not D5 unreachability; CO134 changes to D6. A supplemental original-unit probe passes clean/restored and fails with Admitted instead of ConversationBusy; this does not change the HTTP MISS.",
+      "supplemental_evidence": "mutations/m18-unit-proof/result.json"
     },
     {
       "sample": 19,

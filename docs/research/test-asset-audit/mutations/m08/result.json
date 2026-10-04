@@ -108,5 +108,7 @@
       "seconds": 16.25,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m08/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Skipping confirmed-expiry rebuild reuses a Model Attempt role; Worker hits model_attempts_one_role and cannot complete the expected recovery."
 }

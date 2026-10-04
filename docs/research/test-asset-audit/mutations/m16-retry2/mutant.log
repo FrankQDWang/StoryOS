@@ -1,0 +1,33 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/accept-proposal-http.integration.test.ts (4 tests | 1 failed | 3 skipped) 2607ms
+   × acceptProposal retains changed_head across reload and refuses another attempt until revision 2605ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/accept-proposal-http.integration.test.ts > acceptProposal retains changed_head across reload and refuses another attempt until revision
+AssertionError: Missing expected rejection.
+
+simple
+
+ ❯ test/node-postgresql/accept-proposal-http.integration.test.ts:286:13
+    284|             FOR EACH ROW EXECUTE FUNCTION storyos.test_condition_failu…
+    285|           try {
+    286|             await assert.rejects(() => acceptProposal({ ...command, an…
+       |             ^
+    287|               (error) => requireStoryOSProtocolError(error).status ===…
+    288|             assert.deepEqual((await getProposal(command)).proposal, re…
+ ❯ test/node-postgresql/accept-proposal-http.integration.test.ts:274:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  06:00:33
+   Duration  2.93s (transform 115ms, setup 0ms, import 144ms, tests 2.61s, environment 0ms)
+
+Verification failed: 13.55s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/49e63cb939a4408baaae20943d6ef932/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

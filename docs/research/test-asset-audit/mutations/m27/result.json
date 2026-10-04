@@ -108,5 +108,7 @@
       "seconds": 13.857,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m27/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Refusing valid Reopen skips its expected persistence stage; the deliberately faulted-write case no longer gets its expected rejection at reopen-rejected:171."
 }

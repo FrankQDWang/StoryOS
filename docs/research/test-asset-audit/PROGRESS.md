@@ -6,10 +6,10 @@
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
-- Complete source-review directories: apps/web/test/node-process-cut (3 files, 5 tests); apps/web/test/browser-source (34 test files, 89 runtime cases, three support files); apps/web/test/node-postgresql (52 test files, 215 runtime cases, one support file); apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests); crates/storyos-contracts/src (14 files, 62 tests). Exact-dist is also complete (37 files, 43 cases). All 35 Web support and 78 Rust module/support files have dispositions. Inventory and initial coverage reconciliation are complete; mutation review remains pending.
+- Complete source-review directories: apps/web/test/node-process-cut (3 files, 5 tests); apps/web/test/browser-source (34 test files, 89 runtime cases, three support files); apps/web/test/node-postgresql (52 test files, 215 runtime cases, one support file); apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests); crates/storyos-contracts/src (14 files, 62 tests). Exact-dist is also complete (37 files, 43 cases). All 35 Web support and 78 Rust module/support files have dispositions. Inventory, coverage reconciliation and all 30 mutation reviews are complete.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: execute the remaining frozen random sample from mutation-sample.json. All 30 manually designed plans are saved in mutations/. Review each candidate status and exact assertion output; never count setup failure, zero selected cases or a timeout as a kill.
-- Mutation self-check: 29/30 actual injections complete: 15 KILL, 13 MISS and one timeout-only BLOCKED. Sample16 needs its preserved same-sample retry after an initial database activation failure. Sample 1 has an excluded/repaired harness failure. D5 semantic-only coverage is now explicit after samples 2/3/22.
+- Next: rebuild restored release outputs, produce REPORT.md and SUMMARY.json, validate report integrity and commit final evidence.
+- Mutation self-check: 30/30 actual injections complete: 16 KILL, 13 MISS and one timeout-only BLOCKED. Samples 1 and 16 have preserved, excluded setup failures. Corrected supplementary unit probes for samples 4, 11 and 18 passed clean/restored and failed on the mutant. All misses and transfer requirements remain explicit.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
 
@@ -36,9 +36,9 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | apps/web/test/node-contract | Source review complete | node-contract.md; 31 runtime cases, 8 files; mutation review pending |
 | apps/web/test/node-postgresql | Source review complete | node-postgresql.md; 215 runtime cases in 52 files, one support disposition; NODE_POSTGRESQL_CHECKPOINT.md |
 | apps/web/test/browser-source | Source review complete | browser-source.md; 89 cases in 34 files, three support dispositions; BROWSER_SOURCE_CHECKPOINT.md |
-| apps/web/test/browser-exact-dist | Partial | browser-exact-dist.md; 35 cases in 34 files; BROWSER_EXACT_DIST_CHECKPOINT.md |
+| apps/web/test/browser-exact-dist | Source review complete | browser-exact-dist.md; 43 cases in 37 files; BROWSER_EXACT_DIST_CHECKPOINT.md |
 | apps/web/test/node-process-cut | Source review complete | node-process-cut.md; five tests in three files; NODE_PROCESS_CUT_CHECKPOINT.md |
-| apps/web/test/support | Pending | inventory.json |
+| apps/web/test/support | Complete | SUPPORT.md; support-removals.json |
 | crates/storyos-core/src | Source review complete | core.md; 202 tests in 38 files; CORE_CHECKPOINT.md |
 | crates/storyos-application/src | Source review complete | application.md; 58 tests in 20 files; APPLICATION_CHECKPOINT.md |
 | crates/storyos-adapter-postgres/src | Source review complete | adapter.md; 36 test files, 87 tests; ADAPTER_CHECKPOINT.md |
@@ -49,7 +49,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 
 ## Self-check
 
-0/30 mutation experiments complete. No DELETE sample has been selected yet.
+30/30 fixed random mutations complete: 16 KILL, 13 MISS, one timeout-only BLOCKED. See mutation-sample.json for all outcomes and RECONCILIATION.md for the revised classes.
 
 ## Delivery
 
@@ -190,3 +190,5 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Supplemental checks complete: the exact original unit tests for samples 4 and 11 each pass clean, fail the same mutant, then pass restored. Sample 11 remains a coverage MISS; these probes do not replace its HTTP result. All three release binaries match their original SHA256 after restoration. Before sample 29, relaxed both coupled count ceilings in its manual plan to avoid a unit-only mutation being masked by the unchanged primitive ceiling. No sample was changed or replaced. Next remaining batch: 16-21,23-30.
 
 - Mutation checkpoint: 29/30 injected (15 KILL,13 MISS,1 timeout-only BLOCKED). CT007 now MERGE; CO134 now D6 with storage exclusivity/rollback proof. Totals: DELETE330 KEEP478 MERGE52 MOVE5; 13750 unioned candidate lines. All source/package changes are restored at this checkpoint. Next: retry sample16, run supplemental Core busy-unit proof, rebuild restored source to clear mutant executables from the build cache, then final REPORT/summary validation.
+
+- Final mutation checkpoint: sample16 same-sample retry is an intended HTTP assertion failure with clean/restored PASS. All 30 injections are complete: 16 KILL, 13 MISS, one timeout-only BLOCKED. Sample18 original-unit confirmation is separate from its surviving HTTP mutant. Final source verdicts: 865 cases in 256 files; 330 DELETE, 478 KEEP, 52 MERGE, five MOVE; 13,750 candidate lines. No temporary source mutation remains. Rebuild restored release outputs before final delivery.

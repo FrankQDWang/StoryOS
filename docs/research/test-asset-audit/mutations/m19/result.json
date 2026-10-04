@@ -108,5 +108,7 @@
       "seconds": 8.714,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m19/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Fragment Referer receives200 instead of403 at project-http:1065."
 }

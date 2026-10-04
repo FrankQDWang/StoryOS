@@ -108,5 +108,7 @@
       "seconds": 12.438,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m10/restored.log"
     }
-  ]
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Exact candidate comparison sees the unchanged prior text at Inline HTTP:1017."
 }

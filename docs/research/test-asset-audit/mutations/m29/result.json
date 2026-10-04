@@ -101,5 +101,7 @@
       "seconds": 21.602,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m29/restored.log"
     }
-  ]
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Both count ceilings changed240->241. HTTP and registry each execute one test and pass; original policy-alignment unit fails. CT007 becomes MERGE with genuine Challenge and exact problem-code count checks in NP008."
 }

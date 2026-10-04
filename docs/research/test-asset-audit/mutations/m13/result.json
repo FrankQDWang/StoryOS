@@ -108,5 +108,7 @@
       "seconds": 12.358,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m13/restored.log"
     }
-  ]
+  ],
+  "manual_result": "blocked-timeout",
+  "manual_finding": "Archive never becomes Ready after the claim result is dropped. Only the bounded readiness wait fails; excluded from KILL under the no-timeout rule. AD046 becomes MERGE into the explicit Adapter queue-selection case."
 }

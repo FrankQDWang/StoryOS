@@ -131,5 +131,7 @@
       "seconds": 12.467,
       "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m21/restored.log"
     }
-  ]
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Usable reference Core unit fails; Adapter returns ordinary Dispatch before that classifier, so continuation HTTP passes."
 }
