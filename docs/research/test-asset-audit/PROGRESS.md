@@ -2,12 +2,12 @@
 
 ## Resume here
 
-- Status: active. Inventory captured; detailed review starts with `apps/web/test/node-contract`.
+- Status: active. Inventory captured; node-contract source review complete.
 - Worktree: `/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS`.
 - Branch: `codex/test-asset-audit`.
 - Fixed baseline: `479224809cdaae997cda51cb8853e3fafa242b65` (fetched `origin/main`, 2026-10-05 Asia/Singapore).
 - Read this file before each resumed session. Do not refresh the audit baseline.
-- Next: finish node-contract review, compare browser and Rust coverage, write its verdict tables, commit this progress file with the tables. Then audit the remaining directories.
+- Next: review crates/storyos-core/src next. Revisit cross-layer owners as each directory is read.
 
 ## Contract
 
@@ -29,7 +29,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 
 | Directory | State | Evidence |
 |---|---|---|
-| apps/web/test/node-contract | In progress | Source read; coverage comparison pending |
+| apps/web/test/node-contract | Source review complete | node-contract.md; 31 runtime cases, 8 files; mutation review pending |
 | apps/web/test/node-postgresql | Pending | inventory.json |
 | apps/web/test/browser-source | Pending | inventory.json |
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
@@ -50,3 +50,9 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 ## Delivery
 
 REPORT.md will start with conclusions, directory savings and the top 20 files, then give all per-file tables and the cross-layer duplication table. It does not exist yet; no complete-audit claim is made.
+
+## Latest checkpoint
+
+- Node contract: 31 runtime cases reviewed across 8 files. See node-contract.json for source spans and node-contract.md for decisions.
+- Discovery: startup asset cases can fail before asset loading; session-map cases can fail later on missing DATABASE_URL even if mapping validation is bypassed. No runtime mutation has yet been used to validate these findings.
+- Discovery: the TypeScript Unicode counter has no product consumer and is imported only by its own test. Do not describe its Rust counterpart as executing that helper.

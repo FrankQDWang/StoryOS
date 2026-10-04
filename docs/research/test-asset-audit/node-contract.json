@@ -1,0 +1,361 @@
+[
+  {
+    "id": "NC001",
+    "path": "apps/web/test/node-contract/chapter-navigation.test.ts",
+    "line": 48,
+    "test": "openSelectedChapter returns the requested Chapter Head",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The browser test requests Chapter B, renders its empty Head and checks its exact GET path. This pure success assertion adds no different input or effect.",
+    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:41",
+    "remove": [
+      48,
+      66
+    ]
+  },
+  {
+    "id": "NC002",
+    "path": "apps/web/test/node-contract/chapter-navigation.test.ts",
+    "line": 68,
+    "test": "openSelectedChapter classifies missing, expired, and Scope-mismatched Chapters",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Unique cases: 404 resource_unavailable, foreign owner, and wrong Chapter identity must yield no Chapter bytes. The browser navigation test only supplies snapshot_expired. Search across Web tests found no other openSelectedChapter rejection cases. Retain the 404 and identity cases; the expired case can share the browser assertion.",
+    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:41",
+    "remove": null
+  },
+  {
+    "id": "NC003",
+    "path": "apps/web/test/node-contract/chapter-navigation.test.ts",
+    "line": 125,
+    "test": "completeJournalOrRefuse waits for a durable Journal or refuses with a typed gate",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Unfinished semantic input must not call the Journal drain, and a rejected drain must refuse navigation. The browser navigation scenario drains successfully and never injects either condition. This test does not prove asynchronous wait ordering: whenIdle resolves immediately.",
+    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:41",
+    "remove": null
+  },
+  {
+    "id": "NC004",
+    "path": "apps/web/test/node-contract/chapter-navigation.test.ts",
+    "line": 148,
+    "test": "selectedChapterSurface keeps pending bytes on the current Chapter",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move the unique currentPending=null case into the browser navigation scenario: the current Chapter must become read-only with needs_attention. Current and other-Chapter Pending Edit Projection cases already appear there. Remove the whole unit only after the new browser case fails on an editable fallback.",
+    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:41",
+    "remove": null
+  },
+  {
+    "id": "NC005",
+    "path": "apps/web/test/node-contract/generated-profile.test.ts",
+    "line": 9,
+    "test": "exposes the exact frozen runtime profile through its generated declaration",
+    "verdict": "DELETE",
+    "reason": "D2",
+    "evidence": "The equality assertion compares two static outputs from the same generator; the type annotation is compiler evidence. Object.isFrozen only locks the generator wrapper. No caller mutates this profile, and no concrete user-visible failure specific to freezing was found. Boot execution still checks whether the generated profile interoperates with the server fixture. This is not a claim that a boot test checks Object.isFrozen.",
+    "coverage": "apps/web/test/node-contract/protocol-boot.test.ts:26",
+    "remove": [
+      1,
+      20
+    ]
+  },
+  {
+    "id": "NC006",
+    "path": "apps/web/test/node-contract/production-build.test.ts",
+    "line": 31,
+    "test": "make web packages the production graph before Web tests",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Removing or moving package-release after Web execution can run tests against stale dist. This is the only test that inspects make web ordering. Exact-dist tests read existing bytes and do not assert Make dependency order.",
+    "coverage": "apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts:22",
+    "remove": null
+  },
+  {
+    "id": "NC007",
+    "path": "apps/web/test/node-contract/production-build.test.ts",
+    "line": 45,
+    "test": "the Vite production build emits hashed Protected Web Client assets",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Changing Vite asset names to stable unhashed JavaScript can break immutable cache invalidation. The exact-dist transport only requires an assets URL; Server unit fixtures hard-code a hashed name and do not inspect the Vite result.",
+    "coverage": "apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts:22; crates/storyos-server/src/web_assets_tests.rs:49",
+    "remove": null
+  },
+  {
+    "id": "NC008",
+    "path": "apps/web/test/node-contract/project-open.test.ts",
+    "line": 31,
+    "test": "the protected Web client opens the authoritative current Chapter",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "With IndexedDB unavailable in Node, opening must retain the authoritative Chapter and return editor-read-only-recovery. Browser project entry supplies IndexedDB and returns editor-ready. Request-order and same-origin assertions are redundant, but this distinct recovery branch is not.",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "remove": null
+  },
+  {
+    "id": "NC009",
+    "path": "apps/web/test/node-contract/project-open.test.ts",
+    "line": 75,
+    "test": "an empty Project opens the Canonical Query empty tree without a Chapter identity",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The listed-empty browser scenario calls the same openControlledProject path, verifies the authoritative title and empty tree, and verifies the Canonical Query request. Unexpected Chapter calls throw. The Node test adds no alternative failure case.",
+    "coverage": "apps/web/test/browser-source/list-open.integration.test.ts:11",
+    "remove": [
+      75,
+      113
+    ]
+  },
+  {
+    "id": "NC010",
+    "path": "apps/web/test/node-contract/project-open.test.ts",
+    "line": 115,
+    "test": "a Canonical Query tree with a foreign Project Scope fails closed",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A tree with a foreign owner must not enter empty-project-ready. list-open supplies a matching Scope. Searches for tree Scope mismatches found no other Web test that corrupts this response.",
+    "coverage": "apps/web/test/browser-source/list-open.integration.test.ts:11",
+    "remove": null
+  },
+  {
+    "id": "NC011",
+    "path": "apps/web/test/node-contract/project-open.test.ts",
+    "line": 158,
+    "test": "an archived Project fails closed without opening a workspace",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Direct Project opening must reject an archived library entry before requesting a Chapter. The exact-dist archive test clicks a disabled library button and never opens the archived Project URL; it cannot catch removal of the boot guard.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-05-archive-project.integration.test.ts:47",
+    "remove": null
+  },
+  {
+    "id": "NC012",
+    "path": "apps/web/test/node-contract/project-open.test.ts",
+    "line": 193,
+    "test": "a Project missing from the library fails closed without opening a workspace",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A direct Project response can outlive removal from the library; it must not cause a Chapter fetch. The archived case provides a matching entry, so replacing optional lookup with unconditional acceptance for missing entries escapes that case. No other Web test removes this library entry.",
+    "coverage": "apps/web/test/node-contract/project-open.test.ts:158",
+    "remove": null
+  },
+  {
+    "id": "NC013",
+    "path": "apps/web/test/node-contract/project-open.test.ts",
+    "line": 226,
+    "test": "an unavailable Project fails closed without displaying response data",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A thrown query error containing foreign text must remain available as a non-enumerable diagnostic cause and absent from the displayed/serialized blocked state. Scope tests throw internal fixed messages and do not assert diagnostic identity. No other test uses PROJECT_OPEN_DIAGNOSTIC_CAUSE.",
+    "coverage": "apps/web/test/node-contract/project-open.test.ts:115",
+    "remove": null
+  },
+  {
+    "id": "NC014",
+    "path": "apps/web/test/node-contract/project-open.test.ts",
+    "line": 248,
+    "test": "missing, empty, invalid, or mismatched owner identities fail closed",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Four cases reject missing, empty, malformed, and different owner identities before workspace entry. The browser entry tests use valid equal owners; the Chapter navigation mismatch tests exercise another function. Do not call those tests coverage of boot.ts validation.",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19; apps/web/test/node-contract/chapter-navigation.test.ts:68",
+    "remove": null
+  },
+  {
+    "id": "NC015",
+    "path": "apps/web/test/node-contract/protocol-boot.test.ts",
+    "line": 26,
+    "test": "a compatible Release 1 profile exposes protected application state",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Both Project-open and browser entry call validateProtocolProfile through bootProtectedWebClient with this valid profile and require success. Direct equality repeats the same successful gate.",
+    "coverage": "apps/web/test/node-contract/project-open.test.ts:31",
+    "remove": [
+      26,
+      29
+    ]
+  },
+  {
+    "id": "NC016",
+    "path": "apps/web/test/node-contract/protocol-boot.test.ts",
+    "line": 33,
+    "test": "missing compatibility identity",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A response without release_identity must block instead of entering protected state. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "remove": null
+  },
+  {
+    "id": "NC017",
+    "path": "apps/web/test/node-contract/protocol-boot.test.ts",
+    "line": 39,
+    "test": "stale generated-client identity",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A server with a different generated-client revision must require an upgrade. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "remove": null
+  },
+  {
+    "id": "NC018",
+    "path": "apps/web/test/node-contract/protocol-boot.test.ts",
+    "line": 47,
+    "test": "missing required capability",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A server without direct_author_edit must not enter protected state. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "remove": null
+  },
+  {
+    "id": "NC019",
+    "path": "apps/web/test/node-contract/protocol-boot.test.ts",
+    "line": 61,
+    "test": "unknown compatibility identity field",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An added release_identity field must be reported as incompatible. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "remove": null
+  },
+  {
+    "id": "NC020",
+    "path": "apps/web/test/node-contract/protocol-boot.test.ts",
+    "line": 62,
+    "test": "unknown top-level profile field",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An added top-level profile field must be reported as incompatible. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "remove": null
+  },
+  {
+    "id": "NC021",
+    "path": "apps/web/test/node-contract/protocol-http.integration.test.ts",
+    "line": 54,
+    "test": "production startup refuses an absent root or invalid resource set before readiness",
+    "verdict": "DELETE",
+    "reason": "D3",
+    "evidence": "The resource loop inherits bootstrap settings and supplies no valid session or database prerequisites. main.rs validates session mappings before loading assets. Exit 1 without a readiness line does not identify an asset failure. The missing-root first case only checks argument parsing. Asset validation has direct coverage for absent, extra, altered, mixed and symbolic-link resources.",
+    "coverage": "crates/storyos-server/src/web_assets_tests.rs:64; crates/storyos-server/src/web_assets_tests.rs:110",
+    "remove": [
+      54,
+      92
+    ]
+  },
+  {
+    "id": "NC022",
+    "path": "apps/web/test/node-contract/protocol-http.integration.test.ts",
+    "line": 94,
+    "test": "packaged production startup refuses session mappings that are not exactly one handle",
+    "verdict": "MOVE",
+    "reason": "L1",
+    "evidence": "Run this at the packaged startup boundary with all later prerequisites valid, and assert the specific refusal. Current cases remove DATABASE_URL: bypassing session validation can still exit 1 there, and the invalid User UUID is parsed only after Storage Activation and bind. Parser rejection is independently covered; production startup integration is not proved by these assertions.",
+    "coverage": "crates/storyos-server/src/session_bootstrap_tests.rs:10",
+    "remove": null
+  },
+  {
+    "id": "NC023",
+    "path": "apps/web/test/node-contract/protocol-http.integration.test.ts",
+    "line": 105,
+    "test": "offline web-root check does not require session mappings or PostgreSQL",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Moving web-root validation after session or database admission breaks this offline operational command. The test executes the actual package with unusable database URLs and no session map; unit WebAssetSet tests cannot catch CLI order changes. Search found no second --check-web-root test.",
+    "coverage": "crates/storyos-server/src/web_assets_tests.rs:49",
+    "remove": null
+  },
+  {
+    "id": "NC024",
+    "path": "apps/web/test/node-contract/protocol-http.integration.test.ts",
+    "line": 114,
+    "test": "offline worker check does not require PostgreSQL",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The shipped Worker --check must succeed without database access or external tools. This is the only in-scope test executing that offline Worker command; the Server offline check executes a different binary.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:105",
+    "remove": null
+  },
+  {
+    "id": "NC025",
+    "path": "apps/web/test/node-contract/protocol-http.integration.test.ts",
+    "line": 127,
+    "test": "packaged production startup refuses an invalid public Origin before Storage Activation",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The paired production binary must reject insecure public Origin before database admission. The Rust process test covers the same argument path but uses a Cargo test binary and a missing resource root. Retain one packaged process owner; mark the Rust duplicate for deletion during Server review.",
+    "coverage": "crates/storyos-server/tests/public_origin_startup.rs:15",
+    "remove": null
+  },
+  {
+    "id": "NC026",
+    "path": "apps/web/test/node-contract/protocol-http.integration.test.ts",
+    "line": 137,
+    "test": "packaged production startup refuses a non-loopback listen when a public Origin is set",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The paired binary must reject 0.0.0.0 under public Origin before database admission. Retain this package-boundary case; the Rust process test repeats it against the Cargo test binary. Unit origin validation does not prove that main calls the plan before storage.",
+    "coverage": "crates/storyos-server/tests/public_origin_startup.rs:25",
+    "remove": null
+  },
+  {
+    "id": "NC027",
+    "path": "apps/web/test/node-contract/protocol-http.integration.test.ts",
+    "line": 147,
+    "test": "packaged production startup refuses bind without a reachable Active proof",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A matching package with one valid session must not bind with missing or unreachable Storage Activation. Asset and session parser tests never reach this branch. The test distinguishes bypass of the activation call by the readiness marker and timeout; it does not prove wrong-generation proof handling.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:94",
+    "remove": null
+  },
+  {
+    "id": "NC028",
+    "path": "apps/web/test/node-contract/required-global-teardown.test.ts",
+    "line": 37,
+    "test": "managed verification reports required teardown fails",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A Vitest teardown rejection must propagate through the repository runner even when the ordinary test passes. These are independent exit-status combinations in test.each at line 36. Python runner tests do not execute this Vitest teardown adapter. Search found no other use of this oracle-failure marker.",
+    "coverage": "apps/web/test/support/required-global-teardown.ts:1",
+    "remove": null
+  },
+  {
+    "id": "NC029",
+    "path": "apps/web/test/node-contract/required-global-teardown.test.ts",
+    "line": 38,
+    "test": "managed verification reports required teardown passes",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A successful teardown must not force failure of an otherwise green child process. These are independent exit-status combinations in test.each at line 36. Python runner tests do not execute this Vitest teardown adapter. Search found no other use of this oracle-failure marker.",
+    "coverage": "apps/web/test/support/required-global-teardown.ts:1",
+    "remove": null
+  },
+  {
+    "id": "NC030",
+    "path": "apps/web/test/node-contract/required-global-teardown.test.ts",
+    "line": 39,
+    "test": "managed verification reports ordinary test fails",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "An ordinary assertion failure must survive a successful required teardown instead of being overwritten with success. These are independent exit-status combinations in test.each at line 36. Python runner tests do not execute this Vitest teardown adapter. Search found no other use of this oracle-failure marker.",
+    "coverage": "apps/web/test/support/required-global-teardown.ts:1",
+    "remove": null
+  },
+  {
+    "id": "NC031",
+    "path": "apps/web/test/node-contract/statistics-profile.test.ts",
+    "line": 12,
+    "test": "matches the pinned Rust/TypeScript golden cases",
+    "verdict": "DELETE",
+    "reason": "D4",
+    "evidence": "countStoredText in test/support is imported only by this test; production code does not use this TypeScript reimplementation. The Rust golden test owns actual Unicode counting. Its coverage is semantic coverage of product counting, not executable coverage of this unused helper; a mutation confined to the helper cannot make Rust fail. Remove the unused helper together after its support-file review.",
+    "coverage": "crates/storyos-core/src/statistics_profile_tests.rs:4",
+    "remove": [
+      1,
+      30
+    ]
+  }
+]
