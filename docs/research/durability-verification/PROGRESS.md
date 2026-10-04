@@ -153,3 +153,4 @@
 - Matrix minimal, `concurrent-rename`: invariant failure (exit 1). Evidence: `evidence/minimal/concurrent-rename.json`.
 - Matrix minimal, `concurrent-retry`: invariant failure (exit 1). Evidence: `evidence/minimal/concurrent-retry.json`.
 - Matrix minimal, `concurrent-rename-restart`: invariant failure (exit 1). Evidence: `evidence/minimal/concurrent-rename-restart.json`.
+- Matrix minimal, `session-replay`: invariant failure (exit 1). Evidence: `evidence/minimal/session-replay.json`.
