@@ -10,8 +10,11 @@ from run import ROUTES, compare, wire
 
 def run(http, seed, differences, coverage):
     e = Editor(http, seed, differences, coverage)
-    e.edit(units('Settled before expiry'), 'authoritative_applied', 'Settled before expiry')
-    settled = http.commands['applyAuthorEdit']
+    settled = []
+    for index in range(20):
+        text = f'Settled {seed}/{index}'
+        e.edit(units(text, 0, len(e.text)), 'authoritative_applied', text)
+        settled.append(http.commands['applyAuthorEdit'])
     route = ROUTES['applyAuthorEdit']
     path = route['path'].format(project_id=e.s.project)
     challenge_path = f'/api/v1/projects/{e.s.project}/anti-forgery-challenges'
@@ -30,12 +33,12 @@ def run(http, seed, differences, coverage):
     while time.time() < deadline:
         print(f'Waiting for real Challenge expiry: {int(deadline - time.time())} seconds', flush=True)
         time.sleep(min(30, max(0, deadline - time.time())))
-    for body, key, challenge in pending:
+    for (body, key, challenge), saved in zip(pending, settled):
         status, response = http.request('POST', path, body,
             {'Idempotency-Key': key, 'X-StoryOS-Anti-Forgery': challenge['nonce']})
         refused = status >= 400 and 'receipt' not in response
         compare('Expired pending Challenge has no authority', True, refused, differences)
         coverage['challenge:expired_pending_refused'] += int(refused)
-        replay(http, settled, 'applyAuthorEdit_after_expiry', differences, coverage)
+        replay(http, saved, 'applyAuthorEdit_after_expiry', differences, coverage)
     e.refresh()
     compare('Expiry leaves settled prose', e.text, e.session['base_snapshot']['materialized_revision']['body'], differences)

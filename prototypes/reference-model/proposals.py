@@ -13,8 +13,9 @@ class Proposal:
         self.http, self.differences, self.coverage = http, differences, coverage
         self.label = f'{seed}/proposal/{label}'
         self.prior_head = self.editor.revision
-        self.editor.edit(units('A quiet room before dawn.'), 'authoritative_applied', 'A quiet room before dawn.')
-        if label in ['draft', 'ordered', 'bundle']:
+        initial = 'The narrator voice stays calm.' if label == 'draft_binding' else 'A quiet room before dawn.'
+        self.editor.edit(units(initial), 'authoritative_applied', initial)
+        if label in ['draft', 'draft_binding', 'ordered', 'bundle']:
             from mixed import prepare
             self.blocks = prepare(self.editor)
         self.body = self.editor.text
@@ -26,10 +27,10 @@ class Proposal:
             project_id=self.editor.s.project)
         assert status == 200, enabled
         target = {'kind': 'current_chapter', 'chapter_id': self.editor.chapter}
-        if label in ['draft', 'ordered', 'bundle']:
+        if label in ['draft', 'draft_binding', 'ordered', 'bundle']:
             target = dict(kind='passage_collection', source_chapter_id=self.editor.chapter,
                 targets=[dict(chapter_id=self.editor.chapter, base_authoritative_revision_id=self.editor.revision,
-                              manuscript_block_ids=[b['manuscript_block_id'] for b in (self.blocks[:1] if label == 'draft' else self.blocks)])])
+                              manuscript_block_ids=[b['manuscript_block_id'] for b in (self.blocks[:1] if label in ['draft', 'draft_binding'] else self.blocks)])])
         status, result = http.command('createAgentRun',
             dict(conversation={'kind': 'new'}, author_message={'text': 'Revise this passage: keep the narrator voice.' + {'ordered': ' in order', 'bundle': ' as a bundle'}.get(label, '')},
                  working_target=target,
@@ -153,7 +154,7 @@ class Proposal:
             self.p = self.query()
             if self.p['validation_receipt']['kind'] == 'present':
                 compare(self.label + '/fresh validation identity', True,
-                        self.p['validation_receipt']['validation_receipt_id'] != p['validation_receipt']['validation_receipt_id'], self.differences)
+                        self.p['validation_receipt']['validation_receipt_id'] != p['validation_receipt'].get('validation_receipt_id'), self.differences)
                 # A-006: HTTP cannot observe the interval before a separate Core validation.
                 self.expected['validation'] = 'valid'
             compare(self.label + '/edited candidate', expected, self.p['candidate_text'], self.differences)
@@ -269,3 +270,27 @@ def run(http, seed, differences, coverage, selected=None):
             selected = next(op['operation_id'] for op in operations if op['manuscript_block_id'] == target)
             p.command('acceptProposal', 'refused', mutation={'selected_operation_ids': [selected]})
             p.command('rejectProposalOperations', 'refused', mutation={'selected_pending_operation_ids': [selected]})
+
+        elif mode == 'draft_binding':
+            from draft_binding import run as binding
+            binding(p)
+        elif mode == 'proposal-undo':
+            original = p.candidate
+            p.edit()
+            e = p.editor
+            e.refresh()
+            _, response = http.command('undoLatestAuthorAction', dict(editor_session_id=e.session_id,
+                expected_authoritative_revision_id=e.revision,
+                expected_author_undo_frontier_sequence=e.session['author_undo_frontier_sequence']), project_id=e.s.project)
+            compare('Proposal Undo restores candidate', original, p.query()['candidate_text'], differences)
+            compare('Proposal Undo has no authoritative Commit', [], response['receipt']['authoritative_commit_ids'], differences)
+            revision = response['effect']['authoritative_revision']
+            before = len(differences)
+            compare('D-004: Undo response preserves immutable authoritative payload',
+                {'revision_id': e.revision, 'body': e.text},
+                {key: revision[key] for key in ['revision_id', 'body']}, differences)
+            for entry in differences[before:]:
+                entry.update(seed_case=p.label, trace_start=p.start, trace_end=len(http.trace))
+            e.refresh()
+            compare('Proposal Undo leaves canonical prose', e.text, e.session['base_snapshot']['materialized_revision']['body'], differences)
+            coverage['undoLatestAuthorAction:compensated'] += 1

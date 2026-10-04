@@ -28,7 +28,7 @@ def prepare(editor):
     return [first, second]
 
 
-def run(proposal):
+def run(proposal, finish=True):
     p, e, http = proposal.p, proposal.editor, proposal.http
     candidate_size = len(proposal.candidate.encode('utf-16-le')) // 2
     tail = proposal.blocks[1]
@@ -46,6 +46,12 @@ def run(proposal):
                                    head=dict(source_index=1, source_offset=len(tail['text'])))))]
     values = e.request(edit_units)
     values.update(expected_proposal_head_revision_ids=[p['revision_id']], observed_ownership_partition='mixed')
+    if not finish:
+        stale = deepcopy(values)
+        stale['author_edit_units'][0]['selection_snapshot']['ordered_selection']['sources'][0]['owner']['revision_id'] = http.identity()
+        status, conflict = http.command('applyAuthorEdit', stale, project_id=e.s.project)
+        compare('Ordered source proof mismatch', {'kind': 'conflicted', 'reason': 'ownership_changed'}, conflict.get('effect'), proposal.differences)
+        proposal.coverage['applyAuthorEdit:conflicted:ownership_changed'] += int(conflict.get('effect', {}).get('reason') == 'ownership_changed')
     status, response = http.command('applyAuthorEdit', values, project_id=e.s.project)
     kind = response.get('effect', {}).get('kind', f'HTTP_{status}')
     proposal.coverage['applyAuthorEdit:' + kind] += 1
@@ -63,6 +69,8 @@ def run(proposal):
     _, chapter = http.request('GET', f'/api/v1/projects/{e.s.project}/chapters/{e.chapter}')
     compare('Mixed intent leaves Blocks unchanged', proposal.blocks, chapter['chapter']['current_revision']['blocks'], proposal.differences)
     compare('Mixed intent leaves candidate unchanged', proposal.candidate, proposal.query()['candidate_text'], proposal.differences)
+    if not finish:
+        return draft, path
     values = dict(draft_id=draft_id, draft_kind='refused_edit', source_current_draft_revision_id=draft['draft_revision_id'],
         source_draft_payload_digest=draft['payload_digest'], expected_closure='open', close_reason='abandoned',
         editor_session_id=e.session_id, writer_generation=e.session['writer']['writer_generation'])

@@ -159,3 +159,9 @@ Managed exit: 0. Differences: 0. Evidence: `proposals-332-335.json.gz` and `prop
 ## Proposal batch 336-339
 
 Managed exit: 0. Differences: 0. Evidence: `proposals-336-339.json.gz` and `proposals-336-339.log`. Counts include only recorded calls.
+
+## Step 14: Proposal count threshold
+
+Five bounded batches completed seeds 320-339: 380 independently created AgentRuns, 20 hits for each reached lifecycle reason, 20 mixed Draft compensations, 20 Acceptance reversals, and 20 Reversal Proposal Barriers. All batches have zero differences. Each batch has its own committed compressed trace and managed log.
+
+Next: verify two remaining Author Edit/Undo reasons through complete ordered-source proof and Draft expansion/compensation. Also minimize the empty authoritative payload in Proposal Undo responses as possible D-004. The expiry probe now retains 20 distinct committed commands, so its post-expiry retries are not repetitions of one settlement.
