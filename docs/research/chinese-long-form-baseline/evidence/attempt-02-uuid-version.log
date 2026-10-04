@@ -1,0 +1,18 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+file:///Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/generated/typescript/storyos-public-release-1/client.mjs:56
+    throw new StoryOSProtocolError("command_http_error", `StoryOS command failed with HTTP ${response.status}`, { status: response.status, responseBody, retryAfterSeconds });
+          ^
+
+StoryOSProtocolError: StoryOS command failed with HTTP 400
+    at commandJson (file:///Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/generated/typescript/storyos-public-release-1/client.mjs:56:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/prototypes/chinese-long-form-baseline/measure.mjs:95:21 {
+  code: 'command_http_error',
+  status: 400,
+  responseBody: '{"schema_id":"storyos.problem.v1","code":"invalid_request","message":"The request is invalid."}',
+  retryAfterSeconds: undefined
+}
+
+Node.js v24.16.0
+Verification source-changed: 16.68s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/7aa39d83758b4cf4a4dddcc7b35e1616/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

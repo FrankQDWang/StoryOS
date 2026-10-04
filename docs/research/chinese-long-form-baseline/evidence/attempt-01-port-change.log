@@ -1,0 +1,15 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+file:///Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/apps/web/test/support/node-integration.ts:90
+      fail(new Error(`StoryOS Server exited with ${code}: ${stderr}`));
+           ^
+
+Error: StoryOS Server exited with 1: Error: Unavailable(Error { kind: Connect, cause: Some(Os { code: 61, kind: ConnectionRefused, message: "Connection refused" }) })
+
+    at ChildProcess.<anonymous> (file:///Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/apps/web/test/support/node-integration.ts:90:12)
+    at Object.onceWrapper (node:events:631:26)
+    at ChildProcess.emit (node:events:509:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:295:12)
+
+Node.js v24.16.0
+Verification failed: 7.28s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/dc432d4a0de14b8ca05e4432955f0cf5/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

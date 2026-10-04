@@ -48,3 +48,31 @@ measurement, integration, progress, and commits.
 3. Word-count primary sources, corpus comparisons, precise candidate, golden vectors.
 4. UTF-16 end-to-end observations and counterexamples or bounded no-finding result.
 5. Three part reports, ranked findings in `REPORT.md`, and final scope audit.
+
+### Step 2: corpus and product-backed smoke
+
+- `make release-package` passed in 302.69 s at `cc61461d`; no full tests ran.
+  Package manifest: `sha256:4295347e71c0374f1283d2dff8c417bcdaf6fb6f72e43a97e335bf8bfee3ae7a`.
+- `python3 prototypes/chinese-long-form-baseline/generate.py` generated exact scalar
+  budgets with seed 20261005. The largest corpus has 1,500 Chapters and 34,626 Blocks.
+  Counts include paragraph LF separators; titles do not enter the budget.
+- A real 30,000-scalar Project imported through Create Project, Create Volume,
+  Create Chapter, Set Current Chapter, and Apply Author Edit. No prose SQL inserts.
+  Get Statistics confirmed exactly 30,000 scalars.
+- Product smoke passed: Project read 7 SQL calls; tree 12; Chapter read 8;
+  statistics 9; current-Chapter and manuscript search 9 each; session read 8.
+  These are isolated endpoint costs, before full Web action measurement.
+- The temporary database uses pg_stat_statements and auto_explain. The extension
+  needs a database restart. Docker changed its dynamic host port, so the harness
+  now reads that port again. Attempt 01 records the initial connection failure.
+- Attempt 02 used UUID v4 for an idempotency key; the public contract requires v7.
+  The harness now allocates v7-shaped time/random identities.
+- Attempt 03 tried editing a new Chapter without selecting it. It received 503
+  and an empty-UUID database error. Preserve this as a protocol sequence probe,
+  not proof that the ordinary editor loses text. The normal path now switches
+  the Current Chapter before the edit. No product fix was made.
+- Quota preparation resets only this disposable Project's challenge counters,
+  outside measured actions, as existing business fixtures do. Import duration
+  excludes no API calls but is not a production quota-throughput claim.
+- Next: complete structural, Undo, export, Proposal, Web and UTF-16 observations;
+  then run all four scales and retain compact raw evidence.
