@@ -1,9 +1,13 @@
 use super::{
-    CHALLENGE_REQUEST_SCHEMA_PATH, CHALLENGE_RESPONSE_SCHEMA_PATH, CHAPTER_RESPONSE_SCHEMA_PATH,
-    FIXTURE_DIGEST_PLACEHOLDER, OPENAPI_PATH, PROJECT_RESPONSE_SCHEMA_PATH, RESPONSE_SCHEMA_PATH,
+    CHAPTER_FIXTURE_PATHS, CHAPTER_RESPONSE_SCHEMA_PATH, FIXTURE_DIGEST_PLACEHOLDER, OPENAPI_PATH,
     REVIEW_CATALOG_PATH, fixture_corpus_bytes, release1_protocol_profile, validate_review_bindings,
 };
 use crate::digest::sha256_prefixed;
+use crate::release1_command_challenge_artifacts::{
+    CHALLENGE_REQUEST_SCHEMA_PATH, CHALLENGE_RESPONSE_SCHEMA_PATH,
+};
+use crate::release1_project_query_artifacts::PROJECT_RESPONSE_SCHEMA_PATH;
+use crate::release1_protocol_profile_artifacts::RESPONSE_SCHEMA_PATH;
 use crate::{
     ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason,
     AuthoritativeChapterRevision, GetChapterResponse, NoEffectReason,
@@ -578,15 +582,12 @@ fn chapter_fixtures_conform_to_the_typed_response_contract() {
     let generated = super::generated_files()
         .into_iter()
         .collect::<std::collections::BTreeMap<_, _>>();
-    for path in [
-        super::CHAPTER_FIXTURE_PATHS[0],
-        super::CHAPTER_FIXTURE_PATHS[2],
-    ] {
+    for path in [CHAPTER_FIXTURE_PATHS[0], CHAPTER_FIXTURE_PATHS[2]] {
         let _: GetChapterResponse = serde_json::from_slice(&generated[path])
             .expect("positive and boundary Chapter fixtures must satisfy GetChapterResponse");
     }
     assert!(
-        serde_json::from_slice::<GetChapterResponse>(&generated[super::CHAPTER_FIXTURE_PATHS[1]],)
+        serde_json::from_slice::<GetChapterResponse>(&generated[CHAPTER_FIXTURE_PATHS[1]],)
             .is_err(),
         "the invalid Chapter fixture must not satisfy GetChapterResponse",
     );
