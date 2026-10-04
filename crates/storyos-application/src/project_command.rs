@@ -65,6 +65,14 @@ pub struct ProjectCommandSettlement<A, N, C, R> {
     pub response_project: Project,
 }
 
+/// The applied value of an `ActivityOnly` command: its effect and its one Activity record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActivityApplied<A> {
+    pub effect: A,
+    pub project_activity_position: u64,
+    pub project_activity_event_id: String,
+}
+
 /// The settled outcome of one Manuscript Structure Transition command.
 pub type StructureSettlement<A, N, C, R> = ProjectCommandSettlement<StructureApplied<A>, N, C, R>;
 

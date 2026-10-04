@@ -1,4 +1,4 @@
-//! One replay read for the settled acknowledgement of a structural project command.
+//! One replay read for the settled acknowledgement of a project command.
 
 use std::collections::BTreeMap;
 

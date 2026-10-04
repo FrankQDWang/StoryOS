@@ -1,10 +1,12 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, EditorClientBinding, IssueProjectCommandChallenge,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UpdateProjectCommand,
-    UpdateProjectSettlementEffect, UserId, issue_project_command_challenge, update_project,
+    IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    UpdateProjectInput, UpdateProjectSettlement, UserId, issue_project_command_challenge,
 };
+use storyos_core::{TransitionOutcome, UpdateProjectApplied, UpdateProjectConflict};
 use tokio_postgres::NoTls;
+
+use crate::command_sequence::tests::{CommandCall, command_call};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -49,38 +51,44 @@ fn issue_named_request(
 }
 
 fn command(
-    binding: ProjectCommandChallengeBinding,
-    nonce_digest: &str,
+    issue: &IssueProjectCommandChallenge,
     ids_suffix: &str,
     expected_revision: u64,
     title: &str,
     bytes: &[u8],
-) -> UpdateProjectCommand {
-    UpdateProjectCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<UpdateProjectInput> {
+    command_call(
+        issue.binding.clone(),
+        &issue.nonce_digest,
+        ids_suffix,
+        bytes,
+        UpdateProjectInput {
+            title: title.to_owned(),
+            expected_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        title: title.to_owned(),
-        expected_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+    )
+}
+
+async fn update_project(
+    store: &PostgresProjectReader,
+    call: &CommandCall<UpdateProjectInput>,
+) -> UpdateProjectSettlement {
+    store
+        .update_project(&call.envelope, &call.input)
+        .await
+        .unwrap()
+}
+
+fn applied_effect(settlement: &UpdateProjectSettlement) -> &UpdateProjectApplied {
+    let TransitionOutcome::Applied(applied) = &settlement.outcome else {
+        panic!("the rename must apply, got {:?}", settlement.outcome);
+    };
+    &applied.effect
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn update_project_is_atomic_replayable_and_scope_safe() {
+async fn update_project_renames_only_its_scope_and_replays_the_captured_project() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -107,38 +115,16 @@ async fn update_project_is_atomic_replayable_and_scope_safe() {
         .unwrap();
     let first = update_project(
         &store,
-        &command(
-            first_issue.binding.clone(),
-            &first_issue.nonce_digest,
-            "0502",
-            1,
-            TITLE,
-            COMMAND_BYTES,
-        ),
+        &command(&first_issue, "0502", 1, TITLE, COMMAND_BYTES),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        first.effect,
-        UpdateProjectSettlementEffect::Applied {
+        applied_effect(&first),
+        &UpdateProjectApplied {
             title: TITLE.to_owned(),
             revision: 2,
         }
     );
-    let replay = update_project(
-        &store,
-        &command(
-            first_issue.binding.clone(),
-            &first_issue.nonce_digest,
-            "0599",
-            1,
-            TITLE,
-            COMMAND_BYTES,
-        ),
-    )
-    .await
-    .unwrap();
-    assert_eq!(replay, first);
 
     let stale_issue = issue_request("0503");
     issue_project_command_challenge(&store, &stale_issue)
@@ -146,45 +132,24 @@ async fn update_project_is_atomic_replayable_and_scope_safe() {
         .unwrap();
     let stale = update_project(
         &store,
-        &command(
-            stale_issue.binding.clone(),
-            &stale_issue.nonce_digest,
-            "0504",
-            1,
-            TITLE,
-            COMMAND_BYTES,
-        ),
+        &command(&stale_issue, "0504", 1, TITLE, COMMAND_BYTES),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        stale.effect,
-        UpdateProjectSettlementEffect::Conflicted {
-            reason: storyos_core::UpdateProjectConflict::StaleProjectRevision,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(UpdateProjectConflict::StaleProjectRevision)
     );
 
     let row = admin
         .query_one(
-            "SELECT title, revision::text,
-                    (SELECT count(*) FROM storyos.domain_receipts
-                      WHERE project_id = $1::text::uuid AND command_kind = 'updateProject'),
-                    (SELECT count(*) FROM storyos.project_activity_event_payloads
-                      WHERE project_id = $1::text::uuid AND event_kind = 'project_updated')
-               FROM storyos.projects
-              WHERE project_id = $1::text::uuid",
+            "SELECT title, revision::text FROM storyos.projects WHERE project_id = $1::text::uuid",
             &[&PROJECT],
         )
         .await
         .unwrap();
     assert_eq!(
-        (
-            row.get::<_, String>(0),
-            row.get::<_, String>(1),
-            row.get::<_, i64>(2),
-            row.get::<_, i64>(3)
-        ),
-        (TITLE.to_owned(), "2".to_owned(), 2, 1)
+        (row.get::<_, String>(0), row.get::<_, String>(1)),
+        (TITLE.to_owned(), "2".to_owned())
     );
 
     let later_issue = issue_named_request("0505", LATER_COMMAND_DIGEST);
@@ -193,37 +158,21 @@ async fn update_project_is_atomic_replayable_and_scope_safe() {
         .unwrap();
     let later = update_project(
         &store,
-        &command(
-            later_issue.binding.clone(),
-            &later_issue.nonce_digest,
-            "0506",
-            2,
-            LATER_TITLE,
-            LATER_COMMAND_BYTES,
-        ),
+        &command(&later_issue, "0506", 2, LATER_TITLE, LATER_COMMAND_BYTES),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        later.effect,
-        UpdateProjectSettlementEffect::Applied {
+        applied_effect(&later),
+        &UpdateProjectApplied {
             title: LATER_TITLE.to_owned(),
             revision: 3,
         }
     );
     let frozen = update_project(
         &store,
-        &command(
-            first_issue.binding.clone(),
-            &first_issue.nonce_digest,
-            "0598",
-            1,
-            TITLE,
-            COMMAND_BYTES,
-        ),
+        &command(&first_issue, "0598", 1, TITLE, COMMAND_BYTES),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(frozen, first);
 
     let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();

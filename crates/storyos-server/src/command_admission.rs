@@ -117,6 +117,8 @@ project_command_request!(contracts::DeleteVolumeRequest, nested delete_volume_in
 project_command_request!(contracts::CreateChapterRequest, nested create_chapter_input);
 project_command_request!(contracts::UpdateChapterRequest, nested update_chapter_input);
 project_command_request!(contracts::DeleteChapterRequest, nested delete_chapter_input);
+project_command_request!(contracts::UpdateProjectRequest, nested update_project_input);
+project_command_request!(contracts::ArchiveProjectRequest, nested archive_project_input);
 
 /// One admitted project command, ready for its Core Transition.
 pub(super) struct Admitted<I> {
@@ -375,7 +377,7 @@ pub(super) fn positive(value: &str) -> Result<u64, ApiError> {
         .ok_or_else(invalid_request)
 }
 
-/// Accepts a Volume or Chapter title of 1 to 1024 bytes.
+/// Accepts a Project, Volume, or Chapter title of 1 to 1024 bytes.
 pub(super) fn structure_title(title: &str) -> Result<String, ApiError> {
     if title.is_empty() || title.len() > 1024 {
         return Err(invalid_request());

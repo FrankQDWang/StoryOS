@@ -74,7 +74,7 @@ pub use archive_path::{
     ArchivePathRefusal, admit_archive_path,
 };
 pub use archive_project::{
-    ArchiveProject, ArchiveProjectConflict, ArchiveProjectNoEffect, ArchiveProjectRefusal,
+    ArchiveProject, ArchiveProjectApplied, ArchiveProjectConflict, ArchiveProjectNoEffect,
     ArchiveProjectResult, ProjectLifecycle, archive_project,
 };
 pub use assemble_context::{
@@ -225,8 +225,8 @@ pub use update_chapter::{
     UpdateChapterRefusal, UpdateChapterResult, update_chapter,
 };
 pub use update_project::{
-    UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
-    UpdateProjectResult, update_project,
+    UpdateProject, UpdateProjectApplied, UpdateProjectConflict, UpdateProjectNoEffect,
+    UpdateProjectRefusal, UpdateProjectResult, update_project,
 };
 pub use update_project_assistance::{
     AssistanceAvailability, AssistanceBindingPresence, UpdateProjectAssistance,

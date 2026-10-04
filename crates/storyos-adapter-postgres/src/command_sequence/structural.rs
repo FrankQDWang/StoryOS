@@ -7,6 +7,7 @@ use storyos_application::{
 };
 use tokio_postgres::Client;
 
+use super::records::insert_applied_activity;
 use super::{LockedProject, SettlementProfile, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structural_authority_settlement::{
@@ -108,34 +109,16 @@ impl SettlementProfile for Structural {
                 "tree revision or Current Chapter changed under FOR UPDATE",
             ));
         }
-        let serde_json::Value::Object(mut activity) = write.activity else {
-            return Err(unavailable("the Activity payload is not an object"));
-        };
-        activity.insert("kind".to_owned(), activity_kind.into());
-        activity.insert(
-            "tree_revision".to_owned(),
-            write.resulting_tree_revision.to_string().into(),
-        );
-        client
-            .execute(
-                "INSERT INTO storyos.project_activity_event_payloads
-                   (owner_user_id, project_id, project_activity_position,
-                    project_activity_event_id, event_kind, receipt_id, receipt_result_kind,
-                    payload)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                         $5, $6::text::uuid, 'authoritative_applied', $7::text::jsonb)",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &sequences.project_activity_position.to_string(),
-                    &sequences.project_activity_event_id,
-                    &activity_kind,
-                    &ids.receipt_id,
-                    &serde_json::Value::Object(activity).to_string(),
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
+        insert_applied_activity(
+            client,
+            envelope,
+            activity_kind,
+            sequences.project_activity_position,
+            &sequences.project_activity_event_id,
+            write.activity,
+            &[("tree_revision", write.resulting_tree_revision.to_string())],
+        )
+        .await?;
         let (identity, resulting_revision_id) = match &write.identity {
             StructureIdentity::Volume(volume_id) => {
                 (StructureAffectedIdentity::Volume { volume_id }, None)
