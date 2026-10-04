@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 805 test cases in 212 files have source verdicts. The audit is not complete.
+- Status: active. 817 test cases in 216 files have source verdicts. The audit is not complete.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
-- Complete source-review directories: apps/web/test/node-postgresql (52 test files, 215 runtime cases, one support file); apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests); crates/storyos-contracts/src (14 files, 62 tests). Cross-directory reconciliation and mutation review are still pending.
+- Complete source-review directories: apps/web/test/browser-source (34 test files, 89 runtime cases, three support files); apps/web/test/node-postgresql (52 test files, 215 runtime cases, one support file); apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests); crates/storyos-contracts/src (14 files, 62 tests). Cross-directory reconciliation and mutation review are still pending.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: continue browser-source from BROWSER_SOURCE_CHECKPOINT.md (77 cases in 30 files reviewed), then browser-exact-dist, node-process-cut and remaining support. Node PostgreSQL source review is complete; read NODE_POSTGRESQL_CHECKPOINT.md for 215 runtime cases in 52 files. All 482 Rust tests in 122 files have source verdicts. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
+- Next: review browser-exact-dist, then node-process-cut and remaining support. Browser source review is complete; BROWSER_SOURCE_CHECKPOINT.md records 89 cases in 34 files plus three support files. Node PostgreSQL source review is complete; read NODE_POSTGRESQL_CHECKPOINT.md for 215 runtime cases in 52 files. All 482 Rust tests in 122 files have source verdicts. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
 - No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -35,7 +35,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 |---|---|---|
 | apps/web/test/node-contract | Source review complete | node-contract.md; 31 runtime cases, 8 files; mutation review pending |
 | apps/web/test/node-postgresql | Source review complete | node-postgresql.md; 215 runtime cases in 52 files, one support disposition; NODE_POSTGRESQL_CHECKPOINT.md |
-| apps/web/test/browser-source | Partial | browser-source.md; 77 cases in 30 files; BROWSER_SOURCE_CHECKPOINT.md |
+| apps/web/test/browser-source | Source review complete | browser-source.md; 89 cases in 34 files, three support dispositions; BROWSER_SOURCE_CHECKPOINT.md |
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
 | apps/web/test/node-process-cut | Pending | inventory.json |
 | apps/web/test/support | Pending | inventory.json |
@@ -147,3 +147,6 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 
 - Browser Journal/input checkpoint: 77 cases in 30 browser-source files; 65 KEEP, seven DELETE, four MERGE, one MOVE. Eight files add append drift, projection lifetimes, active/fenced collection, working-set retirement, local recovery and Tiptap decisions. Two support files have dispositions. Takeover late-result assertions transfer before collection; two simple adapter behaviors have retained mounted/packaged owners.
 - Current cumulative source review: 805 cases in 212 files; DELETE 332, KEEP 439, MERGE 29, MOVE 5; 13188 unioned candidate source lines. Continue the remaining acknowledgement-loss, editor-session, manual-input, reload-recovery and scenario files, then exact-dist/process-cut/support and cross-directory reconciliation. Self-check 0/30; no selected samples, temporary source changes or active processes.
+
+- Browser source directory complete: 89 runtime cases in all 34 test files and dispositions for all three support files. 71 KEEP, eight DELETE, nine MERGE, one MOVE; 752 direct candidate lines. The unused textarea input test adds 520 lines; five real shared-submission scenarios must transfer into acknowledgement-loss before removing their old fixtures. Existing Takeover cases retain storage evidence, not a claim about current Tiptap interaction.
+- Current cumulative source review: 817 cases in 216 test files; DELETE 333, KEEP 445, MERGE 34, MOVE 5; 13708 unioned candidate source lines. Continue browser-exact-dist, node-process-cut and remaining support, then covering-test/D5 reconciliation and random self-check. Self-check 0/30; no samples, temporary source changes or active processes.

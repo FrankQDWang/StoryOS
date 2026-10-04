@@ -1,11 +1,12 @@
 # Browser source checkpoint
 
-Source review is partial: 77 runtime cases in 30 test files. No mutation samples selected.
+Source review is complete: 89 runtime cases in all 34 test files, plus three support files. Cross-directory reconciliation and mutation checks are pending.
 
 | Reviewed file | Cases | Verdict counts |
 |---|---|---|
 | apps/web/test/browser-source/accept-block-proposal.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/acceptance-journal.integration.test.ts | 1 | {'MERGE': 1} |
+| apps/web/test/browser-source/acknowledgement-loss.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/activity-reorder.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/activity-resync.integration.test.ts | 17 | {'DELETE': 3, 'KEEP': 14} |
 | apps/web/test/browser-source/activity-stream-consume.integration.test.ts | 4 | {'KEEP': 3, 'MERGE': 1} |
@@ -19,6 +20,7 @@ Source review is partial: 77 runtime cases in 30 test files. No mutation samples
 | apps/web/test/browser-source/current-chapter-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/delete-historical-acknowledgement.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts | 4 | {'DELETE': 1, 'KEEP': 3} |
+| apps/web/test/browser-source/editor-session.integration.test.ts | 4 | {'KEEP': 4} |
 | apps/web/test/browser-source/journal-gc-fenced.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/journal-gc.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/journal-working-set.integration.test.ts | 1 | {'KEEP': 1} |
@@ -26,22 +28,16 @@ Source review is partial: 77 runtime cases in 30 test files. No mutation samples
 | apps/web/test/browser-source/local-edit-journal-append-drift.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts | 5 | {'KEEP': 5} |
 | apps/web/test/browser-source/local-recovery-panel.integration.test.ts | 2 | {'KEEP': 2} |
+| apps/web/test/browser-source/manual-input.integration.test.ts | 6 | {'DELETE': 1, 'MERGE': 5} |
 | apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts | 8 | {'KEEP': 6, 'DELETE': 2} |
 | apps/web/test/browser-source/project-entry.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/readable-export-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/refused-edit-discard.integration.test.ts | 2 | {'KEEP': 2} |
+| apps/web/test/browser-source/reload-recovery.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/rename-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/takeover-late-result.integration.test.ts | 1 | {'MERGE': 1} |
 | apps/web/test/browser-source/undo-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/update-historical-acknowledgement.integration.test.ts | 2 | {'KEEP': 2} |
-
-## Pending files
-
-- apps/web/test/browser-source/acknowledgement-loss.integration.test.ts
-- apps/web/test/browser-source/editor-session.integration.test.ts
-- apps/web/test/browser-source/manual-input.integration.test.ts
-- apps/web/test/browser-source/reload-recovery.integration.test.ts
-- apps/web/test/browser-source/scenario.ts
 
 ## Evidence and execution dependencies
 
@@ -81,3 +77,15 @@ Source review is partial: 77 runtime cases in 30 test files. No mutation samples
 - DELETE adapter Backspace join in favor of the packaged split/join journey and simple captured suffix insertion in favor of mounted append projection. Keep middle split, selected-text split, Shift+Enter, unsupported transactions, backward mixed heading selection and open-Slice/CRLF paste. Packaged end-of-text split cannot detect losing an existing right suffix.
 - Keep both local recovery panel parameters: authoritative two-Block text and Proposal candidate text have different projection owners. Copy is a mocked destination; explicit continuation and reopened IndexedDB state are observed. No later server write is claimed.
 - Current browser-source total: 77 cases / 30 files; 65 KEEP, seven DELETE, four MERGE, one MOVE; 232 immediate candidate lines. All declaration lines and parameter multiplicities checked. No runtime execution, mutation or product/test/generated change.
+
+## Recovery completion and unused textarea controller
+
+- BS078-BS089 complete the directory with 12 cases across four files. scenario.ts is the third support file; all 37 directory files now have dispositions. Total: 71 KEEP, eight DELETE, nine MERGE, one MOVE; 752 immediate candidate lines.
+- KEEP acknowledgement-loss for net-zero Outcome settlement across reopen, admission evidence and closed-only local retention. KEEP reload-recovery for durable proof/attempt loading, v3 migration with an unresolved capsule, v2 refusal and missing-capsule behavior. Their ordinary committed/challenge/rejected checks overlap; these are not the KEEP justification.
+- KEEP incompatible Head and record-contract reopen separately from explicit legacy-primitive Block reconfirmation. The reconfirm function has a real Stage1View recovery-control caller.
+- KEEP the large editor-session case for 250/251 ms and 240/241-unit boundaries, historical policy rejection, real freeze validation hash count, pre-send failure plus invalid acknowledgement recovery, and direct zero-authority receipt settlement. Do not preserve every expected-record literal merely because the case remains.
+- Three masked inputs have explicit limits: acknowledgement-loss foreign scope also mismatches the net-zero body's applied result; editor-session oversized body also disagrees with its edit; schema 999 follows an unrepaired corrupt payload. Do not count these as independent scope/size/schema guard evidence.
+- Runtime consumer search found attachManualInput only in tests; product files import its types. DELETE manual-input:58 (520 lines), which drives a separate textarea parser and overrides trust classification. Actual packaged Tiptap input is retained. No covering product test is claimed for a mutation limited to the unused textarea implementation.
+- MERGE all five manual-input:579 scenarios into acknowledgement-loss:97 using the shared submission boundary and onWriterFenced. Preserve their held POST/Outcome ordering, second-workspace writes, whole Journal comparisons and request counts. Recognized versus unknown Problem and prior challenge/admission/terminal evidence remain distinct. Drop textarea UI assertions. This transfer is a removal prerequisite and contributes zero direct savings.
+- Correction to earlier Takeover descriptions: valid resync cases use the unused textarea controller for their final new-input convenience step. Their distinct real storage/ingest/binding evidence still supports KEEP, but that step does not prove the current mounted Tiptap UI.
+- Source completeness and cited declaration lines checked. No tests ran for these report-only changes. No temporary mutation or active process remains. Continue browser-exact-dist, node-process-cut and remaining support.
