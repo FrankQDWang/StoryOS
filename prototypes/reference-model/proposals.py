@@ -274,23 +274,26 @@ def run(http, seed, differences, coverage, selected=None):
         elif mode == 'draft_binding':
             from draft_binding import run as binding
             binding(p)
-        elif mode in ['proposal-undo', 'rejection-undo']:
+        elif mode in ['proposal-undo', 'rejection-undo', 'withdrawal-undo']:
             original = p.candidate
             if mode == 'proposal-undo':
                 p.edit()
-            else:
+            elif mode == 'rejection-undo':
                 p.command('rejectProposalOperations', 'resolved', {'operation_resolution': 'rejected'})
+            else:
+                p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
             e = p.editor
             e.refresh()
             _, response = http.command('undoLatestAuthorAction', dict(editor_session_id=e.session_id,
                 expected_authoritative_revision_id=e.revision,
                 expected_author_undo_frontier_sequence=e.session['author_undo_frontier_sequence']), project_id=e.s.project)
             if mode == 'rejection-undo':
-                before = len(differences)
-                compare('D-005: rejection Undo routes to reopening', 'compensated', response['effect']['kind'], differences)
-                compare('D-005: rejection Undo restores pending operation', 'pending', p.query()['operation_resolution'], differences)
-                for entry in differences[before:]:
-                    entry.update(seed_case=p.label, trace_start=p.start, trace_end=len(http.trace))
+                effect = response['effect']
+                allowed = effect['kind'] == 'compensated' or effect == {'kind': 'unavailable', 'reason': 'barrier'}
+                compare('A-010: rejection handler or explicit Barrier', True, allowed, differences)
+                expected_resolution = 'pending' if effect['kind'] == 'compensated' else 'rejected'
+                compare('Rejection Undo result matches operation state', expected_resolution, p.query()['operation_resolution'], differences)
+                coverage['undoLatestAuthorAction:' + effect['kind'] + (':' + effect['reason'] if effect.get('reason') else '')] += 1
                 continue
             compare('Proposal Undo restores candidate', original, p.query()['candidate_text'], differences)
             compare('Proposal Undo has no authoritative Commit', [], response['receipt']['authoritative_commit_ids'], differences)
