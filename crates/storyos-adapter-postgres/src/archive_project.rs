@@ -14,7 +14,7 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Classification, CommandIsolation, CommandSpec,
-    LockedProject, MissingAdmission, ProjectCommand, ResponseRecord, settle_project_command,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, settle_project_command,
     unavailable,
 };
 
@@ -34,10 +34,10 @@ impl ProjectCommand for ArchiveProjectInput {
         kind: "archiveProject",
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
-        response: ResponseRecord::Project,
         activity_kind: "project_archival_changed",
     };
     type Profile = ActivityOnly;
+    type Response = ProjectResponse;
     type Applied = ArchiveProjectApplied;
     type Plan = ();
     type Effect = ArchiveProjectApplied;

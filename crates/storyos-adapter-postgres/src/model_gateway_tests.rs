@@ -6,8 +6,8 @@ use storyos_application::{
     ContractFaultObserver, ContractFaultPoint, ConversationSelection, CreateAgentRunCommand,
     DestinationRequest, EditorClientBinding, IssueProjectCommandChallenge, ModelProviderAdapter,
     ModelResponse, ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
-    PreparedRequest, ProjectScope, UpdateProjectAssistanceCommand, complete_agent_run,
-    issue_project_command_challenge, request_create_agent_run, update_project_assistance,
+    PreparedRequest, ProjectScope, UpdateProjectAssistanceInput, complete_agent_run,
+    issue_project_command_challenge, request_create_agent_run,
 };
 use storyos_core::{
     AssistanceAvailability, DecisionCandidate, ModelOutput, NativeStreamItem, OutputPhase,
@@ -234,22 +234,20 @@ async fn claimed_run(
     issue_project_command_challenge(store, &assistance)
         .await
         .unwrap();
-    update_project_assistance(
-        store,
-        &UpdateProjectAssistanceCommand {
-            project_scope: scope.clone(),
-            client_binding: binding(&assistance),
-            challenge_binding: assistance.binding.clone(),
-            nonce_digest: assistance.nonce_digest.clone(),
-            canonical_command_bytes: AVAILABLE_BYTES.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{prefix}2"),
+    let assistance_call = crate::command_sequence::tests::command_call(
+        assistance.binding.clone(),
+        &assistance.nonce_digest,
+        &format!("{prefix}2"),
+        AVAILABLE_BYTES,
+        UpdateProjectAssistanceInput {
             availability: AssistanceAvailability::Available,
             expected_revision: 0,
-            ids: ids(&format!("{prefix}2")),
         },
-    )
-    .await
-    .unwrap();
+    );
+    store
+        .update_project_assistance(&assistance_call.envelope, &assistance_call.input)
+        .await
+        .unwrap();
     let volume_id = apply_volume(
         store,
         &scope,

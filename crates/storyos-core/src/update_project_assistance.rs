@@ -1,6 +1,9 @@
 //! Pure Core classification for Project assistance availability.
 
-use super::ProjectPresence;
+use std::convert::Infallible;
+
+use super::TransitionOutcome;
+use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AssistanceAvailability {
@@ -19,32 +22,31 @@ pub enum AssistanceBindingPresence {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpdateProjectAssistance {
-    pub presence: ProjectPresence,
     pub binding: AssistanceBindingPresence,
     pub expected_revision: u64,
     pub requested: AssistanceAvailability,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UpdateProjectAssistanceResult {
+/// The applied assistance change; both kinds record an `authoritative_applied` Receipt.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UpdateProjectAssistanceApplied {
+    /// The first assistance setting of the Project, which also creates its binding.
     Initialized {
         availability: AssistanceAvailability,
         revision: u64,
     },
-    Applied {
+    Changed {
         availability: AssistanceAvailability,
         revision: u64,
     },
-    NoEffect {
-        reason: UpdateProjectAssistanceNoEffect,
-    },
-    Conflicted {
-        reason: UpdateProjectAssistanceConflict,
-    },
-    Refused {
-        reason: UpdateProjectAssistanceRefusal,
-    },
 }
+
+pub type UpdateProjectAssistanceResult = TransitionOutcome<
+    UpdateProjectAssistanceApplied,
+    UpdateProjectAssistanceNoEffect,
+    UpdateProjectAssistanceConflict,
+    Infallible,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateProjectAssistanceNoEffect {
@@ -56,50 +58,45 @@ pub enum UpdateProjectAssistanceConflict {
     StaleAssistanceRevision,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UpdateProjectAssistanceRefusal {
-    MissingProject,
-}
+reason_codes!(UpdateProjectAssistanceNoEffect { AvailabilityUnchanged => "availability_unchanged" });
+reason_codes!(UpdateProjectAssistanceConflict {
+    StaleAssistanceRevision => "stale_assistance_revision",
+});
 
-/// Classify one Project assistance setting against exact Scope presence and expected revision.
+/// Classify one Project assistance setting against the current binding and expected revision.
 pub fn update_project_assistance(
     command: &UpdateProjectAssistance,
 ) -> UpdateProjectAssistanceResult {
-    if command.presence == ProjectPresence::Absent {
-        return UpdateProjectAssistanceResult::Refused {
-            reason: UpdateProjectAssistanceRefusal::MissingProject,
-        };
-    }
     match command.binding {
         AssistanceBindingPresence::Uninitialized => {
             if command.expected_revision != 0 {
-                return UpdateProjectAssistanceResult::Conflicted {
-                    reason: UpdateProjectAssistanceConflict::StaleAssistanceRevision,
-                };
+                return TransitionOutcome::Conflicted(
+                    UpdateProjectAssistanceConflict::StaleAssistanceRevision,
+                );
             }
-            UpdateProjectAssistanceResult::Initialized {
+            TransitionOutcome::Applied(UpdateProjectAssistanceApplied::Initialized {
                 availability: command.requested,
                 revision: 1,
-            }
+            })
         }
         AssistanceBindingPresence::Initialized {
             availability,
             revision,
         } => {
             if command.expected_revision != revision {
-                return UpdateProjectAssistanceResult::Conflicted {
-                    reason: UpdateProjectAssistanceConflict::StaleAssistanceRevision,
-                };
+                return TransitionOutcome::Conflicted(
+                    UpdateProjectAssistanceConflict::StaleAssistanceRevision,
+                );
             }
             if command.requested == availability {
-                return UpdateProjectAssistanceResult::NoEffect {
-                    reason: UpdateProjectAssistanceNoEffect::AvailabilityUnchanged,
-                };
+                return TransitionOutcome::NoEffect(
+                    UpdateProjectAssistanceNoEffect::AvailabilityUnchanged,
+                );
             }
-            UpdateProjectAssistanceResult::Applied {
+            TransitionOutcome::Applied(UpdateProjectAssistanceApplied::Changed {
                 availability: command.requested,
                 revision: revision + 1,
-            }
+            })
         }
     }
 }

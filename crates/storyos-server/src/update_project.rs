@@ -72,7 +72,7 @@ pub(super) async fn update_project(
             result,
             authority: None,
             heads: Vec::new(),
-            project: settlement.response_project,
+            project: settlement.response,
         },
     );
     Ok(Json(contracts::UpdateProjectResponse {

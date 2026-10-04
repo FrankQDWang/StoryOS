@@ -75,7 +75,7 @@ pub(super) async fn delete_volume(
             result,
             authority,
             heads: Vec::new(),
-            project: settlement.response_project,
+            project: settlement.response,
         },
     );
     Ok(Json(contracts::DeleteVolumeResponse {

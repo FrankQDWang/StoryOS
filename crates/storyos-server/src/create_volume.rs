@@ -82,7 +82,7 @@ pub(super) async fn create_volume(
             result,
             authority,
             heads: Vec::new(),
-            project: settlement.response_project,
+            project: settlement.response,
         },
     );
     Ok(Json(contracts::CreateVolumeResponse {

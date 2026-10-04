@@ -16,12 +16,14 @@ mod activity_only;
 mod admission;
 mod chapter_selection;
 mod records;
+mod response;
 mod structural;
 use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
 pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
-use records::{ReceiptRecord, insert_receipt, lock_project, settle_idempotency};
+use records::{ReceiptRecord, insert_receipt, lock_project};
+pub(crate) use response::{ProjectAssistanceResponse, ProjectResponse, ResponseRecord};
 pub(crate) use structural::{
     CurrentChapterChange, Structural, StructureIdentity, StructureWrite, WriterBase,
 };
@@ -56,16 +58,10 @@ pub(crate) enum MissingAdmission {
     InvalidChallenge,
 }
 
-/// The acknowledgement record that the Command Idempotency Fence keeps for an exact retry.
-pub(crate) enum ResponseRecord {
-    Project,
-}
-
 pub(crate) struct CommandSpec {
     pub(crate) kind: &'static str,
     pub(crate) isolation: CommandIsolation,
     pub(crate) missing_admission: MissingAdmission,
-    pub(crate) response: ResponseRecord,
     pub(crate) activity_kind: &'static str,
 }
 
@@ -152,6 +148,7 @@ pub(crate) type ProfileWrite<C> =
 pub(crate) trait ProjectCommand: Sync {
     const SPEC: CommandSpec;
     type Profile: SettlementProfile;
+    type Response: ResponseRecord;
     type Applied: Send;
     type Plan: Send;
     type Effect: Send;
@@ -192,6 +189,7 @@ pub(crate) type SettledCommand<C> = ProjectCommandSettlement<
     <C as ProjectCommand>::NoEffect,
     <C as ProjectCommand>::Conflict,
     <C as ProjectCommand>::Refusal,
+    <<C as ProjectCommand>::Response as ResponseRecord>::Response,
 >;
 
 pub(crate) async fn settle_project_command<C: ProjectCommand>(
@@ -306,12 +304,12 @@ async fn first_use<C: ProjectCommand>(
             TransitionOutcome::Refused(reason),
         ),
     };
-    let response_project = settle_idempotency(client, envelope, &C::SPEC).await?;
+    let response = C::Response::settle(client, envelope, C::SPEC.kind).await?;
     Ok(ProjectCommandSettlement {
         ids: envelope.ids.clone(),
         receipt_created_at,
         outcome,
-        response_project,
+        response,
     })
 }
 
@@ -330,7 +328,7 @@ fn replay_command<C: ProjectCommand>(
     Ok(ProjectCommandSettlement {
         ids: replay.ids.clone(),
         receipt_created_at: replay.receipt_created_at.clone(),
-        response_project: replay.response_project()?,
+        response: C::Response::replay(replay)?,
         outcome,
     })
 }

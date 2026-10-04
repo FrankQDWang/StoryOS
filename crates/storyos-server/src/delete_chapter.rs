@@ -78,7 +78,7 @@ pub(super) async fn delete_chapter(
             result,
             authority,
             heads: Vec::new(),
-            project: settlement.response_project,
+            project: settlement.response,
         },
     );
     Ok(Json(contracts::DeleteChapterResponse {

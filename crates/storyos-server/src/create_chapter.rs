@@ -78,7 +78,7 @@ pub(super) async fn create_chapter(
                 CreateChapterPublicOrder::HistoricalCreateChapterAck(storage_key) => storage_key,
             };
             let current_chapter_id = settlement
-                .response_project
+                .response
                 .current_chapter_id
                 .as_ref()
                 .ok_or_else(resource_unavailable)?
@@ -110,7 +110,7 @@ pub(super) async fn create_chapter(
             result,
             authority,
             heads: Vec::new(),
-            project: settlement.response_project,
+            project: settlement.response,
         },
     );
     Ok(Json(contracts::CreateChapterResponse {

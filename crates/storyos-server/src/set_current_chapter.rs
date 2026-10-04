@@ -88,7 +88,7 @@ pub(super) async fn set_current_chapter(
             result,
             authority,
             heads: vec![admitted.input.expected_target_revision_id.clone()],
-            project: settlement.response_project,
+            project: settlement.response,
         },
     );
     Ok(Json(contracts::SetCurrentChapterResponse {

@@ -80,7 +80,7 @@ pub(super) async fn update_volume(
             result,
             authority,
             heads: Vec::new(),
-            project: settlement.response_project,
+            project: settlement.response,
         },
     );
     Ok(Json(contracts::UpdateVolumeResponse {

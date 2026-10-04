@@ -13,8 +13,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, ChapterSelection, ChapterSelectionWrite, Classification, CommandIsolation,
-    CommandSpec, EditorAdmission, LockedProject, MissingAdmission, ProjectCommand, ReceiptHeads,
-    ResponseRecord, settle_project_command, unavailable,
+    CommandSpec, EditorAdmission, LockedProject, MissingAdmission, ProjectCommand, ProjectResponse,
+    ReceiptHeads, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::CurrentChapterSequences;
 
@@ -37,10 +37,10 @@ impl ProjectCommand for SetCurrentChapterInput {
         kind: "setCurrentChapter",
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
-        response: ResponseRecord::Project,
         activity_kind: "current_chapter_set",
     };
     type Profile = ChapterSelection;
+    type Response = ProjectResponse;
     type Applied = String;
     type Plan = ChapterHead;
     type Effect = CurrentChapterSelected;

@@ -7,13 +7,16 @@ use storyos_application::{
     ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectCommandError,
     ProjectCommandSettlement, ProjectScope, SetCurrentChapterInput, SetCurrentChapterSettlement,
     StructureAuthority, StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput,
-    UpdateChapterSettlement, UpdateProjectInput, UpdateProjectSettlement, UpdateVolumeInput,
-    UpdateVolumeSettlement, issue_project_command_challenge,
+    UpdateChapterSettlement, UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement,
+    UpdateProjectInput, UpdateProjectSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
+    issue_project_command_challenge,
 };
 use storyos_application::{
     ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
 };
-use storyos_core::{CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome};
+use storyos_core::{
+    AssistanceAvailability, CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome,
+};
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
@@ -113,6 +116,15 @@ async fn update_project(
     call: &CommandCall<UpdateProjectInput>,
 ) -> Result<UpdateProjectSettlement, ProjectCommandError> {
     store.update_project(&call.envelope, &call.input).await
+}
+
+async fn update_project_assistance(
+    store: &PostgresProjectReader,
+    call: &CommandCall<UpdateProjectAssistanceInput>,
+) -> Result<UpdateProjectAssistanceSettlement, ProjectCommandError> {
+    store
+        .update_project_assistance(&call.envelope, &call.input)
+        .await
 }
 
 async fn archive_project(
@@ -221,6 +233,12 @@ const UPDATE_CHAPTER: Route = Route {
     path: storyos_contracts::UPDATE_CHAPTER_PATH,
     schema: storyos_contracts::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
 };
+const UPDATE_PROJECT_ASSISTANCE: Route = Route {
+    kind: "updateProjectAssistance",
+    method: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_METHOD,
+    path: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_PATH,
+    schema: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
+};
 const SET_CURRENT_CHAPTER: Route = Route {
     kind: "setCurrentChapter",
     method: storyos_contracts::SET_CURRENT_CHAPTER_METHOD,
@@ -284,20 +302,21 @@ async fn issued<I>(
 /// Settles one call, replays it with new request identities, and requires an equal settlement.
 ///
 /// Returns the Receipt result kind and the authority rows of the first settlement.
-async fn replayed_outcome<I: Clone, A, N, C, R>(
+async fn replayed_outcome<I: Clone, A, N, C, R, P>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<I>,
     settle: impl AsyncFn(
         &PostgresProjectReader,
         &CommandCall<I>,
-    ) -> Result<ProjectCommandSettlement<A, N, C, R>, ProjectCommandError>,
+    ) -> Result<ProjectCommandSettlement<A, N, C, R, P>, ProjectCommandError>,
 ) -> (ReceiptResult, [i64; 5])
 where
     A: Debug + PartialEq,
     N: ReasonCode + Debug + PartialEq,
     C: ReasonCode + Debug + PartialEq,
     R: ReasonCode + Debug + PartialEq,
+    P: Debug + PartialEq,
 {
     let first = settle(store, call).await.unwrap();
     let mut retry = call.clone();
@@ -513,6 +532,22 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((SET_CURRENT_CHAPTER.kind, outcome));
     }
 
+    let scope = seed_project(&store, "5d90").await;
+    for (suffix, availability, expected_revision) in [
+        (0x5d91, AssistanceAvailability::Available, 0),
+        (0x5d92, AssistanceAvailability::Available, 1),
+        (0x5d93, AssistanceAvailability::Unavailable, 0),
+        (0x5d94, AssistanceAvailability::Unavailable, 1),
+    ] {
+        let input = UpdateProjectAssistanceInput {
+            availability,
+            expected_revision,
+        };
+        let call = issued(&store, &scope, suffix, &UPDATE_PROJECT_ASSISTANCE, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, update_project_assistance).await;
+        observed.push((UPDATE_PROJECT_ASSISTANCE.kind, outcome));
+    }
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 1, 1]);
     let chapter_selection_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 0, 1]);
@@ -555,6 +590,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("setCurrentChapter", no_effect),
             ("setCurrentChapter", conflicted),
             ("setCurrentChapter", refused),
+            ("updateProjectAssistance", activity_applied),
+            ("updateProjectAssistance", no_effect),
+            ("updateProjectAssistance", conflicted),
+            ("updateProjectAssistance", activity_applied),
         ]
     );
 }
@@ -586,6 +625,19 @@ async fn two_chapter_writer(
     };
     let revision_b = opened.chapter.revision_id.as_ref().to_owned();
     (scope, chapter_a, chapter_b, revision_b, editor_session_id)
+}
+
+/// One applicable first Update Project Assistance in a new Project.
+async fn update_project_assistance_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<UpdateProjectAssistanceInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let input = UpdateProjectAssistanceInput {
+        availability: AssistanceAvailability::Available,
+        expected_revision: 0,
+    };
+    issued(store, &scope, base + 9, &UPDATE_PROJECT_ASSISTANCE, input).await
 }
 
 /// One applicable Set Current Chapter from Chapter A to Chapter B in a new Project.
@@ -777,8 +829,14 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &set_current_chapter_call(&store, 0x5e80).await,
         )
         .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &update_project_assistance_call(&store, 0x5e90).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 9]);
+    assert_eq!(observed, vec![(true, [0; 5]); 10]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -796,6 +854,7 @@ struct Failing<C> {
 impl<C: ProjectCommand> ProjectCommand for Failing<C> {
     const SPEC: CommandSpec = C::SPEC;
     type Profile = C::Profile;
+    type Response = C::Response;
     type Applied = C::Applied;
     type Plan = C::Plan;
     type Effect = C::Effect;
@@ -889,12 +948,18 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &set_current_chapter_call(&store, 0x5f80).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &update_project_assistance_call(&store, 0x5f90).await,
+        )
+        .await,
     ];
     let rolled_back = (
         vec![(true, [0; 5]), (true, [0; 5])],
         ReceiptResult::AuthoritativeApplied,
     );
-    assert_eq!(observed, vec![rolled_back; 9]);
+    assert_eq!(observed, vec![rolled_back; 10]);
 }
 
 /// The replay error of one exact retry.
@@ -919,9 +984,9 @@ async fn evidence_replays<C: ProjectCommand + Clone>(
     let key = &call.envelope.challenge_binding.idempotency_key;
     let mut errors = Vec::new();
     for evidence in [
-        "acknowledgement_format = NULL, response_project = NULL",
+        "acknowledgement_format = NULL, response_project = NULL, response_assistance = NULL",
         "acknowledgement_format = 'command_response_project.v1',
-         response_project = '{\"broken\":true}'::jsonb",
+         response_project = '{\"broken\":true}'::jsonb, response_assistance = NULL",
     ] {
         admin
             .batch_execute(&format!(
@@ -970,6 +1035,12 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &set_current_chapter_call(&store, 0x6a80).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &update_project_assistance_call(&store, 0x6a90).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -978,5 +1049,5 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 9]);
+    assert_eq!(observed, vec![separated; 10]);
 }

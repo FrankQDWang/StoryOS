@@ -250,9 +250,8 @@ pub use undo_latest_author_action::{
     UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore, undo_latest_author_action,
 };
 pub use update_project_assistance::{
-    ProjectAssistanceRecord, UpdateProjectAssistanceCommand, UpdateProjectAssistanceError,
-    UpdateProjectAssistanceSettlement, UpdateProjectAssistanceSettlementEffect,
-    UpdateProjectAssistanceStore, update_project_assistance,
+    ProjectAssistanceAcknowledgement, ProjectAssistanceRecord, UpdateProjectAssistanceInput,
+    UpdateProjectAssistanceSettlement,
 };
 pub use withdraw_proposal::{
     ResolvedWithdrawal, WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,

@@ -1,13 +1,10 @@
 //! The Admission, Receipt, Project lock, and Command Idempotency Fence rows of the sequence.
 
-use storyos_application::{ChapterId, Project, ProjectCommandEnvelope, ProjectCommandError};
+use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_core::ProjectLifecycle;
 use tokio_postgres::Client;
 
-use super::{CommandSpec, LockedProject, ReceiptHeads, ResponseRecord, unavailable};
-use crate::command_response_project::{
-    COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
-};
+use super::{LockedProject, ReceiptHeads, unavailable};
 
 pub(super) struct ReceiptRecord {
     pub(super) result: &'static str,
@@ -150,50 +147,4 @@ pub(super) async fn lock_project(
         tree_revision: row.get::<_, String>(1).parse().map_err(unavailable)?,
         current_chapter_id: row.get(2),
     })
-}
-
-/// Reads the Command-response Project after the writes and settles the Command Idempotency Fence.
-pub(super) async fn settle_idempotency(
-    client: &Client,
-    envelope: &ProjectCommandEnvelope,
-    spec: &CommandSpec,
-) -> Result<Project, ProjectCommandError> {
-    let scope = &envelope.project_scope;
-    let row = client
-        .query_one(
-            "SELECT title, current_chapter_id::text FROM storyos.projects
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await
-        .map_err(unavailable)?;
-    let project = Project {
-        project_id: scope.project_id.clone(),
-        title: row.get(0),
-        current_chapter_id: row.get::<_, Option<String>>(1).map(ChapterId::new),
-    };
-    client
-        .execute(
-            "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled',
-                    result_reference = $3,
-                    acknowledgement_format = $5,
-                    response_project = $6::text::jsonb
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = $7 AND idempotency_key = $4::text::uuid",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &envelope.ids.receipt_id,
-                &envelope.challenge_binding.idempotency_key,
-                &match spec.response {
-                    ResponseRecord::Project => COMMAND_RESPONSE_PROJECT_FORMAT,
-                },
-                &encode_command_response_project(&project),
-                &spec.kind,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    Ok(project)
 }

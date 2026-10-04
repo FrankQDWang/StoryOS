@@ -2,11 +2,18 @@
 
 use std::collections::BTreeMap;
 
-use storyos_application::{AuthorCommandAdmissionIds, Project, ProjectCommandChallengeBinding};
+use storyos_application::{
+    AuthorCommandAdmissionIds, Project, ProjectAssistanceAcknowledgement,
+    ProjectCommandChallengeBinding,
+};
 use storyos_core::{ReasonCode, TransitionOutcome};
 
+use crate::command_response_assistance::{
+    COMMAND_RESPONSE_ASSISTANCE_FORMAT, CommandResponseAssistanceEvidence,
+    read_command_response_assistance,
+};
 use crate::command_response_project::{
-    CommandResponseProjectEvidence, read_command_response_project,
+    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence, read_command_response_project,
 };
 use crate::{PostgresProjectReader, set_challenge_scope_on_client};
 
@@ -28,6 +35,7 @@ pub(crate) struct CommandReplay {
     activity: JsonText,
     acknowledgement_format: Option<String>,
     response_project: Option<String>,
+    response_assistance: Option<String>,
 }
 
 /// The Structural Authority Settlement records that one applied command wrote.
@@ -109,6 +117,43 @@ impl CommandReplay {
                 "command acknowledgement evidence is damaged",
             ))),
         }
+    }
+
+    /// The Command-response Project and the assistance record of an assistance acknowledgement.
+    pub(crate) fn response_project_assistance(
+        &self,
+    ) -> Result<ProjectAssistanceAcknowledgement, ReplayFault> {
+        let damaged = || {
+            unavailable(std::io::Error::other(
+                "command acknowledgement evidence is damaged",
+            ))
+        };
+        let project_format = match self.acknowledgement_format.as_deref() {
+            Some(COMMAND_RESPONSE_ASSISTANCE_FORMAT) => Some(COMMAND_RESPONSE_PROJECT_FORMAT),
+            other => other,
+        };
+        let project =
+            match read_command_response_project(project_format, self.response_project.as_deref()) {
+                Ok(CommandResponseProjectEvidence::Captured(project)) => project,
+                Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                    return Err(ReplayFault::HistoricalAcknowledgementUnavailable);
+                }
+                Err(()) => return Err(damaged()),
+            };
+        let assistance = match read_command_response_assistance(
+            self.acknowledgement_format.as_deref(),
+            self.response_assistance.as_deref(),
+        ) {
+            Ok(CommandResponseAssistanceEvidence::Captured(assistance)) => assistance,
+            Ok(CommandResponseAssistanceEvidence::HistoricalUnavailable) => {
+                return Err(ReplayFault::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => return Err(damaged()),
+        };
+        Ok(ProjectAssistanceAcknowledgement {
+            project,
+            assistance,
+        })
     }
 }
 
@@ -205,6 +250,7 @@ pub(crate) async fn read_command_replay(
         authority,
         acknowledgement_format: row.get(15),
         response_project: row.get(16),
+        response_assistance: row.get(18),
     })
 }
 
@@ -237,7 +283,8 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
             AND (payload.project_activity_position IS NULL
                  OR structure.project_activity_position <= payload.project_activity_position)
           ORDER BY structure.project_activity_position DESC
-          LIMIT 1)
+          LIMIT 1),
+        idempotency.response_assistance::text
    FROM storyos.domain_receipts AS receipt
    JOIN storyos.author_command_admission_settlements AS settlement
      ON (settlement.owner_user_id, settlement.project_id,

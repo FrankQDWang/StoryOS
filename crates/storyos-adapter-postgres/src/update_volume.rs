@@ -11,7 +11,7 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Classification, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    MissingAdmission, ProjectCommand, ResponseRecord, Structural, StructureIdentity,
+    MissingAdmission, ProjectCommand, ProjectResponse, Structural, StructureIdentity,
     StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
@@ -39,10 +39,10 @@ impl ProjectCommand for UpdateVolumeInput {
         kind: "updateVolume",
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
-        response: ResponseRecord::Project,
         activity_kind: "volume_updated",
     };
     type Profile = Structural;
+    type Response = ProjectResponse;
     type Applied = UpdateVolumeApplied;
     type Plan = LiveVolumes;
     type Effect = UpdateVolumeApplied;

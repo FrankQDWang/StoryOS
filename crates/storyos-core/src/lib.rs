@@ -230,8 +230,8 @@ pub use update_project::{
 };
 pub use update_project_assistance::{
     AssistanceAvailability, AssistanceBindingPresence, UpdateProjectAssistance,
-    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
-    UpdateProjectAssistanceRefusal, UpdateProjectAssistanceResult, update_project_assistance,
+    UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
+    UpdateProjectAssistanceNoEffect, UpdateProjectAssistanceResult, update_project_assistance,
 };
 pub use update_volume::{
     UpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict, UpdateVolumeNoEffect,

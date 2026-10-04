@@ -1,12 +1,11 @@
 use super::{
-    AssistanceAvailability, AssistanceBindingPresence, ProjectPresence, UpdateProjectAssistance,
-    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
-    UpdateProjectAssistanceRefusal, UpdateProjectAssistanceResult, update_project_assistance,
+    AssistanceAvailability, AssistanceBindingPresence, TransitionOutcome, UpdateProjectAssistance,
+    UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
+    UpdateProjectAssistanceNoEffect, update_project_assistance,
 };
 
 fn initialize() -> UpdateProjectAssistance {
     UpdateProjectAssistance {
-        presence: ProjectPresence::Present,
         binding: AssistanceBindingPresence::Uninitialized,
         expected_revision: 0,
         requested: AssistanceAvailability::Available,
@@ -15,7 +14,6 @@ fn initialize() -> UpdateProjectAssistance {
 
 fn initialized(availability: AssistanceAvailability, revision: u64) -> UpdateProjectAssistance {
     UpdateProjectAssistance {
-        presence: ProjectPresence::Present,
         binding: AssistanceBindingPresence::Initialized {
             availability,
             revision,
@@ -29,10 +27,10 @@ fn initialized(availability: AssistanceAvailability, revision: u64) -> UpdatePro
 fn a_first_prepare_classifies_as_initialized() {
     assert_eq!(
         update_project_assistance(&initialize()),
-        UpdateProjectAssistanceResult::Initialized {
+        TransitionOutcome::Applied(UpdateProjectAssistanceApplied::Initialized {
             availability: AssistanceAvailability::Available,
             revision: 1,
-        }
+        })
     );
 }
 
@@ -42,9 +40,7 @@ fn a_repeated_prepare_with_the_same_availability_is_no_effect() {
     repeat.requested = AssistanceAvailability::Available;
     assert_eq!(
         update_project_assistance(&repeat),
-        UpdateProjectAssistanceResult::NoEffect {
-            reason: UpdateProjectAssistanceNoEffect::AvailabilityUnchanged,
-        }
+        TransitionOutcome::NoEffect(UpdateProjectAssistanceNoEffect::AvailabilityUnchanged)
     );
 }
 
@@ -52,10 +48,10 @@ fn a_repeated_prepare_with_the_same_availability_is_no_effect() {
 fn a_matching_revision_and_new_availability_classifies_as_applied() {
     assert_eq!(
         update_project_assistance(&initialized(AssistanceAvailability::Available, 1)),
-        UpdateProjectAssistanceResult::Applied {
+        TransitionOutcome::Applied(UpdateProjectAssistanceApplied::Changed {
             availability: AssistanceAvailability::Unavailable,
             revision: 2,
-        }
+        })
     );
 }
 
@@ -65,9 +61,7 @@ fn a_stale_revision_classifies_as_conflicted() {
     stale.expected_revision = 1;
     assert_eq!(
         update_project_assistance(&stale),
-        UpdateProjectAssistanceResult::Conflicted {
-            reason: UpdateProjectAssistanceConflict::StaleAssistanceRevision,
-        }
+        TransitionOutcome::Conflicted(UpdateProjectAssistanceConflict::StaleAssistanceRevision)
     );
 }
 
@@ -77,20 +71,6 @@ fn a_nonzero_expected_revision_before_initialization_is_stale() {
     stale.expected_revision = 1;
     assert_eq!(
         update_project_assistance(&stale),
-        UpdateProjectAssistanceResult::Conflicted {
-            reason: UpdateProjectAssistanceConflict::StaleAssistanceRevision,
-        }
-    );
-}
-
-#[test]
-fn a_missing_project_classifies_as_refused() {
-    let mut missing = initialize();
-    missing.presence = ProjectPresence::Absent;
-    assert_eq!(
-        update_project_assistance(&missing),
-        UpdateProjectAssistanceResult::Refused {
-            reason: UpdateProjectAssistanceRefusal::MissingProject,
-        }
+        TransitionOutcome::Conflicted(UpdateProjectAssistanceConflict::StaleAssistanceRevision)
     );
 }

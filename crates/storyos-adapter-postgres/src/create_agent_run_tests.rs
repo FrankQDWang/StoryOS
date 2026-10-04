@@ -2,8 +2,8 @@ use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, ConversationSelection, CreateAgentRunCommand, CreateAgentRunError,
     EditorClientBinding, IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, UpdateProjectAssistanceCommand, UserId, issue_project_command_challenge,
-    open_agent_run, request_create_agent_run, update_project_assistance,
+    ProjectScope, UpdateProjectAssistanceInput, UserId, issue_project_command_challenge,
+    open_agent_run, request_create_agent_run,
 };
 use storyos_core::AssistanceAvailability;
 use tokio_postgres::NoTls;
@@ -168,34 +168,20 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
     issue_project_command_challenge(&store, &assistance_issue)
         .await
         .unwrap();
-    update_project_assistance(
-        &store,
-        &UpdateProjectAssistanceCommand {
-            project_scope: assistance_issue.binding.project_scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: assistance_issue
-                    .binding
-                    .client_session_binding_digest
-                    .clone(),
-                session_generation: assistance_issue.binding.client_session_generation,
-                client_contract_revision: assistance_issue.binding.client_contract_revision.clone(),
-                security_policy_revision: assistance_issue.binding.security_policy_revision.clone(),
-            },
-            challenge_binding: assistance_issue.binding.clone(),
-            nonce_digest: assistance_issue.nonce_digest.clone(),
-            canonical_command_bytes: AVAILABLE_BYTES.to_vec(),
-            correlation_id: "018f0000-0000-7001-8000-000000007a02".to_owned(),
+    let assistance_call = crate::command_sequence::tests::command_call(
+        assistance_issue.binding.clone(),
+        &assistance_issue.nonce_digest,
+        "7a02",
+        AVAILABLE_BYTES,
+        UpdateProjectAssistanceInput {
             availability: AssistanceAvailability::Available,
             expected_revision: 0,
-            ids: AuthorCommandAdmissionIds {
-                command_id: "018f0000-0000-7001-8000-000000017a02".to_owned(),
-                author_command_admission_id: "018f0000-0000-7001-8000-000000027a02".to_owned(),
-                receipt_id: "018f0000-0000-7001-8000-000000037a02".to_owned(),
-            },
         },
-    )
-    .await
-    .unwrap();
+    );
+    store
+        .update_project_assistance(&assistance_call.envelope, &assistance_call.input)
+        .await
+        .unwrap();
 
     let first_issue = issue_run("7a11");
     issue_project_command_challenge(&store, &first_issue)

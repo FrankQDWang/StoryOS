@@ -7,7 +7,8 @@ use storyos_core::{
     CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
     DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
     ReasonCode, SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
-    UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal, UpdateProjectConflict,
+    UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
+    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
     UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
 };
 
@@ -177,6 +178,14 @@ fn every_project_setting_reason_maps_to_its_public_reason() {
     assert_maps(vec![(
         ArchiveProjectConflict::StaleProjectRevision,
         contracts::ArchiveProjectConflictReason::StaleProjectRevision,
+    )]);
+    assert_maps(vec![(
+        UpdateProjectAssistanceNoEffect::AvailabilityUnchanged,
+        contracts::UpdateProjectAssistanceNoEffectReason::AvailabilityUnchanged,
+    )]);
+    assert_maps(vec![(
+        UpdateProjectAssistanceConflict::StaleAssistanceRevision,
+        contracts::UpdateProjectAssistanceConflictReason::StaleAssistanceRevision,
     )]);
 }
 

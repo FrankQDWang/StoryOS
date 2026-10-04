@@ -69,7 +69,7 @@ pub(super) async fn archive_project(
             result,
             authority: None,
             heads: Vec::new(),
-            project: settlement.response_project,
+            project: settlement.response,
         },
     );
     Ok(Json(contracts::ArchiveProjectResponse {
