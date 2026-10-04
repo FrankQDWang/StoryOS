@@ -4,7 +4,7 @@ use ts_rs::{Config, TS};
 
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_project_export_query::{
     GET_EXPORT_OPERATION, GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
@@ -29,7 +29,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&GET_EXPORT_OPERATION, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -100,12 +100,12 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect or download one settled Project Export Archive\n",
+            "    get:\n      operationId: {}\n      summary: Inspect or download one settled Project Export Archive\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: export_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
         ),
-        GET_EXPORT_OPERATION.path, GET_EXPORT_OPERATION.operation_id, responses,
+        GET_EXPORT_OPERATION.operation_id, responses,
     )
 }
 

@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_set_current_chapter::{
     SET_CURRENT_CHAPTER, SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
@@ -31,7 +31,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&SET_CURRENT_CHAPTER, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -110,7 +110,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    put:\n      operationId: {}\n      summary: Make one eligible Chapter current\n",
+            "    put:\n      operationId: {}\n      summary: Make one eligible Chapter current\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
@@ -118,7 +118,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        SET_CURRENT_CHAPTER.path, SET_CURRENT_CHAPTER.operation_id, request_schema, responses,
+        SET_CURRENT_CHAPTER.operation_id, request_schema, responses,
     )
 }
 

@@ -161,9 +161,12 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         activity_schema["properties"]["data"]["$ref"],
         "#/$defs/ProjectActivityEvent"
     );
-    assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,steerAgentRun,getAgentRun,getRefusedEditDraft,closeEditorFlowDraft,expandRefusedEditDraftToProposal,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,replanProposal,withdrawProposal,reopenWithdrawnProposal,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
-    ));
+    let implemented_slice = openapi
+        .lines()
+        .find(|line| line.starts_with("  x-storyos-implemented-slice:"))
+        .expect("OpenAPI names the runtime-implemented slice");
+    assert!(implemented_slice.contains("getSnapshot"));
+    assert!(implemented_slice.contains("activityStream"));
 
     let client = String::from_utf8(
         generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),

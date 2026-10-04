@@ -11,7 +11,7 @@ use crate::release1_author_edit_outcome::{
     GetApplyAuthorEditOutcomeResponse,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_wire::json_bytes;
 
@@ -35,7 +35,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&GET_APPLY_AUTHOR_EDIT_OUTCOME, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -153,8 +153,8 @@ pub(super) fn openapi() -> String {
         })
         .collect::<String>();
     format!(
-        "  {}:\n    get:\n      operationId: {}\n      summary: Read one exact Apply Author Edit outcome\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: idempotency_key\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      responses:\n{responses}",
-        GET_APPLY_AUTHOR_EDIT_OUTCOME.path, GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id,
+        "    get:\n      operationId: {}\n      summary: Read one exact Apply Author Edit outcome\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: idempotency_key\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      responses:\n{responses}",
+        GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id,
     )
 }
 

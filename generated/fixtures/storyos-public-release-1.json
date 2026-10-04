@@ -1,62 +1,26 @@
 {
-  "corpus_digest": "sha256:e01495e4fe34f5650417340724e302bfeba85172bad84ca52d8ae4f74385a23c",
+  "corpus_digest": "sha256:c6f32d420f75ce6937248be6a1deb6c0b82189664832c9f2e0aa9ae5e1ce847b",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
-      "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.json",
-      "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.json",
-      "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.json",
-      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.json",
-      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.json",
-      "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-protocol-profile.json",
       "generated/golden-wire/storyos-public-release-1/get-protocol-profile.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-protocol-profile.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-project.json",
-      "generated/golden-wire/storyos-public-release-1/get-project.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-project.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-chapter.json",
-      "generated/golden-wire/storyos-public-release-1/get-chapter.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json",
-      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-project-challenge.json",
       "generated/golden-wire/storyos-public-release-1/create-project-challenge.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-project-challenge.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-project.json",
       "generated/golden-wire/storyos-public-release-1/create-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-project.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json",
+      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json",
       "generated/golden-wire/storyos-public-release-1/list-projects.json",
       "generated/golden-wire/storyos-public-release-1/list-projects.invalid.json",
       "generated/golden-wire/storyos-public-release-1/list-projects.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json",
-      "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/search-manuscript.json",
-      "generated/golden-wire/storyos-public-release-1/search-manuscript.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/search-manuscript.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-statistics.json",
-      "generated/golden-wire/storyos-public-release-1/get-statistics.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-statistics.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.json",
-      "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json",
-      "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/export-project-archive.json",
-      "generated/golden-wire/storyos-public-release-1/export-project-archive.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/export-project-archive.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-export-operation.json",
-      "generated/golden-wire/storyos-public-release-1/get-export-operation.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-export-operation.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-project.json",
+      "generated/golden-wire/storyos-public-release-1/get-project.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-project.boundary.json",
       "generated/golden-wire/storyos-public-release-1/update-project.json",
       "generated/golden-wire/storyos-public-release-1/update-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/update-project.boundary.json",
@@ -66,54 +30,18 @@
       "generated/golden-wire/storyos-public-release-1/update-project-assistance.json",
       "generated/golden-wire/storyos-public-release-1/update-project-assistance.invalid.json",
       "generated/golden-wire/storyos-public-release-1/update-project-assistance.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/create-agent-run.json",
-      "generated/golden-wire/storyos-public-release-1/create-agent-run.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/create-agent-run.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-agent-run.json",
-      "generated/golden-wire/storyos-public-release-1/get-agent-run.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/steer-agent-run.json",
-      "generated/golden-wire/storyos-public-release-1/steer-agent-run.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/steer-agent-run.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/pause-agent-run.json",
-      "generated/golden-wire/storyos-public-release-1/pause-agent-run.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/pause-agent-run.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/cancel-agent-run.json",
-      "generated/golden-wire/storyos-public-release-1/cancel-agent-run.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/cancel-agent-run.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.json",
-      "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-proposal.json",
-      "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/accept-proposal.json",
-      "generated/golden-wire/storyos-public-release-1/accept-proposal.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/accept-proposal.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.json",
-      "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.json",
-      "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.json",
-      "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.json",
-      "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/replan-proposal.json",
-      "generated/golden-wire/storyos-public-release-1/replan-proposal.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/replan-proposal.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.json",
-      "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/withdraw-proposal.json",
-      "generated/golden-wire/storyos-public-release-1/withdraw-proposal.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/withdraw-proposal.boundary.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
+      "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-editor-session.json",
+      "generated/golden-wire/storyos-public-release-1/get-editor-session.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/take-over-project-writer.json",
+      "generated/golden-wire/storyos-public-release-1/take-over-project-writer.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/take-over-project-writer.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-volume.json",
       "generated/golden-wire/storyos-public-release-1/create-volume.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-volume.boundary.json",
@@ -135,18 +63,84 @@
       "generated/golden-wire/storyos-public-release-1/set-current-chapter.json",
       "generated/golden-wire/storyos-public-release-1/set-current-chapter.invalid.json",
       "generated/golden-wire/storyos-public-release-1/set-current-chapter.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json",
-      "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
-      "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/get-editor-session.json",
-      "generated/golden-wire/storyos-public-release-1/get-editor-session.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json",
       "generated/golden-wire/storyos-public-release-1/apply-author-edit.json",
       "generated/golden-wire/storyos-public-release-1/apply-author-edit.invalid.json",
       "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/accept-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/accept-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/accept-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.json",
+      "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/withdraw-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/withdraw-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/withdraw-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/replan-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/replan-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/replan-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.json",
+      "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.json",
+      "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.json",
+      "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.json",
+      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json",
+      "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.json",
+      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/create-agent-run.json",
+      "generated/golden-wire/storyos-public-release-1/create-agent-run.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/create-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-agent-run.json",
+      "generated/golden-wire/storyos-public-release-1/get-agent-run.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/steer-agent-run.json",
+      "generated/golden-wire/storyos-public-release-1/steer-agent-run.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/steer-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/pause-agent-run.json",
+      "generated/golden-wire/storyos-public-release-1/pause-agent-run.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/pause-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/cancel-agent-run.json",
+      "generated/golden-wire/storyos-public-release-1/cancel-agent-run.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/cancel-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/export-project-archive.json",
+      "generated/golden-wire/storyos-public-release-1/export-project-archive.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/export-project-archive.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.json",
+      "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json",
+      "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-chapter.json",
+      "generated/golden-wire/storyos-public-release-1/get-chapter.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-statistics.json",
+      "generated/golden-wire/storyos-public-release-1/get-statistics.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-statistics.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.json",
+      "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.json",
+      "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.json",
       "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.boundary.json",
@@ -156,84 +150,18 @@
       "generated/golden-wire/storyos-public-release-1/activity-stream.json",
       "generated/golden-wire/storyos-public-release-1/activity-stream.invalid.json",
       "generated/golden-wire/storyos-public-release-1/activity-stream.boundary.json",
-      "generated/golden-wire/storyos-public-release-1/take-over-project-writer.json",
-      "generated/golden-wire/storyos-public-release-1/take-over-project-writer.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/take-over-project-writer.boundary.json"
+      "generated/golden-wire/storyos-public-release-1/search-manuscript.json",
+      "generated/golden-wire/storyos-public-release-1/search-manuscript.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/search-manuscript.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-export-operation.json",
+      "generated/golden-wire/storyos-public-release-1/get-export-operation.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-export-operation.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json",
+      "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.boundary.json"
     ]
   },
   "fixtures": [
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.expandRefusedEditDraftToProposal.positive.v1",
-      "operation_id": "expandRefusedEditDraftToProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.expandRefusedEditDraftToProposal.invalid.v1",
-      "operation_id": "expandRefusedEditDraftToProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.expandRefusedEditDraftToProposal.boundary.v1",
-      "operation_id": "expandRefusedEditDraftToProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.closeEditorFlowDraft.positive.v1",
-      "operation_id": "closeEditorFlowDraft",
-      "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.closeEditorFlowDraft.invalid.v1",
-      "operation_id": "closeEditorFlowDraft",
-      "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.closeEditorFlowDraft.boundary.v1",
-      "operation_id": "closeEditorFlowDraft",
-      "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.positive.v1",
-      "operation_id": "undoLatestAuthorAction",
-      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.negative.v1",
-      "operation_id": "undoLatestAuthorAction",
-      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.invalid.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-closed.v1.positive.v1",
-      "operation_id": "closeEditorFlowDraft",
-      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-closed.v1.negative.v1",
-      "operation_id": "closeEditorFlowDraft",
-      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.invalid.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.storyos.event.refused-edit-draft-created.v1.positive.v1",
-      "operation_id": "applyAuthorEdit",
-      "path": "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.storyos.event.refused-edit-draft-created.v1.negative.v1",
-      "operation_id": "applyAuthorEdit",
-      "path": "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.invalid.json"
-    },
     {
       "classification": "positive",
       "fixture_id": "storyos.golden.getProtocolProfile.positive.v1",
@@ -251,60 +179,6 @@
       "fixture_id": "storyos.golden.getProtocolProfile.boundary.v1",
       "operation_id": "getProtocolProfile",
       "path": "generated/golden-wire/storyos-public-release-1/get-protocol-profile.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.getProject.positive.v1",
-      "operation_id": "getProject",
-      "path": "generated/golden-wire/storyos-public-release-1/get-project.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.getProject.invalid.v1",
-      "operation_id": "getProject",
-      "path": "generated/golden-wire/storyos-public-release-1/get-project.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.getProject.boundary.v1",
-      "operation_id": "getProject",
-      "path": "generated/golden-wire/storyos-public-release-1/get-project.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.getChapter.positive.v1",
-      "operation_id": "getChapter",
-      "path": "generated/golden-wire/storyos-public-release-1/get-chapter.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.getChapter.invalid.v1",
-      "operation_id": "getChapter",
-      "path": "generated/golden-wire/storyos-public-release-1/get-chapter.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.getChapter.boundary.v1",
-      "operation_id": "getChapter",
-      "path": "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.createProjectCommandChallenge.positive.v1",
-      "operation_id": "createProjectCommandChallenge",
-      "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.createProjectCommandChallenge.invalid.v1",
-      "operation_id": "createProjectCommandChallenge",
-      "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.createProjectCommandChallenge.boundary.v1",
-      "operation_id": "createProjectCommandChallenge",
-      "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json"
     },
     {
       "classification": "positive",
@@ -344,6 +218,24 @@
     },
     {
       "classification": "positive",
+      "fixture_id": "storyos.golden.createProjectCommandChallenge.positive.v1",
+      "operation_id": "createProjectCommandChallenge",
+      "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.createProjectCommandChallenge.invalid.v1",
+      "operation_id": "createProjectCommandChallenge",
+      "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.createProjectCommandChallenge.boundary.v1",
+      "operation_id": "createProjectCommandChallenge",
+      "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json"
+    },
+    {
+      "classification": "positive",
       "fixture_id": "storyos.golden.listProjects.positive.v1",
       "operation_id": "listProjects",
       "path": "generated/golden-wire/storyos-public-release-1/list-projects.json"
@@ -362,129 +254,21 @@
     },
     {
       "classification": "positive",
-      "fixture_id": "storyos.golden.getManuscriptTree.positive.v1",
-      "operation_id": "getManuscriptTree",
-      "path": "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json"
+      "fixture_id": "storyos.golden.getProject.positive.v1",
+      "operation_id": "getProject",
+      "path": "generated/golden-wire/storyos-public-release-1/get-project.json"
     },
     {
       "classification": "invalid",
-      "fixture_id": "storyos.golden.getManuscriptTree.invalid.v1",
-      "operation_id": "getManuscriptTree",
-      "path": "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.invalid.json"
+      "fixture_id": "storyos.golden.getProject.invalid.v1",
+      "operation_id": "getProject",
+      "path": "generated/golden-wire/storyos-public-release-1/get-project.invalid.json"
     },
     {
       "classification": "boundary",
-      "fixture_id": "storyos.golden.getManuscriptTree.boundary.v1",
-      "operation_id": "getManuscriptTree",
-      "path": "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.searchManuscript.positive.v1",
-      "operation_id": "searchManuscript",
-      "path": "generated/golden-wire/storyos-public-release-1/search-manuscript.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.searchManuscript.invalid.v1",
-      "operation_id": "searchManuscript",
-      "path": "generated/golden-wire/storyos-public-release-1/search-manuscript.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.searchManuscript.boundary.v1",
-      "operation_id": "searchManuscript",
-      "path": "generated/golden-wire/storyos-public-release-1/search-manuscript.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.getStatistics.positive.v1",
-      "operation_id": "getStatistics",
-      "path": "generated/golden-wire/storyos-public-release-1/get-statistics.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.getStatistics.invalid.v1",
-      "operation_id": "getStatistics",
-      "path": "generated/golden-wire/storyos-public-release-1/get-statistics.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.getStatistics.boundary.v1",
-      "operation_id": "getStatistics",
-      "path": "generated/golden-wire/storyos-public-release-1/get-statistics.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.exportHumanReadableManuscript.positive.v1",
-      "operation_id": "exportHumanReadableManuscript",
-      "path": "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.exportHumanReadableManuscript.invalid.v1",
-      "operation_id": "exportHumanReadableManuscript",
-      "path": "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.exportHumanReadableManuscript.boundary.v1",
-      "operation_id": "exportHumanReadableManuscript",
-      "path": "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.getHumanReadableManuscriptExport.positive.v1",
-      "operation_id": "getHumanReadableManuscriptExport",
-      "path": "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.getHumanReadableManuscriptExport.invalid.v1",
-      "operation_id": "getHumanReadableManuscriptExport",
-      "path": "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.getHumanReadableManuscriptExport.boundary.v1",
-      "operation_id": "getHumanReadableManuscriptExport",
-      "path": "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.exportProjectArchive.positive.v1",
-      "operation_id": "exportProjectArchive",
-      "path": "generated/golden-wire/storyos-public-release-1/export-project-archive.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.exportProjectArchive.invalid.v1",
-      "operation_id": "exportProjectArchive",
-      "path": "generated/golden-wire/storyos-public-release-1/export-project-archive.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.exportProjectArchive.boundary.v1",
-      "operation_id": "exportProjectArchive",
-      "path": "generated/golden-wire/storyos-public-release-1/export-project-archive.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.getExportOperation.positive.v1",
-      "operation_id": "getExportOperation",
-      "path": "generated/golden-wire/storyos-public-release-1/get-export-operation.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.getExportOperation.invalid.v1",
-      "operation_id": "getExportOperation",
-      "path": "generated/golden-wire/storyos-public-release-1/get-export-operation.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.getExportOperation.boundary.v1",
-      "operation_id": "getExportOperation",
-      "path": "generated/golden-wire/storyos-public-release-1/get-export-operation.boundary.json"
+      "fixture_id": "storyos.golden.getProject.boundary.v1",
+      "operation_id": "getProject",
+      "path": "generated/golden-wire/storyos-public-release-1/get-project.boundary.json"
     },
     {
       "classification": "positive",
@@ -542,276 +326,6 @@
     },
     {
       "classification": "positive",
-      "fixture_id": "storyos.golden.createAgentRun.positive.v1",
-      "operation_id": "createAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/create-agent-run.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.createAgentRun.invalid.v1",
-      "operation_id": "createAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/create-agent-run.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.createAgentRun.boundary.v1",
-      "operation_id": "createAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/create-agent-run.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.getAgentRun.positive.v1",
-      "operation_id": "getAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/get-agent-run.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.getAgentRun.invalid.v1",
-      "operation_id": "getAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/get-agent-run.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.getAgentRun.boundary.v1",
-      "operation_id": "getAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.steerAgentRun.positive.v1",
-      "operation_id": "steerAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/steer-agent-run.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.steerAgentRun.invalid.v1",
-      "operation_id": "steerAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/steer-agent-run.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.steerAgentRun.boundary.v1",
-      "operation_id": "steerAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/steer-agent-run.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.pauseAgentRun.positive.v1",
-      "operation_id": "pauseAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/pause-agent-run.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.pauseAgentRun.invalid.v1",
-      "operation_id": "pauseAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/pause-agent-run.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.pauseAgentRun.boundary.v1",
-      "operation_id": "pauseAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/pause-agent-run.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.cancelAgentRun.positive.v1",
-      "operation_id": "cancelAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.cancelAgentRun.invalid.v1",
-      "operation_id": "cancelAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.cancelAgentRun.boundary.v1",
-      "operation_id": "cancelAgentRun",
-      "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.getRefusedEditDraft.positive.v1",
-      "operation_id": "getRefusedEditDraft",
-      "path": "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.getRefusedEditDraft.invalid.v1",
-      "operation_id": "getRefusedEditDraft",
-      "path": "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.getRefusedEditDraft.boundary.v1",
-      "operation_id": "getRefusedEditDraft",
-      "path": "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.getProposal.positive.v1",
-      "operation_id": "getProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/get-proposal.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.getProposal.invalid.v1",
-      "operation_id": "getProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.getProposal.boundary.v1",
-      "operation_id": "getProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.acceptProposal.positive.v1",
-      "operation_id": "acceptProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.acceptProposal.invalid.v1",
-      "operation_id": "acceptProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.acceptProposal.boundary.v1",
-      "operation_id": "acceptProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.rejectProposalOperations.positive.v1",
-      "operation_id": "rejectProposalOperations",
-      "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.rejectProposalOperations.invalid.v1",
-      "operation_id": "rejectProposalOperations",
-      "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.rejectProposalOperations.boundary.v1",
-      "operation_id": "rejectProposalOperations",
-      "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.completeReadyPartialProposal.positive.v1",
-      "operation_id": "completeReadyPartialProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.completeReadyPartialProposal.invalid.v1",
-      "operation_id": "completeReadyPartialProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.completeReadyPartialProposal.boundary.v1",
-      "operation_id": "completeReadyPartialProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.continueProposalGeneration.positive.v1",
-      "operation_id": "continueProposalGeneration",
-      "path": "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.continueProposalGeneration.invalid.v1",
-      "operation_id": "continueProposalGeneration",
-      "path": "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.continueProposalGeneration.boundary.v1",
-      "operation_id": "continueProposalGeneration",
-      "path": "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.reopenRejectedOperations.positive.v1",
-      "operation_id": "reopenRejectedOperations",
-      "path": "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.reopenRejectedOperations.invalid.v1",
-      "operation_id": "reopenRejectedOperations",
-      "path": "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.reopenRejectedOperations.boundary.v1",
-      "operation_id": "reopenRejectedOperations",
-      "path": "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.replanProposal.positive.v1",
-      "operation_id": "replanProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.replanProposal.invalid.v1",
-      "operation_id": "replanProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.replanProposal.boundary.v1",
-      "operation_id": "replanProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.reopenWithdrawnProposal.positive.v1",
-      "operation_id": "reopenWithdrawnProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.reopenWithdrawnProposal.invalid.v1",
-      "operation_id": "reopenWithdrawnProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.reopenWithdrawnProposal.boundary.v1",
-      "operation_id": "reopenWithdrawnProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.boundary.json"
-    },
-    {
-      "classification": "positive",
-      "fixture_id": "storyos.golden.withdrawProposal.positive.v1",
-      "operation_id": "withdrawProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/withdraw-proposal.json"
-    },
-    {
-      "classification": "invalid",
-      "fixture_id": "storyos.golden.withdrawProposal.invalid.v1",
-      "operation_id": "withdrawProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/withdraw-proposal.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.withdrawProposal.boundary.v1",
-      "operation_id": "withdrawProposal",
-      "path": "generated/golden-wire/storyos-public-release-1/withdraw-proposal.boundary.json"
-    },
-    {
-      "classification": "positive",
       "fixture_id": "storyos.golden.archiveProject.positive.v1",
       "operation_id": "archiveProject",
       "path": "generated/golden-wire/storyos-public-release-1/archive-project.json"
@@ -827,6 +341,60 @@
       "fixture_id": "storyos.golden.archiveProject.boundary.v1",
       "operation_id": "archiveProject",
       "path": "generated/golden-wire/storyos-public-release-1/archive-project.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.createEditorSession.positive.v1",
+      "operation_id": "createEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/create-editor-session.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.createEditorSession.invalid.v1",
+      "operation_id": "createEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.createEditorSession.boundary.v1",
+      "operation_id": "createEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getEditorSession.positive.v1",
+      "operation_id": "getEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getEditorSession.invalid.v1",
+      "operation_id": "getEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getEditorSession.boundary.v1",
+      "operation_id": "getEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.takeOverProjectWriter.positive.v1",
+      "operation_id": "takeOverProjectWriter",
+      "path": "generated/golden-wire/storyos-public-release-1/take-over-project-writer.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.takeOverProjectWriter.invalid.v1",
+      "operation_id": "takeOverProjectWriter",
+      "path": "generated/golden-wire/storyos-public-release-1/take-over-project-writer.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.takeOverProjectWriter.boundary.v1",
+      "operation_id": "takeOverProjectWriter",
+      "path": "generated/golden-wire/storyos-public-release-1/take-over-project-writer.boundary.json"
     },
     {
       "classification": "positive",
@@ -956,6 +524,216 @@
     },
     {
       "classification": "positive",
+      "fixture_id": "storyos.golden.applyAuthorEdit.positive.v1",
+      "operation_id": "applyAuthorEdit",
+      "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.applyAuthorEdit.invalid.v1",
+      "operation_id": "applyAuthorEdit",
+      "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.applyAuthorEdit.boundary.v1",
+      "operation_id": "applyAuthorEdit",
+      "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.acceptProposal.positive.v1",
+      "operation_id": "acceptProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.acceptProposal.invalid.v1",
+      "operation_id": "acceptProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.acceptProposal.boundary.v1",
+      "operation_id": "acceptProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.rejectProposalOperations.positive.v1",
+      "operation_id": "rejectProposalOperations",
+      "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.rejectProposalOperations.invalid.v1",
+      "operation_id": "rejectProposalOperations",
+      "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.rejectProposalOperations.boundary.v1",
+      "operation_id": "rejectProposalOperations",
+      "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.withdrawProposal.positive.v1",
+      "operation_id": "withdrawProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/withdraw-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.withdrawProposal.invalid.v1",
+      "operation_id": "withdrawProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/withdraw-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.withdrawProposal.boundary.v1",
+      "operation_id": "withdrawProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/withdraw-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.replanProposal.positive.v1",
+      "operation_id": "replanProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.replanProposal.invalid.v1",
+      "operation_id": "replanProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.replanProposal.boundary.v1",
+      "operation_id": "replanProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.reopenWithdrawnProposal.positive.v1",
+      "operation_id": "reopenWithdrawnProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.reopenWithdrawnProposal.invalid.v1",
+      "operation_id": "reopenWithdrawnProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.reopenWithdrawnProposal.boundary.v1",
+      "operation_id": "reopenWithdrawnProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/reopen-withdrawn-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.reopenRejectedOperations.positive.v1",
+      "operation_id": "reopenRejectedOperations",
+      "path": "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.reopenRejectedOperations.invalid.v1",
+      "operation_id": "reopenRejectedOperations",
+      "path": "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.reopenRejectedOperations.boundary.v1",
+      "operation_id": "reopenRejectedOperations",
+      "path": "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.completeReadyPartialProposal.positive.v1",
+      "operation_id": "completeReadyPartialProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.completeReadyPartialProposal.invalid.v1",
+      "operation_id": "completeReadyPartialProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.completeReadyPartialProposal.boundary.v1",
+      "operation_id": "completeReadyPartialProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.continueProposalGeneration.positive.v1",
+      "operation_id": "continueProposalGeneration",
+      "path": "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.continueProposalGeneration.invalid.v1",
+      "operation_id": "continueProposalGeneration",
+      "path": "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.continueProposalGeneration.boundary.v1",
+      "operation_id": "continueProposalGeneration",
+      "path": "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.expandRefusedEditDraftToProposal.positive.v1",
+      "operation_id": "expandRefusedEditDraftToProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.expandRefusedEditDraftToProposal.invalid.v1",
+      "operation_id": "expandRefusedEditDraftToProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.expandRefusedEditDraftToProposal.boundary.v1",
+      "operation_id": "expandRefusedEditDraftToProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.closeEditorFlowDraft.positive.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.closeEditorFlowDraft.invalid.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.closeEditorFlowDraft.boundary.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-closed.v1.positive.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-closed.v1.negative.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.invalid.json"
+    },
+    {
+      "classification": "positive",
       "fixture_id": "storyos.golden.undoLatestAuthorAction.positive.v1",
       "operation_id": "undoLatestAuthorAction",
       "path": "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json"
@@ -974,57 +752,243 @@
     },
     {
       "classification": "positive",
-      "fixture_id": "storyos.golden.createEditorSession.positive.v1",
-      "operation_id": "createEditorSession",
-      "path": "generated/golden-wire/storyos-public-release-1/create-editor-session.json"
+      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.positive.v1",
+      "operation_id": "undoLatestAuthorAction",
+      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.json"
     },
     {
       "classification": "invalid",
-      "fixture_id": "storyos.golden.createEditorSession.invalid.v1",
-      "operation_id": "createEditorSession",
-      "path": "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json"
-    },
-    {
-      "classification": "boundary",
-      "fixture_id": "storyos.golden.createEditorSession.boundary.v1",
-      "operation_id": "createEditorSession",
-      "path": "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json"
+      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.negative.v1",
+      "operation_id": "undoLatestAuthorAction",
+      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.invalid.json"
     },
     {
       "classification": "positive",
-      "fixture_id": "storyos.golden.getEditorSession.positive.v1",
-      "operation_id": "getEditorSession",
-      "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.json"
+      "fixture_id": "storyos.golden.createAgentRun.positive.v1",
+      "operation_id": "createAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/create-agent-run.json"
     },
     {
       "classification": "invalid",
-      "fixture_id": "storyos.golden.getEditorSession.invalid.v1",
-      "operation_id": "getEditorSession",
-      "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.invalid.json"
+      "fixture_id": "storyos.golden.createAgentRun.invalid.v1",
+      "operation_id": "createAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/create-agent-run.invalid.json"
     },
     {
       "classification": "boundary",
-      "fixture_id": "storyos.golden.getEditorSession.boundary.v1",
-      "operation_id": "getEditorSession",
-      "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json"
+      "fixture_id": "storyos.golden.createAgentRun.boundary.v1",
+      "operation_id": "createAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/create-agent-run.boundary.json"
     },
     {
       "classification": "positive",
-      "fixture_id": "storyos.golden.applyAuthorEdit.positive.v1",
-      "operation_id": "applyAuthorEdit",
-      "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.json"
+      "fixture_id": "storyos.golden.getAgentRun.positive.v1",
+      "operation_id": "getAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/get-agent-run.json"
     },
     {
       "classification": "invalid",
-      "fixture_id": "storyos.golden.applyAuthorEdit.invalid.v1",
-      "operation_id": "applyAuthorEdit",
-      "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.invalid.json"
+      "fixture_id": "storyos.golden.getAgentRun.invalid.v1",
+      "operation_id": "getAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/get-agent-run.invalid.json"
     },
     {
       "classification": "boundary",
-      "fixture_id": "storyos.golden.applyAuthorEdit.boundary.v1",
+      "fixture_id": "storyos.golden.getAgentRun.boundary.v1",
+      "operation_id": "getAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.steerAgentRun.positive.v1",
+      "operation_id": "steerAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/steer-agent-run.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.steerAgentRun.invalid.v1",
+      "operation_id": "steerAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/steer-agent-run.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.steerAgentRun.boundary.v1",
+      "operation_id": "steerAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/steer-agent-run.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.pauseAgentRun.positive.v1",
+      "operation_id": "pauseAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/pause-agent-run.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.pauseAgentRun.invalid.v1",
+      "operation_id": "pauseAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/pause-agent-run.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.pauseAgentRun.boundary.v1",
+      "operation_id": "pauseAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/pause-agent-run.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.cancelAgentRun.positive.v1",
+      "operation_id": "cancelAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.cancelAgentRun.invalid.v1",
+      "operation_id": "cancelAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.cancelAgentRun.boundary.v1",
+      "operation_id": "cancelAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.exportProjectArchive.positive.v1",
+      "operation_id": "exportProjectArchive",
+      "path": "generated/golden-wire/storyos-public-release-1/export-project-archive.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.exportProjectArchive.invalid.v1",
+      "operation_id": "exportProjectArchive",
+      "path": "generated/golden-wire/storyos-public-release-1/export-project-archive.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.exportProjectArchive.boundary.v1",
+      "operation_id": "exportProjectArchive",
+      "path": "generated/golden-wire/storyos-public-release-1/export-project-archive.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.exportHumanReadableManuscript.positive.v1",
+      "operation_id": "exportHumanReadableManuscript",
+      "path": "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.exportHumanReadableManuscript.invalid.v1",
+      "operation_id": "exportHumanReadableManuscript",
+      "path": "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.exportHumanReadableManuscript.boundary.v1",
+      "operation_id": "exportHumanReadableManuscript",
+      "path": "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getManuscriptTree.positive.v1",
+      "operation_id": "getManuscriptTree",
+      "path": "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getManuscriptTree.invalid.v1",
+      "operation_id": "getManuscriptTree",
+      "path": "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getManuscriptTree.boundary.v1",
+      "operation_id": "getManuscriptTree",
+      "path": "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getChapter.positive.v1",
+      "operation_id": "getChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/get-chapter.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getChapter.invalid.v1",
+      "operation_id": "getChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/get-chapter.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getChapter.boundary.v1",
+      "operation_id": "getChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getStatistics.positive.v1",
+      "operation_id": "getStatistics",
+      "path": "generated/golden-wire/storyos-public-release-1/get-statistics.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getStatistics.invalid.v1",
+      "operation_id": "getStatistics",
+      "path": "generated/golden-wire/storyos-public-release-1/get-statistics.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getStatistics.boundary.v1",
+      "operation_id": "getStatistics",
+      "path": "generated/golden-wire/storyos-public-release-1/get-statistics.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getProposal.positive.v1",
+      "operation_id": "getProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/get-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getProposal.invalid.v1",
+      "operation_id": "getProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getProposal.boundary.v1",
+      "operation_id": "getProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getRefusedEditDraft.positive.v1",
+      "operation_id": "getRefusedEditDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getRefusedEditDraft.invalid.v1",
+      "operation_id": "getRefusedEditDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getRefusedEditDraft.boundary.v1",
+      "operation_id": "getRefusedEditDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.storyos.event.refused-edit-draft-created.v1.positive.v1",
       "operation_id": "applyAuthorEdit",
-      "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json"
+      "path": "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.storyos.event.refused-edit-draft-created.v1.negative.v1",
+      "operation_id": "applyAuthorEdit",
+      "path": "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.invalid.json"
     },
     {
       "classification": "positive",
@@ -1082,21 +1046,57 @@
     },
     {
       "classification": "positive",
-      "fixture_id": "storyos.golden.takeOverProjectWriter.positive.v1",
-      "operation_id": "takeOverProjectWriter",
-      "path": "generated/golden-wire/storyos-public-release-1/take-over-project-writer.json"
+      "fixture_id": "storyos.golden.searchManuscript.positive.v1",
+      "operation_id": "searchManuscript",
+      "path": "generated/golden-wire/storyos-public-release-1/search-manuscript.json"
     },
     {
       "classification": "invalid",
-      "fixture_id": "storyos.golden.takeOverProjectWriter.invalid.v1",
-      "operation_id": "takeOverProjectWriter",
-      "path": "generated/golden-wire/storyos-public-release-1/take-over-project-writer.invalid.json"
+      "fixture_id": "storyos.golden.searchManuscript.invalid.v1",
+      "operation_id": "searchManuscript",
+      "path": "generated/golden-wire/storyos-public-release-1/search-manuscript.invalid.json"
     },
     {
       "classification": "boundary",
-      "fixture_id": "storyos.golden.takeOverProjectWriter.boundary.v1",
-      "operation_id": "takeOverProjectWriter",
-      "path": "generated/golden-wire/storyos-public-release-1/take-over-project-writer.boundary.json"
+      "fixture_id": "storyos.golden.searchManuscript.boundary.v1",
+      "operation_id": "searchManuscript",
+      "path": "generated/golden-wire/storyos-public-release-1/search-manuscript.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getExportOperation.positive.v1",
+      "operation_id": "getExportOperation",
+      "path": "generated/golden-wire/storyos-public-release-1/get-export-operation.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getExportOperation.invalid.v1",
+      "operation_id": "getExportOperation",
+      "path": "generated/golden-wire/storyos-public-release-1/get-export-operation.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getExportOperation.boundary.v1",
+      "operation_id": "getExportOperation",
+      "path": "generated/golden-wire/storyos-public-release-1/get-export-operation.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getHumanReadableManuscriptExport.positive.v1",
+      "operation_id": "getHumanReadableManuscriptExport",
+      "path": "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getHumanReadableManuscriptExport.invalid.v1",
+      "operation_id": "getHumanReadableManuscriptExport",
+      "path": "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getHumanReadableManuscriptExport.boundary.v1",
+      "operation_id": "getHumanReadableManuscriptExport",
+      "path": "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.boundary.json"
     }
   ],
   "public_protocol_release": "storyos.public.release.1",

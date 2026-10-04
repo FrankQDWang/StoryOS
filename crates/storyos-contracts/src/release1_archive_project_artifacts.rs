@@ -8,7 +8,7 @@ use crate::release1_archive_project::{
     ArchiveProjectResponse,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
@@ -29,7 +29,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&ARCHIVE_PROJECT, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -105,7 +105,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    put:\n      operationId: {}\n      summary: Archive one exact Project\n",
+            "    put:\n      operationId: {}\n      summary: Archive one exact Project\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
@@ -113,7 +113,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        ARCHIVE_PROJECT.path, ARCHIVE_PROJECT.operation_id, request_schema, responses,
+        ARCHIVE_PROJECT.operation_id, request_schema, responses,
     )
 }
 

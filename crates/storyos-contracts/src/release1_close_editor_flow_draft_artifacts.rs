@@ -10,7 +10,7 @@ use crate::release1_close_editor_flow_draft::{
 };
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, event_fixtures, fixture_triple,
-    operation_schemas, path_items,
+    method, operation_schemas,
 };
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
@@ -40,7 +40,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             },
         ]
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&CLOSE_EDITOR_FLOW_DRAFT, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -138,7 +138,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Discard one open retained Refused Edit Draft\n",
+            "    post:\n      operationId: {}\n      summary: Discard one open retained Refused Edit Draft\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: draft_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -147,10 +147,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        CLOSE_EDITOR_FLOW_DRAFT.path,
-        CLOSE_EDITOR_FLOW_DRAFT.operation_id,
-        request_schema,
-        responses,
+        CLOSE_EDITOR_FLOW_DRAFT.operation_id, request_schema, responses,
     )
 }
 

@@ -5,7 +5,7 @@ use ts_rs::{Config, TS};
 use crate::release1::{ACTIVITY_PROFILE, PUBLIC_PROTOCOL_RELEASE};
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_snapshot::{
     ACTIVITY_STREAM, ACTIVITY_STREAM_REQUEST_SCHEMA_ID, ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
@@ -67,8 +67,8 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         .collect()
     },
     openapi: || {
-        let mut methods = path_items(snapshot_openapi());
-        methods.extend(path_items(activity_stream_openapi()));
+        let mut methods = method(&GET_SNAPSHOT, snapshot_openapi());
+        methods.extend(method(&ACTIVITY_STREAM, activity_stream_openapi()));
         methods
     },
     typescript_types: typescript_type_declarations,
@@ -362,8 +362,8 @@ pub(super) fn activity_stream_openapi() -> String {
         })
         .collect::<String>();
     format!(
-        "  {}:\n    get:\n      operationId: {}\n      summary: Stream Project Activity after an authorized Snapshot\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: snapshot_id\n          in: query\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: protocol_release\n          in: query\n          required: true\n          schema:\n            type: string\n        - name: Last-Event-ID\n          in: header\n          required: false\n          schema:\n            type: string\n      responses:\n{responses}",
-        ACTIVITY_STREAM.path, ACTIVITY_STREAM.operation_id,
+        "    get:\n      operationId: {}\n      summary: Stream Project Activity after an authorized Snapshot\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: snapshot_id\n          in: query\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: protocol_release\n          in: query\n          required: true\n          schema:\n            type: string\n        - name: Last-Event-ID\n          in: header\n          required: false\n          schema:\n            type: string\n      responses:\n{responses}",
+        ACTIVITY_STREAM.operation_id,
     )
 }
 
@@ -526,7 +526,7 @@ fn operation_openapi(
         })
         .collect::<String>();
     format!(
-        "  {}:\n    get:\n      operationId: {}\n      summary: {summary}\n      parameters:\n{parameter_yaml}      responses:\n{responses}",
-        operation.path, operation.operation_id,
+        "    get:\n      operationId: {}\n      summary: {summary}\n      parameters:\n{parameter_yaml}      responses:\n{responses}",
+        operation.operation_id,
     )
 }

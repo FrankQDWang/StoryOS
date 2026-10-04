@@ -5,7 +5,7 @@ use ts_rs::{Config, TS};
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_operation_registry::{
     ContractGraphEntry, OperationArtifacts, OperationKind, RegisteredOperation, fixture_triple,
-    operation_schemas, path_items,
+    method, operation_schemas,
 };
 use crate::release1_takeover::{
     TAKE_OVER_PROJECT_WRITER, TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
@@ -28,7 +28,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&TAKE_OVER_PROJECT_WRITER, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -105,8 +105,8 @@ pub(super) fn openapi() -> String {
         })
         .collect::<String>();
     format!(
-        "  {}:\n    post:\n      operationId: {}\n      summary: Take over the current Project writer generation\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: editor_session_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{request_schema}'\n      responses:\n{responses}",
-        TAKE_OVER_PROJECT_WRITER.path, TAKE_OVER_PROJECT_WRITER.operation_id
+        "    post:\n      operationId: {}\n      summary: Take over the current Project writer generation\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: editor_session_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{request_schema}'\n      responses:\n{responses}",
+        TAKE_OVER_PROJECT_WRITER.operation_id
     )
 }
 

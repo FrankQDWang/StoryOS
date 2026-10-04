@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_reopen_withdrawn_proposal::{
     REOPEN_WITHDRAWN_PROPOSAL, REOPEN_WITHDRAWN_PROPOSAL_DIGEST_PROFILE,
@@ -32,7 +32,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&REOPEN_WITHDRAWN_PROPOSAL, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -113,7 +113,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Reopen a withdrawn Proposal\n",
+            "    post:\n      operationId: {}\n      summary: Reopen a withdrawn Proposal\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: proposal_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -122,10 +122,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        REOPEN_WITHDRAWN_PROPOSAL.path,
-        REOPEN_WITHDRAWN_PROPOSAL.operation_id,
-        request_schema,
-        responses,
+        REOPEN_WITHDRAWN_PROPOSAL.operation_id, request_schema, responses,
     )
 }
 

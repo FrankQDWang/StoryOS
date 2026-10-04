@@ -8,7 +8,7 @@ use crate::release1_accept_proposal::{
     AcceptProposalRequest, AcceptProposalResponse, AcceptanceReceipt, AcceptanceReceiptResult,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
@@ -34,7 +34,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&ACCEPT_PROPOSAL, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -116,7 +116,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Accept a permitted pending Proposal Operation set\n",
+            "    post:\n      operationId: {}\n      summary: Accept a permitted pending Proposal Operation set\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: proposal_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -125,7 +125,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        ACCEPT_PROPOSAL.path, ACCEPT_PROPOSAL.operation_id, request_schema, responses,
+        ACCEPT_PROPOSAL.operation_id, request_schema, responses,
     )
 }
 

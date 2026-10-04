@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
 };
 use crate::release1_proposal_generation_decision::{
     COMPLETE_READY_PARTIAL_PROPOSAL, COMPLETE_READY_PARTIAL_PROPOSAL_DIGEST_PROFILE,
@@ -78,7 +78,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         .flatten()
         .collect()
     },
-    openapi: || path_items(openapi()),
+    openapi,
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -152,9 +152,8 @@ pub(super) fn continue_response_schema_bytes() -> Vec<u8> {
     )
 }
 
-pub(super) fn openapi() -> String {
-    format!(
-        "{}{}",
+pub(super) fn openapi() -> Vec<OpenApiMethod> {
+    vec![
         operation_openapi(
             &COMPLETE_READY_PARTIAL_PROPOSAL,
             COMPLETE_REQUEST_SCHEMA_PATH,
@@ -167,7 +166,7 @@ pub(super) fn openapi() -> String {
             CONTINUE_RESPONSE_SCHEMA_PATH,
             "Continue one Proposal Generation",
         ),
-    )
+    ]
 }
 
 pub(super) fn typescript_type_declarations() -> String {
@@ -380,7 +379,7 @@ fn operation_openapi(
     request_path: &str,
     response_path: &str,
     summary: &str,
-) -> String {
+) -> OpenApiMethod {
     let request_schema = generated_ref(request_path);
     let response_schema = generated_ref(response_path);
     let responses = operation
@@ -402,9 +401,9 @@ fn operation_openapi(
             format!("        '{status}':\n          description: {description}\n{retry_after}{content}")
         })
         .collect::<String>();
-    format!(
+    let yaml = format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: {}\n",
+            "    post:\n      operationId: {}\n      summary: {}\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: proposal_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -413,8 +412,12 @@ fn operation_openapi(
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        operation.path, operation.operation_id, summary, request_schema, responses,
-    )
+        operation.operation_id, summary, request_schema, responses,
+    );
+    OpenApiMethod {
+        path: operation.path,
+        yaml,
+    }
 }
 
 fn client_source(digest_name: &str, function_name: &str, profile: &str, path: &str) -> String {
