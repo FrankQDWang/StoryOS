@@ -6,6 +6,41 @@ use crate::release1_list_projects::{
     LIST_PROJECTS, LIST_PROJECTS_REQUEST_SCHEMA_ID, LIST_PROJECTS_RESPONSE_SCHEMA_ID,
     ListProjectsResponse, ProjectLifecycleState, ProjectListItem,
 };
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
+use crate::release1_wire::json_bytes;
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &LIST_PROJECTS,
+        &["server_derived_user"],
+    )],
+    schemas: || {
+        operation_schemas(
+            &LIST_PROJECTS,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&LIST_PROJECTS, method_openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &LIST_PROJECTS,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
+};
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/project-list-request.schema.json";
@@ -145,10 +180,4 @@ fn list_fixture(projects: Vec<Value>) -> Value {
         "owner_user_id": "018f0000-0000-7001-8000-000000000001",
         "projects": projects
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
