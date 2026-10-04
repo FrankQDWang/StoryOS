@@ -147,3 +147,7 @@ Managed exit: 0. Differences: 0. Evidence: `proposals-320-323.json.gz` and `prop
 ## Proposal batch 324-327
 
 Managed exit: 0. Differences: 0. Evidence: `proposals-324-327.json.gz` and `proposals-324-327.log`. Counts include only recorded calls.
+
+## Proposal batch 328-331
+
+Managed exit: 0. Differences: 0. Evidence: `proposals-328-331.json.gz` and `proposals-328-331.log`. Counts include only recorded calls.
