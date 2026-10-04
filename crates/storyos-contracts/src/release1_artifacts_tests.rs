@@ -1,8 +1,11 @@
 use super::{
-    CHAPTER_FIXTURE_PATHS, CHAPTER_RESPONSE_SCHEMA_PATH, FIXTURE_DIGEST_PLACEHOLDER, OPENAPI_PATH,
-    REVIEW_CATALOG_PATH, fixture_corpus_bytes, release1_protocol_profile, validate_review_bindings,
+    FIXTURE_DIGEST_PLACEHOLDER, OPENAPI_PATH, REVIEW_CATALOG_PATH, fixture_corpus_bytes,
+    release1_protocol_profile, validate_review_bindings,
 };
 use crate::digest::sha256_prefixed;
+use crate::release1_chapter_query_artifacts::{
+    CHAPTER_FIXTURE_PATHS, CHAPTER_RESPONSE_SCHEMA_PATH,
+};
 use crate::release1_command_challenge_artifacts::{
     CHALLENGE_REQUEST_SCHEMA_PATH, CHALLENGE_RESPONSE_SCHEMA_PATH,
 };
@@ -321,9 +324,11 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
         ])
     );
 
-    let editor_session: serde_json::Value =
-        serde_json::from_slice(&generated[super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH])
-            .expect("editor session schema must be JSON");
+    let editor_session: serde_json::Value = serde_json::from_slice(
+        &generated
+            [crate::release1_editor_session_artifacts::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH],
+    )
+    .expect("editor session schema must be JSON");
     assert_eq!(
         editor_session["$defs"]["EditorReadOnlyReason"]["enum"],
         serde_json::json!([
@@ -535,9 +540,9 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_set_current_chapter_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_undo_latest_author_action_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_undo_latest_author_action_artifacts::RESPONSE_SCHEMA_PATH,
-        super::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
-        super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
-        super::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
+        crate::release1_editor_session_artifacts::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
+        crate::release1_editor_session_artifacts::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
+        crate::release1_editor_session_artifacts::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
     ];
     if crate::release1_author_edit_artifacts::IS_IMPLEMENTED {
         expected_references.extend([
