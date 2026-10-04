@@ -160,12 +160,6 @@ pub(super) fn cancel_response_schema_bytes() -> Vec<u8> {
 pub(super) fn openapi() -> Vec<OpenApiMethod> {
     vec![
         operation_openapi(
-            &STEER_AGENT_RUN,
-            "Retain guidance for the next safe decision",
-            STEER_REQUEST_SCHEMA_PATH,
-            STEER_RESPONSE_SCHEMA_PATH,
-        ),
-        operation_openapi(
             &PAUSE_AGENT_RUN,
             "Pause one AgentRun without cancelling it",
             PAUSE_REQUEST_SCHEMA_PATH,
@@ -176,6 +170,12 @@ pub(super) fn openapi() -> Vec<OpenApiMethod> {
             "Cancel one AgentRun after a durable fence",
             CANCEL_REQUEST_SCHEMA_PATH,
             CANCEL_RESPONSE_SCHEMA_PATH,
+        ),
+        operation_openapi(
+            &STEER_AGENT_RUN,
+            "Retain guidance for the next safe decision",
+            STEER_REQUEST_SCHEMA_PATH,
+            STEER_RESPONSE_SCHEMA_PATH,
         ),
     ]
 }
@@ -198,7 +198,7 @@ pub(super) fn typescript_type_declarations() -> String {
         CancelAgentRunResponse::decl(&config),
     );
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\n{declarations}",
+        "{declarations}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         SteerAgentRunInput::decl(&config),
         SteerAgentRunRequest::decl(&config),
         SteerAgentRunEffect::decl(&config),
@@ -246,7 +246,7 @@ pub(super) fn typescript_client_source() -> String {
             .replace("{run_id}", "${encodeURIComponent(runId)}"),
     );
     format!(
-        r#"
+        r#"{existing}
 export async function digestSteerAgentRun(request, cryptoImpl = globalThis.crypto) {{
   if (!request || typeof request !== "object") throw new TypeError("digestSteerAgentRun requires request");
   const bytes = new TextEncoder().encode(JSON.stringify(canonicalJson(request)));
@@ -257,7 +257,7 @@ export async function steerAgentRun({{ projectId, runId, request, idempotencyKey
   if (typeof projectId !== "string" || typeof runId !== "string" || !request || typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("steerAgentRun requires Scope, input and security bindings");
   return commandJson({{ ...options, path: `/api/v1/projects/${{encodeURIComponent(projectId)}}/agent-runs/${{encodeURIComponent(runId)}}/steering-inputs`, body: request, commandHeaders: {{ "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery }} }});
 }}
-{existing}"#
+"#
     )
 }
 
