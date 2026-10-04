@@ -139,3 +139,15 @@ measurement, integration, progress, and commits.
 - The first command completed database measurements but its final count step
   included `corpus-manifest.json` in a glob. Narrowed that glob to numeric corpus
   names. Existing native Word evidence is intact. No product changes were made.
+
+### Step 6: controlled-plan calibration and final apparatus
+
+- The 30,000-scalar controlled run confirmed the ANALYZE pairing and repeated all
+  six Unicode checks. Its additional Proposal probe stopped after the production
+  UI had already opened the single-Block candidate. The harness incorrectly
+  expected a multi-location navigation link. This is an apparatus selector error.
+- Measure the actual assistant Inspect action as Web Proposal open, then click
+  the visible Accept control. Preserve the failed attempt; do not alter product UI.
+- Final run uses the corrected count-file glob and captures tree/export order,
+  canonical/session/chapter positions, actual Web Proposal actions, and the
+  specified refusal when deleting a populated Volume.

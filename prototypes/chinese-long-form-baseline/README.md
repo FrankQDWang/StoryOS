@@ -35,6 +35,8 @@ manuscript, Proposal, or Receipt is inserted by measurement SQL.
 PostgreSQL instrumentation installs pg_stat_statements in the temporary database
 and preloads it by restarting that owned container. Its newly assigned port is
 read again. auto_explain records actual plans with buffers and no node timing.
+A paired statistics request runs before and after explicit ANALYZE. All other
+operation samples use that analyzed state; default-run evidence is kept separately.
 Only the runtime role enters SQL-call totals. Administrative probes do not.
 Returned/affected SQL rows are separate from scan-row visits in actual plans.
 EXPLAIN averages per-loop row values, so aggregated scan visits can carry its

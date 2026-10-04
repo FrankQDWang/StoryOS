@@ -66,7 +66,7 @@ Property definitions and pinned values: [Unicode 16 UAX #44](https://www.unicode
 ```sh
 python3 prototypes/chinese-long-form-baseline/count-profiles.py \
   --word --golden prototypes/chinese-long-form-baseline/count-golden.json \
-  prototypes/chinese-long-form-baseline/out/corpus-*.json \
+  prototypes/chinese-long-form-baseline/out/corpus-[0-9]*.json \
   prototypes/chinese-long-form-baseline/public-domain.txt \
   > docs/research/chinese-long-form-baseline/word-count-evidence.json
 ```

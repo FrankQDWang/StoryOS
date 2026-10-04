@@ -149,11 +149,10 @@ export async function browserRun({ baseUrl, projectId, chapters, out, measure, b
     const admitted = await (await admittedResponse).json();
     worker();
     const inspect = page.locator('[data-assistant-inspect]');
-    if (await inspect.count()) await inspect.click();
-    await page.locator('[data-proposal-location]').last().waitFor();
+    await inspect.last().waitFor();
     writeFileSync(resolve(out, 'web-proposal-setup.json'), JSON.stringify({ run_id: admitted.effect.run_id }));
     await sample('proposal-open', async () => {
-      await page.locator('[data-proposal-location]').last().click();
+      await inspect.last().click();
       await page.locator('[data-proposal-accept]').last().waitFor();
     });
     await sample('proposal-accept', async () => {
