@@ -130,3 +130,4 @@
 - Matrix round-2, `cut-core-server`: completed (exit 0). Evidence: `evidence/round-2/cut-core-server.json`.
 - Matrix round-2, `cut-core-database`: completed (exit 0). Evidence: `evidence/round-2/cut-core-database.json`.
 - Matrix round-2, `cut-commit-server`: completed (exit 0). Evidence: `evidence/round-2/cut-commit-server.json`.
+- Matrix round-2, `cut-commit-database`: completed (exit 0). Evidence: `evidence/round-2/cut-commit-database.json`.
