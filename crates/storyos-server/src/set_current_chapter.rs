@@ -2,8 +2,8 @@ use storyos_application::{EditorSessionId, SetCurrentChapterInput};
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
-    ProblemMapping, ProjectCommandRoute, ReceiptAuthority, RevisionMismatch, SchemaMismatch,
-    SettledReceipt, admit, controlled_project,
+    BodyValidation, ProblemMapping, ProjectCommandRoute, ReceiptAuthority, RevisionMismatch,
+    SchemaMismatch, SettledReceipt, admit, controlled_project,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -17,6 +17,7 @@ const SET_CURRENT_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     digest_profile: contracts::SET_CURRENT_CHAPTER_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::SetCurrentChapter,
     revision_mismatch: RevisionMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
     schema_mismatch: SchemaMismatch::InvalidRequest,
     problem_mapping: ProblemMapping::Standard,
 };

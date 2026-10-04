@@ -59,7 +59,7 @@ impl ResponseRecord for ProjectResponse {
             command_kind,
             COMMAND_RESPONSE_PROJECT_FORMAT,
             &project,
-            None,
+            /*assistance*/ None,
         )
         .await?;
         Ok(project)

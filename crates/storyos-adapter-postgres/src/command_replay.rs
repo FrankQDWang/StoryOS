@@ -28,8 +28,9 @@ pub(crate) struct CommandReplay {
     pub(crate) author_action_sequence: Option<u64>,
     /// The canonical Snapshot at the Activity position of the Receipt.
     pub(crate) snapshot_id: Option<String>,
-    /// The latest Manuscript Tree Revision that an Activity payload records at or before the Receipt.
-    pub(crate) manuscript_tree_revision: Option<u64>,
+    /// The latest Manuscript Tree Revision text that an Activity payload records at or before the
+    /// Receipt; only a profile that needs it parses it.
+    pub(crate) manuscript_tree_revision: Option<String>,
     /// The resulting head array of the Domain Receipt.
     pub(crate) resulting_heads: Vec<String>,
     result_kind: String,
@@ -224,16 +225,14 @@ pub(crate) async fn read_command_replay(
         }),
         _ => None,
     };
-    let optional_u64 = |index: usize| {
-        row.get::<_, Option<String>>(index)
+    Ok(CommandReplay {
+        author_action_sequence: row
+            .get::<_, Option<String>>(10)
             .map(|value| value.parse::<u64>())
             .transpose()
-            .map_err(unavailable)
-    };
-    Ok(CommandReplay {
-        author_action_sequence: optional_u64(10)?,
+            .map_err(unavailable)?,
         snapshot_id: row.get(11),
-        manuscript_tree_revision: optional_u64(17)?,
+        manuscript_tree_revision: row.get(17),
         ids: AuthorCommandAdmissionIds {
             command_id: row.get(0),
             author_command_admission_id: row.get(1),

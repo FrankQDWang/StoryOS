@@ -161,13 +161,15 @@ impl SettlementProfile for ChapterSelection {
         let authority = match (
             replay.author_action_sequence,
             &replay.snapshot_id,
-            replay.manuscript_tree_revision,
+            &replay.manuscript_tree_revision,
         ) {
             (Some(author_action_sequence), Some(snapshot_id), Some(manuscript_tree_revision)) => {
                 AuthorityEvidence::Settled(ChapterSelectionAuthority {
                     author_action_sequence,
                     snapshot_id: snapshot_id.clone(),
-                    manuscript_tree_revision,
+                    manuscript_tree_revision: manuscript_tree_revision
+                        .parse()
+                        .map_err(|error| ReplayFault::Unavailable(Box::new(error)))?,
                 })
             }
             (None, None, _) => AuthorityEvidence::BeforeAuthorityHistoryFloor,

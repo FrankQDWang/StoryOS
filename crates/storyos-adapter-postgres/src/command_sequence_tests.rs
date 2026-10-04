@@ -1,15 +1,13 @@
 use std::fmt::Debug;
 
 use storyos_application::{
-    ArchiveProjectInput, ArchiveProjectSettlement, AuthorCommandAdmissionIds, CreateChapterInput,
-    CreateChapterSettlement, CreateVolumeInput, CreateVolumeSettlement, DeleteChapterInput,
-    DeleteChapterSettlement, DeleteVolumeInput, DeleteVolumeSettlement, EditorClientBinding,
-    ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectCommandError,
-    ProjectCommandSettlement, ProjectScope, SetCurrentChapterInput, SetCurrentChapterSettlement,
-    StructureAuthority, StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput,
-    UpdateChapterSettlement, UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement,
-    UpdateProjectInput, UpdateProjectSettlement, UpdateVolumeInput, UpdateVolumeSettlement,
-    issue_project_command_challenge,
+    ArchiveProjectInput, AuthorCommandAdmissionIds, CreateChapterInput, CreateChapterSettlement,
+    CreateVolumeInput, CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement,
+    DeleteVolumeInput, DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
+    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
+    SetCurrentChapterInput, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+    UpdateChapterInput, UpdateChapterSettlement, UpdateProjectAssistanceInput, UpdateProjectInput,
+    UpdateVolumeInput, UpdateVolumeSettlement, issue_project_command_challenge,
 };
 use storyos_application::{
     ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
@@ -112,22 +110,6 @@ pub(crate) async fn delete_chapter(
     store.delete_chapter(&call.envelope, &call.input).await
 }
 
-async fn update_project(
-    store: &PostgresProjectReader,
-    call: &CommandCall<UpdateProjectInput>,
-) -> Result<UpdateProjectSettlement, ProjectCommandError> {
-    store.update_project(&call.envelope, &call.input).await
-}
-
-async fn update_project_assistance(
-    store: &PostgresProjectReader,
-    call: &CommandCall<UpdateProjectAssistanceInput>,
-) -> Result<UpdateProjectAssistanceSettlement, ProjectCommandError> {
-    store
-        .update_project_assistance(&call.envelope, &call.input)
-        .await
-}
-
 async fn take_over_project_writer(
     store: &PostgresProjectReader,
     call: &CommandCall<TakeOverProjectWriterInput>,
@@ -135,20 +117,6 @@ async fn take_over_project_writer(
     store
         .take_over_project_writer(&call.envelope, &call.input)
         .await
-}
-
-async fn archive_project(
-    store: &PostgresProjectReader,
-    call: &CommandCall<ArchiveProjectInput>,
-) -> Result<ArchiveProjectSettlement, ProjectCommandError> {
-    store.archive_project(&call.envelope, &call.input).await
-}
-
-pub(crate) async fn set_current_chapter(
-    store: &PostgresProjectReader,
-    call: &CommandCall<SetCurrentChapterInput>,
-) -> Result<SetCurrentChapterSettlement, ProjectCommandError> {
-    store.set_current_chapter(&call.envelope, &call.input).await
 }
 
 /// The applied effect and settled authority of one structure command; panics on any other outcome.
@@ -518,7 +486,15 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             expected_revision,
         };
         let call = issued(&store, &scope, suffix, &UPDATE_PROJECT, input).await;
-        let outcome = replayed_outcome(&store, &admin, &call, update_project).await;
+        let outcome = replayed_outcome(
+            &store,
+            &admin,
+            &call,
+            async |store: &PostgresProjectReader, call: &CommandCall<UpdateProjectInput>| {
+                store.update_project(&call.envelope, &call.input).await
+            },
+        )
+        .await;
         observed.push((UPDATE_PROJECT.kind, outcome));
     }
 
@@ -526,7 +502,15 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     for (suffix, expected_revision) in [(0x5d71, 2), (0x5d72, 1), (0x5d73, 2)] {
         let input = ArchiveProjectInput { expected_revision };
         let call = issued(&store, &scope, suffix, &ARCHIVE_PROJECT, input).await;
-        let outcome = replayed_outcome(&store, &admin, &call, archive_project).await;
+        let outcome = replayed_outcome(
+            &store,
+            &admin,
+            &call,
+            async |store: &PostgresProjectReader, call: &CommandCall<ArchiveProjectInput>| {
+                store.archive_project(&call.envelope, &call.input).await
+            },
+        )
+        .await;
         observed.push((ARCHIVE_PROJECT.kind, outcome));
     }
 
@@ -545,7 +529,15 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             expected_target_revision_id: revision_b.clone(),
         };
         let call = issued(&store, &scope, suffix, &SET_CURRENT_CHAPTER, input).await;
-        let outcome = replayed_outcome(&store, &admin, &call, set_current_chapter).await;
+        let outcome = replayed_outcome(
+            &store,
+            &admin,
+            &call,
+            async |store: &PostgresProjectReader, call: &CommandCall<SetCurrentChapterInput>| {
+                store.set_current_chapter(&call.envelope, &call.input).await
+            },
+        )
+        .await;
         observed.push((SET_CURRENT_CHAPTER.kind, outcome));
     }
 
@@ -561,7 +553,18 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             expected_revision,
         };
         let call = issued(&store, &scope, suffix, &UPDATE_PROJECT_ASSISTANCE, input).await;
-        let outcome = replayed_outcome(&store, &admin, &call, update_project_assistance).await;
+        let outcome = replayed_outcome(
+            &store,
+            &admin,
+            &call,
+            async |store: &PostgresProjectReader,
+                   call: &CommandCall<UpdateProjectAssistanceInput>| {
+                store
+                    .update_project_assistance(&call.envelope, &call.input)
+                    .await
+            },
+        )
+        .await;
         observed.push((UPDATE_PROJECT_ASSISTANCE.kind, outcome));
     }
 
@@ -1130,7 +1133,7 @@ async fn a_command_without_a_response_record_replays_without_it_and_damaged_acti
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let call = take_over_project_writer_call(&store, 0x6aa0).await;
+    let call = take_over_project_writer_call(&store, /*base*/ 0x6aa0).await;
     let first = take_over_project_writer(&store, &call).await.unwrap();
     let key = &call.envelope.challenge_binding.idempotency_key;
     admin
@@ -1154,4 +1157,53 @@ async fn a_command_without_a_response_record_replays_without_it_and_damaged_acti
     let damaged = take_over_project_writer(&store, &with_new_request_ids(&call)).await;
     assert_eq!(pre_capture.unwrap(), first);
     assert!(matches!(damaged, Err(ProjectCommandError::Unavailable(_))));
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_assistance_replay_separates_a_project_only_record_from_damaged_assistance() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = update_project_assistance_call(&store, /*base*/ 0x6ab0).await;
+    store
+        .update_project_assistance(&call.envelope, &call.input)
+        .await
+        .unwrap();
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    let mut errors = Vec::new();
+    for evidence in [
+        "acknowledgement_format = 'command_response_project.v1', response_assistance = NULL",
+        "acknowledgement_format = 'command_response_project_assistance.v1',
+         response_assistance = '{}'::jsonb",
+    ] {
+        admin
+            .batch_execute(&format!(
+                "UPDATE storyos.command_idempotency SET {evidence}
+                  WHERE idempotency_key = '{key}'"
+            ))
+            .await
+            .unwrap();
+        let retry = with_new_request_ids(&call);
+        errors.push(
+            match store
+                .update_project_assistance(&retry.envelope, &retry.input)
+                .await
+            {
+                Err(ProjectCommandError::HistoricalAcknowledgementUnavailable) => {
+                    ReplayError::HistoricalAcknowledgementUnavailable
+                }
+                Err(ProjectCommandError::Unavailable(_)) => ReplayError::Unavailable,
+                other => panic!("the replay must fail on assistance evidence, got {other:?}"),
+            },
+        );
+    }
+    assert_eq!(
+        errors,
+        vec![
+            ReplayError::HistoricalAcknowledgementUnavailable,
+            ReplayError::Unavailable,
+        ]
+    );
 }

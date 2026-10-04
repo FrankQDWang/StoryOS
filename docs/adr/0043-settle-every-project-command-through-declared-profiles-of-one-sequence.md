@@ -10,7 +10,7 @@ On 2026-10-05 the author accepted this decision. It extends [ADR 0041](0041-own-
 
 At `main` `47922480`, the 20 commands in this scope still use hand-written transactions. None of them fits the ADR 0041 adapter as it is, because the database fixes a different set of authority records for each command family:
 
-- The Project setting commands `updateProject`, `archiveProject`, and `updateProjectAssistance`, the AgentRun commands `createAgentRun`, `pauseAgentRun`, and `cancelAgentRun`, and the Activity of `steerAgentRun` write one Project Activity record and no Authoritative Commit, Author Action, or Snapshot.
+- The Project setting commands `updateProject`, `archiveProject`, and `updateProjectAssistance` write one Project Activity record. They write no Authoritative Commit, Author Action, or Snapshot. The AgentRun commands `createAgentRun`, `pauseAgentRun`, and `cancelAgentRun`, and the Activity of `steerAgentRun`, have the same shape.
 - `setCurrentChapter` writes an Author Action, an Activity record, and a canonical Snapshot, but no Authoritative Commit (ADR 0026). Author Undo recognizes a Current Chapter action because it has no Commit.
 - The Proposal decision and Refused Edit Draft commands write one Forward Author Action and no Activity, Commit, or Snapshot. Their applied Receipt result kind is specific to the command, for example `proposal_revised`.
 - `steerAgentRun` and `takeOverProjectWriter` write effect rows and an Activity record for a `no_effect` outcome.
@@ -38,11 +38,11 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
   - `ActionOnly`: one Forward Author Action.
   - `ActivityOnly`: one Activity record.
   The profile fixes which scope sequences the sequence allocates and which authority records it writes. The applied Receipt result kind is part of the profile: `authoritative_applied` or the command's own result kind.
-- **Effects of a zero-authority outcome.** A command can write effect rows, and an Activity record where its schema requires one, for a `no_effect`, `conflicted`, or `refused` outcome. Such an outcome never allocates an Authoritative Commit or an Author Action.
+- **Effects of a zero-authority outcome.** A command can write effect rows for a `no_effect`, `conflicted`, or `refused` outcome. It can also write an Activity record where its schema requires one. Such an outcome never allocates an Authoritative Commit or an Author Action.
 - **Receipt shape.** The command supplies the head arrays, the Revision and Proposal Revision references, the draft and lifecycle references, and the payload of each outcome. The sequence inserts the Receipt.
 - **Activity record.** The command supplies the event kind and the payload fields. The sequence adds `tree_revision` only for the `Structural` profile.
 - **Response record.** One of: the Command-response Project; the Command-response Project with the Project assistance record; or no response record. A command without a response record decodes its whole acknowledgement from the stored Receipt and effect rows.
-- **Admit-only first use.** For the two exports only, the first use commits the Admission, the work rows, and the Command-response Project, and leaves the Command Idempotency Fence `in_progress`. An exact retry of an admitted export replays the admitted operation. The Worker settles the fence later.
+- **Admit-only first use.** For the two exports only, the first use commits the Admission, the work rows, and the Command-response Project. It leaves the Command Idempotency Fence `in_progress`. An exact retry of an admitted export replays the admitted operation. The Worker settles the fence later.
 - **Refusal before Admission.** The fact load can refuse with a reason of the command, for example an archived Project or a missing AgentRun. This writes no row, and the Server keeps its problem code. It is not a Pre-Admission Refusal Record.
 
 ### What the sequence owns
@@ -53,7 +53,7 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
 
 ### One replay rule
 
-- Every command in scope replays through one replay query and an optional command query that reads the command's own effect rows in the same read-only transaction.
+- Every command in scope replays through one replay query. A command can add one query that reads its own effect rows in the same read-only transaction.
 - A missing settled record or an unknown reason gives a binding conflict. A pre-capture record gives `historical_acknowledgement_unavailable` (ADR 0032), but only for a command that has a response record. Damaged evidence is a store fault.
 - These observable changes follow from this rule:
   - For `rejectProposalOperations`, `withdrawProposal`, `replanProposal`, `reopenWithdrawnProposal`, `reopenRejectedOperations`, `completeReadyPartialProposal`, and `continueProposalGeneration`, a missing settled record or an unknown result kind gives `409 idempotency_binding_conflict` instead of `409 historical_acknowledgement_unavailable`.
@@ -65,7 +65,7 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
 
 ## Relation to ADR 0041 and the glossary
 
-ADR 0041 stays in force. This decision replaces its statement that the sequence allocates authority records for an `Applied` outcome only in the `Structural` shape: the settlement profile now fixes the authority records of an `Applied` outcome. The glossary term Core Transition Outcome changes in the same way: only Applied changes the state that the command owns, and its settlement profile fixes which authority records it allocates.
+ADR 0041 stays in force. ADR 0041 lets the sequence allocate authority records for an `Applied` outcome only in the `Structural` shape. This decision replaces that statement: the settlement profile now fixes the authority records of an `Applied` outcome. The glossary term Core Transition Outcome changes in the same way. Only Applied changes the target of the command, and its settlement profile fixes which authority records it allocates.
 
 ## Considered options
 
@@ -76,5 +76,5 @@ ADR 0041 stays in force. This decision replaces its statement that the sequence 
 ## Consequences
 
 - Rows, migrations, persisted formats, isolation levels, reason code texts, and HTTP statuses do not change, except as this decision lists.
-- The single-method Store traits, the application binding self-checks, and the per-command replay queries of the commands in scope are removed after the last command of each family moves.
+- The single-method Store traits, the application binding self-checks, and the per-command replay queries of the commands in scope are removed. Each one goes when the last command of its family moves.
 - A new project command needs a Core classifier with reason codes, one command adapter that declares its profiles, one Server route, and one contracts operation. A command whose records do not fit a declared profile needs a decision that adds a profile.

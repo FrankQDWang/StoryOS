@@ -2,7 +2,8 @@ use storyos_application::{EditorSessionId, ProjectCommandError, TakeOverProjectW
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
-    ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    SettledReceipt, admit,
 };
 use super::*;
 
@@ -15,6 +16,7 @@ const TAKE_OVER_PROJECT_WRITER: ProjectCommandRoute = ProjectCommandRoute {
     digest_profile: "storyos.command.takeOverProjectWriter.jcs.v1",
     receipt_kind: contracts::DomainReceiptCommandKind::TakeOverProjectWriter,
     revision_mismatch: RevisionMismatch::AuthenticationRequired,
+    body_validation: BodyValidation::BeforeRevisionCheck,
     schema_mismatch: SchemaMismatch::CommandTargetRefused,
     problem_mapping: ProblemMapping::Route(takeover_problem),
 };
@@ -31,6 +33,7 @@ pub(super) async fn take_over_project_writer(
         request,
         &TAKE_OVER_PROJECT_WRITER,
         |body: &contracts::TakeOverProjectWriterRequest| {
+            valid_uuid(&body.correlation_id)?;
             valid_uuid(&body.editor_session_id)?;
             let observed_writer_generation = body
                 .observed_writer_generation

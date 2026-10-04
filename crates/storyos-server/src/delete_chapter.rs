@@ -2,8 +2,8 @@ use storyos_application::{ChapterId, DeleteChapterInput};
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
-    ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
-    controlled_project, positive,
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    SettledReceipt, admit, controlled_project, positive,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -17,6 +17,7 @@ const DELETE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     digest_profile: contracts::DELETE_CHAPTER_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::DeleteChapter,
     revision_mismatch: RevisionMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
     schema_mismatch: SchemaMismatch::InvalidRequest,
     problem_mapping: ProblemMapping::Standard,
 };

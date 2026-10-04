@@ -2,8 +2,8 @@ use storyos_application::{CreateChapterInput, CreateChapterPublicOrder};
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
-    ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
-    controlled_project, positive, structure_title,
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    SettledReceipt, admit, controlled_project, positive, structure_title,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -17,6 +17,7 @@ const CREATE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     digest_profile: contracts::CREATE_CHAPTER_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::CreateChapter,
     revision_mismatch: RevisionMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
     schema_mismatch: SchemaMismatch::InvalidRequest,
     problem_mapping: ProblemMapping::Standard,
 };

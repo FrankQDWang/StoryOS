@@ -4,8 +4,8 @@ use storyos_application::{
 use storyos_core::{AssistanceAvailability, TransitionOutcome, UpdateProjectAssistanceApplied};
 
 use super::command_admission::{
-    ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
-    controlled_project,
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    SettledReceipt, admit, controlled_project,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -45,6 +45,7 @@ const UPDATE_PROJECT_ASSISTANCE: ProjectCommandRoute = ProjectCommandRoute {
     digest_profile: contracts::UPDATE_PROJECT_ASSISTANCE_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::UpdateProjectAssistance,
     revision_mismatch: RevisionMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
     schema_mismatch: SchemaMismatch::InvalidRequest,
     problem_mapping: ProblemMapping::Standard,
 };

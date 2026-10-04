@@ -28,6 +28,7 @@ pub(super) struct ProjectCommandRoute {
     pub(super) receipt_kind: contracts::DomainReceiptCommandKind,
     pub(super) revision_mismatch: RevisionMismatch,
     pub(super) schema_mismatch: SchemaMismatch,
+    pub(super) body_validation: BodyValidation,
     pub(super) problem_mapping: ProblemMapping,
 }
 
@@ -35,6 +36,12 @@ pub(super) struct ProjectCommandRoute {
 pub(super) enum RevisionMismatch {
     InvalidRequest,
     AuthenticationRequired,
+}
+
+/// When the command-specific body fields are validated, relative to the revision check.
+pub(super) enum BodyValidation {
+    AfterRevisionCheck,
+    BeforeRevisionCheck,
 }
 
 /// The problem of a command schema that differs from the route schema.
@@ -143,13 +150,13 @@ pub(super) struct Acknowledgement {
 ///
 /// `targets` are the path identities after the Project. `input` validates and parses the
 /// command-specific body fields.
-pub(super) async fn admit<R: ProjectCommandRequest, I>(
+pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I, ApiError>>(
     state: &ServerState,
     project_id: &str,
     targets: &[&str],
     request: Request,
     route: &ProjectCommandRoute,
-    input: impl FnOnce(&R) -> Result<I, ApiError>,
+    input: F,
 ) -> Result<Admitted<I>, ApiError> {
     let (parts, body_stream) = request.into_parts();
     let headers = parts.headers;
@@ -177,16 +184,33 @@ pub(super) async fn admit<R: ProjectCommandRequest, I>(
             SchemaMismatch::CommandTargetRefused => command_target_refused(),
         });
     }
-    if body.client_contract_revision() != session.client_contract_revision
-        || body.security_policy_revision() != session.security_policy_revision
-    {
-        return Err(match route.revision_mismatch {
-            RevisionMismatch::InvalidRequest => invalid_request(),
-            RevisionMismatch::AuthenticationRequired => authentication_required(),
-        });
-    }
-    let input = input(&body)?;
-    valid_uuid(body.correlation_id())?;
+    let check_revision = || {
+        if body.client_contract_revision() != session.client_contract_revision
+            || body.security_policy_revision() != session.security_policy_revision
+        {
+            return Err(match route.revision_mismatch {
+                RevisionMismatch::InvalidRequest => invalid_request(),
+                RevisionMismatch::AuthenticationRequired => authentication_required(),
+            });
+        }
+        Ok(())
+    };
+    let validate_body = |input: F| {
+        let input = input(&body)?;
+        valid_uuid(body.correlation_id())?;
+        Ok::<I, ApiError>(input)
+    };
+    let input = match route.body_validation {
+        BodyValidation::AfterRevisionCheck => {
+            check_revision()?;
+            validate_body(input)?
+        }
+        BodyValidation::BeforeRevisionCheck => {
+            let input = validate_body(input)?;
+            check_revision()?;
+            input
+        }
+    };
     let idempotency_key = exact_header(&headers, "idempotency-key")?;
     let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
     if !valid_uuid_v7(idempotency_key)
