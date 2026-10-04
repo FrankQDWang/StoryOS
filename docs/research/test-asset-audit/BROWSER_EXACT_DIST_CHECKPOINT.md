@@ -38,12 +38,13 @@ Source review is partial: 35 cases in 34 test files; 21 KEEP, three DELETE, 11 M
 | apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284 | KEEP |
 | apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307 | KEEP |
 
+| apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts:5 | DELETE |
+| apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts:5 | DELETE |
+
 ## Pending files
 
 - apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts
-- apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts
 - apps/web/test/browser-exact-dist/production-host.integration.test.ts
-- apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts
 - apps/web/test/browser-exact-dist/restored-discard.integration.test.ts
 
 ## Decisions and evidence

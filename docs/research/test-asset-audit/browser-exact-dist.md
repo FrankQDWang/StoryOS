@@ -1,6 +1,6 @@
 # browser-exact-dist test verdicts
 
-Reviewed: 33 cases in 32 files. See PROGRESS.md for directory completion.
+Reviewed: 35 cases in 34 files. See PROGRESS.md for directory completion.
 
 Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 
@@ -10,11 +10,23 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 |---|---|---|---|---|---|---|
 | BD001 | 22 — serves untransformed dist bytes in a reloadable same-origin child frame | DELETE | D4 | The product-host byte and resource contract is covered by the real HTTP host test, and actual editor reload is exercised by the Stage 1 journey. This case instead checks the test-only exactDistPlugin plus native iframe realm/sessionStorage semantics. Root/Project byte equality and Content-Length do not compare either response with a built artifact, so the title overstates untransformed-byte proof. No product covering test is claimed for a mutation confined to the Vite test plugin or the artificial realm marker. | apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106; apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307 |
 
+## apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD034 | 5 — shows exact captured Memory settings through Run selection, reload, and unavailable evidence | DELETE | D1 | The helper never asserts rendered captured Memory settings or switches a displayed historical Run: all Memory facts are checked with direct getAgentRun calls. The retained HTTP case already cancels the first Run, continues the same Conversation with use=false/contribution=true, preserves old settings and uses restrictive RLS to make captured evidence unavailable. Current and historical lookups use the same exact-revision LEFT JOIN and boolean mapping. Real composer continuation after reload is covered by the production prose journey. Remove its exclusive helper/dispatch route and reconcile optional teardown captured_memory counters. | apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:554; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10 |
+
 ## apps/web/test/browser-exact-dist/production-page.integration.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | BD002 | 34 — loads the exact Vite production page in Google Chrome and shows the Stage 1 surface | MERGE | M1 | Move protected-ready heading/message, no alert and no premature editor/AI controls into the Create Chapter journey before it creates the Project. Its iframe already loads the same packaged root. The explicit Chrome user-agent check tests runner selection; byte/header smoke belongs to the retained real-host HTTP test. Remove this standalone page fixture only after the initial-surface assertions transfer. | apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43; apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106 |
+
+## apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD035 | 5 — shows bounded selected Run input and recovery evidence through the packaged production host | DELETE | D1 | The helper evidence assertions call getAgentRun directly; they do not assert selected Context, compaction, reference recovery, retrieval or successor evidence rendered in the UI. Existing HTTP cases cover immutable/superseded input, over-limit refusal, compaction install/refusal, expiry rebuild, original/cancelled retrieval and successor eligibility/fence cancellation. Browser reload followed by another direct GET adds no browser evidence-reader boundary. Real composer continuity is covered by production prose/controls. Remove this exclusive 13-Project helper and its route, and update optional teardown run_evidence counters. No rendered evidence coverage is claimed lost. | apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:944; apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:165; apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:128; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:220; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:277; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:288; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:317; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:362; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10; apps/web/test/browser-exact-dist/production-host.integration.test.ts:30 |
 
 ## apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts
 

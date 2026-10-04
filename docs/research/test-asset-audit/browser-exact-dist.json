@@ -364,5 +364,33 @@
     "evidence": "Real packaged input must produce linked durable Journal groups, collected payload fences and matching Server Activity through three settled edits and a fourth retained intent recovered after browser reload. Source GC uses mocked acknowledgements; long-session checks text after automatic collection but not these cross-store/Activity identity relationships. The optional database teardown independently requires exactly four Receipts, Activities and Author Actions. Chinese text is inserted directly here, not composed through IME. Command/coverage digests and timestamps are normalized, so only cross-reference consistency (plus independently checked event digest and pinned body/unit digests) is claimed. Receive the repeated-reload exact Revision check from interruption:95.",
     "coverage": "apps/web/test/browser-source/journal-gc.integration.test.ts:43; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts:95",
     "remove": null
+  },
+  {
+    "id": "BD034",
+    "path": "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts",
+    "line": 5,
+    "test": "shows exact captured Memory settings through Run selection, reload, and unavailable evidence",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The helper never asserts rendered captured Memory settings or switches a displayed historical Run: all Memory facts are checked with direct getAgentRun calls. The retained HTTP case already cancels the first Run, continues the same Conversation with use=false/contribution=true, preserves old settings and uses restrictive RLS to make captured evidence unavailable. Current and historical lookups use the same exact-revision LEFT JOIN and boolean mapping. Real composer continuation after reload is covered by the production prose journey. Remove its exclusive helper/dispatch route and reconcile optional teardown captured_memory counters.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:554; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10",
+    "remove": [
+      1,
+      8
+    ]
+  },
+  {
+    "id": "BD035",
+    "path": "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts",
+    "line": 5,
+    "test": "shows bounded selected Run input and recovery evidence through the packaged production host",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The helper evidence assertions call getAgentRun directly; they do not assert selected Context, compaction, reference recovery, retrieval or successor evidence rendered in the UI. Existing HTTP cases cover immutable/superseded input, over-limit refusal, compaction install/refusal, expiry rebuild, original/cancelled retrieval and successor eligibility/fence cancellation. Browser reload followed by another direct GET adds no browser evidence-reader boundary. Real composer continuity is covered by production prose/controls. Remove this exclusive 13-Project helper and its route, and update optional teardown run_evidence counters. No rendered evidence coverage is claimed lost.",
+    "coverage": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:944; apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:165; apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:128; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:220; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:277; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:288; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:317; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:362; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10; apps/web/test/browser-exact-dist/production-host.integration.test.ts:30",
+    "remove": [
+      1,
+      8
+    ]
   }
 ]
