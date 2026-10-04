@@ -121,7 +121,7 @@ class TargetedStatusTests(unittest.TestCase):
                     self.assertEqual(len(list(self.root.glob('target/verification/*/report.json'))), 1)
             finally:
                 process.send_signal(signal.SIGTERM)
-                process.communicate(timeout=10)
+                process.communicate()
 
     def test_make_selector_does_not_invalidate_public_python_status(self):
         runner = verification_tests.COMMAND.resolve()
