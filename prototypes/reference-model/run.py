@@ -61,6 +61,8 @@ class HTTP:
         schema = route['schemas']['request']
         stem = schema.split('.')[2]
         body = {'command_schema': schema, stem.replace('-', '_') + '_input': {**self.meta(), **values}}
+        if name in ['createEditorSession', 'takeOverProjectWriter']:
+            body = {'command_schema': schema, **self.meta(), **values}
         key = self.identity()
         if name == 'createProject':
             status, challenge = self.request('POST', '/api/v1/anti-forgery-challenges', {**body, 'idempotency_key': key})
@@ -144,6 +146,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--count', type=int, default=1)
+    parser.add_argument('--stage', default='bootstrap')
+    parser.add_argument('--case')
     parser.add_argument('--output', default='target/reference-model/bootstrap.json')
     args = parser.parse_args()
     package = ROOT / 'target/release-package'
@@ -159,11 +163,15 @@ def main():
         http = HTTP(line.split('=', 1)[1], random.Random(args.seed), trace)
         for seed in range(args.seed, args.seed + args.count):
             http.rng = random.Random(seed)
-            chain(http, seed, differences, coverage)
+            if args.stage == 'bootstrap':
+                chain(http, seed, differences, coverage)
+            else:
+                from structure import run
+                run(http, seed, differences, coverage, args.case)
     finally:
         server.terminate()
         server.wait(timeout=15)
-        result = dict(seed=args.seed, count=args.count, base='479224809cdaae997cda51cb8853e3fafa242b65',
+        result = dict(seed=args.seed, count=args.count, stage=args.stage, case=args.case, base='479224809cdaae997cda51cb8853e3fafa242b65',
                       coverage=dict(coverage), differences=differences, trace=trace)
         output = ROOT / args.output
         output.parent.mkdir(parents=True, exist_ok=True)

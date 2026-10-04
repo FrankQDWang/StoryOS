@@ -40,3 +40,20 @@ Model correction M-001: the first model assumed initial Tree Revision zero witho
 Decision: execution writes evidence to ignored `target/reference-model/`, then copies it to the report directory after the managed command exits. Writing the first trace straight into tracked-source scope caused a `source-changed` observation. That run is retained, not relabeled PASS. Nonce and cookie values are omitted from traces.
 
 Next: expand structure scenarios and retain a complete outcome/reachability matrix, then implement Author Edit and Undo.
+
+## Step 3: Structure outcome survey
+
+Done: seed 10 exercised all 48 generated structure/Project/Current Chapter effect variants as separate HTTP scenarios. A seeded random walk now adds mixed create, rename, reorder, and delete commands. The model compares full live trees, relative tree revisions, command outcome/reason, Receipt allocation, Author Action sequence, and Activity stability for non-applied results.
+
+The first survey is retained as `structure-first-survey.json`. The initial interrupted survey is `structure-initial-model-errors.json`. No product source changed.
+
+Model corrections: M-002 used an empty update body although the generated schema requires both title and order. The generator now submits the unchanged current title and rank. M-003 treated a whitespace title as invalid, but the contract only requires 1 to 1024 UTF-8 bytes. Empty titles now probe schema refusal and are not counted as Core refusal outcomes.
+
+Classified contract limits (full report pending):
+- A-001: no contract rule states whether an archived Project permits Canonical Manuscript Tree reads. Observed 404 after archive; `getProject` remains readable. Do not infer a 200 requirement.
+- A-002: initial Tree Revision and Project Revision numbers are not specified. Tree Revision is read as an opaque initial baseline. The Project query does not expose Project Revision; the generator probes positive 1 and validates later known increments.
+- A-003: `empty_project` and `invalid_chapter_join` priority is unspecified. A public empty Project has no live target; the exercised sequence reaches invalid join. Keep the unreachable empty branch in the coverage ledger.
+- A-004: generated structure revision/order strings permit zero, while `structure_admission.rs:302` requires positive values. The initial zero probe returned 400. This is schema/transport disagreement, not a zero-to-one model expectation.
+- R-001: `invalid_title` Core effects cannot pass public title validation: the Server and Core use the same byte limits. Exercise the public refusal and document the unreachable Core variant.
+
+Next: collect 20-hit structure evidence and complete replay cases; prepare the Author Edit model.
