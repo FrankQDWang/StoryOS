@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::Release1ProtocolProfile;
 use crate::release1::{
     CREATE_EDITOR_SESSION, CREATE_PROJECT_COMMAND_CHALLENGE, GET_CHAPTER, GET_EDITOR_SESSION,
-    GET_PROJECT, GET_PROTOCOL_PROFILE, PUBLIC_PROTOCOL_RELEASE, QueryOperation,
+    GET_PROJECT, GET_PROTOCOL_PROFILE, PUBLIC_PROTOCOL_RELEASE,
 };
 use crate::release1_accept_proposal::ACCEPT_PROPOSAL;
 use crate::release1_accept_proposal_artifacts as accept_proposal_artifacts;
@@ -41,6 +41,7 @@ use crate::release1_manuscript_statistics::GET_STATISTICS;
 use crate::release1_manuscript_statistics_artifacts as manuscript_statistics_artifacts;
 use crate::release1_manuscript_tree::GET_MANUSCRIPT_TREE;
 use crate::release1_manuscript_tree_artifacts as manuscript_tree_artifacts;
+use crate::release1_operation_registry::{FixtureMembership, fixture_triple};
 use crate::release1_project_assistance::{GET_PROJECT_ASSISTANCE, UPDATE_PROJECT_ASSISTANCE};
 use crate::release1_project_assistance_artifacts as project_assistance_artifacts;
 use crate::release1_project_export::EXPORT_PROJECT_ARCHIVE;
@@ -100,14 +101,6 @@ use super::{
 /// One ordered owner of active Release 1 fixture membership.
 /// Catalog paths, catalog entries, generated golden files, and digest inputs
 /// all derive from this list.
-struct FixtureMembership {
-    path: &'static str,
-    fixture_id: &'static str,
-    classification: &'static str,
-    operation_id: &'static str,
-    bytes: fn(&Release1ProtocolProfile) -> Vec<u8>,
-}
-
 fn fixture_corpus_membership() -> &'static [FixtureMembership] {
     static MEMBERSHIP: LazyLock<Vec<FixtureMembership>> =
         LazyLock::new(build_fixture_corpus_membership);
@@ -147,36 +140,6 @@ pub(super) fn generated_fixture_files(profile: &Release1ProtocolProfile) -> Vec<
         .iter()
         .map(|entry| (entry.path, (entry.bytes)(profile)))
         .collect()
-}
-
-fn fixture_triple(
-    paths: [&'static str; 3],
-    operation: &QueryOperation,
-    producers: [fn(&Release1ProtocolProfile) -> Vec<u8>; 3],
-) -> [FixtureMembership; 3] {
-    [
-        FixtureMembership {
-            path: paths[0],
-            fixture_id: operation.fixtures[0],
-            classification: "positive",
-            operation_id: operation.operation_id,
-            bytes: producers[0],
-        },
-        FixtureMembership {
-            path: paths[1],
-            fixture_id: operation.fixtures[1],
-            classification: "invalid",
-            operation_id: operation.operation_id,
-            bytes: producers[1],
-        },
-        FixtureMembership {
-            path: paths[2],
-            fixture_id: operation.fixtures[2],
-            classification: "boundary",
-            operation_id: operation.operation_id,
-            bytes: producers[2],
-        },
-    ]
 }
 
 fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {

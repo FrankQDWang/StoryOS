@@ -3,10 +3,47 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
+use crate::release1_operation_registry::{
+    ContractGraphEntry, OperationArtifacts, OperationKind, RegisteredOperation, fixture_triple,
+    operation_schemas, path_items,
+};
 use crate::release1_takeover::{
     TAKE_OVER_PROJECT_WRITER, TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
     TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID, TakeOverProjectWriterRequest,
     TakeOverProjectWriterResponse, TakeOverProjectWriterResult, TakeoverCompareFailedReason,
+};
+use crate::release1_wire::json_bytes;
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation {
+        operation: &TAKE_OVER_PROJECT_WRITER,
+        kind: OperationKind::Command,
+        graph: ContractGraphEntry::Absent,
+    }],
+    schemas: || {
+        operation_schemas(
+            &TAKE_OVER_PROJECT_WRITER,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &TAKE_OVER_PROJECT_WRITER,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -231,10 +268,4 @@ fn schema_bytes<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Vec<u8
     let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
     apply_u64_wire_constraints(&mut schema, &canonical_u64);
     json_bytes(&schema)
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
