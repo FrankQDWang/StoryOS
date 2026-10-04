@@ -19,6 +19,7 @@ mod release1_author_edit_artifacts;
 mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
 mod release1_draft_retry;
+mod release1_editor_session_artifacts;
 pub use release1_draft_retry::{
     DraftPayloadPosition, DraftRetry, DraftRetryKind, DraftRetryReplacement, ExactStructuredRange,
     ExactStructuredRangeKind, ObservedDraftClosure, RetryDraftClosure, RetryDraftKind,
@@ -412,6 +413,7 @@ pub use release1_expand_refused_edit_draft::{
     ExpandRefusedEditDraftEffect, ExpandRefusedEditDraftInput, ExpandRefusedEditDraftRequest,
     ExpandRefusedEditDraftResponse, WholeDraftPayload,
 };
+mod release1_chapter_query_artifacts;
 mod release1_close_editor_flow_draft_artifacts;
 mod release1_command_challenge_artifacts;
 pub use release1_close_editor_flow_draft::{
