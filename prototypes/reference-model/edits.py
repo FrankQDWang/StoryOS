@@ -128,7 +128,7 @@ def run(http, seed, differences, coverage, selected=None):
         status, http.fixture_session = http.command('createEditorSession', {}, project_id=fixture)
         assert status == 200, http.fixture_session
     session = http.fixture_session
-    assert session['author_undo_frontier_sequence'] is None
+    assert session.get('author_undo_frontier_sequence') is None
     status, result = http.command('undoLatestAuthorAction', dict(
         editor_session_id=session['editor_session']['editor_session_id'], expected_author_undo_frontier_sequence='1',
         expected_authoritative_revision_id=session['base_snapshot']['authoritative_head_revision_id']), project_id=fixture)

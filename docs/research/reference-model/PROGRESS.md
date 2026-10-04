@@ -117,3 +117,5 @@ Seed 303 exercised 15 independent Proposal scenarios, including producer withdra
 A-007: section 10.1 names typed Proposal edit, rejection, and withdrawal handlers but does not explicitly map Replan. The observed Replan compensation has no authoritative Commit and returns an empty projected authoritative body. The routing and response projection need separate contract/schema review.
 
 Next: verify Acceptance reversal, then collect bounded 20-seed batches.
+
+Step 10 follow-up: the empty fixture frontier is an omitted optional property, not explicit null. Corrected the harness lookup. Seed 220 reached unsupported-intent refusal with zero differences before that lookup stopped the run; evidence is retained as `edits-empty-frontier-probe.json.gz`.
