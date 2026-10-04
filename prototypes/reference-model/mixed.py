@@ -50,7 +50,7 @@ def run(proposal, finish=True):
         stale = deepcopy(values)
         stale['author_edit_units'][0]['selection_snapshot']['ordered_selection']['sources'][0]['owner']['revision_id'] = http.identity()
         status, conflict = http.command('applyAuthorEdit', stale, project_id=e.s.project)
-        compare('Ordered source proof mismatch', {'kind': 'conflicted', 'reason': 'ownership_changed'}, conflict.get('effect'), proposal.differences)
+        compare('Ordered source proof mismatch', {'kind': 'conflicted', 'reason': 'ownership_changed', 'current_authoritative_revision_id': e.revision}, conflict.get('effect'), proposal.differences)
         proposal.coverage['applyAuthorEdit:conflicted:ownership_changed'] += int(conflict.get('effect', {}).get('reason') == 'ownership_changed')
     status, response = http.command('applyAuthorEdit', values, project_id=e.s.project)
     kind = response.get('effect', {}).get('kind', f'HTTP_{status}')

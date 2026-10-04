@@ -9,7 +9,7 @@ def run(p):
     from mixed import run as preserve
     e, http = p.editor, p.http
     draft, draft_path = preserve(p, finish=False)
-    p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
+    p.command('rejectProposalOperations', 'resolved', {'operation_resolution': 'rejected'})
     status, admitted = http.command('createAgentRun', dict(conversation={'kind': 'new'},
         author_message={'text': 'Revise this phrase: narrator voice'},
         working_target={'kind': 'current_chapter', 'chapter_id': e.chapter},
@@ -29,7 +29,7 @@ def run(p):
     anchors = deepcopy(p.p['anchors'])
     assert anchors
     # Retained public Anchors are opaque source proof, not model-computed expected state.
-    p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
+    p.command('rejectProposalOperations', 'resolved', {'operation_resolution': 'rejected'})
     e.refresh()
     values = dict(draft_id=draft['draft_id'], source_current_draft_revision_id=draft['draft_revision_id'],
         source_draft_payload_digest=draft['payload_digest'], expected_source_draft_closure='open',
