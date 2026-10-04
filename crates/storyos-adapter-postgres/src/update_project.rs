@@ -38,6 +38,7 @@ impl ProjectCommand for UpdateProjectInput {
     };
     type Profile = ActivityOnly;
     type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = UpdateProjectApplied;
     type Plan = ();
     type Effect = UpdateProjectApplied;

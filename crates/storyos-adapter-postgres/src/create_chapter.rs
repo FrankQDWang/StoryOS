@@ -44,6 +44,7 @@ impl ProjectCommand for CreateChapterInput {
     };
     type Profile = Structural;
     type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = CreateChapterApplied;
     type Plan = LiveChapters;
     type Effect = ChapterCreated;

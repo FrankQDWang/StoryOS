@@ -34,20 +34,12 @@ pub(super) struct ProjectCommandRoute {
 /// The problem of a client contract or security policy revision that differs from the session.
 pub(super) enum RevisionMismatch {
     InvalidRequest,
-    #[expect(
-        dead_code,
-        reason = "The Project and Editor Session routes move to this sequence in a later ticket"
-    )]
     AuthenticationRequired,
 }
 
 /// The problem of a command schema that differs from the route schema.
 pub(super) enum SchemaMismatch {
     InvalidRequest,
-    #[expect(
-        dead_code,
-        reason = "The Project and Editor Session routes move to this sequence in a later ticket"
-    )]
     CommandTargetRefused,
 }
 
@@ -55,10 +47,6 @@ pub(super) enum SchemaMismatch {
 pub(super) enum ProblemMapping {
     /// The four shared problems, with messages that name the route display name.
     Standard,
-    #[expect(
-        dead_code,
-        reason = "The Project and Editor Session routes move to this sequence in a later ticket"
-    )]
     Route(fn(ProjectCommandError) -> ApiError),
 }
 
@@ -68,6 +56,11 @@ pub(super) trait ProjectCommandRequest: DeserializeOwned + Serialize {
     fn client_contract_revision(&self) -> &str;
     fn security_policy_revision(&self) -> &str;
     fn correlation_id(&self) -> &str;
+
+    /// Whether the body targets the route command; a route can also require its editor contract.
+    fn targets_route(&self, schema_id: &str) -> bool {
+        self.command_schema() == schema_id
+    }
 }
 
 macro_rules! project_command_request {
@@ -90,25 +83,6 @@ macro_rules! project_command_request {
             }
         }
     };
-    ($request:ty, flat) => {
-        impl ProjectCommandRequest for $request {
-            fn command_schema(&self) -> &str {
-                &self.command_schema
-            }
-
-            fn client_contract_revision(&self) -> &str {
-                &self.client_contract_revision
-            }
-
-            fn security_policy_revision(&self) -> &str {
-                &self.security_policy_revision
-            }
-
-            fn correlation_id(&self) -> &str {
-                &self.correlation_id
-            }
-        }
-    };
 }
 
 project_command_request!(contracts::CreateVolumeRequest, nested create_volume_input);
@@ -125,6 +99,29 @@ project_command_request!(
     nested update_project_assistance_input
 );
 
+impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
+    fn command_schema(&self) -> &str {
+        &self.command_schema
+    }
+
+    fn client_contract_revision(&self) -> &str {
+        &self.client_contract_revision
+    }
+
+    fn security_policy_revision(&self) -> &str {
+        &self.security_policy_revision
+    }
+
+    fn correlation_id(&self) -> &str {
+        &self.correlation_id
+    }
+
+    fn targets_route(&self, schema_id: &str) -> bool {
+        self.command_schema == schema_id
+            && self.editor_contract_revision == contracts::EDITOR_CONTRACT_REVISION
+    }
+}
+
 /// One admitted project command, ready for its Core Transition.
 pub(super) struct Admitted<I> {
     pub(super) store: PostgresProjectReader,
@@ -140,7 +137,6 @@ pub(super) struct Acknowledgement {
     pub(super) command_id: String,
     pub(super) author_command_admission_id: String,
     pub(super) receipt: contracts::DomainReceipt,
-    pub(super) project: contracts::ControlledProject,
 }
 
 /// Authenticates one project command request and binds it to its Command Challenge.
@@ -175,7 +171,7 @@ pub(super) async fn admit<R: ProjectCommandRequest, I>(
     let session = state
         .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
-    if body.command_schema() != route.schema_id {
+    if !body.targets_route(route.schema_id) {
         return Err(match route.schema_mismatch {
             SchemaMismatch::InvalidRequest => invalid_request(),
             SchemaMismatch::CommandTargetRefused => command_target_refused(),
@@ -265,7 +261,7 @@ impl<I> Admitted<I> {
         .await;
     }
 
-    /// The Domain Receipt and Command-response Project of one settlement.
+    /// The Domain Receipt and request identities of one settlement.
     pub(super) fn acknowledgement(
         &self,
         route: &ProjectCommandRoute,
@@ -316,21 +312,25 @@ impl<I> Admitted<I> {
                 },
                 created_at: settled.receipt_created_at,
             },
-            project: contracts::ControlledProject {
-                project_id: settled.project.project_id.as_ref().to_owned(),
-                title: settled.project.title,
-                open: match settled.project.current_chapter_id {
-                    Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {
-                        current_chapter_id: chapter_id.as_ref().to_owned(),
-                    },
-                    None => contracts::ProjectOpenState::Empty,
-                },
-            },
         }
     }
 }
 
-/// The settlement facts that the Domain Receipt and Command-response Project show.
+/// The public form of one Command-response Project.
+pub(super) fn controlled_project(project: Project) -> contracts::ControlledProject {
+    contracts::ControlledProject {
+        project_id: project.project_id.as_ref().to_owned(),
+        title: project.title,
+        open: match project.current_chapter_id {
+            Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {
+                current_chapter_id: chapter_id.as_ref().to_owned(),
+            },
+            None => contracts::ProjectOpenState::Empty,
+        },
+    }
+}
+
+/// The settlement facts that the Domain Receipt shows.
 pub(super) struct SettledReceipt {
     pub(super) ids: AuthorCommandAdmissionIds,
     pub(super) receipt_created_at: String,
@@ -338,7 +338,6 @@ pub(super) struct SettledReceipt {
     pub(super) authority: Option<ReceiptAuthority>,
     /// The one head that the expected, prior, and resulting head arrays show; empty without one.
     pub(super) heads: Vec<String>,
-    pub(super) project: Project,
 }
 
 /// The Authoritative Commit identities and Author Action that an applied Receipt shows.

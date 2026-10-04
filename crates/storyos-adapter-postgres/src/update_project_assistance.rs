@@ -43,6 +43,7 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
     };
     type Profile = ActivityOnly;
     type Response = ProjectAssistanceResponse;
+    type ZeroEffect = ();
     type Applied = UpdateProjectAssistanceApplied;
     type Plan = ();
     type Effect = UpdateProjectAssistanceApplied;

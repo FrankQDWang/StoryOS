@@ -3,7 +3,7 @@ use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
     ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
-    positive, structure_title,
+    controlled_project, positive, structure_title,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -110,7 +110,6 @@ pub(super) async fn create_chapter(
             result,
             authority,
             heads: Vec::new(),
-            project: settlement.response,
         },
     );
     Ok(Json(contracts::CreateChapterResponse {
@@ -120,7 +119,7 @@ pub(super) async fn create_chapter(
         command_id: ack.command_id,
         author_command_admission_id: ack.author_command_admission_id,
         receipt: ack.receipt,
-        project: ack.project,
+        project: controlled_project(settlement.response),
         effect,
     }))
 }

@@ -42,6 +42,7 @@ impl ProjectCommand for DeleteChapterInput {
     };
     type Profile = Structural;
     type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = DeleteChapterApplied;
     type Plan = ParentVolume;
     type Effect = ChapterDeleted;

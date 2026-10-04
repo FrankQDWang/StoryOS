@@ -56,14 +56,17 @@ impl std::error::Error for ProjectCommandError {
 
 /// The settled outcome of one project command, equal on first delivery and replay.
 ///
-/// The applied value `A` is the record of the command's settlement profile, and `P` is the
-/// acknowledgement record that the command keeps for an exact retry (ADR 0043).
+/// The applied value `A` is the record of the command's settlement profile, `P` is the
+/// acknowledgement record that the command keeps for an exact retry, and `Z` is the effect of a
+/// zero-authority outcome that writes effect rows (ADR 0043).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProjectCommandSettlement<A, N, C, R, P = Project> {
+pub struct ProjectCommandSettlement<A, N, C, R, P = Project, Z = ()> {
     pub ids: AuthorCommandAdmissionIds,
     pub receipt_created_at: String,
     pub outcome: TransitionOutcome<A, N, C, R>,
     pub response: P,
+    /// Present only for a zero-authority outcome that wrote effect rows.
+    pub zero_authority_effect: Option<Z>,
 }
 
 /// The applied value of an `ActivityOnly` command: its effect and its one Activity record.

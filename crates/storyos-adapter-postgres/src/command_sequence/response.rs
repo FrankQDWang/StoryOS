@@ -37,6 +37,10 @@ pub(crate) trait ResponseRecord {
 /// The Command-response Project.
 pub(crate) struct ProjectResponse;
 
+/// No response record: the command decodes its whole acknowledgement from the stored Receipt
+/// and effect rows, so an exact retry never gives `historical_acknowledgement_unavailable`.
+pub(crate) struct NoResponse;
+
 /// The Command-response Project and the Project assistance record after the writes.
 pub(crate) struct ProjectAssistanceResponse;
 
@@ -63,6 +67,39 @@ impl ResponseRecord for ProjectResponse {
 
     fn replay(replay: &CommandReplay) -> Result<Project, ReplayFault> {
         replay.response_project()
+    }
+}
+
+impl ResponseRecord for NoResponse {
+    type Response = ();
+
+    async fn settle(
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        command_kind: &'static str,
+    ) -> Result<(), ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        client
+            .execute(
+                "UPDATE storyos.command_idempotency
+                    SET outcome_kind = 'settled', result_reference = $3
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND command_kind = $5 AND idempotency_key = $4::text::uuid",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &envelope.ids.receipt_id,
+                    &envelope.challenge_binding.idempotency_key,
+                    &command_kind,
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        Ok(())
+    }
+
+    fn replay(_replay: &CommandReplay) -> Result<(), ReplayFault> {
+        Ok(())
     }
 }
 

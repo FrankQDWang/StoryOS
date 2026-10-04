@@ -43,6 +43,7 @@ impl ProjectCommand for CreateVolumeInput {
     };
     type Profile = Structural;
     type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = CreateVolumeApplied;
     type Plan = NewVolumeOrder;
     type Effect = VolumeCreated;

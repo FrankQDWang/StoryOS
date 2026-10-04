@@ -92,6 +92,28 @@ pub(super) async fn insert_applied_activity(
     for (key, value) in profile_fields {
         payload.insert((*key).to_owned(), value.as_str().into());
     }
+    insert_activity_payload(
+        client,
+        envelope,
+        "authoritative_applied",
+        activity_kind,
+        position,
+        event_id,
+        serde_json::Value::Object(payload),
+    )
+    .await
+}
+
+/// Inserts one Activity payload of the Receipt with the Receipt result kind that it records.
+pub(super) async fn insert_activity_payload(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    receipt_result_kind: &str,
+    event_kind: &str,
+    position: u64,
+    event_id: &str,
+    payload: serde_json::Value,
+) -> Result<(), ProjectCommandError> {
     client
         .execute(
             "INSERT INTO storyos.project_activity_event_payloads
@@ -99,15 +121,16 @@ pub(super) async fn insert_applied_activity(
                 project_activity_event_id, event_kind, receipt_id, receipt_result_kind,
                 payload)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                     $5, $6::text::uuid, 'authoritative_applied', $7::text::jsonb)",
+                     $5, $6::text::uuid, $7, $8::text::jsonb)",
             &[
                 &envelope.project_scope.owner_user_id.as_ref(),
                 &envelope.project_scope.project_id.as_ref(),
                 &position.to_string(),
                 &event_id,
-                &activity_kind,
+                &event_kind,
                 &envelope.ids.receipt_id,
-                &serde_json::Value::Object(payload).to_string(),
+                &receipt_result_kind,
+                &payload.to_string(),
             ],
         )
         .await

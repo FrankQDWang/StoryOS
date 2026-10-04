@@ -38,6 +38,7 @@ impl ProjectCommand for ArchiveProjectInput {
     };
     type Profile = ActivityOnly;
     type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = ArchiveProjectApplied;
     type Plan = ();
     type Effect = ArchiveProjectApplied;

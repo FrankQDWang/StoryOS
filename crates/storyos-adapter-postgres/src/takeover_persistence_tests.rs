@@ -1,8 +1,8 @@
 use storyos_application::{
     AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId, IssueProjectCommandChallenge,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    TakeOverProjectWriterCommand, TakeOverProjectWriterEffect, UserId, create_editor_session,
-    issue_project_command_challenge, take_over_project_writer,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectId,
+    ProjectScope, TakeOverProjectWriterInput, UserId, WriterTakeover, create_editor_session,
+    issue_project_command_challenge,
 };
 use tokio_postgres::{Client, NoTls};
 
@@ -133,7 +133,7 @@ struct CounterTakeoverCase<'a> {
 async fn execute_counter_takeover(
     store: &PostgresProjectReader,
     case: &CounterTakeoverCase<'_>,
-) -> storyos_application::TakeOverProjectWriterSettlement {
+) -> WriterTakeover {
     let binding = takeover_binding(
         COUNTER_PROJECT,
         case.binding_ref,
@@ -150,32 +150,39 @@ async fn execute_counter_takeover(
     )
     .await
     .unwrap();
-    take_over_project_writer(
-        store,
-        &TakeOverProjectWriterCommand {
-            project_scope: ProjectScope::new(UserId::new(USER), ProjectId::new(COUNTER_PROJECT)),
-            client_binding: EditorClientBinding {
-                binding_ref: case.binding_ref.to_owned(),
-                session_generation: 1,
-                client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
-                security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
+    store
+        .take_over_project_writer(
+            &ProjectCommandEnvelope {
+                project_scope: ProjectScope::new(
+                    UserId::new(USER),
+                    ProjectId::new(COUNTER_PROJECT),
+                ),
+                client_binding: EditorClientBinding {
+                    binding_ref: case.binding_ref.to_owned(),
+                    session_generation: 1,
+                    client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
+                    security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
+                },
+                challenge_binding: binding,
+                nonce_digest: case.nonce_digest.to_owned(),
+                canonical_command_bytes: br#"{}"#.to_vec(),
+                correlation_id: case.correlation_id.to_owned(),
+                ids: AuthorCommandAdmissionIds {
+                    command_id: case.command_id.to_owned(),
+                    author_command_admission_id: case.admission_id.to_owned(),
+                    receipt_id: case.receipt_id.to_owned(),
+                },
             },
-            challenge_binding: binding,
-            nonce_digest: case.nonce_digest.to_owned(),
-            canonical_command_bytes: br#"{}"#.to_vec(),
-            correlation_id: case.correlation_id.to_owned(),
-            ids: AuthorCommandAdmissionIds {
-                command_id: case.command_id.to_owned(),
-                author_command_admission_id: case.admission_id.to_owned(),
-                receipt_id: case.receipt_id.to_owned(),
+            &TakeOverProjectWriterInput {
+                editor_session_id: EditorSessionId::new(case.editor_session_id),
+                observed_writer_generation: case.observed_writer_generation,
+                editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
             },
-            editor_session_id: EditorSessionId::new(case.editor_session_id),
-            observed_writer_generation: case.observed_writer_generation,
-            editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
-        },
-    )
-    .await
-    .unwrap()
+        )
+        .await
+        .unwrap()
+        .zero_authority_effect
+        .expect("a writer takeover records its writer effect")
 }
 
 async fn read_scope_counters(client: &Client) -> Option<(String, String, String)> {
@@ -603,21 +610,17 @@ async fn takeover_activity_counter_handles_missing_and_existing_rows() {
         },
     )
     .await;
-    let first_snapshot_id = match &first.effect {
-        TakeOverProjectWriterEffect::TakeoverApplied {
-            resulting_snapshot_id,
-            ..
-        } => resulting_snapshot_id.clone(),
-    };
+    let first_snapshot_id = first.resulting_snapshot_id.clone();
     assert_eq!(
-        first.effect,
-        TakeOverProjectWriterEffect::TakeoverApplied {
+        first,
+        WriterTakeover {
             prior_editor_session_id: COUNTER_WRITER_SESSION.to_owned(),
             prior_writer_generation: 1,
             resulting_editor_session_id: COUNTER_OBSERVER_ONE.to_owned(),
             resulting_writer_generation: 2,
             resulting_snapshot_id: first_snapshot_id,
             resulting_snapshot_activity_position: 1,
+            resulting_head: COUNTER_REVISION.to_owned(),
         }
     );
     assert_eq!(
@@ -658,21 +661,17 @@ async fn takeover_activity_counter_handles_missing_and_existing_rows() {
         },
     )
     .await;
-    let second_snapshot_id = match &second.effect {
-        TakeOverProjectWriterEffect::TakeoverApplied {
-            resulting_snapshot_id,
-            ..
-        } => resulting_snapshot_id.clone(),
-    };
+    let second_snapshot_id = second.resulting_snapshot_id.clone();
     assert_eq!(
-        second.effect,
-        TakeOverProjectWriterEffect::TakeoverApplied {
+        second,
+        WriterTakeover {
             prior_editor_session_id: COUNTER_OBSERVER_ONE.to_owned(),
             prior_writer_generation: 2,
             resulting_editor_session_id: COUNTER_OBSERVER_TWO.to_owned(),
             resulting_writer_generation: 3,
             resulting_snapshot_id: second_snapshot_id,
             resulting_snapshot_activity_position: 2,
+            resulting_head: COUNTER_REVISION.to_owned(),
         }
     );
     assert_eq!(

@@ -59,7 +59,7 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
   - For `rejectProposalOperations`, `withdrawProposal`, `replanProposal`, `reopenWithdrawnProposal`, `reopenRejectedOperations`, `completeReadyPartialProposal`, and `continueProposalGeneration`, a missing settled record or an unknown result kind gives `409 idempotency_binding_conflict` instead of `409 historical_acknowledgement_unavailable`.
   - For `steerAgentRun`, `pauseAgentRun`, and `cancelAgentRun`, damaged acknowledgement evidence gives `503 project_store_unavailable` instead of `409 idempotency_binding_conflict`.
   - For `setCurrentChapter`, a partial set of Author Action, Snapshot, and tree revision evidence gives `503 project_store_unavailable` instead of `409 idempotency_binding_conflict`.
-  - For `takeOverProjectWriter`, a stored Activity payload without a required field gives `503 author_edit_store_unavailable` instead of `409 idempotency_binding_conflict`.
+  - For `takeOverProjectWriter`, a settled Receipt without its Activity record gives `503 author_edit_store_unavailable` instead of `409 idempotency_binding_conflict`. The Activity payload checks already prevent a payload with a missing field.
   - `closeEditorFlowDraft` and `expandRefusedEditDraftToProposal` replay in a separate read-only transaction, not in the write transaction. The response does not change.
 - Each specification that moves commands lists every other observable difference in its behavior-equivalence review. An unlisted difference is a defect.
 

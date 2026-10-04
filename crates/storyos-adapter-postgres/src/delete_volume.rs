@@ -39,6 +39,7 @@ impl ProjectCommand for DeleteVolumeInput {
     };
     type Profile = Structural;
     type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = DeleteVolumeApplied;
     type Plan = ();
     type Effect = VolumeDeleted;

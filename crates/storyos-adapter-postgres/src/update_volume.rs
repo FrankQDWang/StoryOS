@@ -43,6 +43,7 @@ impl ProjectCommand for UpdateVolumeInput {
     };
     type Profile = Structural;
     type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = UpdateVolumeApplied;
     type Plan = LiveVolumes;
     type Effect = UpdateVolumeApplied;

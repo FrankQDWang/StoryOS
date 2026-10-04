@@ -14,6 +14,7 @@ use storyos_application::{
 use storyos_application::{
     ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
 };
+use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
 use storyos_core::{
     AssistanceAvailability, CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome,
 };
@@ -21,8 +22,8 @@ use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
 use super::{
-    Classification, CommandSpec, LockedProject, ProfileSequences, ProfileWrite, ProjectCommand,
-    settle_project_command, unavailable,
+    ActivitySequences, Classification, CommandSpec, LockedProject, ProfileSequences, ProfileWrite,
+    ProjectCommand, ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
@@ -124,6 +125,15 @@ async fn update_project_assistance(
 ) -> Result<UpdateProjectAssistanceSettlement, ProjectCommandError> {
     store
         .update_project_assistance(&call.envelope, &call.input)
+        .await
+}
+
+async fn take_over_project_writer(
+    store: &PostgresProjectReader,
+    call: &CommandCall<TakeOverProjectWriterInput>,
+) -> Result<TakeOverProjectWriterSettlement, ProjectCommandError> {
+    store
+        .take_over_project_writer(&call.envelope, &call.input)
         .await
 }
 
@@ -239,6 +249,12 @@ const UPDATE_PROJECT_ASSISTANCE: Route = Route {
     path: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_PATH,
     schema: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
 };
+const TAKE_OVER_PROJECT_WRITER: Route = Route {
+    kind: "takeOverProjectWriter",
+    method: storyos_contracts::TAKE_OVER_PROJECT_WRITER_METHOD,
+    path: storyos_contracts::TAKE_OVER_PROJECT_WRITER_PATH,
+    schema: storyos_contracts::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
+};
 const SET_CURRENT_CHAPTER: Route = Route {
     kind: "setCurrentChapter",
     method: storyos_contracts::SET_CURRENT_CHAPTER_METHOD,
@@ -302,14 +318,14 @@ async fn issued<I>(
 /// Settles one call, replays it with new request identities, and requires an equal settlement.
 ///
 /// Returns the Receipt result kind and the authority rows of the first settlement.
-async fn replayed_outcome<I: Clone, A, N, C, R, P>(
+async fn replayed_outcome<I: Clone, A, N, C, R, P, Z>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<I>,
     settle: impl AsyncFn(
         &PostgresProjectReader,
         &CommandCall<I>,
-    ) -> Result<ProjectCommandSettlement<A, N, C, R, P>, ProjectCommandError>,
+    ) -> Result<ProjectCommandSettlement<A, N, C, R, P, Z>, ProjectCommandError>,
 ) -> (ReceiptResult, [i64; 5])
 where
     A: Debug + PartialEq,
@@ -317,6 +333,7 @@ where
     C: ReasonCode + Debug + PartialEq,
     R: ReasonCode + Debug + PartialEq,
     P: Debug + PartialEq,
+    Z: Debug + PartialEq,
 {
     let first = settle(store, call).await.unwrap();
     let mut retry = call.clone();
@@ -548,11 +565,16 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((UPDATE_PROJECT_ASSISTANCE.kind, outcome));
     }
 
+    let call = take_over_project_writer_call(&store, 0x5da0).await;
+    let outcome = replayed_outcome(&store, &admin, &call, take_over_project_writer).await;
+    observed.push((TAKE_OVER_PROJECT_WRITER.kind, outcome));
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 1, 1]);
     let chapter_selection_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 0, 1]);
     let activity_applied = (ReceiptResult::AuthoritativeApplied, [1, 0, 1, 0, 0]);
     let no_effect = (ReceiptResult::NoEffect, [1, 0, 0, 0, 0]);
+    let writer_takeover = (ReceiptResult::NoEffect, [1, 0, 1, 0, 1]);
     let conflicted = (ReceiptResult::Conflicted, [1, 0, 0, 0, 0]);
     let refused = (ReceiptResult::Refused, [1, 0, 0, 0, 0]);
     assert_eq!(
@@ -594,6 +616,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("updateProjectAssistance", no_effect),
             ("updateProjectAssistance", conflicted),
             ("updateProjectAssistance", activity_applied),
+            ("takeOverProjectWriter", writer_takeover),
         ]
     );
 }
@@ -625,6 +648,21 @@ async fn two_chapter_writer(
     };
     let revision_b = opened.chapter.revision_id.as_ref().to_owned();
     (scope, chapter_a, chapter_b, revision_b, editor_session_id)
+}
+
+/// One applicable writer takeover by a second Editor Session in a new Project.
+async fn take_over_project_writer_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<TakeOverProjectWriterInput> {
+    let (scope, ..) = two_chapter_writer(store, base).await;
+    let observer = open_session(store, &scope, &format!("{:04x}", base + 5)).await;
+    let input = TakeOverProjectWriterInput {
+        editor_session_id: EditorSessionId::new(observer),
+        observed_writer_generation: 1,
+        editor_contract_revision: storyos_contracts::EDITOR_CONTRACT_REVISION.to_owned(),
+    };
+    issued(store, &scope, base + 9, &TAKE_OVER_PROJECT_WRITER, input).await
 }
 
 /// One applicable first Update Project Assistance in a new Project.
@@ -835,8 +873,14 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &update_project_assistance_call(&store, 0x5e90).await,
         )
         .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &take_over_project_writer_call(&store, 0x5ea0).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 10]);
+    assert_eq!(observed, vec![(true, [0; 5]); 11]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -855,6 +899,7 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
     const SPEC: CommandSpec = C::SPEC;
     type Profile = C::Profile;
     type Response = C::Response;
+    type ZeroEffect = C::ZeroEffect;
     type Applied = C::Applied;
     type Plan = C::Plan;
     type Effect = C::Effect;
@@ -896,6 +941,27 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
 
     fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault> {
         self.command.decode(replay)
+    }
+
+    fn writes_zero_authority_effect(&self, outcome: &ZeroOutcome<'_, Self>) -> bool {
+        self.command.writes_zero_authority_effect(&match outcome {
+            ZeroOutcome::NoEffect(reason) => ZeroOutcome::NoEffect(*reason),
+            ZeroOutcome::Conflicted(reason) => ZeroOutcome::Conflicted(*reason),
+            ZeroOutcome::Refused(reason) => ZeroOutcome::Refused(*reason),
+        })
+    }
+
+    async fn write_zero_authority_effect(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+        activity: &ActivitySequences,
+    ) -> Result<ZeroAuthorityWrite<Self::ZeroEffect>, ProjectCommandError> {
+        self.command
+            .write_zero_authority_effect(client, envelope, project, activity)
+            .await?;
+        Err(unavailable("injected zero-authority write failure"))
     }
 }
 
@@ -954,12 +1020,17 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &update_project_assistance_call(&store, 0x5f90).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &take_over_project_writer_call(&store, 0x5fa0).await,
+        )
+        .await,
     ];
-    let rolled_back = (
-        vec![(true, [0; 5]), (true, [0; 5])],
-        ReceiptResult::AuthoritativeApplied,
-    );
-    assert_eq!(observed, vec![rolled_back; 10]);
+    let rolled_back = |result| (vec![(true, [0; 5]), (true, [0; 5])], result);
+    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
+    expected.push(rolled_back(ReceiptResult::NoEffect));
+    assert_eq!(observed, expected);
 }
 
 /// The replay error of one exact retry.
@@ -1050,4 +1121,37 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         ],
     );
     assert_eq!(observed, vec![separated; 10]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_command_without_a_response_record_replays_without_it_and_damaged_activity_is_a_fault() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = take_over_project_writer_call(&store, 0x6aa0).await;
+    let first = take_over_project_writer(&store, &call).await.unwrap();
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET acknowledgement_format = NULL, response_project = NULL
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let pre_capture = take_over_project_writer(&store, &with_new_request_ids(&call)).await;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.project_activity_event_payloads
+                SET payload = jsonb_set(payload, '{{prior_writer_generation}}', '\"damaged\"')
+              WHERE receipt_id = '{}'",
+            first.ids.receipt_id
+        ))
+        .await
+        .unwrap();
+    let damaged = take_over_project_writer(&store, &with_new_request_ids(&call)).await;
+    assert_eq!(pre_capture.unwrap(), first);
+    assert!(matches!(damaged, Err(ProjectCommandError::Unavailable(_))));
 }

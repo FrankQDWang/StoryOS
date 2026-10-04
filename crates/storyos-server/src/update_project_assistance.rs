@@ -5,6 +5,7 @@ use storyos_core::{AssistanceAvailability, TransitionOutcome, UpdateProjectAssis
 
 use super::command_admission::{
     ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
+    controlled_project,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -133,7 +134,6 @@ pub(super) async fn update_project_assistance(
             result,
             authority: None,
             heads: Vec::new(),
-            project: settlement.response.project,
         },
     );
     Ok(Json(contracts::UpdateProjectAssistanceResponse {
@@ -143,7 +143,7 @@ pub(super) async fn update_project_assistance(
         command_id: ack.command_id,
         author_command_admission_id: ack.author_command_admission_id,
         receipt: ack.receipt,
-        project: ack.project,
+        project: controlled_project(settlement.response.project),
         assistance: contract_assistance(&assistance),
         effect,
     }))

@@ -30,6 +30,8 @@ pub(crate) struct CommandReplay {
     pub(crate) snapshot_id: Option<String>,
     /// The latest Manuscript Tree Revision that an Activity payload records at or before the Receipt.
     pub(crate) manuscript_tree_revision: Option<u64>,
+    /// The resulting head array of the Domain Receipt.
+    pub(crate) resulting_heads: Vec<String>,
     result_kind: String,
     receipt: JsonText,
     activity: JsonText,
@@ -251,6 +253,7 @@ pub(crate) async fn read_command_replay(
         acknowledgement_format: row.get(15),
         response_project: row.get(16),
         response_assistance: row.get(18),
+        resulting_heads: row.get(19),
     })
 }
 
@@ -284,7 +287,8 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
                  OR structure.project_activity_position <= payload.project_activity_position)
           ORDER BY structure.project_activity_position DESC
           LIMIT 1),
-        idempotency.response_assistance::text
+        idempotency.response_assistance::text,
+        receipt.resulting_heads::text[]
    FROM storyos.domain_receipts AS receipt
    JOIN storyos.author_command_admission_settlements AS settlement
      ON (settlement.owner_user_id, settlement.project_id,

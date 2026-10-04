@@ -41,6 +41,7 @@ impl ProjectCommand for SetCurrentChapterInput {
     };
     type Profile = ChapterSelection;
     type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = String;
     type Plan = ChapterHead;
     type Effect = CurrentChapterSelected;

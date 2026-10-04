@@ -3,7 +3,7 @@ use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
     ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
-    positive,
+    controlled_project, positive,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -78,7 +78,6 @@ pub(super) async fn delete_chapter(
             result,
             authority,
             heads: Vec::new(),
-            project: settlement.response,
         },
     );
     Ok(Json(contracts::DeleteChapterResponse {
@@ -88,7 +87,7 @@ pub(super) async fn delete_chapter(
         command_id: ack.command_id,
         author_command_admission_id: ack.author_command_admission_id,
         receipt: ack.receipt,
-        project: ack.project,
+        project: controlled_project(settlement.response),
         effect,
     }))
 }

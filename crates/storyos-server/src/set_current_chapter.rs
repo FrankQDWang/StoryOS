@@ -3,7 +3,7 @@ use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
     ProblemMapping, ProjectCommandRoute, ReceiptAuthority, RevisionMismatch, SchemaMismatch,
-    SettledReceipt, admit,
+    SettledReceipt, admit, controlled_project,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -88,7 +88,6 @@ pub(super) async fn set_current_chapter(
             result,
             authority,
             heads: vec![admitted.input.expected_target_revision_id.clone()],
-            project: settlement.response,
         },
     );
     Ok(Json(contracts::SetCurrentChapterResponse {
@@ -98,7 +97,7 @@ pub(super) async fn set_current_chapter(
         command_id: ack.command_id,
         author_command_admission_id: ack.author_command_admission_id,
         receipt: ack.receipt,
-        project: ack.project,
+        project: controlled_project(settlement.response),
         effect,
     }))
 }

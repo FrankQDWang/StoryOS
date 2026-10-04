@@ -265,10 +265,7 @@ pub use editor_session::{
     OpenEditorSession, create_editor_session, get_editor_session,
 };
 
-pub use takeover::{
-    TakeOverProjectWriterCommand, TakeOverProjectWriterEffect, TakeOverProjectWriterError,
-    TakeOverProjectWriterSettlement, TakeOverProjectWriterStore, take_over_project_writer,
-};
+pub use takeover::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement, WriterTakeover};
 
 pub use project_activity::{ActivityAggregateRef, ProjectActivityEvent, ProjectActivityKind};
 pub use snapshot::{

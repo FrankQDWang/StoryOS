@@ -18,9 +18,10 @@ pub(crate) struct ActivityWrite<E> {
     pub(crate) activity: serde_json::Value,
 }
 
+/// The Project Activity position and event identity that one Activity record uses.
 pub(crate) struct ActivitySequences {
-    project_activity_position: u64,
-    project_activity_event_id: String,
+    pub(crate) project_activity_position: u64,
+    pub(crate) project_activity_event_id: String,
 }
 
 pub(crate) struct ActivityOnly;

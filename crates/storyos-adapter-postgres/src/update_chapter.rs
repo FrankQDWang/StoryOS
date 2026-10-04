@@ -46,6 +46,7 @@ impl ProjectCommand for UpdateChapterInput {
     };
     type Profile = Structural;
     type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = UpdateChapterApplied;
     type Plan = LiveSiblings;
     type Effect = UpdateChapterApplied;

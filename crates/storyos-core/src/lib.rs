@@ -47,6 +47,7 @@ mod replan_proposal;
 mod revision_comparison;
 mod set_current_chapter;
 mod statistics_profile;
+mod take_over_project_writer;
 mod transition_outcome;
 mod undo_latest_author_action;
 mod update_chapter;
@@ -207,6 +208,10 @@ pub use set_current_chapter::{
 };
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
+};
+pub use take_over_project_writer::{
+    CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
+    TakeOverProjectWriterResult, take_over_project_writer,
 };
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{
