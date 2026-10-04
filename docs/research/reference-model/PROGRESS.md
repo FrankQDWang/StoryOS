@@ -101,3 +101,11 @@ Next: verify conflict/replan and negative lifecycle results, then reach 20-hit c
 The normal Stage 4 smoke also proved current-writer fencing, usable takeover, refusal of stale takeover, unchanged old Author Edit acknowledgement after takeover, changed-digest Challenge conflict, the 10-Challenge shared capacity, and the separate 120-Challenge Author Edit capacity. It is `replay-first-survey.json`; its known Create Chapter replay failure is retained. The minimized run `5bde3e30923240d6b34a91e408322ba2` completed in 24 seconds.
 
 Proposal conflict/replan and ordinary negative lifecycle smoke passed in `proposals-lifecycle-smoke.json`. Additional conflict and refused branches, mixed-ownership Draft creation, and the 20-hit batches remain to run.
+
+## Step 9: Complete mixed-intent preservation
+
+Seed 302 now creates two Blocks through one public Author Edit, generates a Proposal for the first Block, and submits one structured replacement spanning that candidate and the second authoritative Block. It receives RefusedToDraft, preserves every attempted unit and its independently recomputed payload digest, and changes neither authoritative Blocks nor the candidate. Draft close followed by Author Undo restores the open Draft. `draft-smoke.json` retains the evidence; run `b49ea67447c142c88fc7edf56bf4cc1b` completed in 22 seconds with zero differences.
+
+The first Draft query used the wrong URL and stopped in the harness. The route now comes directly from the generated route catalog. The multi-Block model checks semantic Blocks and identity; it treats the separate body string as an opaque display projection for this setup.
+
+Next: finish negative Proposal branches and run the 20-hit Author Edit/Undo and Proposal batches. The no-frontier Undo probe uses the unmodified command-owned fixture's empty action history; all novel changes in the main scenarios still enter through HTTP.

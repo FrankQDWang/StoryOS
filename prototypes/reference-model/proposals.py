@@ -14,6 +14,9 @@ class Proposal:
         self.label = f'{seed}/proposal/{label}'
         self.prior_head = self.editor.revision
         self.editor.edit(units('A quiet room before dawn.'), 'authoritative_applied', 'A quiet room before dawn.')
+        if label == 'draft':
+            from mixed import prepare
+            self.blocks = prepare(self.editor)
         self.body = self.editor.text
         self.start = self.editor.s.start
         status, assistance = http.request('GET', f'/api/v1/projects/{self.editor.s.project}/assistance')
@@ -22,9 +25,14 @@ class Proposal:
             {'availability': 'available', 'expected_assistance_revision': revision},
             project_id=self.editor.s.project)
         assert status == 200, enabled
+        target = {'kind': 'current_chapter', 'chapter_id': self.editor.chapter}
+        if label == 'draft':
+            target = dict(kind='passage_collection', source_chapter_id=self.editor.chapter,
+                targets=[dict(chapter_id=self.editor.chapter, base_authoritative_revision_id=self.editor.revision,
+                              manuscript_block_ids=[self.blocks[0]['manuscript_block_id']])])
         status, result = http.command('createAgentRun',
             dict(conversation={'kind': 'new'}, author_message={'text': 'Revise this passage: keep the narrator voice.'},
-                 working_target={'kind': 'current_chapter', 'chapter_id': self.editor.chapter},
+                 working_target=target,
                  instruction={'kind': 'absent'}, cause={'kind': 'author_request'}),
             project_id=self.editor.s.project)
         assert status == 202, result
@@ -82,6 +90,9 @@ class Proposal:
     def command(self, name, outcome, update=None, mutation=None):
         values = self.values(name)
         values.update(mutation or {})
+        producer = values.get('cause') == 'current_producer'
+        if producer:
+            values.pop('editor_session_id')
         prior = deepcopy(self.p)
         before = len(self.differences)
         status, result = self.http.command(name, values, project_id=self.editor.s.project, proposal_id=self.proposal_id)
@@ -96,8 +107,8 @@ class Proposal:
             compare(self.label + '/' + name + '/Commit count', int(name == 'acceptProposal' and applied),
                     len(result['receipt']['authoritative_commit_ids']), self.differences)
             if applied:
-                self.editor.actions += 1
-                compare(self.label + '/' + name + '/Action', str(self.editor.actions), effect['author_action_sequence'], self.differences)
+                self.editor.actions += int(not producer)
+                compare(self.label + '/' + name + '/Action', None if producer else str(self.editor.actions), effect.get('author_action_sequence'), self.differences)
                 self.expected.update(update or {})
                 if name == 'withdrawProposal':
                     self.withdrawal = effect['closure_event_refs'][0]
@@ -119,7 +130,7 @@ class Proposal:
             item.update(seed_case=self.label, trace_start=self.start, trace_end=len(self.http.trace))
         return result
 
-    def edit(self):
+    def edit(self, outcome='proposal_revised', mutation=None):
         e, p = self.editor, self.p
         e.refresh()
         left = self.http.rng.randrange(len(self.candidate) + 1)
@@ -130,10 +141,11 @@ class Proposal:
         values.update(expected_proposal_head_revision_ids=[p['revision_id']], observed_ownership_partition='mixed',
             proposal_target=dict(proposal_id=self.proposal_id, operation_id=p['operation_id'],
                                  revision_id=p['revision_id'], manuscript_block_id=p['manuscript_block_id']))
+        values.update(mutation or {})
         status, result = self.http.command('applyAuthorEdit', values, project_id=e.s.project)
         effect = result.get('effect', {'kind': f'HTTP_{status}'})
-        self.coverage['applyAuthorEdit:' + effect['kind']] += 1
-        compare(self.label + '/candidate edit', 'proposal_revised', effect['kind'], self.differences)
+        self.coverage['applyAuthorEdit:' + effect['kind'] + (':' + effect['reason'] if effect.get('reason') else '')] += 1
+        compare(self.label + '/candidate edit', outcome, effect['kind'], self.differences)
         if effect['kind'] == 'proposal_revised':
             e.actions += 1
             self.candidate = expected
@@ -151,7 +163,7 @@ class Proposal:
 
 
 def run(http, seed, differences, coverage, selected=None):
-    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect', 'conflict_reject', 'conflict_withdraw', 'refuse_replan']
+    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect', 'conflict_reject', 'conflict_withdraw', 'refuse_replan', 'draft', 'edit_conflicts', 'producer', 'closed']
     http.rng.shuffle(modes)
     for mode in modes:
         http.rng = random.Random(f'{seed}/proposal/{mode}')
@@ -166,12 +178,16 @@ def run(http, seed, differences, coverage, selected=None):
             p.command('reopenWithdrawnProposal', 'no_effect')
         elif mode == 'reject':
             p.command('rejectProposalOperations', 'resolved', {'operation_resolution': 'rejected'})
+            p.command('acceptProposal', 'refused')
+            p.command('rejectProposalOperations', 'refused')
+            p.command('reopenRejectedOperations', 'refused', mutation={'rejection_event_refs': [http.identity()]})
             p.command('reopenRejectedOperations', 'resolved', {'operation_resolution': 'pending', 'validation': 'pending'})
         elif mode == 'edit':
             p.edit()
         elif mode == 'replan':
             p.command('acceptProposal', 'conflicted', mutation={'expected_authoritative_revision_id': p.prior_head})
             p.command('replanProposal', 'conflicted', mutation={'expected_current_target_revisions': [p.prior_head]})
+            p.command('replanProposal', 'refused', mutation={'source_condition': {'kind': 'proposal_conflict', 'proposal_conflict_ref': http.identity()}})
             p.command('replanProposal', 'resolved', {'validation': 'pending'})
             p.editor.undo('unavailable')
         elif mode == 'invalid':
@@ -197,3 +213,21 @@ def run(http, seed, differences, coverage, selected=None):
         elif mode == 'refuse_replan':
             p.command('replanProposal', 'refused')
             p.command('replanProposal', 'refused', mutation={'expected_current_proposal_head': http.identity()})
+        elif mode == 'draft':
+            from mixed import run as run_mixed
+            run_mixed(p)
+        elif mode == 'edit_conflicts':
+            p.edit('conflicted', {'expected_proposal_head_revision_ids': [], 'observed_ownership_partition': 'authoritative'})
+            p.edit('conflicted', {'proposal_target': dict(proposal_id=p.proposal_id, operation_id=http.identity(),
+                revision_id=p.p['revision_id'], manuscript_block_id=p.p['manuscript_block_id'])})
+        elif mode == 'producer':
+            cause = dict(cause='current_producer', withdrawal_reason={'kind': 'current_producer_withdrew'},
+                producer=dict(kind='agent_run_decision', run_id=http.identity(), decision_id=http.identity()))
+            p.command('withdrawProposal', 'no_effect', mutation=cause)
+            cause['producer'] = dict(kind='agent_run_decision', run_id=p.run_id, decision_id=p.p['source']['decision_id'])
+            p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'}, cause)
+        elif mode == 'closed':
+            p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
+            p.command('rejectProposalOperations', 'refused')
+            p.rejections = [http.identity()]
+            p.command('reopenRejectedOperations', 'refused')

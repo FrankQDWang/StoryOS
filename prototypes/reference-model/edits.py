@@ -123,3 +123,14 @@ def run(http, seed, differences, coverage, selected=None):
     editor.undo()
     # A-005: the contract does not define the next direct-edit handler's eligibility after compensation.
     editor.undo(('compensated', 'conflicted'))
+    fixture = '018f0000-0000-7001-8000-000000000002'
+    if not hasattr(http, 'fixture_session'):
+        status, http.fixture_session = http.command('createEditorSession', {}, project_id=fixture)
+        assert status == 200, http.fixture_session
+    session = http.fixture_session
+    assert session['author_undo_frontier_sequence'] is None
+    status, result = http.command('undoLatestAuthorAction', dict(
+        editor_session_id=session['editor_session']['editor_session_id'], expected_author_undo_frontier_sequence='1',
+        expected_authoritative_revision_id=session['base_snapshot']['authoritative_head_revision_id']), project_id=fixture)
+    compare('No frontier Undo', {'kind': 'unavailable', 'reason': 'no_frontier'}, result['effect'], differences)
+    coverage['undoLatestAuthorAction:unavailable:no_frontier'] += 1
