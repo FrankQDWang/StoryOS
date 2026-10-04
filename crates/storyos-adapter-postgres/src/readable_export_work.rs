@@ -110,7 +110,7 @@ pub(crate) async fn claim_readable_export_row(
     }))
 }
 
-async fn complete_claimed_export(
+pub(crate) async fn complete_claimed_export(
     client: &tokio_postgres::Client,
     claim: &ClaimedReadableExport,
 ) -> Result<CompleteReadableExport, CompleteReadableExportError> {

@@ -176,9 +176,13 @@ async fn exact_retry_uses_one_rate_unit_and_rate_rows_obey_forced_rls() {
     let hidden_rate_rows = foreign_scope
         .query_one(
             "SELECT
-               (SELECT count(*) FROM storyos.project_command_challenge_rate_guards),
-               (SELECT count(*) FROM storyos.project_command_challenge_rate_windows)",
-            &[],
+               (SELECT count(*) FROM storyos.project_command_challenge_rate_guards
+                WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                  AND client_session_generation = 801),
+               (SELECT count(*) FROM storyos.project_command_challenge_rate_windows
+                WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                  AND client_session_generation = 801)",
+            &[&USER_A, &PROJECT_A],
         )
         .await
         .unwrap();
