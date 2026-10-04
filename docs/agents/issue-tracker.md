@@ -71,7 +71,7 @@ The steps below use Matt Pocock skill names, for example `to-spec`. Claude Code 
 | Codex | User skills in `~/.agents/skills/` | Type `$<name>` in the prompt, for example `$to-spec`, or select the skill from `/skills`. |
 
 - In Claude Code, the plugin marks `wayfinder`, `to-spec`, `to-tickets`, `implement-spec`, `triage`, and `retro` as user-invoked. The agent cannot start them itself. When a workflow step uses one of these skills, the agent asks the author to type the command.
-- Claude Code also has a built-in `/code-review` command that is not the Matt skill. For the two-axis Standards and Spec review, use `/mattpocock-skills:code-review`.
+- In Claude Code, the Matt `code-review` skill comes from the `mattpocock-skills` plugin. Claude Code also has a different `code-review` skill. For the two-axis Standards and Spec review, use `/mattpocock-skills:code-review`.
 - A subagent is a separate agent context that the client starts for one role, for example an implementer or the merger. The two clients can start subagents. When a client starts a subagent, the subagent shares the files of its parent. Give each writing subagent its own worktree.
 
 ### Delivery steps

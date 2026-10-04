@@ -33,9 +33,15 @@ the PR with an ordinary merge commit.
    The Standards reviewer compares the diff with `AGENTS.md`, `GLOSSARY.md`, and
    ASD-STE100. The Spec reviewer compares the diff with the ticket or task contract.
    Each reviewer returns `PASS` or `FAIL` with `file:line` evidence.
-   - Current example when Claude Code implements: the Codex plugin, with one new
-     thread for each axis and without `--write`:
-     `node ~/.claude/plugins/cache/openai-codex/codex/<version>/scripts/codex-companion.mjs task --fresh "<axis prompt>"`.
+   - Current example when Claude Code implements: the Codex plugin. Use one new
+     thread for each axis. Do not use `--write`. The first command finds the newest
+     installed plugin version:
+
+     ```bash
+     codex_root=$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/ | sort -V | tail -n 1)
+     node "${codex_root}scripts/codex-companion.mjs" task --fresh "<axis prompt>"
+     ```
+
    - When Codex implements, use a different agent tool or a separate Claude Code
      session for each axis.
 3. Post each verdict as a PR comment. If a verdict is `FAIL`, fix the findings.
