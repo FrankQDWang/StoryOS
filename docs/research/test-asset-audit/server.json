@@ -1,0 +1,726 @@
+[
+  {
+    "id": "SV001",
+    "path": "crates/storyos-server/src/author_edit_tests.rs",
+    "line": 43,
+    "test": "request_validation_rejects_a_foreign_target",
+    "verdict": "MOVE",
+    "reason": "L1",
+    "evidence": "Move the unmatched manuscript target case to the authenticated Author Edit HTTP flow. That flow only sends the captured target. The current direct validator call proves an error but not rejection before Challenge consumption or absence of authority writes; require 422 and unchanged admission/receipt counts at that public boundary.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "SV002",
+    "path": "crates/storyos-server/src/author_edit_tests.rs",
+    "line": 50,
+    "test": "request_validation_accepts_a_bounded_ordered_batch",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The real HTTP Author Edit flow submits two ordered units, commits their final text and replays the exact result. This validator-only positive adds no distinct input rule.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      49,
+      67
+    ]
+  },
+  {
+    "id": "SV003",
+    "path": "crates/storyos-server/src/author_edit_tests.rs",
+    "line": 70,
+    "test": "apply_author_edit_rejects_referer_without_origin",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP flow sends a Referer-only Author Edit with valid Host/session and checks 403. This default-router request adds neither valid authentication nor a different Origin rule.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      69,
+      85
+    ]
+  },
+  {
+    "id": "SV004",
+    "path": "crates/storyos-server/src/author_edit_outcome_tests.rs",
+    "line": 10,
+    "test": "admitted_unsettled_outcome_requires_visible_reconciliation",
+    "verdict": "MOVE",
+    "reason": "L1",
+    "evidence": "Move the admitted-but-unsettled observation to the GET outcome boundary, with a retained Admission that actually selects StillUnknown/AdmissionCommitted; assert both identities, reconciliation_required and unchanged authority. The present test only constructs and compares mapped enum fields. The existing HTTP damaged-payload case now returns RequiresReconfirmation, so it is NOT covering evidence for this observation. Do not delete until the new public case proves the branch.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-server/src/author_edit_outcome_tests.rs:10",
+    "remove": null
+  },
+  {
+    "id": "SV005",
+    "path": "crates/storyos-server/src/editor_session_tests.rs",
+    "line": 8,
+    "test": "editor_session_routes_exist_and_state_change_never_uses_referer",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The real HTTP flow creates and reads an Editor Session and rejects a Referer-only creation with valid session/site context. Route existence and the shared Origin policy are covered there; the default-router statuses add no unique regression.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      1,
+      31
+    ]
+  },
+  {
+    "id": "SV006",
+    "path": "crates/storyos-server/src/contract_reason_tests.rs",
+    "line": 27,
+    "test": "every_volume_reason_maps_to_its_public_reason",
+    "verdict": "DELETE",
+    "reason": "D2",
+    "evidence": "The table repeats Core and wire enum literals plus each code round trip. contract_reason deserializes the stable Core code; there is no distinct transformation per pair. Public Volume flows own observable Conflict, Refused, NoEffect and Applied reasons. Do not claim they execute every unreachable Core-only refusal in this literal table.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148; apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:384",
+    "remove": [
+      1,
+      160
+    ]
+  },
+  {
+    "id": "SV007",
+    "path": "crates/storyos-server/src/contract_reason_tests.rs",
+    "line": 93,
+    "test": "every_chapter_reason_maps_to_its_public_reason",
+    "verdict": "DELETE",
+    "reason": "D2",
+    "evidence": "The table repeats static Chapter enum pairs and their code round trips. Public Chapter command outcomes own the wire reason behavior. Input validation can prevent some Core-only values from reaching the mapper; no independent observable regression is established for enumerating those values.",
+    "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:204; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361; apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252; apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:470; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:417",
+    "remove": null
+  },
+  {
+    "id": "SV008",
+    "path": "crates/storyos-server/src/public_origin_tests.rs",
+    "line": 6,
+    "test": "a_configured_http_origin_refuses_startup",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged startup test sends this same insecure public Origin and requires its specific error before Storage Activation; bypassing the HTTPS condition loses that diagnostic.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:127",
+    "remove": [
+      5,
+      14
+    ]
+  },
+  {
+    "id": "SV009",
+    "path": "crates/storyos-server/src/public_origin_tests.rs",
+    "line": 17,
+    "test": "a_configured_https_origin_is_the_printed_site",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A configured public HTTPS name with uppercase host and explicit 443 must produce the normalized printed URL and Host. Other normalization tests check request admission, not PackagedPublicOrigin field construction; packaged startup tests only reject profiles.",
+    "coverage": "crates/storyos-server/src/client_session_binding_tests.rs:112; apps/web/test/node-contract/protocol-http.integration.test.ts:127",
+    "remove": null
+  },
+  {
+    "id": "SV010",
+    "path": "crates/storyos-server/src/public_origin_tests.rs",
+    "line": 31,
+    "test": "an_invalid_configured_origin_refuses_startup",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Public startup must reject IP-literal HTTPS Origins even though request Origin parsing accepts IPs for local HTTP. Neither the HTTP-only startup rejection nor request parser tests checks the public DNS-name restriction. Empty/path/query/userinfo cases overlap parser protection, but the two IP cases are unique.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:127; crates/storyos-server/src/client_session_binding_tests.rs:112",
+    "remove": null
+  },
+  {
+    "id": "SV011",
+    "path": "crates/storyos-server/src/public_origin_tests.rs",
+    "line": 51,
+    "test": "a_public_origin_refuses_a_non_loopback_listen",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "IPv6 wildcard and a concrete private-interface listen must refuse public HTTPS. The packaged test only supplies IPv4 wildcard 0.0.0.0; an IPv4-only loopback check or wildcard-only restriction would escape it.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:137",
+    "remove": null
+  },
+  {
+    "id": "SV012",
+    "path": "crates/storyos-server/src/public_origin_tests.rs",
+    "line": 62,
+    "test": "unset_public_origin_keeps_the_local_http_profile",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An absent public Origin must leave a non-loopback bind in the local HTTP profile. Public-mode listen restrictions must not leak into that profile. All compared packaged success tests bind 127.0.0.1, so they do not detect this regression.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35; apps/web/test/node-contract/protocol-http.integration.test.ts:137",
+    "remove": null
+  },
+  {
+    "id": "SV013",
+    "path": "crates/storyos-server/src/public_origin_tests.rs",
+    "line": 70,
+    "test": "a_public_origin_admits_loopback_localhost_and_unix_listens",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Public HTTPS on port 8443 must preserve that port and accept IPv6 loopback, localhost and the configured Unix-listen contract. ADR 0023 explicitly retains Unix sockets even though main currently opens TCP only. No packaged success case exercises these alternatives or checks the derived nondefault Host.",
+    "coverage": "crates/storyos-server/src/public_origin_tests.rs:17; apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35",
+    "remove": null
+  },
+  {
+    "id": "SV014",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 18,
+    "test": "tuple_origins_normalize_default_ports_host_case_idna_and_ip_hosts",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public router normalization matrix covers all four tuples: default port, host case, IDNA, IPv4 and IPv6. This equality-only helper matrix adds no other normalization rule.",
+    "coverage": "crates/storyos-server/src/client_session_binding_tests.rs:112",
+    "remove": [
+      17,
+      27
+    ]
+  },
+  {
+    "id": "SV015",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 30,
+    "test": "tuple_origins_keep_scheme_host_and_non_default_port_distinct",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Add a same-host, same-explicit-port but different-scheme Origin to the hostile HTTP matrix, then remove this equality-only test. Existing foreign Origins also differ in host, so they cannot prove the scheme component independently. Nondefault-port and foreign-host distinctions are already public cases.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
+    "remove": null
+  },
+  {
+    "id": "SV016",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 43,
+    "test": "origin_header_uses_the_same_tuple_normalization_as_configuration",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The retained public router case admits HTTPS host case/default-port differences in configuration, binding and header, executing this exact parser.",
+    "coverage": "crates/storyos-server/src/client_session_binding_tests.rs:112",
+    "remove": [
+      42,
+      53
+    ]
+  },
+  {
+    "id": "SV017",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 56,
+    "test": "sensitive_safe_read_derives_one_referer_tuple_with_path_and_query",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Real HTTP accepts both query-only and Project-path Referers and returns the Project body. This helper-only path/query example adds no distinct rule.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:989",
+    "remove": [
+      55,
+      69
+    ]
+  },
+  {
+    "id": "SV018",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 72,
+    "test": "state_changing_policy_requires_origin_and_never_uses_referer",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Real HTTP challenges and Editor Session/Author Edit commands reject Referer-only state changes and accept Origin-bearing requests. They execute both arms used here.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:170; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      71,
+      84
+    ]
+  },
+  {
+    "id": "SV019",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 87,
+    "test": "present_invalid_origin_refuses_without_referer_fallback",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The hostile HTTP matrix supplies malformed or empty Origin with a valid same-site Referer and requires 403 without disclosure. That directly proves Origin presence prevents fallback.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
+    "remove": [
+      86,
+      103
+    ]
+  },
+  {
+    "id": "SV020",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 106,
+    "test": "valid_origin_is_authoritative_over_referer",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A valid Origin must remain authoritative even with a foreign Referer. HTTP negatives check invalid Origin with valid Referer, which does not catch requiring both headers to agree or always preferring Referer. No other test supplies this positive conflicting-header pair.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
+    "remove": null
+  },
+  {
+    "id": "SV021",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 125,
+    "test": "empty_repeated_and_non_utf8_origin_values_refuse",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The real HTTP matrix independently supplies empty Origin, obs-text Origin with valid Referer, and duplicate raw Origin fields; all must return 403. This HeaderMap matrix repeats the same extraction rule.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
+    "remove": [
+      124,
+      150
+    ]
+  },
+  {
+    "id": "SV022",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 153,
+    "test": "empty_repeated_and_non_utf8_referer_values_refuse",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Add empty and non-UTF-8 Referer inputs to the existing hostile HTTP matrix, then remove this helper test. Repeated Referer is already covered there; its non-UTF-8 case is currently Origin only, so do not treat that as Referer coverage.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
+    "remove": null
+  },
+  {
+    "id": "SV023",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 181,
+    "test": "unsupported_or_malformed_url_classes_refuse",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP hostile Referer matrix covers relative URLs, bad ports/IPv6, userinfo, fragments, opaque URLs and non-HTTP schemes. The extra file/ws/blob literals all fail the same closed http-or-https condition, with no separate product branch.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
+    "remove": [
+      180,
+      196
+    ]
+  },
+  {
+    "id": "SV024",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 199,
+    "test": "every_representable_syntax_violation_class_refuses",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A representable tab or unencoded brace in a Referer must not be silently normalized and admitted. The HTTP matrix covers backslashes, missing slashes, percent escapes and credentials, but not these accepted-by-URL syntax-recovery classes. Keep the representable syntax cases; the NUL-fragment case is not a realizable HTTP field and is not independent retention evidence.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
+    "remove": null
+  },
+  {
+    "id": "SV025",
+    "path": "crates/storyos-server/src/request_origin_tests.rs",
+    "line": 218,
+    "test": "configured_and_header_origins_require_origin_only_shape",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An Origin with an empty explicit port must refuse instead of being normalized to the configured site. HTTP covers normalized path traversal but not an empty port; public-Origin unit tests cover paths/query/fragment but not this authority spelling. Retain that case; ordinary path cases overlap.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008; crates/storyos-server/src/public_origin_tests.rs:31",
+    "remove": null
+  },
+  {
+    "id": "SV026",
+    "path": "crates/storyos-server/src/client_session_binding_tests.rs",
+    "line": 95,
+    "test": "current_client_session_binding_accepts_its_exact_request_site_and_identities",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Real authenticated Project reads and Author Edit requests require the exact configured site/session identities. The helper positive uses the same binding checks without a public response.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:132; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      94,
+      109
+    ]
+  },
+  {
+    "id": "SV027",
+    "path": "crates/storyos-server/src/client_session_binding_tests.rs",
+    "line": 112,
+    "test": "public_read_admission_uses_normalized_config_binding_and_header_origins",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Public request admission must normalize configuration, stored binding and Origin consistently for IDNA/default ports/IPv6. The 503 proves site and authentication gates passed before the intentionally absent store; changing normalization yields 403/401. Other HTTP tests only use the generated local Origin.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:132; crates/storyos-server/src/request_origin_tests.rs:18",
+    "remove": null
+  },
+  {
+    "id": "SV028",
+    "path": "crates/storyos-server/src/client_session_binding_tests.rs",
+    "line": 144,
+    "test": "stale_or_identity_mismatched_client_session_bindings_fail_closed",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "The observable expiry case is covered by the public Web-host refresh test. The other cases mutate an internal binding while leaving config fixed; main creates both identities/generation from the same values and has no independent rotation path. No current producer was found for those mismatches. This does not claim the expiry test kills the generation/client/policy guards; review accepted binding contracts during reconciliation.",
+    "coverage": "crates/storyos-server/src/web_host_tests.rs:394; crates/storyos-server/src/main.rs:64",
+    "remove": [
+      143,
+      183
+    ]
+  },
+  {
+    "id": "SV029",
+    "path": "crates/storyos-server/src/client_session_binding_tests.rs",
+    "line": 186,
+    "test": "missing_origin_and_ambiguous_cookie_fail_closed",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Missing Origin is rejected by the real HTTP hostile-header matrix. Ambiguous same-name cookies are rejected by the retained Web-host request test for both document issuance and API admission.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008; crates/storyos-server/src/web_host_tests.rs:439",
+    "remove": [
+      185,
+      212
+    ]
+  },
+  {
+    "id": "SV030",
+    "path": "crates/storyos-server/src/client_session_binding_tests.rs",
+    "line": 215,
+    "test": "invalid_allowed_origin_configuration_admits_no_protected_request",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "The only production ServerConfig builder uses the bind-derived site or a validated PackagedPublicOrigin. It cannot install a path-bearing allowed Origin. Public configuration refusal belongs to the transport plan; this synthetic post-parser state has no distinct current product input.",
+    "coverage": "crates/storyos-server/src/public_origin_tests.rs:31; crates/storyos-server/src/main.rs:45",
+    "remove": [
+      214,
+      230
+    ]
+  },
+  {
+    "id": "SV031",
+    "path": "crates/storyos-server/src/client_session_binding_tests.rs",
+    "line": 233,
+    "test": "invalid_binding_origin_configuration_fails_authentication",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "main copies the same validated Origin into configuration and every binding. No persisted or independently supplied binding Origin exists in this process. The public configuration rejection is retained; it does not execute this unreachable synthetic binding guard.",
+    "coverage": "crates/storyos-server/src/public_origin_tests.rs:31; crates/storyos-server/src/main.rs:75",
+    "remove": [
+      232,
+      247
+    ]
+  },
+  {
+    "id": "SV032",
+    "path": "crates/storyos-server/src/client_session_binding_tests.rs",
+    "line": 250,
+    "test": "multiple_cookie_headers_fail_closed",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Add two raw Cookie header fields to the existing Web-host invalid-cookie request matrix, then remove this helper test. Two cookie names in one field do not prove rejecting two separate fields, especially when the second field contains only an unrelated cookie.",
+    "coverage": "crates/storyos-server/src/web_host_tests.rs:439",
+    "remove": null
+  },
+  {
+    "id": "SV033",
+    "path": "crates/storyos-server/src/client_session_binding_tests.rs",
+    "line": 263,
+    "test": "empty_or_mixed_empty_session_cookie_values_fail_closed",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Add an empty storyos_session followed by a valid same-name value to the Web-host matrix, then remove this helper test. Empty-only and two nonempty values are already covered; the mixed ordering must not allow a later valid value to erase the initial error.",
+    "coverage": "crates/storyos-server/src/web_host_tests.rs:439",
+    "remove": null
+  },
+  {
+    "id": "SV034",
+    "path": "crates/storyos-server/src/session_bootstrap_tests.rs",
+    "line": 10,
+    "test": "packaged_production_requires_exactly_one_handle",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Malformed JSON, empty/space-containing handles and invalid mapping count must refuse at the actual startup parser. The packaged negative only requires exit 1 with later database prerequisites absent, so it can pass if validation is bypassed. This typed-error test independently detects the validation loss.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:94; apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35",
+    "remove": null
+  },
+  {
+    "id": "SV035",
+    "path": "crates/storyos-server/src/session_bootstrap_tests.rs",
+    "line": 50,
+    "test": "one_handle_issues_that_cookie_value",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged HTTP host starts with this single configured handle and observes the exact issued cookie; authenticated reads prove owner resolution. The parser result alone adds no distinct case.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35; apps/web/test/node-postgresql/project-http.integration.test.ts:132",
+    "remove": [
+      49,
+      61
+    ]
+  },
+  {
+    "id": "SV036",
+    "path": "crates/storyos-server/src/session_bootstrap_tests.rs",
+    "line": 64,
+    "test": "multiple_mapping_test_allowance_disables_issuance",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The explicit isolation allowance must disable issuance even when the mapping happens to contain one handle. The public isolation test supplies two handles, while the normal one-handle production test enables issuance; neither detects incorrect single-handle precedence under the allowance.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:66; apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35",
+    "remove": null
+  },
+  {
+    "id": "SV037",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 73,
+    "test": "public_challenge_route_requires_origin_and_never_uses_referer",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The real HTTP challenge flow sends valid Host/session with Referer but no Origin and requires 403, then proves normal admission. This router copy exercises the same gate.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": [
+      72,
+      80
+    ]
+  },
+  {
+    "id": "SV038",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 83,
+    "test": "public_challenge_route_rejects_every_invalid_origin_class_before_storage",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Malformed, repeated, non-UTF-8 and non-HTTP Origin values all pass through the same shared request_origin parser exercised by the real hostile-header matrix. That test checks sanitized refusal and valid-Referer nonfallback; this challenge-route copy adds no distinct Origin branch.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008; apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": [
+      82,
+      130
+    ]
+  },
+  {
+    "id": "SV039",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 133,
+    "test": "public_challenge_route_reaches_the_project_store_after_security_validation",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The real HTTP challenge flow reaches PostgreSQL, issues a challenge and replays it. Merely reaching a missing-store 503 is weaker coverage of the same successful admission path.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": [
+      132,
+      140
+    ]
+  },
+  {
+    "id": "SV040",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 143,
+    "test": "public_challenge_route_refuses_retired_semantic_context_controls",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A request for the retired semantic-context operation must be refused by the closed Challenge target catalog before storage, with no nonce. Existing HTTP tests reject a wrong digest profile for a live operation, not a removed route/schema/profile tuple. Release-1 closed target admission is the continuing contract for this absence.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": null
+  },
+  {
+    "id": "SV041",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 179,
+    "test": "public_challenge_route_accepts_case_insensitive_json_content_type",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A valid mixed-case application/*+json Content-Type must reach challenge storage. HTTP clients use lowercase application/json, so a case-sensitive or suffix-rejecting parser could break other valid clients without failing them.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": null
+  },
+  {
+    "id": "SV042",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 195,
+    "test": "public_challenge_route_rejects_repeated_content_type_without_disclosure",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Two Content-Type fields must yield 415 and a sanitized problem before storage. Existing public clients send one field; malformed single-field tests do not execute the duplicate-header rule.",
+    "coverage": "crates/storyos-server/src/project_command_challenge_tests.rs:219; apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": null
+  },
+  {
+    "id": "SV043",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 219,
+    "test": "public_challenge_route_rejects_malformed_json_content_types",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Malformed MIME parameters and invalid structured-suffix tokens must not be treated as JSON. The positive mixed-case case and ordinary HTTP application/json requests do not exercise these grammar failures.",
+    "coverage": "crates/storyos-server/src/project_command_challenge_tests.rs:179; apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": null
+  },
+  {
+    "id": "SV044",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 246,
+    "test": "server_config_debug_redacts_the_challenge_secret",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Formatting ServerConfig with Debug must not expose the Challenge HMAC secret. HTTP error-body sanitization does not format this configuration and cannot catch replacing its custom Debug redaction with raw bytes.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:938",
+    "remove": null
+  },
+  {
+    "id": "SV045",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 259,
+    "test": "challenge_secret_derivation_uses_hmac_sha256",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The known HMAC-SHA256 vector binds the actual secret_digest profile and length-delimited parts. Same-process HTTP replay uses the same implementation twice and would accept a consistently changed nonce derivation, which can break recovery across a binary update.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": null
+  },
+  {
+    "id": "SV046",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 273,
+    "test": "rate_refusal_has_a_bounded_retry_time_without_binding_disclosure",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Retry-After must carry the supplied remaining window, not a hard-coded value within 1..60. The HTTP rate test accepts any value in that range, so a constant 1 would pass it but make clients retry prematurely. This test supplies 37 and checks exact propagation.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:938",
+    "remove": null
+  },
+  {
+    "id": "SV047",
+    "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+    "line": 293,
+    "test": "public_challenge_route_enforces_the_absolute_json_body_ceiling",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The Challenge route must reject an over-1-MiB JSON body as 413, yet reject a foreign Origin as 403 before parsing that same oversized body. Author Edit payload limits concern another route and do not prove this admission order or ceiling.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": null
+  },
+  {
+    "id": "SV048",
+    "path": "crates/storyos-server/src/web_assets_tests.rs",
+    "line": 48,
+    "test": "validated_resources_survive_directory_changes",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The actual production HTTP host serves identical HTML and JavaScript after its validated root is moved. That exercises the same immutable in-memory snapshot and would fail on reopening the old path. The HTTP resource policy test also refuses serving the manifest.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:80; apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106",
+    "remove": [
+      47,
+      60
+    ]
+  },
+  {
+    "id": "SV049",
+    "path": "crates/storyos-server/src/web_assets_tests.rs",
+    "line": 63,
+    "test": "refuses_missing_extra_altered_and_mixed_resources",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "An existing resource root with missing, extra or changed files or a foreign manifest must fail loading, instead of serving mixed package bytes. The packaged startup negative can fail earlier on session mappings or later on database prerequisites and does not identify this refusal. Exact-digest manifest tests do not exercise the compiled-digest mismatch.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:54; crates/storyos-server/src/web_assets_tests.rs:91",
+    "remove": null
+  },
+  {
+    "id": "SV050",
+    "path": "crates/storyos-server/src/web_assets_tests.rs",
+    "line": 91,
+    "test": "refuses_invalid_manifest_even_with_its_exact_digest",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A manifest whose bytes match the supplied binding digest must still reject duplicate/path-escape records, wrong MIME/length/hash and wrong client/security identities. Startup tests mutate manifest bytes without changing the compiled digest, so they fail at the digest check and cannot prove this deeper validation.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:54; crates/storyos-server/src/web_assets_tests.rs:63",
+    "remove": null
+  },
+  {
+    "id": "SV051",
+    "path": "crates/storyos-server/src/web_assets_tests.rs",
+    "line": 110,
+    "test": "refuses_symbolic_links_and_unlisted_directories",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Root, manifest, asset and directory symlinks, plus unlisted directories, must refuse loading. The packaged startup test only inserts an index symlink and has a masked exit-status oracle. The exact-digest record test does not exercise filesystem entry types.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:54; crates/storyos-server/src/web_assets_tests.rs:91",
+    "remove": null
+  },
+  {
+    "id": "SV052",
+    "path": "crates/storyos-server/src/web_host_tests.rs",
+    "line": 129,
+    "test": "public_https_profile_cookie_includes_secure_and_ignores_forwarded_headers",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Public HTTPS must issue Secure, ignore forged forwarding headers for site selection, admit the configured site and refuse foreign Host/Origin. All automated packaged success flows use local HTTP; neither their cookie check nor Origin helper tests exercise this HTTPS response/configuration boundary.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35; apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
+    "remove": null
+  },
+  {
+    "id": "SV053",
+    "path": "crates/storyos-server/src/web_host_tests.rs",
+    "line": 238,
+    "test": "html_document_get_issues_the_configured_session_cookie",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A direct Project document GET without a cookie must issue the local session cookie, as the root page does. The packaged cookie test only requests root; the packaged Project deep-link test checks resource bytes/headers but never Set-Cookie, so removing deep-link issuance would escape both.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35; apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106",
+    "remove": null
+  },
+  {
+    "id": "SV054",
+    "path": "crates/storyos-server/src/web_host_tests.rs",
+    "line": 267,
+    "test": "static_index_html_path_does_not_issue_a_session",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The literal /index.html resource must remain readable without issuing a session even though its bytes are the same as root HTML. Other tests cover root/Project routes and script assets, not this ambiguous document resource path.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106; crates/storyos-server/src/web_host_tests.rs:238",
+    "remove": null
+  },
+  {
+    "id": "SV055",
+    "path": "crates/storyos-server/src/web_host_tests.rs",
+    "line": 296,
+    "test": "protocol_assets_and_failures_do_not_issue_a_session",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Protocol nonissuance is checked over real HTTP, including a mismatched cookie. Asset/failure nonissuance uses the same document-route guard exercised more narrowly by the retained /index.html test; missing-session API admission is checked by the packaged host. No unique branch remains.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35; apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106; crates/storyos-server/src/web_host_tests.rs:267",
+    "remove": [
+      295,
+      361
+    ]
+  },
+  {
+    "id": "SV056",
+    "path": "crates/storyos-server/src/web_host_tests.rs",
+    "line": 364,
+    "test": "issuance_requires_the_printed_host_and_does_not_need_origin",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The retained HTTPS Web-host test serves HTML for a foreign presented Host without issuing a cookie, and issues it for the configured Host without Origin. The same Host equality and optional-Origin issuance rule controls local HTTP.",
+    "coverage": "crates/storyos-server/src/web_host_tests.rs:129",
+    "remove": [
+      363,
+      391
+    ]
+  },
+  {
+    "id": "SV057",
+    "path": "crates/storyos-server/src/web_host_tests.rs",
+    "line": 394,
+    "test": "matching_cookie_refreshes_an_expired_binding",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "After the eight-hour binding expires, the correct existing cookie on an HTML GET must refresh the live binding and authorize a subsequent API request. Browser long-session tests run far less than eight hours; packaged cookie issuance starts with a fresh binding and does not exercise expiry or mutable refresh.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35; crates/storyos-server/src/client_session_binding_tests.rs:144",
+    "remove": null
+  },
+  {
+    "id": "SV058",
+    "path": "crates/storyos-server/src/web_host_tests.rs",
+    "line": 439,
+    "test": "mismatched_cookie_is_not_overwritten_and_does_not_authorize",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An empty or duplicate session cookie on HTML must neither be overwritten nor authorize the API. The packaged host checks only a different nonempty handle; parser helper tests do not prove document issuance cannot turn an invalid cookie into authentication. Extend this owner with the two MERGE cases.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35; crates/storyos-server/src/client_session_binding_tests.rs:250; crates/storyos-server/src/client_session_binding_tests.rs:263",
+    "remove": null
+  },
+  {
+    "id": "SV059",
+    "path": "crates/storyos-server/src/web_host_tests.rs",
+    "line": 478,
+    "test": "disabled_bootstrap_does_not_issue_a_cookie",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The real packaged host starts under the isolation allowance and checks no cookie is issued. The retained parser test separately covers the single-handle disabled allowance. This router-only disabled flag adds no independent policy.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:66; crates/storyos-server/src/session_bootstrap_tests.rs:64",
+    "remove": [
+      477,
+      494
+    ]
+  }
+]

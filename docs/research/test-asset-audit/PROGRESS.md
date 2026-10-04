@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 392 test cases in 105 files have source verdicts. The audit is not complete.
+- Status: active. 451 test cases in 116 files have source verdicts. The audit is not complete.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
-- Complete source-review directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests). Cross-directory reconciliation and mutation review are still pending.
+- Complete source-review directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests). Cross-directory reconciliation and mutation review are still pending.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: crates/storyos-server/src, then crates/storyos-contracts/src and remaining Web directories. ADAPTER_CHECKPOINT.md records all 36 source test files and the shared/module-link disposition. Adapter totals: 99 tests in 38 files.
+- Next: crates/storyos-contracts/src, then remaining Web directories. SERVER_CHECKPOINT.md records 59 Server tests and nine module-link files. Adapter totals: 99 tests in 38 files.
 - No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -43,7 +43,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | crates/storyos-application/src | Source review complete | application.md; 58 tests in 20 files; APPLICATION_CHECKPOINT.md |
 | crates/storyos-adapter-postgres/src | Source review complete | adapter.md; 36 test files, 87 tests; ADAPTER_CHECKPOINT.md |
 | crates/storyos-adapter-postgres/tests | Source review complete | adapter.md; 12 tests in 2 files; ADAPTER_INTEGRATION_CHECKPOINT.md |
-| crates/storyos-server/src | Pending | inventory.json |
+| crates/storyos-server/src | Source review complete | server.md; 59 tests in 11 files; SERVER_CHECKPOINT.md |
 | crates/storyos-server/tests | Source review complete | server-integration.md; 2 tests; 33 candidate lines |
 | crates/storyos-contracts/src | Pending | inventory.json |
 
@@ -104,3 +104,6 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Overall source review: 392 cases / 105 files, DELETE 232, KEEP 153, MERGE 6, MOVE 1; 9370 candidate source lines. Still 0/30 mutation checks, no full-audit claim.
 - The hand-written Takeover persistence test never invokes the product Takeover operation; its final invalid insert can fail on missing Commit/Author Action foreign keys even if the intended CHECK is removed. D3 records this masked oracle.
 - Direct SQL rank counters measure statement work, not latency. Keep actual five-/seven-Chapter batching and Volume sparse/tombstone cases. Keep independently blocked Takeover races and unequal-counter preservation.
+
+- Server source directory complete: 59 tests in 11 files; {'MOVE': 2, 'DELETE': 26, 'KEEP': 27, 'MERGE': 4}; 677 candidate source lines. Nine module-link files have dispositions. Origin, Cookie and payload comparisons now distinguish input differences from shared helper coverage. See SERVER_CHECKPOINT.md.
+- Current cumulative source review: 451 cases in 116 files; {'DELETE': 258, 'KEEP': 180, 'MERGE': 10, 'MOVE': 3}; 10047 candidate source lines. Random mutation self-check remains 0/30. No product or test changes and no active processes.
