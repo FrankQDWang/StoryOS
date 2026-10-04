@@ -1,0 +1,442 @@
+[
+  {
+    "id": "AD001",
+    "path": "crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs",
+    "line": 59,
+    "test": "unexpired_challenge_is_unknown_and_the_query_does_not_consume_it",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Project flow queries an issued unexpired Author Edit challenge as StillUnknown, checks the exact expires_at and unchanged authority, then successfully uses that same challenge for the real edit. It proves the query did not consume the challenge.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      57,
+      102
+    ]
+  },
+  {
+    "id": "AD002",
+    "path": "crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs",
+    "line": 106,
+    "test": "expired_unconsumed_challenge_without_admission_is_rejected",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Project flow expires an unconsumed challenge in PostgreSQL, queries the outcome, and requires challenge_expired_unconsumed with unchanged authority. It executes the same resolution query.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      104,
+      158
+    ]
+  },
+  {
+    "id": "AD003",
+    "path": "crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs",
+    "line": 162,
+    "test": "missing_foreign_and_changed_proof_bindings_share_one_unavailable_oracle",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "After client/security/limit-profile or session-generation changes, outcome proof must become unavailable rather than expose an earlier Admission. HTTP checks missing key, wrong nonce, alternate session and foreign Project, but does not independently change stored generation, client contract, security policy or limit profile. Retain those four comparisons; the other cases are public duplicates.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "AD004",
+    "path": "crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs",
+    "line": 229,
+    "test": "outcome_resolution_waits_for_consume_and_cannot_report_a_false_rejection",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An outcome read racing a transaction that consumed and expired a challenge must wait for the arbiter and, after rollback, return the original unexpired unknown state. The public outcome flow is sequential; process-cut tests kill a process rather than observe a blocked live read against rollback. The pg_blocking_pids observation makes this race discriminating.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; apps/web/test/node-process-cut/apply-author-edit-process-cut.integration.test.ts:179",
+    "remove": null
+  },
+  {
+    "id": "AD005",
+    "path": "crates/storyos-adapter-postgres/src/author_command_outcome_unknown_tests.rs",
+    "line": 108,
+    "test": "append_is_exact_serialized_and_has_zero_authority_effect",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Concurrent exact appends must share one immutable observation; a new append racing settlement must wait then refuse, while an old exact replay stays readable even at sequence exhaustion. Public process-cut recovery observes unknown and later settlement, but does not synchronize two appends on the arbiter or test the u64 sequence endpoint. These failures could duplicate observations or append after settlement; the final durable counts also prove zero authority allocation.",
+    "coverage": "apps/web/test/node-process-cut/apply-author-edit-process-cut.integration.test.ts:179; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "AD006",
+    "path": "crates/storyos-adapter-postgres/src/connection_pool_tests.rs",
+    "line": 24,
+    "test": "a_settled_connection_is_reused_and_an_unsettled_transaction_is_not",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Returning an uncommitted connection can leak transaction state to the next request; failing to reuse settled connections recreates a backend per request. This test compares PID plus backend_start before/after dropped and committed transactions. Ordinary HTTP results can remain correct while reconnecting, and scoped query tests do not deliberately drop a live pooled transaction.",
+    "coverage": "crates/storyos-adapter-postgres/tests/project_scope.rs:35; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "AD007",
+    "path": "crates/storyos-adapter-postgres/tests/project_scope.rs",
+    "line": 21,
+    "test": "database_error_keeps_its_cause_without_exposing_it_in_display",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Database connection failure must keep a diagnostic source while presenting the fixed redacted Project-read error. HTTP unavailable responses test public problem mapping, not whether the internal Error::source survives for diagnosis. This test directly verifies both observations using a real invalid connection string.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "AD008",
+    "path": "crates/storyos-adapter-postgres/tests/project_scope.rs",
+    "line": 35,
+    "test": "two_users_and_projects_are_isolated_at_application_and_rls_boundaries",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Runtime SELECT without an owner/project WHERE clause must still show only the exact Project, with neither superuser nor BYPASSRLS privileges. HTTP and ordinary Adapter queries add their own scoped predicates, so they can pass when database RLS is removed. Preserve the direct SQL visibility and role cases; most public Project/Chapter projection assertions are duplicates.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
+    "remove": null
+  },
+  {
+    "id": "AD009",
+    "path": "crates/storyos-adapter-postgres/tests/project_scope.rs",
+    "line": 159,
+    "test": "composite_identity_rejects_a_foreign_revision_reference",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A write can accidentally bind a Head to another Project's revision even when both IDs exist. This direct admin insert tests the composite revision foreign key without Application predicates or RLS masking it. HTTP foreign requests refuse before attempting that invalid write; EditorSession composite references are a different constraint.",
+    "coverage": "crates/storyos-adapter-postgres/tests/project_scope.rs:192; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "AD010",
+    "path": "crates/storyos-adapter-postgres/tests/project_scope.rs",
+    "line": 192,
+    "test": "editor_session_tables_force_scope_and_composite_references",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A runtime writer must not create an EditorSession in a foreign Scope or bind its Snapshot to a foreign revision. The direct writes reach table policy and the EditorSession-specific composite key, unlike HTTP validation. The seven-table FORCE RLS posture check also detects removal of owner enforcement even when ordinary runtime queries remain filtered.",
+    "coverage": "crates/storyos-adapter-postgres/tests/project_scope.rs:159; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "AD011",
+    "path": "crates/storyos-adapter-postgres/tests/project_scope.rs",
+    "line": 321,
+    "test": "user_level_list_is_isolated_from_exact_project_scope_reads",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "User-level library listing may see all owned Projects but no manuscript objects, and its transaction-local scope must disappear after commit. Partial/malformed Scope must see no Projects. Public library listing checks results through scoped queries but does not issue raw queries after a previous scope transaction or in partial Scope modes.",
+    "coverage": "crates/storyos-adapter-postgres/tests/project_scope.rs:35; apps/web/test/browser-exact-dist/s2-03-list-open-library.integration.test.ts:34",
+    "remove": null
+  },
+  {
+    "id": "AD012",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+    "line": 19,
+    "test": "two_paragraphs_including_empty_right_roundtrip_through_canonical_bytes",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged split journey persists Hello plus an empty right Block before typing into it, then queries/reloads both identities. Missing empty-right serialization or LF display prevents that journey. The local roundtrip observes the same serializer/parser pair only.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": [
+      18,
+      36
+    ]
+  },
+  {
+    "id": "AD013",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+    "line": 39,
+    "test": "one_heading_roundtrips_through_versioned_payload_bytes",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged Retype journey changes one Block to heading, queries full payload and reloads it. This owns heading kind and text persistence beyond a symmetric local roundtrip.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
+    "remove": [
+      38,
+      49
+    ]
+  },
+  {
+    "id": "AD014",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+    "line": 60,
+    "test": "ordered_versioned_ids_decode_the_complete_payload",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The retained membership-query integration builds a two-Block payload and ordered member rows, invokes the production loader and compares exact IDs/texts. It includes this successful decode and SQL association.",
+    "coverage": "crates/storyos-adapter-postgres/src/manuscript_search_tests.rs:217",
+    "remove": [
+      59,
+      71
+    ]
+  },
+  {
+    "id": "AD015",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+    "line": 74,
+    "test": "versioned_id_mismatch_decodes_no_blocks",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The membership-query integration deliberately stores reversed member IDs against a versioned payload and requires no Blocks. It invokes this same decoder through the product read path.",
+    "coverage": "crates/storyos-adapter-postgres/src/manuscript_search_tests.rs:217",
+    "remove": [
+      73,
+      88
+    ]
+  },
+  {
+    "id": "AD016",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+    "line": 91,
+    "test": "legacy_payload_with_zero_members_decodes_no_blocks",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The membership-query integration includes a legacy payload with no member rows and requires an empty Block list. This is the same historical no-proof decode.",
+    "coverage": "crates/storyos-adapter-postgres/src/manuscript_search_tests.rs:217",
+    "remove": [
+      90,
+      96
+    ]
+  },
+  {
+    "id": "AD017",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+    "line": 99,
+    "test": "legacy_payload_with_one_member_upgrades_that_block",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public seeded Project flow reads its legacy Authoritative A payload with the retained Block identity and then edits it. This exercises the actual legacy-to-one-Block loader path; Unicode upgrade has its independent Core oracle.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-core/src/manuscript_payload_tests.rs:4",
+    "remove": [
+      98,
+      107
+    ]
+  },
+  {
+    "id": "AD018",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+    "line": 110,
+    "test": "legacy_payload_with_more_than_one_member_decodes_no_blocks",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A historical text-only payload with multiple member IDs has no unique Block association and must decode to no Blocks. The query integration tests zero members, while the versioned mismatch test has explicit IDs inside JSON. Neither proves refusal of ambiguous legacy membership.",
+    "coverage": "crates/storyos-adapter-postgres/src/manuscript_search_tests.rs:217; crates/storyos-adapter-postgres/src/manuscript_block_tests.rs:74",
+    "remove": null
+  },
+  {
+    "id": "AD019",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+    "line": 131,
+    "test": "several_ordered_blocks_persist_complete_payload_and_member_rows",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Persisting N Blocks must use the two batch statements rather than per-Block writes. The test counts the actual membership SQL calls, verifies all member rows/order and complete payload. Browser split/paste checks correct output but cannot detect N+1 database work with identical results.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1076",
+    "remove": null
+  },
+  {
+    "id": "AD020",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_search_tests.rs",
+    "line": 82,
+    "test": "search_rebuilds_from_canonical_facts_without_a_write_and_separates_not_ready_from_zero",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Archived Project search must become Missing even with retained canonical facts. The HTTP search case covers empty/rebuild/watermark/foreign access but never archives the Project; browser deletion removes a Chapter, not the Project lifecycle. Keep the archived-query case and remove the shared success/rebuild/scope/watermark assertions after public-owner verification.",
+    "coverage": "apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts:78; apps/web/test/browser-exact-dist/s2-search.integration.test.ts:127",
+    "remove": null
+  },
+  {
+    "id": "AD021",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_search_tests.rs",
+    "line": 217,
+    "test": "several_live_chapters_load_membership_in_one_statement",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Loading many Chapter memberships with one joined statement prevents N+1 reads; CurrentChapter selection must load only one Chapter even in a 32-Chapter Project. The same test independently rejects reversed versioned member order and missing legacy members through SQL loading. Browser query results alone do not detect redundant reads or these malformed retained payload associations.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-search.integration.test.ts:127; crates/storyos-adapter-postgres/src/manuscript_block_tests.rs:74",
+    "remove": null
+  },
+  {
+    "id": "AD022",
+    "path": "crates/storyos-adapter-postgres/src/manuscript_tree_tests.rs",
+    "line": 72,
+    "test": "empty_canonical_tree_is_scope_safe_and_snapshot_bound",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An archived Project with a retained canonical Snapshot must not return its tree. The HTTP tree case checks empty/foreign Scope and expired Snapshot, while the archived browser library disables entry before tree lookup. Neither calls the tree query on archived retained state. Keep that final lifecycle assertion; the other cases have public owners.",
+    "coverage": "apps/web/test/node-postgresql/manuscript-tree-http.integration.test.ts:72; apps/web/test/node-postgresql/manuscript-tree-http.integration.test.ts:127; apps/web/test/browser-exact-dist/s2-05-archive-project.integration.test.ts:47",
+    "remove": null
+  },
+  {
+    "id": "AD023",
+    "path": "crates/storyos-adapter-postgres/src/author_edit_tests.rs",
+    "line": 27,
+    "test": "payload_digest_is_lowercase_sha256",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Changing the Adapter payload-digest representation breaks comparison with retained revision envelopes after an upgrade. This independent known SHA-256 vector pins the exact lowercase stored value. Public outcome tests compare current values or call the same helper in expected Snapshots; the Core archive golden uses a different hash function and cannot detect a change confined to this Adapter helper.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:35; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "AD024",
+    "path": "crates/storyos-adapter-postgres/src/author_edit_tests.rs",
+    "line": 184,
+    "test": "three_author_edit_fault_cuts_have_complete_negative_evidence",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The invalid SECOND legacy unit must settle a Refused Receipt without partial authority; public Project refusal invalidates only its single unit. This test also corrupts retained Receipt Heads, Admission targets and revision/commit links and requires replay/outcome refusal, plus direct deferred constraints against authority linked to a zero-authority result. Public process cuts prove recovery but do not inject these relation corruptions. Keep these distinct scenarios; ordinary Applied/NoEffect/stale success and incomplete-payload recovery have other owners.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; apps/web/test/node-process-cut/apply-author-edit-process-cut.integration.test.ts:179",
+    "remove": null
+  },
+  {
+    "id": "AD025",
+    "path": "crates/storyos-adapter-postgres/src/author_edit_tests.rs",
+    "line": 1599,
+    "test": "an_open_admission_with_an_incomplete_payload_requires_reconfirmation",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Project flow strips author_edit_units from an open Admission, requires DirectEditIntentUnrecoverable with no Recovery Draft, repeats the outcome query, and checks unchanged authority and observation count. It invokes the same reconfirmation path for the same missing field.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      1597,
+      1826
+    ]
+  },
+  {
+    "id": "AD026",
+    "path": "crates/storyos-adapter-postgres/src/create_project_challenge_tests.rs",
+    "line": 45,
+    "test": "create_project_challenge_replays_conflicts_and_stays_user_isolated",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Before a Project exists, another User must not read its prospective challenge or idempotency rows through raw runtime SQL. The HTTP challenge test validates caller isolation through a scoped endpoint; it does not test these user-level table policies or visibility of users/projects under that role. Keep the raw policy observations; replay/conflict/zero-authority counts have public equivalents.",
+    "coverage": "apps/web/test/node-postgresql/create-project-challenge-http.integration.test.ts:62; crates/storyos-adapter-postgres/tests/project_scope.rs:321",
+    "remove": null
+  },
+  {
+    "id": "AD027",
+    "path": "crates/storyos-adapter-postgres/src/project_command_challenge_tests.rs",
+    "line": 48,
+    "test": "fixed_window_capacity_and_rollover_are_deterministic_under_concurrency",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Concurrent distinct requests at second 119 must consume exactly ten rate units, refuse one with retry=1, then admit it into the second-120 window. The HTTP rate test only requires at least one refusal among 21 requests and an allowed Retry-After range; it does not pin capacity, rollover or one-window atomic counts.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:938",
+    "remove": null
+  },
+  {
+    "id": "AD028",
+    "path": "crates/storyos-adapter-postgres/src/project_command_challenge_tests.rs",
+    "line": 135,
+    "test": "exact_retry_uses_one_rate_unit_and_rate_rows_obey_forced_rls",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Two concurrent exact requests must consume one rate unit, and another Scope must see neither the rate guard nor window rows through raw SQL. Public challenge retry is sequential and public rate errors do not inspect row-policy visibility or the exact consumed counter.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:170; apps/web/test/node-postgresql/project-http.integration.test.ts:938",
+    "remove": null
+  },
+  {
+    "id": "AD029",
+    "path": "crates/storyos-adapter-postgres/src/project_command_challenge_tests.rs",
+    "line": 215,
+    "test": "author_edit_and_shared_challenges_use_separate_rate_budgets",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Saturating the shared command budget must not block Author Edit's separate 120-unit budget, and writing must not reset the saturated shared budget. The public frequent-writing journey proves continued success below the cap but does not saturate both classes and check the over-cap refusal in the same controlled window.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; crates/storyos-adapter-postgres/src/project_command_challenge_tests.rs:282",
+    "remove": null
+  },
+  {
+    "id": "AD030",
+    "path": "crates/storyos-adapter-postgres/src/project_command_challenge_tests.rs",
+    "line": 282,
+    "test": "author_undo_and_author_edit_share_the_author_edit_rate_budget_for_one_project",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Author Undo and Author Edit must share one 120-unit writing allowance while another Project remains eligible; exact retry at capacity must remain free. Browser frequent Undo exercises successful interaction but does not exhaust the combined budget or compare a second Project at the same instant.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69; crates/storyos-adapter-postgres/src/project_command_challenge_tests.rs:215",
+    "remove": null
+  },
+  {
+    "id": "AD031",
+    "path": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs",
+    "line": 56,
+    "test": "issue_and_consume_are_exact_retry_safe_under_forced_rls",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A settled command must stay replayable after its challenge expires; applying ordinary expiry rejection to exact settled retries breaks recovery of old acknowledgements. Public command retries occur promptly and do not explicitly expire the settled challenge. This case also checks only nonce_digest is stored and the issued challenge links to its exact rate window. Remove generic first-use/retry echoes after reconciling their public owners.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:170; apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+    "remove": null
+  },
+  {
+    "id": "AD032",
+    "path": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs",
+    "line": 187,
+    "test": "issue_and_consume_preserve_the_full_u64_client_session_generation",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "The production Server main fixes current_session_generation=1 and constructs all bindings from it. No current request or persisted-session recovery source supplies u64::MAX. The tested numeric roundtrip is an unused internal range at this baseline; ordinary generation binding remains covered, without claiming that a public test kills a high-half-only cast defect.",
+    "coverage": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs:56; apps/web/test/node-postgresql/project-http.integration.test.ts:170",
+    "remove": [
+      185,
+      261
+    ]
+  },
+  {
+    "id": "AD033",
+    "path": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs",
+    "line": 265,
+    "test": "changed_binding_and_wrong_scope_fail_closed_without_consumption",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Stored challenges from a previous client/security/limit/rate-policy revision must not authorize a new incompatible command; failed consumption must leave them pending. HTTP tests substitute caller, nonce and digest but do not independently vary all retained policy/schema bindings. Unlike the synthetic Application tuples, this comparison is against separately persisted challenge evidence. Keep the distinct revision/policy/route cases.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:170; crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs:162",
+    "remove": null
+  },
+  {
+    "id": "AD034",
+    "path": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs",
+    "line": 400,
+    "test": "consumption_rolls_back_with_the_caller_owned_transaction",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public Reopen Rejected test injects a database trigger failure after challenge admission, removes the fault, then succeeds with the same request and anti-forgery challenge. It exercises consumption rollback with the caller transaction and proves actual subsequent use, beyond the local FirstUse enum.",
+    "coverage": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:17",
+    "remove": [
+      398,
+      436
+    ]
+  },
+  {
+    "id": "AD035",
+    "path": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs",
+    "line": 440,
+    "test": "an_expired_unconsumed_challenge_cannot_enter_the_command_transaction",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An expired unconsumed challenge must refuse command entry. Public Project outcome expiry tests classify a read as Rejected, which uses a different query and does not call consume_project_command_challenge. This direct consumption test protects the write-side expiration gate.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs:106",
+    "remove": null
+  },
+  {
+    "id": "AD036",
+    "path": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs",
+    "line": 485,
+    "test": "an_author_edit_challenge_issued_under_the_shared_revision_stays_consumable",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An Author Edit challenge issued before the separate writing-rate policy deployment must still consume under the current policy. Current HTTP challenges are issued and consumed with one version; the generic changed-policy test intentionally rejects incompatible policies and does not cover this supported historical exception.",
+    "coverage": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs:265; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "AD037",
+    "path": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs",
+    "line": 525,
+    "test": "an_author_undo_challenge_issued_under_the_shared_revision_stays_consumable",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Author Undo has its own legacy shared-rate challenge compatibility path. The Author Edit migration case changes a different command kind, so an implementation that permits only ApplyAuthorEdit would pass that test and break retained Undo challenges. Browser Undo creates current-policy challenges only.",
+    "coverage": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs:485; apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69",
+    "remove": null
+  }
+]
