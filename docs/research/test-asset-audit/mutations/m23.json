@@ -29,8 +29,8 @@
     "-p",
     "storyos-core",
     "--lib",
-    "update_volume::tests::an_invalid_title_classifies_as_refused_with_zero_authority_effect",
-    "update_volume_tests::--",
+    "update_volume_tests::an_invalid_title_classifies_as_refused_with_zero_authority_effect",
+    "--",
     "--exact",
     "--nocapture"
   ]

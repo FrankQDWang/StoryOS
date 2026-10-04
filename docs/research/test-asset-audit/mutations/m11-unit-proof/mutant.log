@@ -1,0 +1,24 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+   Compiling storyos-core v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.27s
+     Running unittests src/lib.rs (target/rust-cache/gen-f249a5399a7e4905b98070796744bffd/debug/deps/storyos_core-1b7ce60b8370d53d)
+
+running 1 test
+
+thread 'project_archive::tests::a_missing_root_is_unsettled_and_exposes_no_zip_bytes' (103672073) panicked at crates/storyos-core/src/project_archive_tests.rs:318:5:
+assertion `left == right` failed
+  left: Ok([80, 75, 3, 4, 20, 0, 0, 0, 0, 0, 0, 0, 33, 0, 73, 153, 47, 242, 90, 0, 0, 0, 90, 0, 0, 0, 22, 0, 0, 0, 99, 97, 110, 111, 110, 105, 99, 97, 108, 47, 112, 114, 111, 106, 101, 99, 116, 46, 106, 115, 111, 110, 123, 34, 112, 114, 111, 106, 101, 99, 116, 95, 105, 100, 34, 58, 34, 48, 49, 56, 102, 48, 48, 48, 48, 45, 48, 48, 48, 48, 45, 55, 48, 48, 49, 45, 56, 48, 48, 48, 45, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 50, 34, 44, 34, 115, 99, 104, 101, 109, 97, 34, 58, 34, 115, 116, 111, 114, 121, 111, 115, 46, 112, 114, 111, 106, 101, 99, 116, 45, 114, 101, 99, 111, 114, 100, 46, 118, 49, 34, 125, 80, 75, 1, 2, 20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 33, 0, 73, 153, 47, 242, 90, 0, 0, 0, 90, 0, 0, 0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99, 97, 110, 111, 110, 105, 99, 97, 108, 47, 112, 114, 111, 106, 101, 99, 116, 46, 106, 115, 111, 110, 80, 75, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, 68, 0, 0, 0, 142, 0, 0, 0, 0, 0])
+ right: Err(InvalidProvenance)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test project_archive::tests::a_missing_root_is_unsettled_and_exposes_no_zip_bytes ... FAILED
+
+failures:
+
+failures:
+    project_archive::tests::a_missing_root_is_unsettled_and_exposes_no_zip_bytes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 201 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p storyos-core --lib`
+Verification failed: 2.69s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/a11d92a4b99b4d168e00cc2ce0fc52c3/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

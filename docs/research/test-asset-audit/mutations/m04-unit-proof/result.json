@@ -1,0 +1,78 @@
+{
+  "sample": 4,
+  "id": "CO026",
+  "status": "candidate-kill",
+  "source": "crates/storyos-core/src/create_chapter.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m04-baseline",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-core",
+        "--lib",
+        "create_chapter_tests::an_invalid_volume_join_classifies_as_refused_with_zero_authority_effect",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 3.976,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m04-unit-proof/baseline.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m04-mutant",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-core",
+        "--lib",
+        "create_chapter_tests::an_invalid_volume_join_classifies_as_refused_with_zero_authority_effect",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 3.164,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m04-unit-proof/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m04-restored",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-core",
+        "--lib",
+        "create_chapter_tests::an_invalid_volume_join_classifies_as_refused_with_zero_authority_effect",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 3.664,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m04-unit-proof/restored.log"
+    }
+  ]
+}

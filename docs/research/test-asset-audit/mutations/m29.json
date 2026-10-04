@@ -3,8 +3,8 @@
   "id": "CT007",
   "source": "crates/storyos-contracts/src/release1.rs",
   "source_sha256": "41feb61c40f5d3549dc3f8f11af29c275de7b45ce05bc8221df253e31fa20b2b",
-  "old": "pub const AUTHOR_EDIT_MAX_UNITS: usize = 240;",
-  "new": "pub const AUTHOR_EDIT_MAX_UNITS: usize = 241;",
+  "old": "pub const AUTHOR_EDIT_MAX_UNITS: usize = 240;\npub const AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES: usize = 240;",
+  "new": "pub const AUTHOR_EDIT_MAX_UNITS: usize = 241;\npub const AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES: usize = 241;",
   "release": true,
   "command": [
     "python3",
@@ -23,5 +23,5 @@
     "--exact",
     "--nocapture"
   ],
-  "defect": "Drift the accepted Author Edit unit ceiling from the pinned 240 to 241."
+  "defect": "Raise both coupled Author Edit count ceilings from the pinned 240 to 241. Changing only the unit ceiling would still be masked by the primitive ceiling, so both are changed before this sample is executed."
 }

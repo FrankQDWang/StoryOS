@@ -51,7 +51,8 @@
       "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
       "status": "kill",
       "evidence": "mutations/m04/result.json",
-      "finding": "Invalid Volume join becomes conflicted instead of refused at HTTP:565. Optional removed-test probe selected zero tests and is excluded."
+      "finding": "Invalid Volume join becomes conflicted instead of refused at HTTP:565. Optional removed-test probe selected zero tests and is excluded. Corrected original-test probe now passes clean/restored and fails the same mutant.",
+      "supplemental_evidence": "mutations/m04-unit-proof/result.json"
     },
     {
       "sample": 5,
@@ -135,7 +136,8 @@
       "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295",
       "status": "miss",
       "evidence": "mutations/m11/result.json",
-      "finding": "In-progress HTTP download is rejected before Core packaging. Missing-root Core guard remains unexecuted; corrected CO124 from D1 to D5."
+      "finding": "In-progress HTTP download is rejected before Core packaging. Missing-root Core guard remains unexecuted; corrected CO124 from D1 to D5. Separate original Core probe passes clean/restored and fails the same empty-root mutant; primary coverage remains MISS.",
+      "supplemental_evidence": "mutations/m11-unit-proof/result.json"
     },
     {
       "sample": 12,

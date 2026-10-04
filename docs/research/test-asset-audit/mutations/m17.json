@@ -29,8 +29,8 @@
     "-p",
     "storyos-core",
     "--lib",
-    "create_chapter::tests::an_invalid_title_classifies_as_refused_with_zero_authority_effect",
-    "create_chapter_tests::--",
+    "create_chapter_tests::an_invalid_title_classifies_as_refused_with_zero_authority_effect",
+    "--",
     "--exact",
     "--nocapture"
   ]

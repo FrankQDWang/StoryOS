@@ -1,0 +1,78 @@
+{
+  "sample": 11,
+  "id": "CO124",
+  "status": "candidate-kill",
+  "source": "crates/storyos-core/src/project_archive.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m11-baseline",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-core",
+        "--lib",
+        "project_archive::tests::a_missing_root_is_unsettled_and_exposes_no_zip_bytes",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 2.082,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m11-unit-proof/baseline.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m11-mutant",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-core",
+        "--lib",
+        "project_archive::tests::a_missing_root_is_unsettled_and_exposes_no_zip_bytes",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 3.141,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m11-unit-proof/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m11-restored",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-core",
+        "--lib",
+        "project_archive::tests::a_missing_root_is_unsettled_and_exposes_no_zip_bytes",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 3.462,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m11-unit-proof/restored.log"
+    }
+  ]
+}
