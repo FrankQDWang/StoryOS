@@ -1,4 +1,3 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
@@ -8,6 +7,87 @@ use crate::release1_create_project::{
     CREATE_PROJECT_REQUEST_SCHEMA_ID, CREATE_PROJECT_RESPONSE_SCHEMA_ID,
     CreateProjectChallengeRequest, CreateProjectChallengeResponse, CreateProjectInput,
     CreateProjectRequest, CreateProjectResponse,
+};
+use crate::release1_operation_registry::{
+    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
+};
+use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[
+        RegisteredOperation::challenge(
+            &CREATE_PROJECT_CHALLENGE,
+            &[
+                "server_derived_user",
+                "prospective_project_scope",
+                "strict_origin",
+                "protected_client_session_binding",
+                "closed_create_project_schema",
+                "body_idempotency_key",
+            ],
+        ),
+        RegisteredOperation::command(
+            &CREATE_PROJECT,
+            &[
+                "server_derived_user",
+                "prospective_project_scope",
+                "strict_origin",
+                "protected_client_session_binding",
+                "challenge_nonce_record",
+                "expected_absent_project",
+            ],
+        ),
+    ],
+    schemas: || {
+        [
+            operation_schemas(
+                &CREATE_PROJECT_CHALLENGE,
+                (
+                    CHALLENGE_REQUEST_SCHEMA_PATH,
+                    challenge_request_schema_bytes(),
+                ),
+                (
+                    CHALLENGE_RESPONSE_SCHEMA_PATH,
+                    challenge_response_schema_bytes(),
+                ),
+            ),
+            operation_schemas(
+                &CREATE_PROJECT,
+                (REQUEST_SCHEMA_PATH, command_request_schema_bytes()),
+                (RESPONSE_SCHEMA_PATH, command_response_schema_bytes()),
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    },
+    openapi,
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        [
+            fixture_triple(
+                CHALLENGE_FIXTURE_PATHS,
+                &CREATE_PROJECT_CHALLENGE,
+                [
+                    |_| challenge_fixture_bytes(),
+                    |_| challenge_invalid_fixture_bytes(),
+                    |_| challenge_boundary_fixture_bytes(),
+                ],
+            ),
+            fixture_triple(
+                FIXTURE_PATHS,
+                &CREATE_PROJECT,
+                [
+                    |_| fixture_bytes(),
+                    |_| invalid_fixture_bytes(),
+                    |_| boundary_fixture_bytes(),
+                ],
+            ),
+        ]
+        .concat()
+    },
 };
 
 pub(super) const CHALLENGE_REQUEST_SCHEMA_PATH: &str =
@@ -71,22 +151,29 @@ pub(super) fn typescript_type_declarations() -> String {
     )
 }
 
-pub(super) fn openapi() -> String {
+pub(super) fn openapi() -> Vec<OpenApiMethod> {
     let request_schema = generated_ref(CHALLENGE_REQUEST_SCHEMA_PATH);
     let response_schema = generated_ref(CHALLENGE_RESPONSE_SCHEMA_PATH);
     let responses = response_block(CREATE_PROJECT_CHALLENGE.responses, response_schema, &[200]);
-    format!(
+    let challenge = format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Issue one prospective Project command challenge\n",
+            "    post:\n      operationId: {}\n      summary: Issue one prospective Project command challenge\n",
             "      parameters:\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        CREATE_PROJECT_CHALLENGE.path,
-        CREATE_PROJECT_CHALLENGE.operation_id,
-        request_schema,
-        responses,
-    ) + &command_openapi()
+        CREATE_PROJECT_CHALLENGE.operation_id, request_schema, responses,
+    );
+    vec![
+        OpenApiMethod {
+            path: CREATE_PROJECT_CHALLENGE.path,
+            yaml: challenge,
+        },
+        OpenApiMethod {
+            path: CREATE_PROJECT.path,
+            yaml: command_openapi(),
+        },
+    ]
 }
 
 pub(super) fn command_request_schema_bytes() -> Vec<u8> {
@@ -137,7 +224,6 @@ fn command_openapi() -> String {
     let responses = response_block(CREATE_PROJECT.responses, response_schema, &[200]);
     format!(
         concat!(
-            "  {}:\n{}",
             "    post:\n      operationId: {}\n      summary: Create one empty Project\n",
             "      parameters:\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
@@ -145,11 +231,7 @@ fn command_openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        CREATE_PROJECT.path,
-        crate::release1_list_projects_artifacts::method_openapi(),
-        CREATE_PROJECT.operation_id,
-        request_schema,
-        responses,
+        CREATE_PROJECT.operation_id, request_schema, responses,
     )
 }
 
@@ -289,22 +371,4 @@ fn response_block(
             )
         })
         .collect()
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

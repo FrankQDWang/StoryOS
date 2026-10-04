@@ -3,11 +3,50 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::{LIMIT_PROFILE_REVISION, PUBLIC_PROTOCOL_RELEASE};
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_manuscript_search::{
     ManuscriptSearchCompleteness, ManuscriptSearchMatch, ManuscriptSearchSelection,
     SEARCH_MANUSCRIPT, SEARCH_MANUSCRIPT_REQUEST_SCHEMA_ID, SEARCH_MANUSCRIPT_RESPONSE_SCHEMA_ID,
     SearchManuscriptRequest, SearchManuscriptResponse,
+};
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &SEARCH_MANUSCRIPT,
+        &[
+            "server_derived_project_scope",
+            "bounded_search_query",
+            "projection_watermark_if_required",
+            "redaction_profile",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &SEARCH_MANUSCRIPT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&SEARCH_MANUSCRIPT, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &SEARCH_MANUSCRIPT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -32,7 +71,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
     query_text["x-storyos-max-utf8-bytes"] = json!(1_048_576);
     schema["properties"]["required_watermark"] = json!({
         "anyOf": [
-            author_edit_artifacts::canonical_u64_wire_schema(),
+            canonical_u64_wire_schema(),
             { "type": "null" }
         ]
     });
@@ -49,7 +88,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     schema["properties"]["query_id"]["format"] = json!("uuid");
     schema["properties"]["correlation_id"]["format"] = json!("uuid");
     schema["properties"]["projection_kind"]["const"] = json!("manuscript_search");
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     schema["properties"]["projection_generation"] = canonical_u64.clone();
     schema["properties"]["projection_watermark"] = canonical_u64.clone();
     schema["properties"]["required_watermark"] = json!({
@@ -72,8 +111,8 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     if let Some(item) = schema["$defs"].get_mut("ManuscriptSearchMatch") {
         item["properties"]["chapter_id"]["format"] = json!("uuid");
         item["properties"]["manuscript_block_id"]["format"] = json!("uuid");
-        item["properties"]["start"] = author_edit_artifacts::canonical_u64_wire_schema();
-        item["properties"]["end"] = author_edit_artifacts::canonical_u64_wire_schema();
+        item["properties"]["start"] = canonical_u64_wire_schema();
+        item["properties"]["end"] = canonical_u64_wire_schema();
     }
     json_bytes(&schema)
 }
@@ -101,12 +140,12 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Search the current Chapter or manuscript\n",
+            "    post:\n      operationId: {}\n      summary: Search the current Chapter or manuscript\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        SEARCH_MANUSCRIPT.path, SEARCH_MANUSCRIPT.operation_id, request_schema, responses,
+        SEARCH_MANUSCRIPT.operation_id, request_schema, responses,
     )
 }
 
@@ -199,10 +238,4 @@ fn search_fixture() -> Value {
         "redaction_profile": "storyos.author.v1",
         "limit_profile_revision": LIMIT_PROFILE_REVISION
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

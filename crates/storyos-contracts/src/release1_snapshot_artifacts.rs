@@ -3,12 +3,99 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::{ACTIVITY_PROFILE, PUBLIC_PROTOCOL_RELEASE};
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
 use crate::release1_snapshot::{
     ACTIVITY_STREAM, ACTIVITY_STREAM_REQUEST_SCHEMA_ID, ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
     ActivityStreamRequest, CanonicalSnapshotMaps, GET_SNAPSHOT, GET_SNAPSHOT_REQUEST_SCHEMA_ID,
     GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotRequest, GetSnapshotResponse, SnapshotDescriptor,
     SnapshotKind,
+};
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[
+        RegisteredOperation::query(
+            &GET_SNAPSHOT,
+            &[
+                "snapshot_scope_join",
+                "snapshot_signature",
+                "snapshot_lifecycle_available",
+            ],
+        ),
+        RegisteredOperation::stream(
+            &ACTIVITY_STREAM,
+            &[
+                "server_derived_project_scope",
+                "snapshot_binding_or_last_event_id",
+                "activity_profile",
+                "replay_generation",
+                "filter_digest",
+                "reauthorize_on_connect",
+            ],
+        ),
+    ],
+    schemas: || {
+        [
+            operation_schemas(
+                &GET_SNAPSHOT,
+                (
+                    SNAPSHOT_REQUEST_SCHEMA_PATH,
+                    snapshot_request_schema_bytes(),
+                ),
+                (
+                    SNAPSHOT_RESPONSE_SCHEMA_PATH,
+                    snapshot_response_schema_bytes(),
+                ),
+            ),
+            operation_schemas(
+                &ACTIVITY_STREAM,
+                (
+                    ACTIVITY_STREAM_REQUEST_SCHEMA_PATH,
+                    activity_stream_request_schema_bytes(),
+                ),
+                (
+                    ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH,
+                    activity_stream_response_schema_bytes(),
+                ),
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    },
+    openapi: || {
+        let mut methods = method(&GET_SNAPSHOT, snapshot_openapi());
+        methods.extend(method(&ACTIVITY_STREAM, activity_stream_openapi()));
+        methods
+    },
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        [
+            fixture_triple(
+                SNAPSHOT_FIXTURE_PATHS,
+                &GET_SNAPSHOT,
+                [
+                    |_| snapshot_fixture_bytes(),
+                    |_| snapshot_invalid_fixture_bytes(),
+                    |_| snapshot_boundary_fixture_bytes(),
+                ],
+            ),
+            fixture_triple(
+                ACTIVITY_STREAM_FIXTURE_PATHS,
+                &ACTIVITY_STREAM,
+                [
+                    |_| activity_stream_fixture_bytes(),
+                    |_| activity_stream_invalid_fixture_bytes(),
+                    |_| activity_stream_boundary_fixture_bytes(),
+                ],
+            ),
+        ]
+        .concat()
+    },
 };
 
 pub(super) const SNAPSHOT_REQUEST_SCHEMA_PATH: &str =
@@ -45,7 +132,7 @@ pub(super) fn snapshot_response_schema_bytes() -> Vec<u8> {
         GET_SNAPSHOT_RESPONSE_SCHEMA_ID,
         "StoryOS Snapshot Response",
     );
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     schema["$defs"]["SnapshotDescriptor"]["properties"]["project_activity_position"] =
         canonical_u64.clone();
     schema["$defs"]["SnapshotDescriptor"]["properties"]["replay_generation"] = canonical_u64;
@@ -77,7 +164,7 @@ pub(super) fn activity_stream_response_schema_bytes() -> Vec<u8> {
         }
     });
     let nullable_uuid = json!({ "type": ["string", "null"], "format": "uuid" });
-    let sequence = author_edit_artifacts::canonical_u64_wire_schema();
+    let sequence = canonical_u64_wire_schema();
     json_bytes(&json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
@@ -274,8 +361,8 @@ pub(super) fn activity_stream_openapi() -> String {
         })
         .collect::<String>();
     format!(
-        "  {}:\n    get:\n      operationId: {}\n      summary: Stream Project Activity after an authorized Snapshot\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: snapshot_id\n          in: query\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: protocol_release\n          in: query\n          required: true\n          schema:\n            type: string\n        - name: Last-Event-ID\n          in: header\n          required: false\n          schema:\n            type: string\n      responses:\n{responses}",
-        ACTIVITY_STREAM.path, ACTIVITY_STREAM.operation_id,
+        "    get:\n      operationId: {}\n      summary: Stream Project Activity after an authorized Snapshot\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: snapshot_id\n          in: query\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: protocol_release\n          in: query\n          required: true\n          schema:\n            type: string\n        - name: Last-Event-ID\n          in: header\n          required: false\n          schema:\n            type: string\n      responses:\n{responses}",
+        ACTIVITY_STREAM.operation_id,
     )
 }
 
@@ -404,12 +491,6 @@ fn typed_schema<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value 
     schema
 }
 
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("schema JSON is serializable");
-    bytes.push(b'\n');
-    bytes
-}
-
 fn operation_openapi(
     operation: &crate::release1::QueryOperation,
     summary: &str,
@@ -444,7 +525,7 @@ fn operation_openapi(
         })
         .collect::<String>();
     format!(
-        "  {}:\n    get:\n      operationId: {}\n      summary: {summary}\n      parameters:\n{parameter_yaml}      responses:\n{responses}",
-        operation.path, operation.operation_id,
+        "    get:\n      operationId: {}\n      summary: {summary}\n      parameters:\n{parameter_yaml}      responses:\n{responses}",
+        operation.operation_id,
     )
 }

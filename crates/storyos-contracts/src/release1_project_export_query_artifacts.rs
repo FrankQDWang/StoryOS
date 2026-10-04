@@ -3,9 +3,48 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
 use crate::release1_project_export_query::{
     GET_EXPORT_OPERATION, GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
     GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
+};
+use crate::release1_wire::json_bytes;
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &GET_EXPORT_OPERATION,
+        &[
+            "export_scope_join",
+            "export_operation_visibility",
+            "redaction_profile",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &GET_EXPORT_OPERATION,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&GET_EXPORT_OPERATION, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &GET_EXPORT_OPERATION,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -61,12 +100,12 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect or download one settled Project Export Archive\n",
+            "    get:\n      operationId: {}\n      summary: Inspect or download one settled Project Export Archive\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: export_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
         ),
-        GET_EXPORT_OPERATION.path, GET_EXPORT_OPERATION.operation_id, responses,
+        GET_EXPORT_OPERATION.operation_id, responses,
     )
 }
 
@@ -143,10 +182,4 @@ fn export_fixture() -> Value {
             "expires_at": null
         }
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

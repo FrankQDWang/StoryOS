@@ -1,7 +1,9 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
 use crate::release1_project_assistance::{
     GET_PROJECT_ASSISTANCE, GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
     GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID, GetProjectAssistanceResponse,
@@ -11,6 +13,68 @@ use crate::release1_project_assistance::{
     UpdateProjectAssistanceEffect, UpdateProjectAssistanceInput,
     UpdateProjectAssistanceNoEffectReason, UpdateProjectAssistanceRequest,
     UpdateProjectAssistanceResponse,
+};
+use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[
+        RegisteredOperation::query(
+            &GET_PROJECT_ASSISTANCE,
+            &["server_derived_project_scope", "project_visibility"],
+        ),
+        RegisteredOperation::command(
+            &UPDATE_PROJECT_ASSISTANCE,
+            &[
+                "server_derived_project_scope",
+                "expected_assistance_revision",
+                "project_active",
+            ],
+        ),
+    ],
+    schemas: || {
+        [
+            operation_schemas(
+                &GET_PROJECT_ASSISTANCE,
+                (GET_REQUEST_SCHEMA_PATH, get_request_schema_bytes()),
+                (GET_RESPONSE_SCHEMA_PATH, get_response_schema_bytes()),
+            ),
+            operation_schemas(
+                &UPDATE_PROJECT_ASSISTANCE,
+                (UPDATE_REQUEST_SCHEMA_PATH, update_request_schema_bytes()),
+                (UPDATE_RESPONSE_SCHEMA_PATH, update_response_schema_bytes()),
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    },
+    openapi: || method(&GET_PROJECT_ASSISTANCE, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        [
+            fixture_triple(
+                GET_FIXTURE_PATHS,
+                &GET_PROJECT_ASSISTANCE,
+                [
+                    |_| get_fixture_bytes(),
+                    |_| get_invalid_fixture_bytes(),
+                    |_| get_boundary_fixture_bytes(),
+                ],
+            ),
+            fixture_triple(
+                UPDATE_FIXTURE_PATHS,
+                &UPDATE_PROJECT_ASSISTANCE,
+                [
+                    |_| update_fixture_bytes(),
+                    |_| update_invalid_fixture_bytes(),
+                    |_| update_boundary_fixture_bytes(),
+                ],
+            ),
+        ]
+        .concat()
+    },
 };
 
 pub(super) const GET_REQUEST_SCHEMA_PATH: &str =
@@ -31,8 +95,6 @@ pub(super) const UPDATE_FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/update-project-assistance.invalid.json",
     "generated/golden-wire/storyos-public-release-1/update-project-assistance.boundary.json",
 ];
-
-const U64_WIRE: &str = "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$";
 
 pub(super) fn get_request_schema_bytes() -> Vec<u8> {
     json_bytes(&json!({
@@ -99,7 +161,7 @@ pub(super) fn openapi() -> String {
     );
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect Project assistance and its Host-owned fake binding\n",
+            "    get:\n      operationId: {}\n      summary: Inspect Project assistance and its Host-owned fake binding\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
             "    put:\n      operationId: {}\n      summary: Prepare or change Project assistance availability\n",
@@ -110,7 +172,6 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        GET_PROJECT_ASSISTANCE.path,
         GET_PROJECT_ASSISTANCE.operation_id,
         get_responses,
         UPDATE_PROJECT_ASSISTANCE.operation_id,
@@ -318,22 +379,4 @@ fn status_block(responses: &[(u16, &str)], response_schema: &str, command: bool)
             format!("        '{status}':\n          description: {description}\n{retry_after}{content}")
         })
         .collect()
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

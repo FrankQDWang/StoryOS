@@ -1,12 +1,71 @@
+use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
 use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::release1_operation_registry::{
+    GeneratedSchema, OperationArtifacts, RegisteredOperation, event_fixtures, fixture_triple,
+    method, operation_schemas,
+};
 use crate::release1_refused_edit_draft::{
     GET_REFUSED_EDIT_DRAFT, GET_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID,
     GET_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID, GetRefusedEditDraftResponse,
     REFUSED_EDIT_DRAFT_CREATED_SCHEMA_ID, RefusedEditDraftCreated, RefusedEditDraftCreator,
     RefusedEditDraftInspect, RefusedEditDraftSource,
+};
+use crate::release1_wire::json_bytes;
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &GET_REFUSED_EDIT_DRAFT,
+        &[
+            "exact_scope",
+            "retained_revision_digest",
+            "immutable_creation_source",
+        ],
+    )],
+    schemas: || {
+        let [request, response] = operation_schemas(
+            &GET_REFUSED_EDIT_DRAFT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        );
+        vec![
+            request,
+            response,
+            GeneratedSchema {
+                schema_id: REFUSED_EDIT_DRAFT_CREATED_SCHEMA_ID,
+                path: EVENT_SCHEMA_PATH,
+                bytes: event_schema_bytes(),
+            },
+        ]
+    },
+    openapi: || method(&GET_REFUSED_EDIT_DRAFT, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &GET_REFUSED_EDIT_DRAFT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into_iter()
+        .chain(event_fixtures(
+            EVENT_FIXTURE_PATHS,
+            [
+                "storyos.golden.storyos.event.refused-edit-draft-created.v1.positive.v1",
+                "storyos.golden.storyos.event.refused-edit-draft-created.v1.negative.v1",
+            ],
+            APPLY_AUTHOR_EDIT.operation_id,
+            [|_| event_fixture_bytes(), |_| event_invalid_fixture_bytes()],
+        ))
+        .collect()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -109,12 +168,12 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one retained Refused Edit Draft\n",
+            "    get:\n      operationId: {}\n      summary: Inspect one retained Refused Edit Draft\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: draft_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
         ),
-        GET_REFUSED_EDIT_DRAFT.path, GET_REFUSED_EDIT_DRAFT.operation_id, responses,
+        GET_REFUSED_EDIT_DRAFT.operation_id, responses,
     )
 }
 
@@ -127,9 +186,8 @@ pub(super) fn typescript_type_declarations() -> String {
         RefusedEditDraftInspect::decl(&config),
         GetRefusedEditDraftResponse::decl(&config),
     ]
-    .iter()
-    .map(|declaration| format!("export {declaration}\n"))
-    .collect()
+    .map(|declaration| format!("export {declaration}"))
+    .join("\n")
 }
 
 pub(super) fn typescript_client_source() -> String {
@@ -198,12 +256,6 @@ fn proposal_fixture() -> Value {
                 "created_at": "2026-09-26T00:00:00.000Z", "source": {"command_id": id, "author_command_admission_id": id, "receipt_id": id, "idempotency_key": id, "command_digest": {"algorithm": "sha256", "profile": "storyos.command.applyAuthorEdit.jcs.v1", "value_hex_lowercase": "0".repeat(64)}}}
         }
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
 
 pub(super) const EVENT_SCHEMA_PATH: &str =

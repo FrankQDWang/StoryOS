@@ -19,6 +19,7 @@ mod release1_author_edit_artifacts;
 mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
 mod release1_draft_retry;
+mod release1_editor_session_artifacts;
 pub use release1_draft_retry::{
     DraftPayloadPosition, DraftRetry, DraftRetryKind, DraftRetryReplacement, ExactStructuredRange,
     ExactStructuredRangeKind, ObservedDraftClosure, RetryDraftClosure, RetryDraftKind,
@@ -42,6 +43,7 @@ mod release1_manuscript_statistics;
 mod release1_manuscript_statistics_artifacts;
 mod release1_manuscript_tree;
 mod release1_manuscript_tree_artifacts;
+mod release1_operation_registry;
 mod release1_project_activity;
 mod release1_project_assistance;
 mod release1_project_assistance_artifacts;
@@ -49,10 +51,12 @@ mod release1_project_export;
 mod release1_project_export_artifacts;
 mod release1_project_export_query;
 mod release1_project_export_query_artifacts;
+mod release1_project_query_artifacts;
 mod release1_proposal;
 mod release1_proposal_artifacts;
 mod release1_proposal_generation_decision;
 mod release1_proposal_generation_decision_artifacts;
+mod release1_protocol_profile_artifacts;
 mod release1_readable_export;
 mod release1_readable_export_artifacts;
 mod release1_readable_export_query;
@@ -81,6 +85,7 @@ mod release1_update_project;
 mod release1_update_project_artifacts;
 mod release1_update_volume;
 mod release1_update_volume_artifacts;
+mod release1_wire;
 mod release1_withdraw_proposal;
 mod release1_withdraw_proposal_artifacts;
 mod stage1_bundle;
@@ -408,7 +413,9 @@ pub use release1_expand_refused_edit_draft::{
     ExpandRefusedEditDraftEffect, ExpandRefusedEditDraftInput, ExpandRefusedEditDraftRequest,
     ExpandRefusedEditDraftResponse, WholeDraftPayload,
 };
+mod release1_chapter_query_artifacts;
 mod release1_close_editor_flow_draft_artifacts;
+mod release1_command_challenge_artifacts;
 pub use release1_close_editor_flow_draft::{
     CLOSE_EDITOR_FLOW_DRAFT_DIGEST_PROFILE, CLOSE_EDITOR_FLOW_DRAFT_PATH,
     CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID, CLOSE_EDITOR_FLOW_DRAFT_RESPONSE_SCHEMA_ID,
