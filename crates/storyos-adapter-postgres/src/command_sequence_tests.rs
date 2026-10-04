@@ -14,8 +14,8 @@ use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
 use super::{
-    Classified, CommandSpec, LockedProject, StructureCommand, StructureWrite,
-    settle_structure_command, unavailable,
+    Classified, CommandSpec, LockedProject, ProfileWrite, ProjectCommand, settle_project_command,
+    unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
@@ -310,8 +310,7 @@ async fn new_chapter(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn every_structural_outcome_replays_its_first_settlement_and_writes_authority_only_when_applied()
- {
+async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_records() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -428,32 +427,33 @@ async fn every_structural_outcome_replays_its_first_settlement_and_writes_author
         observed.push((DELETE_CHAPTER.kind, outcome));
     }
 
-    let applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 1, 1]);
+    // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
+    let structural_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 1, 1]);
     let no_effect = (ReceiptResult::NoEffect, [1, 0, 0, 0, 0]);
     let conflicted = (ReceiptResult::Conflicted, [1, 0, 0, 0, 0]);
     let refused = (ReceiptResult::Refused, [1, 0, 0, 0, 0]);
     assert_eq!(
         observed,
         vec![
-            ("createVolume", applied),
+            ("createVolume", structural_applied),
             ("createVolume", conflicted),
             ("createVolume", refused),
-            ("updateVolume", applied),
+            ("updateVolume", structural_applied),
             ("updateVolume", no_effect),
             ("updateVolume", conflicted),
             ("updateVolume", refused),
-            ("deleteVolume", applied),
+            ("deleteVolume", structural_applied),
             ("deleteVolume", no_effect),
             ("deleteVolume", conflicted),
             ("deleteVolume", refused),
-            ("createChapter", applied),
+            ("createChapter", structural_applied),
             ("createChapter", conflicted),
             ("createChapter", refused),
-            ("updateChapter", applied),
+            ("updateChapter", structural_applied),
             ("updateChapter", no_effect),
             ("updateChapter", conflicted),
             ("updateChapter", refused),
-            ("deleteChapter", applied),
+            ("deleteChapter", structural_applied),
             ("deleteChapter", no_effect),
             ("deleteChapter", conflicted),
             ("deleteChapter", refused),
@@ -565,7 +565,7 @@ fn with_new_request_ids<I: Clone>(call: &CommandCall<I>) -> CommandCall<I> {
 /// Marks the Command Challenge consumed and the Command Idempotency Fence in progress, then retries.
 ///
 /// Returns whether the retry is a binding conflict and the rows of the retry Receipt.
-async fn in_progress_retry<C: StructureCommand>(
+async fn in_progress_retry<C: ProjectCommand>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
@@ -580,7 +580,7 @@ async fn in_progress_retry<C: StructureCommand>(
         ))
         .await
         .unwrap();
-    let retry = settle_structure_command(store, &call.envelope, &call.input).await;
+    let retry = settle_project_command(store, &call.envelope, &call.input).await;
     (
         matches!(retry, Err(ProjectCommandError::BindingConflict)),
         settlement_rows(admin, &call.envelope.ids.receipt_id).await,
@@ -589,7 +589,7 @@ async fn in_progress_retry<C: StructureCommand>(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn every_structural_in_progress_exact_retry_conflicts_and_writes_no_row() {
+async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -617,8 +617,9 @@ struct Failing<C> {
     at: FailurePoint,
 }
 
-impl<C: StructureCommand> StructureCommand for Failing<C> {
+impl<C: ProjectCommand> ProjectCommand for Failing<C> {
     const SPEC: CommandSpec = C::SPEC;
+    type Profile = C::Profile;
     type Applied = C::Applied;
     type Plan = C::Plan;
     type Effect = C::Effect;
@@ -646,7 +647,7 @@ impl<C: StructureCommand> StructureCommand for Failing<C> {
         project: &LockedProject,
         plan: Self::Plan,
         applied: Self::Applied,
-    ) -> Result<StructureWrite<Self::Effect>, ProjectCommandError> {
+    ) -> Result<ProfileWrite<Self>, ProjectCommandError> {
         self.command
             .apply(client, envelope, project, plan, applied)
             .await?;
@@ -662,7 +663,7 @@ impl<C: StructureCommand> StructureCommand for Failing<C> {
 ///
 /// Returns, for each failure, whether it is a store fault and the rows of its Receipt, then the
 /// Receipt result kind of the real settlement.
-async fn failed_then_settled<C: StructureCommand + Clone>(
+async fn failed_then_settled<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
@@ -673,13 +674,13 @@ async fn failed_then_settled<C: StructureCommand + Clone>(
             command: call.input.clone(),
             at,
         };
-        let failed = settle_structure_command(store, &call.envelope, &failing).await;
+        let failed = settle_project_command(store, &call.envelope, &failing).await;
         failures.push((
             matches!(failed, Err(ProjectCommandError::Unavailable(_))),
             settlement_rows(admin, &call.envelope.ids.receipt_id).await,
         ));
     }
-    let Ok(settled) = settle_structure_command(store, &call.envelope, &call.input).await else {
+    let Ok(settled) = settle_project_command(store, &call.envelope, &call.input).await else {
         panic!("the unused Command Challenge must still settle");
     };
     (failures, settled.outcome.receipt_result())
@@ -687,7 +688,7 @@ async fn failed_then_settled<C: StructureCommand + Clone>(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn every_structural_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused() {
+async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -718,12 +719,12 @@ enum ReplayError {
 }
 
 /// Settles the call, then replays it with pre-capture and then with damaged acknowledgement evidence.
-async fn evidence_replays<C: StructureCommand + Clone>(
+async fn evidence_replays<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
 ) -> (ReceiptResult, [ReplayError; 2]) {
-    let Ok(settled) = settle_structure_command(store, &call.envelope, &call.input).await else {
+    let Ok(settled) = settle_project_command(store, &call.envelope, &call.input).await else {
         panic!("the structural command must settle");
     };
     let key = &call.envelope.challenge_binding.idempotency_key;
@@ -741,8 +742,7 @@ async fn evidence_replays<C: StructureCommand + Clone>(
             .await
             .unwrap();
         let retry = with_new_request_ids(call);
-        let Err(error) = settle_structure_command(store, &retry.envelope, &retry.input).await
-        else {
+        let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
             panic!("a replay without complete evidence must fail");
         };
         errors.push(match error {
@@ -761,7 +761,7 @@ async fn evidence_replays<C: StructureCommand + Clone>(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn every_structural_replay_separates_pre_capture_from_damaged_evidence() {
+async fn every_replay_separates_pre_capture_from_damaged_evidence() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;

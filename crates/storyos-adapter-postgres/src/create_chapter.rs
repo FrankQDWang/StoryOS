@@ -14,10 +14,10 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AdmissionClass, Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    MissingAdmission, ProjectCommand, ResponseRecord, Structural, StructureIdentity,
+    StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -27,19 +27,23 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &CreateChapterInput,
     ) -> Result<CreateChapterSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
 /// The live Chapter order of the target Volume, locked by `classify`.
 pub(crate) struct LiveChapters(Vec<String>);
 
-impl StructureCommand for CreateChapterInput {
+impl ProjectCommand for CreateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createChapter",
         isolation: CommandIsolation::Serializable,
+        admission: AdmissionClass::ExplicitProjectCommand,
+        missing_admission: MissingAdmission::InvalidChallenge,
+        response: ResponseRecord::Project,
         activity_kind: "chapter_created",
     };
+    type Profile = Structural;
     type Applied = CreateChapterApplied;
     type Plan = LiveChapters;
     type Effect = ChapterCreated;

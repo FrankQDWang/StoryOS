@@ -12,10 +12,10 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AdmissionClass, Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    MissingAdmission, ProjectCommand, ResponseRecord, Structural, StructureIdentity,
+    StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -25,16 +25,20 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &DeleteVolumeInput,
     ) -> Result<DeleteVolumeSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
-impl StructureCommand for DeleteVolumeInput {
+impl ProjectCommand for DeleteVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "deleteVolume",
         isolation: CommandIsolation::Serializable,
+        admission: AdmissionClass::ExplicitProjectCommand,
+        missing_admission: MissingAdmission::InvalidChallenge,
+        response: ResponseRecord::Project,
         activity_kind: "volume_deleted",
     };
+    type Profile = Structural;
     type Applied = DeleteVolumeApplied;
     type Plan = ();
     type Effect = VolumeDeleted;

@@ -9,10 +9,10 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AdmissionClass, Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    MissingAdmission, ProjectCommand, ResponseRecord, Structural, StructureIdentity,
+    StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -22,7 +22,7 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &UpdateVolumeInput,
     ) -> Result<UpdateVolumeSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
@@ -33,12 +33,16 @@ pub(crate) struct LiveVolumes {
     current_order: u64,
 }
 
-impl StructureCommand for UpdateVolumeInput {
+impl ProjectCommand for UpdateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "updateVolume",
         isolation: CommandIsolation::Serializable,
+        admission: AdmissionClass::ExplicitProjectCommand,
+        missing_admission: MissingAdmission::InvalidChallenge,
+        response: ResponseRecord::Project,
         activity_kind: "volume_updated",
     };
+    type Profile = Structural;
     type Applied = UpdateVolumeApplied;
     type Plan = LiveVolumes;
     type Effect = UpdateVolumeApplied;

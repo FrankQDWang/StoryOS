@@ -4,7 +4,9 @@ use storyos_application::{ChapterId, Project, ProjectCommandEnvelope, ProjectCom
 use storyos_core::ProjectLifecycle;
 use tokio_postgres::Client;
 
-use super::{LockedProject, unavailable};
+use super::{
+    AdmissionClass, CommandSpec, LockedProject, MissingAdmission, ResponseRecord, unavailable,
+};
 use crate::command_response_project::{
     COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
 };
@@ -109,8 +111,11 @@ pub(super) async fn lock_project(
 pub(super) async fn insert_admission(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
-    command_kind: &str,
+    spec: &CommandSpec,
 ) -> Result<(), ProjectCommandError> {
+    let action_class = match spec.admission {
+        AdmissionClass::ExplicitProjectCommand => "explicit_project_command",
+    };
     let binding = &envelope.client_binding;
     let challenge = &envelope.challenge_binding;
     let inserted = client
@@ -127,7 +132,7 @@ pub(super) async fn insert_admission(
                 undo_group_id, completed_intent_record_id, local_intent_sequence, command_payload)
              SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                     NULL, NULL, $5, $6::text::numeric, $7, $8,
-                    'explicit_project_command', $9, $10, $11, $16,
+                    $17, $9, $10, $11, $16,
                     $12, $13::text::uuid, challenge.consumed_at, challenge.expires_at,
                     $14::text::uuid, NULL, NULL, '{}'::uuid[], '{}'::text[], NULL, $7,
                     NULL, NULL, NULL, convert_from($15::bytea, 'UTF8')::jsonb
@@ -152,13 +157,16 @@ pub(super) async fn insert_admission(
                 &challenge.idempotency_key,
                 &envelope.correlation_id,
                 &envelope.canonical_command_bytes.as_slice(),
-                &command_kind,
+                &spec.kind,
+                &action_class,
             ],
         )
         .await
         .map_err(unavailable)?;
     if inserted != 1 {
-        return Err(ProjectCommandError::InvalidChallenge);
+        return Err(match spec.missing_admission {
+            MissingAdmission::InvalidChallenge => ProjectCommandError::InvalidChallenge,
+        });
     }
     Ok(())
 }
@@ -167,7 +175,7 @@ pub(super) async fn insert_admission(
 pub(super) async fn settle_idempotency(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
-    command_kind: &str,
+    spec: &CommandSpec,
 ) -> Result<Project, ProjectCommandError> {
     let scope = &envelope.project_scope;
     let row = client
@@ -197,9 +205,11 @@ pub(super) async fn settle_idempotency(
                 &scope.project_id.as_ref(),
                 &envelope.ids.receipt_id,
                 &envelope.challenge_binding.idempotency_key,
-                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &match spec.response {
+                    ResponseRecord::Project => COMMAND_RESPONSE_PROJECT_FORMAT,
+                },
                 &encode_command_response_project(&project),
-                &command_kind,
+                &spec.kind,
             ],
         )
         .await

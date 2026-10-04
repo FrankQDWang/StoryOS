@@ -12,10 +12,10 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AdmissionClass, Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    MissingAdmission, ProjectCommand, ResponseRecord, Structural, StructureIdentity,
+    StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -25,19 +25,23 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &DeleteChapterInput,
     ) -> Result<DeleteChapterSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
 /// The parent Volume of the target Chapter.
 pub(crate) struct ParentVolume(String);
 
-impl StructureCommand for DeleteChapterInput {
+impl ProjectCommand for DeleteChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "deleteChapter",
         isolation: CommandIsolation::Serializable,
+        admission: AdmissionClass::ExplicitProjectCommand,
+        missing_admission: MissingAdmission::InvalidChallenge,
+        response: ResponseRecord::Project,
         activity_kind: "chapter_deleted",
     };
+    type Profile = Structural;
     type Applied = DeleteChapterApplied;
     type Plan = ParentVolume;
     type Effect = ChapterDeleted;

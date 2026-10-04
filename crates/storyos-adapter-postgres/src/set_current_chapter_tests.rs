@@ -9,7 +9,7 @@ use storyos_application::{
     issue_project_command_challenge, open_chapter, open_project, set_current_chapter,
 };
 
-use crate::structure_command::tests::{
+use crate::command_sequence::tests::{
     CommandCall, applied, command_call, create_chapter, create_volume,
 };
 
