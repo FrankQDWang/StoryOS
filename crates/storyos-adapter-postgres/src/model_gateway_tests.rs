@@ -9,7 +9,10 @@ use storyos_application::{
     PreparedRequest, ProjectScope, UpdateProjectAssistanceCommand, complete_agent_run,
     issue_project_command_challenge, request_create_agent_run, update_project_assistance,
 };
-use storyos_core::{AssistanceAvailability, NativeStreamItem, StreamItemRole, StreamItemState};
+use storyos_core::{
+    AssistanceAvailability, DecisionCandidate, ModelOutput, NativeStreamItem, OutputPhase,
+    StreamItemRole, StreamItemState,
+};
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
@@ -119,7 +122,13 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                 *self.streamed.lock().unwrap() = serde_json::from_str(&streamed).ok();
                 return Observation::Terminal(ModelResponse {
                     items: second.to_vec(),
-                    output: None,
+                    output: Some(ModelOutput {
+                        phase: OutputPhase::Commentary,
+                        candidate: DecisionCandidate::ProseChange {
+                            text: "Guard the voice".to_owned(),
+                        },
+                        prose_changes: Some(Vec::new()),
+                    }),
                     usage: ModelUsage::Unknown,
                     response_reference: None,
                 });
@@ -593,6 +602,15 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
 
     let result = complete_agent_run(&store, &destination, &points, &claim).await;
 
+    let persisted: String = admin
+        .query_one(
+            "SELECT payload->>'items' FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+            &[&claim.run_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
     let item = |item_id: &str, state: &str, text: &str| {
         serde_json::json!({
             "item_id": item_id, "role": "assistant", "state": state, "phase": state,
@@ -600,19 +618,22 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
             "refusal": null, "hosted_report": null
         })
     };
+    let kept = serde_json::json!([
+        item("1", "complete", "Guard the voice"),
+        item("3", "provisional", "Hold"),
+        item("2", "complete", "Keep it"),
+    ]);
     assert_eq!(
         (
             result.ok(),
             destination.streamed.into_inner().unwrap(),
+            serde_json::from_str::<serde_json::Value>(&persisted).ok(),
             points.0.into_inner().unwrap(),
         ),
         (
             Some(CompleteAgentRun::AlreadySettled),
-            Some(serde_json::json!([
-                item("1", "complete", "Guard the voice"),
-                item("3", "provisional", "Hold"),
-                item("2", "complete", "Keep it"),
-            ])),
+            Some(kept.clone()),
+            Some(kept),
             vec![
                 ContractFaultPoint::DispatchClaimed,
                 ContractFaultPoint::StreamCommitted,

@@ -1,6 +1,7 @@
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DispatchClaim, ProjectScope,
-    ReferenceRetrieval, RequestAttempt, ResponseReference, RetrievePurpose, RetrieveRequest,
+    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DispatchClaim, ModelUsage,
+    ProjectScope, ReferenceRetrieval, RequestAttempt, ResponseReference, RetrievePurpose,
+    RetrieveRequest,
 };
 use storyos_core::{
     HOST_FAKE_MAPPING_REVISION, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
@@ -115,6 +116,7 @@ pub(crate) async fn advance_original_result_retrieval(
                 decision,
                 retrieval: None,
                 supplied: None,
+                usage: ModelUsage::Unknown,
                 fenced,
                 run_write,
             },
@@ -253,6 +255,8 @@ pub(crate) struct SettledRetrieval {
     pub decision: OriginalResultRetrievalDecision,
     pub retrieval: Option<RecordedRetrieval>,
     pub supplied: Option<SuppliedDecision>,
+    /// The usage of the original response. It belongs to the original Attempt only.
+    pub usage: ModelUsage,
     pub fenced: bool,
     pub run_write: RetrievalRunWrite,
 }
@@ -280,6 +284,7 @@ pub(crate) async fn settle(
         decision,
         retrieval,
         supplied,
+        usage,
         fenced,
         run_write,
     } = settled;
@@ -325,11 +330,12 @@ pub(crate) async fn settle(
     marker["advances_continuation"] = serde_json::json!(advances_continuation);
     let reservation_released = supplies_decision;
     marker["reservation_released"] = serde_json::json!(reservation_released);
-    marker["usage_kind"] = serde_json::json!("unknown");
+    let usage = crate::agent_run_observation::encode_usage(usage);
+    marker["usage_kind"] = usage["kind"].clone();
     next["original_result_retrieval"] = marker;
     next["reservation"] =
         serde_json::json!({"kind": "worst_case", "released": reservation_released});
-    next["usage"] = serde_json::json!({"kind": "unknown"});
+    next["usage"] = usage;
     if let (true, Some(supplied)) = (supplies_decision, supplied) {
         let binding = Uuid::now_v7().to_string();
         let decision_id = Uuid::now_v7().to_string();

@@ -180,7 +180,8 @@ pub(crate) async fn record(
         serde_json::from_str(&loaded.get::<_, String>(0)).map_err(unavailable)?;
     let (dispatch_state, decision_id, binding_id) = match observation {
         Observation::Terminal(response) => {
-            payload["items"] = crate::agent_run_observation::encode_items(&response.items);
+            payload["items"] =
+                crate::agent_run_observation::merge_items(&payload["items"], &response.items);
             payload["usage"] = crate::agent_run_observation::encode_usage(response.usage);
             if let Some(reference) = &response.response_reference {
                 payload["response_reference"] = serde_json::json!(reference);

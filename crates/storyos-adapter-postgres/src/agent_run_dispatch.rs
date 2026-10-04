@@ -6,7 +6,7 @@ use storyos_application::{
 use storyos_core::NativeStreamItem;
 
 use super::PostgresProjectReader;
-use crate::agent_run_observation::encode_items;
+use crate::agent_run_observation::merge_items;
 use crate::agent_run_work::{
     CreateAdmission, RunPhaseRow, WorkPhase, admit_create, complete_challenge_error,
     complete_database_error, hold_if_requested, load_run_phase, settle_one_phase, update_run,
@@ -190,21 +190,9 @@ impl ModelDispatchStore for PostgresProjectReader {
             if run.settled() {
                 return Ok(Some(StreamStop::StaleFence));
             }
-            let mut items = serde_json::from_str::<serde_json::Value>(&target.get::<_, String>(0))
-                .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
-                .get("items")
-                .and_then(serde_json::Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            for event in encode_items(events).as_array().into_iter().flatten() {
-                match items
-                    .iter_mut()
-                    .find(|item| item["item_id"] == event["item_id"])
-                {
-                    Some(item) => *item = event.clone(),
-                    None => items.push(event.clone()),
-                }
-            }
+            let committed = serde_json::from_str::<serde_json::Value>(&target.get::<_, String>(0))
+                .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+            let items = merge_items(&committed["items"], events);
             transaction
                 .client
                 .execute(
@@ -219,7 +207,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                         &claim.project_scope.project_id.as_ref(),
                         &claim.run_id,
                         &dispatch.model_attempt_id,
-                        &serde_json::Value::Array(items).to_string(),
+                        &items.to_string(),
                     ],
                 )
                 .await

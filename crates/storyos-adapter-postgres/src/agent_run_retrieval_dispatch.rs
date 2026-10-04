@@ -190,6 +190,7 @@ pub(crate) async fn record_original_result(
                 manifest_id,
             }),
             supplied: retrieved.supplied,
+            usage: retrieved.usage,
             fenced,
             run_write: if payload.get("unknown_create_successor").is_some() {
                 RetrievalRunWrite::Defer

@@ -112,7 +112,7 @@ pub(crate) async fn persist_create_result(
         _ => None,
     };
     let mut payload = retained_payload.clone();
-    payload["items"] = encode_items(result.items);
+    payload["items"] = merge_items(&retained_payload["items"], result.items);
     payload["decision"] = match (&result.outcome, decision_id.as_deref()) {
         (
             AgentDecisionOutcome::Decision {
@@ -191,6 +191,24 @@ pub(crate) async fn persist_create_result(
         Some(kind) => WorkPhase::Hold(kind),
         None => WorkPhase::Done(CompleteAgentRun::Settled),
     })
+}
+
+/// Keeps the committed stream items in order. An item with a known item ID replaces that item.
+pub(crate) fn merge_items(
+    committed: &serde_json::Value,
+    events: &[NativeStreamItem],
+) -> serde_json::Value {
+    let mut items = committed.as_array().cloned().unwrap_or_default();
+    for event in encode_items(events).as_array().into_iter().flatten() {
+        match items
+            .iter_mut()
+            .find(|item| item["item_id"] == event["item_id"])
+        {
+            Some(item) => *item = event.clone(),
+            None => items.push(event.clone()),
+        }
+    }
+    serde_json::Value::Array(items)
 }
 
 pub(crate) fn encode_items(items: &[NativeStreamItem]) -> serde_json::Value {
