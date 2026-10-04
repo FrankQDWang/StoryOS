@@ -6,11 +6,6 @@ use crate::digest::sha256_prefixed;
 use crate::release1_chapter_query_artifacts::{
     CHAPTER_FIXTURE_PATHS, CHAPTER_RESPONSE_SCHEMA_PATH,
 };
-use crate::release1_command_challenge_artifacts::{
-    CHALLENGE_REQUEST_SCHEMA_PATH, CHALLENGE_RESPONSE_SCHEMA_PATH,
-};
-use crate::release1_project_query_artifacts::PROJECT_RESPONSE_SCHEMA_PATH;
-use crate::release1_protocol_profile_artifacts::RESPONSE_SCHEMA_PATH;
 use crate::{
     ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason,
     AuthoritativeChapterRevision, GetChapterResponse, NoEffectReason,
@@ -476,101 +471,29 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         );
         resolved_references.insert(relative);
     }
-    let mut expected_references = vec![
-        crate::release1_close_editor_flow_draft_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_close_editor_flow_draft_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_expand_refused_edit_draft_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_expand_refused_edit_draft_artifacts::RESPONSE_SCHEMA_PATH,
-        RESPONSE_SCHEMA_PATH,
-        PROJECT_RESPONSE_SCHEMA_PATH,
-        CHAPTER_RESPONSE_SCHEMA_PATH,
-        CHALLENGE_REQUEST_SCHEMA_PATH,
-        CHALLENGE_RESPONSE_SCHEMA_PATH,
-        crate::release1_create_project_artifacts::CHALLENGE_REQUEST_SCHEMA_PATH,
-        crate::release1_create_project_artifacts::CHALLENGE_RESPONSE_SCHEMA_PATH,
-        crate::release1_create_project_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_create_project_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_list_projects_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_update_project_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_update_project_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_project_assistance_artifacts::GET_RESPONSE_SCHEMA_PATH,
-        crate::release1_project_assistance_artifacts::UPDATE_REQUEST_SCHEMA_PATH,
-        crate::release1_project_assistance_artifacts::UPDATE_RESPONSE_SCHEMA_PATH,
-        crate::release1_agent_run_artifacts::CREATE_REQUEST_SCHEMA_PATH,
-        crate::release1_agent_run_artifacts::CREATE_RESPONSE_SCHEMA_PATH,
-        crate::release1_agent_run_artifacts::GET_RESPONSE_SCHEMA_PATH,
-        crate::release1_agent_run_control_artifacts::PAUSE_REQUEST_SCHEMA_PATH,
-        crate::release1_agent_run_control_artifacts::PAUSE_RESPONSE_SCHEMA_PATH,
-        crate::release1_agent_run_control_artifacts::CANCEL_REQUEST_SCHEMA_PATH,
-        crate::release1_agent_run_control_artifacts::CANCEL_RESPONSE_SCHEMA_PATH,
-        crate::release1_agent_run_control_artifacts::STEER_REQUEST_SCHEMA_PATH,
-        crate::release1_agent_run_control_artifacts::STEER_RESPONSE_SCHEMA_PATH,
-        crate::release1_proposal_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_accept_proposal_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_accept_proposal_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_reject_proposal_operations_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_reject_proposal_operations_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_reopen_rejected_operations_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_reopen_rejected_operations_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_replan_proposal_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_replan_proposal_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_withdraw_proposal_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_withdraw_proposal_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_reopen_withdrawn_proposal_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_reopen_withdrawn_proposal_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_proposal_generation_decision_artifacts::COMPLETE_REQUEST_SCHEMA_PATH,
-        crate::release1_proposal_generation_decision_artifacts::COMPLETE_RESPONSE_SCHEMA_PATH,
-        crate::release1_proposal_generation_decision_artifacts::CONTINUE_REQUEST_SCHEMA_PATH,
-        crate::release1_proposal_generation_decision_artifacts::CONTINUE_RESPONSE_SCHEMA_PATH,
-        crate::release1_archive_project_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_archive_project_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_create_volume_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_create_volume_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_create_chapter_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_create_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_update_volume_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_update_volume_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_delete_volume_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_delete_volume_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_update_chapter_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_update_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_delete_chapter_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_delete_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_set_current_chapter_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_set_current_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_undo_latest_author_action_artifacts::REQUEST_SCHEMA_PATH,
-        crate::release1_undo_latest_author_action_artifacts::RESPONSE_SCHEMA_PATH,
-        crate::release1_editor_session_artifacts::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
-        crate::release1_editor_session_artifacts::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
-        crate::release1_editor_session_artifacts::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
-    ];
-    if crate::release1_author_edit_artifacts::IS_IMPLEMENTED {
-        expected_references.extend([
-            crate::release1_author_edit_artifacts::REQUEST_SCHEMA_PATH,
-            crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH,
-        ]);
-    }
-    expected_references.push(crate::release1_author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_refused_edit_draft_artifacts::RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_snapshot_artifacts::SNAPSHOT_RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_manuscript_tree_artifacts::RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_manuscript_search_artifacts::REQUEST_SCHEMA_PATH);
-    expected_references.push(crate::release1_manuscript_search_artifacts::RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_manuscript_statistics_artifacts::RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_readable_export_artifacts::REQUEST_SCHEMA_PATH);
-    expected_references.push(crate::release1_readable_export_artifacts::RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_readable_export_query_artifacts::RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_project_export_artifacts::REQUEST_SCHEMA_PATH);
-    expected_references.push(crate::release1_project_export_artifacts::RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_project_export_query_artifacts::RESPONSE_SCHEMA_PATH);
-    expected_references
-        .push(crate::release1_snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH);
-    expected_references.push(crate::release1_takeover_artifacts::REQUEST_SCHEMA_PATH);
-    expected_references.push(crate::release1_takeover_artifacts::RESPONSE_SCHEMA_PATH);
-    assert_eq!(
-        resolved_references,
-        expected_references.into_iter().map(str::to_owned).collect()
-    );
+    let expected_references = crate::release1_operation_registry::RELEASE1_OPERATIONS
+        .iter()
+        .flat_map(|artifacts| {
+            let schema_paths = (artifacts.schemas)()
+                .into_iter()
+                .map(|schema| (schema.schema_id, schema.path))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            artifacts
+                .operations
+                .iter()
+                .flat_map(move |registered| {
+                    let operation = registered.operation;
+                    let request = (operation.method != "GET").then_some(operation.request_schema);
+                    request
+                        .into_iter()
+                        .chain([operation.response_schema])
+                        .map(|schema_id| schema_paths[schema_id].to_owned())
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(resolved_references, expected_references);
 }
 
 #[test]
@@ -792,6 +715,22 @@ const KNOWN_HTTP_STATUS_DRIFT: [&str; 6] = [
     "getChapter",
 ];
 
+/// Operations whose contract-graph preconditions omit a reviewed route-catalog precondition.
+const KNOWN_PRECONDITION_DRIFT: [&str; 12] = [
+    "createEditorSession",
+    "applyAuthorEdit",
+    "acceptProposal",
+    "rejectProposalOperations",
+    "replanProposal",
+    "reopenRejectedOperations",
+    "completeReadyPartialProposal",
+    "continueProposalGeneration",
+    "expandRefusedEditDraftToProposal",
+    "closeEditorFlowDraft",
+    "undoLatestAuthorAction",
+    "getApplyAuthorEditOutcome",
+];
+
 #[test]
 fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() {
     let generated = super::generated_files()
@@ -811,6 +750,15 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
     let mut source_surfaces = Vec::new();
     let mut reviewed_surfaces = Vec::new();
     let mut http_status_drift = Vec::new();
+    let mut precondition_drift = Vec::new();
+    let mut client_positions = Vec::new();
+    let mut declaration_positions = Vec::new();
+    let schema_catalog: serde_json::Value = serde_json::from_slice(
+        &generated["generated/schema-catalog/storyos-public-release-1.json"],
+    )
+    .expect("schema catalog must be JSON");
+    let graph: serde_json::Value = serde_json::from_slice(&super::contract_graph_bytes())
+        .expect("contract graph must be JSON");
     for artifacts in crate::release1_operation_registry::RELEASE1_OPERATIONS {
         let schema_paths = (artifacts.schemas)()
             .into_iter()
@@ -928,8 +876,46 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
                 .collect::<Vec<u16>>();
             assert_eq!(openapi_statuses, statuses, "{id}");
 
-            assert!(client.contains(&format!("export async function {id}(")));
-            assert!(declaration.contains(&format!("export declare function {id}(")));
+            client_positions.push(client.find(&format!("export async function {id}(")));
+            declaration_positions.push(declaration.find(&format!("export declare function {id}(")));
+            assert!(
+                schema_catalog["implemented_operations"]
+                    .as_array()
+                    .expect("implemented operations must be an array")
+                    .contains(&serde_json::json!(id)),
+                "{id}"
+            );
+            let graph_entry = graph["operations"]
+                .as_array()
+                .expect("contract graph operations must be an array")
+                .iter()
+                .find(|entry| entry["operation_id"] == id);
+            match registered.graph {
+                crate::release1_operation_registry::ContractGraphEntry::Preconditions(
+                    preconditions,
+                ) => {
+                    let graph_entry =
+                        graph_entry.unwrap_or_else(|| panic!("contract graph must contain {id}"));
+                    assert_eq!(graph_entry["kind"], reviewed["kind"], "{id}");
+                    assert_eq!(
+                        graph_entry["preconditions"],
+                        serde_json::json!(preconditions),
+                        "{id}"
+                    );
+                    let reviewed_preconditions = reviewed["preconditions"]
+                        .as_array()
+                        .expect("reviewed preconditions must be an array");
+                    if !reviewed_preconditions
+                        .iter()
+                        .all(|precondition| preconditions.iter().any(|own| precondition == own))
+                    {
+                        precondition_drift.push(id);
+                    }
+                }
+                crate::release1_operation_registry::ContractGraphEntry::Absent => {
+                    assert!(graph_entry.is_none(), "{id}");
+                }
+            }
 
             let fixture_ids = fixture_catalog["fixtures"]
                 .as_array()
@@ -944,4 +930,12 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
     }
     assert_eq!(source_surfaces, reviewed_surfaces);
     assert_eq!(http_status_drift, KNOWN_HTTP_STATUS_DRIFT);
+    assert_eq!(precondition_drift, KNOWN_PRECONDITION_DRIFT);
+    for positions in [client_positions, declaration_positions] {
+        assert!(positions.iter().all(Option::is_some));
+        assert!(
+            positions.is_sorted(),
+            "generated functions must follow the registry order"
+        );
+    }
 }
