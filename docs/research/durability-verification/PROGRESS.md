@@ -82,3 +82,13 @@
 - Reproducers return 1 for an invariant failure and 2 for a probe error. Public
   query correlation IDs are excluded only from independent query comparisons.
   SQL errors and exact command replies remain in evidence; nonces are omitted.
+- Step 6: concurrent exact retry also returned 503 with one Receipt and one
+  Admission. A later sequential replay returned the original full reply.
+  The adapter starts SERIALIZABLE and propagates errors; no retry loop exists
+  in its caller chain. This is the same failure class as Step 4.
+- The fixed matrix now includes before-Admission, after-Admission, and
+  pre-Core-COMMIT cuts, each by Server SIGKILL and backend termination. A
+  second lock on idempotency stops Core after its effect writes but before
+  COMMIT. The lost-ack case discards a received HTTP reply then kills Server;
+  it does not claim a cut inside Server response serialization.
+- Next: run round 1, minimize confirmed findings, then replay the full matrix.

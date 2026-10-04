@@ -47,6 +47,7 @@ class SQL {
 }
 const monitor = new SQL();
 const gate = new SQL();
+const tailGate = new SQL();
 let server, baseUrl, bind = '127.0.0.1:0';
 async function start() {
   const database = new URL(process.env.STORYOS_TEST_DATABASE_URL);
@@ -83,8 +84,8 @@ async function command(kind, route, request, session = 'a', extra = {}, method =
     method, route_template: `/api/v1/projects/{project_id}${route}`, command_schema: request.command_schema,
     canonical_command_digest: await api[`digest${kind[0].toUpperCase()}${kind.slice(1)}`](request), idempotency_key: key,
   } });
-  return { key, request, session, send: () => api[kind]({ ...options(session), ...extra, request,
-    idempotencyKey: key, antiForgery: nonce.nonce }),
+  return { key, request, session, send: (overrides = {}) => api[kind]({ ...options(session), ...extra, request,
+    idempotencyKey: key, antiForgery: nonce.nonce, ...overrides }),
     outcome: () => api.getApplyAuthorEditOutcome({ ...options(session), idempotencyKey: key, antiForgery: nonce.nonce }) };
 }
 async function open(session = 'a') {
@@ -155,7 +156,18 @@ async function run() {
   record('environment', await monitor.json(`SELECT json_build_object('postgres',version(),'isolation',current_setting('default_transaction_isolation'),
     'fsync',current_setting('fsync'),'synchronous_commit',current_setting('synchronous_commit'),'full_page_writes',current_setting('full_page_writes'))`));
   let writer = scenario.startsWith('concurrent-') ? undefined : await open();
-  if (scenario === 'durable') {
+  if (scenario === 'lost-ack') {
+    const cmd = await edit(writer, 'lost'); const before = await counts();
+    record('discarded_ack', await capture(cmd.send({ fetchImpl: async (url, init) => {
+      const response = await options().fetchImpl(url, init); await response.arrayBuffer();
+      await stop(); throw new Error('Acknowledgement discarded after HTTP delivery; Server killed');
+    } })));
+    await start(); const outcome = await cmd.outcome();
+    assert.equal(outcome.outcome.outcome_kind, 'committed');
+    assert.deepEqual(await cmd.send(), outcome.outcome.response);
+    assert.equal((await counts()).commits, before.commits + 1); record('lost_ack_recovered', outcome);
+    await smoke(writer);
+  } else if (scenario === 'durable') {
     const cmd = await edit(writer); const ack = await cmd.send(), before = await counts(), body = await chapter();
     for (const mode of ['server', 'database']) {
       if (mode === 'server') { await stop(); await start(); }
@@ -173,11 +185,16 @@ async function run() {
     const cmd = await edit(writer, 'cut'), before = await counts(), body = await chapter();
     await hold(phase === 'admission' ? 'command_idempotency' : 'authoritative_heads',
       phase === 'admission' ? `${scope} AND idempotency_key='${cmd.key}'` : `${scope} AND manuscript_object_id='${CHAPTER}'`);
-    const pending = capture(cmd.send()); const rows = await blocked(1);
-    await cut(mode, rows); record('interrupted_reply', await pending); await gate.query('ROLLBACK');
+    const pending = capture(cmd.send()); let rows = await blocked(1);
+    if (phase === 'commit') {
+      await tailGate.query(`BEGIN; SELECT 1 FROM storyos.command_idempotency WHERE ${scope} AND idempotency_key='${cmd.key}' FOR UPDATE`);
+      await gate.query('ROLLBACK'); rows = await blocked(1, 'UPDATE storyos.command_idempotency');
+    }
+    record('at_cut', await counts());
+    await cut(mode, rows); record('interrupted_reply', await pending); await gate.query('ROLLBACK'); await tailGate.query('ROLLBACK');
     if (mode === 'server') await start();
     assert.deepEqual(await chapter(), body); record('before_recovery', { before, after: await counts() });
-    if (phase === 'core') {
+    if (phase !== 'admission') {
       const outcome = await cmd.outcome(); assert.equal(outcome.outcome.outcome_kind, 'committed');
       const ack = await cmd.send(); assert.deepEqual(ack, outcome.outcome.response);
       assert.equal((await counts()).commits, before.commits + 1); record('recovered_once', ack);
@@ -185,7 +202,8 @@ async function run() {
       assert.deepEqual(await counts(), before); const ack = await cmd.send(); assert.deepEqual(await cmd.send(), ack); record('retried_once', ack);
     }
     await smoke(writer);
-  } else if (scenario === 'concurrent-rename' || scenario === 'concurrent-retry') {
+  } else if (scenario === 'concurrent-rename' || scenario === 'concurrent-retry' || scenario === 'concurrent-rename-restart') {
+    if (scenario.endsWith('-restart')) { await stop(); await start(); }
     const first = await rename('a', 'First'), second = scenario === 'concurrent-retry' ? first : await rename('b', 'Second');
     await hold('projects'); const p1 = capture(first.send()); await blocked(1);
     const p2 = capture(second.send()); await blocked(2); await gate.query('ROLLBACK');
@@ -193,6 +211,16 @@ async function run() {
     const ack = await first.send(); assert.deepEqual(await first.send(), ack);
     record('settled_counts', await counts()); writer = await open(); await smoke(writer);
     record('verdict', replies.every(x => x.ok) ? 'holds' : 'fails');
+  } else if (scenario === 'concurrent-author') {
+    writer = await open(); const seed = await edit(writer, 'SEED'); const ack = await seed.send();
+    const before = await counts(), cmd = await edit(writer, 'NEXT'), ren = await rename('b', 'Concurrent');
+    await hold('authoritative_heads', `${scope} AND manuscript_object_id='${CHAPTER}'`);
+    const pending = capture(cmd.send()); await blocked(1); const renamed = await ren.send();
+    await gate.query('ROLLBACK'); record('concurrent_author_reply', await pending);
+    record('concurrent_rename_reply', renamed); record('reconcile_author', await capture(cmd.outcome()));
+    assert.deepEqual(await seed.send(), ack);
+    assert.ok((await chapter()).chapter.current_revision.body.startsWith(ack.effect.authoritative_revision.body));
+    record('acknowledged_seed_preserved', { ack, before, after: await counts() }); await smoke(writer);
   } else if (scenario === 'session-replay') {
     const before = writer.value;
     await smoke(writer); const observer = await open('b'), take = await takeover(observer, before.writer.writer_generation);
@@ -227,7 +255,7 @@ async function run() {
 try { await run(); }
 catch (e) { record('blocked_or_probe_error', { message: e.message, stack: e.stack }); process.exitCode = 2; }
 finally {
-  await stop(); await gate.close(); await monitor.close();
+  await stop(); await gate.close(); await tailGate.close(); await monitor.close();
   const logs = spawnSync('docker', ['logs', container], { encoding: 'utf8' });
   const errors = (logs.stdout + logs.stderr).split('\n').filter(line => /ERROR:|DETAIL:.*(Process|Reason)|HINT:.*retried/.test(line));
   record('postgres_errors', errors);
