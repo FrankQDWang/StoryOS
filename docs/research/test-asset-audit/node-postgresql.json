@@ -1829,5 +1829,589 @@
     "evidence": "Keep the two nonempty publicly authored export fixtures consumed by the mixed physical recovery drill. Losing archived output or its retained records would break scripts/verify-recovery-hold.sh:175 and its post-restore inspector at :718. This test verifies content before Archive and ready/counts afterward; it does not itself perform a restore or re-download after Archive. Other export cases do not supply the exact two Projects consumed by the recovery script. The inspector checks readable prose but only nonempty Archive ZIP bytes after restore, not byte equality.",
     "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558; apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124; crates/storyos-adapter-postgres/src/recovery_visibility_proof_tests.rs:363",
     "remove": null
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 216,
+    "test": "one collection request produces three exact locations across two Chapters: English",
+    "case": {
+      "value": "",
+      "source_line": 216
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "English Chapter-title and paragraph references must resolve to three declared locations in manuscript order, include both owned Chapters in the exact sent/retained wire, and exclude same-title foreign prose. Explicit collection input bypasses natural-language resolution; Chinese exercises different grammar. Server restart must preserve decisions and Proposals without applying authoritative prose.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:216 [chinese]; apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:216 [ SCRIPT:reverse_locations]",
+    "remove": null,
+    "id": "NP158"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 216,
+    "test": "one collection request produces three exact locations across two Chapters: Chinese",
+    "case": {
+      "value": "chinese",
+      "source_line": 216
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Chinese title references deliberately repeat and reverse paragraph mentions. Resolution must deduplicate and return manuscript order with exact candidate-location binding. English uses already ordered references without duplicate mentions; reversing producer output does not exercise this parser or resolver ordering.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:216 [English]; apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:216 [ SCRIPT:reverse_locations]",
+    "remove": null,
+    "id": "NP159"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 216,
+    "test": "one collection request produces three exact locations across two Chapters: reversed producer locations",
+    "case": {
+      "value": " SCRIPT:reverse_locations",
+      "source_line": 216
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Reversing the producer location array must not swap candidate text/explanation between declared Blocks or change Chapter order. The normal English/Chinese runs supply producer records in canonical order and can pass if persistence uses array position instead of Block identity. This variant uses an explicit collection target, not language resolution.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:216 [English]; apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:571 [ SCRIPT:reverse_locations]",
+    "remove": null,
+    "id": "NP160"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 273,
+    "test": "ordinary clarification keeps the Conversation and resolves fresh targets with continuation",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Ambiguous duplicate Chapter titles must yield a native Clarification with no passage targets/prose; later requests in the same Conversation must resolve fresh numbered/current Chapter references and bind incremental input to the preceding continuation. Successful initial collection requests never leave ambiguity or change target between conversational turns.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:216; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:128",
+    "remove": null,
+    "id": "NP161"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 305,
+    "test": "collection refuses deleted before destination dispatch",
+    "case": {
+      "value": "deleted",
+      "source_line": 305
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A deleted secondary Chapter must block the whole collection before dispatch and remove its retained prose from selected Context. Scalar removed-target-after-admission coverage checks a later opening phase; foreign and stale inputs do not execute the removed manuscript-object lookup. A subsequent Worker run must not change the observed result.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:305 [other parameters]; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58",
+    "remove": null,
+    "id": "NP162"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 305,
+    "test": "collection refuses foreign before destination dispatch",
+    "case": {
+      "value": "foreign",
+      "source_line": 305
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A valid Chapter from another Project must not enter collection Context or destination input. Ordinary collection success includes only owned targets; its foreign-text exclusion does not submit a foreign ID. An authenticated owner of both fixtures still must not cross Project scope. A subsequent Worker run must not change the observed result.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:305 [other parameters]; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58",
+    "remove": null,
+    "id": "NP163"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 305,
+    "test": "collection refuses stale before destination dispatch",
+    "case": {
+      "value": "stale",
+      "source_line": 305
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A declared secondary target bound to another Chapter's Revision must block dispatch even though its Chapter and Block IDs exist. Deleted/foreign targets fail earlier lookup; missing Block checks membership instead of matching the declared base. A subsequent Worker run must not change the observed result.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:305 [other parameters]; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58",
+    "remove": null,
+    "id": "NP164"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 305,
+    "test": "collection refuses missing_block before destination dispatch",
+    "case": {
+      "value": "missing_block",
+      "source_line": 305
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An existing secondary Chapter/Revision with an unknown Block ID must block dispatch and exclude its prose. Stale-base coverage has valid member IDs; a missing membership guard can pass every successful collection test. A subsequent Worker run must not change the observed result.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:305 [other parameters]; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58",
+    "remove": null,
+    "id": "NP165"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 305,
+    "test": "collection refuses over_budget before destination dispatch",
+    "case": {
+      "value": "over_budget",
+      "source_line": 305
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An oversized secondary passage must block the collection and exclude Working Target content with no Attempt or evidence. The ordinary oversized single-Chapter case does not invoke assemble_passage_collection or its all-target aggregation; this test does not assert a specific budget reason. A subsequent Worker run must not change the observed result.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:305 [other parameters]; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58",
+    "remove": null,
+    "id": "NP166"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 305,
+    "test": "collection refuses reservation before destination dispatch",
+    "case": {
+      "value": "reservation",
+      "source_line": 305
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An existing reservation in the secondary Chapter must refuse just that location while opening both permitted locations in the first Chapter. Same-Chapter late reservation tests neither cross a Chapter group nor install a reservation before collection admission. Despite the test title this case does dispatch and produce a Decision. A subsequent Worker run must not change the observed result.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:571; apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:216",
+    "remove": null,
+    "id": "NP167"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 354,
+    "test": "one request produces explained exact locations and keeps them after restart",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Transfer exact single-Chapter location/Explanation/Validation Receipt checks, pre-Acceptance unchanged Chapter, Server restart equality and repeated Worker no-change checks into the Bundle case before its first Acceptance. It already creates the same two-Block typed Proposal but does not currently perform these restart observations. Preserve these assertions before settlement changes Operation resolutions.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:999",
+    "remove": null,
+    "id": "NP168"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the stream boundary without revival",
+    "case": {
+      "value": "stream",
+      "source_line": 396
+    },
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The single-Chapter typed stream case repeats the corresponding collection_stream transition through the same claim/observation recovery code. Both carry produced locations through open_selected_prose_change; the collection case also requires two Chapter groups, exact retained items, no repeated installation and unchanged authority. Native frame shapes differ but this case adds no frame-specific recovery rule. Delete only this parameter, not the shared body.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [collection_stream]",
+    "remove": null,
+    "id": "NP169"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the decision boundary without revival",
+    "case": {
+      "value": "decision",
+      "source_line": 396
+    },
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The single-Chapter typed decision case repeats the corresponding collection_decision transition through the same claim/observation recovery code. Both carry produced locations through open_selected_prose_change; the collection case also requires two Chapter groups, exact retained items, no repeated installation and unchanged authority. Native frame shapes differ but this case adds no frame-specific recovery rule. Delete only this parameter, not the shared body.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [collection_decision]",
+    "remove": null,
+    "id": "NP170"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the cancelled boundary without revival",
+    "case": {
+      "value": "cancelled",
+      "source_line": 396
+    },
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The single-Chapter typed cancelled case repeats the corresponding collection_cancelled transition through the same claim/observation recovery code. Both carry produced locations through open_selected_prose_change; the collection case also requires two Chapter groups, exact retained items, no repeated installation and unchanged authority. Native frame shapes differ but this case adds no frame-specific recovery rule. Delete only this parameter, not the shared body.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [collection_cancelled]",
+    "remove": null,
+    "id": "NP171"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the collection_stream boundary without revival",
+    "case": {
+      "value": "collection_stream",
+      "source_line": 396
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Killing the Worker after retained native items but before Decision publication, expiring its lease and restarting the Server must recover one typed result across both Chapters without duplicate Proposals. Decision-cut coverage begins after installation; ordinary streaming does not kill/reclaim this pre-Decision work. Terminal Pause/Cancel variants release the held Worker; only nonterminal variants kill it and restart the Server.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [other collection parameters]; apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:532",
+    "remove": null,
+    "id": "NP172"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the collection_decision boundary without revival",
+    "case": {
+      "value": "collection_decision",
+      "source_line": 396
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "After a typed collection Decision is installed, Worker kill/reclaim and Server restart must preserve its raw decision bytes and all location identities. The message also has the stream prefix, so recovery must not enter scalar generation when retained locations exist. Pre-Decision recovery cannot detect reinstallation after a durable Decision. Terminal Pause/Cancel variants release the held Worker; only nonterminal variants kill it and restart the Server.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [other collection parameters]; apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:532",
+    "remove": null,
+    "id": "NP173"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the collection_cancelled boundary without revival",
+    "case": {
+      "value": "collection_cancelled",
+      "source_line": 396
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Cancel while collection native items are held must retain those items/Attempt, leave the Decision absent, create no Proposals in either Chapter and remain cancelled after another Worker run. Generic advisory cancellation has no typed location installation to suppress; Pause ends in a different state. Terminal Pause/Cancel variants release the held Worker; only nonterminal variants kill it and restart the Server.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [other collection parameters]; apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:532",
+    "remove": null,
+    "id": "NP174"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the collection_paused boundary without revival",
+    "case": {
+      "value": "collection_paused",
+      "source_line": 396
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Pause while collection native items are held must keep paused status, absent Decision and zero Proposals across both Chapters after release and repeated Worker execution. Cancel tests another persisted terminal status; advisory Pause lacks typed candidate output that could be installed late. Terminal Pause/Cancel variants release the held Worker; only nonterminal variants kill it and restart the Server.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [other collection parameters]; apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:532",
+    "remove": null,
+    "id": "NP175"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the collection_rejected boundary without revival",
+    "case": {
+      "value": "collection_rejected",
+      "source_line": 396
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Reject an already installed collection Proposal while its Decision is held, then kill/reclaim the Worker and restart the Server. The exact rejected Proposal snapshots and immutable Decision must survive; ordinary Decision recovery has no intervening author resolution and cannot detect revival. Terminal Pause/Cancel variants release the held Worker; only nonterminal variants kill it and restart the Server.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [other collection parameters]; apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:532",
+    "remove": null,
+    "id": "NP176"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the candidate_stream boundary without revival",
+    "case": {
+      "value": "candidate_stream",
+      "source_line": 396
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A secondary-candidate revision interrupted before Decision must recover as a revision of the existing target, create no new Proposal and keep authoritative prose unchanged. Collection recovery opens new Proposals; ordinary candidate steering does not kill/reclaim this Attempt. The test does not assert exact revised candidate bytes after this pre-Decision cut. Terminal Pause/Cancel variants release the held Worker; only nonterminal variants kill it and restart the Server.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [collection variants]; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:612",
+    "remove": null,
+    "id": "NP177"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the candidate_decision boundary without revival",
+    "case": {
+      "value": "candidate_decision",
+      "source_line": 396
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A secondary-candidate Decision installed before Worker kill must remain exactly frozen after reclaim/Server restart, with the current candidate snapshot unchanged and no new Proposal. Pre-Decision recovery has no installed revision to protect against double application; steering admits a new instruction instead. Terminal Pause/Cancel variants release the held Worker; only nonterminal variants kill it and restart the Server.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [collection variants]; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:612",
+    "remove": null,
+    "id": "NP178"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the candidate_cancelled boundary without revival",
+    "case": {
+      "value": "candidate_cancelled",
+      "source_line": 396
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Cancel a held secondary-candidate revision before Decision and require the existing candidate snapshot unchanged, no new Proposal, absent Decision and stable cancelled state after Worker release. Collection cancellation has no existing candidate to protect. Terminal Pause/Cancel variants release the held Worker; only nonterminal variants kill it and restart the Server.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [collection variants]; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:612",
+    "remove": null,
+    "id": "NP179"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 396,
+    "test": "typed result recovers the candidate_paused boundary without revival",
+    "case": {
+      "value": "candidate_paused",
+      "source_line": 396
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Pause a held secondary-candidate revision before Decision and require the existing candidate snapshot unchanged, no new Proposal and stable paused state after release/repeated Worker. Cancel uses another status; collection Pause has no candidate revision branch. Terminal Pause/Cancel variants release the held Worker; only nonterminal variants kill it and restart the Server.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:396 [collection variants]; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:612",
+    "remove": null,
+    "id": "NP180"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 525,
+    "test": "scalar requests do not enter the typed script undeclared_location",
+    "case": {
+      "value": "undeclared_location",
+      "source_line": 525
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "An unresolved singular request must Clarify without creating a Proposal, while the legacy colon-prefixed singular request must still open scalar prose with no locations field. Typed collection success never checks scalar absence of locations; ordinary Clarification lacks this legacy scalar response comparison. The SCRIPT suffix is inert in both requests, so retain one compatibility input only; this is not undeclared typed-output rejection.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:273; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:353",
+    "remove": null,
+    "id": "NP181"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 525,
+    "test": "scalar requests do not enter the typed script stale_location_base",
+    "case": {
+      "value": "stale_location_base",
+      "source_line": 525
+    },
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Both scalar prefixes take identical paths for these two suffixes. apply_prose_changes returns before producing locations for the scalar request; unresolved ordinary input yields the same Clarification. The retained undeclared_location parameter checks the identical no-Proposal/no-locations/unchanged-authority behavior. Neither parameter injects a malformed typed location.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:525 [undeclared_location]",
+    "remove": null,
+    "id": "NP182"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 548,
+    "test": "unusable typed output malformed_locations retains evidence without candidates",
+    "case": {
+      "value": "malformed_locations",
+      "source_line": 548
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An empty explanation on the first otherwise complete location must reject the whole typed result, not open the valid second candidate. This is the nonempty-explanation guard, independent of location identity and size. Repeated GET must preserve the complete Run apart from correlation ID.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:548 [other parameters]; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:353",
+    "remove": null,
+    "id": "NP183"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 548,
+    "test": "unusable typed output undeclared_location retains evidence without candidates",
+    "case": {
+      "value": "undeclared_location",
+      "source_line": 548
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A complete producer record naming an undeclared Block must reject all candidate installation while retaining its native JSON. Stale-base and empty-explanation inputs retain declared Block identity and cannot detect a missing identity check. Repeated GET must preserve the complete Run apart from correlation ID.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:548 [other parameters]; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:353",
+    "remove": null,
+    "id": "NP184"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 548,
+    "test": "unusable typed output stale_location_base retains evidence without candidates",
+    "case": {
+      "value": "stale_location_base",
+      "source_line": 548
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A producer record for a declared Block but a different base Revision must reject the whole result. Admission used a valid base; the admission stale-target test blocks before dispatch and does not check returned producer evidence. Repeated GET must preserve the complete Run apart from correlation ID.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:548 [other parameters]; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:353",
+    "remove": null,
+    "id": "NP185"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 548,
+    "test": "unusable typed output oversized_explanation retains evidence without candidates",
+    "case": {
+      "value": "oversized_explanation",
+      "source_line": 548
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A complete explanation above the bounded token limit must reject all typed candidates while preserving native output. Empty-explanation and valid output do not exercise the size check; oversized input Context is a different direction. Repeated GET must preserve the complete Run apart from correlation ID.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:548 [other parameters]; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:353",
+    "remove": null,
+    "id": "NP186"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 548,
+    "test": "unusable typed output incomplete retains evidence without candidates",
+    "case": {
+      "value": "incomplete",
+      "source_line": 548
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Incomplete native JSON with valid candidate bytes must remain inspectable without a Decision or newly opened Proposal. Complete invalid-location tests supply a terminal output; candidate incomplete-output coverage protects an existing candidate through another target branch. Repeated GET must preserve the complete Run apart from correlation ID.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:548 [other parameters]; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:353",
+    "remove": null,
+    "id": "NP187"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 548,
+    "test": "unusable typed output unselected retains evidence without candidates",
+    "case": {
+      "value": "unselected",
+      "source_line": 548
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A complete typed result published as commentary must retain native bytes but install no Decision or Proposal. The incomplete case has no terminal output; generic unselected advisory output has no produced locations that could be opened accidentally. Repeated GET must preserve the complete Run apart from correlation ID.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:548 [other parameters]; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:353",
+    "remove": null,
+    "id": "NP188"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 571,
+    "test": "a later reservation preserves the permitted location: ordered output",
+    "case": {
+      "value": "",
+      "source_line": 571
+    },
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The reverse_locations parameter injects the identical second-Block reservation after admission and requires the same permitted/refused outcomes, candidate text, Proposal count and unchanged Head. It additionally permutes producer order, so the ordinary-order input has no distinct reservation or persistence branch.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:571 [ SCRIPT:reverse_locations]",
+    "remove": null,
+    "id": "NP189"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 571,
+    "test": "a later reservation preserves the permitted location: reversed output",
+    "case": {
+      "value": " SCRIPT:reverse_locations",
+      "source_line": 571
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A second-Block reservation installed after admission must leave only the first location eligible even when producer locations arrive reversed. The response must bind candidate text and refusal to Block identity, not array order. Earlier cross-Chapter reservation exists before admission; successful reversed collection output has no refused location.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:305 [reservation]; apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:216 [ SCRIPT:reverse_locations]",
+    "remove": null,
+    "id": "NP190"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 657,
+    "test": "acceptProposal applies a reversed multi-operation set without using array order as authority",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "The Bundle test already submits a complete two-Operation set in reverse ID order and requires prose in manuscript order. Transfer this test's exact Receipt selected-ID order, both applied Operation resolutions and persisted Chapter GET comparison into that successful stage, then remove this separate fixture. Bundle validation gates the same downstream selected-operation application.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:999",
+    "remove": null,
+    "id": "NP191"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 712,
+    "test": "partial Acceptance preserves retained evidence and conflicts the remaining Operation",
+    "case": {
+      "value": "retained",
+      "source_line": 711
+    },
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The collection parameter creates the same two Operations in the first Chapter and executes the same partial Acceptance, response-loss/restart/replay, immutable history, fault rollback, remaining-Operation conflict, Replan and Archive corruption checks. It additionally preserves another Chapter and validates the collection wire. The retained branch has no assertion or mutation absent from collection; delete only this generated case.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:712 [collection]",
+    "remove": null,
+    "id": "NP192"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 712,
+    "test": "partial Acceptance preserves legacy_overwritten evidence and conflicts the remaining Operation",
+    "case": {
+      "value": "legacy_overwritten",
+      "source_line": 711
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "After partial Acceptance, overwritten historical base IDs must make Proposal GET unavailable and Archive admission fail invalid_provenance, while remaining Acceptance conflicts and Replan never rewrite that damaged history. The collection case keeps live history intact and tampers only a later captured Archive source; these enter different evidence readers.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:712 [collection]",
+    "remove": null,
+    "id": "NP193"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 712,
+    "test": "partial Acceptance preserves collection evidence and conflicts the remaining Operation",
+    "case": {
+      "value": "collection",
+      "source_line": 711
+    },
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Partial Acceptance must preserve original Revision/Validation Receipt rows through response loss, restart and exact replay, roll back a failing conflict-condition insert, conflict the remaining Operation, and Replan only that remainder without changing another Chapter. Archive must preserve exact original evidence/Attempt locations; a recomputed-digest source with rewritten history must fail completion. Single-Operation Acceptance has no successful sibling already applied; legacy_overwritten corrupts live history rather than captured source.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:712 [legacy_overwritten]; apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166",
+    "remove": null,
+    "id": "NP194"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 999,
+    "test": "acceptProposal refuses incomplete atomic Bundle closure then applies the closed set",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A one-member selection of an atomic two-Operation Bundle must refuse incomplete_bundle_closure, while the full reversed set applies text in manuscript order. Ordinary partial Acceptance is permitted and therefore cannot detect a missing Bundle constraint. Receive exact location/restart setup checks from :354 and successful Receipt/resolution/Chapter observations from :657 before removing those cases.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:354; apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:657; apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:712 [collection]; crates/storyos-core/src/accept_proposal_tests.rs:136",
+    "remove": null,
+    "id": "NP195"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 1055,
+    "test": "AI revises only the secondary candidate with a pending sibling",
+    "case": {
+      "value": "pending",
+      "source_line": 1055
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Revising the second pending Operation must leave the first pending Operation, primary candidate projection, source linkage and authoritative Chapter unchanged. A bug that revises every pending sibling would still pass the rejected-sibling variant, where the first Operation is no longer pending. Single-candidate steering has no sibling to protect.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:1055 [other sibling]; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:529",
+    "remove": null,
+    "id": "NP196"
+  },
+  {
+    "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+    "line": 1055,
+    "test": "AI revises only the secondary candidate with a rejected sibling",
+    "case": {
+      "value": "rejected",
+      "source_line": 1055
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Revising the second Operation must preserve a first sibling's rejected resolution and candidate bytes while keeping primary projection and Chapter unchanged. The pending-sibling input cannot detect revival of an already rejected Operation. Recovery tests preserve a frozen candidate but do not initiate a successful revision alongside a rejected sibling.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:1055 [other sibling]; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:529",
+    "remove": null,
+    "id": "NP197"
   }
 ]

@@ -1,6 +1,6 @@
 # Node PostgreSQL checkpoint
 
-Source review is partial: 157 runtime cases in 50 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
+Source review is partial: 197 runtime cases in 51 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
 
 | Reviewed file | Cases | Verdict counts |
 |---|---|---|
@@ -42,6 +42,7 @@ Source review is partial: 157 runtime cases in 50 files have individual verdicts
 | apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts | 3 | {'KEEP': 3} |
 | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts | 5 | {'KEEP': 5} |
+| apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts | 40 | {'KEEP': 32, 'MERGE': 2, 'DELETE': 6} |
 | apps/web/test/node-postgresql/snapshot-replay-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/node-postgresql/takeover-http.integration.test.ts | 1 | {'MERGE': 1} |
@@ -57,7 +58,7 @@ Source review is partial: 157 runtime cases in 50 files have individual verdicts
 
 ## Next files
 
-Continue Inline Proposal and multi-operation selection tests. Other Node PostgreSQL command files are reviewed.
+Continue Inline Proposal tests. Other Node PostgreSQL command files are reviewed.
 
 ## Evidence corrections and execution dependencies
 
@@ -74,7 +75,6 @@ Continue Inline Proposal and multi-operation selection tests. Other Node Postgre
 ## Pending files
 
 - apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts
-- apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts
 
 ## Structural and navigation checkpoint
 
@@ -148,3 +148,16 @@ Continue Inline Proposal and multi-operation selection tests. Other Node Postgre
 - recovery-archived-exports-http:122 is an executable fixture provider for scripts/verify-recovery-hold.sh:175. scripts/recovery-hold-drill.sh:105 and the post-restore call at verify-recovery-hold.sh:718 consume its named Projects. Keep this dependency. The test itself does not restore or re-download after Archive; the inspector later verifies readable prose and nonempty ZIP, not Archive byte equality.
 - export-acknowledgement-support.ts has no test declaration. SUPPORT.md records its retained callers and zero direct savings. Export Activity count regexes /0$/ and /1$/ are weaker than exact counts; no duplicate-count guarantee is inferred from them.
 - Updated CO106's comparison: readable HTTP now explicitly covers empty-Project bytes. The Core golden still uniquely covers empty Volume and absent Chapter body. No runtime or mutation check occurred; all conclusions here are source evidence.
+
+## Multi-operation checkpoint
+
+- NP158-NP197 cover all 40 runtime cases in settle-multi-operation-selections-http.integration.test.ts: 32 KEEP, six DELETE and two MERGE. There are 12 declarations, including a loop that generates three partial-Acceptance cases. Parameter values and declaration lines are explicit in JSON.
+- Keep English title/paragraph resolution, Chinese duplicate/reversed references and reversed producer order as distinct inputs. Foreign target submission differs from a successful owned-target request that merely checks foreign text absence. Each secondary-target refusal input reaches a separate lookup, membership, base or aggregate-budget condition.
+- The reservation parameter at :305 does dispatch and reports two opened locations plus one refusal. Its title incorrectly says before dispatch. Keep the after-admission reservation with reversed producer order at :571; delete its ordinary-order parameter because its inputs, state and assertions are otherwise identical.
+- Delete the single-Chapter stream/decision/cancelled recovery parameters in favor of collection_stream/collection_decision/collection_cancelled. Both install produced locations through the same opening and claim-recovery path; collection adds another Chapter group. Their native frame shapes differ, but no frame-specific recovery condition is exercised only by the deleted cases.
+- Keep the candidate-target recovery parameters: they revise an existing secondary candidate through another branch. The pre-Decision candidate recovery variant does not assert exact revised candidate bytes; its observable assertions are retained items, one typed location, no new Proposal and unchanged Chapter. Pause/Cancel release the held Worker; nonterminal cases kill it, expire the lease and restart the Server.
+- Keep one scalar compatibility parameter at :525, which checks Clarification versus legacy colon-prefixed scalar output with no locations field. Delete the second inert SCRIPT suffix. Neither suffix injects bad typed output in this test; six actual invalid/incomplete/unselected typed-output cases at :548 remain distinct.
+- MERGE :354 exact opening/Explanation/restart checks into :999 before Acceptance. MERGE :657 Receipt selection order, applied resolutions and persisted Chapter GET checks into :999 after its existing reversed closed-Bundle Acceptance. Neither case is immediately removable before transfer.
+- Delete partial-Acceptance history=retained in favor of history=collection: the latter runs all the same first-Chapter mutation, rollback, replay, Replan and captured-source corruption assertions, then adds cross-Chapter/wire checks. Keep legacy_overwritten, which damages live history and exercises unavailable GET plus rejected Archive admission instead of failed Archive completion.
+- Keep both secondary-candidate sibling states. A bug that revises every pending Operation would pass the rejected-sibling variant; a bug that revives a rejected sibling would pass the pending-sibling variant.
+- All six DELETE recommendations remove shared-line parameter elements, so their conservative immediate line estimate is zero. They still enter the final random sample population. No product/test mutation or execution occurred at this checkpoint.
