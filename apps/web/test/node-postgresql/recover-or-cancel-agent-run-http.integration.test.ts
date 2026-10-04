@@ -668,3 +668,43 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     await stopRealServer(started.server);
   }
 });
+
+test("a Pause before the Cancel still sends one Abort for the in-flight Attempt", async () => {
+  const dispatchHold = join(tmpdir(), "storyos-g03-pause-cancel.hold");
+  const started = await startRealServer();
+  let worker: Promise<void> | undefined;
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("c611"), "Pause Cancel Novel", "c6");
+    const run = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c621"));
+    const challenge = await cancelChallenge(started.baseUrl, prepared.fetchImpl, prepared.projectId, id("c631"), id("c632"));
+    writeFileSync(dispatchHold, "hold");
+    worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
+    await waitFor(
+      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id),
+      (current) => current.status === "claimed" && current.model_attempt.kind === "present",
+    );
+    const paused = await postPause(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id, id("c641"), id("c642"));
+    assert.equal(paused.response.effect.kind, "applied");
+    const cancelled = await postCancel(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id, id("c631"), id("c632"), challenge);
+    assert.equal(cancelled.response.effect.kind, "applied");
+    unlinkSync(dispatchHold);
+    await worker;
+    await settleOnce();
+    const after = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id);
+    assert.equal(after.status, "cancelled");
+    assert.equal(after.decision.kind, "absent");
+    assert.equal(await queryPostgres(`
+      SELECT count(*)::text || ' ' || count(DISTINCT outbound_disclosure_event_id)::text
+          || ' ' || min(payload->>'result')
+        FROM storyos.model_attempts
+       WHERE project_id = '${prepared.projectId}'::uuid
+         AND run_id = '${run.effect.run_id}'::uuid
+         AND attempt_role = 'abort';
+    `), "1 1 acknowledged");
+  } finally {
+    if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
+    if (worker !== undefined) await Promise.allSettled([worker]);
+    await stopRealServer(started.server);
+  }
+});

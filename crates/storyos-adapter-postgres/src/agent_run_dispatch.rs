@@ -257,7 +257,6 @@ impl ModelDispatchStore for PostgresProjectReader {
             let run = load_run_phase(client, claim).await?;
             let settled = WorkPhase::Done(CompleteAgentRun::AlreadySettled);
             let phase = match record {
-                DispatchRecord::Refusal(_) if run.settled() => return Ok(settled),
                 DispatchRecord::Refusal(refusal) => {
                     let capability = match refusal {
                         PreDispatchRefusal::CredentialUnavailable => {
@@ -265,6 +264,16 @@ impl ModelDispatchStore for PostgresProjectReader {
                         }
                         PreDispatchRefusal::UnsupportedRequest => "destination_request_unsupported",
                     };
+                    if run.status == "cancelled" {
+                        crate::agent_run_recovery::refuse_cancellation_duties(
+                            client, claim, &run, capability,
+                        )
+                        .await?;
+                        return Ok(settled);
+                    }
+                    if run.settled() {
+                        return Ok(settled);
+                    }
                     update_run(
                         client,
                         claim,

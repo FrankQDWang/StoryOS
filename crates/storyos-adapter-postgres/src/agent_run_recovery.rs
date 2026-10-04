@@ -79,7 +79,8 @@ pub(crate) async fn settle_cancelled(
     let payload: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    if payload.get("original_result_retrieval").is_some() {
+    let refused = payload.get("cancellation_duties_refused").is_some();
+    if payload.get("original_result_retrieval").is_some() && !refused {
         let work = advance_original_result_retrieval(
             client,
             claim,
@@ -99,7 +100,11 @@ pub(crate) async fn settle_cancelled(
             ))));
         }
     }
-    let cancellation = crate::agent_run_abort::pending(client, claim, run).await?;
+    let cancellation = if refused {
+        None
+    } else {
+        crate::agent_run_abort::pending(client, claim, run).await?
+    };
     if let Some(cancellation) = cancellation {
         if let Some(attempt_id) = run
             .attempt_id
@@ -183,6 +188,12 @@ pub(crate) async fn record_cancelled_create(
         && run.decision_position == "0"
     {
         write_subject(client, claim, run, dispatch, response_reference.as_ref()).await?;
+        crate::agent_run_successor::prohibit_automatic_successor(
+            client,
+            &claim.project_scope,
+            &claim.run_id,
+        )
+        .await?;
     }
     client
         .execute(
@@ -324,6 +335,39 @@ pub(crate) async fn mark_cancellation_duties(
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
                 &run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    Ok(())
+}
+
+/// A pre-dispatch refusal of a cancellation duty ends the duties of this cancelled Run, so the
+/// Worker does not send the same refused request again.
+pub(crate) async fn refuse_cancellation_duties(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+    capability: &str,
+) -> Result<(), CompleteAgentRunError> {
+    client
+        .execute(
+            "WITH refused AS (
+               UPDATE storyos.model_attempts
+                  SET payload = payload || jsonb_build_object('cancellation_duties_refused', $5::text)
+                WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                  AND model_attempt_id = $6::text::uuid)
+             UPDATE storyos.agent_runs
+                SET wakeup_pending = false, lease_expires_at = NULL
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND fence_token = $4",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+                &claim.fence_token,
+                &capability,
+                &run.attempt_id,
             ],
         )
         .await

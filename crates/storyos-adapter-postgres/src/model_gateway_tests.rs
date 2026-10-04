@@ -5,8 +5,8 @@ use storyos_application::{
     AuthorCommandAdmissionIds, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
     ContractFaultObserver, ContractFaultPoint, ConversationSelection, CreateAgentRunCommand,
     DestinationRequest, EditorClientBinding, IssueProjectCommandChallenge, ModelProviderAdapter,
-    ModelResponse, ModelStreamSink, ModelUsage, Observation, PreDispatchRefusal, PreparedRequest,
-    ProjectScope, UpdateProjectAssistanceCommand, complete_agent_run,
+    ModelResponse, ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
+    PreparedRequest, ProjectScope, UpdateProjectAssistanceCommand, complete_agent_run,
     issue_project_command_challenge, request_create_agent_run, update_project_assistance,
 };
 use storyos_core::{AssistanceAvailability, NativeStreamItem, StreamItemRole, StreamItemState};
@@ -96,7 +96,10 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     refusal: None,
                     hosted_report: None,
                 };
-                let first = [item("1", StreamItemState::Provisional, "Guard")];
+                let first = [
+                    item("1", StreamItemState::Provisional, "Guard"),
+                    item("3", StreamItemState::Provisional, "Hold"),
+                ];
                 let second = [
                     item("1", StreamItemState::Complete, "Guard the voice"),
                     item("2", StreamItemState::Complete, "Keep it"),
@@ -607,6 +610,7 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
             Some(CompleteAgentRun::AlreadySettled),
             Some(serde_json::json!([
                 item("1", "complete", "Guard the voice"),
+                item("3", "provisional", "Hold"),
                 item("2", "complete", "Keep it"),
             ])),
             vec![
@@ -614,6 +618,84 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
                 ContractFaultPoint::StreamCommitted,
                 ContractFaultPoint::StreamCommitted,
             ],
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_refused_cancellation_duty_ends_the_cancelled_claim() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let claim = claimed_run(&store, &admin, "b96").await;
+    let cancelling = ProbingDestination {
+        admin: &admin,
+        run_id: claim.run_id.clone(),
+        probe: Probe::CancelBeforeExchange,
+        seen: Mutex::default(),
+        streamed: Mutex::default(),
+    };
+    let fenced = complete_agent_run(&store, &cancelling, &NoContractFaults, &claim).await;
+    let fence_token = admin
+        .query_one(
+            "UPDATE storyos.agent_runs
+                SET claim_generation = claim_generation + 1,
+                    fence_token = claim_generation + 1,
+                    lease_expires_at = clock_timestamp()
+              WHERE run_id = $1::text::uuid AND status = 'cancelled' AND wakeup_pending
+          RETURNING fence_token",
+            &[&claim.run_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    let refusing = ProbingDestination {
+        admin: &admin,
+        run_id: claim.run_id.clone(),
+        probe: Probe::Refuse,
+        seen: Mutex::default(),
+        streamed: Mutex::default(),
+    };
+
+    let result = complete_agent_run(
+        &store,
+        &refusing,
+        &NoContractFaults,
+        &ClaimedAgentRun {
+            fence_token,
+            ..claim.clone()
+        },
+    )
+    .await;
+
+    let row = admin
+        .query_one(
+            "SELECT run.wakeup_pending, attempt.payload->>'cancellation_duties_refused',
+                    (SELECT count(*) FROM storyos.model_attempts AS abort
+                      WHERE abort.run_id = run.run_id AND abort.attempt_role = 'abort')
+               FROM storyos.agent_runs AS run
+               JOIN storyos.model_attempts AS attempt
+                 ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+              WHERE run.run_id = $1::text::uuid",
+            &[&claim.run_id],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(fenced, Err(CompleteAgentRunError::StaleFence)));
+    assert_eq!(
+        (
+            result.ok(),
+            row.get::<_, bool>(0),
+            row.get::<_, Option<String>>(1),
+            row.get::<_, i64>(2),
+        ),
+        (
+            Some(CompleteAgentRun::AlreadySettled),
+            false,
+            Some("destination_credential_unavailable".to_owned()),
+            0,
         )
     );
 }

@@ -561,3 +561,69 @@ test("a late predecessor updates evidence and usage only", async () => {
     await stopRealServer(started.server);
   }
 });
+
+test("cancellation during the successor stream aborts the successor once", async () => {
+  const hold = join(tmpdir(), "storyos-g03-successor-stream.hold");
+  const started = await startRealServer();
+  let worker: Promise<void> | undefined;
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("ab01"), "Successor Cancel Novel", "ab");
+    const created = await admit(started.baseUrl, prepared, id("ab11"), "SCRIPT:successor-once");
+    writeFileSync(hold, "hold");
+    worker = settleHeld({ STORYOS_TEST_FAKE_STREAM_HOLD_PATH: hold });
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      if (await roles(prepared.projectId, created.effect.run_id) === "1 1 1 1") break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(await roles(prepared.projectId, created.effect.run_id), "1 1 1 1");
+    const request: CancelAgentRunRequest = {
+      command_schema: "storyos.command.cancel-agent-run.request.v1",
+      cancel_agent_run_input: { ...BINDING, correlation_id: id("ab21") },
+    };
+    const cancelled = await challenged(
+      started.baseUrl,
+      prepared.fetchImpl,
+      prepared.projectId,
+      "POST",
+      "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
+      request.command_schema,
+      await digestCancelAgentRun(request),
+      id("ab31"),
+      (antiForgery) => cancelAgentRun({
+        baseUrl: started.baseUrl,
+        projectId: prepared.projectId,
+        runId: created.effect.run_id,
+        fetchImpl: prepared.fetchImpl,
+        idempotencyKey: id("ab31"),
+        antiForgery,
+        request,
+      }),
+    );
+    assert.equal(cancelled.effect.kind, "applied");
+    unlinkSync(hold);
+    await worker;
+    await settleOnce();
+    const after = await inspect(started.baseUrl, prepared, created.effect.run_id);
+    assert.equal(after.status, "cancelled");
+    assert.equal(after.decision.kind, "absent");
+    assert.equal(successor(after).disposition, "prohibited");
+    assert.equal(await queryPostgres(`
+      SELECT count(*) FILTER (WHERE abort.attempt_role = 'abort')::text
+          || ' ' || count(*) FILTER (WHERE abort.attempt_role = 'successor_abort'
+               AND abort.payload->>'original_model_attempt_id' = successor.model_attempt_id::text)::text
+          || ' ' || count(DISTINCT abort.outbound_disclosure_event_id)::text
+          || ' ' || bool_and(successor.decision_id IS NULL)::text
+        FROM storyos.model_attempts AS abort
+        JOIN storyos.model_attempts AS successor
+          ON successor.run_id = abort.run_id AND successor.attempt_role = 'successor'
+       WHERE abort.project_id = '${prepared.projectId}'::uuid
+         AND abort.run_id = '${created.effect.run_id}'::uuid
+         AND abort.attempt_role IN ('abort', 'successor_abort');
+    `), "1 1 2 true");
+  } finally {
+    if (existsSync(hold)) unlinkSync(hold);
+    if (worker !== undefined) await Promise.allSettled([worker]);
+    await stopRealServer(started.server);
+  }
+});
