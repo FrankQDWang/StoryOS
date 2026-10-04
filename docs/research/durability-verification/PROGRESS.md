@@ -126,3 +126,4 @@
 - Matrix round-2, `durable`: completed (exit 0). Evidence: `evidence/round-2/durable.json`.
 - Matrix round-2, `lost-ack`: completed (exit 0). Evidence: `evidence/round-2/lost-ack.json`.
 - Matrix round-2, `cut-admission-server`: completed (exit 0). Evidence: `evidence/round-2/cut-admission-server.json`.
+- Matrix round-2, `cut-admission-database`: completed (exit 0). Evidence: `evidence/round-2/cut-admission-database.json`.
