@@ -50,3 +50,14 @@
   port across a Server restart to preserve the Client Session Binding origin.
 - PostgreSQL `pg_stat_activity`, `pg_blocking_pids`, and explicit row/table locks
   supply barriers. A timeout reports a blocked case; it never releases a barrier.
+- Step 3: implemented the one-time driver and ran `durable` successfully.
+  An acknowledged edit, its complete acknowledgement, and authority counts
+  survived SIGKILL/restart and database-connection termination/restart. A new
+  Author Edit then succeeded. PostgreSQL 16.15 reports fsync, synchronous_commit,
+  and full_page_writes enabled. Initial probe correction: ignore fresh query
+  correlation IDs when comparing independent chapter reads. Command replies
+  still use complete-object equality. Initial failed probe is retained under
+  `target/durability-verification/durable-initial.json`.
+  Write execution evidence to ignored target first, then retain it after the
+  command ends; this avoids the verification wrapper's source-change status.
+  Next: concurrent commands and Admission/Core interruption schedules.
