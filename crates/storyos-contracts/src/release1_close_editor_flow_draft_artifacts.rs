@@ -161,9 +161,8 @@ pub(super) fn typescript_type_declarations() -> String {
         CloseEditorFlowDraftEffect::decl(&config),
         CloseEditorFlowDraftResponse::decl(&config),
     ]
-    .iter()
-    .map(|declaration| format!("export {declaration}\n"))
-    .collect()
+    .map(|declaration| format!("export {declaration}"))
+    .join("\n")
 }
 
 pub(super) fn typescript_client_source() -> String {
