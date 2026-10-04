@@ -1,5 +1,6 @@
 // One-time public-interface reliability probe. Run with scripts/dev-postgres.sh run.
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { createInterface } from 'node:readline';
@@ -14,7 +15,8 @@ const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
 assert.ok(container, 'Use scripts/dev-postgres.sh run');
 const scenario = process.argv[2];
 const events = [];
-const record = (name, data) => { events.push({ name, data }); console.log(name, JSON.stringify(data)); };
+const record = (name, data) => { events.push({ name, data }); console.log(name, JSON.stringify(data));
+  if (name === 'verdict' && data === 'fails') process.exitCode = 1; };
 let serial = 10000;
 const id = () => `018f0000-0000-7001-8000-${String(++serial).padStart(12, '0')}`;
 const common = () => ({ client_contract_revision: 'storyos.web-client.release-1.v3',
@@ -152,7 +154,7 @@ async function run() {
   await start();
   record('environment', await monitor.json(`SELECT json_build_object('postgres',version(),'isolation',current_setting('default_transaction_isolation'),
     'fsync',current_setting('fsync'),'synchronous_commit',current_setting('synchronous_commit'),'full_page_writes',current_setting('full_page_writes'))`));
-  const writer = await open();
+  let writer = scenario.startsWith('concurrent-') ? undefined : await open();
   if (scenario === 'durable') {
     const cmd = await edit(writer); const ack = await cmd.send(), before = await counts(), body = await chapter();
     for (const mode of ['server', 'database']) {
@@ -189,7 +191,7 @@ async function run() {
     const p2 = capture(second.send()); await blocked(2); await gate.query('ROLLBACK');
     const replies = await Promise.all([p1, p2]); record('concurrent_results', replies);
     const ack = await first.send(); assert.deepEqual(await first.send(), ack);
-    record('settled_counts', await counts()); await smoke(writer);
+    record('settled_counts', await counts()); writer = await open(); await smoke(writer);
     record('verdict', replies.every(x => x.ok) ? 'holds' : 'fails');
   } else if (scenario === 'session-replay') {
     const before = writer.value;
@@ -198,8 +200,9 @@ async function run() {
     for (const mode of ['concurrent-history', 'restart']) {
       if (mode === 'restart') { await stop(); await start(); }
       const replay = await writer.cmd.send(); assert.deepEqual(await counts(), authority);
-      record('session_replay_' + mode, { original: before, replay, equal: JSON.stringify(before) === JSON.stringify(replay) });
+      record('session_replay_' + mode, { original: before, replay, equal: isDeepStrictEqual(before, replay) });
     }
+    record('verdict', isDeepStrictEqual(before, await writer.cmd.send()) ? 'holds' : 'fails');
     await smoke(observer);
   } else if (scenario.startsWith('takeover-')) {
     const mode = scenario.slice('takeover-'.length), observer = await open('b');
@@ -216,7 +219,9 @@ async function run() {
     const stale = await command('applyAuthorEdit', '/manuscript/author-edits', {
       ...old.request, correlation_id: id(), completed_intent_record_id: id(), local_intent_sequence: String(serial) });
     record('fresh_stale_request', await capture(stale.send()));
-    record('verdict', after.commits === before.commits ? 'holds' : 'fails'); await smoke(observer);
+    record('verdict', after.commits === before.commits ? 'holds' : 'fails');
+    const next = await edit(observer, '+'); record('winner_next_edit', await next.send());
+    const recovered = await open('b'); await (await takeover(recovered, String(after.writer))).send(); await smoke(recovered);
   } else throw new Error('Unknown scenario: ' + scenario);
 }
 try { await run(); }

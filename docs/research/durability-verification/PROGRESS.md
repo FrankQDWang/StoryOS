@@ -71,3 +71,14 @@
   prefixes; PostgreSQL truncates long activity query text.
   Root-cause candidates: missing whole-transaction retry, exhausted retry, or
   invalid binding. Next: replay, locate the cause, and run takeover schedules.
+- Step 5: `takeover-server` proved D4/interruption false. Admission committed,
+  Core waited on the Head, SIGKILL stopped the Server, and the new Server
+  acknowledged writer generation 2. GET of the old command outcome then wrote
+  `Authoritative AOLD` with one new Authoritative Commit. A fresh stale command
+  returned 412, but recovery bypassed that fence. The winner's next edit
+  conflicted against its stale base Snapshot. This failed smoke is retained in
+  `target/durability-verification/takeover-server-v2.json`.
+  Next: verify recovery on a fresh Editor Session and replay all matrix cases.
+- Reproducers return 1 for an invariant failure and 2 for a probe error. Public
+  query correlation IDs are excluded only from independent query comparisons.
+  SQL errors and exact command replies remain in evidence; nonces are omitted.
