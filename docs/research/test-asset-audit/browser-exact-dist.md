@@ -1,6 +1,6 @@
 # browser-exact-dist test verdicts
 
-Reviewed: 32 cases in 31 files. See PROGRESS.md for directory completion.
+Reviewed: 33 cases in 32 files. See PROGRESS.md for directory completion.
 
 Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 
@@ -15,6 +15,12 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | BD002 | 34 — loads the exact Vite production page in Google Chrome and shows the Stage 1 surface | MERGE | M1 | Move protected-ready heading/message, no alert and no premature editor/AI controls into the Create Chapter journey before it creates the Project. Its iframe already loads the same packaged root. The explicit Chrome user-agent check tests runner selection; byte/header smoke belongs to the retained real-host HTTP test. Remove this standalone page fixture only after the initial-surface assertions transfer. | apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43; apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106 |
+
+## apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD033 | 307 — S1-JRN-001 uses the Vite production page, storyos-server, Application, Core, and PostgreSQL | KEEP | K2 | Real packaged input must produce linked durable Journal groups, collected payload fences and matching Server Activity through three settled edits and a fourth retained intent recovered after browser reload. Source GC uses mocked acknowledgements; long-session checks text after automatic collection but not these cross-store/Activity identity relationships. The optional database teardown independently requires exactly four Receipts, Activities and Author Actions. Chinese text is inserted directly here, not composed through IME. Command/coverage digests and timestamps are normalized, so only cross-reference consistency (plus independently checked event digest and pinned body/unit digests) is claimed. Receive the repeated-reload exact Revision check from interruption:95. | apps/web/test/browser-source/journal-gc.integration.test.ts:43; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts:95 |
 
 ## apps/web/test/browser-exact-dist/s2-01-bootstrap-challenge.integration.test.ts
 

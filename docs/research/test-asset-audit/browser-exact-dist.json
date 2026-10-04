@@ -353,5 +353,16 @@
     "evidence": "Two complete multiline replacements must allocate distinct new right Block identities; cross-Block cut must remove the old right identity; IME cancellation/confirmation and drop must persist the resulting text across reload. Single paste in move/retype cannot detect reusing an earlier replacement identity, and repeated composition/split writing never performs a cross-Block selected cut. Drop is a synthesized DragEvent with DataTransfer, while clipboard commands drive the actual browser; do not label it native drag gesture coverage.",
     "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184; apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:156",
     "remove": null
+  },
+  {
+    "id": "BD033",
+    "path": "apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts",
+    "line": 307,
+    "test": "S1-JRN-001 uses the Vite production page, storyos-server, Application, Core, and PostgreSQL",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Real packaged input must produce linked durable Journal groups, collected payload fences and matching Server Activity through three settled edits and a fourth retained intent recovered after browser reload. Source GC uses mocked acknowledgements; long-session checks text after automatic collection but not these cross-store/Activity identity relationships. The optional database teardown independently requires exactly four Receipts, Activities and Author Actions. Chinese text is inserted directly here, not composed through IME. Command/coverage digests and timestamps are normalized, so only cross-reference consistency (plus independently checked event digest and pinned body/unit digests) is claimed. Receive the repeated-reload exact Revision check from interruption:95.",
+    "coverage": "apps/web/test/browser-source/journal-gc.integration.test.ts:43; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts:95",
+    "remove": null
   }
 ]

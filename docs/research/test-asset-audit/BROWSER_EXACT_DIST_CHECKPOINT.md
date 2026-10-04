@@ -1,6 +1,6 @@
 # Browser exact-dist checkpoint
 
-Source review is partial: 32 cases in 31 test files; 20 KEEP, one DELETE, 11 MERGE. Direct candidate lines: 67.
+Source review is partial: 33 cases in 32 test files; 21 KEEP, one DELETE, 11 MERGE. Direct candidate lines: 67.
 
 | Reviewed file | Verdict |
 |---|---|
@@ -36,6 +36,7 @@ Source review is partial: 32 cases in 31 test files; 20 KEEP, one DELETE, 11 MER
 | apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179 | KEEP |
 | apps/web/test/browser-exact-dist/s2-input.integration.test.ts:188 | KEEP |
 | apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284 | KEEP |
+| apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307 | KEEP |
 
 ## Pending files
 
@@ -44,8 +45,6 @@ Source review is partial: 32 cases in 31 test files; 20 KEEP, one DELETE, 11 MER
 - apps/web/test/browser-exact-dist/production-host.integration.test.ts
 - apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts
 - apps/web/test/browser-exact-dist/restored-discard.integration.test.ts
-- apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts
-- apps/web/test/browser-exact-dist/stage1-journey-expectation.ts
 
 ## Decisions and evidence
 
@@ -55,7 +54,7 @@ Source review is partial: 32 cases in 31 test files; 20 KEEP, one DELETE, 11 MER
 - KEEP Project rename, archived disabled-open, relative Chapter creation and Volume rename/reorder at their real UI boundary. HTTP persistence cannot detect wrong menu targets, stale library rendering or inline placement/cancel behavior.
 - Archive is performed with a directly imported wrapper; its retained observation is the disabled archived library button. Old form/textarea absence selectors do not establish that all current write menus are disabled. Chapter menu fixed 12px font and screenshot output are not separate KEEP grounds.
 - exact-dist-plugin.ts and inline-chapter-creation.ts are fully read and have support dispositions. exact-dist-global-setup.ts is fully reviewed and recorded in SUPPORT.md. Its optional authority oracle has exact dependencies on production-host/prose/Inline/Memory/Run/composer/multi-location fixtures; do not remove those tests before reconciling the counters.
-- Read-ahead: s2-jrn-001 is now adjudicated as MERGE (BD028). s1-jrn-001 has only imports and the test body (307-439) reviewed; helpers remain. stage1-journey-expectation.ts has only lines 1-160 reviewed; remaining normalization and expected objects remain.
+- Read-ahead: s2-jrn-001 is now adjudicated as MERGE (BD028). s1-jrn-001 and stage1-journey-expectation.ts are now fully reviewed (BD033 and SUPPORT.md).
 - All completed declarations and cited starts checked. No runtime test, mutation or product/test change occurred.
 
 ## Chapter operations and save display
@@ -95,3 +94,12 @@ Source review is partial: 32 cases in 31 test files; 20 KEEP, one DELETE, 11 MER
 - KEEP repeated multiline replacement identity allocation, cross-Block cut, composition and reload. Drop uses a synthetic DragEvent, not a native drag gesture.
 - KEEP real assistance/Run/Author Edit cursor convergence followed by another saved edit. The optional database oracle requires the fixed f802/f804 receipts from this case; mocked stream tests cannot replace the actual wire/consumer pair.
 - Current exact-dist counts: 32 cases in 31 files, 20 KEEP, one DELETE, 11 MERGE; 67 direct candidate lines. No runtime execution, product edit or temporary mutation.
+
+## Stage 1 and production command routing
+
+- BD033 keeps Stage 1's real cross-store/Activity/collection relationships across retained-input reload. Chinese input is direct insertion, not IME. Authority Receipts/effects in the in-browser object come from Journal settlements; the optional teardown supplies separate database counts. Normalization removes timestamp and command/coverage digest values; do not claim independent validation of those hashes.
+- Stage 1 expected/normalization support, browser command client, privileged dispatcher and production-host-command.ts are fully read and recorded in SUPPORT.md. Wrappers are not empty assertions: they dispatch to these executing helpers.
+- Read-ahead complete: all five remaining wrapper files (production-host, inline-proposal, captured-memory, run-evidence, restored-discard) are read; underlying scenario helpers remain except production-host-command.ts, which is fully reviewed. That helper's cold real-origin context checks issued HttpOnly/SameSite cookie, enforced Trusted Types/frame-ancestors, real replay-generation resync, held old-writer POST across Takeover, retained old local Journal and winner continued writing. The eventual production-host:5 verdict is KEEP.
+- Reconcile manual-input:579 validated stale refusal against production-host:5: the latter already holds an actual old-writer POST across Takeover and checks the rendered read-only editor/local text. The other manual parameters have distinct unknown schema and earlier challenge/admission/terminal evidence. Do not change those verdicts until the covering production file is fully entered.
+- Remaining helper work includes production-prose-request-command (routes prose/refused/conflict/restore) and its Draft helpers, Inline, captured Memory, Run evidence, composer and multi-location. No partial helper read is treated as a finished disposition.
+- Current totals: 33 cases in 32 files, 21 KEEP, one DELETE, 11 MERGE; 67 direct candidate lines. No active process or temporary mutation.
