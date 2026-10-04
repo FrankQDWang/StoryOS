@@ -1,4 +1,3 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
@@ -23,6 +22,72 @@ use crate::release1_agent_run::{
     ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
     SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
+use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[
+        RegisteredOperation::command(
+            &CREATE_AGENT_RUN,
+            &[
+                "server_derived_project_scope",
+                "operation_requirement",
+                "working_target_or_explicit_not_applicable",
+                "capability_and_destination_grant",
+            ],
+        ),
+        RegisteredOperation::query(
+            &GET_AGENT_RUN,
+            &["run_scope_join", "run_projection_watermark_or_snapshot"],
+        ),
+    ],
+    schemas: || {
+        [
+            operation_schemas(
+                &CREATE_AGENT_RUN,
+                (CREATE_REQUEST_SCHEMA_PATH, create_request_schema_bytes()),
+                (CREATE_RESPONSE_SCHEMA_PATH, create_response_schema_bytes()),
+            ),
+            operation_schemas(
+                &GET_AGENT_RUN,
+                (GET_REQUEST_SCHEMA_PATH, get_request_schema_bytes()),
+                (GET_RESPONSE_SCHEMA_PATH, get_response_schema_bytes()),
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        [
+            fixture_triple(
+                CREATE_FIXTURE_PATHS,
+                &CREATE_AGENT_RUN,
+                [
+                    |_| create_fixture_bytes(),
+                    |_| create_invalid_fixture_bytes(),
+                    |_| create_boundary_fixture_bytes(),
+                ],
+            ),
+            fixture_triple(
+                GET_FIXTURE_PATHS,
+                &GET_AGENT_RUN,
+                [
+                    |_| get_fixture_bytes(),
+                    |_| get_invalid_fixture_bytes(),
+                    |_| get_boundary_fixture_bytes(),
+                ],
+            ),
+        ]
+        .concat()
+    },
+};
 
 pub(super) const CREATE_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/create-agent-run-request.schema.json";
@@ -42,8 +107,6 @@ pub(super) const GET_FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/get-agent-run.invalid.json",
     "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
 ];
-
-const U64_WIRE: &str = "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$";
 
 pub(super) fn create_request_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<CreateAgentRunRequest>(
@@ -633,22 +696,4 @@ fn status_block(
             format!("        '{status}':\n          description: {description}\n{retry_after}{content}")
         })
         .collect()
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

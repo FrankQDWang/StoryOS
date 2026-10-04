@@ -1,4 +1,3 @@
-use crate::release1_close_editor_flow_draft_artifacts::{generated_ref, json_bytes, schema_value};
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
@@ -7,6 +6,47 @@ use crate::release1_expand_refused_edit_draft::{
     EXPAND_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID, EXPAND_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID,
     ExpandRefusedEditDraftEffect, ExpandRefusedEditDraftInput, ExpandRefusedEditDraftRequest,
     ExpandRefusedEditDraftResponse, WholeDraftPayload,
+};
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
+use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &EXPAND_REFUSED_EDIT_DRAFT,
+        &[
+            "exact_scope",
+            "current_writer",
+            "exact_retained_open_source",
+            "whole_draft_payload",
+            "current_target_anchors",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &EXPAND_REFUSED_EDIT_DRAFT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &EXPAND_REFUSED_EDIT_DRAFT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/expand-refused-edit-draft-to-proposal-request.schema.json";

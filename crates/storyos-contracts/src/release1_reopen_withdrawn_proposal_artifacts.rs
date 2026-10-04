@@ -1,7 +1,9 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
 use crate::release1_reopen_withdrawn_proposal::{
     REOPEN_WITHDRAWN_PROPOSAL, REOPEN_WITHDRAWN_PROPOSAL_DIGEST_PROFILE,
     REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID, REOPEN_WITHDRAWN_PROPOSAL_RESPONSE_SCHEMA_ID,
@@ -9,6 +11,43 @@ use crate::release1_reopen_withdrawn_proposal::{
     ReopenWithdrawnProposalInput, ReopenWithdrawnProposalNoEffectReason,
     ReopenWithdrawnProposalRefusalReason, ReopenWithdrawnProposalRequest,
     ReopenWithdrawnProposalResponse, ReopenWithdrawnReceipt, ReopenWithdrawnReceiptResult,
+};
+use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &REOPEN_WITHDRAWN_PROPOSAL,
+        &[
+            "proposal_scope_join",
+            "current_closure_withdrawn",
+            "exact_withdrawal_event_ref",
+            "expected_target_revisions",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &REOPEN_WITHDRAWN_PROPOSAL,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &REOPEN_WITHDRAWN_PROPOSAL,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -210,22 +249,4 @@ fn command_fixture(created_at: &str) -> Value {
             "state_event_refs": ["018f0000-0000-7001-8000-000000000b09"]
         }
     })
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

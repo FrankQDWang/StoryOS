@@ -39,6 +39,13 @@ impl RegisteredOperation {
         Self::graphed(operation, OperationKind::Command, preconditions)
     }
 
+    pub(super) const fn stream(
+        operation: &'static QueryOperation,
+        preconditions: &'static [&'static str],
+    ) -> Self {
+        Self::graphed(operation, OperationKind::Stream, preconditions)
+    }
+
     pub(super) const fn challenge(
         operation: &'static QueryOperation,
         preconditions: &'static [&'static str],
@@ -70,6 +77,7 @@ pub(super) enum OperationKind {
     Query,
     Command,
     Challenge,
+    Stream,
 }
 
 impl OperationKind {
@@ -78,6 +86,7 @@ impl OperationKind {
             Self::Query => "query",
             Self::Command => "command",
             Self::Challenge => "challenge",
+            Self::Stream => "stream",
         }
     }
 }
@@ -128,6 +137,14 @@ pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
     &crate::release1_reject_proposal_operations_artifacts::ARTIFACTS,
     &crate::release1_withdraw_proposal_artifacts::ARTIFACTS,
     &crate::release1_replan_proposal_artifacts::ARTIFACTS,
+    &crate::release1_reopen_withdrawn_proposal_artifacts::ARTIFACTS,
+    &crate::release1_reopen_rejected_operations_artifacts::ARTIFACTS,
+    &crate::release1_proposal_generation_decision_artifacts::ARTIFACTS,
+    &crate::release1_expand_refused_edit_draft_artifacts::ARTIFACTS,
+    &crate::release1_close_editor_flow_draft_artifacts::ARTIFACTS,
+    &crate::release1_undo_latest_author_action_artifacts::ARTIFACTS,
+    &crate::release1_agent_run_artifacts::ARTIFACTS,
+    &crate::release1_agent_run_control_artifacts::ARTIFACTS,
 ];
 
 /// The request and response schemas of one operation.
@@ -167,6 +184,29 @@ pub(super) fn fixture_triple(
             fixture_id,
             classification,
             operation_id: operation.operation_id,
+            bytes,
+        },
+    )
+}
+
+/// The positive and invalid fixtures of one event schema.
+pub(super) fn event_fixtures(
+    paths: [&'static str; 2],
+    fixture_ids: [&'static str; 2],
+    operation_id: &'static str,
+    producers: [fn(&Release1ProtocolProfile) -> Vec<u8>; 2],
+) -> [FixtureMembership; 2] {
+    let [positive, invalid] = producers;
+    [
+        ("positive", paths[0], fixture_ids[0], positive),
+        ("invalid", paths[1], fixture_ids[1], invalid),
+    ]
+    .map(
+        |(classification, path, fixture_id, bytes)| FixtureMembership {
+            path,
+            fixture_id,
+            classification,
+            operation_id,
             bytes,
         },
     )
