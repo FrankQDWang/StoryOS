@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 728 test cases in 182 files have source verdicts. The audit is not complete.
+- Status: active. 747 test cases in 197 files have source verdicts. The audit is not complete.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
 - Complete source-review directories: apps/web/test/node-postgresql (52 test files, 215 runtime cases, one support file); apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests); crates/storyos-contracts/src (14 files, 62 tests). Cross-directory reconciliation and mutation review are still pending.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: review browser-source, browser-exact-dist, node-process-cut and remaining support. Node PostgreSQL source review is complete; read NODE_POSTGRESQL_CHECKPOINT.md for 215 runtime cases in 52 files. All 482 Rust tests in 122 files have source verdicts. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
+- Next: continue browser-source from BROWSER_SOURCE_CHECKPOINT.md (19 cases in 15 files reviewed), then browser-exact-dist, node-process-cut and remaining support. Node PostgreSQL source review is complete; read NODE_POSTGRESQL_CHECKPOINT.md for 215 runtime cases in 52 files. All 482 Rust tests in 122 files have source verdicts. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
 - No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -35,7 +35,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 |---|---|---|
 | apps/web/test/node-contract | Source review complete | node-contract.md; 31 runtime cases, 8 files; mutation review pending |
 | apps/web/test/node-postgresql | Source review complete | node-postgresql.md; 215 runtime cases in 52 files, one support disposition; NODE_POSTGRESQL_CHECKPOINT.md |
-| apps/web/test/browser-source | Pending | inventory.json |
+| apps/web/test/browser-source | Partial | browser-source.md; 19 cases in 15 files; BROWSER_SOURCE_CHECKPOINT.md |
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
 | apps/web/test/node-process-cut | Pending | inventory.json |
 | apps/web/test/support | Pending | inventory.json |
@@ -138,3 +138,6 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 
 - Node PostgreSQL directory source review complete: 215 runtime cases in all 52 test files; 178 KEEP, 21 DELETE, 15 MERGE, one MOVE. Its one support file also has a disposition. Inline Proposal adds distinct retry/expansion/Undo and lifecycle fault cases plus physical-recovery fixture dependencies. Every test declaration line is covered and parameter multiplicities are recorded.
 - Current cumulative source review: 728 cases in 182 files; DELETE 325, KEEP 374, MERGE 25, MOVE 4; 12956 unioned candidate source lines. Next: browser-source, browser-exact-dist, node-process-cut and remaining support, then cross-directory reconciliation and random self-check. Self-check 0/30; no selected samples, temporary mutations or active processes.
+
+- Browser source checkpoint: 19 runtime cases in 15 files; 16 KEEP, one DELETE, one MERGE, one MOVE. Historical reply cases own separate retry/UI paths. Generic foundation smoke repeats real input commands and has an unused cookie-set helper branch; preserve that D4 limitation. Acceptance pending-projection assertions transfer to public delivery; pure parser negatives move to Node.
+- Current cumulative source review: 747 cases in 197 files; DELETE 326, KEEP 390, MERGE 26, MOVE 5; 12996 unioned candidate source lines. Continue browser-source, then exact-dist/process-cut/support and cross-directory reconciliation. Self-check 0/30; no samples, temporary mutations or active processes.
