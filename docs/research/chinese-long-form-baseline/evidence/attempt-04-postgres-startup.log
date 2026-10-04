@@ -1,0 +1,33 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  the database system is starting up
+node:internal/errors:985
+  const err = new Error(message);
+              ^
+
+Error: Command failed: docker exec storyos-test-603760aeeb49517b75c3-e6562dc19cd342fbb30e193e28bf141b psql -XAt -v ON_ERROR_STOP=1 -U postgres -c CREATE EXTENSION pg_stat_statements; ALTER ROLE storyos_runtime SET session_preload_libraries = 'auto_explain'; ALTER ROLE storyos_runtime SET auto_explain.log_analyze = on; ALTER ROLE storyos_runtime SET auto_explain.log_buffers = on; ALTER ROLE storyos_runtime SET auto_explain.log_timing = off; ALTER ROLE storyos_runtime SET auto_explain.log_format = 'json'; ALTER ROLE storyos_runtime SET auto_explain.log_min_duration = -1;
+psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  the database system is starting up
+
+    at genericNodeError (node:internal/errors:985:15)
+    at wrappedFn (node:internal/errors:539:14)
+    at checkExecSyncError (node:child_process:925:11)
+    at execFileSync (node:child_process:961:15)
+    at sql (file:///Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/prototypes/chinese-long-form-baseline/measure.mjs:18:24)
+    at file:///Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/prototypes/chinese-long-form-baseline/measure.mjs:23:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:633:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  status: 2,
+  signal: null,
+  output: [
+    null,
+    '',
+    'psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  the database system is starting up\n'
+  ],
+  pid: 94794,
+  stdout: '',
+  stderr: 'psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: FATAL:  the database system is starting up\n'
+}
+
+Node.js v24.16.0
+Verification failed: 52.94s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/595582a2f8fa4c2d8113b795eeaea154/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

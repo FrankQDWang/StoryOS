@@ -76,3 +76,19 @@ measurement, integration, progress, and commits.
   excludes no API calls but is not a production quota-throughput claim.
 - Next: complete structural, Undo, export, Proposal, Web and UTF-16 observations;
   then run all four scales and retain compact raw evidence.
+
+### Step 3: count definitions and native Word observations
+
+- Completed `WORD-COUNT.md`, first-party source links/access dates, the public-domain
+  digital-edition excerpt and provenance, and 19 Unicode golden vectors.
+- The machine has Microsoft Word 16.89.1. Its native `compute statistics` API
+  measured all four exact corpora, the public-domain excerpt, and the golden inputs.
+  All temporary unsaved documents closed after measurement.
+- At 3,000,000 current scalars, Word reports 2,957,724 words (-1.4092%).
+  The Unicode 16.0.0 L/N scalar candidate reports 2,609,036 (-13.032133%).
+- Complete current algorithms for WPS and the studied novel platforms were not
+  available from the consulted first-party material. Their exact deltas stay
+  unknown; independent profile sensitivity is labelled separately.
+- Repeat native Word with `WORD_COUNTS=1 sh prototypes/chinese-long-form-baseline/run.sh`.
+- Expanded operation run found a database startup race after restart (attempt 04).
+  Added an explicit `pg_isready` barrier; no product or database schema change.
