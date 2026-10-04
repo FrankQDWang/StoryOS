@@ -108,7 +108,7 @@ pub(crate) async fn claim_archive_export_row(
     }))
 }
 
-async fn complete_claimed_export(
+pub(crate) async fn complete_claimed_export(
     client: &tokio_postgres::Client,
     claim: &ClaimedArchiveExport,
 ) -> Result<CompleteArchiveExport, CompleteArchiveExportError> {
