@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 120 test cases in 25 files have source verdicts. The audit is not complete.
+- Status: active. 235 test cases in 47 files have source verdicts. The audit is not complete.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
-- Complete directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases).
-- Partial directory: crates/storyos-core/src (16 files, 87 tests). core.json and core.md contain its completed files. Do not repeat those reviews.
-- Next: apply_author_edit_tests.rs and open_inline_proposal_tests.rs, then the remaining Core files. Compare exact inputs and assertions, not test names. After Core, proceed through Application, Adapter, Server, Contracts, and remaining Web directories.
+- Complete source-review directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests). Cross-directory reconciliation and mutation review are still pending.
+- Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
+- Next: crates/storyos-application/src. Compare each fake-Store test with actual public command coverage and separate binding checks from pass-through calls. Then review Adapter, Server, Contracts, and remaining Web directories.
 - No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -39,7 +39,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
 | apps/web/test/node-process-cut | Pending | inventory.json |
 | apps/web/test/support | Pending | inventory.json |
-| crates/storyos-core/src | In progress | core.md; 16 files, 87 tests reviewed |
+| crates/storyos-core/src | Source review complete | core.md; 202 tests in 38 files; CORE_CHECKPOINT.md |
 | crates/storyos-application/src | Pending | inventory.json |
 | crates/storyos-adapter-postgres/src | Pending | inventory.json |
 | crates/storyos-adapter-postgres/tests | Pending | inventory.json |
@@ -81,3 +81,8 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Current checkpoint: 120 cases in 25 files; {'DELETE': 80, 'KEEP': 38, 'MERGE': 1, 'MOVE': 1}; 1194 candidate source lines. Core now includes Current Chapter, Undo, Acceptance, generation append/pause, Block Proposal and compaction. These are provisional source verdicts, not mutation results.
 - Revalidation corrected the Block Proposal comparison: the reserved-block HTTP Author Edit calls the same Core changed-Head classifier when it records conflicted validation. A synthetic present-Block/None-Head tuple is not a unique real input.
 - Added render_tables.py to keep manually written rows and Markdown tables consistent. It does not infer verdicts and is not connected to verification commands.
+
+- Core directory source review complete: inventory and verdict names match exactly, 202 functions in 38 files. Current overall source verdicts: {'DELETE': 148, 'KEEP': 84, 'MERGE': 2, 'MOVE': 1}; 2585 candidate lines across 47 test files.
+- Corrections: canonical Inline boundary input calls the shared owner classifier, so equality-edge assertions are publicly covered; the local crossing/full-selection cases remain distinct. Test citations were corrected to declaration lines.
+- Export Write spies do not measure intermediate copies; their DELETE rows use D3. The actual payload-hash hook counts real hash input, so its single-pass performance invariant remains KEEP without a latency claim.
+- No source mutation, database operation, full test run, issue change, PR or push occurred during this Core review.

@@ -722,7 +722,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "Undo with no remaining Forward Author Action must return NoFrontier rather than panic or claim compensation. The Application fake merely returns that outcome; it never calls Core. Public HTTP Undo scenarios create structural or prose actions first and do not assert no_frontier. This is the only executable empty-frontier classification found.",
-    "coverage": "crates/storyos-application/src/undo_latest_author_action_tests.rs:70; apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts:335",
+    "coverage": "crates/storyos-application/src/undo_latest_author_action_tests.rs:72; apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts:335",
     "remove": null
   },
   {
@@ -850,7 +850,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "The Operation-not-pending case is not covered by a second Acceptance with a fresh key: the HTTP success test only replays the settled key. Removing the pending guard could accept a resolved Operation again. Keep that case; wrong Scope/admission are fixed true at the Core call and stale-revision behavior is already in the HTTP table.",
-    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:14; apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:175",
+    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:14; apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166",
     "remove": null
   },
   {
@@ -861,7 +861,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "Duplicate selections and unsatisfied predecessor dependencies must be refused by Acceptance, not merely reported as false by classify_proposal_selection. HTTP tests cover atomic Bundle closure and reversed valid sets, but never duplicate IDs or a missing predecessor. The shared selection test does not invoke accept_proposal.",
-    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:999; crates/storyos-core/src/accept_proposal_tests.rs:141",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:999; crates/storyos-core/src/accept_proposal_tests.rs:136",
     "remove": null
   },
   {
@@ -872,7 +872,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "A valid-looking Validation Receipt bound to another Proposal Revision must be Invalid independently of its validity flag. The HTTP invalid-validation case submits an old Receipt identity, making the validity check fail as well; it does not isolate a true validity flag with a false revision match. The altered-candidate assertion itself is covered by HTTP.",
-    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:175",
+    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166",
     "remove": null
   },
   {
@@ -894,7 +894,7 @@
     "verdict": "DELETE",
     "reason": "D1",
     "evidence": "The changed_head HTTP case changes the stored Head and checks a durable conflict, unchanged Chapter, and refusal of another attempt until revision.",
-    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:175",
+    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166",
     "remove": [
       212,
       222
@@ -1060,5 +1060,1453 @@
       34,
       69
     ]
+  },
+  {
+    "id": "CO088",
+    "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+    "line": 36,
+    "test": "one_replace_selection_is_classified_as_one_authoritative_result",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public legacy edit asserts the persisted final body; the versioned Unicode cases call the same UTF-16 splice helper with a complete emoji selection. No separate observable regression remains in this single-operation wrapper example.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-core/src/manuscript_payload_tests.rs:603",
+    "remove": [
+      35,
+      43
+    ]
+  },
+  {
+    "id": "CO089",
+    "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+    "line": 46,
+    "test": "ordered_units_apply_against_one_transient_body",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public Project edit applies insertion at 15 and then replaces 15..16 in the transient body, and checks the persisted result. It fails if each unit restarts from the original body.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      45,
+      83
+    ]
+  },
+  {
+    "id": "CO090",
+    "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+    "line": 86,
+    "test": "invalid_later_unit_refuses_the_complete_batch",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The Adapter transaction test changes the SECOND unit selection snapshot, asserts Refused InvalidSelection, and reads back the settled Receipt. This owns the same batch-atomic refusal plus durable negative evidence.",
+    "coverage": "crates/storyos-adapter-postgres/src/author_edit_tests.rs:184",
+    "remove": [
+      85,
+      106
+    ]
+  },
+  {
+    "id": "CO091",
+    "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+    "line": 109,
+    "test": "stale_head_and_invalid_selections_fail_without_a_partial_result",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Project edit covers stale Head and invalid snapshot. The shared UTF-16 splice is exercised by versioned tests for reversed range, split surrogate at either endpoint, and out-of-range endpoint. The extra collapsed inside-surrogate and both-outside tuples hit these same endpoint checks, without a new state transition.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-core/src/manuscript_payload_tests.rs:603",
+    "remove": [
+      108,
+      138
+    ]
+  },
+  {
+    "id": "CO092",
+    "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+    "line": 141,
+    "test": "current_proposal_fact_conflicts_with_a_stale_authoritative_observation",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A Proposal can change ownership after the author observes authoritative prose. Removing the Core expected/current Proposal Head check can route a stale request into the mixed partition. The compared public malformed ordered-source request empties its expected Head list and fails with HTTP 422 before this result; it does not assert this Core conflict. No equivalent returned ProposalHeadPresent assertion was found in the compared public cases.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1288",
+    "remove": null
+  },
+  {
+    "id": "CO093",
+    "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+    "line": 153,
+    "test": "matching_proposal_heads_revise_the_candidate_without_authority",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Inline interior edit asserts ProposalRevised, exact new candidate, unchanged source and later exact Acceptance splice. It invokes the same mixed-partition body result.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:973",
+    "remove": [
+      152,
+      177
+    ]
+  },
+  {
+    "id": "CO094",
+    "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+    "line": 180,
+    "test": "exclusive_edge_input_applies_to_authority_without_revising_the_candidate",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public reserved-block edit uses the same Guard-to-Keep replacement outside the Anchor, asserts authoritative body and unchanged candidate, then verifies conflicted validation.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1174",
+    "remove": [
+      179,
+      205
+    ]
+  },
+  {
+    "id": "CO095",
+    "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+    "line": 208,
+    "test": "unchanged_content_is_a_no_effect_core_result",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public empty insertion exercises the same final-body equality and NoEffect result; the Adapter outcome case also reads and replays its Receipt. Replacing a selection by equal text adds no separate branch to that equality.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-adapter-postgres/src/author_edit_tests.rs:184",
+    "remove": [
+      207,
+      230
+    ]
+  },
+  {
+    "id": "CO096",
+    "path": "crates/storyos-core/src/open_inline_proposal_tests.rs",
+    "line": 41,
+    "test": "opens_one_inline_proposal_for_exact_anchors",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP Inline opening checks exact Anchors, valid Receipt, distinct candidate and source, then Accepts the exact splice. The local string slice assertion is a literal fixture check.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:973",
+    "remove": [
+      40,
+      46
+    ]
+  },
+  {
+    "id": "CO097",
+    "path": "crates/storyos-core/src/open_inline_proposal_tests.rs",
+    "line": 49,
+    "test": "refuses_wrong_scope_unavailable_target_and_unsupported_profiles",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Retained Anchor coordinate contracts must not be interpreted as UTF-16 after a profile mismatch. Refused-edit source validation passes stored Anchors to this classifier. The compared HTTP opening uses valid profiles, and changed-source tests mutate source order/text rather than Anchor profiles. Preserve the unsupported-profile case; fixed Scope=false and redundant None-Head cases add no independent coverage.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:973; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1288",
+    "remove": null
+  },
+  {
+    "id": "CO098",
+    "path": "crates/storyos-core/src/open_inline_proposal_tests.rs",
+    "line": 85,
+    "test": "conflicts_changed_head_outside_the_displayed_range",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public whole-Draft expansion sends a stale expected target revision AND matches its Anchor base to that stale revision. It asserts conflicted and unchanged retained state. This reaches the same changed-current-Head classifier rather than an Anchor-contract mismatch.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:264",
+    "remove": [
+      84,
+      94
+    ]
+  },
+  {
+    "id": "CO099",
+    "path": "crates/storyos-core/src/open_inline_proposal_tests.rs",
+    "line": 97,
+    "test": "conflicts_reservation_invalid_anchor_digest_and_coordinate_drift",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A retained or supplied Anchor with inverted range or an incorrect base-slice digest must not validate and select unrelated source text. Expansion passes supplied Anchors into Core. Existing whole-Draft expansion tests change source digest and expected Head, not Anchor range or base-slice digest. Keep these two negative inputs; fixed current coordinate-profile and separately covered reservation cases can be removed within the retained test.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:264; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1288",
+    "remove": null
+  },
+  {
+    "id": "CO100",
+    "path": "crates/storyos-core/src/open_inline_proposal_tests.rs",
+    "line": 135,
+    "test": "preserves_ordered_anchors_across_two_blocks",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Reversing two supplied Anchors can reorder the replacement target across Blocks. Expansion accepts an Anchor list and Core validates its order against current Blocks. Existing two-Block Acceptance tests have one Anchor plus an unaffected sibling; the reversed ordered-source test changes a different structure. Neither rejects reversed Anchors.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1076; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1288",
+    "remove": null
+  },
+  {
+    "id": "CO101",
+    "path": "crates/storyos-core/src/open_inline_proposal_tests.rs",
+    "line": 167,
+    "test": "routes_interior_edge_and_crossing_input_to_the_owner",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A crossing legacy range 8..16 must be Mixed, and a full Anchor selection 10..24 must remain Proposal-owned. Public legacy edits cover interior and outside ranges; ordered mixed-source edits use a different classifier. Canonical boundary input DOES call this same helper and covers both zero-width equality edges, so those edge assertions are redundant. Retain only the crossing/full-selection cases unless later browser review finds equivalent legacy inputs.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1174; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:2146",
+    "remove": null
+  },
+  {
+    "id": "CO102",
+    "path": "crates/storyos-core/src/project_export_tests.rs",
+    "line": 6,
+    "test": "archived_project_is_refused",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public export admission test archives the Project and then issues and retries a fresh export request; both fail with 422. The Worker archived-after-admission test also asserts the specific archived_project terminal reason.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:664",
+    "remove": [
+      1,
+      27
+    ]
+  },
+  {
+    "id": "CO103",
+    "path": "crates/storyos-core/src/project_export_tests.rs",
+    "line": 19,
+    "test": "active_project_is_admitted",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public export admission checks the accepted acknowledgement, durable operation and exact retry for the active Project.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295",
+    "remove": null
+  },
+  {
+    "id": "CO104",
+    "path": "crates/storyos-core/src/readable_export_command_tests.rs",
+    "line": 6,
+    "test": "archived_project_is_refused",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public readable export test archives the Project, sends a fresh export request and its retry, and requires 422; the Worker case also checks the archived_project terminal reason.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:233; apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:540",
+    "remove": [
+      1,
+      27
+    ]
+  },
+  {
+    "id": "CO105",
+    "path": "crates/storyos-core/src/readable_export_command_tests.rs",
+    "line": 19,
+    "test": "active_project_is_admitted",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public readable export admission verifies an active Project yields a durable inspectable operation and a stable acknowledgement.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:233",
+    "remove": null
+  },
+  {
+    "id": "CO106",
+    "path": "crates/storyos-core/src/readable_export_tests.rs",
+    "line": 4,
+    "test": "utf8_lf_profile_matches_pinned_golden_cases",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An empty Project, empty Volume, and unavailable Chapter body have distinct exported byte forms; collapsing absent and empty body invents or loses text. HTTP pinned export covers an empty PRESENT body and live-source pinning, not absent body, empty Project or empty Volume. Preserve these golden byte cases; the profile string equality itself adds no behavior.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124",
+    "remove": null
+  },
+  {
+    "id": "CO107",
+    "path": "crates/storyos-core/src/readable_export_tests.rs",
+    "line": 52,
+    "test": "representative_manuscript_appends_each_chapter_body_once",
+    "verdict": "DELETE",
+    "reason": "D3",
+    "evidence": "The sink counts only write_str calls equal to the complete body. It cannot detect copies made before the final write, and splitting the write changes the count without changing output or copy cost. Its output assertion repeats the retained renderer golden cases. It does not substantiate the stated reduction from three body copies.",
+    "coverage": "crates/storyos-core/src/readable_export_tests.rs:4",
+    "remove": [
+      51,
+      74
+    ]
+  },
+  {
+    "id": "CO108",
+    "path": "crates/storyos-core/src/archive_path_tests.rs",
+    "line": 4,
+    "test": "protocol_example_path_is_admitted",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Building the protocol example archive admits this exact path and binds it into the pinned root digest. The simple path/collision-key echo adds no separate behavior.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:35",
+    "remove": [
+      3,
+      8
+    ]
+  },
+  {
+    "id": "CO109",
+    "path": "crates/storyos-core/src/archive_path_tests.rs",
+    "line": 11,
+    "test": "structural_refusals_match_the_pinned_profile",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Retained entry paths are loaded from storage before ZIP packaging. Accepting absolute, dot-segment, drive-prefixed or ambiguous separators can produce unsafe or non-portable ZIP names. Public export tests contain only canonical generated paths; the collision tests do not exercise these structural refusals.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558; crates/storyos-core/src/project_archive_tests.rs:62",
+    "remove": null
+  },
+  {
+    "id": "CO110",
+    "path": "crates/storyos-core/src/archive_path_tests.rs",
+    "line": 44,
+    "test": "length_and_depth_limits_are_exact",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An oversized or over-deep retained path must be refused before packaging under the pinned reader limits. Existing archive cases use short two-segment paths and do not distinguish these limits. Keep the overflow inputs; the test name overstates exactness because it does not test the allowed endpoint.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:35",
+    "remove": null
+  },
+  {
+    "id": "CO111",
+    "path": "crates/storyos-core/src/archive_path_tests.rs",
+    "line": 61,
+    "test": "ascii_case_folding_does_not_rewrite_the_admitted_path",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "The case-collision archive test already requires case folding, but rejects both entries before proving that a non-colliding mixed-case path is preserved. Add one successful mixed-case entry assertion there, then delete this lower-level duplicate.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:62",
+    "remove": null
+  },
+  {
+    "id": "CO112",
+    "path": "crates/storyos-core/src/archive_path_tests.rs",
+    "line": 68,
+    "test": "combining_mark_paths_are_refused_rather_than_normalized",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Normalizing a decomposed retained path instead of refusing it can change an entry name and its root coverage. All other path cases are ASCII and cannot detect this behavior. This test proves refusal of this decomposed input only; it does not validate full Unicode NFC admission.",
+    "coverage": "crates/storyos-core/src/archive_path_tests.rs:11; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": null
+  },
+  {
+    "id": "CO113",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 35,
+    "test": "protocol_example_entry_and_root_digests_are_golden",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Changing root serialization or digest coverage can make an earlier archive fail verification after upgrade. HTTP builds and verifies with the same current implementation and only checks digest shape, so it can miss a coordinated encoding change. This fixed external byte/root vector detects it; the bytes.len literal can be removed.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": null
+  },
+  {
+    "id": "CO114",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 54,
+    "test": "corrupt_entry_digest_is_a_typed_terminal_failure",
+    "verdict": "DELETE",
+    "reason": "D4",
+    "evidence": "verify_entry_digest has no product caller at this baseline; packaging compares the rebuilt root directly. The tampered-payload test exercises the actual corruption refusal. It will not catch a mutation confined to the unused helper, and that helper has no current observable product regression.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:325",
+    "remove": [
+      53,
+      59
+    ]
+  },
+  {
+    "id": "CO115",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 62,
+    "test": "case_colliding_paths_are_refused",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Two retained entries that differ only by ASCII case must not produce a ZIP with platform-dependent names. The public ZIP tests use distinct generated names and do not collide them. This is the archive-builder boundary and can absorb the lower-level successful mixed-case path case.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558; crates/storyos-core/src/archive_path_tests.rs:61",
+    "remove": null
+  },
+  {
+    "id": "CO116",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 82,
+    "test": "file_path_that_equals_a_directory_prefix_is_refused",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An entry named canonical can conflict with canonical/project.json during extraction even when the exact names differ. The case-collision test has no directory-prefix pair; public output tests contain only regular leaf paths.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:62; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": null
+  },
+  {
+    "id": "CO117",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 110,
+    "test": "nested_archive_records_keep_escaped_empty_and_sorted_bytes",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Removing escaping or changing nested empty-array/object serialization can alter persisted archive digests or invalidly encode author text. The root golden vector has a small flat payload and HTTP only parses selected simple rows. This nested escaped-text and escaped-key known vector isolates these bytes.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:35; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": null
+  },
+  {
+    "id": "CO118",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 134,
+    "test": "archive_row_sort_keys_follow_canonical_object_bytes",
+    "verdict": "DELETE",
+    "reason": "D2",
+    "evidence": "The test invokes Rust sort_by_cached_key in the test itself, not the production row-collection call. Changing or removing the production sort would leave it green. The canonical encoding prerequisite is already checked by the nested-byte test; stable ordering of equal serde_json Values has no distinguishable output here.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:110",
+    "remove": [
+      133,
+      146
+    ]
+  },
+  {
+    "id": "CO119",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 149,
+    "test": "representative_row_array_appends_payload_once_into_one_buffer",
+    "verdict": "DELETE",
+    "reason": "D3",
+    "evidence": "The Write spy only counts the final scalar-sized write and cannot detect temporary subtree Strings allocated before it. A split write can fail the count without changing output. The retained nested encoder vector owns correct bytes; this count does not prove the claimed six-to-one copy reduction.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:110",
+    "remove": [
+      148,
+      168
+    ]
+  },
+  {
+    "id": "CO120",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 187,
+    "test": "unsigned_byte_order_is_the_sort_key",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Reversing supplied archive entries must still yield canonical path order before root coverage. HTTP sources are generated in an established family order and do not deliberately reverse this builder input; the one-entry golden cannot detect a missing sort.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:35; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": null
+  },
+  {
+    "id": "CO121",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 206,
+    "test": "foreign_missing_lifecycle_and_provenance_are_typed_failures",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A retained row with a foreign owner must stop archive construction, not export foreign content. The builder passes row owner/project into this exact classifier. HTTP export success and caller-scope rejection do not inject a foreign row into retained export material. Keep the foreign-row and missing-family checks; lifecycle/payload/gap boolean combinations are fixed by current callers and add no real branch coverage.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295; crates/storyos-core/src/project_archive_tests.rs:278",
+    "remove": null
+  },
+  {
+    "id": "CO122",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 252,
+    "test": "catalog_include_names_ignore_other_export_policies",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Treating the conditional historical-evidence policy as unconditional include makes archive completion require tables that are not always delivered. The public ZIP case asserts current included and excluded families, but does not change catalog policy or isolate the conditional policy. This classifier case distinguishes the three policies and flattened table names.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": null
+  },
+  {
+    "id": "CO123",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 278,
+    "test": "required_export_tables_are_live_catalog_include_names",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Requiring a catalog table absent from the live schema breaks export during supported catalog/schema overlap; omitting a required live table silently loses a family. This test varies the two sets and observes MissingFamily. Public tests use one live schema with complete families and do not omit a required family.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558; crates/storyos-core/src/project_archive_tests.rs:206",
+    "remove": null
+  },
+  {
+    "id": "CO124",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 317,
+    "test": "a_missing_root_is_unsettled_and_exposes_no_zip_bytes",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public in-progress export download has no settled root and requires invalid_provenance with no ZIP output. It owns the same empty-root packaging refusal at the HTTP boundary.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295",
+    "remove": [
+      316,
+      322
+    ]
+  },
+  {
+    "id": "CO125",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 325,
+    "test": "a_corrupt_payload_is_refused_before_zip_bytes",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A payload altered after the root was settled must not produce ZIP bytes. Public pinned-source failure tests damage source evidence before settlement, while this test tampers with packaged entry bytes under an existing valid root. Neither successful repeated download nor unavailable-source failure covers that comparison.",
+    "coverage": "apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts:273; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": null
+  },
+  {
+    "id": "CO126",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 340,
+    "test": "verified_archive_zip_repeats_and_contains_uncompressed_entry_bytes",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public export downloads ZIP STORE bytes, parses uncompressed named entries, and requires a byte-identical second download. This includes the local magic/name/payload/repeat assertions at the actual download boundary.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": [
+      339,
+      366
+    ]
+  },
+  {
+    "id": "CO127",
+    "path": "crates/storyos-core/src/project_archive_tests.rs",
+    "line": 386,
+    "test": "representative_payload_is_hashed_once_during_verified_packaging",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Adding a second full entry hash during verified packaging doubles payload hashing work for large exports while preserving output. The test instruments the actual SHA input and detects that concrete work increase; output-only tests cannot. This is a hash-pass invariant, not a measured latency claim; the comparison to a literal previous count is redundant.",
+    "coverage": "crates/storyos-core/src/project_archive_tests.rs:340; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": null
+  },
+  {
+    "id": "CO128",
+    "path": "crates/storyos-core/src/continuation_input_tests.rs",
+    "line": 44,
+    "test": "first_run_and_matching_prior_choose_the_declared_mapping",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public continuation scenario runs first, incremental and full requests, then checks each stored input_mapping and whether prior continuation was sent. These are the same three classifier outcomes plus their actual transport evidence.",
+    "coverage": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237",
+    "remove": [
+      43,
+      57
+    ]
+  },
+  {
+    "id": "CO129",
+    "path": "crates/storyos-core/src/continuation_input_tests.rs",
+    "line": 60,
+    "test": "identity_mismatch_or_covered_copy_uses_new_transport",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A prior binding registered under a different provider registration must start a new transport even when destination is unchanged. The public scenario mutates destination identity and covered-copy restriction only; it does not alter registration. Retain the registration mismatch, and remove the destination/restriction repeats. Conversation mismatch is additionally filtered by lookup and is not the independent reason to keep this test.",
+    "coverage": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237",
+    "remove": null
+  },
+  {
+    "id": "CO130",
+    "path": "crates/storyos-core/src/create_agent_run_tests.rs",
+    "line": 8,
+    "test": "admits_a_new_conversation_when_assistance_and_target_are_current",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public admission creates a new Conversation and one queued Run with captured settings, exact acknowledgement and query evidence. This includes the Core admitted classification.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
+    "remove": [
+      7,
+      19
+    ]
+  },
+  {
+    "id": "CO131",
+    "path": "crates/storyos-core/src/create_agent_run_tests.rs",
+    "line": 22,
+    "test": "refuses_an_inaccessible_existing_conversation",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public admission sends an existing Conversation identity that is absent, requires scoped 404, and does not expose owner information. The Adapter computes ExistingMissing for that input.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:626",
+    "remove": [
+      21,
+      35
+    ]
+  },
+  {
+    "id": "CO132",
+    "path": "crates/storyos-core/src/create_agent_run_tests.rs",
+    "line": 48,
+    "test": "refuses_an_archived_project",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An archived Project can still have retained Assistance and Chapter records; a new Run must not be admitted from them. create_agent_run reads stored lifecycle and passes it into this classifier. The compared Run tests cover unavailable Assistance, missing/busy Conversation and invalid Chapter, but do not archive the Project before admission. Other command archive tests do not execute this classifier.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:626",
+    "remove": null
+  },
+  {
+    "id": "CO133",
+    "path": "crates/storyos-core/src/create_agent_run_tests.rs",
+    "line": 60,
+    "test": "refuses_unavailable_assistance",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public no-binding Project request asserts assistance_unavailable and zero Conversation/settings rows, covering this refusal and its negative side effects.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:626",
+    "remove": [
+      59,
+      69
+    ]
+  },
+  {
+    "id": "CO134",
+    "path": "crates/storyos-core/src/create_agent_run_tests.rs",
+    "line": 72,
+    "test": "refuses_a_busy_existing_conversation",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public admission tries an existing busy Conversation and requires conversation_busy; the competing-admission case also proves only one queued Run can exist.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:833",
+    "remove": [
+      71,
+      81
+    ]
+  },
+  {
+    "id": "CO135",
+    "path": "crates/storyos-core/src/create_agent_run_tests.rs",
+    "line": 84,
+    "test": "refuses_an_invalid_working_target_chapter",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public admission supplies a nonexistent working Chapter and requires invalid_chapter_join, exercising the same computed Chapter admission state.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
+    "remove": [
+      83,
+      93
+    ]
+  },
+  {
+    "id": "CO136",
+    "path": "crates/storyos-core/src/rebuild_expired_reference_tests.rs",
+    "line": 27,
+    "test": "usable_reference_does_not_rebuild_or_erase_an_ordinary_correction",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "The Adapter returns ordinary dispatch before calling this classifier when the reference is Usable. The public ordinary continuation case owns preservation of the correction without rebuild. Its execution does not prove the unused Usable classifier arm.",
+    "coverage": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237",
+    "remove": [
+      26,
+      41
+    ]
+  },
+  {
+    "id": "CO137",
+    "path": "crates/storyos-core/src/rebuild_expired_reference_tests.rs",
+    "line": 44,
+    "test": "unknown_create_is_not_confirmed_expiry",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public expiry recovery marks the prior dispatch uncertain, then checks unknown_create refusal, no model attempt and no opaque reuse. This is the same UnknownCreate classifier path.",
+    "coverage": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+    "remove": [
+      43,
+      52
+    ]
+  },
+  {
+    "id": "CO138",
+    "path": "crates/storyos-core/src/rebuild_expired_reference_tests.rs",
+    "line": 55,
+    "test": "confirmed_expiry_and_unusable_handles_rebuild_without_opaque_reuse",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP recovery scenario confirms expired and unusable handles by probe, rebuilds eligible input, and checks fresh invocation/step, retained terminal predecessor and no opaque reuse or semantic erasure. Both reference conditions are exercised.",
+    "coverage": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+    "remove": [
+      54,
+      69
+    ]
+  },
+  {
+    "id": "CO139",
+    "path": "crates/storyos-core/src/rebuild_expired_reference_tests.rs",
+    "line": 72,
+    "test": "automatic_rebuild_blocks_when_a_required_gate_fails",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A confirmed expired predecessor that is unsettled or cancelled must not dispatch replacement work. The public recovery scenario covers budget, processing-boundary and missing-input gates but does not independently put this classifier behind an unsettled or fenced predecessor. Retain those two cases; the other publicly covered gates can be removed. The current-authority case is not independent when boundary resolution already fails.",
+    "coverage": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+    "remove": null
+  },
+  {
+    "id": "CO140",
+    "path": "crates/storyos-core/src/rebuild_expired_reference_tests.rs",
+    "line": 131,
+    "test": "copy_restriction_omits_covered_content_and_still_rebuilds_eligible_input",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public scenario marks the prior covered copy restricted, confirms expiry, and checks successful rebuilt input with covered_content_included=false, no opaque reuse and the current correction intact.",
+    "coverage": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+    "remove": [
+      130,
+      140
+    ]
+  },
+  {
+    "id": "CO141",
+    "path": "crates/storyos-core/src/rebuild_expired_reference_tests.rs",
+    "line": 143,
+    "test": "unchanged_effective_context_does_not_mint_a_new_step",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "The only production caller supplies effective_model_context_changed=true. No current product input reaches this false case; the public recovery test owns fresh step allocation for actual corrections. It cannot kill a mutation confined to the false-only branch.",
+    "coverage": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+    "remove": [
+      142,
+      150
+    ]
+  },
+  {
+    "id": "CO142",
+    "path": "crates/storyos-core/src/unknown_create_successor_tests.rs",
+    "line": 23,
+    "test": "successor_scripts_are_distinct_from_ordinary_and_retrieval_text",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public ordinary advisory, retrieval and successor flows invoke the script parser and verify their distinct effects. A parser that maps ordinary/retrieval text to successor work breaks those actual request boundaries; the local enum echo is not an extra observable requirement.",
+    "coverage": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:128; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:197",
+    "remove": [
+      22,
+      37
+    ]
+  },
+  {
+    "id": "CO143",
+    "path": "crates/storyos-core/src/unknown_create_successor_tests.rs",
+    "line": 40,
+    "test": "missing_or_unsupported_lookup_still_permits_one_successor",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public default-unknown successor and missing/unsupported retrieval cases assert one fenced successor, consumed allowance and exact attempt roles. These cover all three lookup inputs here.",
+    "coverage": "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:197; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:288",
+    "remove": [
+      39,
+      59
+    ]
+  },
+  {
+    "id": "CO144",
+    "path": "crates/storyos-core/src/unknown_create_successor_tests.rs",
+    "line": 62,
+    "test": "failed_gates_pause_without_consuming_the_allowance",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public pause matrix contains all seven scripts in this test and checks the same reasons, unconsumed allowance, no fence/no successor and stable restart state.",
+    "coverage": "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:317",
+    "remove": [
+      61,
+      100
+    ]
+  },
+  {
+    "id": "CO145",
+    "path": "crates/storyos-core/src/unknown_create_successor_tests.rs",
+    "line": 103,
+    "test": "cancellation_and_spent_allowance_do_not_reset_or_duplicate",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Budget can become insufficient after the allowance is consumed but before dispatch resumes; that pending dispatch must resume rather than reopen admission. The local case deliberately sets budget=false in ConsumedPendingDispatch. The public crash-after-fence case resumes with unchanged eligible budget, and cancellation cases cover their own transitions. Keep the consumed-budget case; cancellation and already-dispatched subcases are public duplicates.",
+    "coverage": "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:433; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:362; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:565",
+    "remove": null
+  },
+  {
+    "id": "CO146",
+    "path": "crates/storyos-core/src/retrieve_original_result_tests.rs",
+    "line": 22,
+    "test": "retrieval_follows_the_retained_reference_and_fence",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public retrieval matrix tests missing reference, unsupported retrieval and incomplete result with exact retrieval counts. Its successful result settles once, and its cancelled Run records a late result as evidence only. Together these are all five local classifier inputs, with actual retained evidence and no duplicate create.",
+    "coverage": "apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:128; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:220; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:277",
+    "remove": [
+      1,
+      61
+    ]
+  },
+  {
+    "id": "CO147",
+    "path": "crates/storyos-core/src/revision_comparison_tests.rs",
+    "line": 47,
+    "test": "comparison_binds_exact_revisions_and_normalizes_adjacent_fragments",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Diff normalization must join short adjacent fragments, preserve two separated replacements, return no span for equal text and count UTF-16 before a changed character following an emoji. The public candidate test asserts a whole-string empty-base insertion; it does not exercise these alignment and coordinate cases. Keep the distinct diff cases; the empty-base example can be removed after its public owner is checked.",
+    "coverage": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:223",
+    "remove": null
+  },
+  {
+    "id": "CO148",
+    "path": "crates/storyos-core/src/reject_proposal_operations_tests.rs",
+    "line": 21,
+    "test": "resolves_one_pending_operation_without_authority",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Reject checks one resolution event, resolved reservation, stable Proposal revision, unchanged Chapter and exact retry. It executes the same pending Operation classification.",
+    "coverage": "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts:16",
+    "remove": [
+      20,
+      26
+    ]
+  },
+  {
+    "id": "CO149",
+    "path": "crates/storyos-core/src/reject_proposal_operations_tests.rs",
+    "line": 29,
+    "test": "refuses_wrong_scope_admission_stale_revision_and_non_pending_work",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Reject of a closed Proposal or a stale Proposal revision must not append a new resolution even when an Operation is pending. The HTTP Reject test repeats an already rejected Operation at the same revision; that catches OperationNotPending but not these two earlier gates. Keep closed/stale cases; Scope/admission are fixed true by the Adapter and the pending repeat is publicly covered.",
+    "coverage": "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts:16",
+    "remove": null
+  },
+  {
+    "id": "CO150",
+    "path": "crates/storyos-core/src/reject_proposal_operations_tests.rs",
+    "line": 73,
+    "test": "refuses_duplicate_identities_missing_dependencies_and_incomplete_bundle_closure",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A Reject selection missing a required predecessor must not resolve only its dependent Operation. The Adapter passes a real dependency result into this classifier. The current HTTP multi-selection test exercises incomplete Bundle closure on Acceptance, and the Core selection algorithm test does not execute Reject's consumption of its flags. Retain this classifier dependency case and the distinct duplicate-selection check pending ingress comparison.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:999; crates/storyos-core/src/accept_proposal_tests.rs:136",
+    "remove": null
+  },
+  {
+    "id": "CO151",
+    "path": "crates/storyos-core/src/reject_proposal_operations_tests.rs",
+    "line": 101,
+    "test": "conflicts_a_changed_target_head",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A Chapter Head can change between viewing and rejecting a pending Proposal. Reject must return ChangedHead rather than resolve it. Existing Reject HTTP tests keep the Head fixed; Acceptance changed-Head tests invoke a different classifier.",
+    "coverage": "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts:16; apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166",
+    "remove": null
+  },
+  {
+    "id": "CO152",
+    "path": "crates/storyos-core/src/reopen_rejected_operations_tests.rs",
+    "line": 20,
+    "test": "resolves_one_rejected_operation_without_authority",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Reopen records a new pending Proposal revision, restores reservation, retains Rejection evidence and leaves the Chapter unchanged, including retry and restart.",
+    "coverage": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:17",
+    "remove": [
+      19,
+      25
+    ]
+  },
+  {
+    "id": "CO153",
+    "path": "crates/storyos-core/src/reopen_rejected_operations_tests.rs",
+    "line": 28,
+    "test": "refuses_stale_lineage_unavailable_proof_and_non_rejected_work",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A rejected Operation may acquire an overlapping reservation before Reopen. reservation_available=false must refuse the operation even with a matching Rejection event. The public test checks stale revision and unavailable proof only, not this competing-reservation state or a current non-rejected Operation. Retain those cases; Scope/admission constants and covered proof/stale cases can be removed.",
+    "coverage": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:17",
+    "remove": null
+  },
+  {
+    "id": "CO154",
+    "path": "crates/storyos-core/src/reopen_rejected_operations_tests.rs",
+    "line": 88,
+    "test": "conflicts_a_changed_target_head",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Reopening a rejected Operation against a changed Chapter Head must conflict. The public Reopen scenario keeps Chapter state fixed throughout; an Acceptance or Replan conflict is not execution of this classifier.",
+    "coverage": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:17",
+    "remove": null
+  },
+  {
+    "id": "CO155",
+    "path": "crates/storyos-core/src/replan_proposal_tests.rs",
+    "line": 20,
+    "test": "resolves_one_current_conflict_without_authority",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Replan appends a pending revision bound to the current Chapter Head, preserves Operation identity and closure, consumes the exact source condition and leaves authority unchanged.",
+    "coverage": "apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts:15",
+    "remove": [
+      19,
+      25
+    ]
+  },
+  {
+    "id": "CO156",
+    "path": "crates/storyos-core/src/replan_proposal_tests.rs",
+    "line": 28,
+    "test": "refuses_stale_ineligible_and_unproven_sources",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A replacement Operation list that changes stable identities must not Replan under an otherwise valid source condition. Public Replan changes the source proof and stale proposal revision but supplies the original Operation identities. Keep identity mismatch and closed-source cases; Scope/admission literals and public proof/stale checks are redundant.",
+    "coverage": "apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts:15",
+    "remove": null
+  },
+  {
+    "id": "CO157",
+    "path": "crates/storyos-core/src/replan_proposal_tests.rs",
+    "line": 88,
+    "test": "conflicts_a_changed_target_head",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The current Chapter can change again after the author observes a conflict and before Replan. This classifier must reject the old expected target Head. The HTTP Replan setup creates a ChangedHead result through Acceptance, then gives Replan the NEW correct Head; it never tests Replan's own ChangedHead branch.",
+    "coverage": "apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts:15",
+    "remove": null
+  },
+  {
+    "id": "CO158",
+    "path": "crates/storyos-core/src/withdraw_proposal_tests.rs",
+    "line": 29,
+    "test": "author_withdrawal_allocates_one_forward_action",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public author Withdrawal asserts one forward Author Action, the closure change and zero authoritative commits, matching the allocation path here.",
+    "coverage": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:17",
+    "remove": [
+      28,
+      36
+    ]
+  },
+  {
+    "id": "CO159",
+    "path": "crates/storyos-core/src/withdraw_proposal_tests.rs",
+    "line": 39,
+    "test": "current_producer_withdrawal_allocates_no_author_action",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The real producer endpoint verifies matched producer Withdrawal, no Author Action or Undo disposition, exact replay and unchanged authority.",
+    "coverage": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:217",
+    "remove": [
+      38,
+      46
+    ]
+  },
+  {
+    "id": "CO160",
+    "path": "crates/storyos-core/src/withdraw_proposal_tests.rs",
+    "line": 49,
+    "test": "unsupported_cause_and_terminal_supersession_have_no_effect",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "HTTP covers unmatched producer and already-closed Proposal no-effect cases. No production write to Proposal closure=superseded was found at this baseline; Draft supersession is a different field. The remaining terminal-supersession tuple has no established reachable regression and is not claimed to be killed by those HTTP cases.",
+    "coverage": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:17; apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:217",
+    "remove": [
+      48,
+      75
+    ]
+  },
+  {
+    "id": "CO161",
+    "path": "crates/storyos-core/src/withdraw_proposal_tests.rs",
+    "line": 78,
+    "test": "withdraw_refuses_scope_admission_and_stale_revision_and_conflicts_on_head",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An author can issue Withdrawal with a stale Proposal revision or a changed Chapter Head; these must not close the current Proposal. The HTTP author and producer scenarios use matching revisions/Head and only check scope or producer mismatch. Preserve the stale and changed-Head cases; Scope/admission are established before classification.",
+    "coverage": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:17; apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:217",
+    "remove": null
+  },
+  {
+    "id": "CO162",
+    "path": "crates/storyos-core/src/reopen_withdrawn_proposal_tests.rs",
+    "line": 19,
+    "test": "a_matching_withdrawn_proposal_reopens",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public explicit Reopen creates a pending open revision, preserves Operation resolution and authority, and records the matching Withdrawal lineage.",
+    "coverage": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:360",
+    "remove": [
+      18,
+      24
+    ]
+  },
+  {
+    "id": "CO163",
+    "path": "crates/storyos-core/src/reopen_withdrawn_proposal_tests.rs",
+    "line": 27,
+    "test": "terminal_supersession_and_a_mismatched_event_have_no_effect",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "Public repeated Reopen uses the current reopened revision with the old Withdrawal event and requires WithdrawalEventMismatch. Matching event plus open closure is not produced by the current write sequence, which appends a new revision on Reopen; terminal Proposal supersession has no current writer. The other two tuples are synthetic, not extra executable HTTP coverage.",
+    "coverage": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:360",
+    "remove": [
+      26,
+      53
+    ]
+  },
+  {
+    "id": "CO164",
+    "path": "crates/storyos-core/src/reopen_withdrawn_proposal_tests.rs",
+    "line": 56,
+    "test": "reopen_refuses_scope_admission_and_a_stale_revision_and_conflicts_on_the_head",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Reopen of an otherwise matching Withdrawal can arrive after the Proposal or Chapter Head changes. The public Reopen test exercises event mismatch on a new revision, not stale requested revision or changed target Head with valid event proof. Keep these two checks; fixed Scope/admission flags are redundant.",
+    "coverage": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:360",
+    "remove": null
+  },
+  {
+    "id": "CO165",
+    "path": "crates/storyos-core/src/update_project_assistance_tests.rs",
+    "line": 29,
+    "test": "a_first_prepare_classifies_as_initialized",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public first prepare changes absent Assistance into an initialized binding at revision 1 and queries the complete binding.",
+    "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+    "remove": [
+      1,
+      96
+    ]
+  },
+  {
+    "id": "CO166",
+    "path": "crates/storyos-core/src/update_project_assistance_tests.rs",
+    "line": 40,
+    "test": "a_repeated_prepare_with_the_same_availability_is_no_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public repeat prepare uses available revision 1 and asserts NoEffect plus the unchanged complete binding.",
+    "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+    "remove": null
+  },
+  {
+    "id": "CO167",
+    "path": "crates/storyos-core/src/update_project_assistance_tests.rs",
+    "line": 52,
+    "test": "a_matching_revision_and_new_availability_classifies_as_applied",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public toggle changes available revision 1 to unavailable revision 2 and checks the result and query retain destination/use binding identities.",
+    "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+    "remove": null
+  },
+  {
+    "id": "CO168",
+    "path": "crates/storyos-core/src/update_project_assistance_tests.rs",
+    "line": 63,
+    "test": "a_stale_revision_classifies_as_conflicted",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public stale prepare checks Conflicted and the unchanged binding, including retained acknowledgement replay.",
+    "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+    "remove": null
+  },
+  {
+    "id": "CO169",
+    "path": "crates/storyos-core/src/update_project_assistance_tests.rs",
+    "line": 75,
+    "test": "a_nonzero_expected_revision_before_initialization_is_stale",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Before initialization the public test supplies expected revision 1, requires stale_assistance_revision, then replays the same refusal after initialization.",
+    "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+    "remove": null
+  },
+  {
+    "id": "CO170",
+    "path": "crates/storyos-core/src/update_project_assistance_tests.rs",
+    "line": 87,
+    "test": "a_missing_project_classifies_as_refused",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "The Adapter loads the Project before classification and always passes Present. Missing or foreign Project rejection belongs to that lookup; changing the isolated Absent arm cannot affect the current route.",
+    "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+    "remove": null
+  },
+  {
+    "id": "CO171",
+    "path": "crates/storyos-core/src/assemble_context_tests.rs",
+    "line": 50,
+    "test": "assembles_complete_current_passage_context_without_destination_io",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Run admission queries complete selected input, sufficiency, token profile, Host Control isolation and no destination/outbound manifests. A continuation case additionally checks the nonempty current Chapter body. The local record repeats those outcomes and many echoed identifiers.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237",
+    "remove": [
+      49,
+      113
+    ]
+  },
+  {
+    "id": "CO172",
+    "path": "crates/storyos-core/src/assemble_context_tests.rs",
+    "line": 116,
+    "test": "blocks_exact_required_working_target_over_the_item_limit",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Run admission uses a 10001-scalar Chapter, requires the exact WorkingTarget over-limit reason and rejected token count, retains only the author instruction and performs no destination I/O.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:944",
+    "remove": [
+      115,
+      180
+    ]
+  },
+  {
+    "id": "CO173",
+    "path": "crates/storyos-core/src/assemble_context_tests.rs",
+    "line": 183,
+    "test": "blocks_an_unavailable_required_instruction_revision",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A retained required Instruction Revision can be unavailable during compaction reconstruction; proceeding without it would omit required author input. The compaction loader reads this retained instruction field. Public compaction fixtures use instruction=absent, and over-limit Run tests block a different source. No other test was found with RequiredRevision available=false.",
+    "coverage": "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:165; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:944",
+    "remove": null
+  },
+  {
+    "id": "CO174",
+    "path": "crates/storyos-core/src/assemble_context_tests.rs",
+    "line": 260,
+    "test": "blocks_a_working_target_without_an_exact_revision",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The Adapter admission test creates a Chapter without an exact current revision, reads back blocked WorkingTargetRevisionUnavailable and verifies no outbound manifests. It executes assembly plus persistence and lookup.",
+    "coverage": "crates/storyos-adapter-postgres/src/create_agent_run_tests.rs:120",
+    "remove": [
+      259,
+      323
+    ]
+  },
+  {
+    "id": "CO175",
+    "path": "crates/storyos-core/src/assemble_context_tests.rs",
+    "line": 326,
+    "test": "persisted_assembly_record_roundtrips",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public admission persists an assembly and queries its selected content, identifiers and sufficiency through the decoder. The historical compatibility case separately owns missing-field behavior. A symmetric current encoder/decoder roundtrip is weaker than those observed persisted results.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:184",
+    "remove": [
+      325,
+      332
+    ]
+  },
+  {
+    "id": "CO176",
+    "path": "crates/storyos-core/src/assemble_context_tests.rs",
+    "line": 335,
+    "test": "historical_assembly_without_block_selection_remains_readable",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The public historical Run case removes proposal_target_block_ids from retained operation requirements, reclaims the Run and requires one Proposal on the original Head. This exercises the actual historical fallback through decoding and execution.",
+    "coverage": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:184",
+    "remove": [
+      334,
+      352
+    ]
+  },
+  {
+    "id": "CO177",
+    "path": "crates/storyos-core/src/assemble_context_tests.rs",
+    "line": 355,
+    "test": "present_invalid_block_selection_is_not_historical_absence",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A present null/object/mixed-type Block selection must not be treated as historical absence, which would select an unintended target. The public compatibility case removes the field entirely; it does not corrupt a present value. Preserve all three malformed retained forms at the decoder boundary.",
+    "coverage": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:184",
+    "remove": null
+  },
+  {
+    "id": "CO178",
+    "path": "crates/storyos-core/src/statistics_profile_tests.rs",
+    "line": 4,
+    "test": "unicode_16_profile_matches_pinned_golden_cases",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Counting UTF-16 units or normalizing stored NFD text changes author-visible character totals; ignoring NBSP/ideographic space changes word totals. The browser statistics case uses Hello world and CJK text only. This pinned Unicode matrix covers emoji scalars, decomposed/precomposed text and non-ASCII separators absent there.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts:120",
+    "remove": null
+  },
+  {
+    "id": "CO179",
+    "path": "crates/storyos-core/src/statistics_profile_tests.rs",
+    "line": 30,
+    "test": "chapter_blocks_join_like_display_body_before_counting",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The retained empty-Block matrix includes Hello and world with LF separators and checks exact word and character totals. It catches omitted LF or merged word runs and strictly extends this two-nonempty-Block example.",
+    "coverage": "crates/storyos-core/src/statistics_profile_tests.rs:41",
+    "remove": [
+      29,
+      38
+    ]
+  },
+  {
+    "id": "CO180",
+    "path": "crates/storyos-core/src/statistics_profile_tests.rs",
+    "line": 41,
+    "test": "empty_blocks_still_contribute_their_separating_lf",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Dropping empty Blocks removes separating LF characters from Chapter totals. The public statistics scenario has nonempty one-Block Chapters and no empty internal/terminal Blocks. This case also distinguishes zero Blocks from two empty Blocks.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts:120; crates/storyos-core/src/statistics_profile_tests.rs:4",
+    "remove": null
+  },
+  {
+    "id": "CO181",
+    "path": "crates/storyos-core/src/statistics_profile_tests.rs",
+    "line": 67,
+    "test": "block_stream_counts_equal_the_joined_chapter_reference",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Both paths use the same CountingAccumulator for scalar and whitespace handling. Their difference is LF insertion between Blocks, already checked with exact independent counts by the empty-Block matrix; Unicode scalar behavior has the pinned golden owner. This joined-reference equality adds no isolated algorithm path.",
+    "coverage": "crates/storyos-core/src/statistics_profile_tests.rs:41; crates/storyos-core/src/statistics_profile_tests.rs:4",
+    "remove": [
+      66,
+      81
+    ]
+  },
+  {
+    "id": "CO182",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 4,
+    "test": "upgrade_legacy_string_preserves_exact_unicode_and_one_stable_block",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Legacy payload upgrade must preserve emoji, CJK and embedded LF as exact text in the original Block. The Adapter legacy decoding case contains only Hello, and the versioned edit tests use upgrade_legacy_manuscript to build expected values, which can hide the same upgrade defect on both sides. Keep this explicit independent Unicode object oracle.",
+    "coverage": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs:99; crates/storyos-core/src/manuscript_payload_tests.rs:603",
+    "remove": null
+  },
+  {
+    "id": "CO183",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 20,
+    "test": "empty_legacy_string_becomes_one_empty_paragraph_block",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The exact packaged editor test opens a new Chapter as one empty paragraph Block, then edits it. Losing the empty Block or wrong initial kind fails that hydrated surface; the Unicode upgrade case retains the explicit stable-ID contract.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-editor.integration.test.ts:77; crates/storyos-core/src/manuscript_payload_tests.rs:4",
+    "remove": [
+      19,
+      33
+    ]
+  },
+  {
+    "id": "CO184",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 68,
+    "test": "versioned_replace_preserves_unicode_line_breaks_and_block_identity",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The retained versioned range matrix covers replacement/deletion around the same emoji, embedded newline and CJK tail, compares the entire payload and stable Block identity. This single successful replacement has no separate branch.",
+    "coverage": "crates/storyos-core/src/manuscript_payload_tests.rs:603",
+    "remove": [
+      67,
+      83
+    ]
+  },
+  {
+    "id": "CO185",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 86,
+    "test": "legacy_replace_against_versioned_payload_is_unsupported",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "The Adapter chooses the versioned classifier only if at least one versioned primitive exists. This fixture supplies a sole legacy primitive, so it is routed to the legacy classifier in the product. Existing public legacy edits protect the actual behavior; they do not kill the impossible direct-call shape here.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": [
+      85,
+      100
+    ]
+  },
+  {
+    "id": "CO186",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 103,
+    "test": "replace_on_unknown_block_is_invalid_selection",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A versioned Chapter-owned replacement naming a nonexistent Block must refuse without editing another Block. The public wrong-Block Inline case rejects at the reservation-ownership guard, before this primitive lookup. Existing successful split/edit journeys always use an existing Block.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:2146; apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": null
+  },
+  {
+    "id": "CO187",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 172,
+    "test": "split_keeps_the_starting_fragment_identity_and_assigns_the_new_right_id",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Public Inline setup splits a nonempty body in the middle and asserts both exact texts, original left ID, new right ID and kind. The packaged split/join journey additionally proves identities after reload.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1076; apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": [
+      171,
+      179
+    ]
+  },
+  {
+    "id": "CO188",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 182,
+    "test": "join_keeps_the_left_identity_and_drops_the_right_from_current_payload",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Packaged Backspace joins Hello and World, queries a single left-ID Block containing HelloWorld, and verifies it after a second reload.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": [
+      181,
+      203
+    ]
+  },
+  {
+    "id": "CO189",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 206,
+    "test": "join_of_nonadjacent_blocks_is_invalid",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Joining nonadjacent Blocks must not silently remove the intervening Block. The packaged join journey uses adjacent Blocks, and the cut/paste journey selects a contiguous range; neither supplies a left/right pair separated by a third Block.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179; apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284",
+    "remove": null
+  },
+  {
+    "id": "CO190",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 250,
+    "test": "replace_still_targets_one_block_inside_a_split_payload",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged split journey inserts World into the new right Block and queries both Hello and World with their exact distinct IDs. It detects replacement routed to the wrong Block or replacement of the whole Chapter.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": [
+      249,
+      288
+    ]
+  },
+  {
+    "id": "CO191",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 291,
+    "test": "split_at_the_end_keeps_an_empty_right_block_and_the_starting_identity",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged journey presses Enter at the end of Hello, requires two paragraphs and a saved revision before typing into the right one. Omitting the empty right Block prevents that interaction and its persisted two-Block result.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": [
+      290,
+      315
+    ]
+  },
+  {
+    "id": "CO192",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 318,
+    "test": "one_unit_joins_then_replaces_across_adjacent_blocks_atomically",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged cross-Block cut joins Gamma and Delta then deletes the interior range, requires Gelta and the retained left ID after reload. It exercises the same ordered join-then-replace unit through real input.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284",
+    "remove": [
+      317,
+      347
+    ]
+  },
+  {
+    "id": "CO193",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 350,
+    "test": "a_later_invalid_primitive_in_the_same_unit_refuses_the_complete_range",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "If a later replacement is invalid after a successful Join in the same unit, the whole versioned edit must refuse. The public cut journey uses valid offsets; the legacy invalid-second-unit case uses a different classifier and unit boundary. Neither protects this partially executed versioned unit.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284; crates/storyos-adapter-postgres/src/author_edit_tests.rs:184",
+    "remove": null
+  },
+  {
+    "id": "CO194",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 382,
+    "test": "one_unit_replaces_then_splits_so_pasted_paragraphs_receive_new_identities",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged move/retype journey pastes Copied LF Extra after Hello, checks HelloCopied keeps its ID and Extra receives a distinct new ID. This is the same replace-then-split composition and complete resulting payload.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
+    "remove": [
+      381,
+      427
+    ]
+  },
+  {
+    "id": "CO195",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 430,
+    "test": "one_unit_moves_a_block_and_keeps_both_identities",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged move action queries reversed Block order with both original identities and texts, then checks the state survives reopen.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
+    "remove": [
+      429,
+      466
+    ]
+  },
+  {
+    "id": "CO196",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 469,
+    "test": "an_invalid_move_index_refuses_without_changing_payload_order",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A stale or malformed Move index equal to the Block count must not reorder/drop a Block. The browser exposes valid move positions and its success test does not submit an out-of-range index. The Core primitive owns that refusal.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
+    "remove": null
+  },
+  {
+    "id": "CO197",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 493,
+    "test": "one_to_one_retype_keeps_identity_and_text",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Packaged Retype turns one paragraph into a heading and compares every Block's ID, text and kind before and after reload.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
+    "remove": [
+      492,
+      529
+    ]
+  },
+  {
+    "id": "CO198",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 532,
+    "test": "a_stale_head_still_has_zero_authority_effect_for_move",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A stale authoritative Head on a versioned structural command must conflict before changing order. The public Move journey uses the current Head. Inline stale_head mutates the Proposal Head list, while legacy stale-authority tests call a separate classifier, so neither replaces this gate.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:2146",
+    "remove": null
+  },
+  {
+    "id": "CO199",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 557,
+    "test": "two_disconnected_block_replacements_in_one_unit_are_an_unsupported_intent",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Two disconnected replacements in one unit must not be accepted as one contiguous author intent. Public clipboard tests use connected ranges and the ordered-source mixed edit is a different intent form. Keep this classifier-level refusal of two unrelated Block replacements.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1288",
+    "remove": null
+  },
+  {
+    "id": "CO200",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 591,
+    "test": "chapter_display_body_joins_current_paragraphs_with_one_line_break",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged split journey reads and displays Hello LF World, then joins it to HelloWorld. The Unicode upgrade owner preserves embedded newlines in a single Block. These cover both local display concatenation examples.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179; crates/storyos-core/src/manuscript_payload_tests.rs:4",
+    "remove": [
+      590,
+      600
+    ]
+  },
+  {
+    "id": "CO201",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 603,
+    "test": "versioned_range_edits_preserve_unicode_and_reject_invalid_selections",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Splitting a surrogate at either endpoint, reversing a range, or selecting beyond stored text must refuse; valid offsets after emoji must preserve newline/CJK content and Block identity. Browser editing produces valid Unicode selections and public mixed-source surrogate refusal uses a different classifier. This is the shared splice oracle for both legacy and versioned edits.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:2078; apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284",
+    "remove": null
+  },
+  {
+    "id": "CO202",
+    "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+    "line": 634,
+    "test": "a_versioned_range_replacement_with_the_same_text_has_no_effect",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Replacing versioned text by the identical emoji must return NoEffect instead of allocating a new authoritative revision. Public browser input suppression can avoid sending an unchanged request, and the public legacy NoEffect case uses a different final-payload comparison. No equivalent versioned equal-content request was found.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284",
+    "remove": null
   }
 ]
