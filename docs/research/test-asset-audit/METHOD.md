@@ -17,7 +17,7 @@ The presentation follows PR 927, `Removed test assertions and reasons`: one reas
 | K1 | A concrete distinct input or invariant has no equivalent assertion in the compared tests. |
 | K2 | A distinct executable boundary or failure mode is not proved at another layer. |
 
-KEEP evidence states a concrete failure and the closest competing test, including why it does not cover that failure. Coverage here is a source comparison unless mutation evidence is linked. Later directory review can revise any verdict. DELETE D2/D4 does not claim that another test checks dead code or a static implementation shape. If the random self-check selects such a row, record the limitation or failed coverage, do not replace the sample or invent a kill.
+KEEP evidence states a concrete failure and the closest competing test, including why it does not cover that failure. Coverage here is a source comparison unless mutation evidence is linked. Final verdicts include the class corrections from the 30-sample self-check. DELETE D2/D4 does not claim that another test checks dead code or a static implementation shape. If the random self-check selects such a row, record the limitation or failed coverage, do not replace the sample or invent a kill.
 
 ## Line estimates
 

@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 865 test cases in 256 files have source verdicts. The audit is not complete.
+- Status: complete. REPORT.md contains the final conclusions, directory totals, top 20 files, all 256 per-file tables and the 30-case mutation results.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
 - Complete source-review directories: apps/web/test/node-process-cut (3 files, 5 tests); apps/web/test/browser-source (34 test files, 89 runtime cases, three support files); apps/web/test/node-postgresql (52 test files, 215 runtime cases, one support file); apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests); crates/storyos-contracts/src (14 files, 62 tests). Exact-dist is also complete (37 files, 43 cases). All 35 Web support and 78 Rust module/support files have dispositions. Inventory, coverage reconciliation and all 30 mutation reviews are complete.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: rebuild restored release outputs, produce REPORT.md and SUMMARY.json, validate report integrity and commit final evidence.
+- Next: no audit work remains. Any future thinning is a separate implementation task; follow REPORT.md and its named assertion-transfer prerequisites.
 - Mutation self-check: 30/30 actual injections complete: 16 KILL, 13 MISS and one timeout-only BLOCKED. Samples 1 and 16 have preserved, excluded setup failures. Corrected supplementary unit probes for samples 4, 11 and 18 passed clean/restored and failed on the mutant. All misses and transfer requirements remain explicit.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -33,7 +33,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 
 | Directory | State | Evidence |
 |---|---|---|
-| apps/web/test/node-contract | Source review complete | node-contract.md; 31 runtime cases, 8 files; mutation review pending |
+| apps/web/test/node-contract | Source review complete | node-contract.md; 31 runtime cases, 8 files; source and mutation reconciliation complete |
 | apps/web/test/node-postgresql | Source review complete | node-postgresql.md; 215 runtime cases in 52 files, one support disposition; NODE_POSTGRESQL_CHECKPOINT.md |
 | apps/web/test/browser-source | Source review complete | browser-source.md; 89 cases in 34 files, three support dispositions; BROWSER_SOURCE_CHECKPOINT.md |
 | apps/web/test/browser-exact-dist | Source review complete | browser-exact-dist.md; 43 cases in 37 files; BROWSER_EXACT_DIST_CHECKPOINT.md |
@@ -53,9 +53,11 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 
 ## Delivery
 
-REPORT.md will start with conclusions, directory savings and the top 20 files, then give all per-file tables and the cross-layer duplication table. It does not exist yet; no complete-audit claim is made.
+REPORT.md starts with conclusions, directory savings and the top 20 files, followed by reason codes, all mutation results, cross-layer comparisons and every per-file verdict table. SUMMARY.json contains the final machine-readable totals. FINAL_VALIDATION.json records source restoration and report integrity.
 
-## Latest checkpoint
+## Historical checkpoints
+
+These entries preserve progress and failed attempts. Final totals and corrections in REPORT.md supersede provisional counts below.
 
 - Node contract: 31 runtime cases reviewed across 8 files. See node-contract.json for source spans and node-contract.md for decisions.
 - Discovery: startup asset cases can fail before asset loading; session-map cases can fail later on missing DATABASE_URL even if mapping validation is bypassed. No runtime mutation has yet been used to validate these findings.
@@ -192,3 +194,13 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Mutation checkpoint: 29/30 injected (15 KILL,13 MISS,1 timeout-only BLOCKED). CT007 now MERGE; CO134 now D6 with storage exclusivity/rollback proof. Totals: DELETE330 KEEP478 MERGE52 MOVE5; 13750 unioned candidate lines. All source/package changes are restored at this checkpoint. Next: retry sample16, run supplemental Core busy-unit proof, rebuild restored source to clear mutant executables from the build cache, then final REPORT/summary validation.
 
 - Final mutation checkpoint: sample16 same-sample retry is an intended HTTP assertion failure with clean/restored PASS. All 30 injections are complete: 16 KILL, 13 MISS, one timeout-only BLOCKED. Sample18 original-unit confirmation is separate from its surviving HTTP mutant. Final source verdicts: 865 cases in 256 files; 330 DELETE, 478 KEEP, 52 MERGE, five MOVE; 13,750 candidate lines. No temporary source mutation remains. Rebuild restored release outputs before final delivery.
+
+
+## Final delivery checkpoint
+
+- Complete: 865 runtime cases in 256 test files; 478 KEEP, 330 DELETE, 52 MERGE and five MOVE. Candidate removal intervals total 13,750 lines, including 467 exclusive support lines. MERGE/MOVE transfers add zero immediate savings.
+- All 35 Web support files and 78 Rust module/support files have dispositions. An independent source scan matches all 482 Rust test function names; every tracked apps/web/test file is in inventory.json.
+- Frozen random sample: 30 actual injections, with 16 KILL, 13 MISS and one timeout-only BLOCKED. All named covering tests passed before mutation and after restoration. Original-unit diagnostics and excluded setup/zero-selection attempts remain separate. Five original DELETE rows became MERGE; the phase, guard and storage-enforcement corrections are explicit.
+- Restored release build PASS: 93.405 seconds; final-restored-build.json and final-restored-build.log. All three packaged binaries match the pre-mutation SHA256 values. Temporary sources match their plan SHA256 values; the diff from the fixed baseline contains only this report directory. No database lease remains.
+- Report integrity PASS: all 256 per-file tables, 865 unique IDs, the unchanged random draw, coverage path/line bounds, table columns, links, interval unions and top 20 calculations. FINAL_VALIDATION.json records the checks. The checker initially omitted the SI prefix in its row-count expression; adding both Server integration rows fixed the checker, not the verdict data.
+- REPORT.md and SUMMARY.json are final. No test/product/migration/generated change remains; no full suite, make verify-local, PR or Issue action occurred. Reports are committed on codex/test-asset-audit. No push was requested or performed.

@@ -54,7 +54,7 @@ The following DELETE rows still cite a current MERGE/MOVE owner. They can be rem
 | NP001 | BD003 |
 | BD035 | NP129, NP135 |
 
-All current coverage paths exist. Source comparison does not replace the pending random mutation self-check.
+All current coverage paths exist. Source comparison does not replace mutation evidence. All 30 fixed samples are complete; mutation-sample.json retains every KILL, MISS and timeout-only BLOCKED result.
 
 ## Mutation correction: private guard equivalence
 
