@@ -1,13 +1,15 @@
 use storyos_application::{
-    AuthorCommandAdmissionIds, ClaimedExportWork, EditorClientBinding,
-    ExportHumanReadableManuscriptCommand, ExportProjectArchiveCommand,
+    AuthorCommandAdmissionIds, ClaimedExportWork, CompleteArchiveExport, CompleteReadableExport,
+    EditorClientBinding, ExportHumanReadableManuscriptCommand, ExportOperationReader,
+    ExportProjectArchiveCommand, GetExportOperation, GetHumanReadableManuscriptExport,
     HUMAN_READABLE_EXPORT_COMMAND_KIND, HUMAN_READABLE_EXPORT_DIGEST_PROFILE,
     HUMAN_READABLE_EXPORT_REQUEST_SCHEMA, HUMAN_READABLE_EXPORT_ROUTE,
-    IssueProjectCommandChallenge, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
-    PROJECT_EXPORT_ARCHIVE_PROFILE, PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE,
-    PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, UserId, claim_next_export_work, issue_project_command_challenge,
-    request_export_project_archive, request_human_readable_manuscript_export,
+    HumanReadableManuscriptExportReader, IssueProjectCommandChallenge,
+    PROJECT_EXPORT_ARCHIVE_PATH_PROFILE, PROJECT_EXPORT_ARCHIVE_PROFILE,
+    PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE, PROJECT_EXPORT_REQUEST_SCHEMA,
+    PROJECT_EXPORT_ROUTE, ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId,
+    claim_next_export_work, issue_project_command_challenge, request_export_project_archive,
+    request_human_readable_manuscript_export,
 };
 use tokio_postgres::NoTls;
 
@@ -113,6 +115,168 @@ async fn a_combined_export_claim_falls_back_to_archive_work() {
     };
     assert_eq!(archive.export_id, archive_export_id);
     remove_export_work_rows(&admin).await;
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_readable_export_status_read_keeps_one_snapshot_across_worker_settlement() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(&runtime_url);
+    let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    remove_export_work_rows(&admin).await;
+    let export_id = admit_readable_export(&store, &scope).await;
+    let Some(ClaimedExportWork::Readable(claim)) = claim_next_export_work(&store).await.unwrap()
+    else {
+        panic!("the admitted readable export must be claimed");
+    };
+    let before_settlement = store
+        .read_human_readable_manuscript_export(&scope, &export_id)
+        .await
+        .unwrap();
+
+    // The status read waits on this lock after its output read; the Worker settles meanwhile.
+    begin_settlement_under_lock(
+        &admin,
+        &scope,
+        "storyos.human_readable_manuscript_export_operations",
+    )
+    .await;
+    let racing_read = tokio::spawn({
+        let store = store.clone();
+        let scope = scope.clone();
+        let export_id = export_id.clone();
+        async move {
+            store
+                .read_human_readable_manuscript_export(&scope, &export_id)
+                .await
+        }
+    });
+    wait_for_blocked_read(
+        &admin,
+        "storyos.human_readable_manuscript_export_operations",
+    )
+    .await;
+    let settled = crate::readable_export_work::complete_claimed_export(&admin, &claim)
+        .await
+        .unwrap();
+    admin.batch_execute("COMMIT").await.unwrap();
+    let racing = racing_read.await.unwrap().unwrap();
+    let after_settlement = store
+        .read_human_readable_manuscript_export(&scope, &export_id)
+        .await
+        .unwrap();
+    remove_export_work_rows(&admin).await;
+
+    assert_eq!(settled, CompleteReadableExport::SettledReady);
+    assert_eq!(racing, before_settlement);
+    assert!(
+        matches!(after_settlement, GetHumanReadableManuscriptExport::Ready(_)),
+        "a read after settlement must see the ready output: {after_settlement:?}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_project_export_status_read_keeps_one_snapshot_across_worker_settlement() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(&runtime_url);
+    let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    remove_export_work_rows(&admin).await;
+    let export_id = admit_archive_export(&store, &scope).await;
+    let Some(ClaimedExportWork::Archive(claim)) = claim_next_export_work(&store).await.unwrap()
+    else {
+        panic!("the admitted Project Export must be claimed");
+    };
+    let before_settlement = store
+        .read_export_operation(&scope, &export_id)
+        .await
+        .unwrap();
+
+    begin_settlement_under_lock(&admin, &scope, "storyos.project_export_operations").await;
+    let racing_read = tokio::spawn({
+        let store = store.clone();
+        let scope = scope.clone();
+        let export_id = export_id.clone();
+        async move { store.read_export_operation(&scope, &export_id).await }
+    });
+    wait_for_blocked_read(&admin, "storyos.project_export_operations").await;
+    let settled = crate::project_export_work::complete_claimed_export(&admin, &claim)
+        .await
+        .unwrap();
+    admin.batch_execute("COMMIT").await.unwrap();
+    let racing = racing_read.await.unwrap().unwrap();
+    let after_settlement = store
+        .read_export_operation(&scope, &export_id)
+        .await
+        .unwrap();
+    remove_export_work_rows(&admin).await;
+
+    assert_eq!(settled, CompleteArchiveExport::SettledReady);
+    assert_eq!(racing, before_settlement);
+    assert!(
+        matches!(after_settlement, GetExportOperation::Ready(_)),
+        "a read after settlement must see the ready output: {after_settlement:?}"
+    );
+}
+
+async fn begin_settlement_under_lock(
+    admin: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    operations_table: &str,
+) {
+    admin
+        .batch_execute(&format!(
+            "BEGIN; LOCK TABLE {operations_table} IN ACCESS EXCLUSIVE MODE"
+        ))
+        .await
+        .unwrap();
+    admin
+        .execute(
+            "SELECT set_config('storyos.user_id', $1, true),
+                    set_config('storyos.owner_user_id', $1, true),
+                    set_config('storyos.project_id', $2, true)",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
+}
+
+async fn wait_for_blocked_read(admin: &tokio_postgres::Client, operations_table: &str) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let waiting: i64 = admin
+                .query_one(
+                    "SELECT count(*) FROM pg_locks
+                      WHERE NOT granted AND relation = $1::text::regclass",
+                    &[&operations_table],
+                )
+                .await
+                .unwrap()
+                .get(0);
+            if waiting == 1 {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the status read must wait on the operations table lock");
 }
 
 #[derive(Debug)]

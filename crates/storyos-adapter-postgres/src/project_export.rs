@@ -68,7 +68,14 @@ impl ExportOperationReader for PostgresProjectReader {
         export_id: &str,
     ) -> Result<GetExportOperation, ProjectReadError> {
         let mut client = self.connect().await?;
-        let transaction = client.transaction().await.map_err(read_error)?;
+        // One snapshot: a Worker settlement cannot commit between the output read and the operation read.
+        let transaction = client
+            .build_transaction()
+            .isolation_level(tokio_postgres::IsolationLevel::RepeatableRead)
+            .read_only(true)
+            .start()
+            .await
+            .map_err(read_error)?;
         set_scope(&transaction, scope).await?;
         let Some(project) = transaction
             .query_opt(
