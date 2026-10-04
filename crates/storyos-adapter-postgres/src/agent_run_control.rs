@@ -168,15 +168,24 @@ async fn persist_control(
         },
         AgentRunControlIntent::Cancel => match classify_cancel_agent_run(lifecycle) {
             CancelAgentRunResult::Applied => {
-                let effect =
-                    apply_control(client, command, AgentRunControlStatus::Cancelled).await?;
-                crate::agent_run_retrieval::reconcile_fenced_original_result(
+                let in_flight = crate::agent_run_recovery::in_flight_attempt(
                     client,
                     &command.project_scope,
                     &command.run_id,
                 )
                 .await
                 .map_err(|error| AgentRunControlError::Unavailable(Box::new(error)))?;
+                let effect =
+                    apply_control(client, command, AgentRunControlStatus::Cancelled).await?;
+                if in_flight {
+                    crate::agent_run_recovery::mark_cancellation_duties(
+                        client,
+                        &command.project_scope,
+                        &command.run_id,
+                    )
+                    .await
+                    .map_err(|error| AgentRunControlError::Unavailable(Box::new(error)))?;
+                }
                 crate::agent_run_successor::prohibit_automatic_successor(
                     client,
                     &command.project_scope,

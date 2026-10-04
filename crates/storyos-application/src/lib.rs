@@ -38,6 +38,8 @@ mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_wire;
+mod model_gateway;
+mod model_gateway_ports;
 pub use author_edit_wire::{author_edit_units_from_wire, author_edit_units_to_wire};
 mod refused_edit_draft;
 pub use refused_edit_draft::{
@@ -114,7 +116,7 @@ pub use agent_run_control::{
 };
 pub use agent_run_work::{
     AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
-    claim_next_agent_run, complete_agent_run,
+    claim_next_agent_run,
 };
 pub use archive_project::{
     ArchiveProjectCommand, ArchiveProjectError, ArchiveProjectSettlement,
@@ -169,6 +171,16 @@ pub use manuscript_structure::{
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterNode,
     GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+};
+pub use model_gateway::complete_agent_run;
+pub use model_gateway_ports::{
+    AbortRequest, AbortTicket, CommittedCancellation, ContractFaultObserver, ContractFaultPoint,
+    CreateRequest, CredentialReference, CredentialResolver, DeclaredTarget, DestinationRequest,
+    DispatchClaim, DispatchRecord, ModelDispatchStore, ModelProviderAdapter, ModelResponse,
+    ModelStreamSink, ModelUsage, NextDispatchWork, NoContractFaults, Observation,
+    PreDispatchRefusal, PreparedRequest, ReferenceRetrieval, ReportedBinding, RequestAttempt,
+    ResolvedCredential, ResponseReference, RetrievePurpose, RetrieveRequest, StreamControl,
+    StreamStop, WirePayloadProjection,
 };
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,

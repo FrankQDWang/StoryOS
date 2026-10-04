@@ -52,16 +52,15 @@ pub enum SuccessorAllowance {
     Dispatched,
 }
 
+/// Scripted Host facts of the fake profile. The fake adapter reports the reference facts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScriptedSuccessorConditions {
-    pub lookup: SuccessorLookup,
     pub same_request: bool,
     pub same_route: bool,
     pub current_authority: bool,
     pub budget_covers_both: bool,
     pub effect: SuccessorEffect,
     pub context_changed: bool,
-    pub late_complete: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -130,39 +129,24 @@ pub fn unknown_create_script(author_message: &str) -> UnknownCreateScript {
     }
 }
 
-/// Map one successor script to explicit gates. Missing lookup is not a ban.
+/// Map one successor script to its scripted Host gates.
 pub fn scripted_successor_conditions(
     script: UnknownCreateScript,
 ) -> Option<ScriptedSuccessorConditions> {
     let permitted = ScriptedSuccessorConditions {
-        lookup: SuccessorLookup::StillUnknown,
         same_request: true,
         same_route: true,
         current_authority: true,
         budget_covers_both: true,
         effect: SuccessorEffect::None,
         context_changed: false,
-        late_complete: false,
     };
     Some(match script {
         UnknownCreateScript::NotSubject => return None,
-        UnknownCreateScript::Once => permitted,
-        UnknownCreateScript::Late => ScriptedSuccessorConditions {
-            late_complete: true,
-            ..permitted
-        },
-        UnknownCreateScript::MissingReference => ScriptedSuccessorConditions {
-            lookup: SuccessorLookup::Unavailable {
-                reason: LookupUnavailable::MissingReference,
-            },
-            ..permitted
-        },
-        UnknownCreateScript::UnsupportedRetrieval => ScriptedSuccessorConditions {
-            lookup: SuccessorLookup::Unavailable {
-                reason: LookupUnavailable::UnsupportedRetrieval,
-            },
-            ..permitted
-        },
+        UnknownCreateScript::Once
+        | UnknownCreateScript::Late
+        | UnknownCreateScript::MissingReference
+        | UnknownCreateScript::UnsupportedRetrieval => permitted,
         UnknownCreateScript::Budget => ScriptedSuccessorConditions {
             budget_covers_both: false,
             ..permitted

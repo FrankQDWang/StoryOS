@@ -1,19 +1,17 @@
-use storyos_application::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ProjectScope};
+use storyos_application::{
+    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DispatchClaim, ModelUsage,
+    ProjectScope, ReferenceRetrieval, RequestAttempt, ResponseReference, RetrievePurpose,
+    RetrieveRequest,
+};
 use storyos_core::{
-    ADVISORY_TEXT, HOST_FAKE_MAPPING_REVISION, OriginalResultKeepReason,
-    OriginalResultRetrievalDecision, OriginalResultRetrievalFacts, OriginalResultScript,
+    HOST_FAKE_MAPPING_REVISION, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
     RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
-    decide_original_result_retrieval, original_result_script,
+    decide_original_result_retrieval,
 };
 use uuid::Uuid;
 
 use crate::agent_run_work::update_run;
 use crate::update_project_assistance::read_assistance_record;
-
-const FOREIGN_SCOPE: &str = "018f0000-0000-7000-8000-00000000f033";
-const FOREIGN_CONVERSATION: &str = "018f0000-0000-7000-8000-00000000f011";
-const FOREIGN_DESTINATION: &str = "018f0000-0000-7000-8000-00000000f022";
-const FOREIGN_MAPPING: &str = "storyos.host-fake.mapping.rejected";
 
 pub(crate) enum RetrievalFence {
     Open,
@@ -31,69 +29,52 @@ pub(crate) struct RetrievalAdvance<'a> {
     pub run_status: &'a str,
 }
 
-pub(crate) fn subject_record(
-    author_message: &str,
-    owner_user_id: &str,
-    project_id: &str,
-    conversation_id: &str,
-    destination_identity: &str,
-) -> Option<serde_json::Value> {
-    let script = original_result_script(author_message);
-    if matches!(script, OriginalResultScript::NotSubject) {
-        return None;
-    }
-    let reference_present = !matches!(script, OriginalResultScript::MissingReference);
-    let reference_id = reference_present.then(|| Uuid::now_v7().to_string());
-    Some(serde_json::json!({
-        "reconciliation_id": Uuid::now_v7().to_string(),
-        "reconciled": false,
-        "owner_user_id": if matches!(script, OriginalResultScript::ForeignScope) {
-            FOREIGN_SCOPE
-        } else {
-            owner_user_id
-        },
-        "project_id": project_id,
-        "conversation_id": if matches!(script, OriginalResultScript::ForeignConversation) {
-            FOREIGN_CONVERSATION
-        } else {
-            conversation_id
-        },
-        "destination_identity": if matches!(script, OriginalResultScript::ForeignDestination) {
-            FOREIGN_DESTINATION
-        } else {
-            destination_identity
-        },
-        "mapping_revision": if matches!(script, OriginalResultScript::ForeignMapping) {
-            FOREIGN_MAPPING
-        } else {
-            HOST_FAKE_MAPPING_REVISION
-        },
-        "capability": if matches!(script, OriginalResultScript::Unsupported) {
-            "unsupported"
-        } else {
-            "supported"
-        },
-        "bounds": if matches!(script, OriginalResultScript::UnknownBounds) {
-            "unknown"
-        } else {
-            "declared_read_only"
-        },
-        "reference_id": reference_id,
-        "result": match script {
-            OriginalResultScript::Incomplete => "incomplete",
-            OriginalResultScript::UnknownResult => "unknown",
-            OriginalResultScript::CompleteSelected
-            | OriginalResultScript::ForeignScope
-            | OriginalResultScript::ForeignConversation
-            | OriginalResultScript::ForeignMapping
-            | OriginalResultScript::ForeignDestination
-            | OriginalResultScript::Unsupported
-            | OriginalResultScript::UnknownBounds => "complete_selected",
-            OriginalResultScript::MissingReference | OriginalResultScript::NotSubject => "absent",
-        }
-    }))
+pub(crate) enum RetrievalWork {
+    Done(CompleteAgentRun),
+    Retrieve(RetrieveRequest),
 }
 
+/// The retained retrieval subject of one unknown create, from the reference it reported.
+pub(crate) fn subject(
+    reference: Option<&ResponseReference>,
+    claim: &ClaimedAgentRun,
+    conversation_id: &str,
+    destination_identity: &str,
+) -> serde_json::Value {
+    let binding = reference.map(|reference| &reference.reported_binding);
+    let retrieval = reference.map(|reference| reference.retrieval);
+    serde_json::json!({
+        "reconciliation_id": Uuid::now_v7().to_string(),
+        "reconciled": false,
+        "owner_user_id": binding
+            .and_then(|binding| binding.owner_user_id.as_deref())
+            .unwrap_or(claim.project_scope.owner_user_id.as_ref()),
+        "project_id": claim.project_scope.project_id.as_ref(),
+        "conversation_id": binding
+            .and_then(|binding| binding.conversation_id.as_deref())
+            .unwrap_or(conversation_id),
+        "destination_identity": binding
+            .and_then(|binding| binding.destination_identity.as_deref())
+            .unwrap_or(destination_identity),
+        "mapping_revision": binding
+            .map_or(HOST_FAKE_MAPPING_REVISION, |binding| binding.mapping_revision.as_str()),
+        "capability": match retrieval {
+            Some(ReferenceRetrieval::Unsupported) => "unsupported",
+            Some(ReferenceRetrieval::Supported { .. }) | None => "supported",
+        },
+        "bounds": match retrieval {
+            Some(ReferenceRetrieval::Supported { bounds: RetrievalBounds::Unknown }) => "unknown",
+            Some(ReferenceRetrieval::Supported {
+                bounds: RetrievalBounds::DeclaredReadOnly,
+            })
+            | Some(ReferenceRetrieval::Unsupported)
+            | None => "declared_read_only",
+        },
+        "reference_id": reference.map(|reference| reference.reference_id.as_str()),
+    })
+}
+
+/// Keeps a blocked subject unknown, or returns the Retrieve request that the gates admit.
 pub(crate) async fn advance_original_result_retrieval(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -101,65 +82,100 @@ pub(crate) async fn advance_original_result_retrieval(
     advance: RetrievalAdvance<'_>,
     fence: RetrievalFence,
     run_write: RetrievalRunWrite,
-) -> Result<CompleteAgentRun, CompleteAgentRunError> {
+) -> Result<RetrievalWork, CompleteAgentRunError> {
     let fenced = matches!(fence, RetrievalFence::Fenced);
-    apply(client, claim, payload, &advance, fenced, run_write).await
-}
-
-pub(crate) async fn reconcile_fenced_original_result(
-    client: &tokio_postgres::Client,
-    scope: &ProjectScope,
-    run_id: &str,
-) -> Result<(), CompleteAgentRunError> {
-    let Some(row) = client
+    let subject = payload
+        .get("original_result_retrieval")
+        .ok_or_else(|| unavailable(std::io::Error::other("The retrieval subject is missing")))?;
+    if flag(subject, "reconciled") {
+        if !fenced && matches!(run_write, RetrievalRunWrite::Write) {
+            restore_reconciled(client, claim, subject).await?;
+        }
+        return Ok(RetrievalWork::Done(CompleteAgentRun::AlreadySettled));
+    }
+    let decision = decide(
+        client,
+        claim,
+        subject,
+        &advance,
+        fenced,
+        RetrievedOriginalResult::NotRetrieved,
+    )
+    .await?;
+    if let OriginalResultRetrievalDecision::KeepUnknown {
+        admit_retrieval: false,
+        ..
+    } = decision
+    {
+        settle(
+            client,
+            claim,
+            payload,
+            &advance,
+            SettledRetrieval {
+                decision,
+                retrieval: None,
+                supplied: None,
+                usage: ModelUsage::Unknown,
+                fenced,
+                run_write,
+            },
+        )
+        .await?;
+        return Ok(RetrievalWork::Done(CompleteAgentRun::Settled));
+    }
+    let existing = client
         .query_opt(
-            "SELECT attempt.model_attempt_id::text, attempt.payload::text,
-                    run.conversation_id::text, run.status
-               FROM storyos.agent_runs AS run
-               JOIN storyos.model_attempts AS attempt
-                 ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
-                    (run.owner_user_id, run.project_id, run.run_id)
-                AND attempt.attempt_role = 'decision' AND attempt.decision_position = 0
-              WHERE run.owner_user_id = $1::text::uuid
-                AND run.project_id = $2::text::uuid
-                AND run.run_id = $3::text::uuid",
+            "SELECT model_attempt_id::text FROM storyos.model_attempts
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid
+                AND attempt_role = 'retrieval' AND decision_position = 0",
             &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &run_id,
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
             ],
         )
         .await
-        .map_err(unavailable)?
-    else {
-        return Ok(());
-    };
-    let payload: serde_json::Value =
-        serde_json::from_str(&row.get::<_, String>(1)).map_err(unavailable)?;
-    if payload.get("original_result_retrieval").is_none() {
-        return Ok(());
-    }
-    let attempt_id: String = row.get(0);
-    let conversation_id: String = row.get(2);
-    let claim = ClaimedAgentRun {
-        project_scope: scope.clone(),
-        run_id: run_id.to_owned(),
-        fence_token: 0,
-    };
-    advance_original_result_retrieval(
-        client,
-        &claim,
-        &payload,
-        RetrievalAdvance {
-            attempt_id: &attempt_id,
-            conversation_id: &conversation_id,
-            run_status: &row.get::<_, String>(3),
+        .map_err(unavailable)?;
+    Ok(RetrievalWork::Retrieve(RetrieveRequest {
+        attempt: match existing {
+            Some(row) => RequestAttempt::Claimed(DispatchClaim {
+                model_attempt_id: row.get(0),
+            }),
+            None => RequestAttempt::New,
         },
-        RetrievalFence::Fenced,
-        RetrievalRunWrite::Write,
-    )
-    .await?;
-    Ok(())
+        purpose: RetrievePurpose::OriginalResult,
+        original_model_attempt_id: advance.attempt_id.to_owned(),
+        response_reference: text(subject, "reference_id").unwrap_or_default().to_owned(),
+    }))
+}
+
+/// Decides one subject with the current assistance admission and the retrieved result.
+pub(crate) async fn decide(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    subject: &serde_json::Value,
+    advance: &RetrievalAdvance<'_>,
+    fenced: bool,
+    retrieved: RetrievedOriginalResult,
+) -> Result<OriginalResultRetrievalDecision, CompleteAgentRunError> {
+    let assistance = read_assistance_record(client, &claim.project_scope)
+        .await
+        .map_err(unavailable)?
+        .ok_or_else(|| {
+            unavailable(std::io::Error::other(
+                "Retrieval requires current assistance admission",
+            ))
+        })?;
+    Ok(decide_original_result_retrieval(&facts(
+        subject,
+        claim,
+        advance.conversation_id,
+        &assistance.processing_destination_identity,
+        fenced || advance.run_status == "cancelled",
+        retrieved,
+    )))
 }
 
 pub(crate) async fn load_original_result_retrieval(
@@ -235,59 +251,51 @@ pub(crate) async fn load_original_result_retrieval(
     }))
 }
 
-async fn apply(
+pub(crate) struct SettledRetrieval {
+    pub decision: OriginalResultRetrievalDecision,
+    pub retrieval: Option<RecordedRetrieval>,
+    pub supplied: Option<SuppliedDecision>,
+    /// The usage of the original response. It belongs to the original Attempt only.
+    pub usage: ModelUsage,
+    pub fenced: bool,
+    pub run_write: RetrievalRunWrite,
+}
+
+pub(crate) struct RecordedRetrieval {
+    pub attempt_id: String,
+    pub manifest_id: String,
+}
+
+/// The retrieved native items and advisory text that a selected original result supplies.
+pub(crate) struct SuppliedDecision {
+    pub items: serde_json::Value,
+    pub text: String,
+}
+
+/// Seals the subject and settles the original Attempt and the Run from one decision.
+pub(crate) async fn settle(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     payload: &serde_json::Value,
     advance: &RetrievalAdvance<'_>,
-    fenced: bool,
-    run_write: RetrievalRunWrite,
-) -> Result<CompleteAgentRun, CompleteAgentRunError> {
+    settled: SettledRetrieval,
+) -> Result<(), CompleteAgentRunError> {
+    let SettledRetrieval {
+        decision,
+        retrieval,
+        supplied,
+        usage,
+        fenced,
+        run_write,
+    } = settled;
     let defer_run_status = matches!(run_write, RetrievalRunWrite::Defer);
     let subject = payload
         .get("original_result_retrieval")
         .ok_or_else(|| unavailable(std::io::Error::other("The retrieval subject is missing")))?;
-    if subject
-        .get("reconciled")
-        .and_then(serde_json::Value::as_bool)
-        == Some(true)
-    {
-        if !fenced && !defer_run_status {
-            restore_reconciled(client, claim, subject).await?;
-        }
-        return Ok(CompleteAgentRun::AlreadySettled);
-    }
-    let assistance = read_assistance_record(client, &claim.project_scope)
-        .await
-        .map_err(unavailable)?
-        .ok_or_else(|| {
-            unavailable(std::io::Error::other(
-                "Retrieval requires current assistance admission",
-            ))
-        })?;
-    let decision = decide_original_result_retrieval(&facts(
-        subject,
-        claim,
-        advance.conversation_id,
-        &assistance.processing_destination_identity,
-        fenced || advance.run_status == "cancelled",
-    )?);
-    let mut retrieval_attempt_id = None;
-    let mut assembly_manifest_id = None;
-    let admit = matches!(
-        decision,
-        OriginalResultRetrievalDecision::EvidenceOnly
-            | OriginalResultRetrievalDecision::SettleSelected
-            | OriginalResultRetrievalDecision::KeepUnknown {
-                admit_retrieval: true,
-                ..
-            }
-    );
-    if admit {
-        let admitted = admit_retrieval(client, claim, advance, subject, &decision).await?;
-        retrieval_attempt_id = Some(admitted.attempt_id);
-        assembly_manifest_id = Some(admitted.manifest_id);
-    }
+    let retrieval_attempt_id = retrieval
+        .as_ref()
+        .map(|recorded| recorded.attempt_id.clone());
+    let assembly_manifest_id = retrieval.map(|recorded| recorded.manifest_id);
     let (disposition, keep_reason, supplies_decision, advances_continuation) = match decision {
         OriginalResultRetrievalDecision::KeepUnknown { reason, .. } => {
             ("kept_unknown", Some(reason.label()), false, false)
@@ -322,20 +330,21 @@ async fn apply(
     marker["advances_continuation"] = serde_json::json!(advances_continuation);
     let reservation_released = supplies_decision;
     marker["reservation_released"] = serde_json::json!(reservation_released);
-    marker["usage_kind"] = serde_json::json!("unknown");
+    let usage = crate::agent_run_observation::encode_usage(usage);
+    marker["usage_kind"] = usage["kind"].clone();
     next["original_result_retrieval"] = marker;
     next["reservation"] =
         serde_json::json!({"kind": "worst_case", "released": reservation_released});
-    next["usage"] = serde_json::json!({"kind": "unknown"});
-    if supplies_decision {
+    next["usage"] = usage;
+    if let (true, Some(supplied)) = (supplies_decision, supplied) {
         let binding = Uuid::now_v7().to_string();
         let decision_id = Uuid::now_v7().to_string();
-        next["items"] = serde_json::json!([complete_item()]);
+        next["items"] = supplied.items;
         next["decision"] = serde_json::json!({
             "kind": "advisory",
             "decision_id": decision_id,
             "selected": true,
-            "text": ADVISORY_TEXT,
+            "text": supplied.text,
             "authoritative": false,
             "advances_continuation": true
         });
@@ -377,199 +386,7 @@ async fn apply(
             .await?;
         }
     }
-    Ok(CompleteAgentRun::Settled)
-}
-
-struct AdmittedRetrieval {
-    attempt_id: String,
-    manifest_id: String,
-}
-
-async fn admit_retrieval(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    advance: &RetrievalAdvance<'_>,
-    subject: &serde_json::Value,
-    decision: &OriginalResultRetrievalDecision,
-) -> Result<AdmittedRetrieval, CompleteAgentRunError> {
-    let invocation_id: String = client
-        .query_one(
-            "SELECT model_invocation_id::text
-               FROM storyos.model_attempts
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND model_attempt_id = $3::text::uuid",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &advance.attempt_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?
-        .get(0);
-    let attempt_id = Uuid::now_v7().to_string();
-    let manifest_id = Uuid::now_v7().to_string();
-    let requirement_id = Uuid::now_v7().to_string();
-    let snapshot_id = Uuid::now_v7().to_string();
-    let destination_manifest_id = Uuid::now_v7().to_string();
-    let outbound_manifest_id = Uuid::now_v7().to_string();
-    let inserted = client
-        .execute(
-            "INSERT INTO storyos.operation_requirements
-               (owner_user_id, project_id, operation_requirement_id, run_id,
-                input_snapshot_id, receipt_id, payload, requirement_role)
-             SELECT owner_user_id, project_id, $4::text::uuid, run_id,
-                    $5::text::uuid, receipt_id, payload, 'retrieval'
-               FROM storyos.operation_requirements
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND requirement_role = 'primary' AND decision_position = 0",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &requirement_id,
-                &snapshot_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    if inserted != 1 {
-        return Err(unavailable(std::io::Error::other(
-            "The primary operation requirement is missing",
-        )));
-    }
-    let manifested = client
-        .execute(
-            "INSERT INTO storyos.context_assembly_manifests
-               (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency,
-                destination_context_manifest_id, outbound_disclosure_manifest_id,
-                payload, receipt_id, manifest_role)
-             SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, 'retrieval'
-               FROM storyos.context_assembly_manifests
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND manifest_role = 'decision' AND decision_position = 0",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &manifest_id,
-                &requirement_id,
-                &destination_manifest_id,
-                &outbound_manifest_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    if manifested != 1 {
-        return Err(unavailable(std::io::Error::other(
-            "The decision Context Assembly Manifest is missing",
-        )));
-    }
-    let reference_id = text(subject, "reference_id").unwrap_or("");
-    let result = text(subject, "result").unwrap_or("unknown");
-    let dispatch_state = if matches!(
-        decision,
-        OriginalResultRetrievalDecision::KeepUnknown {
-            reason: OriginalResultKeepReason::UnknownResult,
-            ..
-        }
-    ) {
-        "uncertain"
-    } else {
-        "settled"
-    };
-    let items = if result == "complete_selected" {
-        serde_json::json!([complete_item()])
-    } else if result == "incomplete" {
-        serde_json::json!([{
-            "item_id": "1",
-            "role": "assistant",
-            "state": "incomplete",
-            "phase": "incomplete",
-            "text": ADVISORY_TEXT,
-            "summary": "host_fake_native_text",
-            "call_id": null,
-            "arguments": null,
-            "refusal": null,
-            "hosted_report": null
-        }])
-    } else {
-        serde_json::json!([])
-    };
-    let retrieval_payload = serde_json::json!({
-        "operation": "retrieve_original_result",
-        "original_model_attempt_id": advance.attempt_id,
-        "response_reference_id": reference_id,
-        "repeats_original_create": false,
-        "resumes_stream": false,
-        "proves_create_idempotency": false,
-        "bounds": text(subject, "bounds").unwrap_or("declared_read_only"),
-        "result": result,
-        "items": items,
-        "decision": null,
-        "usage": { "kind": "unknown" },
-        "reservation": { "kind": "worst_case", "released": false },
-        "evidence": [
-            {
-                "kind": "stored_reference",
-                "attempt_id": attempt_id,
-                "availability": "current",
-                "reference_id": reference_id
-            },
-            {
-                "kind": "provider_report",
-                "attempt_id": attempt_id,
-                "availability": "current",
-                "report": "host_fake_original_result_retrieval"
-            },
-            {
-                "kind": "provider_opaque",
-                "attempt_id": attempt_id,
-                "availability": "unknown",
-                "unknown_facts": ["provider_internal_content"]
-            }
-        ]
-    });
-    client
-        .execute(
-            "INSERT INTO storyos.model_attempts
-               (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
-                outbound_disclosure_event_id, destination_context_manifest_id,
-                outbound_disclosure_manifest_id, wire_payload_projection_id,
-                model_invocation_id, conversation_id, dispatch_state, payload, attempt_role)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, $10::text::uuid, $11::text::uuid, $12,
-                     $13::text::jsonb, 'retrieval')",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &attempt_id,
-                &Uuid::now_v7().to_string(),
-                &Uuid::now_v7().to_string(),
-                &destination_manifest_id,
-                &outbound_manifest_id,
-                &Uuid::now_v7().to_string(),
-                &invocation_id,
-                &advance.conversation_id,
-                &dispatch_state,
-                &retrieval_payload.to_string(),
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    Ok(AdmittedRetrieval {
-        attempt_id,
-        manifest_id,
-    })
+    Ok(())
 }
 
 async fn write_settled_decision(
@@ -680,29 +497,21 @@ fn facts(
     conversation_id: &str,
     destination_identity: &str,
     run_fenced: bool,
-) -> Result<OriginalResultRetrievalFacts, CompleteAgentRunError> {
-    let reference = match text(subject, "reference_id") {
-        Some(_) => RetainedResponseReference::Present,
-        None => RetainedResponseReference::Absent,
-    };
-    let capability = match text(subject, "capability") {
-        Some("unsupported") => RetrievalCapability::Unsupported,
-        _ => RetrievalCapability::Supported,
-    };
-    let bounds = match text(subject, "bounds") {
-        Some("unknown") => RetrievalBounds::Unknown,
-        _ => RetrievalBounds::DeclaredReadOnly,
-    };
-    let retrieved = match text(subject, "result") {
-        Some("incomplete") => RetrievedOriginalResult::Incomplete,
-        Some("unknown") => RetrievedOriginalResult::Unknown,
-        Some("complete_selected") => RetrievedOriginalResult::CompleteSelected,
-        _ => RetrievedOriginalResult::NotRetrieved,
-    };
-    Ok(OriginalResultRetrievalFacts {
-        capability,
-        bounds,
-        reference,
+    retrieved: RetrievedOriginalResult,
+) -> OriginalResultRetrievalFacts {
+    OriginalResultRetrievalFacts {
+        capability: match text(subject, "capability") {
+            Some("unsupported") => RetrievalCapability::Unsupported,
+            _ => RetrievalCapability::Supported,
+        },
+        bounds: match text(subject, "bounds") {
+            Some("unknown") => RetrievalBounds::Unknown,
+            _ => RetrievalBounds::DeclaredReadOnly,
+        },
+        reference: match text(subject, "reference_id") {
+            Some(_) => RetainedResponseReference::Present,
+            None => RetainedResponseReference::Absent,
+        },
         scope_permitted: text(subject, "owner_user_id")
             == Some(claim.project_scope.owner_user_id.as_ref())
             && text(subject, "project_id") == Some(claim.project_scope.project_id.as_ref()),
@@ -711,25 +520,10 @@ fn facts(
         mapping_permitted: text(subject, "mapping_revision") == Some(HOST_FAKE_MAPPING_REVISION),
         retrieved,
         run_fenced,
-    })
+    }
 }
 
-fn complete_item() -> serde_json::Value {
-    serde_json::json!({
-        "item_id": "1",
-        "role": "assistant",
-        "state": "complete",
-        "phase": "complete",
-        "text": ADVISORY_TEXT,
-        "summary": "host_fake_native_text",
-        "call_id": null,
-        "arguments": null,
-        "refusal": null,
-        "hosted_report": null
-    })
-}
-
-fn text<'a>(value: &'a serde_json::Value, field: &str) -> Option<&'a str> {
+pub(crate) fn text<'a>(value: &'a serde_json::Value, field: &str) -> Option<&'a str> {
     value
         .get(field)
         .and_then(serde_json::Value::as_str)
@@ -749,7 +543,9 @@ fn flag(value: &serde_json::Value, field: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> CompleteAgentRunError {
+pub(crate) fn unavailable(
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(error))
 }
 

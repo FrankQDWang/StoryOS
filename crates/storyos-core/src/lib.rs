@@ -8,7 +8,6 @@ mod archive_project;
 mod archive_zip;
 mod assemble_context;
 mod compact_active_context;
-mod complete_fake_decision;
 mod continuation_input;
 mod create_agent_run;
 mod create_chapter;
@@ -18,6 +17,8 @@ mod delete_chapter;
 mod delete_volume;
 mod draft_retry;
 mod expand_refused_edit_draft;
+mod host_fake_profile;
+mod model_output;
 mod rebuild_expired_reference;
 mod retrieve_original_result;
 mod unknown_create_successor;
@@ -88,14 +89,6 @@ pub use compact_active_context::{
     HOST_FAKE_COMPACTION_PRODUCER, active_context_input_digest, decide_compaction_install,
     requests_active_compaction,
 };
-pub use complete_fake_decision::{
-    ADVISORY_TEXT, ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
-    HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
-    INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, NoDecisionReason, PROSE_CHANGE_TEXT,
-    SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole,
-    StreamItemState, host_fake_wire_digest, plan_fake_model_decision, plan_resolved_fake_decision,
-    stream_batch_plan,
-};
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
     continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
@@ -124,11 +117,20 @@ pub use delete_volume::{
     DeleteVolumeRefusal, DeleteVolumeResult, VolumeChildPolicy, VolumeRemovalLifecycle,
     delete_volume,
 };
+pub use host_fake_profile::{
+    ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
+    INLINE_PROSE_CHANGE_TEXT, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT,
+    STREAM_SECOND_TEXT, requested_execution_capability, stream_batch_plan,
+};
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, BlockReservation, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
     VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
     upgrade_legacy_manuscript,
+};
+pub use model_output::{
+    AgentDecisionKind, AgentDecisionOutcome, DecisionCandidate, ModelOutput, NativeStreamItem,
+    OutputPhase, StreamItemRole, StreamItemState, validate_agent_decision,
 };
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
@@ -192,8 +194,8 @@ pub use replan_proposal::{
 };
 pub use retrieve_original_result::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
-    OriginalResultScript, RetainedResponseReference, RetrievalBounds, RetrievalCapability,
-    RetrievedOriginalResult, decide_original_result_retrieval, original_result_script,
+    RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
+    decide_original_result_retrieval,
 };
 pub use revision_comparison::{
     ExactRevisionTexts, ReplacementSpan, RevisionComparison, RevisionComparisonAccess,
@@ -625,10 +627,7 @@ pub use close_editor_flow_draft::{
 };
 
 mod prose_change_locations;
-pub use prose_change_locations::{
-    ProseChangeCandidate, is_fake_candidate_revision_request, produce_fake_candidate_revision,
-    produce_fake_prose_changes, prose_changes_match_targets,
-};
+pub use prose_change_locations::{ProseChangeCandidate, prose_changes_match_targets};
 
 mod assemble_candidate_context;
 pub use assemble_candidate_context::{ProposalCandidateTarget, assemble_candidate_context};

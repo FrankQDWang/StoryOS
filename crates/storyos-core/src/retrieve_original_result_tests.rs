@@ -1,7 +1,7 @@
 use crate::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
-    OriginalResultScript, RetainedResponseReference, RetrievalBounds, RetrievalCapability,
-    RetrievedOriginalResult, decide_original_result_retrieval, original_result_script,
+    RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
+    decide_original_result_retrieval,
 };
 
 fn open_facts(retrieved: RetrievedOriginalResult) -> OriginalResultRetrievalFacts {
@@ -20,14 +20,6 @@ fn open_facts(retrieved: RetrievedOriginalResult) -> OriginalResultRetrievalFact
 
 #[test]
 fn retrieval_follows_the_retained_reference_and_fence() {
-    assert_eq!(
-        original_result_script("Help with this passage."),
-        OriginalResultScript::NotSubject
-    );
-    assert_eq!(
-        original_result_script("SCRIPT:retrieve-complete"),
-        OriginalResultScript::CompleteSelected
-    );
     assert_eq!(
         decide_original_result_retrieval(&OriginalResultRetrievalFacts {
             reference: RetainedResponseReference::Absent,

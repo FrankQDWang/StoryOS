@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-storyos-adapter-postgres = { path = "../storyos-adapter-postgres" }
 storyos-application = { path = "../storyos-application" }
 tokio = { workspace = true, features = ["time"] }
 

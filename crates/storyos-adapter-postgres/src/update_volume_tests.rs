@@ -558,7 +558,7 @@ pub(crate) async fn seed_project(store: &PostgresProjectReader, suffix: &str) ->
     ProjectScope::new(binding.owner_user_id, binding.prospective_project_id)
 }
 
-fn named_issue(
+pub(crate) fn named_issue(
     scope: &ProjectScope,
     suffix: &str,
     method: &str,
@@ -619,7 +619,7 @@ pub(crate) async fn apply_volume(
     volume_id
 }
 
-async fn apply_chapter(
+pub(crate) async fn apply_chapter(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: &str,

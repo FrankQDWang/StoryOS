@@ -1,0 +1,19 @@
+[package]
+name = "storyos-worker-bin"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "storyos-worker"
+path = "src/main.rs"
+
+[dependencies]
+storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
+storyos-adapter-postgres = { path = "../storyos-adapter-postgres" }
+storyos-application = { path = "../storyos-application" }
+storyos-worker = { path = "../storyos-worker" }
+tokio = { workspace = true, features = ["time"] }
+
+[lints]
+workspace = true

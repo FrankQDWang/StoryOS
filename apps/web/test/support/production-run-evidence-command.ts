@@ -127,18 +127,19 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       ["6", "unknown_create"],
     ] as const) {
       await openCase(suffix);
-      const priorId = await submit("Help with this passage.");
+      const priorId = await submit(disposition === "unknown_create"
+        ? "Help with this passage." : "Help with this passage. SCRIPT:reference-expires");
       await settleOnce();
       const prior = await inspect(priorId);
       assert.equal(prior.model_attempt.kind, "present");
-      await queryStoryOSPostgres(`UPDATE storyos.model_attempts
-        SET payload = payload || jsonb_build_object('produced_binding',
-          COALESCE(payload->'produced_binding', '{}'::jsonb) ||
-          jsonb_build_object('reference_condition', 'confirmed_expired'
-            ${disposition === "blocked" ? ", 'budget_exhausted', true" : ""}))
-          ${disposition === "unknown_create" ? ", dispatch_state = 'uncertain'" : ""}
-        WHERE project_id = '${setup.projectId}'::uuid AND run_id = '${priorId}'::uuid
-          AND attempt_role = 'decision';`);
+      if (disposition !== "rebuilt") {
+        await queryStoryOSPostgres(`UPDATE storyos.model_attempts
+          SET ${disposition === "blocked"
+            ? `payload = jsonb_set(payload, '{produced_binding,budget_exhausted}', 'true'::jsonb)`
+            : "dispatch_state = 'uncertain'"}
+          WHERE project_id = '${setup.projectId}'::uuid AND run_id = '${priorId}'::uuid
+            AND attempt_role = 'decision';`);
+      }
       const runId = await submit("I changed my mind: keep the voice.");
       await settleOnce();
       const recovery = (await inspect(runId)).reference_recovery;
@@ -184,6 +185,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       await expect.poll(async () => (await inspect(cancelledLookupId)).model_attempt.kind).toBe("present");
       assert.equal((await cancel(cancelledLookupId, "9")).effect.kind, "applied");
     } finally { if (existsSync(lookupHold)) unlinkSync(lookupHold); await lookupWorker; }
+    await settleOnce();
     const cancelledLookup = await inspect(cancelledLookupId);
     assert.equal(cancelledLookup.status, "cancelled");
     assert.ok(cancelledLookup.original_result_retrieval.kind === "present");
@@ -226,6 +228,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       assert.ok(!fenced.successor_model_attempt_id);
       assert.equal((await cancel(successorId, "c")).effect.kind, "applied");
     } finally { if (existsSync(fenceHold)) unlinkSync(fenceHold); await fenceWorker; }
+    await settleOnce();
     const prohibited = await inspect(successorId);
     assert.equal(prohibited.status, "cancelled");
     assert.ok(prohibited.unknown_create_successor.kind === "present");

@@ -151,7 +151,8 @@ moving files must not conceal a cross-zone merge.
 │   ├── storyos-application/           # use-case composition and transaction intent
 │   ├── storyos-adapter-*/             # PostgreSQL and external implementations
 │   ├── storyos-server/                # public HTTP/SSE process entrypoint
-│   └── storyos-worker/                # fenced asynchronous process entrypoint
+│   ├── storyos-worker/                # fenced asynchronous Worker loop library
+│   └── storyos-worker-bin/            # Worker process entrypoint (ADR 0039)
 ├── apps/
 │   └── web/                           # production author-facing Web Client
 ├── generated/                         # checked-in generator output; never hand-edited
@@ -185,9 +186,10 @@ topology is a governance target, not authorization to create empty crates now.
   queue, database, Web Client, or copied Codex runtime.
 - `storyos-adapter-*` depends inward on the owner port and, when required, the
   contracts crate. It may not be imported by Core or redefine a public API.
-- `storyos-server` and `storyos-worker` are composition roots. They may depend
-  inward on application, contracts, and selected adapters but may not be
-  imported by Core, Kernel, domain zones, or the Web Client.
+- `storyos-server` and `storyos-worker-bin` are composition roots. They may
+  depend inward on application, contracts, and selected adapters but may not be
+  imported by Core, Kernel, domain zones, or the Web Client. The
+  `storyos-worker` library holds the Worker loop and depends on no adapter.
 - `apps/web` imports only generated client/types and presentation-safe packages.
   It does not import Rust implementation code, database schemas, internal
   Worker/Adapter contracts, or generated artifacts for another release surface.

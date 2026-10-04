@@ -10,6 +10,7 @@ mime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
 storyos-adapter-postgres = { path = "../storyos-adapter-postgres" }
 storyos-application = { path = "../storyos-application" }
 storyos-contracts = { path = "../storyos-contracts" }

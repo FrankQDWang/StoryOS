@@ -7,7 +7,7 @@ use super::{
 fn facts(script: UnknownCreateScript) -> UnknownCreateSuccessorFacts {
     let conditions = scripted_successor_conditions(script).expect("successor script");
     UnknownCreateSuccessorFacts {
-        lookup: conditions.lookup,
+        lookup: SuccessorLookup::StillUnknown,
         same_request: conditions.same_request,
         same_route: conditions.same_route,
         current_authority: conditions.current_authority,
@@ -34,33 +34,28 @@ fn successor_scripts_are_distinct_from_ordinary_and_retrieval_text() {
         unknown_create_script("SCRIPT:successor-once"),
         UnknownCreateScript::Once
     );
-    assert!(
-        scripted_successor_conditions(UnknownCreateScript::Late)
-            .expect("late")
-            .late_complete
-    );
 }
 
 #[test]
 fn missing_or_unsupported_lookup_still_permits_one_successor() {
-    for script in [
-        UnknownCreateScript::Once,
-        UnknownCreateScript::Late,
-        UnknownCreateScript::MissingReference,
-        UnknownCreateScript::UnsupportedRetrieval,
-    ] {
-        assert_eq!(
-            decide_unknown_create_successor(&facts(script)),
-            UnknownCreateSuccessorDecision::FenceAndDispatch,
-            "{script:?}"
-        );
-    }
-    assert_eq!(
-        facts(UnknownCreateScript::MissingReference).lookup,
+    for lookup in [
+        SuccessorLookup::StillUnknown,
         SuccessorLookup::Unavailable {
             reason: LookupUnavailable::MissingReference,
-        }
-    );
+        },
+        SuccessorLookup::Unavailable {
+            reason: LookupUnavailable::UnsupportedRetrieval,
+        },
+    ] {
+        assert_eq!(
+            decide_unknown_create_successor(&UnknownCreateSuccessorFacts {
+                lookup,
+                ..facts(UnknownCreateScript::Once)
+            }),
+            UnknownCreateSuccessorDecision::FenceAndDispatch,
+            "{lookup:?}"
+        );
+    }
 }
 
 #[test]

@@ -1,17 +1,24 @@
-//! StoryOS Worker composition root.
+//! The StoryOS Worker loop. Composition roots supply the store, the adapter, and the observer.
 
 use std::time::Duration;
 
 use storyos_application::{
     AgentRunWorkStore, ClaimedExportWork, CompleteAgentRunError, CompleteArchiveExportError,
-    CompleteReadableExportError, ExportWorkStore, claim_next_agent_run, claim_next_export_work,
-    complete_agent_run, complete_archive_export, complete_readable_export,
+    CompleteReadableExportError, ContractFaultObserver, ExportWorkStore, ModelDispatchStore,
+    ModelProviderAdapter, claim_next_agent_run, claim_next_export_work, complete_agent_run,
+    complete_archive_export, complete_readable_export,
 };
 
 /// Combined persistence port for the packaged Worker loop.
-pub trait WorkerStore: ExportWorkStore + AgentRunWorkStore {}
+pub trait WorkerStore: ExportWorkStore + AgentRunWorkStore + ModelDispatchStore {}
 
-impl<T> WorkerStore for T where T: ExportWorkStore + AgentRunWorkStore {}
+impl<T> WorkerStore for T where T: ExportWorkStore + AgentRunWorkStore + ModelDispatchStore {}
+
+/// The destination side of the Worker loop: one Model Provider Adapter and its fault observer.
+pub struct ModelDestination<A, O> {
+    pub adapter: A,
+    pub observer: O,
+}
 
 pub fn in_process_loop_enabled() -> bool {
     std::env::var("STORYOS_WORKER").ok().as_deref() != Some("0")
@@ -25,16 +32,20 @@ pub fn readable_export_lease_ttl_from_env() -> Duration {
         .unwrap_or(Duration::from_secs(30))
 }
 
-pub async fn run(store: impl WorkerStore) {
+pub async fn run<A: ModelProviderAdapter, O: ContractFaultObserver>(
+    store: impl WorkerStore,
+    destination: ModelDestination<A, O>,
+) {
     loop {
-        if !step(&store).await {
+        if !step(&store, &destination).await {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
 }
 
-pub async fn run_once(
+pub async fn run_once<A: ModelProviderAdapter, O: ContractFaultObserver>(
     store: &impl WorkerStore,
+    destination: &ModelDestination<A, O>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match claim_next_export_work(store).await {
         Ok(Some(ClaimedExportWork::Readable(claim))) => {
@@ -46,10 +57,14 @@ pub async fn run_once(
             Ok(())
         }
         Ok(None) => match claim_next_agent_run(store).await {
-            Ok(Some(claim)) => match complete_agent_run(store, &claim).await {
-                Ok(_) | Err(CompleteAgentRunError::StaleFence) => Ok(()),
-                Err(error) => Err(error.into()),
-            },
+            Ok(Some(claim)) => {
+                match complete_agent_run(store, &destination.adapter, &destination.observer, &claim)
+                    .await
+                {
+                    Ok(_) | Err(CompleteAgentRunError::StaleFence) => Ok(()),
+                    Err(error) => Err(error.into()),
+                }
+            }
             Ok(None) => Ok(()),
             Err(error) => Err(error.into()),
         },
@@ -67,7 +82,10 @@ pub async fn claim_only(
     Ok(())
 }
 
-async fn step(store: &impl WorkerStore) -> bool {
+async fn step<A: ModelProviderAdapter, O: ContractFaultObserver>(
+    store: &impl WorkerStore,
+    destination: &ModelDestination<A, O>,
+) -> bool {
     match claim_next_export_work(store).await {
         Ok(Some(ClaimedExportWork::Readable(claim))) => {
             for _ in 0..4 {
@@ -90,7 +108,14 @@ async fn step(store: &impl WorkerStore) -> bool {
         Ok(None) => match claim_next_agent_run(store).await {
             Ok(Some(claim)) => {
                 for _ in 0..4 {
-                    match complete_agent_run(store, &claim).await {
+                    match complete_agent_run(
+                        store,
+                        &destination.adapter,
+                        &destination.observer,
+                        &claim,
+                    )
+                    .await
+                    {
                         Ok(_) | Err(CompleteAgentRunError::StaleFence) => return true,
                         Err(_) => {}
                     }
