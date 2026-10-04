@@ -15,6 +15,8 @@ const FOREIGN_SCOPE: &str = "018f0000-0000-7000-8000-00000000f033";
 const FOREIGN_CONVERSATION: &str = "018f0000-0000-7000-8000-00000000f011";
 const FOREIGN_DESTINATION: &str = "018f0000-0000-7000-8000-00000000f022";
 const FOREIGN_MAPPING: &str = "storyos.host-fake.mapping.rejected";
+const EXPIRED_CONTINUATION: u8 = 5;
+const UNUSABLE_CONTINUATION: u8 = 6;
 
 /// The later result that a fake reference encodes in its last group.
 #[derive(Clone, Copy)]
@@ -86,30 +88,57 @@ pub(crate) fn unknown_create(
             | UnknownCreateScript::Authority => (supported, ReferenceResult::Unknown),
         },
     };
-    let hash = storyos_core::hex_sha256(wire_digest.as_bytes());
     Some(Some(ResponseReference {
-        reference_id: format!(
-            "{}-{}-7{}-8{}-{:02x}{}",
-            &hash[0..8],
-            &hash[8..12],
-            &hash[13..16],
-            &hash[17..20],
-            result as u8,
-            &hash[20..30]
-        ),
+        reference_id: mint_reference(wire_digest, result as u8),
         retrieval,
         reported_binding: binding,
     }))
 }
 
-/// Derives the retrieved result from the reference alone.
-pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
-    let code = request
-        .response_reference
+/// A UUID-shaped reference whose last group starts with the later result code.
+pub(crate) fn mint_reference(wire_digest: &str, code: u8) -> String {
+    let hash = storyos_core::hex_sha256(wire_digest.as_bytes());
+    format!(
+        "{}-{}-7{}-8{}-{code:02x}{}",
+        &hash[0..8],
+        &hash[8..12],
+        &hash[13..16],
+        &hash[17..20],
+        &hash[20..30]
+    )
+}
+
+/// The reference code of a create response that the author message scripts.
+pub(crate) fn continuation_code(author_message: &str) -> u8 {
+    if author_message.ends_with("SCRIPT:reference-expires") {
+        EXPIRED_CONTINUATION
+    } else if author_message.ends_with("SCRIPT:reference-unusable") {
+        UNUSABLE_CONTINUATION
+    } else {
+        0
+    }
+}
+
+/// The rejection of an incremental create whose prior reference the destination lost.
+pub(crate) fn continuation_rejection(previous_reference: &str) -> Option<&'static str> {
+    match reference_code(previous_reference) {
+        Some(EXPIRED_CONTINUATION) => Some("continuation_expired"),
+        Some(UNUSABLE_CONTINUATION) => Some("continuation_unusable"),
+        _ => None,
+    }
+}
+
+fn reference_code(reference: &str) -> Option<u8> {
+    reference
         .rsplit('-')
         .next()
         .and_then(|group| group.get(0..2))
-        .and_then(|code| u8::from_str_radix(code, 16).ok());
+        .and_then(|code| u8::from_str_radix(code, 16).ok())
+}
+
+/// Derives the retrieved result from the reference alone.
+pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
+    let code = reference_code(&request.response_reference);
     let complete = || {
         Observation::Terminal(ModelResponse {
             items: vec![assistant_item(

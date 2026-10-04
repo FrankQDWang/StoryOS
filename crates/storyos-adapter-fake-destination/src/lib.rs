@@ -20,9 +20,9 @@ pub struct FakeDestination;
 pub struct FakeExchange(FakePlan);
 
 enum FakePlan {
-    Create(create_plan::FakeCreate),
+    Create(create_plan::FakeCreate, String),
     UnknownCreate(Option<ResponseReference>),
-    Retrieve(Observation),
+    Observed(Observation),
 }
 
 impl ModelProviderAdapter for FakeDestination {
@@ -34,6 +34,27 @@ impl ModelProviderAdapter for FakeDestination {
     ) -> Result<PreparedRequest<FakeExchange>, PreDispatchRefusal> {
         let create = match request {
             DestinationRequest::Create(create) => create,
+            DestinationRequest::Abort(abort) => {
+                return Ok(PreparedRequest {
+                    projection: projection(
+                        wire_digest(&serde_json::json!({
+                            "operation": "abort",
+                            "model_attempt_id": abort.ticket.model_attempt_id(),
+                            "response_reference": abort.response_reference,
+                            "mapping_revision": HOST_FAKE_MAPPING_REVISION,
+                        })),
+                        /*serialized_payload*/ None,
+                    ),
+                    prepared: FakeExchange(FakePlan::Observed(Observation::Terminal(
+                        ModelResponse {
+                            items: Vec::new(),
+                            output: None,
+                            usage: ModelUsage::Unknown,
+                            response_reference: abort.response_reference.clone(),
+                        },
+                    ))),
+                });
+            }
             DestinationRequest::Retrieve(retrieve) => {
                 return Ok(PreparedRequest {
                     projection: projection(
@@ -44,7 +65,7 @@ impl ModelProviderAdapter for FakeDestination {
                         })),
                         /*serialized_payload*/ None,
                     ),
-                    prepared: FakeExchange(FakePlan::Retrieve(recovery_plan::retrieve(retrieve))),
+                    prepared: FakeExchange(FakePlan::Observed(recovery_plan::retrieve(retrieve))),
                 });
             }
         };
@@ -67,9 +88,25 @@ impl ModelProviderAdapter for FakeDestination {
                 /*serialized_payload*/ None,
             ),
         };
-        let plan = match recovery_plan::unknown_create(&create.author_message, &projection.digest) {
-            Some(reference) => FakePlan::UnknownCreate(reference),
-            None => FakePlan::Create(create_plan::plan_create(create)),
+        let rejection = create
+            .previous_response_reference
+            .as_deref()
+            .and_then(recovery_plan::continuation_rejection);
+        let plan = match (
+            rejection,
+            recovery_plan::unknown_create(&create.author_message, &projection.digest),
+        ) {
+            (Some(reason), _) => FakePlan::Observed(Observation::Rejected {
+                reason: reason.to_owned(),
+            }),
+            (None, Some(reference)) => FakePlan::UnknownCreate(reference),
+            (None, None) => FakePlan::Create(
+                create_plan::plan_create(create),
+                recovery_plan::mint_reference(
+                    &projection.digest,
+                    recovery_plan::continuation_code(&create.author_message),
+                ),
+            ),
         };
         Ok(PreparedRequest {
             projection,
@@ -82,12 +119,12 @@ impl ModelProviderAdapter for FakeDestination {
         prepared: FakeExchange,
         sink: &mut impl ModelStreamSink,
     ) -> Observation {
-        let planned = match prepared.0 {
-            FakePlan::Create(planned) => planned,
+        let (planned, reference) = match prepared.0 {
+            FakePlan::Create(planned, reference) => (planned, reference),
             FakePlan::UnknownCreate(response_reference) => {
                 return Observation::OutcomeUnknown { response_reference };
             }
-            FakePlan::Retrieve(observation) => return observation,
+            FakePlan::Observed(observation) => return observation,
         };
         if sink.append(&planned.items).await == StreamControl::Stop {
             return Observation::OutcomeUnknown {
@@ -98,7 +135,7 @@ impl ModelProviderAdapter for FakeDestination {
             items: planned.items,
             output: planned.output,
             usage: ModelUsage::Unknown,
-            response_reference: None,
+            response_reference: Some(reference),
         })
     }
 }

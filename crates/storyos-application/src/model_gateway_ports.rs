@@ -11,6 +11,7 @@ use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
 pub enum DestinationRequest {
     Create(CreateRequest),
     Retrieve(RetrieveRequest),
+    Abort(AbortRequest),
 }
 
 impl DestinationRequest {
@@ -18,6 +19,7 @@ impl DestinationRequest {
         match self {
             Self::Create(request) => &request.attempt,
             Self::Retrieve(request) => &request.attempt,
+            Self::Abort(request) => &request.attempt,
         }
     }
 }
@@ -39,6 +41,8 @@ pub struct CreateRequest {
     pub passage_input: Option<serde_json::Value>,
     pub declared_targets: Vec<DeclaredTarget>,
     pub candidate_revision: Option<String>,
+    /// The destination reference of the prior response that an incremental continuation sends.
+    pub previous_response_reference: Option<String>,
 }
 
 /// One admitted Proposal target that the request declares to the destination.
@@ -65,6 +69,32 @@ pub enum RetrievePurpose {
     OriginalResult,
     /// Looks for the late result of a predecessor after its successor was dispatched.
     LateResult,
+}
+
+/// A best-effort provider abort of one cancelled Model Attempt.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AbortRequest {
+    pub attempt: RequestAttempt,
+    pub ticket: AbortTicket,
+    pub response_reference: Option<String>,
+}
+
+/// Permission to abort one Model Attempt. Only a `ModelDispatchStore` issues a ticket, and only
+/// after the Model Attempt Cancellation commits.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AbortTicket {
+    model_attempt_id: String,
+}
+
+impl AbortTicket {
+    /// For store implementations, after the cancellation of this Model Attempt commits.
+    pub fn after_committed_cancellation(model_attempt_id: String) -> Self {
+        Self { model_attempt_id }
+    }
+
+    pub fn model_attempt_id(&self) -> &str {
+        &self.model_attempt_id
+    }
 }
 
 /// The committed dispatch claim of one Destination Attempt.
@@ -161,10 +191,10 @@ pub enum NextDispatchWork {
 }
 
 /// Why an exchange must stop at its next durable boundary.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StreamStop {
     StaleFence,
-    Cancelled,
+    Cancelled(AbortTicket),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

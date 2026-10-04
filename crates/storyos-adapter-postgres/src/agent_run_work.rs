@@ -6,6 +6,8 @@ use storyos_application::{
 use storyos_core::{ExecutionCapability, requested_execution_capability, stream_batch_plan};
 use uuid::Uuid;
 
+use crate::agent_run_create_dispatch::PriorContext;
+
 use super::*;
 use crate::update_project_assistance::read_assistance_record;
 
@@ -176,6 +178,28 @@ pub(crate) async fn load_run_phase(
     })
 }
 
+/// Loads the Run for this claim. A claim that only a Run Cancellation fenced keeps the
+/// cancellation duties of evidence, retrieval, and abort; it can never supply a decision.
+pub(crate) async fn load_claimed_or_cancelled(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+) -> Result<(ClaimedAgentRun, RunPhaseRow), CompleteAgentRunError> {
+    match load_run_phase(client, claim).await {
+        Err(CompleteAgentRunError::StaleFence) => {
+            let cancelled = ClaimedAgentRun {
+                fence_token: claim.fence_token + 1,
+                ..claim.clone()
+            };
+            let run = load_run_phase(client, &cancelled).await?;
+            if run.status != "cancelled" {
+                return Err(CompleteAgentRunError::StaleFence);
+            }
+            Ok((cancelled, run))
+        }
+        loaded => Ok((claim.clone(), loaded?)),
+    }
+}
+
 pub(crate) enum CreateAdmission {
     Settled,
     Dispatch(Option<Box<crate::agent_run_expiry::RebuildDispatch>>),
@@ -238,7 +262,8 @@ pub(crate) async fn settle_one_phase(
     claim: &ClaimedAgentRun,
     lease_seconds: i64,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let run = load_run_phase(client, claim).await?;
+    let (claim, run) = load_claimed_or_cancelled(client, claim).await?;
+    let claim = &claim;
     if run.status == "cancelled" {
         return crate::agent_run_recovery::settle_cancelled(client, claim, &run).await;
     }
@@ -259,14 +284,18 @@ pub(crate) async fn settle_one_phase(
         return Ok(
             match admit_create(client, claim, &run, assistance.as_ref()).await? {
                 CreateAdmission::Settled => WorkPhase::Done(CompleteAgentRun::Settled),
-                CreateAdmission::Dispatch(_) => {
+                CreateAdmission::Dispatch(rebuild) => {
                     WorkPhase::Dispatch(Box::new(DestinationRequest::Create(
-                        crate::agent_run_dispatch::create_request(
+                        crate::agent_run_create_dispatch::create_request(
                             client,
                             claim,
                             &run,
                             &record,
                             RequestAttempt::New,
+                            match rebuild {
+                                Some(_) => PriorContext::Rebuild,
+                                None => PriorContext::Continue,
+                            },
                         )
                         .await?,
                     )))
@@ -304,7 +333,7 @@ pub(crate) async fn settle_one_phase(
     }
     if decision_id.is_none() {
         return Ok(WorkPhase::Dispatch(Box::new(DestinationRequest::Create(
-            crate::agent_run_dispatch::create_request(
+            crate::agent_run_create_dispatch::create_request(
                 client,
                 claim,
                 &run,
@@ -312,6 +341,7 @@ pub(crate) async fn settle_one_phase(
                 RequestAttempt::Claimed(DispatchClaim {
                     model_attempt_id: attempt_id,
                 }),
+                PriorContext::Continue,
             )
             .await?,
         ))));

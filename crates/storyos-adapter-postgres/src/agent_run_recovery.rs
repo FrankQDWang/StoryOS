@@ -2,7 +2,7 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DestinationRequest, DispatchClaim,
-    ProjectAssistanceRecord, ProjectScope, ReferenceRetrieval, ResponseReference,
+    Observation, ProjectAssistanceRecord, ProjectScope, ReferenceRetrieval, ResponseReference,
 };
 use storyos_core::{LookupUnavailable, SuccessorLookup};
 
@@ -11,9 +11,7 @@ use crate::agent_run_retrieval::{
     advance_original_result_retrieval,
 };
 use crate::agent_run_successor::SuccessorWork;
-use crate::agent_run_work::{
-    RunPhaseRow, WorkPhase, complete_database_error, load_run_phase, update_run,
-};
+use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error, update_run};
 use crate::update_project_assistance::read_assistance_record;
 
 /// Advances the retrieval subject and then the successor marker of the active decision.
@@ -95,6 +93,11 @@ pub(crate) async fn settle_cancelled(
             ))));
         }
     }
+    if let Some(abort) = crate::agent_run_abort::pending(client, claim, run).await? {
+        return Ok(WorkPhase::Dispatch(Box::new(DestinationRequest::Abort(
+            abort,
+        ))));
+    }
     client
         .execute(
             "UPDATE storyos.agent_runs
@@ -138,33 +141,27 @@ pub(crate) async fn record_unknown_create(
     Ok(WorkPhase::Hold("recovery"))
 }
 
-/// After a Run Cancellation, the fenced claim still records a retrievable reference as evidence.
-pub(crate) async fn record_cancelled_evidence(
+/// A cancelled Run keeps a retrievable reference of its unknown create as evidence, for a
+/// later fenced retrieval. Nothing else of the exchange is recorded.
+pub(crate) async fn record_cancelled_create(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
     dispatch: &DispatchClaim,
-    reference: Option<&ResponseReference>,
-) -> Result<bool, CompleteAgentRunError> {
-    if !reference.is_some_and(|reference| {
-        matches!(reference.retrieval, ReferenceRetrieval::Supported { .. })
-    }) {
-        return Ok(false);
-    }
-    let cancelled = ClaimedAgentRun {
-        fence_token: claim.fence_token + 1,
-        ..claim.clone()
+    observation: Observation,
+) -> Result<WorkPhase, CompleteAgentRunError> {
+    let Observation::OutcomeUnknown {
+        response_reference: Some(reference),
+    } = observation
+    else {
+        return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
     };
-    let run = match load_run_phase(client, &cancelled).await {
-        Err(CompleteAgentRunError::StaleFence) => return Ok(false),
-        loaded => loaded?,
-    };
-    if run.status != "cancelled"
-        || run.decision_position != "0"
-        || run.attempt_id.as_deref() != Some(dispatch.model_attempt_id.as_str())
+    if run.decision_position != "0"
+        || !matches!(reference.retrieval, ReferenceRetrieval::Supported { .. })
     {
-        return Ok(false);
+        return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
     }
-    write_subject(client, &cancelled, &run, dispatch, reference).await?;
+    write_subject(client, claim, run, dispatch, Some(&reference)).await?;
     client
         .execute(
             "UPDATE storyos.agent_runs SET wakeup_pending = true
@@ -174,12 +171,12 @@ pub(crate) async fn record_cancelled_evidence(
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
-                &cancelled.fence_token,
+                &claim.fence_token,
             ],
         )
         .await
         .map_err(complete_database_error)?;
-    Ok(true)
+    Ok(WorkPhase::Hold("recovery"))
 }
 
 async fn write_subject(
@@ -258,8 +255,8 @@ async fn write_subject(
     Ok(())
 }
 
-/// The cancel command sends no destination request. It leaves an unreconciled subject to a
-/// Worker claim of the cancelled Run.
+/// The cancel command sends no destination request. It leaves the abort and the fenced
+/// retrieval of an in-flight decision Attempt to a Worker claim of the cancelled Run.
 pub(crate) async fn mark_cancelled_evidence(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -274,8 +271,9 @@ pub(crate) async fn mark_cancelled_evidence(
                   SELECT 1 FROM storyos.model_attempts AS attempt
                    WHERE (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                          (run.owner_user_id, run.project_id, run.run_id)
-                     AND attempt.attempt_role = 'decision' AND attempt.decision_position = 0
-                     AND attempt.payload->'original_result_retrieval'->>'reconciled' = 'false')",
+                     AND attempt.attempt_role = 'decision'
+                     AND attempt.decision_position = run.active_decision_position
+                     AND attempt.decision_id IS NULL AND attempt.dispatch_state = 'uncertain')",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),

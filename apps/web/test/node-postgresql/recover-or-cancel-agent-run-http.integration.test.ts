@@ -567,6 +567,14 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     assert.equal(afterCancel.model_attempt.kind, "present");
     if (afterCancel.model_attempt.kind !== "present") throw new Error("expected attempt");
     assert.equal(afterCancel.model_attempt.dispatch_state, "uncertain");
+    assert.equal(await queryPostgres(`
+      SELECT count(*)::text || ' ' || count(DISTINCT outbound_disclosure_event_id)::text
+          || ' ' || min(payload->>'result')
+        FROM storyos.model_attempts
+       WHERE project_id = '${prepared.projectId}'::uuid
+         AND run_id = '${dispatchRun.effect.run_id}'::uuid
+         AND attempt_role = 'abort';
+    `), "1 1 acknowledged");
     await settleOnce();
     assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id)).status, "cancelled");
 

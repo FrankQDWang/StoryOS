@@ -51,6 +51,7 @@ enum Probe {
     Refuse,
     InspectBeforeExchange,
     TakeOverBeforeExchange,
+    CancelBeforeExchange,
 }
 
 /// Wraps the fake adapter and acts on the database at a deterministic point of the sequence.
@@ -108,6 +109,18 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     claimed_attempts,
                     run_locked,
                 });
+            }
+            Probe::CancelBeforeExchange => {
+                self.admin
+                    .execute(
+                        "UPDATE storyos.agent_runs
+                            SET status = 'cancelled', fence_token = fence_token + 1,
+                                lease_expires_at = NULL
+                          WHERE run_id = $1::text::uuid AND status = 'claimed'",
+                        &[&self.run_id],
+                    )
+                    .await
+                    .unwrap();
             }
             Probe::TakeOverBeforeExchange => {
                 self.admin
@@ -270,9 +283,9 @@ async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {
                        FROM storyos.context_assembly_manifests AS assembly
                       WHERE assembly.run_id = run.run_id),
                     (SELECT attempt.payload->>'items' FROM storyos.model_attempts AS attempt
-                      WHERE attempt.run_id = run.run_id),
+                      WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'),
                     (SELECT attempt.decision_id::text FROM storyos.model_attempts AS attempt
-                      WHERE attempt.run_id = run.run_id)
+                      WHERE attempt.run_id = run.run_id AND attempt.attempt_role = 'decision')
                FROM storyos.agent_runs AS run
               WHERE run.run_id = $1::text::uuid",
             &[&run_id],
@@ -417,6 +430,78 @@ async fn stale_run_lease_fence_rejects_the_observation() {
             settlement: None,
             model_attempts: 1,
             disclosure_events: 1,
+            destination_manifests: 1,
+            items: Some("[]".to_owned()),
+            decision_id: None,
+        }
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_committed_cancellation_issues_one_abort_through_the_same_sequence() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let claim = claimed_run(&store, &admin, "b94").await;
+    let destination = ProbingDestination {
+        admin: &admin,
+        run_id: claim.run_id.clone(),
+        probe: Probe::CancelBeforeExchange,
+        seen: Mutex::default(),
+    };
+    let points = RecordedPoints::default();
+
+    let result = complete_agent_run(&store, &destination, &points, &claim).await;
+
+    let abort = admin
+        .query_one(
+            "SELECT count(*), count(DISTINCT outbound_disclosure_event_id),
+                    min(payload->>'result'), min(payload->>'original_model_attempt_id')
+               FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'abort'",
+            &[&claim.run_id],
+        )
+        .await
+        .unwrap();
+    let decision_attempt: Option<String> = admin
+        .query_one(
+            "SELECT model_attempt_id::text FROM storyos.model_attempts
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+            &[&claim.run_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        (
+            result.ok(),
+            points.0.into_inner().unwrap(),
+            abort.get::<_, i64>(0),
+            abort.get::<_, i64>(1),
+            abort.get::<_, Option<String>>(2),
+            abort.get::<_, Option<String>>(3),
+        ),
+        (
+            Some(CompleteAgentRun::AlreadySettled),
+            vec![
+                ContractFaultPoint::DispatchClaimed,
+                ContractFaultPoint::DispatchClaimed
+            ],
+            1,
+            1,
+            Some("acknowledged".to_owned()),
+            decision_attempt,
+        )
+    );
+    assert_eq!(
+        dispatch_evidence(&admin, &claim.run_id).await,
+        DispatchEvidence {
+            status: "cancelled".to_owned(),
+            settlement: None,
+            model_attempts: 2,
+            disclosure_events: 2,
             destination_manifests: 1,
             items: Some("[]".to_owned()),
             decision_id: None,

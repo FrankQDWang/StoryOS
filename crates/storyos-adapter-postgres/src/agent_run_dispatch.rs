@@ -1,16 +1,16 @@
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateRequest, DeclaredTarget,
-    DestinationRequest, DispatchClaim, DispatchRecord, ModelDispatchStore, ModelUsage,
-    NextDispatchWork, Observation, PreDispatchRefusal, RequestAttempt, RetrievePurpose, StreamStop,
-    WirePayloadProjection,
+    AbortTicket, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DestinationRequest,
+    DispatchClaim, DispatchRecord, ModelDispatchStore, NextDispatchWork, PreDispatchRefusal,
+    RetrievePurpose, StreamStop, WirePayloadProjection,
 };
-use storyos_core::{AgentDecisionOutcome, NativeStreamItem, validate_agent_decision};
+use storyos_core::NativeStreamItem;
 
 use super::PostgresProjectReader;
-use crate::agent_run_observation::{CreateResult, encode_items, persist_create_result};
+use crate::agent_run_observation::encode_items;
 use crate::agent_run_work::{
     CreateAdmission, RunPhaseRow, WorkPhase, admit_create, complete_challenge_error,
-    complete_database_error, hold_if_requested, load_run_phase, settle_one_phase, update_run,
+    complete_database_error, hold_if_requested, load_claimed_or_cancelled, settle_one_phase,
+    update_run,
 };
 use crate::update_project_assistance::read_assistance_record;
 
@@ -62,11 +62,16 @@ impl ModelDispatchStore for PostgresProjectReader {
             .map_err(complete_challenge_error)?;
         let client = &transaction.client;
         let claimed = async {
-            let run = load_run_phase(client, claim).await?;
+            let (claim, run) = load_claimed_or_cancelled(client, claim).await?;
+            let claim = &claim;
             let request = match request {
                 DestinationRequest::Create(create) => create,
                 DestinationRequest::Retrieve(retrieve) => {
                     return commit_retrieve(client, claim, &run, retrieve, projection).await;
+                }
+                DestinationRequest::Abort(abort) => {
+                    return crate::agent_run_abort::commit(client, claim, &run, abort, projection)
+                        .await;
                 }
             };
             if run.settled()
@@ -143,12 +148,16 @@ impl ModelDispatchStore for PostgresProjectReader {
             .await
             .map_err(complete_challenge_error)?;
         let appended = async {
-            let run = match load_run_phase(&transaction.client, claim).await {
+            let run = match load_claimed_or_cancelled(&transaction.client, claim).await {
                 Err(CompleteAgentRunError::StaleFence) => return Ok(Some(StreamStop::StaleFence)),
-                loaded => loaded?,
+                loaded => loaded?.1,
             };
-            if run.status == "cancelled" {
-                return Ok(Some(StreamStop::Cancelled));
+            if run.status == "cancelled"
+                && run.attempt_id.as_deref() == Some(dispatch.model_attempt_id.as_str())
+            {
+                return Ok(Some(StreamStop::Cancelled(
+                    AbortTicket::after_committed_cancellation(dispatch.model_attempt_id.clone()),
+                )));
             }
             if run.settled()
                 || run.decision_id.is_some()
@@ -206,12 +215,8 @@ impl ModelDispatchStore for PostgresProjectReader {
             .map_err(complete_challenge_error)?;
         let client = &transaction.client;
         let phase = async {
-            let run = match load_run_phase(client, claim).await {
-                Err(CompleteAgentRunError::StaleFence) => {
-                    return cancelled_evidence(client, claim, record).await;
-                }
-                loaded => loaded?,
-            };
+            let (claim, run) = load_claimed_or_cancelled(client, claim).await?;
+            let claim = &claim;
             let settled = WorkPhase::Done(CompleteAgentRun::AlreadySettled);
             let phase = match record {
                 DispatchRecord::Refusal(_) if run.settled() => return Ok(settled),
@@ -240,13 +245,41 @@ impl ModelDispatchStore for PostgresProjectReader {
                     request: DestinationRequest::Create(request),
                     observation,
                 } => {
-                    if run.settled()
-                        || run.decision_id.is_some()
+                    if run.decision_id.is_some()
                         || run.attempt_id.as_deref() != Some(dispatch.model_attempt_id.as_str())
                     {
                         return Ok(settled);
                     }
-                    record_create(client, claim, &run, dispatch, request, observation).await?
+                    if run.status == "cancelled" {
+                        return crate::agent_run_recovery::record_cancelled_create(
+                            client,
+                            claim,
+                            &run,
+                            dispatch,
+                            observation,
+                        )
+                        .await;
+                    }
+                    if run.settled() {
+                        return Ok(settled);
+                    }
+                    crate::agent_run_create_dispatch::record_create(
+                        client,
+                        claim,
+                        &run,
+                        dispatch,
+                        request,
+                        observation,
+                    )
+                    .await?
+                }
+                DispatchRecord::Exchange {
+                    claim: dispatch,
+                    request: DestinationRequest::Abort(abort),
+                    observation,
+                } => {
+                    crate::agent_run_abort::record(client, claim, dispatch, abort, observation)
+                        .await?
                 }
                 DispatchRecord::Exchange {
                     request: DestinationRequest::Retrieve(_),
@@ -321,30 +354,6 @@ async fn advance_steering(
     Ok(phase)
 }
 
-/// A cancelled Run fences this claim; it keeps only the reference of an unknown create.
-async fn cancelled_evidence(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    record: DispatchRecord<'_>,
-) -> Result<WorkPhase, CompleteAgentRunError> {
-    if let DispatchRecord::Exchange {
-        claim: dispatch,
-        request: DestinationRequest::Create(_),
-        observation: Observation::OutcomeUnknown { response_reference },
-    } = record
-        && crate::agent_run_recovery::record_cancelled_evidence(
-            client,
-            claim,
-            dispatch,
-            response_reference.as_ref(),
-        )
-        .await?
-    {
-        return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
-    }
-    Err(CompleteAgentRunError::StaleFence)
-}
-
 async fn commit_retrieve(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -377,117 +386,6 @@ async fn commit_retrieve(
     crate::agent_run_retrieval_dispatch::commit(client, claim, run, request, projection)
         .await
         .map(Some)
-}
-
-async fn record_create(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    run: &RunPhaseRow,
-    dispatch: &DispatchClaim,
-    request: &CreateRequest,
-    observation: Observation,
-) -> Result<WorkPhase, CompleteAgentRunError> {
-    let retained: serde_json::Value =
-        serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let response = match observation {
-        Observation::Terminal(response) => response,
-        Observation::OutcomeUnknown { response_reference } => {
-            return crate::agent_run_recovery::record_unknown_create(
-                client,
-                claim,
-                run,
-                dispatch,
-                response_reference.as_ref(),
-            )
-            .await;
-        }
-        Observation::NotSubmitted | Observation::Rejected { .. } => {
-            let result = CreateResult {
-                attempt_id: &dispatch.model_attempt_id,
-                items: &[],
-                outcome: AgentDecisionOutcome::NoDecision,
-                producer_output: None,
-                usage: ModelUsage::Unknown,
-            };
-            return persist_create_result(client, claim, run, result, &retained).await;
-        }
-    };
-    let declared: Vec<_> = request
-        .declared_targets
-        .iter()
-        .map(|target| {
-            (
-                target.chapter_id.clone(),
-                target.block_id.clone(),
-                target.base_revision_id.clone(),
-            )
-        })
-        .collect();
-    let result = CreateResult {
-        attempt_id: &dispatch.model_attempt_id,
-        items: &response.items,
-        outcome: validate_agent_decision(response.output.as_ref(), &declared),
-        producer_output: response
-            .output
-            .as_ref()
-            .and_then(|output| output.prose_changes.as_deref()),
-        usage: response.usage,
-    };
-    persist_create_result(client, claim, run, result, &retained).await
-}
-
-/// Builds the provider-neutral Create request for the active decision.
-pub(crate) async fn create_request(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    run: &RunPhaseRow,
-    record: &serde_json::Value,
-    attempt: RequestAttempt,
-) -> Result<CreateRequest, CompleteAgentRunError> {
-    let passage_resolution = storyos_core::decode_assembly_record(record)
-        .ok_or_else(|| {
-            CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
-                "Invalid retained Context",
-            )))
-        })?
-        .operation_requirement
-        .ordinary_resolution;
-    let declared_targets =
-        crate::admitted_proposal_target::load_admitted_targets(client, claim, &run.chapter_id)
-            .await?
-            .into_iter()
-            .map(|target| DeclaredTarget {
-                chapter_id: target.chapter_id,
-                block_id: target.block_id,
-                base_revision_id: target.revision_id,
-                collection: target.collection,
-            })
-            .collect();
-    let candidate_revision = crate::candidate_revision_target::admitted(client, claim)
-        .await?
-        .map(|candidate| {
-            let target = candidate
-                .operation_requirement
-                .candidate_target
-                .as_ref()
-                .expect("candidate binding");
-            candidate
-                .selected
-                .iter()
-                .find(|source| source.source_version == target.revision_id)
-                .map(|source| source.content.clone())
-                .unwrap_or_default()
-        });
-    Ok(CreateRequest {
-        attempt,
-        author_message: run.author_message.clone(),
-        chapter_id: run.chapter_id.clone(),
-        passage_resolution,
-        passage_input: crate::passage_collection::passage_input(record, &run.author_message),
-        declared_targets,
-        candidate_revision,
-    })
 }
 
 #[cfg(test)]

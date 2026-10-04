@@ -127,18 +127,19 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       ["6", "unknown_create"],
     ] as const) {
       await openCase(suffix);
-      const priorId = await submit("Help with this passage.");
+      const priorId = await submit(disposition === "unknown_create"
+        ? "Help with this passage." : "Help with this passage. SCRIPT:reference-expires");
       await settleOnce();
       const prior = await inspect(priorId);
       assert.equal(prior.model_attempt.kind, "present");
-      await queryStoryOSPostgres(`UPDATE storyos.model_attempts
-        SET payload = payload || jsonb_build_object('produced_binding',
-          COALESCE(payload->'produced_binding', '{}'::jsonb) ||
-          jsonb_build_object('reference_condition', 'confirmed_expired'
-            ${disposition === "blocked" ? ", 'budget_exhausted', true" : ""}))
-          ${disposition === "unknown_create" ? ", dispatch_state = 'uncertain'" : ""}
-        WHERE project_id = '${setup.projectId}'::uuid AND run_id = '${priorId}'::uuid
-          AND attempt_role = 'decision';`);
+      if (disposition !== "rebuilt") {
+        await queryStoryOSPostgres(`UPDATE storyos.model_attempts
+          SET ${disposition === "blocked"
+            ? `payload = jsonb_set(payload, '{produced_binding,budget_exhausted}', 'true'::jsonb)`
+            : "dispatch_state = 'uncertain'"}
+          WHERE project_id = '${setup.projectId}'::uuid AND run_id = '${priorId}'::uuid
+            AND attempt_role = 'decision';`);
+      }
       const runId = await submit("I changed my mind: keep the voice.");
       await settleOnce();
       const recovery = (await inspect(runId)).reference_recovery;

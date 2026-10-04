@@ -174,12 +174,13 @@ pub use manuscript_tree::{
 };
 pub use model_gateway::complete_agent_run;
 pub use model_gateway_ports::{
-    ContractFaultObserver, ContractFaultPoint, CreateRequest, CredentialReference,
-    CredentialResolver, DeclaredTarget, DestinationRequest, DispatchClaim, DispatchRecord,
-    ModelDispatchStore, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
-    NextDispatchWork, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
-    ReferenceRetrieval, ReportedBinding, RequestAttempt, ResolvedCredential, ResponseReference,
-    RetrievePurpose, RetrieveRequest, StreamControl, StreamStop, WirePayloadProjection,
+    AbortRequest, AbortTicket, ContractFaultObserver, ContractFaultPoint, CreateRequest,
+    CredentialReference, CredentialResolver, DeclaredTarget, DestinationRequest, DispatchClaim,
+    DispatchRecord, ModelDispatchStore, ModelProviderAdapter, ModelResponse, ModelStreamSink,
+    ModelUsage, NextDispatchWork, NoContractFaults, Observation, PreDispatchRefusal,
+    PreparedRequest, ReferenceRetrieval, ReportedBinding, RequestAttempt, ResolvedCredential,
+    ResponseReference, RetrievePurpose, RetrieveRequest, StreamControl, StreamStop,
+    WirePayloadProjection,
 };
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,

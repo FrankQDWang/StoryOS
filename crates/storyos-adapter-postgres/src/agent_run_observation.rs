@@ -16,6 +16,7 @@ pub(crate) struct CreateResult<'a> {
     pub outcome: AgentDecisionOutcome,
     pub producer_output: Option<&'a [ProseChangeCandidate]>,
     pub usage: ModelUsage,
+    pub response_reference: Option<&'a str>,
 }
 
 /// Records the stream, the Agent Decision, and any opened Proposal of one Create exchange.
@@ -122,6 +123,9 @@ pub(crate) async fn persist_create_result(
         _ => serde_json::Value::Null,
     };
     payload["usage"] = encode_usage(result.usage);
+    if let Some(reference) = result.response_reference {
+        payload["response_reference"] = serde_json::json!(reference);
+    }
     crate::prose_change_decision::encode(
         &mut payload,
         result.producer_output,
