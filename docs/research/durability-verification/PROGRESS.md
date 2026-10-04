@@ -133,3 +133,4 @@
 - Matrix round-2, `cut-commit-database`: completed (exit 0). Evidence: `evidence/round-2/cut-commit-database.json`.
 - Matrix round-2, `concurrent-rename`: invariant failure (exit 1). Evidence: `evidence/round-2/concurrent-rename.json`.
 - Matrix round-2, `concurrent-retry`: invariant failure (exit 1). Evidence: `evidence/round-2/concurrent-retry.json`.
+- Matrix round-2, `concurrent-rename-restart`: invariant failure (exit 1). Evidence: `evidence/round-2/concurrent-rename-restart.json`.
