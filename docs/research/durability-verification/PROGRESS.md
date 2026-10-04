@@ -138,3 +138,4 @@
 - Matrix round-2, `session-replay`: invariant failure (exit 1). Evidence: `evidence/round-2/session-replay.json`.
 - Matrix round-2, `takeover-server`: invariant failure (exit 1). Evidence: `evidence/round-2/takeover-server.json`.
 - Matrix round-2, `takeover-database`: invariant failure (exit 1). Evidence: `evidence/round-2/takeover-database.json`.
+- Matrix round-2, `takeover-concurrent`: invariant failure (exit 1). Evidence: `evidence/round-2/takeover-concurrent.json`.
