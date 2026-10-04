@@ -2394,6 +2394,87 @@ paths:
           description: Rate limited
         '503':
           description: Service unavailable
+  /api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs:
+    post:
+      operationId: steerAgentRun
+      summary: Retain guidance for the next safe decision
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/steer-agent-run-request.schema.json'
+      responses:
+        '200':
+          description: AgentRun control settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/steer-agent-run-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Run-state conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: AgentRun control refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
   /api/v1/projects/{project_id}/agent-runs/{run_id}/pause:
     post:
       operationId: pauseAgentRun
@@ -2523,87 +2604,6 @@ paths:
             application/json:
               schema:
                 $ref: '../json-schema/storyos-public-release-1/cancel-agent-run-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Run-state conflict
-        '412':
-          description: Session binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: AgentRun control refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs:
-    post:
-      operationId: steerAgentRun
-      summary: Retain guidance for the next safe decision
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: run_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/steer-agent-run-request.schema.json'
-      responses:
-        '200':
-          description: AgentRun control settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/steer-agent-run-response.schema.json'
         '400':
           description: Invalid request
         '401':

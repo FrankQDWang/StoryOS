@@ -186,9 +186,8 @@ pub(super) fn typescript_type_declarations() -> String {
         RefusedEditDraftInspect::decl(&config),
         GetRefusedEditDraftResponse::decl(&config),
     ]
-    .iter()
-    .map(|declaration| format!("export {declaration}\n"))
-    .collect()
+    .map(|declaration| format!("export {declaration}"))
+    .join("\n")
 }
 
 pub(super) fn typescript_client_source() -> String {
