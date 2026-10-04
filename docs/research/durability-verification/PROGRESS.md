@@ -96,3 +96,4 @@
 - Matrix round-1, `lost-ack`: completed (exit 0). Evidence: `evidence/round-1/lost-ack.json`.
 - Matrix round-1, `cut-admission-server`: completed (exit 0). Evidence: `evidence/round-1/cut-admission-server.json`.
 - Matrix round-1, `cut-admission-database`: completed (exit 0). Evidence: `evidence/round-1/cut-admission-database.json`.
+- Matrix round-1, `cut-core-server`: completed (exit 0). Evidence: `evidence/round-1/cut-core-server.json`.
