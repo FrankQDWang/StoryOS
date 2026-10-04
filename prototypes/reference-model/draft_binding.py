@@ -50,14 +50,14 @@ def run(p):
     compare('Expansion preserves complete replacement', p.candidate, p.p['candidate_text'], p.differences)
     original = p.candidate
     p.expected = dict(generation='ready', validation='pending', closure='open', operation_resolution='pending')
-    p.edit()
+    p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
     e.refresh()
     _, response = http.command('undoLatestAuthorAction', dict(editor_session_id=e.session_id,
         expected_authoritative_revision_id=e.revision,
         expected_author_undo_frontier_sequence=e.session['author_undo_frontier_sequence']), project_id=e.s.project)
-    compare('Proposal edit compensation', 'compensated', response['effect']['kind'], p.differences)
+    compare('Proposal withdrawal compensation', 'compensated', response['effect']['kind'], p.differences)
     compare('Proposal compensation no Commit', [], response['receipt']['authoritative_commit_ids'], p.differences)
-    compare('Proposal compensation restores candidate', original, p.query()['candidate_text'], p.differences)
+    compare('Withdrawal compensation preserves candidate', original, p.query()['candidate_text'], p.differences)
     p.coverage['undoLatestAuthorAction:compensated'] += 1
     e.actions += 1
     response = e.undo('conflicted')

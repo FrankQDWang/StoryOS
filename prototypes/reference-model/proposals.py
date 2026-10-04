@@ -274,14 +274,24 @@ def run(http, seed, differences, coverage, selected=None):
         elif mode == 'draft_binding':
             from draft_binding import run as binding
             binding(p)
-        elif mode == 'proposal-undo':
+        elif mode in ['proposal-undo', 'rejection-undo']:
             original = p.candidate
-            p.edit()
+            if mode == 'proposal-undo':
+                p.edit()
+            else:
+                p.command('rejectProposalOperations', 'resolved', {'operation_resolution': 'rejected'})
             e = p.editor
             e.refresh()
             _, response = http.command('undoLatestAuthorAction', dict(editor_session_id=e.session_id,
                 expected_authoritative_revision_id=e.revision,
                 expected_author_undo_frontier_sequence=e.session['author_undo_frontier_sequence']), project_id=e.s.project)
+            if mode == 'rejection-undo':
+                before = len(differences)
+                compare('D-005: rejection Undo routes to reopening', 'compensated', response['effect']['kind'], differences)
+                compare('D-005: rejection Undo restores pending operation', 'pending', p.query()['operation_resolution'], differences)
+                for entry in differences[before:]:
+                    entry.update(seed_case=p.label, trace_start=p.start, trace_end=len(http.trace))
+                continue
             compare('Proposal Undo restores candidate', original, p.query()['candidate_text'], differences)
             compare('Proposal Undo has no authoritative Commit', [], response['receipt']['authoritative_commit_ids'], differences)
             revision = response['effect']['authoritative_revision']
