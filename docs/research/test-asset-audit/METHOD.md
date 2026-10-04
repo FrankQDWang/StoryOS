@@ -10,6 +10,7 @@ The presentation follows PR 927, `Removed test assertions and reasons`: one reas
 | D2 | Static output, literal, type-level fact, or generator shape; no distinct observable product regression. |
 | D3 | The oracle can pass after the intended protection is removed because another failure masks it. Named coverage owns the meaningful behavior. |
 | D4 | A test checks a test-only reimplementation with no product consumer. Named coverage owns the product behavior, not that dead helper. |
+| D5 | A synthetic internal input cannot reach this rule through current product callers. The public refusal is covered elsewhere; a mutation only in the unreachable guard is not claimed to be covered. |
 | M1 | Merge the named unique case into an existing public-boundary test, then remove the redundant test. |
 | L1 | Move the scenario to its public boundary with a discriminating oracle; current setup does not prove its intended protection. |
 | K1 | A concrete distinct input or invariant has no equivalent assertion in the compared tests. |

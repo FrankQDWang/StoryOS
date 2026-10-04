@@ -1,0 +1,132 @@
+[
+  {
+    "id": "CO001",
+    "path": "crates/storyos-core/src/create_project_tests.rs",
+    "line": 4,
+    "test": "an_absent_project_classifies_as_the_closed_empty_open_state",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP create case asserts an empty opened Project, zero Chapters, and one project row. It reaches the Core classifier through persist_create_project. Returning ExistingProject for Absent would reject the same observed operation.",
+    "coverage": "apps/web/test/node-postgresql/create-project-http.integration.test.ts:75",
+    "remove": [
+      1,
+      17
+    ]
+  },
+  {
+    "id": "CO002",
+    "path": "crates/storyos-core/src/create_project_tests.rs",
+    "line": 12,
+    "test": "an_existing_project_classifies_as_a_closed_refusal",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test creates the prospective Project before command submission and expects 409. Bypassing the Core ExistingProject result would reach the INSERT and return a different error, so this is not merely an idempotency-replay assertion.",
+    "coverage": "apps/web/test/node-postgresql/create-project-http.integration.test.ts:75",
+    "remove": null
+  },
+  {
+    "id": "CO003",
+    "path": "crates/storyos-core/src/archive_project_tests.rs",
+    "line": 16,
+    "test": "a_matching_revision_and_active_lifecycle_classifies_as_applied",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test asserts an Applied archive, revision 2 and archived library state. The Core success tuple adds no input or effect.",
+    "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
+    "remove": [
+      1,
+      58
+    ]
+  },
+  {
+    "id": "CO004",
+    "path": "crates/storyos-core/src/archive_project_tests.rs",
+    "line": 24,
+    "test": "a_stale_revision_classifies_as_conflicted_with_zero_lifecycle_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test archives at revision 1, then submits a new key at stale revision 1 and expects Conflicted. The current Project is already archived, so this also observes stale-revision precedence.",
+    "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
+    "remove": null
+  },
+  {
+    "id": "CO005",
+    "path": "crates/storyos-core/src/archive_project_tests.rs",
+    "line": 37,
+    "test": "an_already_archived_project_classifies_as_no_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test sends a new key at revision 2 to an already archived Project and expects NoEffect. It exercises the same Core lifecycle condition.",
+    "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
+    "remove": null
+  },
+  {
+    "id": "CO006",
+    "path": "crates/storyos-core/src/archive_project_tests.rs",
+    "line": 49,
+    "test": "a_missing_project_classifies_as_refused_with_zero_lifecycle_effect",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "Only persist_archive_project calls this classifier in product code. It returns MissingProject before the call and always passes ProjectPresence::Present (archive_project.rs:83,101 in the adapter). Absent is an internal synthetic input here. HTTP Scope refusal remains covered, but that test cannot kill a mutation confined to this unreachable Core guard.",
+    "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
+    "remove": null
+  },
+  {
+    "id": "CO007",
+    "path": "crates/storyos-core/src/update_project_tests.rs",
+    "line": 17,
+    "test": "a_matching_revision_and_new_title_classifies_as_applied",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test renames and then reads both Project and library, including revision 2. It observes the same Core title/revision effect.",
+    "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+    "remove": [
+      1,
+      82
+    ]
+  },
+  {
+    "id": "CO008",
+    "path": "crates/storyos-core/src/update_project_tests.rs",
+    "line": 28,
+    "test": "a_stale_revision_classifies_as_conflicted_with_zero_title_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test sends Stale Title with revision 1 after a successful rename and expects Conflicted without a title change.",
+    "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+    "remove": null
+  },
+  {
+    "id": "CO009",
+    "path": "crates/storyos-core/src/update_project_tests.rs",
+    "line": 41,
+    "test": "an_unchanged_title_classifies_as_no_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test sends the same title at the current revision and expects a NoEffect Receipt. The pure classifier repeats that condition.",
+    "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+    "remove": null
+  },
+  {
+    "id": "CO010",
+    "path": "crates/storyos-core/src/update_project_tests.rs",
+    "line": 53,
+    "test": "an_invalid_title_classifies_as_refused_with_zero_title_effect",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "Application admission rejects empty and over-1024-byte titles before invoking the store. Thus the Core invalid-title branch is not an independent reachable product protection. Application tests explicitly cover both lengths; the HTTP test covers the empty-title public refusal. Those tests do not execute a mutation confined to this Core guard.",
+    "coverage": "crates/storyos-application/src/update_project_tests.rs:95; apps/web/test/node-postgresql/update-project-http.integration.test.ts:294",
+    "remove": null
+  },
+  {
+    "id": "CO011",
+    "path": "crates/storyos-core/src/update_project_tests.rs",
+    "line": 73,
+    "test": "a_missing_project_classifies_as_refused_with_zero_title_effect",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "persist_update_project returns MissingProject before classification and always passes Present (adapter update_project.rs:83,95). The synthetic Absent branch has no current product caller. HTTP foreign-Scope refusal is semantic coverage, not coverage of this unreachable Core guard.",
+    "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+    "remove": null
+  }
+]

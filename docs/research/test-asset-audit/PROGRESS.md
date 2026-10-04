@@ -35,7 +35,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
 | apps/web/test/node-process-cut | Pending | inventory.json |
 | apps/web/test/support | Pending | inventory.json |
-| crates/storyos-core/src | Pending | inventory.json |
+| crates/storyos-core/src | In progress | core.md; first 3 files, 11 tests reviewed |
 | crates/storyos-application/src | Pending | inventory.json |
 | crates/storyos-adapter-postgres/src | Pending | inventory.json |
 | crates/storyos-adapter-postgres/tests | Pending | inventory.json |
@@ -58,3 +58,5 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Discovery: the TypeScript Unicode counter has no product consumer and is imported only by its own test. Do not describe its Rust counterpart as executing that helper.
 
 - Server integration directory complete: 2 duplicate process tests select the packaged Node cases as retained owners. Candidate savings: 33 lines, not yet mutation-proved.
+
+- Core checkpoint: Create/Archive/Update Project files reviewed (11 tests). Current public input guards make three Core tests exercise unreachable internal states; code D5 distinguishes these from actual duplicate executable coverage. Next Core files: Create/Update Volume, then Chapter and remaining operations.
