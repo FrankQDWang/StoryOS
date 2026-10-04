@@ -743,5 +743,179 @@
       766,
       825
     ]
+  },
+  {
+    "id": "NP066",
+    "path": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
+    "line": 16,
+    "test": "undo acceptance restores the prior chapter, reopens the proposal, and reapply is a fresh acceptance",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Undo of Acceptance must create a new compensating Revision, keep the accepted Revision/Commit readable, reopen the same Proposal with pending reservation and preserved candidate, and permit a fresh Acceptance with a new Receipt. Structural Undo and ordinary prose Undo do not execute the Acceptance child-receipt and Proposal-link path. Foreign access here fails during Challenge acquisition, not in the Undo handler.",
+    "coverage": "apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts:335; apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162",
+    "remove": null
+  },
+  {
+    "id": "NP067",
+    "path": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
+    "line": 77,
+    "test": "undo acceptance derives a proposal when the accepted lineage has drifted",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A drifted accepted Proposal lineage must produce a derived Proposal while leaving the original applied resolution intact and restoring prior prose. The test changes retained closure to isolate the persisted lineage guard in undo_acceptance.rs and LinkMode::Derived; the ordinary reopen case has matching lineage and cannot detect accidental reuse of the old Proposal identity. This proves retained-state handling, not a full UI path that produces drift.",
+    "coverage": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:16; apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:108",
+    "remove": null
+  },
+  {
+    "id": "NP068",
+    "path": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
+    "line": 108,
+    "test": "undo acceptance requires a reversal proposal when the authoritative head has drifted",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "When the actual Head has moved from the accepted Revision and the request names that current Head, Undo must produce a reversal Proposal without changing authority or recording Compensation. Ordinary reopen uses a matching accepted Head; corrupt-evidence refusal does not create a valid reversal. The direct SQL Head move isolates this supported retained-state branch.",
+    "coverage": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:16; apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:149; crates/storyos-core/src/undo_latest_author_action_tests.rs:106",
+    "remove": null
+  },
+  {
+    "id": "NP069",
+    "path": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
+    "line": 149,
+    "test": "undo acceptance is unavailable when the accepted payload digest does not match",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A mismatched persisted Acceptance payload digest must produce source_unavailable and preserve the accepted Head with zero Compensation. Ordinary Undo uses valid retained evidence; the retained Core case only supplies an unusable-evidence boolean and cannot catch a broken Adapter digest computation or envelope lookup. Keep the Core drifted-Head variant separately.",
+    "coverage": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:16; crates/storyos-core/src/undo_latest_author_action_tests.rs:117",
+    "remove": null
+  },
+  {
+    "id": "NP070",
+    "path": "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
+    "line": 96,
+    "test": "Worker applies contiguous canonical batches and completes one streamed candidate",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "An unfenced real Worker stream must consume all canonical batches, become ready with exact full candidate text and a valid Validation Receipt. The fence/continue/complete-partial cases deliberately stop the original stream and exercise explicit recovery; scalar Block opening does not execute batch advancement or terminal stream validation. This case also checks Proposal GET isolation, which is not its unique reason to retain.",
+    "coverage": "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:134; apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts:110; apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts:203",
+    "remove": null
+  },
+  {
+    "id": "NP071",
+    "path": "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
+    "line": 134,
+    "test": "first author input fences the admitted Head and late batches stay ineligible",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The first author input against a generating candidate must fence that generation, preserve the admitted first batch, return conflict without an Author Undo frontier increment, and refuse a later Worker batch without another Proposal Revision. A successful complete stream never exercises the fence; explicit completion/continuation fixtures do not compare the full before/after frontier and unchanged Revision after the late batch.",
+    "coverage": "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:96; apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts:110",
+    "remove": null
+  },
+  {
+    "id": "NP072",
+    "path": "apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts",
+    "line": 14,
+    "test": "Acceptance retains a stale-writer refusal without changing Proposal validity",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A real stale-writer Acceptance refusal must survive retry/restart and later valid Acceptance without altering Proposal validation. This case uniquely injects a refusal-insert fault to prove rollback, blocks concurrent invalid/valid Challenges to prove durable refusal precedence, then checks the exact exported refusal records exclude secrets. Browser simulated HTTP problems only classify delivery; successful Acceptance and generic Takeover do not exercise refusal storage faults, competing admission locks or refusal archive projection. Logged row sizes are measurements, not asserted bounds.",
+    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:14; apps/web/test/browser-source/accept-block-proposal.integration.test.ts:12",
+    "remove": null
+  },
+  {
+    "id": "NP073",
+    "path": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+    "line": 58,
+    "test": "an admitted H0 target cannot open a valid H1 Proposal: Revise this passage: keep the voice.",
+    "case": {
+      "message": "Revise this passage: keep the voice.",
+      "initial_text": "red fox",
+      "source_line": 59
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The scalar Block opening must retain the admitted H0 text/version after a claim expires and an Author Edit creates H1, then decline to create a Proposal. Ordinary successful opening has an unchanged Head; the reserved-Block edit test edits an already opened Proposal. This case executes the earlier admission-to-opening gap through open_selected_prose_change.",
+    "coverage": "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts:203; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1174",
+    "remove": null
+  },
+  {
+    "id": "NP074",
+    "path": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+    "line": 58,
+    "test": "an admitted H0 target cannot open a valid H1 Proposal: Revise this phrase: keep the voice.",
+    "case": {
+      "message": "Revise this phrase: keep the voice.",
+      "initial_text": "PROSE",
+      "source_line": 60
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Inline opening must compare the retained H0 target with live H1 before deriving and persisting an Anchor. open_selected_inline_change builds its own Core input and range/digest from retained target text. A scalar Block or streaming guard can stay correct while the Inline path substitutes live Head or source text; those variants do not create Inline Anchors.",
+    "coverage": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1174",
+    "remove": null
+  },
+  {
+    "id": "NP075",
+    "path": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+    "line": 58,
+    "test": "an admitted H0 target cannot open a valid H1 Proposal: Stream this passage: keep the voice.",
+    "case": {
+      "message": "Stream this passage: keep the voice.",
+      "initial_text": "red fox",
+      "source_line": 61
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The initial stream opening must reject a target changed after admission and claim, before creating the first generation or Proposal. open_generating builds its own current/admitted comparison. The existing late-batch fence test first opens a valid generation and therefore cannot catch live-Head substitution confined to initial stream creation.",
+    "coverage": "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:134; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58",
+    "remove": null
+  },
+  {
+    "id": "NP076",
+    "path": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+    "line": 58,
+    "test": "an admitted H0 target cannot open a valid H1 Proposal: Revise these passages: keep the voice.",
+    "case": {
+      "message": "Revise these passages: keep the voice.",
+      "initial_text": "red fox",
+      "source_line": 62
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Typed producer output must remain bound to declared H0 locations when H1 is installed after claim. This variant supplies produced locations and uses the multiple-target selection path; scalar output supplies no locations. The collection refusal case rejects stale input before destination dispatch, not a valid admitted target that changes before result installation. This is one location, not multi-Chapter coverage.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:305; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58",
+    "remove": null
+  },
+  {
+    "id": "NP077",
+    "path": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+    "line": 141,
+    "test": "a removed admitted Chapter cannot open a Proposal from retained historical blocks",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Removal after Run admission leaves historical Revision members readable. Opening must consult the live removal decision and decline a Proposal; an H0/H1 mismatch still has a live Chapter and cannot catch a missing tombstone join. The collection deletion case rejects before dispatch rather than after an already captured current-Chapter admission.",
+    "coverage": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58; apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:305",
+    "remove": null
+  },
+  {
+    "id": "NP078",
+    "path": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+    "line": 166,
+    "test": "a later reservation cannot become an admitted Run's Proposal",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Both Runs are admitted before either opens a Proposal; after the first settles, the second must recheck the new reservation and create none. The ordinary overlap test admits its second Run only after the first reservation exists, so filtering at admission alone can satisfy it. This temporal input detects a missing reservation recheck after admission.",
+    "coverage": "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts:286",
+    "remove": null
+  },
+  {
+    "id": "NP079",
+    "path": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+    "line": 184,
+    "test": "a historical single-Block Run reclaims and opens one H0 Proposal",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A retained operation requirement without proposal_target_block_ids must still recover its one historical Block after claim expiry, produce a valid Proposal at H0 and avoid duplicate opening on another settlement. Newly admitted requirements always contain the list; neither ordinary Block opening nor current-format H0/H1 cases execute the legacy fallback in load_record_targets.",
+    "coverage": "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts:203; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58",
+    "remove": null
   }
 ]

@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 578 test cases in 150 files have source verdicts. The audit is not complete.
+- Status: active. 592 test cases in 154 files have source verdicts. The audit is not complete.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
 - Complete source-review directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests); crates/storyos-contracts/src (14 files, 62 tests). Cross-directory reconciliation and mutation review are still pending.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: continue apps/web/test/node-postgresql Proposal/Run/context/export families. Its first 65 tests in 20 files are adjudicated; read NODE_POSTGRESQL_CHECKPOINT.md. Then browser-source, browser-exact-dist, node-process-cut and support. All 482 Rust tests in 122 files have source verdicts; CONTRACTS_CHECKPOINT.md records the last Rust directory. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
+- Next: continue apps/web/test/node-postgresql Proposal/Run/context/export families. Its first 79 runtime cases in 24 files are adjudicated; read NODE_POSTGRESQL_CHECKPOINT.md. Then browser-source, browser-exact-dist, node-process-cut and support. All 482 Rust tests in 122 files have source verdicts; CONTRACTS_CHECKPOINT.md records the last Rust directory. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
 - No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -34,7 +34,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | Directory | State | Evidence |
 |---|---|---|
 | apps/web/test/node-contract | Source review complete | node-contract.md; 31 runtime cases, 8 files; mutation review pending |
-| apps/web/test/node-postgresql | Partial | node-postgresql.md; 65 tests in 20 files; NODE_POSTGRESQL_CHECKPOINT.md |
+| apps/web/test/node-postgresql | Partial | node-postgresql.md; 79 runtime cases in 24 files; NODE_POSTGRESQL_CHECKPOINT.md |
 | apps/web/test/browser-source | Pending | inventory.json |
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
 | apps/web/test/node-process-cut | Pending | inventory.json |
@@ -118,3 +118,5 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 
 - Node PostgreSQL structural/navigation checkpoint: 65 tests in 20 files; {'DELETE': 10, 'KEEP': 51, 'MERGE': 4}. Six structural families, Current Chapter and Undo now have complete per-file verdict tables. See NODE_POSTGRESQL_CHECKPOINT.md for shared replay ownership and exact-input differences.
 - Current cumulative source review: 578 cases in 150 files; {'DELETE': 314, 'KEEP': 247, 'MERGE': 14, 'MOVE': 3}; 12832 unioned candidate source lines. These are provisional deletion estimates, not mutation-validated savings. Self-check remains 0/30; no sample selected. No temporary mutations or active processes.
+
+- Proposal/Acceptance checkpoint: Node PostgreSQL now has 79 runtime cases in 24 files (65 KEEP, 10 DELETE, 4 MERGE). Expanded admitted-target test.each into four individual case verdicts; inventory declaration counts differ by three. Current cumulative source review: 592 cases in 154 files; DELETE 314, KEEP 261, MERGE 14, MOVE 3; 12832 unioned candidate source lines. Continue remaining Proposal/Run/export files, then remaining Web directories. Mutation self-check remains 0/30.

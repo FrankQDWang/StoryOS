@@ -1,11 +1,13 @@
 # Node PostgreSQL checkpoint
 
-Source review is partial: 65 tests in 20 files have individual verdicts. Remaining files are listed below. No parameterized file has been adjudicated yet; expand its actual cases manually before using a declaration count.
+Source review is partial: 79 runtime cases in 24 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
 
 | Reviewed file | Cases | Verdict counts |
 |---|---|---|
+| apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/activity-stream-cross-table-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/activity-stream-duplicate-http.integration.test.ts | 1 | {'MERGE': 1} |
+| apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts | 7 | {'KEEP': 7} |
 | apps/web/test/node-postgresql/archive-project-http.integration.test.ts | 3 | {'MERGE': 1, 'KEEP': 2} |
 | apps/web/test/node-postgresql/create-chapter-http.integration.test.ts | 6 | {'KEEP': 5, 'DELETE': 1} |
 | apps/web/test/node-postgresql/create-project-challenge-http.integration.test.ts | 2 | {'KEEP': 2} |
@@ -20,6 +22,8 @@ Source review is partial: 65 tests in 20 files have individual verdicts. Remaini
 | apps/web/test/node-postgresql/protocol-http-host.integration.test.ts | 5 | {'DELETE': 1, 'KEEP': 4} |
 | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts | 5 | {'KEEP': 5} |
 | apps/web/test/node-postgresql/snapshot-replay-http.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts | 2 | {'KEEP': 2} |
+| apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts | 4 | {'KEEP': 4} |
 | apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts | 3 | {'KEEP': 2, 'DELETE': 1} |
 | apps/web/test/node-postgresql/update-chapter-http.integration.test.ts | 4 | {'KEEP': 2, 'DELETE': 2} |
 | apps/web/test/node-postgresql/update-project-http.integration.test.ts | 5 | {'MERGE': 1, 'KEEP': 4} |
@@ -44,8 +48,6 @@ Continue Proposal, Run, context and export command families. Structural commands
 ## Pending files
 
 - apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts
-- apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts
-- apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts
 - apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts
 - apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts
 - apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts
@@ -69,10 +71,8 @@ Continue Proposal, Run, context and export command families. Structural commands
 - apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts
 - apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts
 - apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts
-- apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts
 - apps/web/test/node-postgresql/takeover-http.integration.test.ts
 - apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts
-- apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts
 - apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts
 - apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts
 - apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts
@@ -88,3 +88,13 @@ Continue Proposal, Run, context and export command families. Structural commands
 - NP065 deletes the HTTP Undo rate-budget case. Inspection corrected an initial assumption: the Adapter helper and Server dispatcher use the same ChallengeRateClass::for_command_kind. Adapter project_command_challenge_tests:282 already pins combined capacity, free exact retry and Project separation with a fixed clock; the HTTP case relies on an unmeasured two-window timing assumption.
 - Reconcile older Rust and Contracts covering-test citations that point to the newly deleted structural HTTP cases. Redirect to the retained owner for the exact behavior, not merely another command with a similar name. This reconciliation remains pending before sample selection.
 - No product, test or generated file changed. No mutation experiment or targeted execution ran during this source-review checkpoint.
+
+## Proposal and Acceptance checkpoint
+
+- Added NP066-NP079: Undo Acceptance (four cases), original stream completion/fencing (two), durable Acceptance refusal (one), and admitted target binding (seven runtime cases in four declarations).
+- The admitted-target parameterized table was expanded manually: scalar Block, Inline Anchor, initial stream and typed producer locations. All inject a Head change after admission/claim; opening paths have distinct target construction. The typed case has one location and is not multi-Chapter coverage. JSON case metadata records each source input line.
+- The late-reservation case admits both Runs before the first settles. The ordinary overlap case admits the second after the first reservation exists. Admission-only filtering cannot prove the former; retain the actual recheck scenario.
+- Undo lineage and Head drift use deliberate SQL retained-state changes. Their evidence establishes supported recovery branches, not a complete UI lineage-change scenario. The corrupt digest case uniquely exercises the Adapter evidence reader; the retained Core drifted-Head/unusable-evidence combination remains distinct.
+- Acceptance refusal tests an actual failing insert, deterministic lock coordination, immutable refusal across writer restoration/restart and later success, and canonical archive secret exclusion. Its logged byte sizes are not asserted size limits. Browser delivery fakes cannot cover these persistence behaviors.
+- Read-ahead only: browser-source/accept-block-proposal was read for the comparison; it has no browser verdict yet. Other Proposal/Run/export families remain pending.
+- All new covering/compared test citations point to actual declaration lines. No source mutations, targeted executions or database commands ran.
