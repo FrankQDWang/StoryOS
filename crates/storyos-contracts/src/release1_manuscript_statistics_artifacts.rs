@@ -3,7 +3,6 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::{LIMIT_PROFILE_REVISION, PUBLIC_PROTOCOL_RELEASE};
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_manuscript_statistics::{
     ChapterStatistics, GET_STATISTICS, GET_STATISTICS_REQUEST_SCHEMA_ID,
     GET_STATISTICS_RESPONSE_SCHEMA_ID, GetStatisticsResponse, ManuscriptStatisticsCompleteness,
@@ -12,7 +11,7 @@ use crate::release1_manuscript_statistics::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
-use crate::release1_wire::json_bytes;
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -70,7 +69,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
             "project_id": {"type": "string", "format": "uuid"},
             "required_watermark": {
                 "anyOf": [
-                    author_edit_artifacts::canonical_u64_wire_schema(),
+                    canonical_u64_wire_schema(),
                     { "type": "null" }
                 ]
             }
@@ -90,7 +89,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     schema["properties"]["projection_kind"]["const"] = json!("manuscript_statistics");
     schema["properties"]["counting_profile"]["const"] =
         json!("storyos.statistics.unicode-16.0.0.v1");
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     schema["properties"]["projection_generation"] = canonical_u64.clone();
     schema["properties"]["projection_watermark"] = canonical_u64.clone();
     schema["properties"]["required_watermark"] = json!({

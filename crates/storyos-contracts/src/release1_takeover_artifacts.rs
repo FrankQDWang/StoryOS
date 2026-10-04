@@ -2,7 +2,6 @@ use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_operation_registry::{
     ContractGraphEntry, OperationArtifacts, OperationKind, RegisteredOperation, fixture_triple,
     method, operation_schemas,
@@ -12,7 +11,7 @@ use crate::release1_takeover::{
     TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID, TakeOverProjectWriterRequest,
     TakeOverProjectWriterResponse, TakeOverProjectWriterResult, TakeoverCompareFailedReason,
 };
-use crate::release1_wire::json_bytes;
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation {
@@ -265,7 +264,7 @@ fn schema_bytes<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Vec<u8
     let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
     schema["$id"] = Value::String(schema_id.to_owned());
     schema["title"] = Value::String(title.to_owned());
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     apply_u64_wire_constraints(&mut schema, &canonical_u64);
     json_bytes(&schema)
 }

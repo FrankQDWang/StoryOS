@@ -3,7 +3,6 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::{LIMIT_PROFILE_REVISION, PUBLIC_PROTOCOL_RELEASE};
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_manuscript_search::{
     ManuscriptSearchCompleteness, ManuscriptSearchMatch, ManuscriptSearchSelection,
     SEARCH_MANUSCRIPT, SEARCH_MANUSCRIPT_REQUEST_SCHEMA_ID, SEARCH_MANUSCRIPT_RESPONSE_SCHEMA_ID,
@@ -12,7 +11,7 @@ use crate::release1_manuscript_search::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
-use crate::release1_wire::json_bytes;
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -72,7 +71,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
     query_text["x-storyos-max-utf8-bytes"] = json!(1_048_576);
     schema["properties"]["required_watermark"] = json!({
         "anyOf": [
-            author_edit_artifacts::canonical_u64_wire_schema(),
+            canonical_u64_wire_schema(),
             { "type": "null" }
         ]
     });
@@ -89,7 +88,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     schema["properties"]["query_id"]["format"] = json!("uuid");
     schema["properties"]["correlation_id"]["format"] = json!("uuid");
     schema["properties"]["projection_kind"]["const"] = json!("manuscript_search");
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     schema["properties"]["projection_generation"] = canonical_u64.clone();
     schema["properties"]["projection_watermark"] = canonical_u64.clone();
     schema["properties"]["required_watermark"] = json!({
@@ -112,8 +111,8 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     if let Some(item) = schema["$defs"].get_mut("ManuscriptSearchMatch") {
         item["properties"]["chapter_id"]["format"] = json!("uuid");
         item["properties"]["manuscript_block_id"]["format"] = json!("uuid");
-        item["properties"]["start"] = author_edit_artifacts::canonical_u64_wire_schema();
-        item["properties"]["end"] = author_edit_artifacts::canonical_u64_wire_schema();
+        item["properties"]["start"] = canonical_u64_wire_schema();
+        item["properties"]["end"] = canonical_u64_wire_schema();
     }
     json_bytes(&schema)
 }

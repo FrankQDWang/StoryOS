@@ -1,4 +1,3 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
@@ -13,7 +12,7 @@ use crate::release1_author_edit_outcome::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
-use crate::release1_wire::json_bytes;
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -64,7 +63,7 @@ pub(super) const FIXTURE_PATHS: [&str; 3] = [
 ];
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
-    let mut schema = typed_schema::<GetApplyAuthorEditOutcomeRequest>(
+    let mut schema = schema_value::<GetApplyAuthorEditOutcomeRequest>(
         GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
         "StoryOS Apply Author Edit Outcome Request",
     );
@@ -74,11 +73,11 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
 }
 
 pub(super) fn response_schema_bytes() -> Vec<u8> {
-    let mut schema = typed_schema::<GetApplyAuthorEditOutcomeResponse>(
+    let mut schema = schema_value::<GetApplyAuthorEditOutcomeResponse>(
         GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
         "StoryOS Apply Author Edit Outcome Response",
     );
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     author_edit_artifacts::apply_u64_wire_constraints(&mut schema, &canonical_u64);
     schema["$defs"]["ApplyAuthorEditResponse"]["properties"]["local_intent_sequence"] =
         canonical_u64;
@@ -198,11 +197,4 @@ fn fixture() -> Value {
             "response": author_edit_artifacts::fixture()
         }
     })
-}
-
-fn typed_schema<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
 }

@@ -10,7 +10,7 @@ use crate::release1_expand_refused_edit_draft::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
-use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+use crate::release1_wire::{canonical_u64_wire_schema, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
@@ -71,7 +71,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
     input["expected_source_draft_closure"]["const"] = json!("open");
     input["proposal_kind"]["const"] = json!("inline_edit");
     input["editor_session_id"]["format"] = json!("uuid");
-    input["writer_generation"] = super::release1_author_edit_artifacts::canonical_u64_wire_schema();
+    input["writer_generation"] = canonical_u64_wire_schema();
     input["correlation_id"]["format"] = json!("uuid");
     json_bytes(&schema)
 }

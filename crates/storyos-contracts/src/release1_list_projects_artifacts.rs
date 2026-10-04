@@ -9,7 +9,7 @@ use crate::release1_list_projects::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
-use crate::release1_wire::json_bytes;
+use crate::release1_wire::{U64_WIRE, json_bytes};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -74,7 +74,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     if let Some(item) = schema["$defs"].get_mut("ProjectListItem") {
         item["properties"]["revision"] = json!({
             "type": "string",
-            "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$"
+            "pattern": U64_WIRE
         });
         let title = &mut item["properties"]["title"];
         title["minLength"] = json!(1);

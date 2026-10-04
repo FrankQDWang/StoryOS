@@ -12,7 +12,7 @@ use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, event_fixtures, fixture_triple,
     method, operation_schemas,
 };
-use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+use crate::release1_wire::{canonical_u64_wire_schema, generated_ref, json_bytes, schema_value};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::command(
@@ -97,7 +97,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
         input[field]["const"] = json!(value);
     }
     input["editor_session_id"]["format"] = json!("uuid");
-    input["writer_generation"] = super::release1_author_edit_artifacts::canonical_u64_wire_schema();
+    input["writer_generation"] = canonical_u64_wire_schema();
     input["correlation_id"]["format"] = json!("uuid");
     json_bytes(&schema)
 }

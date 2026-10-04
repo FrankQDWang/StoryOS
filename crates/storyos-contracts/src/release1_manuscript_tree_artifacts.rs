@@ -3,7 +3,6 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_manuscript_tree::{
     GET_MANUSCRIPT_TREE, GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
     GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID, GetManuscriptTreeResponse, ManuscriptChapterNode,
@@ -12,7 +11,7 @@ use crate::release1_manuscript_tree::{
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
-use crate::release1_wire::json_bytes;
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[RegisteredOperation::query(
@@ -79,7 +78,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     schema["title"] = json!("StoryOS Manuscript Tree Response");
     schema["properties"]["schema_id"]["const"] = json!(GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID);
     schema["properties"]["correlation_id"]["format"] = json!("uuid");
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     schema["properties"]["tree_revision"] = canonical_u64.clone();
     if let Some(scope) = schema["$defs"].get_mut("ProjectScope") {
         scope["properties"]["owner_user_id"]["format"] = json!("uuid");

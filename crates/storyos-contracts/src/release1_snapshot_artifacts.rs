@@ -3,7 +3,6 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::{ACTIVITY_PROFILE, PUBLIC_PROTOCOL_RELEASE};
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_operation_registry::{
     OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
@@ -13,7 +12,7 @@ use crate::release1_snapshot::{
     GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotRequest, GetSnapshotResponse, SnapshotDescriptor,
     SnapshotKind,
 };
-use crate::release1_wire::json_bytes;
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
 
 pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[
@@ -133,7 +132,7 @@ pub(super) fn snapshot_response_schema_bytes() -> Vec<u8> {
         GET_SNAPSHOT_RESPONSE_SCHEMA_ID,
         "StoryOS Snapshot Response",
     );
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     schema["$defs"]["SnapshotDescriptor"]["properties"]["project_activity_position"] =
         canonical_u64.clone();
     schema["$defs"]["SnapshotDescriptor"]["properties"]["replay_generation"] = canonical_u64;
@@ -165,7 +164,7 @@ pub(super) fn activity_stream_response_schema_bytes() -> Vec<u8> {
         }
     });
     let nullable_uuid = json!({ "type": ["string", "null"], "format": "uuid" });
-    let sequence = author_edit_artifacts::canonical_u64_wire_schema();
+    let sequence = canonical_u64_wire_schema();
     json_bytes(&json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,

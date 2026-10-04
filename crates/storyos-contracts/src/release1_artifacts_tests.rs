@@ -857,13 +857,27 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
                     "{id}"
                 );
             }
-            let response_references = references(&method_lines[responses_at..]);
-            assert!(!response_references.is_empty(), "{id}");
+            let mut referenced_statuses = Vec::new();
+            let mut status = None;
+            for line in &method_lines[responses_at..] {
+                if let Some(code) = line
+                    .strip_prefix("        '")
+                    .and_then(|rest| rest.strip_suffix("':"))
+                {
+                    status = Some(code);
+                }
+                if let Some(reference) = references(&[line]).pop() {
+                    assert_eq!(reference, schema_ref(operation.response_schema), "{id}");
+                    referenced_statuses
+                        .push(status.unwrap_or_else(|| panic!("{id}: reference outside a status")));
+                }
+            }
+            assert!(!referenced_statuses.is_empty(), "{id}");
             assert!(
-                response_references
+                referenced_statuses
                     .iter()
-                    .all(|reference| reference == schema_ref(operation.response_schema)),
-                "{id}"
+                    .all(|status| status.starts_with('2')),
+                "{id}: {referenced_statuses:?}"
             );
             let openapi_statuses = method_lines[responses_at..]
                 .iter()
