@@ -53,7 +53,7 @@ pub(super) async fn update_volume(
     let result = settlement.outcome.receipt_result();
     let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
-            authority = applied.authority.into_settled();
+            authority = applied.authority.into_settled().map(Into::into);
             contracts::UpdateVolumeEffect::AuthoritativeApplied {
                 volume_id,
                 title: applied.effect.title,
@@ -79,6 +79,7 @@ pub(super) async fn update_volume(
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
+            heads: Vec::new(),
             project: settlement.response_project,
         },
     );

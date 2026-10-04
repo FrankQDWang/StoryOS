@@ -4,21 +4,25 @@ use storyos_application::{
     AuthorCommandAdmissionIds, CreateChapterInput, CreateChapterSettlement, CreateVolumeInput,
     CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput,
     DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectScope, StructureAuthority,
+    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
+    SetCurrentChapterInput, SetCurrentChapterSettlement, StructureAuthority,
     StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput, UpdateChapterSettlement,
     UpdateVolumeInput, UpdateVolumeSettlement, issue_project_command_challenge,
 };
-use storyos_application::{ChapterId, IssueProjectCommandChallenge, VolumeId};
+use storyos_application::{
+    ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
+};
 use storyos_core::{CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome};
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
 use super::{
-    Classified, CommandSpec, LockedProject, ProfileWrite, ProjectCommand, settle_project_command,
-    unavailable,
+    Classification, CommandSpec, LockedProject, ProfileSequences, ProfileWrite, ProjectCommand,
+    settle_project_command, unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::set_current_chapter_authority_tests::{open_session, seed_two_chapters};
 use crate::update_volume_tests::seed_project;
 
 /// One admitted command envelope and its typed Manuscript Structure input.
@@ -101,6 +105,13 @@ pub(crate) async fn delete_chapter(
     call: &CommandCall<DeleteChapterInput>,
 ) -> Result<DeleteChapterSettlement, ProjectCommandError> {
     store.delete_chapter(&call.envelope, &call.input).await
+}
+
+pub(crate) async fn set_current_chapter(
+    store: &PostgresProjectReader,
+    call: &CommandCall<SetCurrentChapterInput>,
+) -> Result<SetCurrentChapterSettlement, ProjectCommandError> {
+    store.set_current_chapter(&call.envelope, &call.input).await
 }
 
 /// The applied effect and settled authority of one structure command; panics on any other outcome.
@@ -195,6 +206,12 @@ const UPDATE_CHAPTER: Route = Route {
     path: storyos_contracts::UPDATE_CHAPTER_PATH,
     schema: storyos_contracts::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
 };
+const SET_CURRENT_CHAPTER: Route = Route {
+    kind: "setCurrentChapter",
+    method: storyos_contracts::SET_CURRENT_CHAPTER_METHOD,
+    path: storyos_contracts::SET_CURRENT_CHAPTER_PATH,
+    schema: storyos_contracts::SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
+};
 const DELETE_CHAPTER: Route = Route {
     kind: "deleteChapter",
     method: storyos_contracts::DELETE_CHAPTER_METHOD,
@@ -247,7 +264,7 @@ async fn replayed_outcome<I: Clone, A, N, C, R>(
     settle: impl AsyncFn(
         &PostgresProjectReader,
         &CommandCall<I>,
-    ) -> Result<StructureSettlement<A, N, C, R>, ProjectCommandError>,
+    ) -> Result<ProjectCommandSettlement<A, N, C, R>, ProjectCommandError>,
 ) -> (ReceiptResult, [i64; 5])
 where
     A: Debug + PartialEq,
@@ -427,8 +444,28 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((DELETE_CHAPTER.kind, outcome));
     }
 
+    let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(&store, 0x5d60).await;
+    for (suffix, chapter_id, expected_current_chapter_id) in [
+        (0x5d69, &chapter_b, &chapter_a),
+        (0x5d6a, &chapter_b, &chapter_b),
+        (0x5d6b, &chapter_a, &chapter_a),
+        (0x5d6c, &MISSING_VOLUME.to_owned(), &chapter_b),
+    ] {
+        let input = SetCurrentChapterInput {
+            editor_session_id: EditorSessionId::new(editor_session_id.clone()),
+            chapter_id: chapter_id.clone(),
+            expected_current_chapter_id: expected_current_chapter_id.clone(),
+            expected_target_revision_id: revision_b.clone(),
+        };
+        let call = issued(&store, &scope, suffix, &SET_CURRENT_CHAPTER, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, set_current_chapter).await;
+        observed.push((SET_CURRENT_CHAPTER.kind, outcome));
+    }
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 1, 1]);
+    let chapter_selection_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 0, 1]);
     let no_effect = (ReceiptResult::NoEffect, [1, 0, 0, 0, 0]);
     let conflicted = (ReceiptResult::Conflicted, [1, 0, 0, 0, 0]);
     let refused = (ReceiptResult::Refused, [1, 0, 0, 0, 0]);
@@ -457,8 +494,57 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("deleteChapter", no_effect),
             ("deleteChapter", conflicted),
             ("deleteChapter", refused),
+            ("setCurrentChapter", chapter_selection_applied),
+            ("setCurrentChapter", no_effect),
+            ("setCurrentChapter", conflicted),
+            ("setCurrentChapter", refused),
         ]
     );
+}
+
+/// A new Project with Chapters A and B, Chapter A current, and one writer Editor Session.
+///
+/// Returns the Scope, both Chapters, the head of Chapter B, and the Editor Session.
+async fn two_chapter_writer(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> (ProjectScope, String, String, String, String) {
+    let suffix = |offset: u16| format!("{:04x}", base + offset);
+    let (scope, _volume_id, chapter_a, chapter_b) = seed_two_chapters(
+        store,
+        "018f0000-0000-7001-8000-000000000001",
+        &suffix(0),
+        &suffix(1),
+        &suffix(2),
+        &suffix(3),
+    )
+    .await;
+    let editor_session_id = open_session(store, &scope, &suffix(4)).await;
+    let OpenChapter::Found(opened) =
+        open_chapter(store, &scope, &ChapterId::new(chapter_b.clone()))
+            .await
+            .unwrap()
+    else {
+        panic!("Chapter B must open");
+    };
+    let revision_b = opened.chapter.revision_id.as_ref().to_owned();
+    (scope, chapter_a, chapter_b, revision_b, editor_session_id)
+}
+
+/// One applicable Set Current Chapter from Chapter A to Chapter B in a new Project.
+async fn set_current_chapter_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<SetCurrentChapterInput> {
+    let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let input = SetCurrentChapterInput {
+        editor_session_id: EditorSessionId::new(editor_session_id),
+        chapter_id: chapter_b,
+        expected_current_chapter_id: chapter_a,
+        expected_target_revision_id: revision_b,
+    };
+    issued(store, &scope, base + 9, &SET_CURRENT_CHAPTER, input).await
 }
 
 /// One applicable Create Volume in a new Project.
@@ -601,8 +687,14 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(&store, &admin, &create_chapter_call(&store, 0x5e30).await).await,
         in_progress_retry(&store, &admin, &update_chapter_call(&store, 0x5e40).await).await,
         in_progress_retry(&store, &admin, &delete_chapter_call(&store, 0x5e50).await).await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &set_current_chapter_call(&store, 0x5e60).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 6]);
+    assert_eq!(observed, vec![(true, [0; 5]); 7]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -632,11 +724,15 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let classified = self.command.classify(client, envelope, project).await?;
         match self.at {
             FailurePoint::Classify => Err(unavailable("injected classify failure")),
-            FailurePoint::Apply => Ok(classified),
+            FailurePoint::Apply => Ok(Classification {
+                outcome: classified.outcome,
+                admission: classified.admission,
+                heads: classified.heads,
+            }),
         }
     }
 
@@ -645,11 +741,12 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
+        sequences: &ProfileSequences<Self>,
         plan: Self::Plan,
         applied: Self::Applied,
     ) -> Result<ProfileWrite<Self>, ProjectCommandError> {
         self.command
-            .apply(client, envelope, project, plan, applied)
+            .apply(client, envelope, project, sequences, plan, applied)
             .await?;
         Err(unavailable("injected apply failure"))
     }
@@ -700,12 +797,18 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(&store, &admin, &create_chapter_call(&store, 0x5f30).await).await,
         failed_then_settled(&store, &admin, &update_chapter_call(&store, 0x5f40).await).await,
         failed_then_settled(&store, &admin, &delete_chapter_call(&store, 0x5f50).await).await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &set_current_chapter_call(&store, 0x5f60).await,
+        )
+        .await,
     ];
     let rolled_back = (
         vec![(true, [0; 5]), (true, [0; 5])],
         ReceiptResult::AuthoritativeApplied,
     );
-    assert_eq!(observed, vec![rolled_back; 6]);
+    assert_eq!(observed, vec![rolled_back; 7]);
 }
 
 /// The replay error of one exact retry.
@@ -773,6 +876,12 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         evidence_replays(&store, &admin, &create_chapter_call(&store, 0x6a30).await).await,
         evidence_replays(&store, &admin, &update_chapter_call(&store, 0x6a40).await).await,
         evidence_replays(&store, &admin, &delete_chapter_call(&store, 0x6a50).await).await,
+        evidence_replays(
+            &store,
+            &admin,
+            &set_current_chapter_call(&store, 0x6a60).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -781,5 +890,5 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 6]);
+    assert_eq!(observed, vec![separated; 7]);
 }

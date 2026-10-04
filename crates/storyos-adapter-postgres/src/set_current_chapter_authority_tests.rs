@@ -1,15 +1,16 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, CreateChapterInput,
-    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
-    EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
-    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    SetCurrentChapterCommand, SetCurrentChapterSettlementEffect, UndoLatestAuthorActionCommand,
-    UndoLatestAuthorActionSettlementEffect, UserId, VolumeCreated, VolumeId, VolumeNode,
-    create_editor_session, create_project, get_manuscript_tree, issue_create_project_challenge,
-    issue_project_command_challenge, open_chapter, open_project, set_current_chapter,
+    AuthorCommandAdmissionIds, ChapterCreated, ChapterId, ChapterNode, ChapterSelectionAuthority,
+    CreateChapterInput, CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput,
+    EditorClientBinding, EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge,
+    IssueProjectCommandChallenge, OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding,
+    ProjectId, ProjectScope, SetCurrentChapterInput, SetCurrentChapterSettlement,
+    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeCreated,
+    VolumeId, VolumeNode, create_editor_session, create_project, get_manuscript_tree,
+    issue_create_project_challenge, issue_project_command_challenge, open_chapter, open_project,
     undo_latest_author_action,
 };
+use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
 
 use crate::command_sequence::tests::{applied, command_call, create_chapter, create_volume};
@@ -272,7 +273,7 @@ async fn switch_current(
     chapter_id: &str,
     expected_current_chapter_id: &str,
     expected_target_revision_id: &str,
-) -> storyos_application::SetCurrentChapterSettlement {
+) -> SetCurrentChapterSettlement {
     let issue = command_issue(
         scope,
         suffix,
@@ -285,33 +286,32 @@ async fn switch_current(
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
-    set_current_chapter(
-        store,
-        &SetCurrentChapterCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
-            },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: CURRENT_BYTES.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-            },
+    let call = command_call(
+        issue.binding,
+        &issue.nonce_digest,
+        suffix,
+        CURRENT_BYTES,
+        SetCurrentChapterInput {
             editor_session_id: EditorSessionId::new(editor_session_id),
             chapter_id: chapter_id.to_owned(),
             expected_current_chapter_id: expected_current_chapter_id.to_owned(),
             expected_target_revision_id: expected_target_revision_id.to_owned(),
         },
-    )
-    .await
-    .unwrap()
+    );
+    store
+        .set_current_chapter(&call.envelope, &call.input)
+        .await
+        .unwrap()
+}
+
+/// The Author Action and Snapshot of an applied switch; `None` for a zero-authority outcome.
+fn switch_authority(settlement: &SetCurrentChapterSettlement) -> Option<ChapterSelectionAuthority> {
+    match &settlement.outcome {
+        TransitionOutcome::Applied(applied) => applied.authority.clone().into_settled(),
+        TransitionOutcome::NoEffect(_)
+        | TransitionOutcome::Conflicted(_)
+        | TransitionOutcome::Refused(_) => None,
+    }
 }
 
 async fn open_admin() -> tokio_postgres::Client {
@@ -389,7 +389,7 @@ pub(super) async fn undo_named(
     .unwrap()
 }
 
-async fn seed_two_chapters(
+pub(super) async fn seed_two_chapters(
     store: &PostgresProjectReader,
     owner: &str,
     project_suffix: &str,
@@ -461,50 +461,30 @@ async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
     issue_project_command_challenge(&store, &first_issue)
         .await
         .unwrap();
-    let first_command = SetCurrentChapterCommand {
-        project_scope: scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: first_issue.binding.client_session_binding_digest.clone(),
-            session_generation: first_issue.binding.client_session_generation,
-            client_contract_revision: first_issue.binding.client_contract_revision.clone(),
-            security_policy_revision: first_issue.binding.security_policy_revision.clone(),
+    let first_call = command_call(
+        first_issue.binding,
+        &first_issue.nonce_digest,
+        "f822",
+        CURRENT_BYTES,
+        SetCurrentChapterInput {
+            editor_session_id: EditorSessionId::new(editor_session_id.clone()),
+            chapter_id: chapter_b.clone(),
+            expected_current_chapter_id: chapter_a.clone(),
+            expected_target_revision_id: revision_b.clone(),
         },
-        challenge_binding: first_issue.binding,
-        nonce_digest: first_issue.nonce_digest,
-        canonical_command_bytes: CURRENT_BYTES.to_vec(),
-        correlation_id: "018f0000-0000-7001-8000-00000000f822".to_owned(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: "018f0000-0000-7001-8000-00000001f822".to_owned(),
-            author_command_admission_id: "018f0000-0000-7001-8000-00000002f822".to_owned(),
-            receipt_id: "018f0000-0000-7001-8000-00000003f822".to_owned(),
-        },
-        editor_session_id: EditorSessionId::new(editor_session_id.clone()),
-        chapter_id: chapter_b.clone(),
-        expected_current_chapter_id: chapter_a.clone(),
-        expected_target_revision_id: revision_b.clone(),
-    };
-    let first = set_current_chapter(&store, &first_command).await.unwrap();
-    let SetCurrentChapterSettlementEffect::Applied {
-        current_chapter_id, ..
-    } = first.effect.clone()
-    else {
+    );
+    let first = store
+        .set_current_chapter(&first_call.envelope, &first_call.input)
+        .await
+        .unwrap();
+    let TransitionOutcome::Applied(first_applied) = &first.outcome else {
         panic!("switching to Chapter B must apply");
     };
-    assert_eq!(current_chapter_id, chapter_b);
-    let authority = first
-        .authority
-        .clone()
+    assert_eq!(first_applied.effect.current_chapter_id, chapter_b);
+    let authority = switch_authority(&first)
         .expect("Applied Set Current Chapter must write a Forward Author Action");
     assert_eq!(authority.author_action_sequence, 4);
     assert_eq!(authority.manuscript_tree_revision, 4);
-    let mut replay_command = first_command.clone();
-    replay_command.ids = AuthorCommandAdmissionIds {
-        command_id: "018f0000-0000-7001-8000-00000001f823".to_owned(),
-        author_command_admission_id: "018f0000-0000-7001-8000-00000002f823".to_owned(),
-        receipt_id: "018f0000-0000-7001-8000-00000003f823".to_owned(),
-    };
-    let replay = set_current_chapter(&store, &replay_command).await.unwrap();
-    assert_eq!(replay, first);
     let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
         panic!("the Canonical Manuscript Tree remains");
     };
@@ -512,7 +492,7 @@ async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
     assert_eq!(
         tree.snapshot.project_activity_position,
-        first.project_activity_position
+        first_applied.project_activity_position
     );
     assert_eq!(
         tree.volumes,
@@ -553,8 +533,7 @@ async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
     )
     .await;
     assert_eq!(
-        other_switch
-            .authority
+        switch_authority(&other_switch)
             .expect("the second User switch must write its own Author Action")
             .author_action_sequence,
         4
@@ -570,12 +549,10 @@ async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
     )
     .await;
     assert!(matches!(
-        stale.effect,
-        SetCurrentChapterSettlementEffect::Conflicted {
-            reason: storyos_core::SetCurrentChapterConflict::StaleCurrentChapter,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(storyos_core::SetCurrentChapterConflict::StaleCurrentChapter)
     ));
-    assert_eq!(stale.authority, None);
+    assert_eq!(switch_authority(&stale), None);
     let admin = open_admin().await;
     let observed: serde_json::Value = serde_json::from_str(
         &admin
@@ -621,7 +598,8 @@ async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
                     &scope.project_id.as_ref(),
                     &first.ids.receipt_id,
                     &stale.ids.receipt_id,
-                    &stale.project_activity_position.to_string(),
+                    // A zero-authority outcome has no Activity position.
+                    &"0",
                 ],
             )
             .await
@@ -673,10 +651,8 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
         &revision_b,
     )
     .await;
-    let authority = switched
-        .authority
-        .as_ref()
-        .expect("the switch must write a Forward Author Action");
+    let authority =
+        switch_authority(&switched).expect("the switch must write a Forward Author Action");
     let compensated = undo_named(
         &store,
         &scope,
@@ -793,9 +769,7 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
         blocked_opened.chapter.revision_id.as_ref(),
     )
     .await;
-    let blocked_authority = blocked_switch
-        .authority
-        .as_ref()
+    let blocked_authority = switch_authority(&blocked_switch)
         .expect("the blocked switch must write a Forward Author Action");
     admin
         .execute(

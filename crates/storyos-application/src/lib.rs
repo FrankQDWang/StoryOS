@@ -187,8 +187,9 @@ pub use pinned_export_source::{
     render_readable_manuscript_from_pinned_source,
 };
 pub use project_command::{
-    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, StructureApplied,
-    StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+    AuthorityEvidence, ChapterSelectionApplied, ChapterSelectionAuthority, ProjectCommandEnvelope,
+    ProjectCommandError, ProjectCommandSettlement, StructureApplied, StructureAuthority,
+    StructureAuthorityEvidence, StructureSettlement,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,
@@ -244,9 +245,7 @@ pub use replan_proposal::{
     ReplanProposalSettlementEffect, ReplanProposalStore, replan_proposal,
 };
 pub use set_current_chapter::{
-    SetCurrentChapterAuthority, SetCurrentChapterCommand, SetCurrentChapterError,
-    SetCurrentChapterSettlement, SetCurrentChapterSettlementEffect, SetCurrentChapterStore,
-    set_current_chapter,
+    CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };
 pub use undo_latest_author_action::{
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,

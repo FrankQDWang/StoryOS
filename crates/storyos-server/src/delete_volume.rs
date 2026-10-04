@@ -50,7 +50,7 @@ pub(super) async fn delete_volume(
     let result = settlement.outcome.receipt_result();
     let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
-            authority = applied.authority.into_settled();
+            authority = applied.authority.into_settled().map(Into::into);
             contracts::DeleteVolumeEffect::AuthoritativeApplied {
                 volume_id: applied.effect.volume_id,
                 tree_revision: applied.effect.tree_revision.to_string(),
@@ -74,6 +74,7 @@ pub(super) async fn delete_volume(
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
+            heads: Vec::new(),
             project: settlement.response_project,
         },
     );

@@ -13,10 +13,11 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AdmissionClass, Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    Classification, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
     MissingAdmission, ProjectCommand, ResponseRecord, Structural, StructureIdentity,
     StructureWrite, WriterBase, settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 impl PostgresProjectReader {
     /// Settles one author-initiated Chapter removal as a Manuscript Structure Transition.
@@ -36,7 +37,6 @@ impl ProjectCommand for DeleteChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "deleteChapter",
         isolation: CommandIsolation::Serializable,
-        admission: AdmissionClass::ExplicitProjectCommand,
         missing_admission: MissingAdmission::InvalidChallenge,
         response: ResponseRecord::Project,
         activity_kind: "chapter_deleted",
@@ -54,7 +54,7 @@ impl ProjectCommand for DeleteChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let target = client
             .query_opt(
@@ -128,7 +128,9 @@ impl ProjectCommand for DeleteChapterInput {
             current_chapter_id: project.current_chapter_id.clone(),
             ordered_active_chapter_ids,
         });
-        Ok(classified.map_applied(|applied| (applied, ParentVolume(volume_id))))
+        Ok(Classification::project_command(
+            classified.map_applied(|applied| (applied, ParentVolume(volume_id))),
+        ))
     }
 
     async fn apply(
@@ -136,6 +138,7 @@ impl ProjectCommand for DeleteChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         ParentVolume(volume_id): ParentVolume,
         applied: DeleteChapterApplied,
     ) -> Result<StructureWrite<ChapterDeleted>, ProjectCommandError> {

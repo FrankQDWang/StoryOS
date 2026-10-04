@@ -52,7 +52,7 @@ pub(super) async fn delete_chapter(
     let result = settlement.outcome.receipt_result();
     let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
-            authority = applied.authority.into_settled();
+            authority = applied.authority.into_settled().map(Into::into);
             contracts::DeleteChapterEffect::AuthoritativeApplied {
                 chapter_id,
                 volume_id: applied.effect.volume_id,
@@ -77,6 +77,7 @@ pub(super) async fn delete_chapter(
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
+            heads: Vec::new(),
             project: settlement.response_project,
         },
     );

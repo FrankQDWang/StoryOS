@@ -12,10 +12,14 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 
+mod admission;
+mod chapter_selection;
 mod records;
 mod structural;
 use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
-use records::{ReceiptRecord, insert_admission, insert_receipt, lock_project, settle_idempotency};
+use admission::insert_admission;
+pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
+use records::{ReceiptRecord, insert_receipt, lock_project, settle_idempotency};
 pub(crate) use structural::{
     CurrentChapterChange, Structural, StructureIdentity, StructureWrite, WriterBase,
 };
@@ -24,9 +28,25 @@ pub(crate) enum CommandIsolation {
     Serializable,
 }
 
-/// The action class that the Author Command Admission records.
-pub(crate) enum AdmissionClass {
+/// The action class and Editor Session binding that the Author Command Admission records.
+pub(crate) enum Admission {
     ExplicitProjectCommand,
+    /// A command of the current writer Editor Session; the insert requires its writer generation.
+    ExplicitEditorCommand(EditorAdmission),
+}
+
+pub(crate) struct EditorAdmission {
+    pub(crate) editor_session_id: String,
+    pub(crate) chapter_object_id: Option<String>,
+    pub(crate) expected_authoritative_revision_id: Option<String>,
+}
+
+/// The head arrays that the Domain Receipt of every outcome records.
+#[derive(Default)]
+pub(crate) struct ReceiptHeads {
+    pub(crate) expected: Vec<String>,
+    pub(crate) prior: Vec<String>,
+    pub(crate) resulting: Vec<String>,
 }
 
 /// The error of an Admission insert that inserts no row.
@@ -42,7 +62,6 @@ pub(crate) enum ResponseRecord {
 pub(crate) struct CommandSpec {
     pub(crate) kind: &'static str,
     pub(crate) isolation: CommandIsolation,
-    pub(crate) admission: AdmissionClass,
     pub(crate) missing_admission: MissingAdmission,
     pub(crate) response: ResponseRecord,
     pub(crate) activity_kind: &'static str,
@@ -96,6 +115,28 @@ pub(crate) type Classified<C> = TransitionOutcome<
     <C as ProjectCommand>::Refusal,
 >;
 
+/// The Core Transition Outcome of one command and the facts that the sequence records with it.
+pub(crate) struct Classification<C: ProjectCommand + ?Sized> {
+    pub(crate) outcome: Classified<C>,
+    pub(crate) admission: Admission,
+    pub(crate) heads: ReceiptHeads,
+}
+
+impl<C: ProjectCommand + ?Sized> Classification<C> {
+    /// An explicit project command whose Receipt has empty head arrays.
+    pub(crate) fn project_command(outcome: Classified<C>) -> Self {
+        Self {
+            outcome,
+            admission: Admission::ExplicitProjectCommand,
+            heads: ReceiptHeads::default(),
+        }
+    }
+}
+
+/// The scope sequences that one command's settlement profile allocates.
+pub(crate) type ProfileSequences<C> =
+    <<C as ProjectCommand>::Profile as SettlementProfile>::Sequences;
+
 /// The applied writes that one command returns for its settlement profile.
 pub(crate) type ProfileWrite<C> =
     <<C as ProjectCommand>::Profile as SettlementProfile>::Write<<C as ProjectCommand>::Effect>;
@@ -122,19 +163,20 @@ pub(crate) trait ProjectCommand: Sync {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> impl Future<Output = Result<Classified<Self>, ProjectCommandError>> + Send;
+    ) -> impl Future<Output = Result<Classification<Self>, ProjectCommandError>> + Send;
 
     /// The Domain Receipt payload of an applied outcome.
     fn applied_receipt_payload(&self, _applied: &Self::Applied, _plan: &Self::Plan) -> String {
         "{}".to_owned()
     }
 
-    /// Writes the effect rows of an applied outcome.
+    /// Writes the effect rows of an applied outcome after its profile sequences are allocated.
     fn apply(
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
+        sequences: &ProfileSequences<Self>,
         plan: Self::Plan,
         applied: Self::Applied,
     ) -> impl Future<Output = Result<ProfileWrite<Self>, ProjectCommandError>> + Send;
@@ -206,8 +248,12 @@ async fn first_use<C: ProjectCommand>(
     command: &C,
 ) -> Result<SettledCommand<C>, ProjectCommandError> {
     let project = lock_project(client, envelope).await?;
-    let classified = command.classify(client, envelope, &project).await?;
-    insert_admission(client, envelope, &C::SPEC).await?;
+    let Classification {
+        outcome: classified,
+        admission,
+        heads,
+    } = command.classify(client, envelope, &project).await?;
+    insert_admission(client, envelope, &C::SPEC, &admission).await?;
     let receipt = ReceiptRecord {
         result: classified.receipt_result().code(),
         payload: match classified.reason_code() {
@@ -215,6 +261,7 @@ async fn first_use<C: ProjectCommand>(
             None => "{}".to_owned(),
         },
         command_kind: C::SPEC.kind,
+        heads,
     };
     let (receipt_created_at, outcome) = match classified {
         TransitionOutcome::Applied((applied, plan)) => {
@@ -231,7 +278,7 @@ async fn first_use<C: ProjectCommand>(
             )
             .await?;
             let write = command
-                .apply(client, envelope, &project, plan, applied)
+                .apply(client, envelope, &project, &sequences, plan, applied)
                 .await?;
             let applied = C::Profile::persist(
                 client,

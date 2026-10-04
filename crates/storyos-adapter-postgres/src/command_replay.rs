@@ -1,4 +1,4 @@
-//! One replay read for the settled acknowledgement of a structural project command.
+//! One replay read for the settled acknowledgement of a project command.
 
 use std::collections::BTreeMap;
 
@@ -17,6 +17,12 @@ pub(crate) struct CommandReplay {
     pub(crate) project_activity_position: u64,
     pub(crate) project_activity_event_id: String,
     pub(crate) authority: Option<ReplayedAuthority>,
+    /// The Author Action of the Receipt, also when the transition has no Commit.
+    pub(crate) author_action_sequence: Option<u64>,
+    /// The canonical Snapshot at the Activity position of the Receipt.
+    pub(crate) snapshot_id: Option<String>,
+    /// The latest Manuscript Tree Revision that an Activity payload records at or before the Receipt.
+    pub(crate) manuscript_tree_revision: Option<u64>,
     result_kind: String,
     receipt: JsonText,
     activity: JsonText,
@@ -171,7 +177,16 @@ pub(crate) async fn read_command_replay(
         }),
         _ => None,
     };
+    let optional_u64 = |index: usize| {
+        row.get::<_, Option<String>>(index)
+            .map(|value| value.parse::<u64>())
+            .transpose()
+            .map_err(unavailable)
+    };
     Ok(CommandReplay {
+        author_action_sequence: optional_u64(10)?,
+        snapshot_id: row.get(11),
+        manuscript_tree_revision: optional_u64(17)?,
         ids: AuthorCommandAdmissionIds {
             command_id: row.get(0),
             author_command_admission_id: row.get(1),
@@ -213,7 +228,16 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
         authoritative_commit.resulting_manuscript_tree_revision::text,
         authoritative_commit.resulting_revision_id::text,
         idempotency.acknowledgement_format,
-        idempotency.response_project::text
+        idempotency.response_project::text,
+        (SELECT structure.payload->>'tree_revision'
+           FROM storyos.project_activity_event_payloads AS structure
+          WHERE (structure.owner_user_id, structure.project_id) =
+                (receipt.owner_user_id, receipt.project_id)
+            AND jsonb_typeof(structure.payload->'tree_revision') = 'string'
+            AND (payload.project_activity_position IS NULL
+                 OR structure.project_activity_position <= payload.project_activity_position)
+          ORDER BY structure.project_activity_position DESC
+          LIMIT 1)
    FROM storyos.domain_receipts AS receipt
    JOIN storyos.author_command_admission_settlements AS settlement
      ON (settlement.owner_user_id, settlement.project_id,

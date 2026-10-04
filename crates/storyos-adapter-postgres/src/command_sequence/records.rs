@@ -4,9 +4,7 @@ use storyos_application::{ChapterId, Project, ProjectCommandEnvelope, ProjectCom
 use storyos_core::ProjectLifecycle;
 use tokio_postgres::Client;
 
-use super::{
-    AdmissionClass, CommandSpec, LockedProject, MissingAdmission, ResponseRecord, unavailable,
-};
+use super::{CommandSpec, LockedProject, ReceiptHeads, ResponseRecord, unavailable};
 use crate::command_response_project::{
     COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
 };
@@ -15,6 +13,7 @@ pub(super) struct ReceiptRecord {
     pub(super) result: &'static str,
     pub(super) payload: String,
     pub(super) command_kind: &'static str,
+    pub(super) heads: ReceiptHeads,
 }
 
 /// Inserts the Domain Receipt and its Admission settlement link.
@@ -34,9 +33,9 @@ pub(super) async fn insert_receipt(
                 artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $11, $6, $7::text::uuid,
-                     'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::uuid[], $10::text[]::uuid[], '{}'::text[], '{}'::text[],
-                     '{}'::text[], $8, $9::text::jsonb)
+                     'author_command_admission', $12::text[]::uuid[], $13::text[]::uuid[],
+                     $14::text[]::uuid[], '{}'::uuid[], '{}'::uuid[], $10::text[]::uuid[],
+                     '{}'::text[], '{}'::text[], '{}'::text[], $8, $9::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
             &[
@@ -51,6 +50,9 @@ pub(super) async fn insert_receipt(
                 &receipt.payload,
                 &commit_ids,
                 &receipt.command_kind,
+                &receipt.heads.expected,
+                &receipt.heads.prior,
+                &receipt.heads.resulting,
             ],
         )
         .await
@@ -108,69 +110,6 @@ pub(super) async fn lock_project(
     })
 }
 
-pub(super) async fn insert_admission(
-    client: &Client,
-    envelope: &ProjectCommandEnvelope,
-    spec: &CommandSpec,
-) -> Result<(), ProjectCommandError> {
-    let action_class = match spec.admission {
-        AdmissionClass::ExplicitProjectCommand => "explicit_project_command",
-    };
-    let binding = &envelope.client_binding;
-    let challenge = &envelope.challenge_binding;
-    let inserted = client
-        .execute(
-            "INSERT INTO storyos.author_command_admissions
-               (owner_user_id, project_id, author_command_admission_id, command_id,
-                editor_session_id, writer_generation, client_session_binding_ref,
-                client_session_generation, client_contract_revision, security_policy_revision,
-                action_class, method, route_template, command_schema, command_kind,
-                canonical_command_digest, idempotency_key, challenge_consumed_at,
-                challenge_expires_at, correlation_id, chapter_object_id,
-                expected_authoritative_revision_id, expected_proposal_head_revision_ids,
-                target_refs, observed_ownership_partition, editor_contract_revision,
-                undo_group_id, completed_intent_record_id, local_intent_sequence, command_payload)
-             SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                    NULL, NULL, $5, $6::text::numeric, $7, $8,
-                    $17, $9, $10, $11, $16,
-                    $12, $13::text::uuid, challenge.consumed_at, challenge.expires_at,
-                    $14::text::uuid, NULL, NULL, '{}'::uuid[], '{}'::text[], NULL, $7,
-                    NULL, NULL, NULL, convert_from($15::bytea, 'UTF8')::jsonb
-               FROM storyos.project_command_challenges AS challenge
-              WHERE challenge.owner_user_id = $1::text::uuid
-                AND challenge.project_id = $2::text::uuid
-                AND challenge.command_kind = $16
-                AND challenge.idempotency_key = $13::text::uuid",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &envelope.ids.author_command_admission_id,
-                &envelope.ids.command_id,
-                &binding.binding_ref,
-                &binding.session_generation.to_string(),
-                &binding.client_contract_revision,
-                &binding.security_policy_revision,
-                &challenge.method,
-                &challenge.route_template,
-                &challenge.command_schema,
-                &challenge.canonical_command_digest,
-                &challenge.idempotency_key,
-                &envelope.correlation_id,
-                &envelope.canonical_command_bytes.as_slice(),
-                &spec.kind,
-                &action_class,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    if inserted != 1 {
-        return Err(match spec.missing_admission {
-            MissingAdmission::InvalidChallenge => ProjectCommandError::InvalidChallenge,
-        });
-    }
-    Ok(())
-}
-
 /// Reads the Command-response Project after the writes and settles the Command Idempotency Fence.
 pub(super) async fn settle_idempotency(
     client: &Client,
@@ -215,4 +154,36 @@ pub(super) async fn settle_idempotency(
         .await
         .map_err(unavailable)?;
     Ok(project)
+}
+
+/// Inserts the Project Activity payload of one settled command at its allocated position.
+pub(super) async fn insert_activity(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    position: u64,
+    event_id: &str,
+    event_kind: &str,
+    payload: serde_json::Map<String, serde_json::Value>,
+) -> Result<(), ProjectCommandError> {
+    client
+        .execute(
+            "INSERT INTO storyos.project_activity_event_payloads
+               (owner_user_id, project_id, project_activity_position,
+                project_activity_event_id, event_kind, receipt_id, receipt_result_kind,
+                payload)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
+                     $5, $6::text::uuid, 'authoritative_applied', $7::text::jsonb)",
+            &[
+                &envelope.project_scope.owner_user_id.as_ref(),
+                &envelope.project_scope.project_id.as_ref(),
+                &position.to_string(),
+                &event_id,
+                &event_kind,
+                &envelope.ids.receipt_id,
+                &serde_json::Value::Object(payload).to_string(),
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    Ok(())
 }

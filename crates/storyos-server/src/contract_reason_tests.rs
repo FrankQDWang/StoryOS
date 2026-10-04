@@ -5,7 +5,8 @@ use storyos_contracts as contracts;
 use storyos_core::{
     CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict, CreateVolumeRefusal,
     DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteVolumeConflict,
-    DeleteVolumeNoEffect, DeleteVolumeRefusal, ReasonCode, UpdateChapterConflict,
+    DeleteVolumeNoEffect, DeleteVolumeRefusal, ReasonCode, SetCurrentChapterConflict,
+    SetCurrentChapterNoEffect, SetCurrentChapterRefusal, UpdateChapterConflict,
     UpdateChapterNoEffect, UpdateChapterRefusal, UpdateVolumeConflict, UpdateVolumeNoEffect,
     UpdateVolumeRefusal,
 };
@@ -155,6 +156,38 @@ fn every_chapter_reason_maps_to_its_public_reason() {
         (
             DeleteChapterRefusal::InvalidChapterJoin,
             contracts::DeleteChapterRefusalReason::InvalidChapterJoin,
+        ),
+    ]);
+}
+
+#[test]
+fn every_current_chapter_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        SetCurrentChapterNoEffect::AlreadyCurrent,
+        contracts::SetCurrentChapterNoEffectReason::AlreadyCurrent,
+    )]);
+    assert_maps(vec![
+        (
+            SetCurrentChapterConflict::StaleCurrentChapter,
+            contracts::SetCurrentChapterConflictReason::StaleCurrentChapter,
+        ),
+        (
+            SetCurrentChapterConflict::WrongTargetHead,
+            contracts::SetCurrentChapterConflictReason::WrongTargetHead,
+        ),
+    ]);
+    assert_maps(vec![
+        (
+            SetCurrentChapterRefusal::ArchivedProject,
+            contracts::SetCurrentChapterRefusalReason::ArchivedProject,
+        ),
+        (
+            SetCurrentChapterRefusal::InvalidChapterJoin,
+            contracts::SetCurrentChapterRefusalReason::InvalidChapterJoin,
+        ),
+        (
+            SetCurrentChapterRefusal::EmptyProject,
+            contracts::SetCurrentChapterRefusalReason::EmptyProject,
         ),
     ]);
 }

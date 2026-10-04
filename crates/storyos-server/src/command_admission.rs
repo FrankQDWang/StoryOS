@@ -117,6 +117,7 @@ project_command_request!(contracts::DeleteVolumeRequest, nested delete_volume_in
 project_command_request!(contracts::CreateChapterRequest, nested create_chapter_input);
 project_command_request!(contracts::UpdateChapterRequest, nested update_chapter_input);
 project_command_request!(contracts::DeleteChapterRequest, nested delete_chapter_input);
+project_command_request!(contracts::SetCurrentChapterRequest, nested set_current_chapter_input);
 
 /// One admitted project command, ready for its Core Transition.
 pub(super) struct Admitted<I> {
@@ -267,7 +268,7 @@ impl<I> Admitted<I> {
         let project_scope = contract_scope(&self.envelope.project_scope);
         let (commit_ids, action_sequence) = match settled.authority {
             Some(authority) => (
-                vec![authority.authoritative_commit_id],
+                authority.authoritative_commit_ids,
                 Some(authority.author_action_sequence.to_string()),
             ),
             None => (Vec::new(), None),
@@ -289,9 +290,9 @@ impl<I> Admitted<I> {
                 idempotency_key: self.envelope.challenge_binding.idempotency_key.clone(),
                 producer_cause: contracts::DomainReceiptProducerCause::AuthorCommandAdmission,
                 author_command_admission_id: settled.ids.author_command_admission_id,
-                expected_heads: Vec::new(),
-                prior_heads: Vec::new(),
-                resulting_heads: Vec::new(),
+                expected_heads: settled.heads.clone(),
+                prior_heads: settled.heads.clone(),
+                resulting_heads: settled.heads,
                 authoritative_revision_ids: Vec::new(),
                 proposal_revision_ids: Vec::new(),
                 authoritative_commit_ids: commit_ids,
@@ -328,8 +329,25 @@ pub(super) struct SettledReceipt {
     pub(super) ids: AuthorCommandAdmissionIds,
     pub(super) receipt_created_at: String,
     pub(super) result: ReceiptResult,
-    pub(super) authority: Option<StructureAuthority>,
+    pub(super) authority: Option<ReceiptAuthority>,
+    /// The one head that the expected, prior, and resulting head arrays show; empty without one.
+    pub(super) heads: Vec<String>,
     pub(super) project: Project,
+}
+
+/// The Authoritative Commit identities and Author Action that an applied Receipt shows.
+pub(super) struct ReceiptAuthority {
+    pub(super) authoritative_commit_ids: Vec<String>,
+    pub(super) author_action_sequence: u64,
+}
+
+impl From<StructureAuthority> for ReceiptAuthority {
+    fn from(authority: StructureAuthority) -> Self {
+        Self {
+            authoritative_commit_ids: vec![authority.authoritative_commit_id],
+            author_action_sequence: authority.author_action_sequence,
+        }
+    }
 }
 
 impl ProjectCommandRoute {

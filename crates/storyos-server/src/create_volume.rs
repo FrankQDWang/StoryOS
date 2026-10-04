@@ -53,7 +53,7 @@ pub(super) async fn create_volume(
         TransitionOutcome::Applied(applied) => {
             let order = match applied.effect.order {
                 CreateVolumePublicOrder::CanonicalSiblingOrder(rank) => {
-                    authority = applied.authority.into_settled();
+                    authority = applied.authority.into_settled().map(Into::into);
                     rank.to_string()
                 }
                 CreateVolumePublicOrder::HistoricalCreateVolumeAck => "1".to_owned(),
@@ -81,6 +81,7 @@ pub(super) async fn create_volume(
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
+            heads: Vec::new(),
             project: settlement.response_project,
         },
     );

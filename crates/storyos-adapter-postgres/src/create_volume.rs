@@ -14,10 +14,11 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AdmissionClass, Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    Classification, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
     MissingAdmission, ProjectCommand, ResponseRecord, Structural, StructureIdentity,
     StructureWrite, WriterBase, settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 impl PostgresProjectReader {
     /// Settles one Create Volume as a Manuscript Structure Transition.
@@ -37,7 +38,6 @@ impl ProjectCommand for CreateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createVolume",
         isolation: CommandIsolation::Serializable,
-        admission: AdmissionClass::ExplicitProjectCommand,
         missing_admission: MissingAdmission::InvalidChallenge,
         response: ResponseRecord::Project,
         activity_kind: "volume_created",
@@ -55,14 +55,14 @@ impl ProjectCommand for CreateVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let classified = classify_create_volume(&CoreCreateVolume {
             expected_tree_revision: self.expected_tree_revision,
             current_tree_revision: project.tree_revision,
             current_lifecycle: project.lifecycle,
             title: self.title.clone(),
         });
-        Ok(match classified {
+        Ok(Classification::project_command(match classified {
             TransitionOutcome::Applied(applied) => {
                 let live_volumes = client
                     .query_one(
@@ -91,7 +91,7 @@ impl ProjectCommand for CreateVolumeInput {
             TransitionOutcome::NoEffect(reason) => match reason {},
             TransitionOutcome::Conflicted(reason) => TransitionOutcome::Conflicted(reason),
             TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(reason),
-        })
+        }))
     }
 
     fn applied_receipt_payload(
@@ -107,6 +107,7 @@ impl ProjectCommand for CreateVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         order: NewVolumeOrder,
         applied: CreateVolumeApplied,
     ) -> Result<StructureWrite<VolumeCreated>, ProjectCommandError> {

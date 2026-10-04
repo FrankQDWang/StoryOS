@@ -10,10 +10,11 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AdmissionClass, Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    Classification, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
     MissingAdmission, ProjectCommand, ResponseRecord, Structural, StructureIdentity,
     StructureWrite, WriterBase, settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 pub(crate) mod sibling_order;
 
@@ -40,7 +41,6 @@ impl ProjectCommand for UpdateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "updateChapter",
         isolation: CommandIsolation::Serializable,
-        admission: AdmissionClass::ExplicitProjectCommand,
         missing_admission: MissingAdmission::InvalidChallenge,
         response: ResponseRecord::Project,
         activity_kind: "chapter_updated",
@@ -58,7 +58,7 @@ impl ProjectCommand for UpdateChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let chapters = client
             .query(
                 "SELECT manuscript_object_id::text, title, parent_volume_id::text
@@ -126,7 +126,9 @@ impl ProjectCommand for UpdateChapterInput {
             current_order: siblings.current_order,
             chapter_count: siblings.ordered_ids.len() as u64,
         });
-        Ok(classified.map_applied(|applied| (applied, siblings)))
+        Ok(Classification::project_command(
+            classified.map_applied(|applied| (applied, siblings)),
+        ))
     }
 
     async fn apply(
@@ -134,6 +136,7 @@ impl ProjectCommand for UpdateChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         siblings: LiveSiblings,
         applied: UpdateChapterApplied,
     ) -> Result<StructureWrite<UpdateChapterApplied>, ProjectCommandError> {

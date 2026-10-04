@@ -76,22 +76,25 @@ pub struct StructureApplied<A> {
     pub authority: StructureAuthorityEvidence,
 }
 
+/// The authority records of one applied command, or their absence before the Authority History Floor.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum StructureAuthorityEvidence {
-    Settled(StructureAuthority),
-    /// The transition precedes the Authority History Floor and has no Commit or Author Action.
+pub enum AuthorityEvidence<T> {
+    Settled(T),
+    /// The transition precedes the Authority History Floor and has no Author Action.
     BeforeAuthorityHistoryFloor,
 }
 
-impl StructureAuthorityEvidence {
+impl<T> AuthorityEvidence<T> {
     /// The settled authority, or `None` before the Authority History Floor.
-    pub fn into_settled(self) -> Option<StructureAuthority> {
+    pub fn into_settled(self) -> Option<T> {
         match self {
             Self::Settled(authority) => Some(authority),
             Self::BeforeAuthorityHistoryFloor => None,
         }
     }
 }
+
+pub type StructureAuthorityEvidence = AuthorityEvidence<StructureAuthority>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StructureAuthority {
@@ -102,4 +105,21 @@ pub struct StructureAuthority {
     pub resulting_manuscript_tree_revision: u64,
     /// The Authoritative Revision that the Commit binds, when it binds one.
     pub resulting_revision_id: Option<String>,
+}
+
+/// The applied record of a Current Chapter change (`ChapterSelection` settlement profile).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChapterSelectionApplied<A> {
+    pub effect: A,
+    pub project_activity_position: u64,
+    pub project_activity_event_id: String,
+    pub authority: AuthorityEvidence<ChapterSelectionAuthority>,
+}
+
+/// The Author Action and canonical Snapshot of a Current Chapter change, which has no Commit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChapterSelectionAuthority {
+    pub author_action_sequence: u64,
+    pub snapshot_id: String,
+    pub manuscript_tree_revision: u64,
 }

@@ -72,7 +72,7 @@ pub(super) async fn create_chapter(
         TransitionOutcome::Applied(applied) => {
             let order = match applied.effect.order {
                 CreateChapterPublicOrder::CanonicalSiblingOrder(rank) => {
-                    authority = applied.authority.into_settled();
+                    authority = applied.authority.into_settled().map(Into::into);
                     rank
                 }
                 CreateChapterPublicOrder::HistoricalCreateChapterAck(storage_key) => storage_key,
@@ -109,6 +109,7 @@ pub(super) async fn create_chapter(
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
+            heads: Vec::new(),
             project: settlement.response_project,
         },
     );

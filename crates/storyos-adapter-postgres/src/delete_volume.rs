@@ -13,10 +13,11 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AdmissionClass, Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
+    Classification, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
     MissingAdmission, ProjectCommand, ResponseRecord, Structural, StructureIdentity,
     StructureWrite, WriterBase, settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 impl PostgresProjectReader {
     /// Settles one author-initiated Volume removal as a Manuscript Structure Transition.
@@ -33,7 +34,6 @@ impl ProjectCommand for DeleteVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "deleteVolume",
         isolation: CommandIsolation::Serializable,
-        admission: AdmissionClass::ExplicitProjectCommand,
         missing_admission: MissingAdmission::InvalidChallenge,
         response: ResponseRecord::Project,
         activity_kind: "volume_deleted",
@@ -51,7 +51,7 @@ impl ProjectCommand for DeleteVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let target = client
             .query_opt(
@@ -120,7 +120,9 @@ impl ProjectCommand for DeleteVolumeInput {
             current_tree_revision: project.tree_revision,
             current_lifecycle: project.lifecycle,
         });
-        Ok(classified.map_applied(|applied| (applied, ())))
+        Ok(Classification::project_command(
+            classified.map_applied(|applied| (applied, ())),
+        ))
     }
 
     async fn apply(
@@ -128,6 +130,7 @@ impl ProjectCommand for DeleteVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         _plan: (),
         applied: DeleteVolumeApplied,
     ) -> Result<StructureWrite<VolumeDeleted>, ProjectCommandError> {
