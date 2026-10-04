@@ -2,10 +2,12 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DestinationRequest, DispatchClaim,
-    Observation, ProjectAssistanceRecord, ProjectScope, ReferenceRetrieval, ResponseReference,
+    Observation, ProjectAssistanceRecord, ProjectScope, ReferenceRetrieval, RequestAttempt,
+    ResponseReference,
 };
 use storyos_core::{LookupUnavailable, SuccessorLookup};
 
+use crate::agent_run_create_dispatch::PriorContext;
 use crate::agent_run_retrieval::{
     RetrievalAdvance, RetrievalFence, RetrievalRunWrite, RetrievalWork,
     advance_original_result_retrieval,
@@ -54,9 +56,12 @@ pub(crate) async fn advance(
         }
     }
     Ok(
-        match crate::agent_run_successor::advance(client, claim, assistance).await? {
+        match crate::agent_run_successor::advance(client, claim, run, assistance).await? {
             SuccessorWork::Done(result) => WorkPhase::Done(result),
             SuccessorWork::Hold(kind) => WorkPhase::Hold(kind),
+            SuccessorWork::Create(request) => {
+                WorkPhase::Dispatch(Box::new(DestinationRequest::Create(request)))
+            }
             SuccessorWork::Retrieve(request) => {
                 WorkPhase::Dispatch(Box::new(DestinationRequest::Retrieve(request)))
             }
@@ -64,7 +69,8 @@ pub(crate) async fn advance(
     )
 }
 
-/// A cancelled Run keeps only evidence work: the fenced retrieval of its unknown create.
+/// A new claim of a cancelled Run does its cancellation duties: it re-observes an in-flight
+/// Create once, reconciles a retrievable reference as evidence, and sends one Abort.
 pub(crate) async fn settle_cancelled(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -93,10 +99,29 @@ pub(crate) async fn settle_cancelled(
             ))));
         }
     }
-    if let Some(abort) = crate::agent_run_abort::pending(client, claim, run).await? {
-        return Ok(WorkPhase::Dispatch(Box::new(DestinationRequest::Abort(
-            abort,
-        ))));
+    let cancellation = crate::agent_run_abort::pending(client, claim, run).await?;
+    if let (Some(cancellation), Some(attempt_id)) = (cancellation, run.attempt_id.as_deref()) {
+        if payload.get("original_result_retrieval").is_none()
+            && payload.get("observed_after_cancellation").is_none()
+            && run.decision_position == "0"
+        {
+            let record: serde_json::Value = serde_json::from_str(&run.assembly_payload)
+                .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+            return Ok(WorkPhase::Dispatch(Box::new(DestinationRequest::Create(
+                crate::agent_run_create_dispatch::create_request(
+                    client,
+                    claim,
+                    run,
+                    &record,
+                    RequestAttempt::Claimed(DispatchClaim {
+                        model_attempt_id: attempt_id.to_owned(),
+                    }),
+                    PriorContext::Continue,
+                )
+                .await?,
+            ))));
+        }
+        return Ok(WorkPhase::Abort(cancellation));
     }
     client
         .execute(
@@ -141,8 +166,8 @@ pub(crate) async fn record_unknown_create(
     Ok(WorkPhase::Hold("recovery"))
 }
 
-/// A cancelled Run keeps a retrievable reference of its unknown create as evidence, for a
-/// later fenced retrieval. Nothing else of the exchange is recorded.
+/// The re-observation of a cancelled Create supplies no Agent Decision. It keeps only a
+/// retrievable reference as evidence for the fenced retrieval.
 pub(crate) async fn record_cancelled_create(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -150,28 +175,28 @@ pub(crate) async fn record_cancelled_create(
     dispatch: &DispatchClaim,
     observation: Observation,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let Observation::OutcomeUnknown {
-        response_reference: Some(reference),
-    } = observation
-    else {
-        return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
+    let reference = match observation {
+        Observation::OutcomeUnknown {
+            response_reference: Some(reference),
+        } if matches!(reference.retrieval, ReferenceRetrieval::Supported { .. }) => Some(reference),
+        Observation::OutcomeUnknown { .. }
+        | Observation::NotSubmitted
+        | Observation::Rejected { .. }
+        | Observation::Terminal(_) => None,
     };
-    if run.decision_position != "0"
-        || !matches!(reference.retrieval, ReferenceRetrieval::Supported { .. })
-    {
-        return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
+    if let Some(reference) = &reference {
+        write_subject(client, claim, run, dispatch, Some(reference)).await?;
     }
-    write_subject(client, claim, run, dispatch, Some(&reference)).await?;
     client
         .execute(
-            "UPDATE storyos.agent_runs SET wakeup_pending = true
+            "UPDATE storyos.model_attempts
+                SET payload = payload || '{\"observed_after_cancellation\": true}'::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid AND fence_token = $4",
+                AND model_attempt_id = $3::text::uuid",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &claim.fence_token,
+                &dispatch.model_attempt_id,
             ],
         )
         .await
@@ -255,25 +280,47 @@ async fn write_subject(
     Ok(())
 }
 
-/// The cancel command sends no destination request. It leaves the abort and the fenced
-/// retrieval of an in-flight decision Attempt to a Worker claim of the cancelled Run.
-pub(crate) async fn mark_cancelled_evidence(
+/// Whether the decision Attempt of a claimed Run is in flight: dispatched with an unknown outcome.
+pub(crate) async fn in_flight_attempt(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    run_id: &str,
+) -> Result<bool, CompleteAgentRunError> {
+    Ok(client
+        .query_one(
+            "SELECT EXISTS (
+               SELECT 1 FROM storyos.agent_runs AS run
+                 JOIN storyos.model_attempts AS attempt
+                   ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
+                      (run.owner_user_id, run.project_id, run.run_id)
+                  AND attempt.attempt_role = 'decision'
+                  AND attempt.decision_position = run.active_decision_position
+                WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
+                  AND run.run_id = $3::text::uuid AND run.status = 'claimed'
+                  AND attempt.decision_id IS NULL AND attempt.dispatch_state = 'uncertain')",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?
+        .get(0))
+}
+
+/// The cancel command sends no destination request. It leaves the cancellation duties of an
+/// in-flight decision Attempt to a new Worker claim of the cancelled Run.
+pub(crate) async fn mark_cancellation_duties(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     run_id: &str,
 ) -> Result<(), CompleteAgentRunError> {
     client
         .execute(
-            "UPDATE storyos.agent_runs AS run SET wakeup_pending = true
-              WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
-                AND run.run_id = $3::text::uuid AND run.status = 'cancelled'
-                AND EXISTS (
-                  SELECT 1 FROM storyos.model_attempts AS attempt
-                   WHERE (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
-                         (run.owner_user_id, run.project_id, run.run_id)
-                     AND attempt.attempt_role = 'decision'
-                     AND attempt.decision_position = run.active_decision_position
-                     AND attempt.decision_id IS NULL AND attempt.dispatch_state = 'uncertain')",
+            "UPDATE storyos.agent_runs SET wakeup_pending = true
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND status = 'cancelled'",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),

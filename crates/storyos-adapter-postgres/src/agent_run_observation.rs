@@ -17,6 +17,14 @@ pub(crate) struct CreateResult<'a> {
     pub producer_output: Option<&'a [ProseChangeCandidate]>,
     pub usage: ModelUsage,
     pub response_reference: Option<&'a str>,
+    pub settlement: CreateSettlement<'a>,
+}
+
+/// How the destination answered one Create.
+pub(crate) enum CreateSettlement<'a> {
+    Response,
+    NotSubmitted,
+    Rejected(&'a str),
 }
 
 /// Records the stream, the Agent Decision, and any opened Proposal of one Create exchange.
@@ -126,6 +134,13 @@ pub(crate) async fn persist_create_result(
     if let Some(reference) = result.response_reference {
         payload["response_reference"] = serde_json::json!(reference);
     }
+    match result.settlement {
+        CreateSettlement::Response => {}
+        CreateSettlement::NotSubmitted => {
+            payload["submission"] = serde_json::json!("not_submitted")
+        }
+        CreateSettlement::Rejected(reason) => payload["rejection"] = serde_json::json!(reason),
+    }
     crate::prose_change_decision::encode(
         &mut payload,
         result.producer_output,
@@ -210,7 +225,7 @@ pub(crate) fn encode_items(items: &[NativeStreamItem]) -> serde_json::Value {
         .collect()
 }
 
-fn encode_decision(
+pub(crate) fn encode_decision(
     kind: &AgentDecisionKind,
     decision_id: &str,
     selected: bool,
@@ -254,7 +269,7 @@ fn encode_decision(
     }
 }
 
-fn encode_usage(usage: ModelUsage) -> serde_json::Value {
+pub(crate) fn encode_usage(usage: ModelUsage) -> serde_json::Value {
     match usage {
         ModelUsage::Reported {
             input_tokens,

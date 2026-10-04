@@ -1,8 +1,8 @@
 //! Claims and records the Retrieve requests of one unknown create.
 
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, DispatchClaim, Observation, RetrievePurpose,
-    RetrieveRequest, WirePayloadProjection,
+    ClaimedAgentRun, CompleteAgentRunError, DispatchClaim, ModelUsage, Observation,
+    RetrievePurpose, RetrieveRequest, WirePayloadProjection,
 };
 use storyos_core::{
     AgentDecisionKind, AgentDecisionOutcome, OriginalResultKeepReason,
@@ -219,7 +219,7 @@ pub(crate) async fn record_late_result(
     client
         .execute(
             "UPDATE storyos.model_attempts
-                SET dispatch_state = 'settled',
+                SET dispatch_state = $7,
                     payload = payload || jsonb_build_object('result', $5::text, 'items', $6::text::jsonb)
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND model_attempt_id = $4::text::uuid",
@@ -230,12 +230,17 @@ pub(crate) async fn record_late_result(
                 &dispatch.model_attempt_id,
                 &retrieved.label(),
                 &retrieved.items.to_string(),
+                &if retrieved.kind == RetrievedOriginalResult::Unknown {
+                    "uncertain"
+                } else {
+                    "settled"
+                },
             ],
         )
         .await
         .map_err(unavailable)?;
     if retrieved.kind == RetrievedOriginalResult::CompleteSelected {
-        crate::agent_run_successor::apply_late(&mut marker, &mut row.payload);
+        crate::agent_run_successor::apply_late(&mut marker, &mut row.payload, retrieved.usage);
     }
     marker["late_result_checked"] = serde_json::json!(true);
     row.payload["unknown_create_successor"] = marker;
@@ -248,6 +253,7 @@ pub(crate) struct RetrievedResult {
     pub kind: RetrievedOriginalResult,
     pub items: serde_json::Value,
     pub supplied: Option<SuppliedDecision>,
+    pub usage: ModelUsage,
 }
 
 impl From<Observation> for RetrievedResult {
@@ -257,6 +263,7 @@ impl From<Observation> for RetrievedResult {
                 kind: RetrievedOriginalResult::Unknown,
                 items: serde_json::json!([]),
                 supplied: None,
+                usage: ModelUsage::Unknown,
             };
         };
         let items = encode_items(&response.items);
@@ -273,11 +280,13 @@ impl From<Observation> for RetrievedResult {
                 kind: RetrievedOriginalResult::CompleteSelected,
                 items: items.clone(),
                 supplied: Some(SuppliedDecision { items, text }),
+                usage: response.usage,
             },
             AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => Self {
                 kind: RetrievedOriginalResult::Incomplete,
                 items,
                 supplied: None,
+                usage: response.usage,
             },
         }
     }

@@ -1,16 +1,16 @@
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DispatchClaim,
-    ProjectAssistanceRecord, ProjectScope, RequestAttempt, RetrievePurpose, RetrieveRequest,
-    UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect,
+    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateRequest, ModelUsage,
+    ProjectAssistanceRecord, ProjectScope, RetrieveRequest, UnknownCreateSuccessorDisposition,
+    UnknownCreateSuccessorInspect,
 };
 use storyos_core::{
-    ADVISORY_TEXT, AssistanceAvailability, LookupUnavailable, SuccessorAllowance, SuccessorEffect,
+    AssistanceAvailability, LookupUnavailable, SuccessorAllowance, SuccessorEffect,
     SuccessorLookup, UnknownCreateSuccessorDecision, UnknownCreateSuccessorFacts,
     decide_unknown_create_successor, scripted_successor_conditions, unknown_create_script,
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::update_run;
+use crate::agent_run_work::{RunPhaseRow, update_run};
 
 pub(crate) struct SuccessorOrigin<'a> {
     pub predecessor_attempt_id: &'a str,
@@ -20,6 +20,7 @@ pub(crate) struct SuccessorOrigin<'a> {
 pub(crate) enum SuccessorWork {
     Done(CompleteAgentRun),
     Hold(&'static str),
+    Create(CreateRequest),
     Retrieve(RetrieveRequest),
 }
 
@@ -73,6 +74,7 @@ pub(crate) fn prepare_subject(
 pub(crate) async fn advance(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
     assistance: Option<&ProjectAssistanceRecord>,
 ) -> Result<SuccessorWork, CompleteAgentRunError> {
     let mut row = load_decision(client, claim).await?;
@@ -93,7 +95,8 @@ pub(crate) async fn advance(
     ));
     match decision {
         UnknownCreateSuccessorDecision::AlreadyDispatched => {
-            finish_dispatched(client, claim, &row, &marker).await
+            crate::agent_run_successor_dispatch::finish_dispatched(client, claim, &row, &marker)
+                .await
         }
         UnknownCreateSuccessorDecision::ProhibitedByCancellation => {
             let consumed = flag(&marker, "allowance_consumed");
@@ -148,9 +151,9 @@ pub(crate) async fn advance(
             write_decision_payload(client, claim, &row.attempt_id, &row.payload).await?;
             Ok(SuccessorWork::Hold("successor_fence"))
         }
-        UnknownCreateSuccessorDecision::ResumePendingDispatch => {
-            dispatch_pending(client, claim, &mut row, &mut marker).await
-        }
+        UnknownCreateSuccessorDecision::ResumePendingDispatch => Ok(SuccessorWork::Create(
+            crate::agent_run_successor_dispatch::successor_request(client, claim, run).await?,
+        )),
     }
 }
 
@@ -297,87 +300,21 @@ pub(crate) async fn load_successor_selection(
 pub(crate) struct DecisionRow {
     status: String,
     pub attempt_id: String,
-    invocation_id: String,
-    conversation_id: String,
+    pub invocation_id: String,
+    pub conversation_id: String,
     pub payload: serde_json::Value,
 }
 
-async fn finish_dispatched(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    row: &DecisionRow,
-    marker: &serde_json::Value,
-) -> Result<SuccessorWork, CompleteAgentRunError> {
-    if let Some(response_reference) = late_check_reference(&row.payload, marker) {
-        let existing = client
-            .query_opt(
-                "SELECT model_attempt_id::text FROM storyos.model_attempts
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND run_id = $3::text::uuid
-                    AND attempt_role = 'late_retrieval' AND decision_position = 0",
-                &[
-                    &claim.project_scope.owner_user_id.as_ref(),
-                    &claim.project_scope.project_id.as_ref(),
-                    &claim.run_id,
-                ],
-            )
-            .await
-            .map_err(unavailable)?;
-        return Ok(SuccessorWork::Retrieve(RetrieveRequest {
-            attempt: match existing {
-                Some(found) => RequestAttempt::Claimed(DispatchClaim {
-                    model_attempt_id: found.get(0),
-                }),
-                None => RequestAttempt::New,
-            },
-            purpose: RetrievePurpose::LateResult,
-            original_model_attempt_id: row.attempt_id.clone(),
-            response_reference,
-        }));
-    }
-    update_run(
-        client,
-        claim,
-        "completed",
-        /*settlement*/ None,
-        /*clear_lease*/ true,
-    )
-    .await?;
-    Ok(SuccessorWork::Done(CompleteAgentRun::Settled))
-}
-
-async fn dispatch_pending(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    row: &mut DecisionRow,
+/// Applies a late complete predecessor result as evidence. Only known usage releases the
+/// worst-case reservation.
+pub(crate) fn apply_late(
     marker: &mut serde_json::Value,
-) -> Result<SuccessorWork, CompleteAgentRunError> {
-    if text(marker, "successor_model_attempt_id").is_none() {
-        let created = insert_successor(client, claim, row).await?;
-        marker["successor_model_attempt_id"] = serde_json::json!(created.attempt_id);
-        marker["successor_manifest_id"] = serde_json::json!(created.manifest_id);
-        marker["successor_decision_id"] = serde_json::json!(created.decision_id);
-        seal(
-            marker,
-            "dispatched",
-            /*pause_reason*/ None,
-            /*allowance_consumed*/ true,
-            /*predecessor_fenced*/ true,
-        );
-        row.payload["unknown_create_successor"] = marker.clone();
-        row.payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": false});
-        row.payload["usage"] = serde_json::json!({"kind": "unknown"});
-        write_decision_payload(client, claim, &row.attempt_id, &row.payload).await?;
-        if late_check_reference(&row.payload, marker).is_some() {
-            return Ok(SuccessorWork::Hold("successor_late"));
-        }
-    }
-    finish_dispatched(client, claim, row, marker).await
-}
-
-pub(crate) fn apply_late(marker: &mut serde_json::Value, payload: &mut serde_json::Value) {
-    payload["usage"] = serde_json::json!({"kind": "reported"});
-    payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": true});
+    payload: &mut serde_json::Value,
+    usage: ModelUsage,
+) {
+    let released = !matches!(usage, ModelUsage::Unknown);
+    payload["usage"] = crate::agent_run_observation::encode_usage(usage);
+    payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": released});
     let attempt_id = text(marker, "predecessor_model_attempt_id").unwrap_or("");
     if let Some(evidence) = payload
         .get_mut("evidence")
@@ -391,190 +328,9 @@ pub(crate) fn apply_late(marker: &mut serde_json::Value, payload: &mut serde_jso
         }));
     }
     marker["late_evidence_applied"] = serde_json::json!(true);
-    marker["predecessor_usage_kind"] = serde_json::json!("reported");
-    marker["predecessor_reservation_released"] = serde_json::json!(true);
+    marker["predecessor_usage_kind"] = payload["usage"]["kind"].clone();
+    marker["predecessor_reservation_released"] = serde_json::json!(released);
     marker["successor_settles_predecessor"] = serde_json::json!(false);
-}
-
-struct CreatedSuccessor {
-    attempt_id: String,
-    manifest_id: String,
-    decision_id: String,
-}
-
-async fn insert_successor(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    row: &DecisionRow,
-) -> Result<CreatedSuccessor, CompleteAgentRunError> {
-    let attempt_id = Uuid::now_v7().to_string();
-    let manifest_id = Uuid::now_v7().to_string();
-    let decision_id = Uuid::now_v7().to_string();
-    let binding_id = Uuid::now_v7().to_string();
-    let requirement_id = Uuid::now_v7().to_string();
-    let snapshot_id = Uuid::now_v7().to_string();
-    let destination_manifest_id = Uuid::now_v7().to_string();
-    let outbound_manifest_id = Uuid::now_v7().to_string();
-    copy_requirement(client, claim, &requirement_id, &snapshot_id).await?;
-    copy_manifest(
-        client,
-        claim,
-        &manifest_id,
-        &requirement_id,
-        &destination_manifest_id,
-        &outbound_manifest_id,
-    )
-    .await?;
-    let mut successor_payload = serde_json::json!({
-        "operation": "unknown_create_successor",
-        "predecessor_model_attempt_id": row.attempt_id,
-        "model_invocation_id": row.invocation_id,
-        "wire": row.payload.get("wire").cloned().unwrap_or(serde_json::Value::Null),
-        "items": [complete_item()],
-        "decision": {
-            "kind": "advisory",
-            "decision_id": decision_id,
-            "selected": true,
-            "text": ADVISORY_TEXT,
-            "authoritative": false,
-            "advances_continuation": true
-        },
-        "usage": { "kind": "unknown" },
-        "reservation": { "kind": "worst_case", "released": false },
-        "settles_predecessor": false,
-        "evidence": crate::agent_run_attempt::evidence_values(
-            &attempt_id,
-            row.payload
-                .pointer("/wire/author_message")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or(""),
-            &manifest_id,
-            /*known_prior_binding_id*/ None,
-        )
-    });
-    if let Some(wire) = crate::agent_run_continuation::parse_wire(&row.payload) {
-        successor_payload["produced_binding"] =
-            crate::agent_run_continuation::encode_produced_binding(
-                &binding_id,
-                &attempt_id,
-                &wire.admission,
-            );
-        successor_payload["continuation"] = crate::agent_run_continuation::encode_wire(&wire);
-    }
-    client
-        .execute(
-            "INSERT INTO storyos.model_attempts
-               (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
-                outbound_disclosure_event_id, destination_context_manifest_id,
-                outbound_disclosure_manifest_id, wire_payload_projection_id,
-                model_invocation_id, conversation_id, decision_id, continuation_binding_id,
-                dispatch_state, payload, attempt_role)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, $10::text::uuid, $11::text::uuid, $12::text::uuid,
-                     $13::text::uuid, 'settled', $14::text::jsonb, 'successor')",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &attempt_id,
-                &Uuid::now_v7().to_string(),
-                &Uuid::now_v7().to_string(),
-                &destination_manifest_id,
-                &outbound_manifest_id,
-                &Uuid::now_v7().to_string(),
-                &row.invocation_id,
-                &row.conversation_id,
-                &decision_id,
-                &binding_id,
-                &successor_payload.to_string(),
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    Ok(CreatedSuccessor {
-        attempt_id,
-        manifest_id,
-        decision_id,
-    })
-}
-
-async fn copy_requirement(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    requirement_id: &str,
-    snapshot_id: &str,
-) -> Result<(), CompleteAgentRunError> {
-    let inserted = client
-        .execute(
-            "INSERT INTO storyos.operation_requirements
-               (owner_user_id, project_id, operation_requirement_id, run_id,
-                input_snapshot_id, receipt_id, payload, requirement_role)
-             SELECT owner_user_id, project_id, $4::text::uuid, run_id,
-                    $5::text::uuid, receipt_id, payload, 'successor'
-               FROM storyos.operation_requirements
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND requirement_role = 'primary' AND decision_position = 0",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &requirement_id,
-                &snapshot_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    if inserted != 1 {
-        return Err(unavailable(std::io::Error::other(
-            "The primary operation requirement is missing",
-        )));
-    }
-    Ok(())
-}
-
-async fn copy_manifest(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    manifest_id: &str,
-    requirement_id: &str,
-    destination_manifest_id: &str,
-    outbound_manifest_id: &str,
-) -> Result<(), CompleteAgentRunError> {
-    let manifested = client
-        .execute(
-            "INSERT INTO storyos.context_assembly_manifests
-               (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency,
-                destination_context_manifest_id, outbound_disclosure_manifest_id,
-                payload, receipt_id, manifest_role)
-             SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, 'successor'
-               FROM storyos.context_assembly_manifests
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND manifest_role = 'decision' AND decision_position = 0",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &manifest_id,
-                &requirement_id,
-                &destination_manifest_id,
-                &outbound_manifest_id,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    if manifested != 1 {
-        return Err(unavailable(std::io::Error::other(
-            "The decision Context Assembly Manifest is missing",
-        )));
-    }
-    Ok(())
 }
 
 pub(crate) async fn load_decision(
@@ -716,7 +472,7 @@ fn facts_from(
     }
 }
 
-fn seal(
+pub(crate) fn seal(
     marker: &mut serde_json::Value,
     disposition: &str,
     pause_reason: Option<&str>,
@@ -737,14 +493,6 @@ fn seal(
     marker["reuses_changed_context"] = serde_json::json!(false);
 }
 
-/// The predecessor reference to read for a late result, once, after the original retrieval.
-fn late_check_reference(payload: &serde_json::Value, marker: &serde_json::Value) -> Option<String> {
-    let subject = payload.get("original_result_retrieval")?;
-    (!flag(marker, "late_result_checked") && text(subject, "retrieval_attempt_id").is_some())
-        .then(|| text(subject, "reference_id").map(str::to_owned))
-        .flatten()
-}
-
 fn effect_label(effect: SuccessorEffect) -> &'static str {
     match effect {
         SuccessorEffect::None => "none",
@@ -753,22 +501,7 @@ fn effect_label(effect: SuccessorEffect) -> &'static str {
     }
 }
 
-fn complete_item() -> serde_json::Value {
-    serde_json::json!({
-        "item_id": "1",
-        "role": "assistant",
-        "state": "complete",
-        "phase": "complete",
-        "text": ADVISORY_TEXT,
-        "summary": "host_fake_native_text",
-        "call_id": null,
-        "arguments": null,
-        "refusal": null,
-        "hosted_report": null
-    })
-}
-
-fn text<'a>(value: &'a serde_json::Value, field: &str) -> Option<&'a str> {
+pub(crate) fn text<'a>(value: &'a serde_json::Value, field: &str) -> Option<&'a str> {
     value
         .get(field)
         .and_then(serde_json::Value::as_str)
@@ -781,14 +514,16 @@ fn required_text(value: &serde_json::Value, field: &str) -> Result<String, std::
         .ok_or_else(|| std::io::Error::other("The successor record is incomplete"))
 }
 
-fn flag(value: &serde_json::Value, field: &str) -> bool {
+pub(crate) fn flag(value: &serde_json::Value, field: &str) -> bool {
     value
         .get(field)
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false)
 }
 
-fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> CompleteAgentRunError {
+pub(crate) fn unavailable(
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(error))
 }
 

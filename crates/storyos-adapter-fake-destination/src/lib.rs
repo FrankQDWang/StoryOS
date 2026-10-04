@@ -73,29 +73,36 @@ impl ModelProviderAdapter for FakeDestination {
             Some(input) => {
                 let mut wire = input.clone();
                 wire["mapping_revision"] = serde_json::json!(HOST_FAKE_MAPPING_REVISION);
+                if let Some(reference) = &create.previous_response_reference {
+                    wire["previous_response_reference"] = serde_json::json!(reference);
+                }
                 let bytes = storyos_core::canonical_json(&wire);
                 projection(
                     format!("sha256:{}", storyos_core::hex_sha256(bytes.as_bytes())),
                     Some(bytes),
                 )
             }
-            None => projection(
-                wire_digest(&serde_json::json!({
+            None => {
+                let mut wire = serde_json::json!({
                     "author_message": create.author_message,
                     "chapter_id": create.chapter_id,
                     "mapping_revision": HOST_FAKE_MAPPING_REVISION,
-                })),
-                /*serialized_payload*/ None,
-            ),
+                });
+                if let Some(reference) = &create.previous_response_reference {
+                    wire["previous_response_reference"] = serde_json::json!(reference);
+                }
+                projection(wire_digest(&wire), /*serialized_payload*/ None)
+            }
         };
         let rejection = create
             .previous_response_reference
             .as_deref()
             .and_then(recovery_plan::continuation_rejection);
-        let plan = match (
-            rejection,
-            recovery_plan::unknown_create(&create.author_message, &projection.digest),
-        ) {
+        let unknown = match create.successor_of {
+            Some(_) => None,
+            None => recovery_plan::unknown_create(&create.author_message, &projection.digest),
+        };
+        let plan = match (rejection, unknown) {
             (Some(reason), _) => FakePlan::Observed(Observation::Rejected {
                 reason: reason.to_owned(),
             }),

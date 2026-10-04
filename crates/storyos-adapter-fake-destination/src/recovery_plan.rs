@@ -139,7 +139,7 @@ fn reference_code(reference: &str) -> Option<u8> {
 /// Derives the retrieved result from the reference alone.
 pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
     let code = reference_code(&request.response_reference);
-    let complete = || {
+    let complete = |usage| {
         Observation::Terminal(ModelResponse {
             items: vec![assistant_item(
                 "1",
@@ -153,7 +153,7 @@ pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
                 },
                 prose_changes: None,
             }),
-            usage: ModelUsage::Unknown,
+            usage,
             response_reference: Some(request.response_reference.clone()),
         })
     };
@@ -161,7 +161,11 @@ pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
         response_reference: None,
     };
     match (code, request.purpose) {
-        (Some(1), _) | (Some(4), RetrievePurpose::LateResult) => complete(),
+        (Some(1), _) => complete(ModelUsage::Unknown),
+        (Some(4), RetrievePurpose::LateResult) => complete(ModelUsage::Reported {
+            input_tokens: 0,
+            output_tokens: 0,
+        }),
         (Some(2), _) => Observation::Terminal(ModelResponse {
             items: vec![assistant_item(
                 "1",

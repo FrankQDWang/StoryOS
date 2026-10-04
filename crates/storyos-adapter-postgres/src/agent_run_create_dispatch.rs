@@ -6,7 +6,7 @@ use storyos_application::{
 };
 use storyos_core::{AgentDecisionOutcome, validate_agent_decision};
 
-use crate::agent_run_observation::{CreateResult, persist_create_result};
+use crate::agent_run_observation::{CreateResult, CreateSettlement, persist_create_result};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase};
 
 pub(crate) async fn record_create(
@@ -42,28 +42,31 @@ pub(crate) async fn record_create(
             return record_continuation_rejection(client, claim, run, dispatch, request, &reason)
                 .await;
         }
-        Observation::NotSubmitted | Observation::Rejected { .. } => {
-            let result = CreateResult {
-                attempt_id: &dispatch.model_attempt_id,
-                items: &[],
-                outcome: AgentDecisionOutcome::NoDecision,
-                producer_output: None,
-                usage: ModelUsage::Unknown,
-                response_reference: None,
-            };
-            return persist_create_result(client, claim, run, result, &retained).await;
+        Observation::NotSubmitted => {
+            return persist_create_result(
+                client,
+                claim,
+                run,
+                no_response(dispatch, CreateSettlement::NotSubmitted),
+                &retained,
+            )
+            .await;
+        }
+        Observation::Rejected { reason } => {
+            return persist_create_result(
+                client,
+                claim,
+                run,
+                no_response(dispatch, CreateSettlement::Rejected(&reason)),
+                &retained,
+            )
+            .await;
         }
     };
     let declared: Vec<_> = request
         .declared_targets
         .iter()
-        .map(|target| {
-            (
-                target.chapter_id.clone(),
-                target.block_id.clone(),
-                target.base_revision_id.clone(),
-            )
-        })
+        .map(DeclaredTarget::location)
         .collect();
     let result = CreateResult {
         attempt_id: &dispatch.model_attempt_id,
@@ -75,8 +78,24 @@ pub(crate) async fn record_create(
             .and_then(|output| output.prose_changes.as_deref()),
         usage: response.usage,
         response_reference: response.response_reference.as_deref(),
+        settlement: CreateSettlement::Response,
     };
     persist_create_result(client, claim, run, result, &retained).await
+}
+
+fn no_response<'a>(
+    dispatch: &'a DispatchClaim,
+    settlement: CreateSettlement<'a>,
+) -> CreateResult<'a> {
+    CreateResult {
+        attempt_id: &dispatch.model_attempt_id,
+        items: &[],
+        outcome: AgentDecisionOutcome::NoDecision,
+        producer_output: None,
+        usage: ModelUsage::Unknown,
+        response_reference: None,
+        settlement,
+    }
 }
 
 /// Whether a new Create may continue the prior response, or must rebuild the full Context.
@@ -138,6 +157,7 @@ pub(crate) async fn create_request(
         candidate_revision,
         previous_response_reference: previous_response_reference(client, claim, run, prior_context)
             .await?,
+        successor_of: None,
     })
 }
 

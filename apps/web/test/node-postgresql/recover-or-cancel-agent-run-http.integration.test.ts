@@ -520,6 +520,7 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
     assert.equal(cancelled.response.effect.kind, "applied");
     unlinkSync(dispatchHold);
     await worker;
+    await settleOnce();
     assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id)).status, "cancelled");
   } finally {
     if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
@@ -560,6 +561,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     assert.equal(cancelledHold.response.effect.kind, "applied");
     unlinkSync(dispatchHold);
     await dispatchWorker;
+    await settleOnce();
     const afterCancel = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id);
     assert.equal(afterCancel.status, "cancelled");
     assert.equal(afterCancel.decision.kind, "absent");

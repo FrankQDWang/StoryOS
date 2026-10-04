@@ -3,7 +3,7 @@
 use storyos_core::NativeStreamItem;
 
 use crate::model_gateway_ports::{
-    AbortRequest, AbortTicket, ContractFaultObserver, ContractFaultPoint, DestinationRequest,
+    CommittedCancellation, ContractFaultObserver, ContractFaultPoint, DestinationRequest,
     DispatchClaim, DispatchRecord, ModelDispatchStore, ModelProviderAdapter, ModelStreamSink,
     NextDispatchWork, RequestAttempt, StreamControl, StreamStop,
 };
@@ -27,14 +27,10 @@ pub async fn complete_agent_run(
         let request = match store.next_dispatch_work(claim).await? {
             NextDispatchWork::Settled(result) => return Ok(result),
             NextDispatchWork::Request(request) => request,
+            NextDispatchWork::Abort(cancellation) => cancellation.into_abort(),
         };
-        if let Some(ticket) = gateway.dispatch(request).await? {
-            let abort = DestinationRequest::Abort(AbortRequest {
-                attempt: RequestAttempt::New,
-                ticket,
-                response_reference: None,
-            });
-            gateway.dispatch(abort).await?;
+        if let Some(cancellation) = gateway.dispatch(request).await? {
+            gateway.dispatch(cancellation.into_abort()).await?;
         }
     }
 }
@@ -49,11 +45,11 @@ struct Gateway<'a, S, A, O> {
 impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
     Gateway<'_, S, A, O>
 {
-    /// Sends one request in order. Returns the abort ticket that a durable cancellation issued.
+    /// Sends one request in order. Returns the cancellation that stopped its stream, if any.
     async fn dispatch(
         &self,
         request: DestinationRequest,
-    ) -> Result<Option<AbortTicket>, CompleteAgentRunError> {
+    ) -> Result<Option<CommittedCancellation>, CompleteAgentRunError> {
         let Gateway {
             store,
             adapter,
@@ -87,10 +83,10 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
             observer,
             claim,
             dispatch: &dispatch,
-            ticket: None,
+            cancellation: None,
         };
         let observation = adapter.exchange(prepared.prepared, &mut sink).await;
-        let ticket = sink.ticket;
+        let cancellation = sink.cancellation;
         store
             .record(
                 claim,
@@ -101,7 +97,7 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
                 },
             )
             .await?;
-        Ok(ticket)
+        Ok(cancellation)
     }
 }
 
@@ -110,7 +106,7 @@ struct GatewaySink<'a, S, O> {
     observer: &'a O,
     claim: &'a ClaimedAgentRun,
     dispatch: &'a DispatchClaim,
-    ticket: Option<AbortTicket>,
+    cancellation: Option<CommittedCancellation>,
 }
 
 impl<S: ModelDispatchStore, O: ContractFaultObserver> ModelStreamSink for GatewaySink<'_, S, O> {
@@ -126,8 +122,8 @@ impl<S: ModelDispatchStore, O: ContractFaultObserver> ModelStreamSink for Gatewa
                     .await;
                 StreamControl::Continue
             }
-            Ok(Some(StreamStop::Cancelled(ticket))) => {
-                self.ticket = Some(ticket);
+            Ok(Some(StreamStop::Cancelled(cancellation))) => {
+                self.cancellation = Some(cancellation);
                 StreamControl::Stop
             }
             Ok(Some(StreamStop::StaleFence)) | Err(_) => StreamControl::Stop,

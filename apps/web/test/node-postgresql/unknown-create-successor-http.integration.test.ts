@@ -405,6 +405,7 @@ test("cancellation after the fence prohibits the successor", async () => {
     assert.equal(cancelled.effect.kind, "applied");
     unlinkSync(hold);
     await worker;
+    await settleOnce();
     const after = await inspect(started.baseUrl, prepared, created.effect.run_id);
     const found = successor(after);
     assert.equal(after.status, "cancelled");

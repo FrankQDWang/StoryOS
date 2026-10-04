@@ -1,7 +1,7 @@
 use storyos_application::{
-    AbortTicket, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DestinationRequest,
-    DispatchClaim, DispatchRecord, ModelDispatchStore, NextDispatchWork, PreDispatchRefusal,
-    RetrievePurpose, StreamStop, WirePayloadProjection,
+    ClaimedAgentRun, CommittedCancellation, CompleteAgentRun, CompleteAgentRunError,
+    DestinationRequest, DispatchClaim, DispatchRecord, ModelDispatchStore, NextDispatchWork,
+    PreDispatchRefusal, RequestAttempt, RetrievePurpose, StreamStop, WirePayloadProjection,
 };
 use storyos_core::NativeStreamItem;
 
@@ -9,8 +9,7 @@ use super::PostgresProjectReader;
 use crate::agent_run_observation::encode_items;
 use crate::agent_run_work::{
     CreateAdmission, RunPhaseRow, WorkPhase, admit_create, complete_challenge_error,
-    complete_database_error, hold_if_requested, load_claimed_or_cancelled, settle_one_phase,
-    update_run,
+    complete_database_error, hold_if_requested, load_run_phase, settle_one_phase, update_run,
 };
 use crate::update_project_assistance::read_assistance_record;
 
@@ -45,6 +44,9 @@ impl ModelDispatchStore for PostgresProjectReader {
                 WorkPhase::Done(result) => return Ok(NextDispatchWork::Settled(result)),
                 WorkPhase::Hold(kind) => hold_if_requested(kind).await,
                 WorkPhase::Dispatch(request) => return Ok(NextDispatchWork::Request(*request)),
+                WorkPhase::Abort(cancellation) => {
+                    return Ok(NextDispatchWork::Abort(cancellation));
+                }
             }
         }
     }
@@ -62,9 +64,15 @@ impl ModelDispatchStore for PostgresProjectReader {
             .map_err(complete_challenge_error)?;
         let client = &transaction.client;
         let claimed = async {
-            let (claim, run) = load_claimed_or_cancelled(client, claim).await?;
-            let claim = &claim;
+            let run = load_run_phase(client, claim).await?;
             let request = match request {
+                DestinationRequest::Create(create) if create.successor_of.is_some() => {
+                    if run.settled() {
+                        return Ok(None);
+                    }
+                    return crate::agent_run_successor_dispatch::commit(client, claim, projection)
+                        .await;
+                }
                 DestinationRequest::Create(create) => create,
                 DestinationRequest::Retrieve(retrieve) => {
                     return commit_retrieve(client, claim, &run, retrieve, projection).await;
@@ -137,6 +145,7 @@ impl ModelDispatchStore for PostgresProjectReader {
         }
     }
 
+    /// Appends the events in order. An event with a known item ID replaces that item.
     async fn append_model_stream_events(
         &self,
         claim: &ClaimedAgentRun,
@@ -148,22 +157,52 @@ impl ModelDispatchStore for PostgresProjectReader {
             .await
             .map_err(complete_challenge_error)?;
         let appended = async {
-            let run = match load_claimed_or_cancelled(&transaction.client, claim).await {
+            let run = match load_run_phase(&transaction.client, claim).await {
                 Err(CompleteAgentRunError::StaleFence) => return Ok(Some(StreamStop::StaleFence)),
-                loaded => loaded?.1,
+                loaded => loaded?,
             };
             if run.status == "cancelled"
                 && run.attempt_id.as_deref() == Some(dispatch.model_attempt_id.as_str())
             {
-                return Ok(Some(StreamStop::Cancelled(
-                    AbortTicket::after_committed_cancellation(dispatch.model_attempt_id.clone()),
-                )));
+                return Ok(Some(StreamStop::Cancelled(CommittedCancellation {
+                    model_attempt_id: dispatch.model_attempt_id.clone(),
+                    response_reference: None,
+                    abort_attempt: RequestAttempt::New,
+                })));
             }
-            if run.settled()
-                || run.decision_id.is_some()
-                || run.attempt_id.as_deref() != Some(dispatch.model_attempt_id.as_str())
-            {
+            let target = transaction
+                .client
+                .query_opt(
+                    "SELECT payload::text FROM storyos.model_attempts
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND run_id = $3::text::uuid AND model_attempt_id = $4::text::uuid
+                        AND attempt_role IN ('decision', 'successor') AND decision_id IS NULL",
+                    &[
+                        &claim.project_scope.owner_user_id.as_ref(),
+                        &claim.project_scope.project_id.as_ref(),
+                        &claim.run_id,
+                        &dispatch.model_attempt_id,
+                    ],
+                )
+                .await
+                .map_err(complete_database_error)?;
+            let Some(target) = target.filter(|_| !run.settled()) else {
                 return Ok(Some(StreamStop::StaleFence));
+            };
+            let mut items = serde_json::from_str::<serde_json::Value>(&target.get::<_, String>(0))
+                .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
+                .get("items")
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            for event in encode_items(events).as_array().into_iter().flatten() {
+                match items
+                    .iter_mut()
+                    .find(|item| item["item_id"] == event["item_id"])
+                {
+                    Some(item) => *item = event.clone(),
+                    None => items.push(event.clone()),
+                }
             }
             transaction
                 .client
@@ -173,14 +212,13 @@ impl ModelDispatchStore for PostgresProjectReader {
                       WHERE owner_user_id = $1::text::uuid
                         AND project_id = $2::text::uuid
                         AND run_id = $3::text::uuid
-                        AND model_attempt_id = $4::text::uuid
-                        AND attempt_role = 'decision' AND decision_id IS NULL",
+                        AND model_attempt_id = $4::text::uuid AND decision_id IS NULL",
                     &[
                         &claim.project_scope.owner_user_id.as_ref(),
                         &claim.project_scope.project_id.as_ref(),
                         &claim.run_id,
                         &dispatch.model_attempt_id,
-                        &encode_items(events).to_string(),
+                        &serde_json::Value::Array(items).to_string(),
                     ],
                 )
                 .await
@@ -215,8 +253,7 @@ impl ModelDispatchStore for PostgresProjectReader {
             .map_err(complete_challenge_error)?;
         let client = &transaction.client;
         let phase = async {
-            let (claim, run) = load_claimed_or_cancelled(client, claim).await?;
-            let claim = &claim;
+            let run = load_run_phase(client, claim).await?;
             let settled = WorkPhase::Done(CompleteAgentRun::AlreadySettled);
             let phase = match record {
                 DispatchRecord::Refusal(_) if run.settled() => return Ok(settled),
@@ -239,6 +276,22 @@ impl ModelDispatchStore for PostgresProjectReader {
                     )
                     .await?;
                     WorkPhase::Done(CompleteAgentRun::Settled)
+                }
+                DispatchRecord::Exchange {
+                    claim: dispatch,
+                    request: DestinationRequest::Create(request),
+                    observation,
+                } if request.successor_of.is_some() => {
+                    if run.settled() {
+                        return Ok(settled);
+                    }
+                    crate::agent_run_successor_dispatch::record(
+                        client,
+                        claim,
+                        dispatch,
+                        observation,
+                    )
+                    .await?
                 }
                 DispatchRecord::Exchange {
                     claim: dispatch,

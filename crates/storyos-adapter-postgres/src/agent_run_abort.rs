@@ -1,20 +1,20 @@
 //! The best-effort provider abort of one cancelled decision Model Attempt.
 
 use storyos_application::{
-    AbortRequest, AbortTicket, ClaimedAgentRun, CompleteAgentRunError, DispatchClaim, Observation,
-    RequestAttempt, WirePayloadProjection,
+    AbortRequest, ClaimedAgentRun, CommittedCancellation, CompleteAgentRunError, DispatchClaim,
+    Observation, RequestAttempt, WirePayloadProjection,
 };
 use uuid::Uuid;
 
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, complete_database_error};
 
-/// The Abort that a cancelled Run still needs: its decision Attempt was dispatched and its
-/// outcome is unknown. The ticket is issued here, after the Model Attempt Cancellation commits.
+/// The committed cancellation of a cancelled Run whose decision Attempt was dispatched, has an
+/// unknown outcome, and has no recorded Abort yet.
 pub(crate) async fn pending(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
-) -> Result<Option<AbortRequest>, CompleteAgentRunError> {
+) -> Result<Option<CommittedCancellation>, CompleteAgentRunError> {
     let Some(attempt_id) = run.attempt_id.as_deref() else {
         return Ok(None);
     };
@@ -46,13 +46,13 @@ pub(crate) async fn pending(
     if !in_flight || recorded.is_some() {
         return Ok(None);
     }
-    Ok(Some(AbortRequest {
-        attempt: match abort_id {
+    Ok(Some(CommittedCancellation {
+        model_attempt_id: attempt_id.to_owned(),
+        response_reference: row.get(3),
+        abort_attempt: match abort_id {
             Some(model_attempt_id) => RequestAttempt::Claimed(DispatchClaim { model_attempt_id }),
             None => RequestAttempt::New,
         },
-        ticket: AbortTicket::after_committed_cancellation(attempt_id.to_owned()),
-        response_reference: row.get(3),
     }))
 }
 

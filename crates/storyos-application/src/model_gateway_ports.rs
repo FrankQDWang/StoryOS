@@ -28,6 +28,8 @@ impl DestinationRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RequestAttempt {
     New,
+    /// The exchange re-observes an Attempt that a lost claim committed. The adapter must not send
+    /// the request again; an adapter that cannot re-observe reports OutcomeUnknown.
     Claimed(DispatchClaim),
 }
 
@@ -43,6 +45,8 @@ pub struct CreateRequest {
     pub candidate_revision: Option<String>,
     /// The destination reference of the prior response that an incremental continuation sends.
     pub previous_response_reference: Option<String>,
+    /// The unknown predecessor Model Attempt that this one bounded successor replaces.
+    pub successor_of: Option<String>,
 }
 
 /// One admitted Proposal target that the request declares to the destination.
@@ -52,6 +56,17 @@ pub struct DeclaredTarget {
     pub block_id: String,
     pub base_revision_id: String,
     pub collection: bool,
+}
+
+impl DeclaredTarget {
+    /// The (Chapter, Block, base revision) key that prose changes must match.
+    pub fn location(&self) -> (String, String, String) {
+        (
+            self.chapter_id.clone(),
+            self.block_id.clone(),
+            self.base_revision_id.clone(),
+        )
+    }
 }
 
 /// One read of a retained response reference. It never sends the original request again.
@@ -79,21 +94,37 @@ pub struct AbortRequest {
     pub response_reference: Option<String>,
 }
 
-/// Permission to abort one Model Attempt. Only a `ModelDispatchStore` issues a ticket, and only
-/// after the Model Attempt Cancellation commits.
+/// Permission to abort one Model Attempt. The Model Gateway makes it only from a
+/// `CommittedCancellation` that the store returned.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AbortTicket {
     model_attempt_id: String,
 }
 
 impl AbortTicket {
-    /// For store implementations, after the cancellation of this Model Attempt commits.
-    pub fn after_committed_cancellation(model_attempt_id: String) -> Self {
-        Self { model_attempt_id }
-    }
-
     pub fn model_attempt_id(&self) -> &str {
         &self.model_attempt_id
+    }
+}
+
+/// A durable Model Attempt Cancellation of an in-flight Attempt, as the store reports it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommittedCancellation {
+    pub model_attempt_id: String,
+    pub response_reference: Option<String>,
+    /// The Abort Destination Attempt that a lost claim already committed, if any.
+    pub abort_attempt: RequestAttempt,
+}
+
+impl CommittedCancellation {
+    pub(crate) fn into_abort(self) -> DestinationRequest {
+        DestinationRequest::Abort(AbortRequest {
+            attempt: self.abort_attempt,
+            ticket: AbortTicket {
+                model_attempt_id: self.model_attempt_id,
+            },
+            response_reference: self.response_reference,
+        })
     }
 }
 
@@ -188,13 +219,14 @@ pub enum ModelUsage {
 pub enum NextDispatchWork {
     Settled(CompleteAgentRun),
     Request(DestinationRequest),
+    Abort(CommittedCancellation),
 }
 
 /// Why an exchange must stop at its next durable boundary.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StreamStop {
     StaleFence,
-    Cancelled(AbortTicket),
+    Cancelled(CommittedCancellation),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

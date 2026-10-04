@@ -1,7 +1,7 @@
 use storyos_application::{
-    AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
-    DestinationRequest, DispatchClaim, ProjectId, ProjectReadError, ProjectScope, RequestAttempt,
-    UserId,
+    AgentRunWorkStore, ClaimedAgentRun, CommittedCancellation, CompleteAgentRun,
+    CompleteAgentRunError, DestinationRequest, DispatchClaim, ProjectId, ProjectReadError,
+    ProjectScope, RequestAttempt, UserId,
 };
 use storyos_core::{ExecutionCapability, requested_execution_capability, stream_batch_plan};
 use uuid::Uuid;
@@ -31,6 +31,7 @@ pub(crate) enum WorkPhase {
     Done(CompleteAgentRun),
     Hold(&'static str),
     Dispatch(Box<DestinationRequest>),
+    Abort(CommittedCancellation),
 }
 
 async fn claim_agent_run_row(
@@ -55,7 +56,7 @@ async fn claim_agent_run_row(
                      AND (run.lease_expires_at IS NULL
                           OR run.lease_expires_at <= clock_timestamp())
                    )
-                ORDER BY run.run_id
+                ORDER BY run.status = 'cancelled', run.run_id
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
              )
@@ -111,11 +112,6 @@ impl RunPhaseRow {
             self.status.as_str(),
             "queued" | "completed" | "waiting" | "refused" | "paused" | "cancelled"
         )
-    }
-
-    pub(crate) fn assembly_record(&self) -> Result<serde_json::Value, CompleteAgentRunError> {
-        serde_json::from_str(&self.assembly_payload)
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))
     }
 }
 
@@ -176,28 +172,6 @@ pub(crate) async fn load_run_phase(
         decision_position: row.get("decision_position"),
         assembly_payload: row.get("assembly_payload"),
     })
-}
-
-/// Loads the Run for this claim. A claim that only a Run Cancellation fenced keeps the
-/// cancellation duties of evidence, retrieval, and abort; it can never supply a decision.
-pub(crate) async fn load_claimed_or_cancelled(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-) -> Result<(ClaimedAgentRun, RunPhaseRow), CompleteAgentRunError> {
-    match load_run_phase(client, claim).await {
-        Err(CompleteAgentRunError::StaleFence) => {
-            let cancelled = ClaimedAgentRun {
-                fence_token: claim.fence_token + 1,
-                ..claim.clone()
-            };
-            let run = load_run_phase(client, &cancelled).await?;
-            if run.status != "cancelled" {
-                return Err(CompleteAgentRunError::StaleFence);
-            }
-            Ok((cancelled, run))
-        }
-        loaded => Ok((claim.clone(), loaded?)),
-    }
 }
 
 pub(crate) enum CreateAdmission {
@@ -262,8 +236,7 @@ pub(crate) async fn settle_one_phase(
     claim: &ClaimedAgentRun,
     lease_seconds: i64,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let (claim, run) = load_claimed_or_cancelled(client, claim).await?;
-    let claim = &claim;
+    let run = load_run_phase(client, claim).await?;
     if run.status == "cancelled" {
         return crate::agent_run_recovery::settle_cancelled(client, claim, &run).await;
     }
@@ -279,7 +252,8 @@ pub(crate) async fn settle_one_phase(
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let record = run.assembly_record()?;
+    let record: serde_json::Value = serde_json::from_str(&run.assembly_payload)
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let Some(attempt_id) = run.attempt_id.clone() else {
         return Ok(
             match admit_create(client, claim, &run, assistance.as_ref()).await? {

@@ -228,6 +228,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       assert.ok(!fenced.successor_model_attempt_id);
       assert.equal((await cancel(successorId, "c")).effect.kind, "applied");
     } finally { if (existsSync(fenceHold)) unlinkSync(fenceHold); await fenceWorker; }
+    await settleOnce();
     const prohibited = await inspect(successorId);
     assert.equal(prohibited.status, "cancelled");
     assert.ok(prohibited.unknown_create_successor.kind === "present");

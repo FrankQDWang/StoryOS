@@ -115,7 +115,7 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                     .execute(
                         "UPDATE storyos.agent_runs
                             SET status = 'cancelled', fence_token = fence_token + 1,
-                                lease_expires_at = NULL
+                                lease_expires_at = NULL, wakeup_pending = true
                           WHERE run_id = $1::text::uuid AND status = 'claimed'",
                         &[&self.run_id],
                     )
@@ -205,7 +205,7 @@ async fn claimed_run(
         "Volume A",
         VOLUME_BYTES,
         &digest("createVolume", VOLUME_BYTES),
-        1,
+        /*expected_tree_revision*/ 1,
     )
     .await;
     let chapter_id = apply_chapter(
@@ -215,7 +215,7 @@ async fn claimed_run(
         &volume_id,
         "Chapter A",
         CHAPTER_BYTES,
-        2,
+        /*expected_tree_revision*/ 2,
     )
     .await;
     let run = named_issue(
@@ -439,7 +439,7 @@ async fn stale_run_lease_fence_rejects_the_observation() {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_committed_cancellation_issues_one_abort_through_the_same_sequence() {
+async fn a_new_claim_of_a_cancelled_run_sends_one_abort_through_the_same_sequence() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -451,48 +451,66 @@ async fn a_committed_cancellation_issues_one_abort_through_the_same_sequence() {
         probe: Probe::CancelBeforeExchange,
         seen: Mutex::default(),
     };
-    let points = RecordedPoints::default();
-
-    let result = complete_agent_run(&store, &destination, &points, &claim).await;
-
-    let abort = admin
+    let fenced_points = RecordedPoints::default();
+    let fenced = complete_agent_run(&store, &destination, &fenced_points, &claim).await;
+    let fence_token = admin
         .query_one(
-            "SELECT count(*), count(DISTINCT outbound_disclosure_event_id),
-                    min(payload->>'result'), min(payload->>'original_model_attempt_id')
-               FROM storyos.model_attempts
-              WHERE run_id = $1::text::uuid AND attempt_role = 'abort'",
-            &[&claim.run_id],
-        )
-        .await
-        .unwrap();
-    let decision_attempt: Option<String> = admin
-        .query_one(
-            "SELECT model_attempt_id::text FROM storyos.model_attempts
-              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+            "UPDATE storyos.agent_runs
+                SET claim_generation = claim_generation + 1,
+                    fence_token = claim_generation + 1,
+                    lease_expires_at = clock_timestamp() + interval '1 minute'
+              WHERE run_id = $1::text::uuid AND status = 'cancelled' AND wakeup_pending
+          RETURNING fence_token",
             &[&claim.run_id],
         )
         .await
         .unwrap()
         .get(0);
+    let cancelled_claim = ClaimedAgentRun {
+        fence_token,
+        ..claim.clone()
+    };
+    let points = RecordedPoints::default();
+
+    let result = complete_agent_run(&store, &FakeDestination, &points, &cancelled_claim).await;
+
+    let abort = admin
+        .query_one(
+            "SELECT count(*), count(DISTINCT abort.outbound_disclosure_event_id),
+                    min(abort.payload->>'result'),
+                    bool_and(abort.payload->>'original_model_attempt_id'
+                             = decision.model_attempt_id::text),
+                    bool_and(run.wakeup_pending)
+               FROM storyos.model_attempts AS abort
+               JOIN storyos.model_attempts AS decision
+                 ON decision.run_id = abort.run_id AND decision.attempt_role = 'decision'
+               JOIN storyos.agent_runs AS run ON run.run_id = abort.run_id
+              WHERE abort.run_id = $1::text::uuid AND abort.attempt_role = 'abort'",
+            &[&claim.run_id],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(fenced, Err(CompleteAgentRunError::StaleFence)));
     assert_eq!(
         (
+            fenced_points.0.into_inner().unwrap(),
             result.ok(),
             points.0.into_inner().unwrap(),
             abort.get::<_, i64>(0),
             abort.get::<_, i64>(1),
             abort.get::<_, Option<String>>(2),
-            abort.get::<_, Option<String>>(3),
+            abort.get::<_, Option<bool>>(3),
+            abort.get::<_, Option<bool>>(4),
         ),
         (
+            vec![ContractFaultPoint::DispatchClaimed],
             Some(CompleteAgentRun::AlreadySettled),
-            vec![
-                ContractFaultPoint::DispatchClaimed,
-                ContractFaultPoint::DispatchClaimed
-            ],
+            vec![ContractFaultPoint::DispatchClaimed],
             1,
             1,
             Some("acknowledged".to_owned()),
-            decision_attempt,
+            Some(true),
+            Some(false),
         )
     );
     assert_eq!(

@@ -1,6 +1,6 @@
 //! Derive one scripted Create result from the exact request, with no process memory.
 
-use storyos_application::CreateRequest;
+use storyos_application::{CreateRequest, DeclaredTarget};
 use storyos_core::{
     ADVISORY_TEXT, DecisionCandidate, INLINE_PROSE_CHANGE_TEXT, ModelOutput, NativeStreamItem,
     OrdinaryPassageResolution, OutputPhase, PASSAGE_REFERENCE_QUESTION, PROSE_CHANGE_TEXT,
@@ -39,9 +39,13 @@ fn plan_message(author_message: &str, resolution: Option<OrdinaryPassageResoluti
                 assistant_item("2", StreamItemState::Provisional, STREAM_SECOND_TEXT),
                 assistant_item("3", StreamItemState::Complete, PROSE_CHANGE_TEXT),
             ],
-            output: Some(final_answer(DecisionCandidate::ProseChange {
-                text: PROSE_CHANGE_TEXT.to_owned(),
-            })),
+            output: Some(ModelOutput {
+                phase: OutputPhase::FinalAnswer,
+                candidate: DecisionCandidate::ProseChange {
+                    text: PROSE_CHANGE_TEXT.to_owned(),
+                },
+                prose_changes: None,
+            }),
         };
     }
     if author_message.starts_with("Revise this phrase:") {
@@ -126,13 +130,7 @@ fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
     let declared: Vec<_> = request
         .declared_targets
         .iter()
-        .map(|target| {
-            (
-                target.chapter_id.clone(),
-                target.block_id.clone(),
-                target.base_revision_id.clone(),
-            )
-        })
+        .map(DeclaredTarget::location)
         .collect();
     let changes = match request.candidate_revision.as_deref() {
         Some(candidate) => produce_fake_candidate_revision(&declared, author_message, candidate),
@@ -156,14 +154,6 @@ fn apply_prose_changes(request: &CreateRequest, planned: &mut FakeCreate) {
             output.phase = OutputPhase::Commentary;
         }
         output.prose_changes = Some(changes);
-    }
-}
-
-fn final_answer(candidate: DecisionCandidate) -> ModelOutput {
-    ModelOutput {
-        phase: OutputPhase::FinalAnswer,
-        candidate,
-        prose_changes: None,
     }
 }
 

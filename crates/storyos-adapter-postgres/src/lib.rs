@@ -109,6 +109,7 @@ mod agent_run_retrieval;
 mod agent_run_retrieval_dispatch;
 mod agent_run_steering;
 mod agent_run_successor;
+mod agent_run_successor_dispatch;
 mod agent_run_work;
 mod archive_project;
 mod author_command_outcome_unknown;

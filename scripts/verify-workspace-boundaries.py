@@ -23,7 +23,8 @@ forbidden = [
 if manifests != expected or forbidden:
     raise SystemExit(f"unexpected workspace manifests: {manifests}; forbidden: {forbidden}")
 
-# ADR 0039: Provider adapters stay out of the Server, the Worker library, and persistence.
+# ADR 0039: a Model Provider Adapter for a real Provider stays out of the Server, the Worker
+# library, and persistence. The Server may use the Contract-Faithful Fake Destination adapter.
 dependencies = {
     package["name"]: {
         dependency["name"]
