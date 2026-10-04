@@ -138,6 +138,11 @@ def cases():
 
 
 def run(http, seed, differences, coverage, selected=None):
+    if selected == 'zero-revision':
+        s = Scenario(http, seed, selected, differences, coverage)
+        status, response = http.command('createVolume', dict(title='Zero revision probe', expected_tree_revision='0'), project_id=s.project)
+        coverage['schema_probe:createVolume:HTTP_' + str(status)] += 1
+        return
     sequence = cases()
     http.rng.shuffle(sequence)
     for name, outcome, reason in sequence:

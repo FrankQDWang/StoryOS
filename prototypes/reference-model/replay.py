@@ -18,6 +18,10 @@ def replay(http, saved, name, differences, coverage):
 
 
 def run(http, seed, differences, coverage, selected=None):
+    if selected == 'expiry':
+        from expiry import run as expired
+        expired(http, seed, differences, coverage)
+        return
     if selected == 'minimals':
         for index, case in enumerate(['chapter-after-session', 'session-after-edit', 'project-undo']):
             run(http, seed + index, differences, coverage, case)

@@ -131,3 +131,9 @@ A parallel launch was refused by the repository resource budget before database 
 Seed 304 passed all 17 scenarios with zero differences. This includes a public Acceptance, later Author Edit, compensation, and UndoAcceptance reaching ReversalRequired without changing current prose. It also reaches Proposal-head conflict and typed Proposal-target mismatch through well-formed requests. Thus target mismatch is reachable through Proposal targets even though the direct-author target check is pre-Admission. All 171 immediate Challenge and command retries were stable. Evidence: `proposals-304.json.gz`; run `d1910035c0b64f4b86cc82ecd8cd65b4`, 67 seconds.
 
 Next: add two-Operation ordered and atomic Bundle negative selections, then run 20 complete Proposal seeds. The fake destination prompt switches are input-fixture mechanics; dependency and Bundle expectations remain from the Manuscript State Machine contract.
+
+## Step 13: Ordered and Bundle selections
+
+Seed 310 passed 19 scenarios with zero differences, including missing required dependencies and incomplete atomic Bundle closure for both Accept and Reject. The generator identifies a selected Operation by its declared Block identity, not incidental query order. Evidence: `proposals-310.json.gz`; run `684c6a3493bf4a08b87dc559c8bc6b35`, 96 seconds. Added standalone replay modes for the zero-revision schema discrepancy and Replan Undo observation.
+
+Next: check the new Reversal Proposal frontier, collect Proposal counts, and verify real five-minute Challenge expiry without clock injection.

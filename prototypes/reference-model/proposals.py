@@ -184,12 +184,20 @@ def run(http, seed, differences, coverage, selected=None):
             p.command('reopenRejectedOperations', 'resolved', {'operation_resolution': 'pending', 'validation': 'pending'})
         elif mode == 'edit':
             p.edit()
-        elif mode == 'replan':
+        elif mode in ['replan', 'replan-undo']:
             p.command('acceptProposal', 'conflicted', mutation={'expected_authoritative_revision_id': p.prior_head})
             p.command('replanProposal', 'conflicted', mutation={'expected_current_target_revisions': [p.prior_head]})
             p.command('replanProposal', 'refused', mutation={'source_condition': {'kind': 'proposal_conflict', 'proposal_conflict_ref': http.identity()}})
             p.command('replanProposal', 'resolved', {'validation': 'pending'})
-            # Undo routing for Replan is an explicit contract question (A-007).
+            if mode == 'replan-undo':
+                e = p.editor
+                e.refresh()
+                status, response = http.command('undoLatestAuthorAction', dict(editor_session_id=e.session_id,
+                    expected_authoritative_revision_id=e.revision,
+                    expected_author_undo_frontier_sequence=e.session['author_undo_frontier_sequence']), project_id=e.s.project)
+                compare('Replan Undo leaves authority', [], response['receipt']['authoritative_commit_ids'], differences)
+                e.refresh()
+                compare('Replan Undo leaves prose', e.text, e.session['base_snapshot']['materialized_revision']['body'], differences)
         elif mode == 'invalid':
             p.command('acceptProposal', 'invalid', mutation={'validation_receipt_id': http.identity()})
             p.command('acceptProposal', 'refused')
@@ -246,6 +254,7 @@ def run(http, seed, differences, coverage, selected=None):
             compare(p.label + '/reversal has no Commit', [], response['receipt']['authoritative_commit_ids'], differences)
             e.refresh()
             compare(p.label + '/reversal leaves authority', before, e.session['base_snapshot']['materialized_revision']['body'], differences)
+            e.undo('unavailable')
 
         elif mode == 'duplicates':
             p.command('acceptProposal', 'refused', mutation={'selected_operation_ids': [p.p['operation_id']] * 2})
@@ -256,6 +265,7 @@ def run(http, seed, differences, coverage, selected=None):
         elif mode in ['ordered', 'bundle']:
             operations = p.p['operations']
             assert len(operations) == 2
-            selected = operations[1 if mode == 'ordered' else 0]['operation_id']
+            target = p.blocks[1 if mode == 'ordered' else 0]['manuscript_block_id']
+            selected = next(op['operation_id'] for op in operations if op['manuscript_block_id'] == target)
             p.command('acceptProposal', 'refused', mutation={'selected_operation_ids': [selected]})
             p.command('rejectProposalOperations', 'refused', mutation={'selected_pending_operation_ids': [selected]})
