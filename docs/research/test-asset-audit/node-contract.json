@@ -7,7 +7,7 @@
     "verdict": "DELETE",
     "reason": "D1",
     "evidence": "The browser test requests Chapter B, renders its empty Head and checks its exact GET path. This pure success assertion adds no different input or effect.",
-    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:41",
+    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:38",
     "remove": [
       48,
       66
@@ -21,7 +21,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "Unique cases: 404 resource_unavailable, foreign owner, and wrong Chapter identity must yield no Chapter bytes. The browser navigation test only supplies snapshot_expired. Search across Web tests found no other openSelectedChapter rejection cases. Retain the 404 and identity cases; the expired case can share the browser assertion.",
-    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:41",
+    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:38",
     "remove": null
   },
   {
@@ -32,7 +32,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "Unfinished semantic input must not call the Journal drain, and a rejected drain must refuse navigation. The browser navigation scenario drains successfully and never injects either condition. This test does not prove asynchronous wait ordering: whenIdle resolves immediately.",
-    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:41",
+    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:38",
     "remove": null
   },
   {
@@ -43,7 +43,7 @@
     "verdict": "MERGE",
     "reason": "M1",
     "evidence": "Move the unique currentPending=null case into the browser navigation scenario: the current Chapter must become read-only with needs_attention. Current and other-Chapter Pending Edit Projection cases already appear there. Remove the whole unit only after the new browser case fails on an editable fallback.",
-    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:41",
+    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:38",
     "remove": null
   },
   {
@@ -79,7 +79,7 @@
     "verdict": "KEEP",
     "reason": "K2",
     "evidence": "Changing Vite asset names to stable unhashed JavaScript can break immutable cache invalidation. The exact-dist transport only requires an assets URL; Server unit fixtures hard-code a hashed name and do not inspect the Vite result.",
-    "coverage": "apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts:22; crates/storyos-server/src/web_assets_tests.rs:49",
+    "coverage": "apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts:22; crates/storyos-server/src/web_assets_tests.rs:48",
     "remove": null
   },
   {
@@ -90,7 +90,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "With IndexedDB unavailable in Node, opening must retain the authoritative Chapter and return editor-read-only-recovery. Browser project entry supplies IndexedDB and returns editor-ready. Request-order and same-origin assertions are redundant, but this distinct recovery branch is not.",
-    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:18",
     "remove": null
   },
   {
@@ -159,7 +159,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "Four cases reject missing, empty, malformed, and different owner identities before workspace entry. The browser entry tests use valid equal owners; the Chapter navigation mismatch tests exercise another function. Do not call those tests coverage of boot.ts validation.",
-    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19; apps/web/test/node-contract/chapter-navigation.test.ts:68",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:18; apps/web/test/node-contract/chapter-navigation.test.ts:68",
     "remove": null
   },
   {
@@ -184,7 +184,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "A response without release_identity must block instead of entering protected state. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
-    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:18",
     "remove": null
   },
   {
@@ -195,7 +195,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "A server with a different generated-client revision must require an upgrade. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
-    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:18",
     "remove": null
   },
   {
@@ -206,7 +206,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "A server without direct_author_edit must not enter protected state. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
-    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:18",
     "remove": null
   },
   {
@@ -217,7 +217,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "An added release_identity field must be reported as incompatible. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
-    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:18",
     "remove": null
   },
   {
@@ -228,7 +228,7 @@
     "verdict": "KEEP",
     "reason": "K1",
     "evidence": "An added top-level profile field must be reported as incompatible. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input.",
-    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:19",
+    "coverage": "apps/web/test/browser-source/project-entry.integration.test.ts:18",
     "remove": null
   },
   {
@@ -239,7 +239,7 @@
     "verdict": "DELETE",
     "reason": "D3",
     "evidence": "The resource loop inherits bootstrap settings and supplies no valid session or database prerequisites. main.rs validates session mappings before loading assets. Exit 1 without a readiness line does not identify an asset failure. The missing-root first case only checks argument parsing. Asset validation has direct coverage for absent, extra, altered, mixed and symbolic-link resources.",
-    "coverage": "crates/storyos-server/src/web_assets_tests.rs:64; crates/storyos-server/src/web_assets_tests.rs:110",
+    "coverage": "crates/storyos-server/src/web_assets_tests.rs:63; crates/storyos-server/src/web_assets_tests.rs:110",
     "remove": [
       54,
       92
@@ -264,7 +264,7 @@
     "verdict": "KEEP",
     "reason": "K2",
     "evidence": "Moving web-root validation after session or database admission breaks this offline operational command. The test executes the actual package with unusable database URLs and no session map; unit WebAssetSet tests cannot catch CLI order changes. Search found no second --check-web-root test.",
-    "coverage": "crates/storyos-server/src/web_assets_tests.rs:49",
+    "coverage": "crates/storyos-server/src/web_assets_tests.rs:48",
     "remove": null
   },
   {
@@ -286,7 +286,7 @@
     "verdict": "KEEP",
     "reason": "K2",
     "evidence": "The paired production binary must reject insecure public Origin before database admission. The Rust process test covers the same argument path but uses a Cargo test binary and a missing resource root. Retain one packaged process owner; mark the Rust duplicate for deletion during Server review.",
-    "coverage": "crates/storyos-server/tests/public_origin_startup.rs:15",
+    "coverage": "crates/storyos-server/tests/public_origin_startup.rs:14",
     "remove": null
   },
   {

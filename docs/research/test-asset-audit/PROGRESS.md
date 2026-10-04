@@ -35,7 +35,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
 | apps/web/test/node-process-cut | Pending | inventory.json |
 | apps/web/test/support | Pending | inventory.json |
-| crates/storyos-core/src | In progress | core.md; first 3 files, 11 tests reviewed |
+| crates/storyos-core/src | In progress | core.md; first 5 files, 22 tests reviewed |
 | crates/storyos-application/src | Pending | inventory.json |
 | crates/storyos-adapter-postgres/src | Pending | inventory.json |
 | crates/storyos-adapter-postgres/tests | Pending | inventory.json |
@@ -59,4 +59,8 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 
 - Server integration directory complete: 2 duplicate process tests select the packaged Node cases as retained owners. Candidate savings: 33 lines, not yet mutation-proved.
 
-- Core checkpoint: Create/Archive/Update Project files reviewed (11 tests). Current public input guards make three Core tests exercise unreachable internal states; code D5 distinguishes these from actual duplicate executable coverage. Next Core files: Create/Update Volume, then Chapter and remaining operations.
+- Core checkpoint: Create/Archive/Update Project files reviewed (11 tests). Current public input guards make three Core tests exercise unreachable internal states; code D5 distinguishes these from actual duplicate executable coverage. Create/Update Volume are now reviewed. Next: Chapter and remaining operations.
+
+- Node/Server citation check corrected test-start line numbers; all cited source spans refer to the fixed baseline.
+- `make verify-targeted CHECK=verify-policy` ended with `source-changed` after 389.26 seconds because audit documents were committed during the run. Its printed Python groups passed, but the managed result is NOT PASS. Report: `target/verification/62fab459d82d4bb29a1967e8f6fcbe95/report.json`. Preserve this result. This is a read-only audit; do not run a full verification to replace it.
+- Added CROSS_LAYER.md with the comparisons already reviewed. Other layers in those rows remain pending; do not infer their final verdicts.

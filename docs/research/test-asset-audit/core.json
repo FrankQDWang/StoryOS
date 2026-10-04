@@ -115,7 +115,7 @@
     "verdict": "DELETE",
     "reason": "D5",
     "evidence": "Application admission rejects empty and over-1024-byte titles before invoking the store. Thus the Core invalid-title branch is not an independent reachable product protection. Application tests explicitly cover both lengths; the HTTP test covers the empty-title public refusal. Those tests do not execute a mutation confined to this Core guard.",
-    "coverage": "crates/storyos-application/src/update_project_tests.rs:95; apps/web/test/node-postgresql/update-project-http.integration.test.ts:294",
+    "coverage": "crates/storyos-application/src/update_project_tests.rs:98; apps/web/test/node-postgresql/update-project-http.integration.test.ts:294",
     "remove": null
   },
   {
@@ -127,6 +127,133 @@
     "reason": "D5",
     "evidence": "persist_update_project returns MissingProject before classification and always passes Present (adapter update_project.rs:83,95). The synthetic Absent branch has no current product caller. HTTP foreign-Scope refusal is semantic coverage, not coverage of this unreachable Core guard.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+    "remove": null
+  },
+  {
+    "id": "CO012",
+    "path": "crates/storyos-core/src/create_volume_tests.rs",
+    "line": 16,
+    "test": "a_matching_tree_revision_and_active_project_classifies_as_applied",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "HTTP creation asserts tree revision 2, Volume title/order, one Authoritative Commit, and the queried tree. The pure Applied result repeats its revision increment.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148",
+    "remove": [
+      1,
+      58
+    ]
+  },
+  {
+    "id": "CO013",
+    "path": "crates/storyos-core/src/create_volume_tests.rs",
+    "line": 24,
+    "test": "a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "HTTP creation with the prior tree revision must produce stale_tree_revision and keep the tree and Volume count unchanged.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148",
+    "remove": null
+  },
+  {
+    "id": "CO014",
+    "path": "crates/storyos-core/src/create_volume_tests.rs",
+    "line": 35,
+    "test": "an_archived_project_classifies_as_refused_with_zero_authority_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test archives the Project, then creates a Volume and checks refused/archived_project. This reaches the Core lifecycle rule.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148",
+    "remove": null
+  },
+  {
+    "id": "CO015",
+    "path": "crates/storyos-core/src/create_volume_tests.rs",
+    "line": 45,
+    "test": "an_invalid_title_classifies_as_refused_with_zero_authority_effect",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "Both invalid lengths are refused by structure_title at the current HTTP ingress before Core. No other production caller of the adapter create_volume method was found. The HTTP empty-title 400 covers the observable refusal, not a mutation confined to the duplicate Core guard. The overlong public request case is not covered by this named test.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148",
+    "remove": null
+  },
+  {
+    "id": "CO016",
+    "path": "crates/storyos-core/src/update_volume_tests.rs",
+    "line": 21,
+    "test": "a_matching_revision_rename_and_reorder_classifies_as_applied",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "HTTP rename/reorder asserts title, order 2, incremented tree revision and queried canonical placement. This includes all fields in the pure Applied assertion.",
+    "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
+    "remove": [
+      1,
+      103
+    ]
+  },
+  {
+    "id": "CO017",
+    "path": "crates/storyos-core/src/update_volume_tests.rs",
+    "line": 33,
+    "test": "a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test submits a stale tree revision and checks conflicted/stale_tree_revision, no Authoritative Commit and unchanged tree.",
+    "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
+    "remove": null
+  },
+  {
+    "id": "CO018",
+    "path": "crates/storyos-core/src/update_volume_tests.rs",
+    "line": 43,
+    "test": "an_unchanged_title_and_order_classifies_as_no_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP unchanged title/order case asserts no_effect/unchanged with no Commit or Author Action.",
+    "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
+    "remove": null
+  },
+  {
+    "id": "CO019",
+    "path": "crates/storyos-core/src/update_volume_tests.rs",
+    "line": 54,
+    "test": "a_wrong_scope_volume_classifies_as_refused_with_zero_authority_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP missing-Volume case reaches InvalidVolumeJoin and checks refused/invalid_volume_join, no Commit and no Author Action. The pure test uses the same Invalid join state.",
+    "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
+    "remove": null
+  },
+  {
+    "id": "CO020",
+    "path": "crates/storyos-core/src/update_volume_tests.rs",
+    "line": 64,
+    "test": "an_invalid_order_classifies_as_refused_with_zero_authority_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Order above the Volume count is checked as refused/invalid_order in the HTTP test. The zero-order case is rejected by structure_admission::positive before this Core call; it adds no reachable Core input. Do not claim a Core zero-only mutation is covered.",
+    "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
+    "remove": null
+  },
+  {
+    "id": "CO021",
+    "path": "crates/storyos-core/src/update_volume_tests.rs",
+    "line": 80,
+    "test": "an_archived_project_classifies_as_refused_with_zero_authority_effect",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The HTTP test archives the Project and verifies the update refuses as archived_project. This is not the unchanged outcome although the values equal the current values.",
+    "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
+    "remove": null
+  },
+  {
+    "id": "CO022",
+    "path": "crates/storyos-core/src/update_volume_tests.rs",
+    "line": 90,
+    "test": "an_invalid_title_classifies_as_refused_with_zero_authority_effect",
+    "verdict": "DELETE",
+    "reason": "D5",
+    "evidence": "structure_title rejects empty and overlong titles before the only current production entry to update_volume. The HTTP empty-title assertion covers the public refusal, not this duplicate Core guard. A new internal consumer would require revisiting this verdict.",
+    "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
     "remove": null
   }
 ]

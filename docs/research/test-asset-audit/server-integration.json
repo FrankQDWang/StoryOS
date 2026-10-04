@@ -2,7 +2,7 @@
   {
     "id": "SI001",
     "path": "crates/storyos-server/tests/public_origin_startup.rs",
-    "line": 15,
+    "line": 14,
     "test": "invalid_public_origin_refuses_before_storage",
     "verdict": "DELETE",
     "reason": "D1",
