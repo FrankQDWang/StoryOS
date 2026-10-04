@@ -792,6 +792,22 @@ const KNOWN_HTTP_STATUS_DRIFT: [&str; 6] = [
     "getChapter",
 ];
 
+/// Operations whose contract-graph preconditions omit a reviewed route-catalog precondition.
+const KNOWN_PRECONDITION_DRIFT: [&str; 12] = [
+    "createEditorSession",
+    "applyAuthorEdit",
+    "acceptProposal",
+    "rejectProposalOperations",
+    "replanProposal",
+    "reopenRejectedOperations",
+    "completeReadyPartialProposal",
+    "continueProposalGeneration",
+    "expandRefusedEditDraftToProposal",
+    "closeEditorFlowDraft",
+    "undoLatestAuthorAction",
+    "getApplyAuthorEditOutcome",
+];
+
 #[test]
 fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() {
     let generated = super::generated_files()
@@ -811,6 +827,15 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
     let mut source_surfaces = Vec::new();
     let mut reviewed_surfaces = Vec::new();
     let mut http_status_drift = Vec::new();
+    let mut precondition_drift = Vec::new();
+    let mut client_positions = Vec::new();
+    let mut declaration_positions = Vec::new();
+    let schema_catalog: serde_json::Value = serde_json::from_slice(
+        &generated["generated/schema-catalog/storyos-public-release-1.json"],
+    )
+    .expect("schema catalog must be JSON");
+    let graph: serde_json::Value = serde_json::from_slice(&super::contract_graph_bytes())
+        .expect("contract graph must be JSON");
     for artifacts in crate::release1_operation_registry::RELEASE1_OPERATIONS {
         let schema_paths = (artifacts.schemas)()
             .into_iter()
@@ -928,8 +953,46 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
                 .collect::<Vec<u16>>();
             assert_eq!(openapi_statuses, statuses, "{id}");
 
-            assert!(client.contains(&format!("export async function {id}(")));
-            assert!(declaration.contains(&format!("export declare function {id}(")));
+            client_positions.push(client.find(&format!("export async function {id}(")));
+            declaration_positions.push(declaration.find(&format!("export declare function {id}(")));
+            assert!(
+                schema_catalog["implemented_operations"]
+                    .as_array()
+                    .expect("implemented operations must be an array")
+                    .contains(&serde_json::json!(id)),
+                "{id}"
+            );
+            let graph_entry = graph["operations"]
+                .as_array()
+                .expect("contract graph operations must be an array")
+                .iter()
+                .find(|entry| entry["operation_id"] == id);
+            match registered.graph {
+                crate::release1_operation_registry::ContractGraphEntry::Preconditions(
+                    preconditions,
+                ) => {
+                    let graph_entry =
+                        graph_entry.unwrap_or_else(|| panic!("contract graph must contain {id}"));
+                    assert_eq!(graph_entry["kind"], reviewed["kind"], "{id}");
+                    assert_eq!(
+                        graph_entry["preconditions"],
+                        serde_json::json!(preconditions),
+                        "{id}"
+                    );
+                    let reviewed_preconditions = reviewed["preconditions"]
+                        .as_array()
+                        .expect("reviewed preconditions must be an array");
+                    if !reviewed_preconditions
+                        .iter()
+                        .all(|precondition| preconditions.iter().any(|own| precondition == own))
+                    {
+                        precondition_drift.push(id);
+                    }
+                }
+                crate::release1_operation_registry::ContractGraphEntry::Absent => {
+                    assert!(graph_entry.is_none(), "{id}");
+                }
+            }
 
             let fixture_ids = fixture_catalog["fixtures"]
                 .as_array()
@@ -944,4 +1007,12 @@ fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() 
     }
     assert_eq!(source_surfaces, reviewed_surfaces);
     assert_eq!(http_status_drift, KNOWN_HTTP_STATUS_DRIFT);
+    assert_eq!(precondition_drift, KNOWN_PRECONDITION_DRIFT);
+    for positions in [client_positions, declaration_positions] {
+        assert!(positions.iter().all(Option::is_some));
+        assert!(
+            positions.is_sorted(),
+            "generated functions must follow the registry order"
+        );
+    }
 }

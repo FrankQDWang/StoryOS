@@ -419,14 +419,12 @@ export type WholeDraftPayload = { "kind": "whole_draft_payload" };
 export type ExpandRefusedEditDraftEffect = { "kind": "proposal_created_from_draft", proposal_id: string, proposal_revision_id: string, event: EditorFlowDraftClosed, } | { "kind": "conflicted", current_revision_id: string, current_digest: string, current_closure: string, } | { "kind": "refused", reason: string, current_closure: string, };
 export type ExpandRefusedEditDraftResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ExpandRefusedEditDraftEffect, };
 
-
 export type CloseEditorFlowDraftInput = { draft_id: string, draft_kind: string, source_current_draft_revision_id: string, source_draft_payload_digest: string, source_reopen_event_id?: string | null, expected_closure: string, close_reason: string, editor_session_id: string, writer_generation: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 export type CloseEditorFlowDraftRequest = { command_schema: string, close_editor_flow_draft_input: CloseEditorFlowDraftInput, };
 export type DraftCloseRefusal = "source_draft_not_open" | "source_unavailable";
 export type EditorFlowDraftClosed = { schema_id: string, event_kind: string, event_id: string, project_scope: ProjectScope, draft_id: string, draft_revision_id: string, payload_digest: string, prior_closure: string, closure: string, close_reason: string, source: RefusedEditDraftSource, author_action_sequence: string | null, created_at: string, };
 export type CloseEditorFlowDraftEffect = { "kind": "draft_closure_changed", event: EditorFlowDraftClosed, } | { "kind": "conflicted", current_revision_id: string, current_digest: string, current_closure: string, } | { "kind": "refused", reason: DraftCloseRefusal, current_closure: string, };
 export type CloseEditorFlowDraftResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: CloseEditorFlowDraftEffect, };
-
 
 export type DraftReopenReceipt = { schema_id: string, receipt_id: string, project_scope: ProjectScope, author_undo_receipt_id: string, source_close_event_id: string, event_id: string, result: string, created_at: string, };
 
@@ -558,6 +556,14 @@ export type UnknownCreateSuccessorDisposition = "fenced" | "dispatched" | "pause
 
 export type OptionalUnknownCreateSuccessorInspect = { "kind": "absent" } | { "kind": "present", recovery_id: string, disposition: UnknownCreateSuccessorDisposition, pause_reason?: string | null, lookup_unavailable_reason?: string | null, predecessor_model_attempt_id: string, successor_model_attempt_id?: string | null, model_invocation_id: string, predecessor_fenced: boolean, allowance_consumed: boolean, predecessor_usage_kind: string, predecessor_reservation_released: boolean, successor_settles_predecessor: boolean, supplies_tool_call: boolean, advances_predecessor_continuation: boolean, reuses_changed_context: boolean, };
 
+export type SteerAgentRunInput = { conversation_id: string, author_message: AuthorMessage, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type SteerAgentRunRequest = { command_schema: string, steer_agent_run_input: SteerAgentRunInput, };
+
+export type SteerAgentRunEffect = { "kind": "retained", run_id: string, steering_input_id: string, input_position: string, } | { "kind": "conflicted", reason: PauseAgentRunConflictReason, };
+
+export type SteerAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: SteerAgentRunEffect, };
+
 export type PauseAgentRunInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type PauseAgentRunRequest = { command_schema: string, pause_agent_run_input: PauseAgentRunInput, };
@@ -581,14 +587,6 @@ export type CancelAgentRunConflictReason = "terminal_run";
 export type CancelAgentRunEffect = { "kind": "applied", run_id: string, status: AgentRunStatus, fence_generation: string, project_activity_position: string, } | { "kind": "no_effect", reason: CancelAgentRunNoEffectReason, } | { "kind": "conflicted", reason: CancelAgentRunConflictReason, };
 
 export type CancelAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CancelAgentRunEffect, };
-
-export type SteerAgentRunInput = { conversation_id: string, author_message: AuthorMessage, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
-
-export type SteerAgentRunRequest = { command_schema: string, steer_agent_run_input: SteerAgentRunInput, };
-
-export type SteerAgentRunEffect = { "kind": "retained", run_id: string, steering_input_id: string, input_position: string, } | { "kind": "conflicted", reason: PauseAgentRunConflictReason, };
-
-export type SteerAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: SteerAgentRunEffect, };
 
 export type ExportProjectArchiveInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, archive_profile: string, archive_path_profile: string, };
 
@@ -663,7 +661,6 @@ export type RefusedEditDraftCreated = { event_kind: string, project_scope: Proje
 export type RefusedEditDraftCreator = { "kind": "core_transition", receipt_id: string, };
 export type RefusedEditDraftInspect = { replacement_provenance?: DraftRetryReplacement | null, draft_id: string, draft_revision_id: string, kind: string, closure: string, retention_state: string, payload: RefusedEditPayload, payload_digest: string, payload_digest_profile: string, creation: RefusedEditDraftCreated, closure_event?: EditorFlowDraftClosed | null, reopen_event?: EditorFlowDraftReopened | null, };
 export type GetRefusedEditDraftResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, draft: RefusedEditDraftInspect, };
-
 
 export type GetApplyAuthorEditOutcomeRequest = { project_id: string, idempotency_key: string, };
 
