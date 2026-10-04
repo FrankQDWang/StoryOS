@@ -167,7 +167,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--count', type=int, default=1)
-    parser.add_argument('--stage', default='bootstrap')
+    parser.add_argument('--stage', choices=['bootstrap', 'structure', 'edits', 'proposals', 'replay'], default='bootstrap')
     parser.add_argument('--case')
     parser.add_argument('--replay', action='store_true')
     parser.add_argument('--output', default='target/reference-model/bootstrap.json')
@@ -186,6 +186,7 @@ def main():
     server = subprocess.Popen([str(package / 'storyos-server'), '--bind', '127.0.0.1:0', '--web-root', str(package / 'web')],
         env=environment, stdout=subprocess.PIPE, text=True)
     trace, differences, coverage = [], [], Counter()
+    completed_seeds = []
     try:
         line = server.stdout.readline().strip()
         assert line.startswith('STORYOS_SERVER_URL='), line
@@ -207,11 +208,12 @@ def main():
             elif args.stage == 'replay':
                 from replay import run
                 run(http, seed, differences, coverage, args.case)
+            completed_seeds.append(seed)
     finally:
         server.terminate()
         server.wait(timeout=15)
         result = dict(seed=args.seed, count=args.count, stage=args.stage, case=args.case, base='479224809cdaae997cda51cb8853e3fafa242b65',
-                      coverage=dict(coverage), differences=differences, trace=trace, provenance=provenance)
+                      coverage=dict(coverage), differences=differences, trace=trace, provenance=provenance, completed_seeds=completed_seeds)
         output = ROOT / args.output
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')

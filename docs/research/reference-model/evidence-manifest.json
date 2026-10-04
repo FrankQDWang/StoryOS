@@ -1,0 +1,27 @@
+{
+  "contract_base": "479224809cdaae997cda51cb8853e3fafa242b65",
+  "package_source_commit": "0dfe51840212a5001dc5439f1996c690405cd56e",
+  "counted_evidence": [
+    "structure-partial-100-114.json.gz",
+    "structure-114-119.json.gz",
+    "edits-220-239.json.gz",
+    "proposals-320-323.json.gz",
+    "proposals-324-327.json.gz",
+    "proposals-328-331.json.gz",
+    "proposals-332-335.json.gz",
+    "proposals-336-339.json.gz",
+    "draft-binding-360-379.json.gz",
+    "replay-420-424.json.gz",
+    "replay-425-429.json.gz",
+    "replay-430-434.json.gz",
+    "replay-435-439.json.gz",
+    "replay-440-444.json.gz",
+    "replay-minimals.json",
+    "proposal-undo-353.json.gz",
+    "withdrawal-undo-354.json.gz",
+    "rejection-undo-355.json.gz",
+    "proposal-structure-356.json.gz"
+  ],
+  "policy": "Count only actual recorded outcomes. Exact retries do not multiply ordinary domain outcome counts. Partial structure evidence is explicitly retained; seed 114 restarts in a fresh database.",
+  "excluded": "Earlier smoke and model-correction traces remain retained as historical observations; they are not needed for the 20-hit threshold."
+}

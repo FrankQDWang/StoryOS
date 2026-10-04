@@ -221,3 +221,9 @@ Managed exit: 0. D-002-shaped differences: 5. Other differences: 0. Evidence: `r
 Seeds 420-444 completed all 25 writer, digest/body/nonce binding, capacity, and post-capacity exact-Challenge retry cases. Both rate classes reached 25 stable-window capacity observations; no extra count run is needed. `writer-replay-audit.json` confirms all 25 delayed Chapter retry differences are HTTP 503/project_store_unavailable, the same D-002. No other difference occurred.
 
 The run output now records candidate package source, manifest/server digests, and harness commit. This separates the fixed contract baseline from a later candidate package. Added usage and reachability documents. Next: one foundation-only structural Proposal reachability probe and the final real-clock expiry run.
+
+## Step 20: Foundation-only outcome inventory
+
+Seed 356 records HTTP 422 for a structural primitive with an explicit Proposal target, without changing prose. A-011 explains why the foundation's StructuralReshapeConflict sub-outcome cannot be selected through this current wire profile. A-008 separately records missing Acceptance NoEffect. Neither missing branch is silently removed from the report.
+
+Created the explicit counted-evidence manifest. Future result files record completed seeds separately from the requested count, so partial runs cannot look complete from their header alone. Next: the real-clock expiry run and final ledger/report.
