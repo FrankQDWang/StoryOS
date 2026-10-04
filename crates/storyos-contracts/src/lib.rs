@@ -50,10 +50,12 @@ mod release1_project_export;
 mod release1_project_export_artifacts;
 mod release1_project_export_query;
 mod release1_project_export_query_artifacts;
+mod release1_project_query_artifacts;
 mod release1_proposal;
 mod release1_proposal_artifacts;
 mod release1_proposal_generation_decision;
 mod release1_proposal_generation_decision_artifacts;
+mod release1_protocol_profile_artifacts;
 mod release1_readable_export;
 mod release1_readable_export_artifacts;
 mod release1_readable_export_query;
@@ -411,6 +413,7 @@ pub use release1_expand_refused_edit_draft::{
     ExpandRefusedEditDraftResponse, WholeDraftPayload,
 };
 mod release1_close_editor_flow_draft_artifacts;
+mod release1_command_challenge_artifacts;
 pub use release1_close_editor_flow_draft::{
     CLOSE_EDITOR_FLOW_DRAFT_DIGEST_PROFILE, CLOSE_EDITOR_FLOW_DRAFT_PATH,
     CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID, CLOSE_EDITOR_FLOW_DRAFT_RESPONSE_SCHEMA_ID,

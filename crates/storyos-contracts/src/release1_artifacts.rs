@@ -12,45 +12,31 @@ use crate::release1::{
     ACTIVITY_PROFILE, API_MAJOR, ArtifactDigests, AuthoritativeChapterRevision,
     CHAPTER_REQUEST_SCHEMA_ID, CHAPTER_RESPONSE_SCHEMA_ID, COMPATIBILITY_PROFILE,
     CONTRACT_REVISION, CREATE_EDITOR_SESSION, CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-    CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID, CREATE_PROJECT_COMMAND_CHALLENGE, ControlledProject,
-    CreateEditorSessionRequest, CreateEditorSessionResponse, CreateProjectCommandChallengeRequest,
-    CreateProjectCommandChallengeResponse, CurrentChapter, DigestAlgorithm, DigestValue,
-    ENVELOPE_PROFILE, ENVELOPE_VERSION, EditorBaseSnapshot, EditorReadOnlyReason,
-    EditorSessionBinding, EditorWriterProjection, GENERATED_CLIENT_REVISION, GET_CHAPTER,
-    GET_EDITOR_SESSION, GET_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-    GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID, GET_PROJECT, GET_PROTOCOL_PROFILE, GetChapterResponse,
-    GetEditorSessionResponse, GetProjectResponse, LIMIT_PROFILE_REVISION, ManuscriptBlock,
-    ManuscriptBlockKind, PROBLEM_PROFILE, PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
-    PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID, PROJECT_REQUEST_SCHEMA_ID,
-    PROJECT_RESPONSE_SCHEMA_ID, PROTOCOL_PROFILE_REQUEST_SCHEMA_ID, PROTOCOL_PROFILE_SCHEMA_ID,
-    PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope, QueryOperation,
-    RELEASE_IDENTITY_SCHEMA_ID, REQUIRED_CAPABILITIES, Release1CompatibilityIdentity,
-    Release1ProtocolProfile, SERVER_CONTRACT_REVISION, WEB_CLIENT_CONTRACT_REVISION,
-    WORKER_CONTRACT_REVISION, protocol_profile,
+    CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID, ControlledProject, CreateEditorSessionRequest,
+    CreateEditorSessionResponse, CurrentChapter, DigestAlgorithm, DigestValue, ENVELOPE_PROFILE,
+    ENVELOPE_VERSION, EditorBaseSnapshot, EditorReadOnlyReason, EditorSessionBinding,
+    EditorWriterProjection, GENERATED_CLIENT_REVISION, GET_CHAPTER, GET_EDITOR_SESSION,
+    GET_EDITOR_SESSION_REQUEST_SCHEMA_ID, GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
+    GetChapterResponse, GetEditorSessionResponse, LIMIT_PROFILE_REVISION, ManuscriptBlock,
+    ManuscriptBlockKind, PROBLEM_PROFILE, PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope,
+    QueryOperation, RELEASE_IDENTITY_SCHEMA_ID, REQUIRED_CAPABILITIES, Release1ProtocolProfile,
+    SERVER_CONTRACT_REVISION, WEB_CLIENT_CONTRACT_REVISION, WORKER_CONTRACT_REVISION,
+    protocol_profile,
 };
 use crate::release1_operation_registry::{
     ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationArtifacts, OperationKind,
     RELEASE1_OPERATIONS, RegisteredOperation, fixture_triple, method,
 };
-use crate::release1_wire::json_bytes;
+use crate::release1_wire::{
+    json_bytes, path_request_schema, query_openapi, with_boundary_project_scope,
+    without_project_scope,
+};
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
-const REQUEST_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/protocol-profile-request.schema.json";
-const RESPONSE_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/protocol-profile-response.schema.json";
-const PROJECT_REQUEST_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/project-request.schema.json";
-const PROJECT_RESPONSE_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/project-response.schema.json";
 const CHAPTER_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/chapter-request.schema.json";
 const CHAPTER_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/chapter-response.schema.json";
-const CHALLENGE_REQUEST_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/project-command-challenge-request.schema.json";
-const CHALLENGE_RESPONSE_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/project-command-challenge-response.schema.json";
 pub(super) const EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json";
 pub(super) const EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH: &str =
@@ -72,26 +58,10 @@ const RELEASE_PROFILE_DECLARATION_PATH: &str =
     "generated/typescript/storyos-public-release-1/release-profile.d.mts";
 const SCHEMA_CATALOG_PATH: &str = "generated/schema-catalog/storyos-public-release-1.json";
 const FIXTURE_CATALOG_PATH: &str = "generated/fixtures/storyos-public-release-1.json";
-const GOLDEN_PROFILE_PATH: &str =
-    "generated/golden-wire/storyos-public-release-1/get-protocol-profile.json";
-const INVALID_PROFILE_PATH: &str =
-    "generated/golden-wire/storyos-public-release-1/get-protocol-profile.invalid.json";
-const BOUNDARY_PROFILE_PATH: &str =
-    "generated/golden-wire/storyos-public-release-1/get-protocol-profile.boundary.json";
-const PROJECT_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-project.json",
-    "generated/golden-wire/storyos-public-release-1/get-project.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-project.boundary.json",
-];
 const CHAPTER_FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/get-chapter.json",
     "generated/golden-wire/storyos-public-release-1/get-chapter.invalid.json",
     "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json",
-];
-const CHALLENGE_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json",
-    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json",
 ];
 const CREATE_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
@@ -382,69 +352,6 @@ fn editor_session_create_openapi() -> String {
     )
 }
 
-fn challenge_openapi() -> String {
-    let operation = &CREATE_PROJECT_COMMAND_CHALLENGE;
-    let request_schema = CHALLENGE_REQUEST_SCHEMA_PATH
-        .strip_prefix("generated/")
-        .unwrap();
-    let response_schema = CHALLENGE_RESPONSE_SCHEMA_PATH
-        .strip_prefix("generated/")
-        .unwrap();
-    let responses = operation.responses.iter().map(|(status, description)| format!(
-        "        '{status}':\n          description: {description}\n{}{}",
-        if *status == 429 { "          headers:\n            Retry-After:\n              required: true\n              schema:\n                type: integer\n                minimum: 1\n                maximum: 60\n" } else { "" },
-        if *status == 200 { format!("          content:\n            application/json:\n              schema:\n                $ref: '../{response_schema}'\n") } else { String::new() }
-    )).collect::<String>();
-    format!(
-        "    post:\n      operationId: {}\n      summary: Issue one exact Project command challenge\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{request_schema}'\n      responses:\n{responses}",
-        operation.operation_id,
-    )
-}
-
-fn operation_openapi(
-    operation: &QueryOperation,
-    summary: &str,
-    response_schema: &str,
-    parameters: &[&str],
-) -> String {
-    let response_schema = response_schema
-        .strip_prefix("generated/")
-        .expect("OpenAPI response schemas must be generated artifacts");
-    let parameters = if parameters.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "      parameters:\n{}",
-            parameters
-                .iter()
-                .map(|name| format!("        - name: {name}\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n"))
-                .collect::<String>()
-        )
-    };
-    let responses = operation.responses.iter().map(|(status, description)| format!(
-        "        '{status}':\n          description: {description}\n{}",
-        if *status == 200 { format!("          content:\n            application/json:\n              schema:\n                $ref: '../{response_schema}'\n") } else { String::new() }
-    )).collect::<String>();
-    format!(
-        "    {}:\n      operationId: {}\n      summary: {summary}\n{parameters}      responses:\n{responses}",
-        operation.method.to_ascii_lowercase(),
-        operation.operation_id,
-    )
-}
-
-fn protocol_profile_request_schema() -> Value {
-    json!({"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
-           "title": "StoryOS Release 1 Protocol Profile Request", "type": "object",
-           "additionalProperties": false, "maxProperties": 0})
-}
-
-fn protocol_profile_schema() -> Value {
-    typed_schema::<Release1ProtocolProfile>(
-        PROTOCOL_PROFILE_SCHEMA_ID,
-        "StoryOS Release 1 Protocol Profile",
-    )
-}
-
 fn typed_schema<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
     let mut schema =
         serde_json::to_value(schema_for!(T)).expect("contract schema should serialize");
@@ -476,30 +383,6 @@ fn canonical_u64_wire_schema() -> Value {
         "type": "string",
         "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$"
     })
-}
-
-fn challenge_response_schema() -> Value {
-    let mut schema = typed_schema::<CreateProjectCommandChallengeResponse>(
-        PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
-        "StoryOS Project Command Challenge Response",
-    );
-    schema["properties"]["expires_at"]["format"] = Value::String("date-time".to_owned());
-    schema
-}
-
-fn path_request_schema(schema_id: &str, fields: &[&str]) -> Value {
-    let properties = fields
-        .iter()
-        .map(|field| {
-            (
-                (*field).to_owned(),
-                json!({"type": "string", "format": "uuid"}),
-            )
-        })
-        .collect::<serde_json::Map<_, _>>();
-    json!({"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": schema_id,
-           "type": "object", "additionalProperties": false, "required": fields,
-           "properties": properties})
 }
 
 fn schema_catalog_bytes(schemas: &[GeneratedSchema]) -> Vec<u8> {
@@ -623,35 +506,6 @@ fn release_profile_declaration_bytes() -> Vec<u8> {
     .to_vec()
 }
 
-fn golden_profile_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
-    json_bytes(&serde_json::to_value(profile).expect("protocol profile should serialize"))
-}
-
-fn invalid_profile_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
-    let mut invalid = serde_json::to_value(profile).expect("protocol profile should serialize");
-    invalid
-        .as_object_mut()
-        .expect("protocol profile should be an object")
-        .remove("release_identity");
-    json_bytes(&invalid)
-}
-
-fn boundary_profile_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
-    let mut boundary = profile.clone();
-    boundary.release_identity.generated_client_revision =
-        "storyos.typescript-client.release-0.v1".to_owned();
-    golden_profile_bytes(&boundary)
-}
-
-fn project_fixture() -> Value {
-    json!({
-        "schema_id": PROJECT_RESPONSE_SCHEMA_ID,
-        "correlation_id": "018f0000-0000-7001-8000-000000000005",
-        "project_scope": {"owner_user_id": "018f0000-0000-7001-8000-000000000001", "project_id": "018f0000-0000-7001-8000-000000000002"},
-        "project": {"project_id": "018f0000-0000-7001-8000-000000000002", "title": "受控项目", "open": {"kind": "current_chapter", "current_chapter_id": "018f0000-0000-7001-8000-000000000003"}}
-    })
-}
-
 fn chapter_fixture() -> Value {
     json!({
         "schema_id": CHAPTER_RESPONSE_SCHEMA_ID,
@@ -659,14 +513,6 @@ fn chapter_fixture() -> Value {
         "project_scope": {"owner_user_id": "018f0000-0000-7001-8000-000000000001", "project_id": "018f0000-0000-7001-8000-000000000002"},
         "project_activity_position": "0",
         "chapter": {"chapter_id": "018f0000-0000-7001-8000-000000000003", "title": "第一章", "current_revision": {"revision_id": "018f0000-0000-7001-8000-000000000004", "body": "雨落在窗沿。", "blocks": [{"manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1", "block_kind": "paragraph", "text": "雨落在窗沿。"}]}}
-    })
-}
-
-fn challenge_fixture() -> Value {
-    json!({
-        "nonce": "4f9f5ad05c4d1294d4114fb15595d831b64e3f4312a17e639213ad36e941ca71",
-        "expires_at": "2026-08-12T08:05:00.000Z",
-        "limit_profile_revision": LIMIT_PROFILE_REVISION
     })
 }
 
@@ -697,50 +543,14 @@ fn editor_session_fixture(schema_id: &str) -> Value {
     })
 }
 
-fn invalid_fixture(mut value: Value) -> Vec<u8> {
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("project_scope");
-    json_bytes(&value)
-}
-
-fn boundary_fixture(mut value: Value) -> Vec<u8> {
-    value["project_scope"]["project_id"] =
-        Value::String("018f0000-0000-7001-8000-000000000102".to_owned());
-    json_bytes(&value)
-}
-
-fn project_fixture_bytes() -> Vec<u8> {
-    json_bytes(&project_fixture())
-}
-fn invalid_project_fixture_bytes() -> Vec<u8> {
-    invalid_fixture(project_fixture())
-}
-fn boundary_project_fixture_bytes() -> Vec<u8> {
-    boundary_fixture(project_fixture())
-}
 fn chapter_fixture_bytes() -> Vec<u8> {
     json_bytes(&chapter_fixture())
 }
 fn invalid_chapter_fixture_bytes() -> Vec<u8> {
-    invalid_fixture(chapter_fixture())
+    without_project_scope(chapter_fixture())
 }
 fn boundary_chapter_fixture_bytes() -> Vec<u8> {
-    boundary_fixture(chapter_fixture())
-}
-fn challenge_fixture_bytes() -> Vec<u8> {
-    json_bytes(&challenge_fixture())
-}
-fn invalid_challenge_fixture_bytes() -> Vec<u8> {
-    let mut invalid = challenge_fixture();
-    invalid.as_object_mut().unwrap().remove("nonce");
-    json_bytes(&invalid)
-}
-fn boundary_challenge_fixture_bytes() -> Vec<u8> {
-    let mut boundary = challenge_fixture();
-    boundary["expires_at"] = json!("1970-01-01T00:00:00.000Z");
-    json_bytes(&boundary)
+    with_boundary_project_scope(chapter_fixture())
 }
 fn create_editor_session_fixture_bytes() -> Vec<u8> {
     json_bytes(&editor_session_fixture(
@@ -753,217 +563,25 @@ fn get_editor_session_fixture_bytes() -> Vec<u8> {
     ))
 }
 fn invalid_create_editor_session_fixture_bytes() -> Vec<u8> {
-    invalid_fixture(editor_session_fixture(
+    without_project_scope(editor_session_fixture(
         CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
     ))
 }
 fn boundary_create_editor_session_fixture_bytes() -> Vec<u8> {
-    boundary_fixture(editor_session_fixture(
+    with_boundary_project_scope(editor_session_fixture(
         CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
     ))
 }
 fn invalid_get_editor_session_fixture_bytes() -> Vec<u8> {
-    invalid_fixture(editor_session_fixture(
+    without_project_scope(editor_session_fixture(
         GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
     ))
 }
 fn boundary_get_editor_session_fixture_bytes() -> Vec<u8> {
-    boundary_fixture(editor_session_fixture(
+    with_boundary_project_scope(editor_session_fixture(
         GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
     ))
 }
-
-pub(super) const PROTOCOL_PROFILE_ARTIFACTS: OperationArtifacts = OperationArtifacts {
-    operations: &[RegisteredOperation::query(
-        &GET_PROTOCOL_PROFILE,
-        &["active_public_release_profile"],
-    )],
-    schemas: || {
-        vec![
-            GeneratedSchema {
-                schema_id: PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
-                path: REQUEST_SCHEMA_PATH,
-                bytes: json_bytes(&protocol_profile_request_schema()),
-            },
-            GeneratedSchema {
-                schema_id: PROTOCOL_PROFILE_SCHEMA_ID,
-                path: RESPONSE_SCHEMA_PATH,
-                bytes: json_bytes(&protocol_profile_schema()),
-            },
-        ]
-    },
-    openapi: || {
-        method(
-            &GET_PROTOCOL_PROFILE,
-            operation_openapi(
-                &GET_PROTOCOL_PROFILE,
-                "Discover the active StoryOS Release 1 protocol profile",
-                RESPONSE_SCHEMA_PATH,
-                &[],
-            ),
-        )
-    },
-    typescript_types: || {
-        let config = Config::default();
-        format!(
-            "export {}\n\nexport {}",
-            Release1CompatibilityIdentity::decl(&config),
-            Release1ProtocolProfile::decl(&config),
-        )
-    },
-    typescript_client: || {
-        format!(
-            "\nexport async function getProtocolProfile(options = {{}}) {{\n  return queryJson({{ ...options, path: \"{}\" }});\n}}\n",
-            GET_PROTOCOL_PROFILE.path,
-        )
-    },
-    typescript_declarations: || "export declare function getProtocolProfile(options: StoryOSQueryOptions): Promise<Release1ProtocolProfile>;\n",
-    fixtures: || {
-        fixture_triple(
-            [
-                GOLDEN_PROFILE_PATH,
-                INVALID_PROFILE_PATH,
-                BOUNDARY_PROFILE_PATH,
-            ],
-            &GET_PROTOCOL_PROFILE,
-            [
-                golden_profile_bytes,
-                invalid_profile_bytes,
-                boundary_profile_bytes,
-            ],
-        )
-        .into()
-    },
-};
-
-pub(super) const PROJECT_COMMAND_CHALLENGE_ARTIFACTS: OperationArtifacts = OperationArtifacts {
-    operations: &[RegisteredOperation::challenge(
-        &CREATE_PROJECT_COMMAND_CHALLENGE,
-        &[
-            "server_derived_project_scope",
-            "strict_origin",
-            "protected_client_session_binding",
-            "route_method_schema_digest_match",
-            "closed_command_schema",
-        ],
-    )],
-    schemas: || {
-        vec![
-            GeneratedSchema {
-                schema_id: PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
-                path: CHALLENGE_REQUEST_SCHEMA_PATH,
-                bytes: json_bytes(&typed_schema::<CreateProjectCommandChallengeRequest>(
-                    PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
-                    "StoryOS Project Command Challenge Request",
-                )),
-            },
-            GeneratedSchema {
-                schema_id: PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
-                path: CHALLENGE_RESPONSE_SCHEMA_PATH,
-                bytes: json_bytes(&challenge_response_schema()),
-            },
-        ]
-    },
-    openapi: || method(&CREATE_PROJECT_COMMAND_CHALLENGE, challenge_openapi()),
-    typescript_types: || {
-        let config = Config::default();
-        format!(
-            "export {}\n\nexport {}",
-            CreateProjectCommandChallengeRequest::decl(&config),
-            CreateProjectCommandChallengeResponse::decl(&config),
-        )
-    },
-    typescript_client: || {
-        format!(
-            concat!(
-                "\nexport async function createProjectCommandChallenge({{ projectId, request, ...options }} = {{}}) {{\n",
-                "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createProjectCommandChallenge requires projectId\");\n",
-                "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProjectCommandChallenge requires request\");\n",
-                "  return commandJson({{ ...options, path: `{}`, body: request }});\n}}\n",
-            ),
-            CREATE_PROJECT_COMMAND_CHALLENGE
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        )
-    },
-    typescript_declarations: || "export declare function createProjectCommandChallenge(options: StoryOSQueryOptions & { projectId: string; request: CreateProjectCommandChallengeRequest }): Promise<CreateProjectCommandChallengeResponse>;\n",
-    fixtures: || {
-        fixture_triple(
-            CHALLENGE_FIXTURE_PATHS,
-            &CREATE_PROJECT_COMMAND_CHALLENGE,
-            [
-                |_| challenge_fixture_bytes(),
-                |_| invalid_challenge_fixture_bytes(),
-                |_| boundary_challenge_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
-};
-
-pub(super) const PROJECT_QUERY_ARTIFACTS: OperationArtifacts = OperationArtifacts {
-    operations: &[RegisteredOperation::query(
-        &GET_PROJECT,
-        &["server_derived_project_scope", "project_visibility"],
-    )],
-    schemas: || {
-        vec![
-            GeneratedSchema {
-                schema_id: PROJECT_REQUEST_SCHEMA_ID,
-                path: PROJECT_REQUEST_SCHEMA_PATH,
-                bytes: json_bytes(&path_request_schema(
-                    PROJECT_REQUEST_SCHEMA_ID,
-                    &["project_id"],
-                )),
-            },
-            GeneratedSchema {
-                schema_id: PROJECT_RESPONSE_SCHEMA_ID,
-                path: PROJECT_RESPONSE_SCHEMA_PATH,
-                bytes: json_bytes(&typed_schema::<GetProjectResponse>(
-                    PROJECT_RESPONSE_SCHEMA_ID,
-                    "StoryOS Project Query Response",
-                )),
-            },
-        ]
-    },
-    openapi: || {
-        method(
-            &GET_PROJECT,
-            operation_openapi(
-                &GET_PROJECT,
-                "Read one controlled StoryOS Project",
-                PROJECT_RESPONSE_SCHEMA_PATH,
-                &["project_id"],
-            ),
-        )
-    },
-    typescript_types: || format!("export {}", GetProjectResponse::decl(&Config::default())),
-    typescript_client: || {
-        format!(
-            concat!(
-                "\nexport async function getProject({{ projectId, ...options }} = {{}}) {{\n",
-                "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getProject requires projectId\");\n",
-                "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-            ),
-            GET_PROJECT
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        )
-    },
-    typescript_declarations: || "export declare function getProject(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectResponse>;\n",
-    fixtures: || {
-        fixture_triple(
-            PROJECT_FIXTURE_PATHS,
-            &GET_PROJECT,
-            [
-                |_| project_fixture_bytes(),
-                |_| invalid_project_fixture_bytes(),
-                |_| boundary_project_fixture_bytes(),
-            ],
-        )
-        .into()
-    },
-};
 
 pub(super) const EDITOR_SESSION_ARTIFACTS: OperationArtifacts = OperationArtifacts {
     operations: &[
@@ -1025,7 +643,7 @@ pub(super) const EDITOR_SESSION_ARTIFACTS: OperationArtifacts = OperationArtifac
         let mut methods = method(&CREATE_EDITOR_SESSION, editor_session_create_openapi());
         methods.extend(method(
             &GET_EDITOR_SESSION,
-            operation_openapi(
+            query_openapi(
                 &GET_EDITOR_SESSION,
                 "Read one exact Editor Session",
                 EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
@@ -1143,7 +761,7 @@ pub(super) const CHAPTER_QUERY_ARTIFACTS: OperationArtifacts = OperationArtifact
     openapi: || {
         method(
             &GET_CHAPTER,
-            operation_openapi(
+            query_openapi(
                 &GET_CHAPTER,
                 "Read the controlled Project current Chapter",
                 CHAPTER_RESPONSE_SCHEMA_PATH,

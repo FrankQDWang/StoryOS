@@ -111,11 +111,11 @@ pub(super) struct FixtureMembership {
 
 /// Modules sort by the reviewed route-catalog position of their first operation.
 pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
-    &crate::release1_artifacts::PROTOCOL_PROFILE_ARTIFACTS,
+    &crate::release1_protocol_profile_artifacts::ARTIFACTS,
     &crate::release1_create_project_artifacts::ARTIFACTS,
-    &crate::release1_artifacts::PROJECT_COMMAND_CHALLENGE_ARTIFACTS,
+    &crate::release1_command_challenge_artifacts::ARTIFACTS,
     &crate::release1_list_projects_artifacts::ARTIFACTS,
-    &crate::release1_artifacts::PROJECT_QUERY_ARTIFACTS,
+    &crate::release1_project_query_artifacts::ARTIFACTS,
     &crate::release1_update_project_artifacts::ARTIFACTS,
     &crate::release1_project_assistance_artifacts::ARTIFACTS,
     &crate::release1_archive_project_artifacts::ARTIFACTS,
