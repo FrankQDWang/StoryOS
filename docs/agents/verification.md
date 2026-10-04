@@ -1,7 +1,72 @@
 # Repository verification
 
-Start with `make verify-status BASE=origin/main`; use `make verify-changed` after edits.
-For test lifecycle changes, run `make verify-policy` and inspect a new plan.
+This guide is the single owner of verification commands for every agent client.
+The main flow comes first; reference sections follow it.
+
+## Daily loop
+
+1. At task start, run `make verify-status BASE=origin/main` and follow its `nextAction`.
+2. After each product or test edit, run the smallest check that can fail on that edit:
+   `make verify-targeted CHECK=<check>`, or `make verify-changed BASE=<base>` for the
+   whole selected scope. Set `BASE` to the actual comparison commit.
+3. After you add, rename, or delete a test, or change the runner or the
+   [input policy](verification-policy.json), run `make verify-policy` and inspect a
+   fresh plan with `make verify-plan BASE=<base>`.
+4. Start a long command in the background with the client's own mechanism. The
+   command is complete when its process exits and its structured result is
+   available. A printed stage line is not the end signal.
+
+The loop is complete when every check that the current sources select has a
+current PASS. A pending check is not a PASS.
+
+## Candidate review and admission
+
+The implementation session is the executor. It opens the PR and runs the steps
+below. It does not merge. A coordinator session checks the evidence and merges the
+PR with an ordinary merge commit.
+
+1. Open the PR and wait for current `verify` success. On the clean candidate, run `python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
+2. Start two independent read-only reviews, one for each axis. Each review runs in
+   a fresh context of an agent tool that is different from the implementer's tool.
+   Give each reviewer the printed request and the scoped diff `git diff <base>...HEAD`.
+   The Standards reviewer checks the diff against `AGENTS.md`, `GLOSSARY.md`, and
+   ASD-STE100. The Spec reviewer checks the diff against the ticket or task contract.
+   Each reviewer returns `PASS` or `FAIL` with `file:line` evidence.
+   - Current example when Claude Code implements: the Codex plugin, with one fresh
+     thread for each axis and without `--write`:
+     `node ~/.claude/plugins/cache/openai-codex/codex/<version>/scripts/codex-companion.mjs task --fresh "<axis prompt>"`.
+   - When Codex implements, use a different agent tool or a separate Claude Code
+     session for each axis.
+3. Fix the findings, commit, push, and repeat steps 1 and 2 until both axes PASS.
+   Post each verdict as a PR comment.
+4. Write one review record for each axis as JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context` (for example `codex-standards-pr<pr>` or `codex-spec-pr<pr>`), `result` (`PASS` or `FAIL`), and `evidence`. The executor context and the two reviewer contexts must differ; IDs assert consistency, not authenticated identity.
+5. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
+6. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after the imports.
+7. Send the PR link and the verdict comment links to the coordinator.
+
+For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json` and its recovery command. Recovery needs current reviews and targeted results.
+Source fixes return to targeted checks and a new candidate. Retain every attempt.
+
+After merge, synchronize `main` and run `make verify-tracker`. A ticket that requires a post-merge complete run uses a fresh request and `make verify` with `--purpose post-merge-different-tree` and the request's base.
+Manual Linux uses `--purpose manual-linux` in request and execution. The workflow accepts
+JSON `{"request": <request>, "reviews": {"standards": <record>, "spec": <record>}}` for the selected Git tree.
+It imports actual independent reviews and runs fresh targeted checks on Linux. Local source stamps belong to admission; candidate-bound reviews remain portable.
+
+## PR verification and optional complete run
+
+Wait for the required GitHub `verify` sentinel and independent Standards and Spec
+reviews. Resolve findings with targeted checks and push the corrected candidate.
+The `candidate-evidence` status and complete-report publication command are retired.
+Do not start a complete local run only to satisfy a PR status. When a ticket requires
+complete verification, keep its local report and use the recovery procedure above.
+Extend the policy and runner together for a new framework or execution group.
+Complete local verification and manual Linux verification retain their stage obligations
+when requested.
+Selected dirty-tree runs are daily feedback. Complete candidate verification needs
+a clean tree because release packaging binds Git identity. An empty change set or
+empty test discovery cannot report success. When a complete run is requested,
+PostgreSQL fixtures, ordered HTTP groups, exact-dist oracles and both recovery
+drills remain mandatory. The PR `verify` sentinel checks the policy and runner.
 
 ## Parallel implementation
 
@@ -23,20 +88,23 @@ Do not share mutable build directories or reuse another worktree's local admissi
 records. Coordinate host capacity before simultaneous resource-heavy commands;
 checkout locks do not enforce a host-wide budget.
 
-## Candidate review and admission
+## Agent clients
 
-1. Open the PR and wait for current `verify` success. On the clean candidate, run `python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
-2. Give the printed request and scoped diff to separate Standards and Spec reviewers. Each returns JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context`, `result` (`PASS` or `FAIL`), and `evidence`. All three contexts must differ; IDs assert consistency, not authenticated identity.
-3. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
-4. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after review.
+These commands and rules are the same for every agent client, for example Claude
+Code and Codex. Codex loads `AGENTS.md` directly; Claude Code loads it through
+`CLAUDE.md`. If a client loads neither file, include this document in its project
+instructions. The checked policy is the common owner; client instructions link
+here and do not copy its rules. Any client can own an implementation, review, or
+coordinator role. The Standards and Spec reviewers use an agent tool that is
+different from the implementer's tool, as
+[Candidate review and admission](#candidate-review-and-admission) specifies.
 
-For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json` and its recovery command. Recovery needs current reviews and targeted results.
-Source fixes return to targeted checks and a new candidate. Retain every attempt.
+## Reference
 
-After merge, synchronize `main` and run `make verify-tracker`. A ticket that requires a post-merge complete run uses a fresh request and `make verify` with `--purpose post-merge-different-tree` and the request's base.
-Manual Linux uses `--purpose manual-linux` in request and execution. The workflow accepts
-JSON `{"request": <request>, "reviews": {"standards": <record>, "spec": <record>}}` for the selected Git tree.
-It imports actual independent reviews and runs fresh targeted checks on Linux. Local source stamps belong to admission; candidate-bound reviews remain portable.
+Read the sections below when the daily loop, a status `nextAction`, or a review
+needs their details.
+
+## Input inventory and complete-run reports
 
 Use `make verify-policy` to check file ownership and the verification command.
 Use `python3 scripts/verification.py inventory` to inspect the input list as JSON.
@@ -57,6 +125,75 @@ command succeeds. Input write stamps detect ordinary writes even when the origin
 bytes are restored; they are run observations, not reusable cache keys. A report describes local execution within the existing trust
 boundary; it is not an independent attestation or a domain Verification Evidence
 Bundle. Keep secrets in environment variables, not recorded command arguments.
+
+## Current status and targeted checks
+
+`make verify-status BASE=origin/main` reads the current daily plan and retained
+results. It does not run tests or write observations. Use
+`python3 scripts/verification_plan.py status --base origin/main` for JSON, or
+`make verify-plan` for a readable plan summary. An empty
+change set remains pending. A prior result can be passed, failed, or stale;
+package-dependent work on dirty sources has unmet prerequisites.
+
+`make verify-targeted CHECK=verify-policy VERIFY_ARGS='--issue 744'` runs a check
+registered in the policy. Query it with
+`python3 scripts/verification.py status --check verify-policy --json`.
+Source bytes and write stamps, policy, test membership, command, execution input
+digest, and plan identity bind targeted results. Only a current passed result
+can satisfy a current prerequisite. They do not satisfy a separately requested complete run.
+The Make test targets use this same entry when called outside a managed run.
+Public step, Rust, shared database, package, and recovery script entries create a
+root record or inherit the existing run. Direct Cargo, Vitest, or other shell
+commands outside these entries remain outside managed observation.
+
+Use `VERIFY_ARGS='--issue 744 --pr 123'` on daily or targeted Make entries for
+explicit attribution. Missing attribution stays null. Nested steps retain their
+parent step ID and do not create another root. Reports retain actual child start,
+UTC and monotonic intervals, process birth identity, and five-second heartbeats.
+Request records distinguish refused requests from execution. A cached daily result
+has no actual child start. Records remain below ignored `target/verification/`.
+Keep secrets in environment variables; do not put them in command arguments,
+purpose, trigger, or recovery reason fields.
+
+`python3 scripts/verification.py status --attempt <run-id> --json` reads the
+existing complete attempt and prints its next recovery command. Recovery uses the
+original failed boundary and its policy-owned preparation. Each recovery has a
+separate retained report linked by `recovery_of`; the attempt component still owns
+retry admission. A failed recovery cannot clear the original failure. Status
+reports distinguish active and lost process identity without changing admission.
+
+## Status output
+
+Status commands return version 2 summaries by default. JSON consumers that need
+`plan` or full prerequisites must add `--details`. Text summaries also omit file
+reasons and graph membership. Plan JSON and retained reports keep their full format.
+
+Use `decision`, `reasonCode`, `nextAction.argv`, and `agentHint` to select the next
+step. `changedInputs` lists changed identity fields, never environment values.
+An active process points to observation. A lost process needs cleanup confirmation.
+A changed identity requires a fresh plan. Recovery commands still enforce current
+admission and require an accurate reason. A current PASS covers only the selected
+verification scope; merge checks and reviews retain their separate authority.
+
+### Bounded daily queries
+
+`make verify-plan` now calls `verification_plan.py summary --format text`.
+`VERIFY_ARGS='--format json'` returns the same summary as JSON. Daily status and
+plan summaries have a 16 KiB and 80-line limit, eight checks per page, and clipped
+text fields with original character counts. Failures and pending checks come first.
+Counts cover all checks; equal blocking reasons share a count. Query errors also
+use a bounded summary; `--details` retains the full error. Partial readiness
+does not satisfy pending checks. Guidance does not authorize execution.
+
+Use `make verify-plan VERIFY_ARGS='--select blocked --page 2'` for another page.
+Use `VERIFY_ARGS='--index 3 --details'` for the exact current check, including all
+reasons and members. Indexes belong to the displayed plan digest; refresh after
+source changes. `--details` gives full status/plan facts without a size limit.
+`python3 scripts/verification_plan.py plan --format json --base origin/main`
+retains the full version 1 plan for program consumers. Redirect this explicit
+export to `target/plan.json` when a saved plan is needed. Full graph exports use
+`plan --profile complete`. The runner still recomputes and rejects stale inputs.
+Queries do not create files, run tests, or change retained evidence.
 
 ## Daily file selection
 
@@ -98,13 +235,6 @@ A new framework or shared resource requires a reviewed policy and runner extensi
 with a public command regression. Review declarations with the same independent
 Standards and Spec process as code. Test names and counts are discovered, not fixed.
 
-Use these commands from Codex, Cursor and Grok Build. If a client does not load
-AGENTS.md, include this document in its project instructions. The checked policy
-is the common owner; client instructions link here. Selected dirty-tree runs are
-daily feedback. Complete candidate verification needs a clean tree because release packaging binds
-Git identity. An empty change set or empty test discovery cannot report success.
-When a complete run is requested, PostgreSQL fixtures, ordered HTTP groups, exact-dist
-oracles and both recovery drills remain mandatory. The PR `verify` sentinel checks the policy and runner.
 
 ## Retained workflow graphs
 
@@ -278,248 +408,7 @@ refusal consumes no attempt. These are not product domain records. The readiness
 boundary checks clean source, input ownership, current targeted results, and independent review imports.
 Independent Standards and Spec reviews remain required before merging a PR.
 
-## PR verification and optional complete run
-
-Wait for the required GitHub `verify` sentinel and independent Standards and Spec
-reviews. Resolve findings with targeted checks and push the corrected candidate.
-The `candidate-evidence` status and complete-report publication command are retired.
-Do not start a complete local run only to satisfy a PR status. When a ticket requires
-complete verification, keep its local report and use the recovery procedure above.
-Extend the policy and runner together for a new framework or execution group.
-Complete local verification and manual Linux verification retain their stage obligations
-when requested.
-
-## Current status and targeted checks
-
-`make verify-status BASE=origin/main` reads the current daily plan and retained
-results. It does not run tests or write observations. Use
-`python3 scripts/verification_plan.py status --base origin/main` for JSON, or
-`make verify-plan` for a readable plan summary. An empty
-change set remains pending. A prior result can be passed, failed, or stale;
-package-dependent work on dirty sources has unmet prerequisites.
-
-`make verify-targeted CHECK=verify-policy VERIFY_ARGS='--issue 744'` runs a check
-registered in the policy. Query it with
-`python3 scripts/verification.py status --check verify-policy --json`.
-Source bytes and write stamps, policy, test membership, command, execution input
-digest, and plan identity bind targeted results. Only a current passed result
-can satisfy a current prerequisite. They do not satisfy a separately requested complete run.
-The Make test targets use this same entry when called outside a managed run.
-Public step, Rust, shared database, package, and recovery script entries create a
-root record or inherit the existing run. Direct Cargo, Vitest, or other shell
-commands outside these entries remain outside managed observation.
-
-Use `VERIFY_ARGS='--issue 744 --pr 123'` on daily or targeted Make entries for
-explicit attribution. Missing attribution stays null. Nested steps retain their
-parent step ID and do not create another root. Reports retain actual child start,
-UTC and monotonic intervals, process birth identity, and five-second heartbeats.
-Request records distinguish refused requests from execution. A cached daily result
-has no actual child start. Records remain below ignored `target/verification/`.
-Keep secrets in environment variables; do not put them in command arguments,
-purpose, trigger, or recovery reason fields.
-
-`python3 scripts/verification.py status --attempt <run-id> --json` reads the
-existing complete attempt and prints its next recovery command. Recovery uses the
-original failed boundary and its policy-owned preparation. Each recovery has a
-separate retained report linked by `recovery_of`; the attempt component still owns
-retry admission. A failed recovery cannot clear the original failure. Status
-reports distinguish active and lost process identity without changing admission.
-
-## Local run observation
-
-Use Docker Engine with Compose 2.24.4 or later and Python 3.13 or later.
-`make observe-start` builds the pinned Grafana OSS image and SQLite plugin, imports
-retained records, and starts a five-second collector. Open
-<http://127.0.0.1:3749/d/storyos-verification>. `make observe-status` shows container
-state and current records. `make observe-stop` removes the observation containers;
-records and the read model remain. `make observe-rebuild` rebuilds the read model
-from retained files. Collection catches up after a restart without test execution.
-
-The collector reads only `target/verification/*/report.json`, step files, and
-request files. It writes `target/observation/data/runs.sqlite`. These directories
-are ignored source and cache inputs. SQLite is disposable observation, not
-admission or test evidence. No executor imports this database. The dashboard shows
-root Issue attribution (or unknown), live stages, scope, reason, elapsed time to
-the last heartbeat, and heartbeat age. Display elapsed time uses UTC and is an
-estimate; recorded monotonic durations remain in the read model. A stale heartbeat
-means unknown liveness, not completion. It does not change the reported status.
-Legacy and malformed inputs stay in the diagnostics view. Raw records are never
-changed; missing historical attribution remains unknown. Deleted input records
-stay in the read model until a rebuild. Rebuild does not preserve derived facts.
-
-The public collector accepts `collect`, `watch`, `status`, and `rebuild`, with
-`--records` and `--database` for disposable inputs. `watch --interval` accepts
-1 to 3600 seconds. Each collection transaction writes at most 200 changed records;
-watch catches up on later polls and one-shot commands drain the backlog. Each
-input is limited to 16 MiB. Containers have CPU and memory limits. Collection scans
-retained paths; volume overhead measurement belongs to the Issue-cost follow-up.
-
-Grafana binds only to loopback and permits anonymous Viewer access. Login and basic
-authentication are disabled; its unused administrator password is random on each
-start. The provisioned data source is not editable, opens SQLite with `mode=ro`,
-and has `attachLimit: 0`. Only the observation directory is mounted, read-only.
-The plugin's default internal-database block list remains enabled. The collector
-has no network. Grafana has no configured external notification destination, and
-analytics is disabled; advisory alert evaluation stays local. Setup needs Internet access to pull images
-and the plugin; this does not change product hosting.
-
-Run `make verify-targeted CHECK=verification-observation-tests` for collector
-regressions. Run `make observe-smoke` after installation changes. This bounded
-check starts an actual disposable managed command and queries the provisioned
-Grafana dashboard through the real SQLite plugin on a temporary loopback port.
-It removes its containers and temporary database when complete. It does not run
-the product suite. `make verify-policy` discovers the collector tests normally.
-
-### Issue cost and advisory rules
-
-The same dashboard shows `issue_cost`, `request_cost`, `stage_cost`, and
-`violations`. Root totals include only recorded actual starts. They retain the
-profile and final state, including failures and interruptions. Reused reports
-and refused requests stay separate. `observed_runs` retains historical and
-incomplete observations; missing attribution and duration remain unknown.
-
-Stage intervals partition each root duration. Child intervals replace parent
-intervals; concurrent leaf intervals have one `concurrent` cost. Remaining time
-is `unclassified`. These are elapsed costs, not CPU measurements. An optional
-`blocked_intervals` list contains explicit monotonic start/end pairs. An empty
-list records zero; an absent list means unknown. Multiple roots need one explicit
-`blocked_clock` identity before their intervals can form an Issue-wide union.
-The Issue blocked total repeats across its profile rows; do not sum those cells.
-Current executors do not measure user blocking, so their value remains unknown.
-
-Advisory rules detect daily complete dispatch, duplicate candidate starts without
-recorded recovery, unassigned starts, overlapping checkout resource use, stale
-heartbeats, and comparable runtime growth. Requests do not become executed
-violations. A stale heartbeat means unknown liveness. Runtime comparison requires
-an explicit recorded `build_state` (`cold` or `warm`), equal effective scope,
-policy, tools, execution inputs, runners, host and repository. Missing facts or
-samples stay unknown. New reports record build-input presence for Rust debug artifacts, Rust release
-artifacts, and Web dependencies. `warm` means all three are present, `cold` means
-none are present, and `mixed` remains incomparable. Presence does not claim a
-cache hit. Missing build state and candidate facts have explicit comparison
-reasons. Historical reports remain unchanged; a baseline still needs three
-comparable completed samples. Never edit original reports to add these observations.
-
-`scripts/observation/settings.json` sets the heartbeat and comparison thresholds,
-record batch cap, and database size guard. Compose caps CPU and memory. Grafana
-refreshes every five seconds and evaluates provisioned rules every ten seconds.
-There is no external notification destination. Grafana rules query the same
-`violations` view as the dashboard and cannot authorize execution or retries.
-
-Collection prints wall and CPU seconds, peak process RSS and database bytes.
-`make observe-smoke` measures 1,000 synthetic retained roots plus one actual
-bounded managed command, queries the real dashboard, waits for a firing rule,
-restarts observation without restarting that command, and records container CPU,
-memory and block I/O. This is synthetic overhead evidence, not a product speedup.
-The original records survive observation downtime and rebuild. The database
-size guard stops further collection above 256 MiB; it never removes raw records.
-
-### Retained node attempts
-
-Managed command steps bind their attempt ID and parent to a retained graph digest
-and node ID. Build and reset observations use `nodes/`; required evidence stages
-keep their existing `steps/` records. They retain the selection reason, execution scope, actual child
-start, UTC end, monotonic duration, and result. Shared phases and resets use their
-own nodes. Cargo build and grouped execution remain separate boundaries. Graph
-membership alone never creates an attempt or a file duration. Uninstrumented
-members remain unknown after execution; a missing finish is not success.
-
-The collector exposes `run_graphs`, `node_attempts`, and `node_states`. These
-read models preserve full membership, pending and unselected nodes, failed
-prerequisites, actual attempts, and cache producer links. Complete reuse stays a
-request against its original run. Cache hits create no executed node attempts.
-Nested step intervals still use the existing exclusive cost calculation; do not
-sum node durations as an Issue bill. Queue and resource wait times remain unknown
-without an explicit observation. Legacy reports gain no graph or timing facts.
-Run `make verify-targeted CHECK=verification-node-tests` for these public command
-and SQLite replay regressions.
-
-### Single-run DAG
-
-Open <http://127.0.0.1:3749/d/storyos-run> or use the run link on the main dashboard.
-Select the time range, Issue, profile, and run. The workflow shows retained nodes,
-including unselected operations. Select a node, then use its inspect link to show
-its details and file members. Select `__none` to collapse files. The URL preserves
-run, group, and node selection. Topology-derived fixed coordinates prevent refresh
-from restarting Grafana layout. Expanding files preserves existing step positions.
-The local UI uses a light theme and Simplified Chinese labels. Step names lead;
-state and duration are secondary. Raw node IDs and evidence stay unchanged.
-A compact step list keeps names readable beside large graphs.
-Read-only queries wait at most five seconds for a collector write lock.
-Dependency edges show required order. Contains and member edges show grouping only.
-Use the node menu, zoom controls, and detail tables to inspect large graphs.
-
-Times use UTC. Unknown timing is not zero. Selected counts include file membership;
-executed counts require actual node attempts. Reused observations link their producer
-and add no attempts. Legacy runs show unavailable graph data. Evidence paths are
-relative to `target/verification/`; they are local records, not served files.
-
-`scripts/verification_observation_dashboard.py` owns the generated `run.json`.
-Run `make observe-dashboard` after edits. Observation tests reject generated drift.
-`make observe-smoke` also queries collapsed and expanded DAGs through Grafana for
-labelled synthetic partial, complete, running, failed, reused, and legacy examples.
-These examples prove display behavior, not product execution.
-The collector stores SQLite sort files in its owned observation data directory. The
-smoke check forces a sort spill and requires a container-collected change after
-the initial import; a stale database cannot satisfy that check.
-
-### Two-run comparison and timeline
-
-Open <http://127.0.0.1:3749/d/storyos-compare> or follow the comparison link from
-one run. Select left and right retained runs. Stable IDs preserve removed files;
-renames appear as removal and addition. Definition changes include dependencies
-and membership, but selection is separate. Inspect the definition and edge cells
-for details. Column filters narrow the table. Missing graphs stay unavailable.
-
-The UTC timeline gives each actual attempt its own row. Use the time picker to
-zoom to the runs. Attempts without both timestamps remain in the detail table;
-no end time or file duration is invented. Overlap includes nested attempts and
-is not additive cost. Explicit blocked intervals use the recorded run UTC and
-monotonic anchor. Missing waits remain unknown. Complete reuse requests point to
-the original run and add no attempt; daily reuse retains its producer link.
-
-Duration deltas are descriptive unless scope, definitions, policy, toolchain,
-execution inputs, runners, host, repository, and build state match. Even then,
-a delta alone does not prove a cause. Observation does not authorize recovery.
-`make observe-dashboard` generates both dashboards; `make observe-smoke` queries
-both through the real SQLite plugin. Synthetic examples prove display behavior,
-not real-candidate recovery. Historical records are never changed.
-
-## Status output
-
-Status commands return version 2 summaries by default. JSON consumers that need
-`plan` or full prerequisites must add `--details`. Text summaries also omit file
-reasons and graph membership. Plan JSON and retained reports keep their full format.
-
-Use `decision`, `reasonCode`, `nextAction.argv`, and `agentHint` to select the next
-step. `changedInputs` lists changed identity fields, never environment values.
-An active process points to observation. A lost process needs cleanup confirmation.
-A changed identity requires a fresh plan. Recovery commands still enforce current
-admission and require an accurate reason. A current PASS covers only the selected
-verification scope; merge checks and reviews retain their separate authority.
-
-
-### Bounded daily queries
-
-`make verify-plan` now calls `verification_plan.py summary --format text`.
-`VERIFY_ARGS='--format json'` returns the same summary as JSON. Daily status and
-plan summaries have a 16 KiB and 80-line limit, eight checks per page, and clipped
-text fields with original character counts. Failures and pending checks come first.
-Counts cover all checks; equal blocking reasons share a count. Query errors also
-use a bounded summary; `--details` retains the full error. Partial readiness
-does not satisfy pending checks. Guidance does not authorize execution.
-
-Use `make verify-plan VERIFY_ARGS='--select blocked --page 2'` for another page.
-Use `VERIFY_ARGS='--index 3 --details'` for the exact current check, including all
-reasons and members. Indexes belong to the displayed plan digest; refresh after
-source changes. `--details` gives full status/plan facts without a size limit.
-`python3 scripts/verification_plan.py plan --format json --base origin/main`
-retains the full version 1 plan for program consumers. Redirect this explicit
-export to `target/plan.json` when a saved plan is needed. Full graph exports use
-`plan --profile complete`. The runner still recomputes and rejects stale inputs.
-Queries do not create files, run tests, or change retained evidence.
-
-### Execution time and resources
+## Execution time and resources
 
 The runner applies `stage_budgets_seconds` from the input policy. A stage over its
 budget stops its child process group, waits for cleanup, and returns 124 even if
@@ -545,3 +434,11 @@ with unavailable supervision remains a test PASS, with an explicit observation
 repair action. Observation cannot admit, reject, retry, or rewrite verification.
 Missing build state, candidate facts, and comparable samples remain explicit;
 unknown timing never means no regression. Grafana availability does not gate tests.
+
+## Local run observation
+
+The optional Grafana and SQLite observation service is described in
+[Verification observation](verification-observation.md). Observation never admits,
+rejects, retries, or rewrites verification, and Grafana availability does not gate
+tests. Read that guide before you start, stop, or rebuild the service, or change
+the collector or dashboards.

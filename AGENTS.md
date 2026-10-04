@@ -3,7 +3,8 @@
 ## Scope and authority
 
 - This file applies to the whole repository. A nearer nested `AGENTS.md` may add or narrow instructions for its subtree; include only subtree-specific boundaries and commands, and do not duplicate this root file.
-- Repository files and tracked design artifacts are the source of truth. Conversation history and Codex memory are supporting context only.
+- Repository files and tracked design artifacts are the source of truth. Conversation history and agent client memory, for example Codex memory or Claude Code memory, are supporting context only.
+- This file is the single rule source for every agent client. Codex reads it directly. Claude Code reads it through `CLAUDE.md`, which only imports this file. Put a new rule here, not in `CLAUDE.md` or a client-specific rule file.
 - Layering of authority: code and checked-in generated contracts state the current implementation reality; ADRs under `docs/adr/` and the current Wayfinder map record the product and architecture contract; this `AGENTS.md` states repository operating rules and coding style. When they diverge, code is the fact of what exists today, but a divergence from an ADR is either a defect to fix or an ADR-recorded exception — never a silent override.
 - Record a spoken deployment, hosting, or vendor decision as an ADR in the same session. An unwritten premise is not a contract. The current production topology is fixed by ADR 0022.
 - One ticket has one implementation owner and an isolated worktree. One coordinator owns the specification and shared tracker state; one merger owns integration.
@@ -12,7 +13,7 @@
 
 ## Agent skills
 
-- For issue publication, claims, and delivery, use GitHub and [Issue tracker](docs/agents/issue-tracker.md).
+- For issue publication, claims, delivery, and the Claude Code and Codex commands that start workflow skills, use GitHub and [Issue tracker](docs/agents/issue-tracker.md).
 - For triage, map the upstream roles with [Triage labels](docs/agents/triage-labels.md).
 - Before domain exploration or design, follow the single-context [Domain docs](docs/agents/domain.md) for the glossary and ADRs.
 
@@ -21,11 +22,11 @@
 ### Parallel specification delivery
 
 - Use one integration branch per specification and a separate branch and worktree per implementation ticket. Run independent dependency-ready tickets in parallel. Preserve real product release gates.
-- Push the integration branch for one aggregate pull request; do not push implementation commits directly to `origin/main`. Merge into `main` only after current required checks and independent Standards and Spec reviews pass. Use an ordinary merge commit unless the specification requires another method.
+- Push the integration branch for one aggregate pull request; do not push implementation commits directly to `origin/main`. Merge into `main` only after current required checks and independent Standards and Spec reviews pass. Use an ordinary merge commit unless the specification requires another method. The implementation session opens the PR and does not merge it; a coordinator session checks the evidence and merges.
 
 ### Verification evidence
 
-- The required GitHub `verify` check validates the pull-request synthetic merge. Require its success and independent read-only Standards and Spec reviews before merging. Run the ticket-appropriate targeted checks. The retired `candidate-evidence` report gate and comment publication are not merge requirements.
+- The required GitHub `verify` check validates the pull-request synthetic merge. Require its success and independent read-only Standards and Spec reviews before merging. Each reviewer uses an agent tool that is different from the implementer's tool. Run the ticket-appropriate targeted checks. The retired `candidate-evidence` report gate and comment publication are not merge requirements.
 - Run `make verify-local` only when the ticket contract or an explicit request calls for a complete local run. Follow [Repository verification](docs/agents/verification.md) for policy review and optional complete-run recovery. A changed candidate needs fresh applicable checks and reviews.
 - After the aggregate PR merges, synchronize `main`, run `make verify-tracker`, and record final evidence for every child and parent requirement as specified in the issue tracker.
 
