@@ -1,0 +1,1122 @@
+{
+  "before": [
+    {
+      "relname": "acceptance_receipts",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "acceptance_refusals",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "active_context_compactions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "agent_runs",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "author_action_entries",
+      "n_live_tup": 452,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.830625+00:00"
+    },
+    {
+      "relname": "author_command_admission_outcome_unknown_observations",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "author_command_admission_reconfirmations",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "author_command_admission_settlements",
+      "n_live_tup": 456,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.681734+00:00"
+    },
+    {
+      "relname": "author_command_admissions",
+      "n_live_tup": 453,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.846265+00:00"
+    },
+    {
+      "relname": "authoritative_commits",
+      "n_live_tup": 303,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.811406+00:00"
+    },
+    {
+      "relname": "authoritative_heads",
+      "n_live_tup": 153,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.76221+00:00"
+    },
+    {
+      "relname": "authoritative_payloads",
+      "n_live_tup": 303,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.723048+00:00"
+    },
+    {
+      "relname": "authoritative_revision_envelopes",
+      "n_live_tup": 151,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.689078+00:00"
+    },
+    {
+      "relname": "authoritative_revisions",
+      "n_live_tup": 303,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.729722+00:00"
+    },
+    {
+      "relname": "authority_history_floors",
+      "n_live_tup": 3,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "backup_wal_evidence",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "chapter_removal_decisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "command_idempotency",
+      "n_live_tup": 455,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.823324+00:00"
+    },
+    {
+      "relname": "context_assembly_manifests",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "context_reference_recoveries",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "conversation_memory_settings",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "create_project_challenges",
+      "n_live_tup": 1,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "create_project_idempotency",
+      "n_live_tup": 1,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "domain_receipts",
+      "n_live_tup": 453,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.87308+00:00"
+    },
+    {
+      "relname": "draft_artifact_revisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_artifacts",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_close_events",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_lifecycle_events",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_reopen_events",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_reopen_receipts",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "editor_input_fences",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "editor_session_base_snapshots",
+      "n_live_tup": 1,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.739854+00:00"
+    },
+    {
+      "relname": "editor_sessions",
+      "n_live_tup": 1,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "external_contract_compatibility_decisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "human_readable_manuscript_export_operations",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "human_readable_manuscript_exports",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "manuscript_blocks",
+      "n_live_tup": 3445,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.7801+00:00"
+    },
+    {
+      "relname": "manuscript_objects",
+      "n_live_tup": 156,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.768031+00:00"
+    },
+    {
+      "relname": "manuscript_revision_members",
+      "n_live_tup": 3595,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.793644+00:00"
+    },
+    {
+      "relname": "migration_phase_checksums",
+      "n_live_tup": 82,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.798691+00:00"
+    },
+    {
+      "relname": "migration_phases",
+      "n_live_tup": 4,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "model_attempts",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "model_registration_heads",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "model_registration_revisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "operation_requirements",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "pinned_export_sources",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "processing_destination_identities",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "processing_destination_identity_evidence_revisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_activity_event_payloads",
+      "n_live_tup": 303,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.851336+00:00"
+    },
+    {
+      "relname": "project_activity_events",
+      "n_live_tup": 151,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.693075+00:00"
+    },
+    {
+      "relname": "project_agents",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_archival_decisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_command_challenge_rate_guards",
+      "n_live_tup": 2,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_command_challenge_rate_windows",
+      "n_live_tup": 6,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.881027+00:00"
+    },
+    {
+      "relname": "project_command_challenges",
+      "n_live_tup": 454,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.320315+00:00"
+    },
+    {
+      "relname": "project_conversations",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_destination_grants",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_export_entries",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_export_manifests",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_export_operations",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_external_use_binding_revisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_policy_revisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_snapshots",
+      "n_live_tup": 456,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.746213+00:00"
+    },
+    {
+      "relname": "project_writer_generations",
+      "n_live_tup": 1,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "projects",
+      "n_live_tup": 3,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.758057+00:00"
+    },
+    {
+      "relname": "proposal_anchors",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_generation_heads",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_generation_transitions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_generations",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_heads",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_operation_reopenings",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_operation_resolutions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_operations",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_pause_fences",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_rejection_receipts",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_replans",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_revisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_stream_events",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_validation_conditions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_withdrawals",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposals",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "recovery_copies",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "recovery_visibility_proofs",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "replay_floors",
+      "n_live_tup": 3,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "replay_generations",
+      "n_live_tup": 3,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "restore_proofs",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "schema_migrations",
+      "n_live_tup": 1,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "scope_counters",
+      "n_live_tup": 1,
+      "last_analyze": null,
+      "last_autoanalyze": "2026-10-04T18:26:27.707327+00:00"
+    },
+    {
+      "relname": "storage_activation_proofs",
+      "n_live_tup": 1,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "undo_acceptance_receipts",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "users",
+      "n_live_tup": 2,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "validation_receipts",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "volume_removal_decisions",
+      "n_live_tup": 0,
+      "last_analyze": null,
+      "last_autoanalyze": null
+    }
+  ],
+  "after": [
+    {
+      "relname": "acceptance_receipts",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.299542+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "acceptance_refusals",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.293287+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "active_context_compactions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.333352+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "agent_runs",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.349358+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "author_action_entries",
+      "n_live_tup": 452,
+      "last_analyze": "2026-10-04T18:27:20.340422+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.830625+00:00"
+    },
+    {
+      "relname": "author_command_admission_outcome_unknown_observations",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.35062+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "author_command_admission_reconfirmations",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.187547+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "author_command_admission_settlements",
+      "n_live_tup": 453,
+      "last_analyze": "2026-10-04T18:27:19.883795+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.681734+00:00"
+    },
+    {
+      "relname": "author_command_admissions",
+      "n_live_tup": 453,
+      "last_analyze": "2026-10-04T18:27:20.365863+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.846265+00:00"
+    },
+    {
+      "relname": "authoritative_commits",
+      "n_live_tup": 303,
+      "last_analyze": "2026-10-04T18:27:20.264689+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.811406+00:00"
+    },
+    {
+      "relname": "authoritative_heads",
+      "n_live_tup": 153,
+      "last_analyze": "2026-10-04T18:27:20.06055+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.76221+00:00"
+    },
+    {
+      "relname": "authoritative_payloads",
+      "n_live_tup": 303,
+      "last_analyze": "2026-10-04T18:27:19.925814+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.723048+00:00"
+    },
+    {
+      "relname": "authoritative_revision_envelopes",
+      "n_live_tup": 150,
+      "last_analyze": "2026-10-04T18:27:19.900137+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.689078+00:00"
+    },
+    {
+      "relname": "authoritative_revisions",
+      "n_live_tup": 303,
+      "last_analyze": "2026-10-04T18:27:19.940382+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.729722+00:00"
+    },
+    {
+      "relname": "authority_history_floors",
+      "n_live_tup": 3,
+      "last_analyze": "2026-10-04T18:27:20.240642+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "backup_wal_evidence",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.186891+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "chapter_removal_decisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.274404+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "command_idempotency",
+      "n_live_tup": 454,
+      "last_analyze": "2026-10-04T18:27:20.314486+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.823324+00:00"
+    },
+    {
+      "relname": "context_assembly_manifests",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.350158+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "context_reference_recoveries",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.333727+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "conversation_memory_settings",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.34841+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "create_project_challenges",
+      "n_live_tup": 1,
+      "last_analyze": "2026-10-04T18:27:20.006156+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "create_project_idempotency",
+      "n_live_tup": 1,
+      "last_analyze": "2026-10-04T18:27:19.977341+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "domain_receipts",
+      "n_live_tup": 453,
+      "last_analyze": "2026-10-04T18:27:20.417139+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.87308+00:00"
+    },
+    {
+      "relname": "draft_artifact_revisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.323824+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_artifacts",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.325869+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_close_events",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.330567+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_lifecycle_events",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.325071+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_reopen_events",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.326781+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "draft_reopen_receipts",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.327075+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "editor_input_fences",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.300196+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "editor_session_base_snapshots",
+      "n_live_tup": 1,
+      "last_analyze": "2026-10-04T18:27:19.94641+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.739854+00:00"
+    },
+    {
+      "relname": "editor_sessions",
+      "n_live_tup": 1,
+      "last_analyze": "2026-10-04T18:27:19.329125+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "external_contract_compatibility_decisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.281775+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "human_readable_manuscript_export_operations",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.189552+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "human_readable_manuscript_exports",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.174746+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "manuscript_blocks",
+      "n_live_tup": 3445,
+      "last_analyze": "2026-10-04T18:27:20.105845+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.7801+00:00"
+    },
+    {
+      "relname": "manuscript_objects",
+      "n_live_tup": 156,
+      "last_analyze": "2026-10-04T18:27:20.067462+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.768031+00:00"
+    },
+    {
+      "relname": "manuscript_revision_members",
+      "n_live_tup": 3595,
+      "last_analyze": "2026-10-04T18:27:20.139677+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.793644+00:00"
+    },
+    {
+      "relname": "migration_phase_checksums",
+      "n_live_tup": 82,
+      "last_analyze": "2026-10-04T18:27:20.220656+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.798691+00:00"
+    },
+    {
+      "relname": "migration_phases",
+      "n_live_tup": 4,
+      "last_analyze": "2026-10-04T18:27:20.214845+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "model_attempts",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.425263+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "model_registration_heads",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.277076+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "model_registration_revisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.276472+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "operation_requirements",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.349756+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "pinned_export_sources",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.195442+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "processing_destination_identities",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.277714+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "processing_destination_identity_evidence_revisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.278715+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_activity_event_payloads",
+      "n_live_tup": 303,
+      "last_analyze": "2026-10-04T18:27:20.378495+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.851336+00:00"
+    },
+    {
+      "relname": "project_activity_events",
+      "n_live_tup": 150,
+      "last_analyze": "2026-10-04T18:27:19.916091+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.693075+00:00"
+    },
+    {
+      "relname": "project_agents",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.28438+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_archival_decisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.035688+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_command_challenge_rate_guards",
+      "n_live_tup": 2,
+      "last_analyze": "2026-10-04T18:27:19.315614+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_command_challenge_rate_windows",
+      "n_live_tup": 6,
+      "last_analyze": "2026-10-04T18:27:20.42189+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.881027+00:00"
+    },
+    {
+      "relname": "project_command_challenges",
+      "n_live_tup": 453,
+      "last_analyze": "2026-10-04T18:27:19.384857+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.320315+00:00"
+    },
+    {
+      "relname": "project_conversations",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.28772+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_destination_grants",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.279555+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_export_entries",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.181793+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_export_manifests",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.182649+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_export_operations",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.191392+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_external_use_binding_revisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.28048+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_policy_revisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.283045+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "project_snapshots",
+      "n_live_tup": 456,
+      "last_analyze": "2026-10-04T18:27:19.970565+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.746213+00:00"
+    },
+    {
+      "relname": "project_writer_generations",
+      "n_live_tup": 1,
+      "last_analyze": "2026-10-04T18:27:19.363014+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "projects",
+      "n_live_tup": 3,
+      "last_analyze": "2026-10-04T18:27:20.037811+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.758057+00:00"
+    },
+    {
+      "relname": "proposal_anchors",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.298188+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_generation_heads",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.32137+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_generation_transitions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.322039+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_generations",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.320549+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_heads",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.289849+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_operation_reopenings",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.29433+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_operation_resolutions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.293975+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_operations",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.327698+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_pause_fences",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.301114+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_rejection_receipts",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.293632+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_replans",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.332346+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_revisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.328092+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_stream_events",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.299959+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_validation_conditions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.331621+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposal_withdrawals",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.334458+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "proposals",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.345364+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "recovery_copies",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.186307+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "recovery_visibility_proofs",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.185227+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "replay_floors",
+      "n_live_tup": 3,
+      "last_analyze": "2026-10-04T18:27:19.957704+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "replay_generations",
+      "n_live_tup": 3,
+      "last_analyze": "2026-10-04T18:27:19.95218+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "restore_proofs",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.183354+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "schema_migrations",
+      "n_live_tup": 1,
+      "last_analyze": "2026-10-04T18:27:20.197143+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "scope_counters",
+      "n_live_tup": 1,
+      "last_analyze": "2026-10-04T18:27:19.920694+00:00",
+      "last_autoanalyze": "2026-10-04T18:26:27.707327+00:00"
+    },
+    {
+      "relname": "storage_activation_proofs",
+      "n_live_tup": 1,
+      "last_analyze": "2026-10-04T18:27:20.23188+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "undo_acceptance_receipts",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.347131+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "users",
+      "n_live_tup": 2,
+      "last_analyze": "2026-10-04T18:27:19.269834+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "validation_receipts",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.291808+00:00",
+      "last_autoanalyze": null
+    },
+    {
+      "relname": "volume_removal_decisions",
+      "n_live_tup": 0,
+      "last_analyze": "2026-10-04T18:27:20.275215+00:00",
+      "last_autoanalyze": null
+    }
+  ]
+}

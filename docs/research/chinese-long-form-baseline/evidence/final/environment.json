@@ -1,0 +1,14 @@
+{
+  "captured_at": "2026-10-05T02:44:29.693289+08:00",
+  "macos": "15.6.1",
+  "hardware_model": "Mac16,1",
+  "host_logical_cpus": 10,
+  "host_memory_bytes": 34359738368,
+  "chrome": "154.0.8037.93",
+  "docker": {
+    "cpus": 10,
+    "memory_bytes": 16819609600,
+    "server_version": "29.4.0"
+  },
+  "postgres_image_id": "sha256:c05eced0bdb41ea9b95a656472a6aa4d50cad0d8a2e33d14eb1c53fd6204f2ae"
+}

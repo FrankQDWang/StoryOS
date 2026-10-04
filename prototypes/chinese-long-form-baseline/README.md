@@ -46,7 +46,9 @@ Each Web phase has a new browser journal and a publicly prepared writer session.
 The harness sets only its server-issued active-session reference in sessionStorage.
 It measures the packaged production UI, real input, IndexedDB APIs, and reload.
 Browser response bodies and IndexedDB API observations include the completed
-foreground action and its triggered reads. They are distinct from isolated HTTP
+action window and its triggered reads. Editor remount can finish later; such Web
+rows are lower bounds for the full journey. The evidence keeps inter-window plans
+separate from measured counters. The rows are distinct from isolated HTTP
 operation counts. A stopped Worker runs once for each export or fake-adapter
 Proposal setup; no external model or provider is called.
 

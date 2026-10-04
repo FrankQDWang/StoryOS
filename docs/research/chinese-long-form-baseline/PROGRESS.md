@@ -2,12 +2,12 @@
 
 ## Resume here
 
-- Status: active. First four-scale run complete; controlled-plan repeat in progress.
+- Status: active. Both four-scale measurements complete; final reports and count repeat pending.
 - Baseline: `origin/main@479224809cdaae997cda51cb8853e3fafa242b65`.
 - Branch: `codex/chinese-long-form-baseline`.
 - Worktree: `/Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS`.
 - Date: 2026-10-05 (Asia/Singapore).
-- Next: run the frozen apparatus with a paired ANALYZE observation, complete the scale report, and finalize all evidence.
+- Next: finalize reports from evidence/final, verify evidence integrity and allowed paths, and push the research branch.
 
 ## Scope and decisions
 
@@ -151,3 +151,29 @@ measurement, integration, progress, and commits.
 - Final run uses the corrected count-file glob and captures tree/export order,
   canonical/session/chapter positions, actual Web Proposal actions, and the
   specified refusal when deleting a populated Volume.
+
+### Step 7: final four-scale measurement and evidence bundle
+
+- Sampler source `9bcc6967` completed all four managed database runs. Each scale
+  has 38 operation windows: 36 without a recorded error/refusal, one expected
+  `nonempty_volume` Refused result, and one failed post-export recovery.
+- `evidence/final/` retains 152 rows, actual plans, inter-window plans, IndexedDB
+  counts, tree/export order, planner state, response positions, and SHA-256 hashes.
+  The summarizer now exposes counters even for failed/refused rows and adds the
+  IndexedDB table. This post-processing change does not alter measured operations.
+- All 24 coordinate observations passed exact expected/DOM/API/PostgreSQL equality.
+- Confirmed generation-2 recovery mismatch: the Chapter position is one ahead of
+  the canonical Snapshot after export. Numeric tree ranks also sort as text at
+  every scale; the export retains that order.
+- Observed the old 1,903 count label after saving the 1,930-scalar Unicode body at
+  every scale. Record as a UI refresh defect candidate, not a count-profile change
+  or a proved statistics-API contract violation. No refresh duration was measured.
+- Web actions that remount the editor can continue after the recorded saved-state
+  window. Proposal Acceptance counters are lower bounds for the full journey;
+  deferred bootstrap plans are retained separately. Do not silently add setup
+  intervals to another operation's counters or call the window full end-to-end.
+- Final paired statistics scan visits before/after ANALYZE are 63,056/842,
+  7,963/7,967, 26,599/26,603, and 79,728/79,732. The earlier default-run bad plan
+  remains evidence; the paired run does not erase planner variability.
+- All owned database leases completed cleanup. The one-command run is now in its
+  optional native Word repeat; its previous native Word observations remain valid.

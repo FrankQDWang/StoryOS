@@ -1,0 +1,194 @@
+{
+  "schema_id": "storyos.query.agent-run.response.v2",
+  "correlation_id": "01a1082b-dee0-7040-a77b-3d99d507de6c",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "01a10829-ec59-7412-9a74-b09d8e86927b"
+  },
+  "project_agent_id": "01a1082b-dce8-7c92-8d20-9d50fcff24ab",
+  "conversation_id": "01a1082b-dce3-7530-bf55-189e0711cf90",
+  "memory_settings_revision": "01a1082b-dd1f-7fa2-8a32-f4ff5c0ad2c1",
+  "captured_memory_settings": {
+    "kind": "available",
+    "memory_settings_revision": "01a1082b-dd1f-7fa2-8a32-f4ff5c0ad2c1",
+    "use_enabled": true,
+    "contribution_enabled": true
+  },
+  "steering_inputs": [],
+  "run_id": "01a1082b-dce8-7c92-8d20-9d4786cd4b24",
+  "status": "completed",
+  "context": {
+    "operation_requirement_id": "01a1082b-dd3d-78e0-8a0f-ce43ca941f0f",
+    "input_snapshot_id": "01a1082b-dd3d-78e0-8a0f-ce55774299c2",
+    "purpose": "current_passage_assistance",
+    "token_counting_profile": {
+      "profile_revision": "storyos.token-counting.unicode-scalar.v1",
+      "algorithm_revision": "storyos.statistics.unicode-16.0.0.v1",
+      "item_token_limit": "10000"
+    },
+    "sufficiency": {
+      "kind": "complete"
+    },
+    "considered": [
+      {
+        "source_class": "host_control",
+        "source_version": "01a1082b-dd3d-78e0-8a0f-ce43ca941f0f",
+        "token_count": "0",
+        "eligible": true
+      },
+      {
+        "source_class": "author_instruction",
+        "source_version": "01a1082b-dd3d-78e0-8a0f-ce55774299c2",
+        "token_count": "36",
+        "eligible": true
+      },
+      {
+        "source_class": "working_target",
+        "source_version": "01a1082b-c192-77b2-b2eb-b90b6ff10b06",
+        "token_count": "1883",
+        "eligible": true
+      },
+      {
+        "source_class": "instruction_binding",
+        "source_version": "absent",
+        "token_count": "0",
+        "eligible": true
+      }
+    ],
+    "selected": [
+      {
+        "source_class": "author_instruction",
+        "source_version": "01a1082b-dd3d-78e0-8a0f-ce55774299c2",
+        "projection_mode": "exact_required",
+        "token_count": "36",
+        "content": "Revise this passage: keep the voice."
+      },
+      {
+        "source_class": "working_target",
+        "source_version": "01a1082b-c192-77b2-b2eb-b90b6ff10b06",
+        "projection_mode": "exact_required",
+        "token_count": "1883",
+        "content": "　　林远在山门外悄悄收起窗前晃动的影子，他知道，自己必须作出选择。旅客在城南仍然记得深夜传来的。\n老掌柜在城南找到了窗前晃动的影子，天色渐渐暗了下来。“先等一等？”沈青低声问道。陆先生在渡口找。\n“先等一等？”旅客低声问道。守夜人在旧书房找到了远处的灯火，这件事还远远没有结束。“你还记得吗？”沈青低声问道。沈青在城南看见深夜传来的钟声，谁也没有再说话。旅客在山门外想起深夜传来的钟声，风从门缝里吹了进来。小舟在旧书房仍然记得窗前晃动的影子，这件事还远远没有结束。陆先生在石桥边看见窗前晃动的影子，他知道，自己必须。\n　　“我们该走了？”沈青低声问道。“这里究竟发生了什么？”阿宁低声问道。阿宁在渡口找到了窗前晃动的影子，他知道，自己必须作出选择。老掌柜在石桥。\n阿宁在长街尽头仍然记得昨日留下的脚印，他知道，自己必须作出选择。旅客在石桥边悄悄收起一枚旧铜钱。\n小舟在雨中的庭院终于听见一枚旧铜钱，这件事还远远没有结束。老掌柜在山门外想起昨日留下的脚印，这。\n“先等一等？”老掌柜低声问道。小舟在山门外终于听见一枚旧铜钱，这件事还远远没有结束。沈青在石桥边看见昨日留下的脚印，天色渐渐暗了下来。老掌柜在河岸回头望着深夜传来的钟声，风从门缝里吹了进来。林远在旧书房终于听见一枚旧铜钱，这件事还远远没有结束。林远在河岸悄悄收起远处的灯火，他知道，自己必须作出选择。旅客在河岸仍然记得。\n老掌柜在石桥边看见远处的灯火，风从门缝里吹了进来。小舟在山门外想起昨日留下的脚印，天色渐渐暗了下来。“这里究竟发生了什么？”沈青低声问道。“我们该走了？”阿宁低声问道。“先等一等？”林远低声问道。守夜人在石桥边悄悄收起昨日留下的脚印，天色渐渐暗了下来。“我们该走了？”阿宁低声问道。“这里究竟发生了什么？”沈青低声问道。\n“这里究竟发生了什么？”沈青低声问道。阿宁在石桥边看见一枚旧铜钱，风从门缝里吹了进来。阿宁在渡口仍然记得一枚旧铜钱，天色渐渐暗了下来。“先等一等？”林远低声问道。林远在长街尽头回头望着窗前晃动的影子，谁也没有再说话。老掌柜在旧书房仍然记得一枚旧铜钱，天色。\n　　“先等一等？”林远低声问道。守夜人在渡口看见一枚旧。\n小舟在城南回头望着远处的灯火，这件事还远远没有结束。林远在长街尽头想起远处的灯火，风从门缝里吹了进来。小舟在城南终于听见昨日留下的脚印，这件事。\n守夜人在长街尽头终于听见深夜传来的钟声，谁也没有再说话。林远在渡口回头望着深夜传来的钟声，他知道，自己必须作出选择。守夜人在石桥边看见一枚旧铜钱，谁也没有再说话。守夜人在长街尽头想起深夜传来。\n“先等一等？”林远低声问道。小舟在长街尽头想起一枚旧铜钱，这件事还远远没有结束。沈青在山门外看。\n“你还记得吗？”阿宁低声问道。小舟在渡口悄悄收起那封没。\n阿宁在雨中的庭院仍然记得昨日留下的脚印，风从门缝里吹了。\n“这里究竟发生了什么？”沈青低声问道。旅客在城南仍然记得昨日留下的脚印，风从门缝里吹了进来。守夜人在长街尽头想起远处的灯火，这件事还远远没有结束。老掌柜在长街尽头找到了窗前晃动的影子，天色渐。\n“先等一等？”沈青低声问道。旅客在旧书房想起远处的灯火，风从门缝里吹了进来。陆先生在石桥边悄悄。\n老掌柜在雨中的庭院仍然记得深夜传来的钟声，谁也没有再说话。阿宁在雨中的庭院仍然记得远处的灯火，。\n“你还记得吗？”旅客低声问道。“先等一等？”小舟低声问道。林远在旧书房仍然记得窗前晃动的影子，谁也没有再说话。陆先生在旧书房仍然记得窗前晃动的影子，谁也没有再说话。阿宁在雨中的庭院找到了窗前晃动的影子，这件事还远远没有结束。守夜人在雨中的庭院回头望着昨日。\n守夜人在石桥边回头望着窗前晃动的影子，风从门缝里吹了进来。“这里究竟发生了什么？”老掌柜低声问道。守夜人在山门外找到了那封没有署名的信，这件事还远远没有结束。守夜人在长街尽头找到了那封没有署名的信，风从门缝里吹了进来。阿宁在河岸仍然记得窗前晃动的影子，这。\n　　旅客在河岸仍然记得昨日留下的脚印，这件事还远远没有结束。陆先生在渡口想起深夜传来的钟声，这件事还远远没有结束。旅客在城南仍然记得远处的灯火。\n陆先生在雨中的庭院仍然记得深夜传来的钟声，天色渐渐暗了下来。阿宁在长街尽头终于听见一枚旧铜钱，风从门缝里吹了进来。“你还记得吗？”守夜人低声问道。陆先生在长街尽头终于听见远处的灯火，这件事还远远没有结束。旅客在渡口悄悄收起一枚旧铜钱，这件事还远远没有结束。“你还记得吗？”陆先生低声问道。“先等一等？”旅客低声问道。“。\n沈青在城南仍然记。"
+      }
+    ],
+    "rejected": [],
+    "host_control": {
+      "distinct_from_destination": true,
+      "destination_visible": true
+    },
+    "assembly_manifest_id": "01a1082b-dd44-78e2-aa8b-53a76443b8db",
+    "destination_context_manifest": {
+      "kind": "present",
+      "manifest_id": "01a1082b-de1a-7670-a9f7-00e4dd5ddd53"
+    },
+    "outbound_disclosure_manifest": {
+      "kind": "present",
+      "manifest_id": "01a1082b-de1a-7670-a9f7-00f338efc93a"
+    },
+    "destination_io": {
+      "kind": "host_fake"
+    },
+    "current_availability": {
+      "working_target": {
+        "kind": "current"
+      }
+    }
+  },
+  "decision": {
+    "kind": "prose_change",
+    "decision_id": "01a1082b-de4f-7711-993d-59266d87bcde",
+    "selected": true,
+    "text": "Guard the narrator voice in this passage.",
+    "producer_input": "Guard the narrator voice in this passage.",
+    "continuation": {
+      "kind": "present",
+      "continuation_binding_id": "01a1082b-de98-7d51-9566-72febaa4d207"
+    },
+    "authoritative": false,
+    "opened_proposal": {
+      "kind": "present",
+      "proposal_id": "01a1082b-de66-7d00-b748-fc701507e898"
+    }
+  },
+  "model_attempt": {
+    "kind": "present",
+    "model_attempt_id": "01a1082b-de1a-7670-a9f7-00b072f9962e",
+    "destination_attempt_id": "01a1082b-de1a-7670-a9f7-00c34aa7e7ba",
+    "outbound_disclosure_event_id": "01a1082b-de1a-7670-a9f7-00d0d5469805",
+    "model_invocation_id": "01a1082b-de1d-7f40-af77-c2a3d083fd1b",
+    "dispatch_state": "settled",
+    "prior_continuation": {
+      "kind": "absent"
+    },
+    "known_prior_continuation": {
+      "kind": "absent"
+    },
+    "input_mapping": "none",
+    "admission": {
+      "processing_destination_identity": "01a1082b-dc59-7b33-9bd0-adb8be74392c",
+      "evidence_revision": "1",
+      "model_registration_revision": "018f0000-0000-7001-8000-00000000fa01",
+      "adapter_mapping": "storyos.host-fake.mapping.v1",
+      "project_model_use_binding_revision": "01a1082b-dc59-7b33-9bd0-addc5fd9f0cc",
+      "external_compatibility_decision": "01a1082b-dc59-7b33-9bd0-ade3100d3035"
+    }
+  },
+  "active_compaction": {
+    "kind": "absent"
+  },
+  "reference_recovery": {
+    "kind": "absent"
+  },
+  "original_result_retrieval": {
+    "kind": "absent"
+  },
+  "unknown_create_successor": {
+    "kind": "absent"
+  },
+  "evidence": [
+    {
+      "kind": "sent_content",
+      "attempt_id": "01a1082b-de1a-7670-a9f7-00b072f9962e",
+      "availability": "current",
+      "content": "Revise this passage: keep the voice."
+    },
+    {
+      "kind": "stored_reference",
+      "attempt_id": "01a1082b-de1a-7670-a9f7-00b072f9962e",
+      "availability": "current",
+      "reference_id": "01a1082b-dd44-78e2-aa8b-53a76443b8db"
+    },
+    {
+      "kind": "provider_report",
+      "attempt_id": "01a1082b-de1a-7670-a9f7-00b072f9962e",
+      "availability": "current",
+      "report": "host_fake_no_provider_usage"
+    },
+    {
+      "kind": "provider_opaque",
+      "attempt_id": "01a1082b-de1a-7670-a9f7-00b072f9962e",
+      "availability": "unknown",
+      "unknown_facts": [
+        "provider_internal_content"
+      ]
+    }
+  ],
+  "items": [
+    {
+      "item_id": "1",
+      "role": "assistant",
+      "state": "complete",
+      "phase": "complete",
+      "text": "Guard the narrator voice in this passage.",
+      "summary": "host_fake_native_text",
+      "call_id": null,
+      "arguments": null,
+      "refusal": null,
+      "hosted_report": null
+    }
+  ],
+  "usage": {
+    "kind": "unknown"
+  },
+  "redaction_profile": "storyos.author.v1"
+}
