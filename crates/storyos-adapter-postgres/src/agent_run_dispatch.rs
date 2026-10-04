@@ -297,6 +297,12 @@ async fn record_create(
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let response = match observation {
         CreateObservation::Terminal(response) => response,
+        CreateObservation::OutcomeUnknown { .. }
+            if retained.get("original_result_retrieval").is_some()
+                || retained.get("unknown_create_successor").is_some() =>
+        {
+            return Ok(WorkPhase::Hold("recovery"));
+        }
         CreateObservation::OutcomeUnknown { .. } => {
             update_run(
                 client,

@@ -15,7 +15,7 @@ const HOST_FAKE_EXECUTION_PROFILE: &str = "storyos.host-fake.execution.v1";
 pub struct FakeDestination;
 
 /// The single-use prepared exchange of one fake request.
-pub struct FakeExchange(create_plan::FakeCreate);
+pub struct FakeExchange(Option<create_plan::FakeCreate>);
 
 impl ModelProviderAdapter for FakeDestination {
     type Prepared = FakeExchange;
@@ -46,7 +46,10 @@ impl ModelProviderAdapter for FakeDestination {
         };
         Ok(PreparedRequest {
             projection,
-            prepared: FakeExchange(create_plan::plan_create(create)),
+            prepared: FakeExchange(
+                (!create_plan::create_outcome_unknown(&create.author_message))
+                    .then(|| create_plan::plan_create(create)),
+            ),
         })
     }
 
@@ -55,7 +58,11 @@ impl ModelProviderAdapter for FakeDestination {
         prepared: FakeExchange,
         sink: &mut impl ModelStreamSink,
     ) -> CreateObservation {
-        let FakeExchange(planned) = prepared;
+        let FakeExchange(Some(planned)) = prepared else {
+            return CreateObservation::OutcomeUnknown {
+                response_reference: None,
+            };
+        };
         if sink.append(&planned.items).await == StreamControl::Stop {
             return CreateObservation::OutcomeUnknown {
                 response_reference: None,
