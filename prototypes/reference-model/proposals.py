@@ -307,3 +307,18 @@ def run(http, seed, differences, coverage, selected=None):
             e.refresh()
             compare('Proposal Undo leaves canonical prose', e.text, e.session['base_snapshot']['materialized_revision']['body'], differences)
             coverage['undoLatestAuthorAction:compensated'] += 1
+
+        elif mode == 'proposal-structure':
+            e = p.editor
+            unit = units('', 1, 1)[0]
+            unit['normalized_primitives'] = [dict(kind='split_block', manuscript_block_id=p.p['manuscript_block_id'],
+                new_manuscript_block_id=http.identity(), offset=1)]
+            values = e.request([unit])
+            values.update(expected_proposal_head_revision_ids=[p.p['revision_id']], observed_ownership_partition='mixed',
+                proposal_target=dict(proposal_id=p.proposal_id, revision_id=p.p['revision_id'],
+                    operation_id=p.p['operation_id'], manuscript_block_id=p.p['manuscript_block_id']))
+            status, response = http.command('applyAuthorEdit', values, project_id=e.s.project)
+            coverage['foundation_probe:proposal_structural:HTTP_' + str(status)] += 1
+            e.refresh()
+            compare('Proposal structural probe leaves canonical prose', e.text,
+                e.session['base_snapshot']['materialized_revision']['body'], differences)

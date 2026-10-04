@@ -215,3 +215,9 @@ Managed exit: 0. D-002-shaped differences: 5. Other differences: 0. Evidence: `r
 ## Writer and Challenge batch 440-444
 
 Managed exit: 0. D-002-shaped differences: 5. Other differences: 0. Evidence: `replay-440-444.json.gz` and `replay-440-444.log`. Final replay audit must confirm response status and changed fields before classification.
+
+## Step 19: Writer and Challenge count threshold
+
+Seeds 420-444 completed all 25 writer, digest/body/nonce binding, capacity, and post-capacity exact-Challenge retry cases. Both rate classes reached 25 stable-window capacity observations; no extra count run is needed. `writer-replay-audit.json` confirms all 25 delayed Chapter retry differences are HTTP 503/project_store_unavailable, the same D-002. No other difference occurred.
+
+The run output now records candidate package source, manifest/server digests, and harness commit. This separates the fixed contract baseline from a later candidate package. Added usage and reachability documents. Next: one foundation-only structural Proposal reachability probe and the final real-clock expiry run.

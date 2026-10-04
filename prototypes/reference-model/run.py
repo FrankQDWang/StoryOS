@@ -173,6 +173,12 @@ def main():
     parser.add_argument('--output', default='target/reference-model/bootstrap.json')
     args = parser.parse_args()
     package = ROOT / 'target/release-package'
+    manifest_bytes = (package / 'web/manifest.json').read_bytes()
+    package_manifest = json.loads(manifest_bytes)
+    provenance = dict(package_source_commit=package_manifest['source_commit'],
+        web_manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+        server_sha256=hashlib.sha256((package / 'storyos-server').read_bytes()).hexdigest(),
+        harness_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip())
     environment = {**os.environ, 'STORYOS_DATABASE_URL': os.environ['STORYOS_TEST_DATABASE_URL'],
         'STORYOS_BOOTSTRAP_SESSIONS': json.dumps({'reference-model': '018f0000-0000-7001-8000-000000000001'}),
         'STORYOS_CHALLENGE_SECRET': 'reference-model-disposable-database-secret',
@@ -205,7 +211,7 @@ def main():
         server.terminate()
         server.wait(timeout=15)
         result = dict(seed=args.seed, count=args.count, stage=args.stage, case=args.case, base='479224809cdaae997cda51cb8853e3fafa242b65',
-                      coverage=dict(coverage), differences=differences, trace=trace)
+                      coverage=dict(coverage), differences=differences, trace=trace, provenance=provenance)
         output = ROOT / args.output
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
