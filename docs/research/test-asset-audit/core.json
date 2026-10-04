@@ -1299,8 +1299,8 @@
     "test": "utf8_lf_profile_matches_pinned_golden_cases",
     "verdict": "KEEP",
     "reason": "K1",
-    "evidence": "An empty Project, empty Volume, and unavailable Chapter body have distinct exported byte forms; collapsing absent and empty body invents or loses text. HTTP pinned export covers an empty PRESENT body and live-source pinning, not absent body, empty Project or empty Volume. Preserve these golden byte cases; the profile string equality itself adds no behavior.",
-    "coverage": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124",
+    "evidence": "An empty Volume and unavailable Chapter body have distinct exported byte forms; collapsing absent and empty body invents or loses text. The pinned HTTP export covers an empty PRESENT body, and embedded readable completion covers an empty Project, but neither covers an empty Volume or absent body. Preserve those distinct golden cases; the profile string equality adds no behavior.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124; apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:476",
     "remove": null
   },
   {

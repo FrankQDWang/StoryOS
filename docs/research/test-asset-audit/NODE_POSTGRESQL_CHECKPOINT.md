@@ -1,6 +1,6 @@
 # Node PostgreSQL checkpoint
 
-Source review is partial: 139 runtime cases in 45 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
+Source review is partial: 157 runtime cases in 50 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
 
 | Reviewed file | Cases | Verdict counts |
 |---|---|---|
@@ -28,10 +28,15 @@ Source review is partial: 139 runtime cases in 45 files have individual verdicts
 | apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/manuscript-tree-http.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts | 2 | {'MERGE': 1, 'KEEP': 1} |
+| apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts | 6 | {'KEEP': 6} |
+| apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts | 3 | {'KEEP': 3} |
 | apps/web/test/node-postgresql/project-http.integration.test.ts | 8 | {'MERGE': 1, 'KEEP': 7} |
 | apps/web/test/node-postgresql/protocol-http-host.integration.test.ts | 5 | {'DELETE': 1, 'KEEP': 4} |
+| apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts | 6 | {'KEEP': 6} |
+| apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts | 4 | {'KEEP': 3, 'DELETE': 1} |
+| apps/web/test/node-postgresql/recovery-archived-exports-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts | 1 | {'KEEP': 1} |
@@ -52,7 +57,7 @@ Source review is partial: 139 runtime cases in 45 files have individual verdicts
 
 ## Next files
 
-Continue Proposal, Run, context and export command families. Structural commands, Current Chapter and Undo are now reviewed.
+Continue Inline Proposal and multi-operation selection tests. Other Node PostgreSQL command files are reviewed.
 
 ## Evidence corrections and execution dependencies
 
@@ -69,12 +74,6 @@ Continue Proposal, Run, context and export command families. Structural commands
 ## Pending files
 
 - apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts
-- apps/web/test/node-postgresql/export-acknowledgement-support.ts
-- apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts
-- apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts
-- apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts
-- apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts
-- apps/web/test/node-postgresql/recovery-archived-exports-http.integration.test.ts
 - apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts
 
 ## Structural and navigation checkpoint
@@ -138,3 +137,14 @@ Continue Proposal, Run, context and export command families. Structural commands
 - MERGE takeover-http:113 into takeover-late-result:119. Takeover authority counts must be captured after the initial Author Edit and before Takeover; transfer complete response and superseded-writer projections. The retained case already checks immutable canonical Snapshots, new winner base, prior base preservation, old committed replay and fresh stale-writer refusal. Its simulated delivery loss occurs after reading the response, so it is not a transport cut.
 - Earlier citations to these new MERGE/MOVE/DELETE rows need reconciliation. This checkpoint adds 124 direct candidate lines from two deleted test bodies; conditional transfers and sole-use helper cleanup are not included.
 - No source mutations, product/test/generated edits, database operations or runtime tests ran. Self-check remains 0/30.
+
+## Export checkpoint
+
+- NP140-NP157 cover five export files and 18 tests. All remain KEEP after comparison of actual loaders, completion functions, output tables and consumers. Similar test helpers are not evidence of shared product replay code.
+- Archive and readable commands own separate replay SELECT columns and error mappings. Each frozen-acknowledgement and historical/damaged-evidence test protects its own persisted response path. Pinned-output tests instead inspect captured payloads after live edits.
+- Embedded Worker execution calls storyos_worker::run then step. External --once calls run_once. Those functions have separate readable/archive match arms. Keep both embedded completion cases: removing step's readable arm would not break external pinned-output or embedded Archive coverage. A preliminary merge hypothesis was rejected before any verdict was committed.
+- Snapshot expiry occurs before pinned-source load. Missing source with an available Snapshot checks a later branch and absence of output persistence. Readable additionally tests valid-hash incomplete facts and invalid-hash complete facts. The two output families use different decoders and persistence functions.
+- The nested-source Archive test checks inclusion of an earlier readable source and exclusion of itself. It does not observe claim order: both Worker claims finish before assertions. AD045 remains the measured priority owner.
+- recovery-archived-exports-http:122 is an executable fixture provider for scripts/verify-recovery-hold.sh:175. scripts/recovery-hold-drill.sh:105 and the post-restore call at verify-recovery-hold.sh:718 consume its named Projects. Keep this dependency. The test itself does not restore or re-download after Archive; the inspector later verifies readable prose and nonempty ZIP, not Archive byte equality.
+- export-acknowledgement-support.ts has no test declaration. SUPPORT.md records its retained callers and zero direct savings. Export Activity count regexes /0$/ and /1$/ are weaker than exact counts; no duplicate-count guarantee is inferred from them.
+- Updated CO106's comparison: readable HTTP now explicitly covers empty-Project bytes. The Core golden still uniquely covers empty Volume and absent Chapter body. No runtime or mutation check occurred; all conclusions here are source evidence.

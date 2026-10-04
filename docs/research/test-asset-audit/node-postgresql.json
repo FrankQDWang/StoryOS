@@ -1631,5 +1631,203 @@
     "evidence": "Takeover after an Author Edit has committed must refresh the winner's base from current authority, preserve all prior canonical Snapshots and the prior writer's base, and permit exact outcome/replay of that committed old-writer edit while rejecting a fresh old-generation edit. Basic Takeover has no intervening committed edit; Adapter counter/race tests do not inspect all public Snapshot/Session/Chapter projections and old-writer outcome query. Delivery loss here is thrown after reading the complete HTTP response, so it proves post-commit replay across Takeover, not a transport/process-cut race. Receive basic response and authority assertions from takeover-http:113.",
     "coverage": "apps/web/test/node-postgresql/takeover-http.integration.test.ts:113; crates/storyos-adapter-postgres/src/takeover_admission_tests.rs:632; crates/storyos-adapter-postgres/src/takeover_persistence_tests.rs:535",
     "remove": null
+  },
+  {
+    "id": "NP140",
+    "path": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts",
+    "line": 295,
+    "test": "exportProjectArchive admits one inspectable in-progress operation",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Archive admission must remain inspectable without ZIP bytes, isolate actual foreign export IDs, reconstruct ready status from a legacy manifest without an operation row, and reject new exports after Archive while retaining earlier status. This is the only compared legacy Archive fallback plus expired legacy Snapshot query. Worker-ready and pinned-source cases do not remove the operation row. The Activity /0$/ assertion is weaker than exact zero; foreign challenged POST stops at Challenge admission.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558; apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts:148",
+    "remove": null
+  },
+  {
+    "id": "NP141",
+    "path": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts",
+    "line": 558,
+    "test": "the in-process Worker settles an admitted Project Export Archive to ready",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The embedded Worker must turn an admitted Archive into a downloadable ZIP without an external Worker process. ZIP STORE parsing requires the reconfirmation family, excludes Challenge tables, and repeated downloads must be byte-identical and remain available after Project Archive. Pinned-source cases use an external Worker and inspect different retained payloads; Core byte vectors do not prove HTTP delivery or secret-family exclusion. The Activity /1$/ check is not an exact count.",
+    "coverage": "apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts:148; crates/storyos-core/src/project_archive_tests.rs:35; crates/storyos-adapter-postgres/src/project_archive_build_tests.rs:101",
+    "remove": null
+  },
+  {
+    "id": "NP142",
+    "path": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts",
+    "line": 664,
+    "test": "the Worker settles failed when the Project is archived after admission",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A Project archived after admission must fail the Archive Worker operation with archived_project, publish no root or ZIP, and replay the original accepted acknowledgement without reviving the failed operation. Admission refusal does not execute this later lifecycle check, and readable completion uses a separate operation table and persist_failed_export path.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295; apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:540",
+    "remove": null
+  },
+  {
+    "id": "NP143",
+    "path": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts",
+    "line": 751,
+    "test": "the Worker settles failed when the pinned Snapshot is unavailable before output exists",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An expired admitted Snapshot must prevent Archive completion and retain the pinned_export_source_unavailable Receipt with no root. Missing-source coverage keeps its Snapshot available and enters a later branch; readable expiry invokes a different completion function and output table.",
+    "coverage": "apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts:273; apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:630",
+    "remove": null
+  },
+  {
+    "id": "NP144",
+    "path": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts",
+    "line": 815,
+    "test": "exportProjectArchive freezes the Accepted acknowledgement after later title and Current Chapter changes and Worker settlement",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Archive acknowledgement replay must retain the admitted empty Project projection and exact bytes after the live Project gains a Chapter and title, Worker settlement, and Server restart. Payload pinning checks ZIP families, not acknowledgement bytes. Readable and structural commands have different replay SQL readers and response error conversions.",
+    "coverage": "apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts:148; apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:688",
+    "remove": null
+  },
+  {
+    "id": "NP145",
+    "path": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts",
+    "line": 842,
+    "test": "exportProjectArchive distinguishes historical absence from damaged new-format evidence",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Archive replay must distinguish missing historical acknowledgement evidence from damaged current-format projection and leave command, operation and source records unchanged. Archive owns its replay SQL offsets and HTTP error match; the readable helper executes a separate loader despite sharing test code. Successful frozen replay never enters either error branch.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:815; apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:715",
+    "remove": null
+  },
+  {
+    "id": "NP146",
+    "path": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts",
+    "line": 233,
+    "test": "exportHumanReadableManuscript admits one inspectable in-progress operation",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Readable admission must expose a durable in-progress operation without manuscript bytes, isolate actual foreign IDs, reconstruct legacy ready output after removing the operation row, and refuse fresh admission after Project Archive. The Archive reader uses separate tables and fallback code; normal readable Worker completion does not exercise manifest-only historical output. The Activity /0$/ oracle is not exact zero; foreign challenged POST stops at Challenge admission.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295",
+    "remove": null
+  },
+  {
+    "id": "NP147",
+    "path": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts",
+    "line": 476,
+    "test": "the in-process Worker settles an admitted human-readable export to ready",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The embedded Worker's readable branch must settle an admitted operation to exact empty manuscript bytes/hash, preserve accepted replay, and publish settlement Activity. External Worker --once calls run_once, while the embedded loop calls a separate step match; deleting only step's readable arm would leave external pinned-output and embedded Archive tests passing. Keep this readable loop-path case. Empty-byte rendering is also covered by Core; the Activity /1$/ check is weaker than exact one.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558; crates/storyos-core/src/readable_export_tests.rs:4",
+    "remove": null
+  },
+  {
+    "id": "NP148",
+    "path": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts",
+    "line": 540,
+    "test": "the Worker settles failed when the Project is archived after admission",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Archiving after readable admission must settle a failed operation with archived_project and no manuscript, while exact admission replay stays accepted and failed status persists. The admission case archives before a fresh request; Archive Worker completion has its own SQL and failure persistence and cannot detect a readable-only missing lifecycle check.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:233; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:664",
+    "remove": null
+  },
+  {
+    "id": "NP149",
+    "path": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts",
+    "line": 630,
+    "test": "the Worker settles failed when the pinned Snapshot is unavailable before output exists",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Readable completion must fail when its admitted Snapshot has expired, without returning manuscript bytes, and retain the source-unavailable Receipt. Invalid-source cases keep a live Snapshot and exercise the later source loader. Archive expiry does not execute readable completion and settlement SQL.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:448; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:751",
+    "remove": null
+  },
+  {
+    "id": "NP150",
+    "path": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts",
+    "line": 688,
+    "test": "exportHumanReadableManuscript freezes the Accepted acknowledgement after later title and Current Chapter changes and Worker settlement",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Readable acknowledgement must keep the original empty Project projection and exact bytes after a live Chapter/title change, output settlement and Server restart. The pinned manuscript case protects output content instead. Archive and structural freeze tests execute different command-specific replay readers, so they cannot detect a readable replay selecting the live Project.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:815",
+    "remove": null
+  },
+  {
+    "id": "NP151",
+    "path": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts",
+    "line": 715,
+    "test": "exportHumanReadableManuscript distinguishes historical absence from damaged new-format evidence",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Readable replay must report historical-evidence conflict for absent format/projection, but unavailable for damaged current-format JSON, without creating duplicate retained records. Its SQL projection offsets and HTTP problem mapping are separate from Archive despite the common assertion helper; positive replay does not cover these stored states.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:688; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:842",
+    "remove": null
+  },
+  {
+    "id": "NP152",
+    "path": "apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts",
+    "line": 148,
+    "test": "an admitted Project Export Archive settles the pinned families after later live changes",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Archive bytes must use the admitted title and manuscript-object families after the live Project is renamed and gains a Volume. Returning current families can still pass stable acknowledgement tests, which never inspect ZIP content. Readable pinning uses different captured facts and a different renderer; empty Archive downloads have no intervening source mutation.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:815; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558; apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124",
+    "remove": null
+  },
+  {
+    "id": "NP153",
+    "path": "apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts",
+    "line": 273,
+    "test": "an Archive whose Pinned Export Source is missing settles failed without live fallback",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "With an available Snapshot but a missing Archive pinned-source row, completion must fail with source-unavailable, no root, no ZIP and zero entry rows instead of rebuilding from live data. Snapshot expiry fails before the source load. The readable missing-source variant shares loading but cannot detect Archive-only fallback or entry persistence in its completion branch.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:751; apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:448",
+    "remove": null
+  },
+  {
+    "id": "NP154",
+    "path": "apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts",
+    "line": 334,
+    "test": "a later Archive packs other in-progress Pinned Export Sources and not its own",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An Archive captured while a readable export is pending must include the earlier readable pinned-source record but exclude its own source row. Ordinary Archive families and readable output never inspect this nested source family. This test runs both claims before checking final states, so its readable-first comment does not prove claim priority; the Adapter case owns that invariant.",
+    "coverage": "apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts:148; crates/storyos-adapter-postgres/src/export_work_tests.rs:54",
+    "remove": null
+  },
+  {
+    "id": "NP155",
+    "path": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts",
+    "line": 124,
+    "test": "an admitted human-readable export settles the pinned manuscript after later live changes",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Readable output must preserve the admitted Volume/Chapter names and empty present body after live renames, prose editing and additional objects, and remain readable after deleting its source row once settled. Frozen acknowledgement coverage protects only response projection; Archive pinning uses different capture and output formats. The embedded-loop completion case exercises a different Worker dispatch function.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:688; apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts:148; apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:476",
+    "remove": null
+  },
+  {
+    "id": "NP156",
+    "path": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts",
+    "line": 448,
+    "test": "missing, partial, and digest-invalid Pinned Export Sources settle failed without live fallback",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Missing source, incomplete facts with a valid recomputed digest, and complete facts with an invalid digest must all fail readable completion with no manuscript/output row and the retained source-unavailable Receipt. These are three inputs inside one runtime test. Snapshot expiry bypasses this loader; the Archive missing-row case neither enters readable decoding nor distinguishes digest failure from structurally incomplete facts.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:630; apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts:273",
+    "remove": null
+  },
+  {
+    "id": "NP157",
+    "path": "apps/web/test/node-postgresql/recovery-archived-exports-http.integration.test.ts",
+    "line": 122,
+    "test": "public completed exports remain retained after lawful archive for physical recovery",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Keep the two nonempty publicly authored export fixtures consumed by the mixed physical recovery drill. Losing archived output or its retained records would break scripts/verify-recovery-hold.sh:175 and its post-restore inspector at :718. This test verifies content before Archive and ready/counts afterward; it does not itself perform a restore or re-download after Archive. Other export cases do not supply the exact two Projects consumed by the recovery script. The inspector checks readable prose but only nonempty Archive ZIP bytes after restore, not byte equality.",
+    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558; apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124; crates/storyos-adapter-postgres/src/recovery_visibility_proof_tests.rs:363",
+    "remove": null
   }
 ]

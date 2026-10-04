@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 652 test cases in 175 files have source verdicts. The audit is not complete.
+- Status: active. 670 test cases in 180 files have source verdicts. The audit is not complete.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
 - Complete source-review directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests); crates/storyos-contracts/src (14 files, 62 tests). Cross-directory reconciliation and mutation review are still pending.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: continue apps/web/test/node-postgresql Proposal/Run/context/export families. Its first 139 runtime cases in 45 files are adjudicated; read NODE_POSTGRESQL_CHECKPOINT.md. Then browser-source, browser-exact-dist, node-process-cut and support. All 482 Rust tests in 122 files have source verdicts; CONTRACTS_CHECKPOINT.md records the last Rust directory. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
+- Next: finish apps/web/test/node-postgresql Inline Proposal and multi-operation selection families. Its first 157 runtime cases in 50 files are adjudicated; read NODE_POSTGRESQL_CHECKPOINT.md. Then browser-source, browser-exact-dist, node-process-cut and support. All 482 Rust tests in 122 files have source verdicts; CONTRACTS_CHECKPOINT.md records the last Rust directory. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
 - No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -34,7 +34,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | Directory | State | Evidence |
 |---|---|---|
 | apps/web/test/node-contract | Source review complete | node-contract.md; 31 runtime cases, 8 files; mutation review pending |
-| apps/web/test/node-postgresql | Partial | node-postgresql.md; 139 runtime cases in 45 files; NODE_POSTGRESQL_CHECKPOINT.md |
+| apps/web/test/node-postgresql | Partial | node-postgresql.md; 157 runtime cases in 50 files; NODE_POSTGRESQL_CHECKPOINT.md |
 | apps/web/test/browser-source | Pending | inventory.json |
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
 | apps/web/test/node-process-cut | Pending | inventory.json |
@@ -129,3 +129,6 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 
 - Run admission/Takeover checkpoint: Node PostgreSQL now has 139 runtime cases in 45 files (110 KEEP, 15 DELETE, 13 MERGE, 1 MOVE). Two newly deleted cases duplicate settled replay or test helper quota reset. The Conversation race needs deterministic Adapter scheduling; four assertion transfers consolidate existing fixtures.
 - Current cumulative source review: 652 cases in 175 files; DELETE 319, KEEP 306, MERGE 23, MOVE 4; 12956 unioned candidate source lines. Next: remaining inline/multi-operation and export Node PostgreSQL files, then other Web directories and cross-directory reconciliation. Self-check 0/30; no samples, temporary mutations or active processes.
+
+- Export checkpoint: Node PostgreSQL now has 157 runtime cases in 50 files (128 KEEP, 15 DELETE, 13 MERGE, 1 MOVE). Separate embedded Worker dispatch arms and the physical recovery drill's fixture dependencies justify keeping all 18 export tests. See NODE_POSTGRESQL_CHECKPOINT.md and SUPPORT.md.
+- Current cumulative source review: 670 cases in 180 files; DELETE 319, KEEP 324, MERGE 23, MOVE 4; 12956 unioned candidate source lines. Only Inline Proposal and multi-operation selection test files remain in Node PostgreSQL. Other Web directories, support and cross-directory reconciliation remain pending. Self-check 0/30; no samples, temporary mutations or active processes.
