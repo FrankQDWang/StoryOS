@@ -1,8 +1,8 @@
 # Verification observation
 
 This optional local service displays retained verification records. It is not
-part of the [Repository verification](verification.md) main flow, and an
-implementer does not need it to run checks.
+part of the [Repository verification](verification.md) main flow. An
+implementer can run checks without this service.
 
 Use Docker Engine with Compose 2.24.4 or later and Python 3.13 or later.
 `make observe-start` builds the pinned Grafana OSS image and SQLite plugin, imports

@@ -450,7 +450,7 @@ The current proof revision hands off to the existing [Stage 3](https://github.co
 The current Stage 3 specification owns its accepted implementation handoff
 and pending final release evidence. Any later change to a specification or
 child graph requires alignment with the `to-spec` skill. Before publication, the
-`to-tickets` skill review covers the changed breakdown and native blocking edges. Reuse current
+`to-tickets` skill review includes the changed breakdown and native blocking edges. Reuse current
 owners and closed prerequisites. Stage 4 and later remain on EXECUTION HOLD.
 This proof contract does not claim that any product stage has passed.
 

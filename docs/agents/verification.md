@@ -1,7 +1,7 @@
 # Repository verification
 
 This guide is the single owner of verification commands for every agent client.
-The main flow comes first. Reference sections follow it.
+The main flow comes first. The reference sections are after it.
 
 ## Daily loop
 
@@ -39,7 +39,7 @@ the PR with an ordinary merge commit.
    - When Codex implements, use a different agent tool or a separate Claude Code
      session for each axis.
 3. Post each verdict as a PR comment. If a verdict is `FAIL`, fix the findings.
-   Commit the fix. Push the fix. Then do steps 1 and 2 again. Continue until both axes
+   Commit the fix. Push the fix. Then do steps 1 and 2 again. Continue until the two axes
    PASS.
 4. Write one review record for each axis as JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context` (for example `codex-standards-pr<pr>` or `codex-spec-pr<pr>`), `result` (`PASS` or `FAIL`), and `evidence`. The executor context and the two reviewer contexts must differ. IDs assert consistency, not authenticated identity.
 5. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
@@ -94,17 +94,17 @@ checkout locks do not enforce a host-wide budget.
 
 These commands and rules are the same for every agent client, for example Claude
 Code and Codex. Codex loads `AGENTS.md` directly. Claude Code loads it through
-`CLAUDE.md`. If a client loads neither file, include this document in its project
+`CLAUDE.md`. If a client does not load `AGENTS.md` or `CLAUDE.md`, include this document in its project
 instructions. The checked policy is the common owner. Client instructions link
-here and do not copy its rules. Any client can own an implementation, review, or
+here and do not copy its rules. Each client can own an implementation, review, or
 coordinator role. The Standards and Spec reviewers use an agent tool that is
 different from the implementer's tool, as
 [Candidate review and admission](#candidate-review-and-admission) specifies.
 
 ## Reference
 
-Read the sections below when the daily loop, a status `nextAction`, or a review
-needs their details.
+For details about the daily loop, a status `nextAction`, or a review, read the
+sections below.
 
 ## Input inventory and complete-run reports
 
