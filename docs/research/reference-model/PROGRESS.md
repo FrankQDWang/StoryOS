@@ -139,3 +139,7 @@ Seed 310 passed 19 scenarios with zero differences, including missing required d
 Next: check the new Reversal Proposal frontier, collect Proposal counts, and verify real five-minute Challenge expiry without clock injection.
 
 Step 13 follow-up: seed 311 confirms that the new Reversal Proposal action becomes a Barrier for the next Undo. Its first Revision has no exact restoration handler. The request returns unavailable/barrier with stable exact retry and no authority change. Evidence: `reversal-barrier-311.json.gz`; managed run `a72a7d666617458fbddf6d2f57c2b323`.
+
+## Proposal batch 320-323
+
+Managed exit: 0. Differences: 0. Evidence: `proposals-320-323.json.gz` and `proposals-320-323.log`. Counts include only recorded calls.
