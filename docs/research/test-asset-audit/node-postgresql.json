@@ -6,11 +6,14 @@
     "test": "the generated client boots protected Web state over the real Server HTTP boundary",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The exact-dist bootstrap loads the real page, reaches protected-ready through app.ts -> bootProtectedWebClient, and successfully acquires a prospective Challenge. This direct Node call repeats successful profile negotiation; its whole-profile equality copies the same generated profile used by boot.",
+    "evidence": "The exact-dist bootstrap loads the real page, reaches protected-ready through app.ts -> bootProtectedWebClient, and successfully acquires a prospective Challenge. This direct Node call repeats successful profile negotiation; its whole-profile equality copies the same generated profile used by boot. Execution order: keep the cited covering test until BD003 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/browser-exact-dist/s2-01-bootstrap-challenge.integration.test.ts:48",
     "remove": [
       24,
       33
+    ],
+    "coverage_dependencies": [
+      "BD003"
     ]
   },
   {

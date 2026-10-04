@@ -1,0 +1,309 @@
+{
+  "baseline": "479224809cdaae997cda51cb8853e3fafa242b65",
+  "seed": 4205576894231042062,
+  "algorithm": "Python random.Random(seed).sample(sorted DELETE rows by id, 30)",
+  "population_count": 335,
+  "population_sha256": "0b4bccaddfe47e67e146c99f776e4fdac66a713f072a42985a4b18324398498b",
+  "samples": [
+    {
+      "sample": 1,
+      "id": "CO105",
+      "path": "crates/storyos-core/src/readable_export_command_tests.rs",
+      "line": 19,
+      "test": "active_project_is_admitted",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:233",
+      "status": "pending"
+    },
+    {
+      "sample": 2,
+      "id": "AP004",
+      "path": "crates/storyos-application/src/update_project_tests.rs",
+      "line": 86,
+      "test": "a_changed_update_project_binding_is_refused_before_the_store",
+      "reason": "D5",
+      "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+      "status": "pending"
+    },
+    {
+      "sample": 3,
+      "id": "AP055",
+      "path": "crates/storyos-application/src/update_project_assistance_tests.rs",
+      "line": 110,
+      "test": "a_changed_retry_digest_is_refused_before_the_store",
+      "reason": "D5",
+      "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
+      "status": "pending"
+    },
+    {
+      "sample": 4,
+      "id": "CO026",
+      "path": "crates/storyos-core/src/create_chapter_tests.rs",
+      "line": 61,
+      "test": "an_invalid_volume_join_classifies_as_refused_with_zero_authority_effect",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
+      "status": "pending"
+    },
+    {
+      "sample": 5,
+      "id": "NP057",
+      "path": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts",
+      "line": 765,
+      "test": "deleteChapter distinguishes historical absence from damaged new-format evidence",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760",
+      "status": "pending"
+    },
+    {
+      "sample": 6,
+      "id": "AP039",
+      "path": "crates/storyos-application/src/manuscript_search_tests.rs",
+      "line": 234,
+      "test": "an_unmet_required_watermark_is_projection_not_ready",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts:78",
+      "status": "pending"
+    },
+    {
+      "sample": 7,
+      "id": "AD013",
+      "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+      "line": 39,
+      "test": "one_heading_roundtrips_through_versioned_payload_bytes",
+      "reason": "D1",
+      "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
+      "status": "pending"
+    },
+    {
+      "sample": 8,
+      "id": "CO138",
+      "path": "crates/storyos-core/src/rebuild_expired_reference_tests.rs",
+      "line": 55,
+      "test": "confirmed_expiry_and_unusable_handles_rebuild_without_opaque_reuse",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
+      "status": "pending"
+    },
+    {
+      "sample": 9,
+      "id": "AD077",
+      "path": "crates/storyos-adapter-postgres/src/create_chapter_tests.rs",
+      "line": 183,
+      "test": "create_chapter_is_atomic_replayable_and_scope_safe",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361; crates/storyos-adapter-postgres/src/structure_command_tests.rs:313; crates/storyos-adapter-postgres/src/create_chapter_authority_tests.rs:393",
+      "status": "pending"
+    },
+    {
+      "sample": 10,
+      "id": "CO093",
+      "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+      "line": 153,
+      "test": "matching_proposal_heads_revise_the_candidate_without_authority",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:973",
+      "status": "pending"
+    },
+    {
+      "sample": 11,
+      "id": "CO124",
+      "path": "crates/storyos-core/src/project_archive_tests.rs",
+      "line": 317,
+      "test": "a_missing_root_is_unsettled_and_exposes_no_zip_bytes",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295",
+      "status": "pending"
+    },
+    {
+      "sample": 12,
+      "id": "CO036",
+      "path": "crates/storyos-core/src/delete_chapter_tests.rs",
+      "line": 21,
+      "test": "removing_a_non_current_chapter_preserves_the_current_chapter",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246",
+      "status": "pending"
+    },
+    {
+      "sample": 13,
+      "id": "AD046",
+      "path": "crates/storyos-adapter-postgres/src/export_work_tests.rs",
+      "line": 94,
+      "test": "a_combined_export_claim_falls_back_to_archive_work",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+      "status": "pending"
+    },
+    {
+      "sample": 14,
+      "id": "CT012",
+      "path": "crates/storyos-contracts/src/release1_artifacts_tests.rs",
+      "line": 190,
+      "test": "take_over_project_writer_wire_is_generated_without_stage1_coverage",
+      "reason": "D2",
+      "coverage": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735; apps/web/test/node-postgresql/takeover-http.integration.test.ts:113",
+      "status": "pending"
+    },
+    {
+      "sample": 15,
+      "id": "CO179",
+      "path": "crates/storyos-core/src/statistics_profile_tests.rs",
+      "line": 30,
+      "test": "chapter_blocks_join_like_display_body_before_counting",
+      "reason": "D1",
+      "coverage": "crates/storyos-core/src/statistics_profile_tests.rs:41",
+      "status": "pending"
+    },
+    {
+      "sample": 16,
+      "id": "CO074",
+      "path": "crates/storyos-core/src/accept_proposal_tests.rs",
+      "line": 213,
+      "test": "conflicts_a_changed_target_head",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166",
+      "status": "pending"
+    },
+    {
+      "sample": 17,
+      "id": "CO028",
+      "path": "crates/storyos-core/src/create_chapter_tests.rs",
+      "line": 81,
+      "test": "an_invalid_title_classifies_as_refused_with_zero_authority_effect",
+      "reason": "D5",
+      "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
+      "status": "pending"
+    },
+    {
+      "sample": 18,
+      "id": "CO134",
+      "path": "crates/storyos-core/src/create_agent_run_tests.rs",
+      "line": 72,
+      "test": "refuses_a_busy_existing_conversation",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:833",
+      "status": "pending"
+    },
+    {
+      "sample": 19,
+      "id": "SV023",
+      "path": "crates/storyos-server/src/request_origin_tests.rs",
+      "line": 181,
+      "test": "unsupported_or_malformed_url_classes_refuse",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:1008",
+      "status": "pending"
+    },
+    {
+      "sample": 20,
+      "id": "AD091",
+      "path": "crates/storyos-adapter-postgres/src/delete_chapter_tests.rs",
+      "line": 354,
+      "test": "delete_chapter_is_atomic_replayable_and_scope_safe",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:417; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:767; crates/storyos-adapter-postgres/src/structure_command_tests.rs:313; crates/storyos-adapter-postgres/src/delete_chapter_tests.rs:611",
+      "status": "pending"
+    },
+    {
+      "sample": 21,
+      "id": "CO136",
+      "path": "crates/storyos-core/src/rebuild_expired_reference_tests.rs",
+      "line": 27,
+      "test": "usable_reference_does_not_rebuild_or_erase_an_ordinary_correction",
+      "reason": "D5",
+      "coverage": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237",
+      "status": "pending"
+    },
+    {
+      "sample": 22,
+      "id": "CT033",
+      "path": "crates/storyos-contracts/src/stage1_handoff_tests.rs",
+      "line": 28,
+      "test": "open_parent_is_rejected",
+      "reason": "D5",
+      "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
+      "status": "pending"
+    },
+    {
+      "sample": 23,
+      "id": "CO022",
+      "path": "crates/storyos-core/src/update_volume_tests.rs",
+      "line": 90,
+      "test": "an_invalid_title_classifies_as_refused_with_zero_authority_effect",
+      "reason": "D5",
+      "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
+      "status": "pending"
+    },
+    {
+      "sample": 24,
+      "id": "NP035",
+      "path": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts",
+      "line": 597,
+      "test": "createVolume freezes the acknowledgement after later title and Current Chapter changes",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:571; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/node-postgresql/create-volume-http.integration.test.ts:392",
+      "status": "pending"
+    },
+    {
+      "sample": 25,
+      "id": "AP027",
+      "path": "crates/storyos-application/src/chapter_query_tests.rs",
+      "line": 128,
+      "test": "a_chapter_identity_mismatch_fails_closed",
+      "reason": "D5",
+      "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
+      "status": "pending"
+    },
+    {
+      "sample": 26,
+      "id": "AD089",
+      "path": "crates/storyos-adapter-postgres/src/delete_volume_tests.rs",
+      "line": 282,
+      "test": "delete_volume_is_atomic_replayable_and_scope_safe",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238; crates/storyos-adapter-postgres/src/structure_command_tests.rs:313; crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs:7",
+      "status": "pending"
+    },
+    {
+      "sample": 27,
+      "id": "CO152",
+      "path": "crates/storyos-core/src/reopen_rejected_operations_tests.rs",
+      "line": 20,
+      "test": "resolves_one_rejected_operation_without_authority",
+      "reason": "D1",
+      "coverage": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:17",
+      "status": "pending"
+    },
+    {
+      "sample": 28,
+      "id": "AP008",
+      "path": "crates/storyos-application/src/archive_project_tests.rs",
+      "line": 79,
+      "test": "a_changed_archive_project_binding_is_refused_before_the_store",
+      "reason": "D5",
+      "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
+      "status": "pending"
+    },
+    {
+      "sample": 29,
+      "id": "CT007",
+      "path": "crates/storyos-contracts/src/release1_tests.rs",
+      "line": 58,
+      "test": "apply_author_edit_contract_activates_the_bounded_batch_policy",
+      "reason": "D2",
+      "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-contracts/src/release1_artifacts_tests.rs:735",
+      "status": "pending"
+    },
+    {
+      "sample": 30,
+      "id": "AP005",
+      "path": "crates/storyos-application/src/update_project_tests.rs",
+      "line": 98,
+      "test": "an_invalid_title_is_refused_before_the_store",
+      "reason": "D5",
+      "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
+      "status": "pending"
+    }
+  ]
+}

@@ -17,7 +17,7 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
-| NC005 | 9 — exposes the exact frozen runtime profile through its generated declaration | DELETE | D2 | The equality assertion compares two static outputs from the same generator; the type annotation is compiler evidence. Object.isFrozen only locks the generator wrapper. No caller mutates this profile, and no concrete user-visible failure specific to freezing was found. Boot execution still checks whether the generated profile interoperates with the server fixture. This is not a claim that a boot test checks Object.isFrozen. | apps/web/test/node-contract/protocol-boot.test.ts:26 |
+| NC005 | 9 — exposes the exact frozen runtime profile through its generated declaration | DELETE | D2 | The equality assertion compares two static outputs from the same generator; the type annotation is compiler evidence. Object.isFrozen only locks the generator wrapper. No caller mutates this profile, and no concrete user-visible failure specific to freezing was found. Boot execution still checks whether the generated profile interoperates with the server fixture. This is not a claim that a boot test checks Object.isFrozen. | apps/web/test/node-contract/project-open.test.ts:31 |
 
 ## apps/web/test/node-contract/production-build.test.ts
 

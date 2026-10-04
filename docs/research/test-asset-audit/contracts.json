@@ -145,11 +145,14 @@
     "test": "take_over_project_writer_wire_is_generated_without_stage1_coverage",
     "verdict": "DELETE",
     "reason": "D2",
-    "evidence": "This long table repeats generated Takeover enums, fields, receipt literals and export strings, plus a historical Stage 1 exclusion. The registry check owns wire assembly and real HTTP Takeover owns fencing and CompareFailed behavior. No independent malformed-document execution occurs here.",
+    "evidence": "This long table repeats generated Takeover enums, fields, receipt literals and export strings, plus a historical Stage 1 exclusion. The registry check owns wire assembly and real HTTP Takeover owns fencing and CompareFailed behavior. No independent malformed-document execution occurs here. Execution order: keep the cited covering test until NP138 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735; apps/web/test/node-postgresql/takeover-http.integration.test.ts:113",
     "remove": [
       189,
       386
+    ],
+    "coverage_dependencies": [
+      "NP138"
     ]
   },
   {
@@ -195,11 +198,14 @@
     "test": "chapter_fixtures_conform_to_the_typed_response_contract",
     "verdict": "DELETE",
     "reason": "D2",
-    "evidence": "The fixtures are static serialized GetChapterResponse values; the invalid fixture simply omits project_scope. No runtime Rust GetChapterResponse deserialization consumer was found. Public scoped Chapter reads protect actual disclosure and generated wire assembly checks schema binding, but neither is claimed to kill a test-only Rust decoding change.",
+    "evidence": "The fixtures are static serialized GetChapterResponse values; the invalid fixture simply omits project_scope. No runtime Rust GetChapterResponse deserialization consumer was found. Public scoped Chapter reads protect actual disclosure and generated wire assembly checks schema binding, but neither is claimed to kill a test-only Rust decoding change. Execution order: keep the cited covering test until NP006 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:132; crates/storyos-contracts/src/release1_artifacts_tests.rs:735",
     "remove": [
       508,
       522
+    ],
+    "coverage_dependencies": [
+      "NP006"
     ]
   },
   {

@@ -31,11 +31,14 @@
     "test": "a_matching_revision_and_active_lifecycle_classifies_as_applied",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The HTTP test asserts an Applied archive, revision 2 and archived library state. The Core success tuple adds no input or effect.",
+    "evidence": "The HTTP test asserts an Applied archive, revision 2 and archived library state. The Core success tuple adds no input or effect. Execution order: keep the cited covering test until NP030 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
     "remove": [
       1,
       58
+    ],
+    "coverage_dependencies": [
+      "NP030"
     ]
   },
   {
@@ -45,9 +48,12 @@
     "test": "a_stale_revision_classifies_as_conflicted_with_zero_lifecycle_effect",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The HTTP test archives at revision 1, then submits a new key at stale revision 1 and expects Conflicted. The current Project is already archived, so this also observes stale-revision precedence.",
+    "evidence": "The HTTP test archives at revision 1, then submits a new key at stale revision 1 and expects Conflicted. The current Project is already archived, so this also observes stale-revision precedence. Execution order: keep the cited covering test until NP030 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP030"
+    ]
   },
   {
     "id": "CO005",
@@ -56,9 +62,12 @@
     "test": "an_already_archived_project_classifies_as_no_effect",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The HTTP test sends a new key at revision 2 to an already archived Project and expects NoEffect. It exercises the same Core lifecycle condition.",
+    "evidence": "The HTTP test sends a new key at revision 2 to an already archived Project and expects NoEffect. It exercises the same Core lifecycle condition. Execution order: keep the cited covering test until NP030 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP030"
+    ]
   },
   {
     "id": "CO006",
@@ -67,9 +76,12 @@
     "test": "a_missing_project_classifies_as_refused_with_zero_lifecycle_effect",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "Only persist_archive_project calls this classifier in product code. It returns MissingProject before the call and always passes ProjectPresence::Present (archive_project.rs:83,101 in the adapter). Absent is an internal synthetic input here. HTTP Scope refusal remains covered, but that test cannot kill a mutation confined to this unreachable Core guard.",
+    "evidence": "Only persist_archive_project calls this classifier in product code. It returns MissingProject before the call and always passes ProjectPresence::Present (archive_project.rs:83,101 in the adapter). Absent is an internal synthetic input here. HTTP Scope refusal remains covered, but that test cannot kill a mutation confined to this unreachable Core guard. Execution order: keep the cited covering test until NP030 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP030"
+    ]
   },
   {
     "id": "CO007",
@@ -78,11 +90,14 @@
     "test": "a_matching_revision_and_new_title_classifies_as_applied",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The HTTP test renames and then reads both Project and library, including revision 2. It observes the same Core title/revision effect.",
+    "evidence": "The HTTP test renames and then reads both Project and library, including revision 2. It observes the same Core title/revision effect. Execution order: keep the cited covering test until NP025 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
     "remove": [
       1,
       82
+    ],
+    "coverage_dependencies": [
+      "NP025"
     ]
   },
   {
@@ -92,9 +107,12 @@
     "test": "a_stale_revision_classifies_as_conflicted_with_zero_title_effect",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The HTTP test sends Stale Title with revision 1 after a successful rename and expects Conflicted without a title change.",
+    "evidence": "The HTTP test sends Stale Title with revision 1 after a successful rename and expects Conflicted without a title change. Execution order: keep the cited covering test until NP025 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP025"
+    ]
   },
   {
     "id": "CO009",
@@ -103,9 +121,12 @@
     "test": "an_unchanged_title_classifies_as_no_effect",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The HTTP test sends the same title at the current revision and expects a NoEffect Receipt. The pure classifier repeats that condition.",
+    "evidence": "The HTTP test sends the same title at the current revision and expects a NoEffect Receipt. The pure classifier repeats that condition. Execution order: keep the cited covering test until NP025 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP025"
+    ]
   },
   {
     "id": "CO010",
@@ -114,8 +135,8 @@
     "test": "an_invalid_title_classifies_as_refused_with_zero_title_effect",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "Application admission rejects empty and over-1024-byte titles before invoking the store. Thus the Core invalid-title branch is not an independent reachable product protection. Application tests explicitly cover both lengths; the HTTP test covers the empty-title public refusal. Those tests do not execute a mutation confined to this Core guard.",
-    "coverage": "crates/storyos-application/src/update_project_tests.rs:98; apps/web/test/node-postgresql/update-project-http.integration.test.ts:294",
+    "evidence": "Application admission rejects empty and over-1024-byte titles before invoking the store. Thus the Core invalid-title branch is not an independent reachable product protection. The retained HTTP test covers the empty-title public refusal. It does not execute a mutation confined to this Core guard or prove the overlong HTTP input.",
+    "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:294",
     "remove": null
   },
   {
@@ -125,9 +146,12 @@
     "test": "a_missing_project_classifies_as_refused_with_zero_title_effect",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "persist_update_project returns MissingProject before classification and always passes Present (adapter update_project.rs:83,95). The synthetic Absent branch has no current product caller. HTTP foreign-Scope refusal is semantic coverage, not coverage of this unreachable Core guard.",
+    "evidence": "persist_update_project returns MissingProject before classification and always passes Present (adapter update_project.rs:83,95). The synthetic Absent branch has no current product caller. HTTP foreign-Scope refusal is semantic coverage, not coverage of this unreachable Core guard. Execution order: keep the cited covering test until NP025 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP025"
+    ]
   },
   {
     "id": "CO012",
@@ -693,11 +717,14 @@
     "test": "a_matching_reversible_frontier_classifies_as_compensated",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The exact-dist test saves Hello then Hello World, invokes real Author Undo and checks prior Block identity and text after reload. This observes compensation of the direct Author Action.",
+    "evidence": "The exact-dist test saves Hello then Hello World, invokes real Author Undo and checks prior Block identity and text after reload. This observes compensation of the direct Author Action. Execution order: keep the cited covering test until BD021 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162",
     "remove": [
       36,
       42
+    ],
+    "coverage_dependencies": [
+      "BD021"
     ]
   },
   {
@@ -993,11 +1020,14 @@
     "test": "opens_one_block_proposal_for_an_exact_current_base",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The Worker HTTP open scenario checks a valid Validation Receipt, exact Block/base and an unchanged Authoritative Chapter.",
+    "evidence": "The Worker HTTP open scenario checks a valid Validation Receipt, exact Block/base and an unchanged Authoritative Chapter. Execution order: keep the cited covering test until NP083 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts:203",
     "remove": [
       1,
       69
+    ],
+    "coverage_dependencies": [
+      "NP083"
     ]
   },
   {
@@ -1029,11 +1059,14 @@
     "test": "ordinary_assistance_does_not_request_active_compaction",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The compaction HTTP test requests this prefix and observes installed compaction; the ordinary advisory HTTP test sends the exact ordinary message and asserts exactly one model_attempt row, so accidental compaction would violate that count.",
+    "evidence": "The compaction HTTP test requests this prefix and observes installed compaction; the ordinary advisory HTTP test sends the exact ordinary message and asserts exactly one model_attempt row, so accidental compaction would violate that count. Execution order: keep the cited covering test until NP135 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:165; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237",
     "remove": [
       20,
       24
+    ],
+    "coverage_dependencies": [
+      "NP135"
     ]
   },
   {
@@ -1640,11 +1673,14 @@
     "test": "refuses_a_busy_existing_conversation",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "Public admission tries an existing busy Conversation and requires conversation_busy; the competing-admission case also proves only one queued Run can exist.",
+    "evidence": "Public admission tries an existing busy Conversation and requires conversation_busy; the competing-admission case also proves only one queued Run can exist. Execution order: keep the cited covering test until NP128 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:833",
     "remove": [
       71,
       81
+    ],
+    "coverage_dependencies": [
+      "NP128"
     ]
   },
   {
@@ -1749,11 +1785,15 @@
     "test": "successor_scripts_are_distinct_from_ordinary_and_retrieval_text",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "Public ordinary advisory, retrieval and successor flows invoke the script parser and verify their distinct effects. A parser that maps ordinary/retrieval text to successor work breaks those actual request boundaries; the local enum echo is not an extra observable requirement.",
+    "evidence": "Public ordinary advisory, retrieval and successor flows invoke the script parser and verify their distinct effects. A parser that maps ordinary/retrieval text to successor work breaks those actual request boundaries; the local enum echo is not an extra observable requirement. Execution order: keep the cited covering test until NP135, NP111 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:128; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:197",
     "remove": [
       22,
       37
+    ],
+    "coverage_dependencies": [
+      "NP135",
+      "NP111"
     ]
   },
   {
@@ -1763,11 +1803,14 @@
     "test": "missing_or_unsupported_lookup_still_permits_one_successor",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The public default-unknown successor and missing/unsupported retrieval cases assert one fenced successor, consumed allowance and exact attempt roles. These cover all three lookup inputs here.",
+    "evidence": "The public default-unknown successor and missing/unsupported retrieval cases assert one fenced successor, consumed allowance and exact attempt roles. These cover all three lookup inputs here. Execution order: keep the cited covering test until NP111 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:197; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:288",
     "remove": [
       39,
       59
+    ],
+    "coverage_dependencies": [
+      "NP111"
     ]
   },
   {
@@ -1946,11 +1989,14 @@
     "test": "author_withdrawal_allocates_one_forward_action",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "Public author Withdrawal asserts one forward Author Action, the closure change and zero authoritative commits, matching the allocation path here.",
+    "evidence": "Public author Withdrawal asserts one forward Author Action, the closure change and zero authoritative commits, matching the allocation path here. Execution order: keep the cited covering test until NP104 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:17",
     "remove": [
       28,
       36
+    ],
+    "coverage_dependencies": [
+      "NP104"
     ]
   },
   {
@@ -1974,11 +2020,14 @@
     "test": "unsupported_cause_and_terminal_supersession_have_no_effect",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "HTTP covers unmatched producer and already-closed Proposal no-effect cases. No production write to Proposal closure=superseded was found at this baseline; Draft supersession is a different field. The remaining terminal-supersession tuple has no established reachable regression and is not claimed to be killed by those HTTP cases.",
+    "evidence": "HTTP covers unmatched producer and already-closed Proposal no-effect cases. No production write to Proposal closure=superseded was found at this baseline; Draft supersession is a different field. The remaining terminal-supersession tuple has no established reachable regression and is not claimed to be killed by those HTTP cases. Execution order: keep the cited covering test until NP104 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:17; apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:217",
     "remove": [
       48,
       75
+    ],
+    "coverage_dependencies": [
+      "NP104"
     ]
   },
   {
@@ -2121,11 +2170,14 @@
     "test": "blocks_exact_required_working_target_over_the_item_limit",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "Public Run admission uses a 10001-scalar Chapter, requires the exact WorkingTarget over-limit reason and rejected token count, retains only the author instruction and performs no destination I/O.",
+    "evidence": "Public Run admission uses a 10001-scalar Chapter, requires the exact WorkingTarget over-limit reason and rejected token count, retains only the author instruction and performs no destination I/O. Execution order: keep the cited covering test until NP129 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:944",
     "remove": [
       115,
       180
+    ],
+    "coverage_dependencies": [
+      "NP129"
     ]
   },
   {
@@ -2260,11 +2312,14 @@
     "test": "empty_legacy_string_becomes_one_empty_paragraph_block",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The exact packaged editor test opens a new Chapter as one empty paragraph Block, then edits it. Losing the empty Block or wrong initial kind fails that hydrated surface; the Unicode upgrade case retains the explicit stable-ID contract.",
+    "evidence": "The exact packaged editor test opens a new Chapter as one empty paragraph Block, then edits it. Losing the empty Block or wrong initial kind fails that hydrated surface; the Unicode upgrade case retains the explicit stable-ID contract. Execution order: keep the cited covering test until BD017 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/browser-exact-dist/s2-editor.integration.test.ts:77; crates/storyos-core/src/manuscript_payload_tests.rs:4",
     "remove": [
       19,
       33
+    ],
+    "coverage_dependencies": [
+      "BD017"
     ]
   },
   {

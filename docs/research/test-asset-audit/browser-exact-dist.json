@@ -386,11 +386,15 @@
     "test": "shows bounded selected Run input and recovery evidence through the packaged production host",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The helper evidence assertions call getAgentRun directly; they do not assert selected Context, compaction, reference recovery, retrieval or successor evidence rendered in the UI. Existing HTTP cases cover immutable/superseded input, over-limit refusal, compaction install/refusal, expiry rebuild, original/cancelled retrieval and successor eligibility/fence cancellation. Browser reload followed by another direct GET adds no browser evidence-reader boundary. Real composer continuity is covered by production prose/controls. Remove this exclusive 13-Project helper and its route, and update optional teardown run_evidence counters. No rendered evidence coverage is claimed lost.",
+    "evidence": "The helper evidence assertions call getAgentRun directly; they do not assert selected Context, compaction, reference recovery, retrieval or successor evidence rendered in the UI. Existing HTTP cases cover immutable/superseded input, over-limit refusal, compaction install/refusal, expiry rebuild, original/cancelled retrieval and successor eligibility/fence cancellation. Browser reload followed by another direct GET adds no browser evidence-reader boundary. Real composer continuity is covered by production prose/controls. Remove this exclusive 13-Project helper and its route, and update optional teardown run_evidence counters. No rendered evidence coverage is claimed lost. Execution order: keep the cited covering test until NP129, NP135 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:944; apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:165; apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:128; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:220; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:277; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:288; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:317; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:362; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10; apps/web/test/browser-exact-dist/production-host.integration.test.ts:30",
     "remove": [
       1,
       8
+    ],
+    "coverage_dependencies": [
+      "NP129",
+      "NP135"
     ]
   },
   {

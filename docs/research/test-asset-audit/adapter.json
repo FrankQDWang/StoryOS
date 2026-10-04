@@ -372,14 +372,11 @@
     "path": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs",
     "line": 187,
     "test": "issue_and_consume_preserve_the_full_u64_client_session_generation",
-    "verdict": "DELETE",
-    "reason": "D5",
-    "evidence": "The production Server main fixes current_session_generation=1 and constructs all bindings from it. No current request or persisted-session recovery source supplies u64::MAX. The tested numeric roundtrip is an unused internal range at this baseline; ordinary generation binding remains covered, without claiming that a public test kills a high-half-only cast defect.",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The persisted Challenge and both rate tables promise the full unsigned 64-bit generation range (migration 0002:19-51), independent of the executable bootstrap default. Replacing decimal conversion with an i64 cast corrupts valid high-half binding identities or prevents their replay/consumption. This case checks u64::MAX in all three tables plus exact issue replay and FirstUse consumption. AD031 and public Project tests use low generations and cannot detect that storage representation regression. The bootstrap currently starts at 1; this KEEP protects the existing persisted numeric contract, not a claimed production rotation workload.",
     "coverage": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs:56; apps/web/test/node-postgresql/project-http.integration.test.ts:170",
-    "remove": [
-      185,
-      261
-    ]
+    "remove": null
   },
   {
     "id": "AD033",
@@ -764,7 +761,7 @@
     "verdict": "DELETE",
     "reason": "D1",
     "evidence": "Each command has an HTTP test that writes the identical NULL historical evidence and malformed new-format Project acknowledgement, requires distinct 409/503 outcomes, and checks no new domain rows. This repeats the same shared replay decoder through the Adapter without a distinct persisted input.",
-    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760; apps/web/test/node-postgresql/update-volume-http.integration.test.ts:694; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:742; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:1239; apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:901; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:765",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760",
     "remove": [
       762,
       785
@@ -1151,11 +1148,14 @@
     "test": "observer_takeover_settles_no_effect_activity_without_manuscript_authority",
     "verdict": "DELETE",
     "reason": "D3",
-    "evidence": "The positive half hand-writes Takeover Admission, Receipt, generation, Snapshot and Activity in SQL, then checks those same literals; it never executes the product Takeover operation. HTTP and retained admission tests execute that path. The final invalid Author Edit Activity insert also references a nonexistent Commit/Author Action, so foreign keys still reject it if the intended no_effect CHECK is removed; is_err alone does not isolate the claimed constraint.",
+    "evidence": "The positive half hand-writes Takeover Admission, Receipt, generation, Snapshot and Activity in SQL, then checks those same literals; it never executes the product Takeover operation. HTTP and retained admission tests execute that path. The final invalid Author Edit Activity insert also references a nonexistent Commit/Author Action, so foreign keys still reject it if the intended no_effect CHECK is removed; is_err alone does not isolate the claimed constraint. Execution order: keep the cited covering test until NP138 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/takeover-http.integration.test.ts:113; crates/storyos-adapter-postgres/src/takeover_admission_tests.rs:550; crates/storyos-adapter-postgres/src/author_edit_tests.rs:184",
     "remove": [
       195,
       531
+    ],
+    "coverage_dependencies": [
+      "NP138"
     ]
   },
   {

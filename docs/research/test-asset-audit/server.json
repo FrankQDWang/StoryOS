@@ -317,11 +317,14 @@
     "test": "current_client_session_binding_accepts_its_exact_request_site_and_identities",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "Real authenticated Project reads and Author Edit requests require the exact configured site/session identities. The helper positive uses the same binding checks without a public response.",
+    "evidence": "Real authenticated Project reads and Author Edit requests require the exact configured site/session identities. The helper positive uses the same binding checks without a public response. Execution order: keep the cited covering test until NP006 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:132; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
     "remove": [
       94,
       109
+    ],
+    "coverage_dependencies": [
+      "NP006"
     ]
   },
   {
@@ -431,11 +434,14 @@
     "test": "one_handle_issues_that_cookie_value",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The packaged HTTP host starts with this single configured handle and observes the exact issued cookie; authenticated reads prove owner resolution. The parser result alone adds no distinct case.",
+    "evidence": "The packaged HTTP host starts with this single configured handle and observes the exact issued cookie; authenticated reads prove owner resolution. The parser result alone adds no distinct case. Execution order: keep the cited covering test until NP006 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:35; apps/web/test/node-postgresql/project-http.integration.test.ts:132",
     "remove": [
       49,
       61
+    ],
+    "coverage_dependencies": [
+      "NP006"
     ]
   },
   {

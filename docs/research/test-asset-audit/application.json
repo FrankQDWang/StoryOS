@@ -31,11 +31,14 @@
     "test": "an_exact_update_project_binding_reaches_the_store",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "The public rename case observes the real title/revision and one retained outcome; the fake Store locally constructs the same Applied result rather than testing persistence or classification.",
+    "evidence": "The public rename case observes the real title/revision and one retained outcome; the fake Store locally constructs the same Applied result rather than testing persistence or classification. Execution order: keep the cited covering test until NP025 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
     "remove": [
       1,
       125
+    ],
+    "coverage_dependencies": [
+      "NP025"
     ]
   },
   {
@@ -45,9 +48,12 @@
     "test": "a_changed_update_project_binding_is_refused_before_the_store",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "Server update_project.rs supplies a literal updateProject command kind. A request cannot independently replace that internal field; the public test owns real command/challenge rejection, not a mutation limited to this redundant guard.",
+    "evidence": "Server update_project.rs supplies a literal updateProject command kind. A request cannot independently replace that internal field; the public test owns real command/challenge rejection, not a mutation limited to this redundant guard. Execution order: keep the cited covering test until NP025 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP025"
+    ]
   },
   {
     "id": "AP005",
@@ -56,9 +62,12 @@
     "test": "an_invalid_title_is_refused_before_the_store",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "Server validates empty and >1024-byte titles before constructing UpdateProjectCommand. The fixture changes title alone but retains unrelated canonical bytes. It does not represent a request that reaches this Application guard; public title validation owns observable refusal.",
+    "evidence": "Server validates empty and >1024-byte titles before constructing UpdateProjectCommand. The fixture changes title alone but retains unrelated canonical bytes. It does not represent a request that reaches this Application guard; public title validation owns observable refusal. Execution order: keep the cited covering test until NP025 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP025"
+    ]
   },
   {
     "id": "AP006",
@@ -67,9 +76,12 @@
     "test": "a_changed_retry_digest_is_refused_before_the_store",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "Server computes both canonical bytes and this in-memory challenge digest from the same request. A changed HTTP retry reaches stored challenge binding validation with a new self-consistent digest; it does not create the local digest/bytes inconsistency in this fixture.",
+    "evidence": "Server computes both canonical bytes and this in-memory challenge digest from the same request. A changed HTTP retry reaches stored challenge binding validation with a new self-consistent digest; it does not create the local digest/bytes inconsistency in this fixture. Execution order: keep the cited covering test until NP025 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP025"
+    ]
   },
   {
     "id": "AP007",
@@ -78,11 +90,14 @@
     "test": "an_exact_archive_project_binding_reaches_the_store",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "Public Archive observes the actual lifecycle/revision and replay; the local fake merely returns Applied revision 2 and counts the pass-through Store call.",
+    "evidence": "Public Archive observes the actual lifecycle/revision and replay; the local fake merely returns Applied revision 2 and counts the pass-through Store call. Execution order: keep the cited covering test until NP030 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
     "remove": [
       1,
       112
+    ],
+    "coverage_dependencies": [
+      "NP030"
     ]
   },
   {
@@ -92,9 +107,12 @@
     "test": "a_changed_archive_project_binding_is_refused_before_the_store",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "Server archive_project.rs constructs command_kind=archiveProject from a literal. The local changed-kind command has no current request path; public binding checks protect actual challenge substitution.",
+    "evidence": "Server archive_project.rs constructs command_kind=archiveProject from a literal. The local changed-kind command has no current request path; public binding checks protect actual challenge substitution. Execution order: keep the cited covering test until NP030 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP030"
+    ]
   },
   {
     "id": "AP009",
@@ -103,9 +121,12 @@
     "test": "a_changed_retry_digest_is_refused_before_the_store",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "Server derives in-memory canonical bytes and digest together. This fixture changes only bytes, unlike a real changed retry whose supplied request is self-consistent and conflicts with stored Admission. The named public test does not execute this synthetic mismatch guard.",
+    "evidence": "Server derives in-memory canonical bytes and digest together. This fixture changes only bytes, unlike a real changed retry whose supplied request is self-consistent and conflicts with stored Admission. The named public test does not execute this synthetic mismatch guard. Execution order: keep the cited covering test until NP030 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP030"
+    ]
   },
   {
     "id": "AP010",
@@ -114,9 +135,12 @@
     "test": "an_invalid_expected_revision_is_refused_before_the_store",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "The Server parses expected Project revision and requires it to be positive before the Application call. A direct expected_revision=0 fixture cannot reach this guard from the current endpoint.",
+    "evidence": "The Server parses expected Project revision and requires it to be positive before the Application call. A direct expected_revision=0 fixture cannot reach this guard from the current endpoint. Execution order: keep the cited covering test until NP030 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "NP030"
+    ]
   },
   {
     "id": "AP011",
@@ -150,11 +174,14 @@
     "test": "a_matching_challenge_reaches_the_store",
     "verdict": "DELETE",
     "reason": "D1",
-    "evidence": "This test only forwards a fake Unavailable result; it does not compute NoFrontier. Packaged public Undo exercises the Application dispatch and settlement path with real authority. The Core NoFrontier classifier remains a separate retained owner.",
+    "evidence": "This test only forwards a fake Unavailable result; it does not compute NoFrontier. Packaged public Undo exercises the Application dispatch and settlement path with real authority. The Core NoFrontier classifier remains a separate retained owner. Execution order: keep the cited covering test until BD021 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162; crates/storyos-core/src/undo_latest_author_action_tests.rs:59",
     "remove": [
       1,
       92
+    ],
+    "coverage_dependencies": [
+      "BD021"
     ]
   },
   {
@@ -164,9 +191,12 @@
     "test": "a_mismatched_command_kind_is_a_binding_conflict",
     "verdict": "DELETE",
     "reason": "D5",
-    "evidence": "The Server supplies UNDO_COMMAND_KIND and computes its binding before dispatch. A setCurrentChapter kind inside UndoLatestAuthorActionCommand is not accepted from the public request.",
+    "evidence": "The Server supplies UNDO_COMMAND_KIND and computes its binding before dispatch. A setCurrentChapter kind inside UndoLatestAuthorActionCommand is not accepted from the public request. Execution order: keep the cited covering test until BD021 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
     "coverage": "apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162",
-    "remove": null
+    "remove": null,
+    "coverage_dependencies": [
+      "BD021"
+    ]
   },
   {
     "id": "AP015",
@@ -701,7 +731,7 @@
     "verdict": "DELETE",
     "reason": "D1",
     "evidence": "The Adapter outcome test resolves an unexpired challenge as unknown and proves the query does not consume it; its concurrent consume test proves no false rejection. The fake resolver merely echoes a constant unknown observation, without a command capability to retry.",
-    "coverage": "crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs:59; crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs:229",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs:229",
     "remove": [
       1,
       61
