@@ -75,7 +75,8 @@ class Proposal:
         elif name == 'replanProposal':
             return dict(conflicted_proposal_revision_id=p['revision_id'], expected_current_proposal_head=p['revision_id'],
                 expected_current_target_revisions=[e.revision], replacement_operations=[p['operation_id']],
-                source_condition=p['source_condition'], editor_session_id=e.session_id)
+                source_condition=p['source_condition'] if p['source_condition']['kind'] != 'absent' else
+                    {'kind': 'proposal_conflict', 'proposal_conflict_ref': self.http.identity()}, editor_session_id=e.session_id)
         return common
 
     def command(self, name, outcome, update=None, mutation=None):
@@ -150,7 +151,7 @@ class Proposal:
 
 
 def run(http, seed, differences, coverage, selected=None):
-    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect']
+    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect', 'conflict_reject', 'conflict_withdraw', 'refuse_replan']
     http.rng.shuffle(modes)
     for mode in modes:
         http.rng = random.Random(f'{seed}/proposal/{mode}')
@@ -162,6 +163,7 @@ def run(http, seed, differences, coverage, selected=None):
             p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
             p.command('withdrawProposal', 'no_effect')
             p.command('reopenWithdrawnProposal', 'resolved', {'closure': 'open', 'validation': 'pending'})
+            p.command('reopenWithdrawnProposal', 'no_effect')
         elif mode == 'reject':
             p.command('rejectProposalOperations', 'resolved', {'operation_resolution': 'rejected'})
             p.command('reopenRejectedOperations', 'resolved', {'operation_resolution': 'pending', 'validation': 'pending'})
@@ -169,7 +171,9 @@ def run(http, seed, differences, coverage, selected=None):
             p.edit()
         elif mode == 'replan':
             p.command('acceptProposal', 'conflicted', mutation={'expected_authoritative_revision_id': p.prior_head})
+            p.command('replanProposal', 'conflicted', mutation={'expected_current_target_revisions': [p.prior_head]})
             p.command('replanProposal', 'resolved', {'validation': 'pending'})
+            p.editor.undo('unavailable')
         elif mode == 'invalid':
             p.command('acceptProposal', 'invalid', mutation={'validation_receipt_id': http.identity()})
             p.command('acceptProposal', 'refused')
@@ -182,3 +186,14 @@ def run(http, seed, differences, coverage, selected=None):
             p.command('reopenWithdrawnProposal', 'no_effect')
             p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
             p.command('reopenWithdrawnProposal', 'no_effect', mutation={'withdrawal_event_ref': http.identity()})
+        elif mode == 'conflict_reject':
+            p.command('rejectProposalOperations', 'conflicted', mutation={'expected_target_revisions': [p.prior_head]})
+            p.command('rejectProposalOperations', 'resolved', {'operation_resolution': 'rejected'})
+            p.command('reopenRejectedOperations', 'conflicted', mutation={'expected_target_revisions': [p.prior_head]})
+        elif mode == 'conflict_withdraw':
+            p.command('withdrawProposal', 'conflicted', mutation={'expected_target_revisions': [p.prior_head]})
+            p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
+            p.command('reopenWithdrawnProposal', 'conflicted', mutation={'expected_target_revisions': [p.prior_head]})
+        elif mode == 'refuse_replan':
+            p.command('replanProposal', 'refused')
+            p.command('replanProposal', 'refused', mutation={'expected_current_proposal_head': http.identity()})

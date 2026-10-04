@@ -102,6 +102,9 @@ def run(http, seed, differences, coverage, selected=None):
     print(f'Seed {seed}: Author Edit and Undo', flush=True)
     editor.edit(units(''), 'no_effect')
     editor.edit(units('bad', 0, 99999), 'refused')
+    empty = units('')[0]
+    empty['normalized_primitives'] = []
+    editor.edit([empty], 'refused')
     editor.edit(units('target'), 'HTTP_422', mutation={'target_refs': ['manuscript:' + http.identity()]})
     original_revision = editor.revision
     for index in range(4):

@@ -93,3 +93,11 @@ Seed 300 exercised Proposal editing, Acceptance, rejection/reopen, and withdrawa
 A-006: a candidate edit is already valid at its next public query, with a new Validation Receipt bound to its new Revision. Section 7.2 says the edit resets validation to pending; section 7.4 permits separate Core validation. HTTP does not expose the interval or specify when that validation may run. The model now checks the fresh validation identity and valid plain-text candidate rather than assuming a query must catch pending. The adapter writes that validation in `author_edit_proposal.rs:431-502`; record this timing ambiguity, not an unsupported claim that the old Receipt was reused.
 
 Next: verify conflict/replan and negative lifecycle results, then reach 20-hit counts. The first 202 assertion failure was a harness mistake and is retained in `proposal-agent-run-accepted.json`.
+
+## Step 8: Three minimized behavior differences
+
+`replay-minimals.json` confirms three implementation defects, recorded with contract and code locations in `FINDINGS.md`: Project changes are absent from Author Undo order; Create Chapter exact replay returns 503 after opening an Editor Session at its Activity position; Create Editor Session replay returns a later base after an edit. The last two were invisible to immediate retry checks. No product fix was made.
+
+The normal Stage 4 smoke also proved current-writer fencing, usable takeover, refusal of stale takeover, unchanged old Author Edit acknowledgement after takeover, changed-digest Challenge conflict, the 10-Challenge shared capacity, and the separate 120-Challenge Author Edit capacity. It is `replay-first-survey.json`; its known Create Chapter replay failure is retained. The minimized run `5bde3e30923240d6b34a91e408322ba2` completed in 24 seconds.
+
+Proposal conflict/replan and ordinary negative lifecycle smoke passed in `proposals-lifecycle-smoke.json`. Additional conflict and refused branches, mixed-ownership Draft creation, and the 20-hit batches remain to run.

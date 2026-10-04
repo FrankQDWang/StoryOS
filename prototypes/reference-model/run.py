@@ -28,6 +28,7 @@ class HTTP:
     def __init__(self, url, rng, trace):
         self.url, self.rng, self.trace = url, rng, trace
         self.replay = False
+        self.commands = {}
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         self.opener.open(url).read()
         profile = self.request('GET', '/api/v1/protocol')[1]
@@ -93,6 +94,7 @@ class HTTP:
         headers = {'Idempotency-Key': key, 'X-StoryOS-Anti-Forgery': challenge['nonce']}
         status, response = self.request(route['method'], path, body, headers)
         self.last_command = (route['method'], path, body, headers, self.last_raw)
+        self.commands[name] = self.last_command
         if self.replay and status in [200, 202]:
             retry_status, _ = self.request(route['method'], path, body, headers)
             equal = retry_status == status and self.last_raw == self.last_command[4]
@@ -195,6 +197,9 @@ def main():
                 run(http, seed, differences, coverage, args.case)
             elif args.stage == 'proposals':
                 from proposals import run
+                run(http, seed, differences, coverage, args.case)
+            elif args.stage == 'replay':
+                from replay import run
                 run(http, seed, differences, coverage, args.case)
     finally:
         server.terminate()
