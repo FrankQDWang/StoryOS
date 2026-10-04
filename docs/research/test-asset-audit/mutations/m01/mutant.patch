@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/readable_export_command.rs
++++ b/crates/storyos-core/src/readable_export_command.rs
+@@ -31,7 +31,7 @@
+             reason: ExportHumanReadableManuscriptRefusal::MissingProject,
+         };
+     }
+-    if command.current_lifecycle == ProjectLifecycle::Archived {
++    if command.current_lifecycle != ProjectLifecycle::Archived {
+         return ExportHumanReadableManuscriptResult::Refused {
+             reason: ExportHumanReadableManuscriptRefusal::ArchivedProject,
+         };

@@ -1,0 +1,33 @@
+{
+  "sample": 22,
+  "id": "CT033",
+  "source": "crates/storyos-contracts/src/stage1_handoff.rs",
+  "source_sha256": "871c9f5bd3c42269e451a7603790ecd174e5cf4514c38aea7fe5dd5685f69bb0",
+  "old": "    if evidence.parent_issue.issue != mandatory.fx_handoff.parent_issue.issue\n        || evidence.parent_issue.state != \"closed\"\n        || mandatory.fx_handoff.parent_issue.state != \"closed\"\n        || evidence.parent_issue.closeout != PARENT_CLOSEOUT\n        || evidence.residual_risks.parent_closeout != PARENT_CLOSEOUT\n        || evidence.next_issue != NEXT_ISSUE\n    {\n        return Err(\"handoff must record performed parent #100 closeout\".into());\n    }\n",
+  "new": "",
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-contracts",
+    "--lib",
+    "stage1_crosswalk::tests::checked_in_crosswalk_matches_fresh_generation",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-contracts",
+    "--lib",
+    "stage1_handoff::tests::open_parent_is_rejected",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "defect": "Remove private parent-closeout verification while constructor constants remain closed."
+}

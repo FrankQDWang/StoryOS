@@ -1,0 +1,21 @@
+{
+  "sample": 15,
+  "id": "CO179",
+  "source": "crates/storyos-core/src/statistics_profile.rs",
+  "source_sha256": "094df89393af30592181f4c3f256af2ea95f564b45a66d341362f2a06d725b6d",
+  "old": "            accumulator.push_scalar('\\n');",
+  "new": "            // Audit mutant: omit the separator between Blocks.",
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-core",
+    "--lib",
+    "statistics_profile::tests::empty_blocks_still_contribute_their_separating_lf",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "defect": "Omit LF between Block texts, undercounting characters and merging words."
+}

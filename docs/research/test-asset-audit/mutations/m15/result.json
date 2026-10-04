@@ -1,0 +1,78 @@
+{
+  "sample": 15,
+  "id": "CO179",
+  "status": "candidate-kill",
+  "source": "crates/storyos-core/src/statistics_profile.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m15-baseline",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-core",
+        "--lib",
+        "statistics_profile::tests::empty_blocks_still_contribute_their_separating_lf",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 2.281,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m15/baseline.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m15-mutant",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-core",
+        "--lib",
+        "statistics_profile::tests::empty_blocks_still_contribute_their_separating_lf",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 3.791,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m15/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m15-restored",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-core",
+        "--lib",
+        "statistics_profile::tests::empty_blocks_still_contribute_their_separating_lf",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 3.149,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m15/restored.log"
+    }
+  ]
+}

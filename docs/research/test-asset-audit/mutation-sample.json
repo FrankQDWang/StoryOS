@@ -13,7 +13,9 @@
       "test": "active_project_is_admitted",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts:233",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m01/result.json",
+      "finding": "Active Project export was refused as archived (422); one selected HTTP case failed, clean/restored cases passed. Earlier manifest-binding startup failure retained separately and excluded."
     },
     {
       "sample": 2,
@@ -153,7 +155,9 @@
       "test": "chapter_blocks_join_like_display_body_before_counting",
       "reason": "D1",
       "coverage": "crates/storyos-core/src/statistics_profile_tests.rs:41",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m15/result.json",
+      "finding": "Omitted LF makes retained empty-Block case fail character_count 10 versus 14; baseline/restored each pass one selected test."
     },
     {
       "sample": 16,

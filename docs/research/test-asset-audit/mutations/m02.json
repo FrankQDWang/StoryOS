@@ -1,0 +1,37 @@
+{
+  "sample": 2,
+  "id": "AP004",
+  "source": "crates/storyos-application/src/update_project.rs",
+  "source_sha256": "d46ee15f45e7cac0b79f34b78b8103d6a64faa564989450715449c326b1b74ab",
+  "old": "        || challenge.command_kind != \"updateProject\"\n",
+  "new": "",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/update-project-http.integration.test.ts",
+    "-t",
+    "^updateProject\\ renames\\ one\\ exact\\ Project,\\ replays,\\ and\\ fails\\ closed$"
+  ],
+  "defect": "Remove internal Update Project command-kind validation.",
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-application",
+    "--lib",
+    "update_project::tests::a_changed_update_project_binding_is_refused_before_the_store",
+    "--",
+    "--exact",
+    "--nocapture"
+  ]
+}

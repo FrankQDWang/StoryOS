@@ -1,0 +1,37 @@
+{
+  "sample": 25,
+  "id": "AP027",
+  "source": "crates/storyos-application/src/chapter_query.rs",
+  "source_sha256": "346f0a918509523586c6f4df972c7cb6a515979854eba951fa7088d388f804f1",
+  "old": "if &facts.project_scope == scope && facts.chapter.chapter_id == *chapter_id =>",
+  "new": "if &facts.project_scope == scope =>",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/create-chapter-http.integration.test.ts",
+    "-t",
+    "^createChapter\\ creates\\ three\\ named\\ Chapters,\\ keeps\\ the\\ first\\ current,\\ and\\ fails\\ closed$"
+  ],
+  "defect": "Return the wrong Chapter identity if a Reader returns contradictory facts.",
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-application",
+    "--lib",
+    "chapter_query::tests::a_chapter_identity_mismatch_fails_closed",
+    "--",
+    "--exact",
+    "--nocapture"
+  ]
+}

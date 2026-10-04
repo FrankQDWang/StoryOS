@@ -1,0 +1,30 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/readable-export-admission-http.integration.test.ts (6 tests | 1 failed | 5 skipped) 537ms
+   × exportHumanReadableManuscript admits one inspectable in-progress operation 536ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/readable-export-admission-http.integration.test.ts > exportHumanReadableManuscript admits one inspectable in-progress operation
+Error: 422 {"schema_id":"storyos.problem.v1","code":"archived_project","message":"The Project is archived."}
+ ❯ test/node-postgresql/readable-export-admission-http.integration.test.ts:246:13
+    244|     ).catch((error) => {
+    245|       const protocol = requireStoryOSProtocolError(error);
+    246|       throw new Error(`${protocol.status} ${protocol.responseBody}`);
+       |             ^
+    247|     });
+    248|     assert.equal(applied.admitted.schema_id, "storyos.command.export-h…
+ ❯ test/node-postgresql/readable-export-admission-http.integration.test.ts:238:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  04:46:08
+   Duration  874ms (transform 114ms, setup 0ms, import 151ms, tests 537ms, environment 0ms)
+
+Verification failed: 9.36s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/c423e955ba344b629516f281bd19740f/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
