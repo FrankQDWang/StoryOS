@@ -20,7 +20,7 @@ Every new observation moves an existing scale directory to an attempt directory.
 Failed attempts remain there. The harness has no self-tests and is not a build
 or verification input extension.
 
-The generator uses original Chinese sentence templates, dialogue, 20–160-character
+The generator uses original Chinese sentence templates, dialogue, 28–160-character
 paragraph targets, indented paragraphs, and a small Latin/digit component. Five
 Chapters total exactly 10,000 Unicode scalars. The four corpora share prefixes.
 Chapter titles do not enter the size; one LF between paragraphs does. This is a

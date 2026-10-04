@@ -1,0 +1,317 @@
+[
+  {
+    "scale": 30000,
+    "chapters": 15,
+    "scalars": 30000,
+    "utf8_bytes": 89312,
+    "blocks": 352,
+    "paragraph_min": 1,
+    "paragraph_median": 72.0,
+    "paragraph_max": 160,
+    "chapter_min": 1779,
+    "chapter_max": 2272,
+    "sha256": "51574d9a9bbb9428392ef461c49a5b4bb5ae06d8b60620a2d580eeb96919065f"
+  },
+  {
+    "scale": 300000,
+    "chapters": 150,
+    "scalars": 300000,
+    "utf8_bytes": 893206,
+    "blocks": 3442,
+    "paragraph_min": 1,
+    "paragraph_median": 72.0,
+    "paragraph_max": 160,
+    "chapter_min": 963,
+    "chapter_max": 2984,
+    "sha256": "8a1f988fec4e58234c63c814feac71ccec44a867814dac584b5b3df721974e86"
+  },
+  {
+    "scale": 1000000,
+    "chapters": 500,
+    "scalars": 1000000,
+    "utf8_bytes": 2977186,
+    "blocks": 11557,
+    "paragraph_min": 1,
+    "paragraph_median": 72,
+    "paragraph_max": 160,
+    "chapter_min": 963,
+    "chapter_max": 3214,
+    "sha256": "18eefd3afe11e970c5a89a0cf88bca603b90f08b80fa4a88f795aad8dedaaa01"
+  },
+  {
+    "scale": 3000000,
+    "chapters": 1500,
+    "scalars": 3000000,
+    "utf8_bytes": 8931648,
+    "blocks": 34626,
+    "paragraph_min": 1,
+    "paragraph_median": 72.0,
+    "paragraph_max": 161,
+    "chapter_min": 951,
+    "chapter_max": 3214,
+    "sha256": "0b260d20f0516fed3b1c225a0f79af2ab1e92d874a3fef8e57a1a877690db8e3"
+  }
+]
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Imported 1/15 chapters
+{"scale":30000,"operation":"statistics-before-analyze","sql_calls":9,"response_bytes":1326,"elapsed_ms":70.28100000000086}
+{"scale":30000,"operation":"open-project","sql_calls":7,"response_bytes":421,"elapsed_ms":22.619249999999738}
+{"scale":30000,"operation":"tree","sql_calls":12,"response_bytes":2387,"elapsed_ms":39.54137499999888}
+{"scale":30000,"operation":"read-chapter","sql_calls":8,"response_bytes":13923,"elapsed_ms":41.643082999999024}
+{"scale":30000,"operation":"statistics","sql_calls":9,"response_bytes":1326,"elapsed_ms":46.85162499999933}
+{"scale":30000,"operation":"search-current_chapter","sql_calls":9,"response_bytes":1085,"elapsed_ms":30.639083000000028}
+{"scale":30000,"operation":"search-manuscript","sql_calls":9,"response_bytes":1085,"elapsed_ms":37.042083000000275}
+{"scale":30000,"operation":"session-read","sql_calls":8,"response_bytes":16365,"elapsed_ms":28.859584000001632}
+{"scale":30000,"operation":"switch-chapter","sql_calls":61,"response_bytes":1943,"elapsed_ms":199.7102500000001}
+{"scale":30000,"operation":"save-input","sql_calls":76,"response_bytes":15467,"elapsed_ms":234.83100000000195}
+{"scale":30000,"operation":"undo","sql_calls":71,"response_bytes":15627,"elapsed_ms":253.20895799999926}
+{"scale":30000,"operation":"create-volume","sql_calls":65,"response_bytes":1843,"elapsed_ms":162.119834000001}
+{"scale":30000,"operation":"create-chapter","sql_calls":71,"response_bytes":1958,"elapsed_ms":186.3712919999998}
+{"scale":30000,"operation":"reorder-chapter","sql_calls":67,"response_bytes":1859,"elapsed_ms":152.4945000000007}
+{"scale":30000,"operation":"reorder-volume","sql_calls":67,"response_bytes":1843,"elapsed_ms":151.63516700000037}
+{"scale":30000,"operation":"delete-chapter","sql_calls":68,"response_bytes":1860,"elapsed_ms":142.93349999999919}
+{"scale":30000,"operation":"delete-volume","sql_calls":68,"response_bytes":1805,"elapsed_ms":216.84870800000135}
+{"scale":30000,"operation":"export","sql_calls":90,"response_bytes":92716,"elapsed_ms":367.4265000000014}
+UpdateProjectAssistance {"kind":"initialized","availability":"available","revision":"1","project_activity_position":"57"}
+{"scale":30000,"operation":"proposal-open","sql_calls":11,"response_bytes":1946,"elapsed_ms":38.24833299999955}
+{"scale":30000,"operation":"proposal-accept","sql_calls":71,"response_bytes":15282,"elapsed_ms":217.4410420000022}
+{"scale":30000,"operation":"web-open-project","sql_calls":116,"response_bytes":64394,"elapsed_ms":1191.6352499999994}
+{"scale":30000,"operation":"web-input-save","sql_calls":112,"response_bytes":35183,"elapsed_ms":726.3266249999979}
+{"scale":30000,"operation":"web-undo","sql_calls":97,"response_bytes":50659,"elapsed_ms":461.5322090000045}
+{"scale":30000,"operation":"web-switch-chapter","sql_calls":178,"response_bytes":74016,"elapsed_ms":880.9541250000038}
+{"scale":30000,"operation":"web-search","sql_calls":9,"response_bytes":1085,"elapsed_ms":199.40158299999894}
+{"scale":30000,"operation":"web-session-recovery","sql_calls":116,"response_bytes":59240,"elapsed_ms":887.4740840000013}
+{"scale":30000,"operation":"web-unicode-insert","sql_calls":112,"response_bytes":32083,"elapsed_ms":577.1213750000024}
+{"scale":30000,"operation":"web-proposal-open","sql_calls":25,"response_bytes":12328,"elapsed_ms":220.1919590000034}
+{"scale":30000,"operation":"web-proposal-accept","sql_calls":232,"response_bytes":69562,"elapsed_ms":619.9534170000043}
+{"scale":30000,"operation":"web-create-volume","sql_calls":86,"response_bytes":5667,"elapsed_ms":393.20116699999926}
+{"scale":30000,"operation":"web-create-chapter","sql_calls":92,"response_bytes":5876,"elapsed_ms":268.67741699999897}
+{"scale":30000,"operation":"web-reorder-chapter","sql_calls":88,"response_bytes":5773,"elapsed_ms":296.10708399999567}
+{"scale":30000,"operation":"web-reorder-volume","sql_calls":88,"response_bytes":5761,"elapsed_ms":314.6410420000029}
+{"scale":30000,"operation":"web-delete-chapter","sql_calls":225,"response_bytes":83868,"elapsed_ms":903.5047500000001}
+{"scale":30000,"operation":"web-delete-volume","sql_calls":225,"response_bytes":76748,"elapsed_ms":884.1239579999965}
+{"scale":30000,"operation":"web-export","sql_calls":100,"response_bytes":93654,"elapsed_ms":490.18220799999835}
+{"scale":30000,"operation":"web-session-recovery-after-structure","sql_calls":134,"response_bytes":58703,"error":{"message":"Error: Editor needs attention: "},"elapsed_ms":950.3665420000034}
+DeleteVolume {"kind":"refused","reason":"nonempty_volume"}
+{"scale":30000,"operation":"delete-populated-volume","sql_calls":47,"response_bytes":1661,"elapsed_ms":128.40233300000546}
+Verification passed: 69.52s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/cd1defa93f6447bda017bcc7b3a96057/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Imported 1/150 chapters
+Imported 25/150 chapters
+Imported 50/150 chapters
+Imported 75/150 chapters
+Imported 100/150 chapters
+Imported 125/150 chapters
+Imported 150/150 chapters
+{"scale":300000,"operation":"statistics-before-analyze","sql_calls":9,"response_bytes":1332,"elapsed_ms":144.09616699999606}
+{"scale":300000,"operation":"open-project","sql_calls":7,"response_bytes":422,"elapsed_ms":25.426083999991533}
+{"scale":300000,"operation":"tree","sql_calls":12,"response_bytes":16603,"elapsed_ms":57.89108400000259}
+{"scale":300000,"operation":"read-chapter","sql_calls":8,"response_bytes":13924,"elapsed_ms":35.942666000002646}
+{"scale":300000,"operation":"statistics","sql_calls":9,"response_bytes":1332,"elapsed_ms":67.61325000000943}
+{"scale":300000,"operation":"search-current_chapter","sql_calls":9,"response_bytes":1088,"elapsed_ms":45.301874999990105}
+{"scale":300000,"operation":"search-manuscript","sql_calls":9,"response_bytes":1088,"elapsed_ms":72.5670839999948}
+{"scale":300000,"operation":"session-read","sql_calls":8,"response_bytes":19979,"elapsed_ms":35.30470800001058}
+{"scale":300000,"operation":"switch-chapter","sql_calls":61,"response_bytes":1946,"elapsed_ms":225.33358299999963}
+{"scale":300000,"operation":"save-input","sql_calls":76,"response_bytes":15471,"elapsed_ms":287.86866599999485}
+{"scale":300000,"operation":"undo","sql_calls":71,"response_bytes":15633,"elapsed_ms":316.0757500000036}
+{"scale":300000,"operation":"create-volume","sql_calls":65,"response_bytes":1847,"elapsed_ms":199.70962500000314}
+{"scale":300000,"operation":"create-chapter","sql_calls":71,"response_bytes":1962,"elapsed_ms":298.41462499999034}
+{"scale":300000,"operation":"reorder-chapter","sql_calls":67,"response_bytes":1863,"elapsed_ms":206.37012500000128}
+{"scale":300000,"operation":"reorder-volume","sql_calls":67,"response_bytes":1847,"elapsed_ms":210.59116700000595}
+{"scale":300000,"operation":"delete-chapter","sql_calls":68,"response_bytes":1864,"elapsed_ms":205.27687499999593}
+{"scale":300000,"operation":"delete-volume","sql_calls":68,"response_bytes":1809,"elapsed_ms":143.99558299999626}
+{"scale":300000,"operation":"export","sql_calls":90,"response_bytes":904589,"elapsed_ms":548.916624999998}
+UpdateProjectAssistance {"kind":"initialized","availability":"available","revision":"1","project_activity_position":"464"}
+{"scale":300000,"operation":"proposal-open","sql_calls":11,"response_bytes":1946,"elapsed_ms":62.43179199998849}
+{"scale":300000,"operation":"proposal-accept","sql_calls":71,"response_bytes":15285,"elapsed_ms":229.18833299999824}
+{"scale":300000,"operation":"web-open-project","sql_calls":116,"response_bytes":92848,"elapsed_ms":1265.6262080000015}
+{"scale":300000,"operation":"web-input-save","sql_calls":112,"response_bytes":35194,"elapsed_ms":698.0337090000103}
+{"scale":300000,"operation":"web-undo","sql_calls":97,"response_bytes":50669,"elapsed_ms":441.38154200001736}
+{"scale":300000,"operation":"web-switch-chapter","sql_calls":178,"response_bytes":102476,"elapsed_ms":1409.5989999999874}
+{"scale":300000,"operation":"web-search","sql_calls":9,"response_bytes":1088,"elapsed_ms":318.42612499999814}
+{"scale":300000,"operation":"web-session-recovery","sql_calls":116,"response_bytes":87694,"elapsed_ms":1342.712750000006}
+{"scale":300000,"operation":"web-unicode-insert","sql_calls":112,"response_bytes":32094,"elapsed_ms":669.7518329999875}
+{"scale":300000,"operation":"web-proposal-open","sql_calls":25,"response_bytes":12328,"elapsed_ms":222.93270900001517}
+{"scale":300000,"operation":"web-proposal-accept","sql_calls":228,"response_bytes":83789,"elapsed_ms":540.3952089999802}
+{"scale":300000,"operation":"web-create-volume","sql_calls":86,"response_bytes":19893,"elapsed_ms":394.361333000008}
+{"scale":300000,"operation":"web-create-chapter","sql_calls":92,"response_bytes":20102,"elapsed_ms":381.62462499999674}
+{"scale":300000,"operation":"web-reorder-chapter","sql_calls":88,"response_bytes":18667,"elapsed_ms":335.02674999999}
+{"scale":300000,"operation":"web-reorder-volume","sql_calls":88,"response_bytes":18655,"elapsed_ms":351.11624999999185}
+{"scale":300000,"operation":"web-delete-chapter","sql_calls":225,"response_bytes":126561,"elapsed_ms":902.396625000023}
+{"scale":300000,"operation":"web-delete-volume","sql_calls":225,"response_bytes":116211,"elapsed_ms":928.5145840000187}
+{"scale":300000,"operation":"web-export","sql_calls":110,"response_bytes":906438,"elapsed_ms":962.4964580000087}
+{"scale":300000,"operation":"web-session-recovery-after-structure","sql_calls":134,"response_bytes":87155,"error":{"message":"Error: Editor needs attention: "},"elapsed_ms":1059.4175830000022}
+DeleteVolume {"kind":"refused","reason":"nonempty_volume"}
+{"scale":300000,"operation":"delete-populated-volume","sql_calls":47,"response_bytes":1662,"elapsed_ms":135.77579200000037}
+Verification passed: 182.28s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/d7a12416bd664c8b96f4f244ed86e31f/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Imported 1/500 chapters
+Imported 25/500 chapters
+Imported 50/500 chapters
+Imported 75/500 chapters
+Imported 100/500 chapters
+Imported 125/500 chapters
+Imported 150/500 chapters
+Imported 175/500 chapters
+Imported 200/500 chapters
+Imported 225/500 chapters
+Imported 250/500 chapters
+Imported 275/500 chapters
+Imported 300/500 chapters
+Imported 325/500 chapters
+Imported 350/500 chapters
+Imported 375/500 chapters
+Imported 400/500 chapters
+Imported 425/500 chapters
+Imported 450/500 chapters
+Imported 475/500 chapters
+Imported 500/500 chapters
+{"scale":1000000,"operation":"statistics-before-analyze","sql_calls":9,"response_bytes":1337,"elapsed_ms":191.5622919999878}
+{"scale":1000000,"operation":"open-project","sql_calls":7,"response_bytes":423,"elapsed_ms":22.332875000021886}
+{"scale":1000000,"operation":"tree","sql_calls":12,"response_bytes":53615,"elapsed_ms":53.7675000000163}
+{"scale":1000000,"operation":"read-chapter","sql_calls":8,"response_bytes":13925,"elapsed_ms":45.02445899997838}
+{"scale":1000000,"operation":"statistics","sql_calls":9,"response_bytes":1337,"elapsed_ms":161.97079200000735}
+{"scale":1000000,"operation":"search-current_chapter","sql_calls":9,"response_bytes":1091,"elapsed_ms":50.541334000008646}
+{"scale":1000000,"operation":"search-manuscript","sql_calls":9,"response_bytes":1091,"elapsed_ms":170.6909169999999}
+{"scale":1000000,"operation":"session-read","sql_calls":8,"response_bytes":14973,"elapsed_ms":29.802167000016198}
+{"scale":1000000,"operation":"switch-chapter","sql_calls":61,"response_bytes":1949,"elapsed_ms":243.47429099999135}
+{"scale":1000000,"operation":"save-input","sql_calls":76,"response_bytes":15474,"elapsed_ms":273.87195800000336}
+{"scale":1000000,"operation":"undo","sql_calls":71,"response_bytes":15639,"elapsed_ms":304.4016249999986}
+{"scale":1000000,"operation":"create-volume","sql_calls":65,"response_bytes":1851,"elapsed_ms":189.40708299999824}
+{"scale":1000000,"operation":"create-chapter","sql_calls":71,"response_bytes":1965,"elapsed_ms":220.3360419999808}
+{"scale":1000000,"operation":"reorder-chapter","sql_calls":67,"response_bytes":1866,"elapsed_ms":187.6409589999821}
+{"scale":1000000,"operation":"reorder-volume","sql_calls":67,"response_bytes":1850,"elapsed_ms":178.55841700005112}
+{"scale":1000000,"operation":"delete-chapter","sql_calls":68,"response_bytes":1867,"elapsed_ms":186.95308300002944}
+{"scale":1000000,"operation":"delete-volume","sql_calls":68,"response_bytes":1812,"elapsed_ms":202.951791999978}
+{"scale":1000000,"operation":"export","sql_calls":90,"response_bytes":3009379,"elapsed_ms":774.3529580000322}
+UpdateProjectAssistance {"kind":"initialized","availability":"available","revision":"1","project_activity_position":"1521"}
+{"scale":1000000,"operation":"proposal-open","sql_calls":11,"response_bytes":1946,"elapsed_ms":40.47041700000409}
+{"scale":1000000,"operation":"proposal-accept","sql_calls":71,"response_bytes":15288,"elapsed_ms":196.25600000005215}
+{"scale":1000000,"operation":"web-open-project","sql_calls":116,"response_bytes":166892,"elapsed_ms":1493.4178750000428}
+{"scale":1000000,"operation":"web-input-save","sql_calls":110,"response_bytes":35204,"elapsed_ms":712.8097089999937}
+{"scale":1000000,"operation":"web-undo","sql_calls":97,"response_bytes":50679,"elapsed_ms":480.96079199999804}
+{"scale":1000000,"operation":"web-switch-chapter","sql_calls":176,"response_bytes":173852,"elapsed_ms":904.5830839999835}
+{"scale":1000000,"operation":"web-search","sql_calls":9,"response_bytes":1091,"elapsed_ms":436.16037500003586}
+{"scale":1000000,"operation":"web-session-recovery","sql_calls":116,"response_bytes":161738,"elapsed_ms":1490.2660000000033}
+{"scale":1000000,"operation":"web-unicode-insert","sql_calls":110,"response_bytes":32104,"elapsed_ms":838.6865420000395}
+{"scale":1000000,"operation":"web-proposal-open","sql_calls":25,"response_bytes":12328,"elapsed_ms":253.4764589999686}
+{"scale":1000000,"operation":"web-proposal-accept","sql_calls":217,"response_bytes":120812,"elapsed_ms":956.8349589999998}
+{"scale":1000000,"operation":"web-create-volume","sql_calls":86,"response_bytes":56915,"elapsed_ms":435.1274170000106}
+{"scale":1000000,"operation":"web-create-chapter","sql_calls":92,"response_bytes":57123,"elapsed_ms":906.5405420000316}
+{"scale":1000000,"operation":"web-reorder-chapter","sql_calls":86,"response_bytes":55683,"elapsed_ms":460.23608400003286}
+{"scale":1000000,"operation":"web-reorder-volume","sql_calls":86,"response_bytes":55671,"elapsed_ms":445.3160420000204}
+{"scale":1000000,"operation":"web-delete-chapter","sql_calls":222,"response_bytes":233083,"elapsed_ms":953.5424590000184}
+{"scale":1000000,"operation":"web-delete-volume","sql_calls":214,"response_bytes":213909,"elapsed_ms":962.321707999974}
+{"scale":1000000,"operation":"web-export","sql_calls":120,"response_bytes":3013478,"elapsed_ms":1690.170625000028}
+{"scale":1000000,"operation":"web-session-recovery-after-structure","sql_calls":134,"response_bytes":161197,"error":{"message":"Error: Editor needs attention: "},"elapsed_ms":1594.5043329999899}
+DeleteVolume {"kind":"refused","reason":"nonempty_volume"}
+{"scale":1000000,"operation":"delete-populated-volume","sql_calls":47,"response_bytes":1663,"elapsed_ms":139.72504099999787}
+Verification passed: 443.26s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/90ac6af2b3984bf78a203bf32c3846ae/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Imported 1/1500 chapters
+Imported 25/1500 chapters
+Imported 50/1500 chapters
+Imported 75/1500 chapters
+Imported 100/1500 chapters
+Imported 125/1500 chapters
+Imported 150/1500 chapters
+Imported 175/1500 chapters
+Imported 200/1500 chapters
+Imported 225/1500 chapters
+Imported 250/1500 chapters
+Imported 275/1500 chapters
+Imported 300/1500 chapters
+Imported 325/1500 chapters
+Imported 350/1500 chapters
+Imported 375/1500 chapters
+Imported 400/1500 chapters
+Imported 425/1500 chapters
+Imported 450/1500 chapters
+Imported 475/1500 chapters
+Imported 500/1500 chapters
+Imported 525/1500 chapters
+Imported 550/1500 chapters
+Imported 575/1500 chapters
+Imported 600/1500 chapters
+Imported 625/1500 chapters
+Imported 650/1500 chapters
+Imported 675/1500 chapters
+Imported 700/1500 chapters
+Imported 725/1500 chapters
+Imported 750/1500 chapters
+Imported 775/1500 chapters
+Imported 800/1500 chapters
+Imported 825/1500 chapters
+Imported 850/1500 chapters
+Imported 875/1500 chapters
+Imported 900/1500 chapters
+Imported 925/1500 chapters
+Imported 950/1500 chapters
+Imported 975/1500 chapters
+Imported 1000/1500 chapters
+Imported 1025/1500 chapters
+Imported 1050/1500 chapters
+Imported 1075/1500 chapters
+Imported 1100/1500 chapters
+Imported 1125/1500 chapters
+Imported 1150/1500 chapters
+Imported 1175/1500 chapters
+Imported 1200/1500 chapters
+Imported 1225/1500 chapters
+Imported 1250/1500 chapters
+Imported 1275/1500 chapters
+Imported 1300/1500 chapters
+Imported 1325/1500 chapters
+Imported 1350/1500 chapters
+Imported 1375/1500 chapters
+Imported 1400/1500 chapters
+Imported 1425/1500 chapters
+Imported 1450/1500 chapters
+Imported 1475/1500 chapters
+Imported 1500/1500 chapters
+{"scale":3000000,"operation":"statistics-before-analyze","sql_calls":9,"response_bytes":1338,"elapsed_ms":545.001082999981}
+{"scale":3000000,"operation":"open-project","sql_calls":7,"response_bytes":423,"elapsed_ms":29.551250000018626}
+{"scale":3000000,"operation":"tree","sql_calls":12,"response_bytes":159396,"elapsed_ms":67.66004200000316}
+{"scale":3000000,"operation":"read-chapter","sql_calls":8,"response_bytes":13925,"elapsed_ms":56.71845799998846}
+{"scale":3000000,"operation":"statistics","sql_calls":9,"response_bytes":1338,"elapsed_ms":493.2382079999661}
+{"scale":3000000,"operation":"search-current_chapter","sql_calls":9,"response_bytes":1091,"elapsed_ms":62.91729200002737}
+{"scale":3000000,"operation":"search-manuscript","sql_calls":9,"response_bytes":1091,"elapsed_ms":514.8680000000168}
+{"scale":3000000,"operation":"session-read","sql_calls":8,"response_bytes":18043,"elapsed_ms":64.91579100000672}
+{"scale":3000000,"operation":"switch-chapter","sql_calls":61,"response_bytes":1949,"elapsed_ms":216.00125000008848}
+{"scale":3000000,"operation":"save-input","sql_calls":76,"response_bytes":15475,"elapsed_ms":257.2257080000127}
+{"scale":3000000,"operation":"undo","sql_calls":71,"response_bytes":15639,"elapsed_ms":342.377416000003}
+{"scale":3000000,"operation":"create-volume","sql_calls":65,"response_bytes":1852,"elapsed_ms":212.2730000000447}
+{"scale":3000000,"operation":"create-chapter","sql_calls":71,"response_bytes":1966,"elapsed_ms":219.07045900006779}
+{"scale":3000000,"operation":"reorder-chapter","sql_calls":67,"response_bytes":1867,"elapsed_ms":254.79141599999275}
+{"scale":3000000,"operation":"reorder-volume","sql_calls":67,"response_bytes":1851,"elapsed_ms":198.03275000001304}
+{"scale":3000000,"operation":"delete-chapter","sql_calls":68,"response_bytes":1868,"elapsed_ms":233.0200419999892}
+{"scale":3000000,"operation":"delete-volume","sql_calls":68,"response_bytes":1813,"elapsed_ms":197.78891700005624}
+{"scale":3000000,"operation":"export","sql_calls":90,"response_bytes":9023190,"elapsed_ms":1743.5090410000412}
+UpdateProjectAssistance {"kind":"initialized","availability":"available","revision":"1","project_activity_position":"4541"}
+{"scale":3000000,"operation":"proposal-open","sql_calls":11,"response_bytes":1946,"elapsed_ms":66.88108399999328}
+{"scale":3000000,"operation":"proposal-accept","sql_calls":71,"response_bytes":15288,"elapsed_ms":250.30179199995473}
+{"scale":3000000,"operation":"web-open-project","sql_calls":116,"response_bytes":378456,"elapsed_ms":2183.4795419999864}
+{"scale":3000000,"operation":"web-input-save","sql_calls":110,"response_bytes":35205,"elapsed_ms":866.4987500000279}
+{"scale":3000000,"operation":"web-undo","sql_calls":97,"response_bytes":52017,"elapsed_ms":540.2747090000194}
+{"scale":3000000,"operation":"web-switch-chapter","sql_calls":169,"response_bytes":385414,"elapsed_ms":930.3993339999579}
+{"scale":3000000,"operation":"web-search","sql_calls":11,"response_bytes":2429,"elapsed_ms":943.3833330000052}
+{"scale":3000000,"operation":"web-session-recovery","sql_calls":116,"response_bytes":373302,"elapsed_ms":1770.4247919998597}
+{"scale":3000000,"operation":"web-unicode-insert","sql_calls":110,"response_bytes":32105,"elapsed_ms":768.7082909999881}
+{"scale":3000000,"operation":"web-proposal-open","sql_calls":25,"response_bytes":12328,"elapsed_ms":258.3706249999814}
+{"scale":3000000,"operation":"web-proposal-accept","sql_calls":219,"response_bytes":226593,"elapsed_ms":658.4687080001459}
+{"scale":3000000,"operation":"web-create-volume","sql_calls":88,"response_bytes":165374,"elapsed_ms":951.6822079999838}
+{"scale":3000000,"operation":"web-create-chapter","sql_calls":90,"response_bytes":161568,"elapsed_ms":449.127042000182}
+{"scale":3000000,"operation":"web-reorder-chapter","sql_calls":86,"response_bytes":162803,"elapsed_ms":368.33379199984483}
+{"scale":3000000,"operation":"web-reorder-volume","sql_calls":86,"response_bytes":162792,"elapsed_ms":370.7108330000192}
+{"scale":3000000,"operation":"web-delete-chapter","sql_calls":214,"response_bytes":553653,"elapsed_ms":989.6556249998976}
+{"scale":3000000,"operation":"web-delete-volume","sql_calls":216,"response_bytes":546496,"elapsed_ms":960.449624999892}
+{"scale":3000000,"operation":"web-export","sql_calls":132,"response_bytes":9028201,"elapsed_ms":2896.9890420001466}
+{"scale":3000000,"operation":"web-session-recovery-after-structure","sql_calls":134,"response_bytes":372761,"error":{"message":"Error: Editor needs attention: "},"elapsed_ms":1861.9902500000317}
+DeleteVolume {"kind":"refused","reason":"nonempty_volume"}
+{"scale":3000000,"operation":"delete-populated-volume","sql_calls":47,"response_bytes":1663,"elapsed_ms":135.31033300003037}
+Verification passed: 1097.27s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/d3df40d42dde4adfa4399bfba2b6837d/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+152 observed operation rows written to /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/prototypes/chinese-long-form-baseline/out/evidence

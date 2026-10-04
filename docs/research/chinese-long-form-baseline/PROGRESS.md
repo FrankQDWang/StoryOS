@@ -2,12 +2,12 @@
 
 ## Resume here
 
-- Status: active. Both four-scale measurements complete; final reports and count repeat pending.
+- Status: complete. Three part reports, ranked final report, and reproducible evidence are committed.
 - Baseline: `origin/main@479224809cdaae997cda51cb8853e3fafa242b65`.
 - Branch: `codex/chinese-long-form-baseline`.
 - Worktree: `/Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS`.
 - Date: 2026-10-05 (Asia/Singapore).
-- Next: finalize reports from evidence/final, verify evidence integrity and allowed paths, and push the research branch.
+- Resume: read REPORT.md and the part reports. Product defects are recorded only; no implementation or issue follow-up is authorized by this task.
 
 ## Scope and decisions
 
@@ -177,3 +177,27 @@ measurement, integration, progress, and commits.
   remains evidence; the paired run does not erase planner variability.
 - All owned database leases completed cleanup. The one-command run is now in its
   optional native Word repeat; its previous native Word observations remain valid.
+
+### Step 8: final reports, count repeat, and scope audit
+
+- Completed `SCALE-ENVELOPE.md`, `WORD-COUNT.md`, `TEXT-COORDINATES.md`, and
+  conclusion-first `REPORT.md`. `COMPLEXITY.md` holds the complete scoped source
+  inventory and distinguishes measured plans from application complexity.
+- The one-command final run exited 0, including native Word and 19 golden inputs.
+  Native Word and independent corpus counts match the earlier observations when
+  matched by input SHA-256. Console: `evidence/final-controlled-console.log`.
+- Evidence checks confirmed all 152 operation windows, the 4 expected refusals,
+  the 4 recorded recovery failures, all 24 exact text comparisons, and all 19
+  golden expected property values. Both evidence manifests match every file.
+- Checked local report links, source path/line existence, and `git diff --check`.
+  The branch diff from the fixed baseline contains only the two authorized
+  directories. Generated evidence is classified separately from apparatus/prose.
+- WPS and current platform exact Unicode algorithms/deltas remain explicit
+  research gaps. First-party sources do not define a complete reproducible rule;
+  no account/publishing flow was used. Independent profiles are not vendor clones.
+- Web remount windows remain identified lower bounds with separate deferred plans.
+  These limits are stated in the reports, not hidden by a generic PASS label.
+- No product, migration, generated contract, existing test, main, issue, or other
+  worktree was changed. No PR, complete test suite, or `make verify-local` was run.
+- Delivery is this research branch. Its reports and evidence are complete; pushing
+  the branch publishes only the authorized research artifacts.
