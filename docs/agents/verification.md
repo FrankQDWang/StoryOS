@@ -1,7 +1,7 @@
 # Repository verification
 
 This guide is the single owner of verification commands for every agent client.
-The main flow comes first; reference sections follow it.
+The main flow comes first. Reference sections follow it.
 
 ## Daily loop
 
@@ -41,7 +41,7 @@ the PR with an ordinary merge commit.
 3. Post each verdict as a PR comment. If a verdict is `FAIL`, fix the findings.
    Commit the fix. Push the fix. Then do steps 1 and 2 again. Continue until both axes
    PASS.
-4. Write one review record for each axis as JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context` (for example `codex-standards-pr<pr>` or `codex-spec-pr<pr>`), `result` (`PASS` or `FAIL`), and `evidence`. The executor context and the two reviewer contexts must differ; IDs assert consistency, not authenticated identity.
+4. Write one review record for each axis as JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context` (for example `codex-standards-pr<pr>` or `codex-spec-pr<pr>`), `result` (`PASS` or `FAIL`), and `evidence`. The executor context and the two reviewer contexts must differ. IDs assert consistency, not authenticated identity.
 5. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
 6. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after the imports.
 7. Send the PR link and the verdict comment links to the coordinator.
@@ -93,9 +93,9 @@ checkout locks do not enforce a host-wide budget.
 ## Agent clients
 
 These commands and rules are the same for every agent client, for example Claude
-Code and Codex. Codex loads `AGENTS.md` directly; Claude Code loads it through
+Code and Codex. Codex loads `AGENTS.md` directly. Claude Code loads it through
 `CLAUDE.md`. If a client loads neither file, include this document in its project
-instructions. The checked policy is the common owner; client instructions link
+instructions. The checked policy is the common owner. Client instructions link
 here and do not copy its rules. Any client can own an implementation, review, or
 coordinator role. The Standards and Spec reviewers use an agent tool that is
 different from the implementer's tool, as

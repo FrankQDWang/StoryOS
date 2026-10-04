@@ -22,7 +22,7 @@
 ### Parallel specification delivery
 
 - Use one integration branch per specification and a separate branch and worktree per implementation ticket. Run independent dependency-ready tickets in parallel. Preserve real product release gates.
-- Push the integration branch for one aggregate pull request; do not push implementation commits directly to `origin/main`. Merge into `main` only after current required checks and independent Standards and Spec reviews pass. Use an ordinary merge commit unless the specification requires another method. The implementation session opens the PR and does not merge it; a coordinator session examines the evidence and merges the PR.
+- Push the integration branch for one aggregate pull request; do not push implementation commits directly to `origin/main`. Merge into `main` only after current required checks and independent Standards and Spec reviews pass. Use an ordinary merge commit unless the specification requires another method. The implementation session opens the PR and does not merge it. A coordinator session examines the evidence and merges the PR.
 
 ### Verification evidence
 
