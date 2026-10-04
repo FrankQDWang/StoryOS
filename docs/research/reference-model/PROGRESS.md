@@ -143,3 +143,7 @@ Step 13 follow-up: seed 311 confirms that the new Reversal Proposal action becom
 ## Proposal batch 320-323
 
 Managed exit: 0. Differences: 0. Evidence: `proposals-320-323.json.gz` and `proposals-320-323.log`. Counts include only recorded calls.
+
+## Proposal batch 324-327
+
+Managed exit: 0. Differences: 0. Evidence: `proposals-324-327.json.gz` and `proposals-324-327.log`. Counts include only recorded calls.
