@@ -364,7 +364,7 @@ async fn dispatch_claim_commits_before_an_exchange_with_no_open_transaction() {
             points.0.into_inner().unwrap()
         ),
         (
-            Some(CompleteAgentRun::AlreadySettled),
+            Some(CompleteAgentRun::Settled),
             vec![ExchangeProbe {
                 claimed_attempts: 1,
                 run_locked: false,
