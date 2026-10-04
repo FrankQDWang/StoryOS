@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 330 test cases in 78 files have source verdicts. The audit is not complete.
+- Status: active. 377 test cases in 97 files have source verdicts. The audit is not complete.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
 - Complete source-review directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests). Cross-directory reconciliation and mutation review are still pending.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: remaining crates/storyos-adapter-postgres/src files. 9 source test files with 25 tests and both integration files with 12 tests are reviewed in adapter.json. Start create_project, update/archive Project, structural commands, counters, export work and model gateway. Then Server, Contracts, and remaining Web directories.
+- Next: remaining crates/storyos-adapter-postgres/src files. 28 source test files with 72 tests and both integration files with 12 tests are reviewed in adapter.json. Remaining: delete_chapter, delete_volume, set_current_chapter (ordinary and authority), takeover (admission and persistence), and Chapter/Volume rank batch files. Then Server, Contracts, and remaining Web directories.
 - No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -41,7 +41,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | apps/web/test/support | Pending | inventory.json |
 | crates/storyos-core/src | Source review complete | core.md; 202 tests in 38 files; CORE_CHECKPOINT.md |
 | crates/storyos-application/src | Source review complete | application.md; 58 tests in 20 files; APPLICATION_CHECKPOINT.md |
-| crates/storyos-adapter-postgres/src | In progress | adapter.md; 9 test files, 25 tests reviewed |
+| crates/storyos-adapter-postgres/src | In progress | adapter.md; 28 test files, 72 tests reviewed |
 | crates/storyos-adapter-postgres/tests | Source review complete | adapter.md; 12 tests in 2 files; ADAPTER_INTEGRATION_CHECKPOINT.md |
 | crates/storyos-server/src | Pending | inventory.json |
 | crates/storyos-server/tests | Source review complete | server-integration.md; 2 tests; 33 candidate lines |
@@ -93,3 +93,9 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 
 - Adapter integration directory complete: 12 tests, 10 KEEP / 2 DELETE; 116 candidate lines. Adapter source progress: 25 tests in 9 files. Reviewed owners include Author Edit recovery, outcome locks, observation append, connection pooling, Block payloads, search/tree and challenges.
 - Overall source verdicts: 330 cases / 78 files; {'DELETE': 213, 'KEEP': 114, 'MERGE': 2, 'MOVE': 1}; 5295 candidate lines. No mutation experiment has run.
+
+- Adapter source checkpoint: 72 tests in 28 files; with integration, 84 tests in 30 files. Overall: 377 cases / 97 files, DELETE 228, KEEP 143, MERGE 5, MOVE 1; 8105 candidate lines. Mutation checks remain 0/30.
+- ADR 0039 explicitly requires Provider preparation refusal and stream sequencing at the Model Gateway seam. Keep the real-Postgres contract tests even though the current FakeDestination does not emit preparation refusal. ADR 0041 explicitly requires in-progress structural replay refusal. These accepted seam/persistence contracts differ from fabricated same-source command bindings (D5). Reconcile that distinction across all D5 rows before freezing the sample.
+- Create AgentRun has a vacuous final foreign query: it queries a Run that its own setup already deleted. Retain only its distinct missing-Revision scenario and other proven unique evidence; HTTP owns actual foreign isolation.
+- Project rename and archive Activity counts, plus Chapter Head identity preservation on rename, are MERGE recommendations. Do not count their files as immediately removable before those assertions reach the named HTTP owners.
+- Positive structural Commit-shape assertions duplicate executable Undo paths. Direct SQL CHECK violations and real rollback faults remain distinct. No temporary mutation or targeted test run occurred in this source-review checkpoint.
