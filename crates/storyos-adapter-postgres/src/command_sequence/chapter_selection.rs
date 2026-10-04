@@ -7,7 +7,7 @@ use storyos_application::{
 };
 use tokio_postgres::Client;
 
-use super::records::insert_activity;
+use super::records::insert_applied_activity;
 use super::{LockedProject, SettlementProfile, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structural_authority_settlement::{
@@ -121,21 +121,17 @@ impl SettlementProfile for ChapterSelection {
         if base_updates != 1 {
             return Err(ProjectCommandError::BindingConflict);
         }
-        let mut activity = serde_json::Map::new();
-        activity.insert("kind".to_owned(), activity_kind.into());
-        activity.insert("prior_chapter_id".to_owned(), write.prior_chapter_id.into());
-        activity.insert("current_chapter_id".to_owned(), write.chapter_id.into());
-        activity.insert(
-            "base_snapshot_id".to_owned(),
-            sequences.snapshot_id.clone().into(),
-        );
-        insert_activity(
+        insert_applied_activity(
             client,
             envelope,
+            activity_kind,
             sequences.project_activity_position,
             &sequences.project_activity_event_id,
-            activity_kind,
-            activity,
+            serde_json::json!({
+                "prior_chapter_id": write.prior_chapter_id,
+                "current_chapter_id": write.chapter_id,
+            }),
+            &[("base_snapshot_id", sequences.snapshot_id.clone())],
         )
         .await?;
         persist_current_chapter_forward_author_action(

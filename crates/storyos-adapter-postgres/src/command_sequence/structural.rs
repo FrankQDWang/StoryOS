@@ -7,7 +7,7 @@ use storyos_application::{
 };
 use tokio_postgres::Client;
 
-use super::records::insert_activity;
+use super::records::insert_applied_activity;
 use super::{LockedProject, SettlementProfile, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structural_authority_settlement::{
@@ -109,21 +109,14 @@ impl SettlementProfile for Structural {
                 "tree revision or Current Chapter changed under FOR UPDATE",
             ));
         }
-        let serde_json::Value::Object(mut activity) = write.activity else {
-            return Err(unavailable("the Activity payload is not an object"));
-        };
-        activity.insert("kind".to_owned(), activity_kind.into());
-        activity.insert(
-            "tree_revision".to_owned(),
-            write.resulting_tree_revision.to_string().into(),
-        );
-        insert_activity(
+        insert_applied_activity(
             client,
             envelope,
+            activity_kind,
             sequences.project_activity_position,
             &sequences.project_activity_event_id,
-            activity_kind,
-            activity,
+            write.activity,
+            &[("tree_revision", write.resulting_tree_revision.to_string())],
         )
         .await?;
         let (identity, resulting_revision_id) = match &write.identity {

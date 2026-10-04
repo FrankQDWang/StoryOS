@@ -76,6 +76,48 @@ pub(super) async fn insert_receipt(
     Ok(receipt_created_at)
 }
 
+/// Inserts the applied Activity record of the Receipt.
+///
+/// `activity` holds the command fields; the record adds `kind` and the profile fields.
+pub(super) async fn insert_applied_activity(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    activity_kind: &'static str,
+    position: u64,
+    event_id: &str,
+    activity: serde_json::Value,
+    profile_fields: &[(&str, String)],
+) -> Result<(), ProjectCommandError> {
+    let serde_json::Value::Object(mut payload) = activity else {
+        return Err(unavailable("the Activity payload is not an object"));
+    };
+    payload.insert("kind".to_owned(), activity_kind.into());
+    for (key, value) in profile_fields {
+        payload.insert((*key).to_owned(), value.as_str().into());
+    }
+    client
+        .execute(
+            "INSERT INTO storyos.project_activity_event_payloads
+               (owner_user_id, project_id, project_activity_position,
+                project_activity_event_id, event_kind, receipt_id, receipt_result_kind,
+                payload)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
+                     $5, $6::text::uuid, 'authoritative_applied', $7::text::jsonb)",
+            &[
+                &envelope.project_scope.owner_user_id.as_ref(),
+                &envelope.project_scope.project_id.as_ref(),
+                &position.to_string(),
+                &event_id,
+                &activity_kind,
+                &envelope.ids.receipt_id,
+                &serde_json::Value::Object(payload).to_string(),
+            ],
+        )
+        .await
+        .map_err(unavailable)?;
+    Ok(())
+}
+
 pub(super) async fn lock_project(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
@@ -154,36 +196,4 @@ pub(super) async fn settle_idempotency(
         .await
         .map_err(unavailable)?;
     Ok(project)
-}
-
-/// Inserts the Project Activity payload of one settled command at its allocated position.
-pub(super) async fn insert_activity(
-    client: &Client,
-    envelope: &ProjectCommandEnvelope,
-    position: u64,
-    event_id: &str,
-    event_kind: &str,
-    payload: serde_json::Map<String, serde_json::Value>,
-) -> Result<(), ProjectCommandError> {
-    client
-        .execute(
-            "INSERT INTO storyos.project_activity_event_payloads
-               (owner_user_id, project_id, project_activity_position,
-                project_activity_event_id, event_kind, receipt_id, receipt_result_kind,
-                payload)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                     $5, $6::text::uuid, 'authoritative_applied', $7::text::jsonb)",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &position.to_string(),
-                &event_id,
-                &event_kind,
-                &envelope.ids.receipt_id,
-                &serde_json::Value::Object(payload).to_string(),
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    Ok(())
 }

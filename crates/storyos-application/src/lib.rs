@@ -34,7 +34,6 @@ pub use acceptance_refusal::{
 mod accept_proposal;
 mod agent_run_control;
 mod agent_run_work;
-mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_wire;
@@ -66,6 +65,7 @@ mod project_activity;
 mod project_command;
 mod project_export;
 mod project_export_work;
+mod project_settings;
 mod proposal_generation_decision;
 mod readable_export;
 mod readable_export_work;
@@ -77,7 +77,6 @@ mod set_current_chapter;
 mod snapshot;
 mod takeover;
 mod undo_latest_author_action;
-mod update_project;
 mod update_project_assistance;
 mod withdraw_proposal;
 
@@ -117,10 +116,6 @@ pub use agent_run_control::{
 pub use agent_run_work::{
     AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
     claim_next_agent_run,
-};
-pub use archive_project::{
-    ArchiveProjectCommand, ArchiveProjectError, ArchiveProjectSettlement,
-    ArchiveProjectSettlementEffect, ArchiveProjectStore, archive_project,
 };
 pub use chapter_query::{ChapterQueryFacts, ChapterQueryReader, OpenChapter, open_chapter};
 pub use create_agent_run::{
@@ -187,9 +182,9 @@ pub use pinned_export_source::{
     render_readable_manuscript_from_pinned_source,
 };
 pub use project_command::{
-    AuthorityEvidence, ChapterSelectionApplied, ChapterSelectionAuthority, ProjectCommandEnvelope,
-    ProjectCommandError, ProjectCommandSettlement, StructureApplied, StructureAuthority,
-    StructureAuthorityEvidence, StructureSettlement,
+    ActivityApplied, AuthorityEvidence, ChapterSelectionApplied, ChapterSelectionAuthority,
+    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, StructureApplied,
+    StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,
@@ -203,6 +198,9 @@ pub use project_export::{
 pub use project_export_work::{
     ArchiveExportWorkStore, ClaimedArchiveExport, CompleteArchiveExport,
     CompleteArchiveExportError, claim_next_archive_export, complete_archive_export,
+};
+pub use project_settings::{
+    ArchiveProjectInput, ArchiveProjectSettlement, UpdateProjectInput, UpdateProjectSettlement,
 };
 pub use proposal_generation_decision::{
     CompleteReadyPartialProposalCommand, CompleteReadyPartialProposalEffect,
@@ -250,10 +248,6 @@ pub use set_current_chapter::{
 pub use undo_latest_author_action::{
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
     UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore, undo_latest_author_action,
-};
-pub use update_project::{
-    UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,
-    UpdateProjectSettlementEffect, UpdateProjectStore, update_project,
 };
 pub use update_project_assistance::{
     ProjectAssistanceRecord, UpdateProjectAssistanceCommand, UpdateProjectAssistanceError,

@@ -3,12 +3,12 @@ use std::fmt::Debug;
 use serde::de::DeserializeOwned;
 use storyos_contracts as contracts;
 use storyos_core::{
-    CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict, CreateVolumeRefusal,
-    DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteVolumeConflict,
-    DeleteVolumeNoEffect, DeleteVolumeRefusal, ReasonCode, SetCurrentChapterConflict,
-    SetCurrentChapterNoEffect, SetCurrentChapterRefusal, UpdateChapterConflict,
-    UpdateChapterNoEffect, UpdateChapterRefusal, UpdateVolumeConflict, UpdateVolumeNoEffect,
-    UpdateVolumeRefusal,
+    ArchiveProjectConflict, ArchiveProjectNoEffect, CreateChapterConflict, CreateChapterRefusal,
+    CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
+    DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
+    ReasonCode, SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
+    UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal, UpdateProjectConflict,
+    UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
 };
 
 use super::contract_reason;
@@ -158,6 +158,26 @@ fn every_chapter_reason_maps_to_its_public_reason() {
             contracts::DeleteChapterRefusalReason::InvalidChapterJoin,
         ),
     ]);
+}
+
+#[test]
+fn every_project_setting_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        UpdateProjectNoEffect::TitleUnchanged,
+        contracts::UpdateProjectNoEffectReason::TitleUnchanged,
+    )]);
+    assert_maps(vec![(
+        UpdateProjectConflict::StaleProjectRevision,
+        contracts::UpdateProjectConflictReason::StaleProjectRevision,
+    )]);
+    assert_maps(vec![(
+        ArchiveProjectNoEffect::AlreadyArchived,
+        contracts::ArchiveProjectNoEffectReason::AlreadyArchived,
+    )]);
+    assert_maps(vec![(
+        ArchiveProjectConflict::StaleProjectRevision,
+        contracts::ArchiveProjectConflictReason::StaleProjectRevision,
+    )]);
 }
 
 #[test]

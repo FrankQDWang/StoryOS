@@ -12,11 +12,13 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 
+mod activity_only;
 mod admission;
 mod chapter_selection;
 mod records;
 mod structural;
 use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
+pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
 use records::{ReceiptRecord, insert_receipt, lock_project, settle_idempotency};
