@@ -1,21 +1,6 @@
 //! Decide whether an uncertain create may be reconciled by its original result.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum OriginalResultScript {
-    NotSubject,
-    MissingReference,
-    Unsupported,
-    UnknownBounds,
-    ForeignScope,
-    ForeignConversation,
-    ForeignMapping,
-    ForeignDestination,
-    Incomplete,
-    UnknownResult,
-    CompleteSelected,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RetrievalCapability {
     Supported,
     Unsupported,
@@ -92,23 +77,6 @@ pub enum OriginalResultRetrievalDecision {
     },
     EvidenceOnly,
     SettleSelected,
-}
-
-/// Classify one author message as an original-result retrieval subject.
-pub fn original_result_script(author_message: &str) -> OriginalResultScript {
-    match author_message {
-        "SCRIPT:retrieve-missing" => OriginalResultScript::MissingReference,
-        "SCRIPT:retrieve-unsupported" => OriginalResultScript::Unsupported,
-        "SCRIPT:retrieve-unbounded" => OriginalResultScript::UnknownBounds,
-        "SCRIPT:retrieve-foreign-scope" => OriginalResultScript::ForeignScope,
-        "SCRIPT:retrieve-foreign-conversation" => OriginalResultScript::ForeignConversation,
-        "SCRIPT:retrieve-foreign-mapping" => OriginalResultScript::ForeignMapping,
-        "SCRIPT:retrieve-foreign-destination" => OriginalResultScript::ForeignDestination,
-        "SCRIPT:retrieve-incomplete" => OriginalResultScript::Incomplete,
-        "SCRIPT:retrieve-unknown" => OriginalResultScript::UnknownResult,
-        "SCRIPT:retrieve-complete" => OriginalResultScript::CompleteSelected,
-        _ => OriginalResultScript::NotSubject,
-    }
 }
 
 /// Admit original-result retrieval, or keep the unknown disposition and reservation.

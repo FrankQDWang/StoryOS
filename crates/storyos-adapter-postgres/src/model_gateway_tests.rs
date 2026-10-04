@@ -4,8 +4,8 @@ use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     AuthorCommandAdmissionIds, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
     ContractFaultObserver, ContractFaultPoint, ConversationSelection, CreateAgentRunCommand,
-    CreateObservation, DestinationRequest, EditorClientBinding, IssueProjectCommandChallenge,
-    ModelProviderAdapter, ModelStreamSink, PreDispatchRefusal, PreparedRequest, ProjectScope,
+    DestinationRequest, EditorClientBinding, IssueProjectCommandChallenge, ModelProviderAdapter,
+    ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
     UpdateProjectAssistanceCommand, complete_agent_run, issue_project_command_challenge,
     request_create_agent_run, update_project_assistance,
 };
@@ -78,7 +78,7 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
         &self,
         prepared: Self::Prepared,
         sink: &mut impl ModelStreamSink,
-    ) -> CreateObservation {
+    ) -> Observation {
         match self.probe {
             Probe::Refuse => unreachable!("a refused request has no exchange"),
             Probe::InspectBeforeExchange => {

@@ -184,6 +184,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
       await expect.poll(async () => (await inspect(cancelledLookupId)).model_attempt.kind).toBe("present");
       assert.equal((await cancel(cancelledLookupId, "9")).effect.kind, "applied");
     } finally { if (existsSync(lookupHold)) unlinkSync(lookupHold); await lookupWorker; }
+    await settleOnce();
     const cancelledLookup = await inspect(cancelledLookupId);
     assert.equal(cancelledLookup.status, "cancelled");
     assert.ok(cancelledLookup.original_result_retrieval.kind === "present");

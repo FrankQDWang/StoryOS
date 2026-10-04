@@ -3,9 +3,8 @@
 use storyos_core::NativeStreamItem;
 
 use crate::model_gateway_ports::{
-    ContractFaultObserver, ContractFaultPoint, CreateAttempt, DestinationRequest, DispatchClaim,
-    DispatchRecord, ModelDispatchStore, ModelProviderAdapter, ModelStreamSink, NextDispatchWork,
-    StreamControl,
+    ContractFaultObserver, ContractFaultPoint, DispatchClaim, DispatchRecord, ModelDispatchStore,
+    ModelProviderAdapter, ModelStreamSink, NextDispatchWork, RequestAttempt, StreamControl,
 };
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
 
@@ -31,12 +30,11 @@ pub async fn complete_agent_run(
                 continue;
             }
         };
-        let DestinationRequest::Create(create) = &request;
-        let dispatch = match &create.attempt {
-            CreateAttempt::Claimed(dispatch) => dispatch.clone(),
-            CreateAttempt::New => {
+        let dispatch = match request.attempt() {
+            RequestAttempt::Claimed(dispatch) => dispatch.clone(),
+            RequestAttempt::New => {
                 let Some(dispatch) = store
-                    .commit_dispatch_claim(claim, create, &prepared.projection)
+                    .commit_dispatch_claim(claim, &request, &prepared.projection)
                     .await?
                 else {
                     continue;
@@ -55,9 +53,9 @@ pub async fn complete_agent_run(
         store
             .record(
                 claim,
-                DispatchRecord::Create {
+                DispatchRecord::Exchange {
                     claim: &dispatch,
-                    request: create,
+                    request: &request,
                     observation,
                 },
             )

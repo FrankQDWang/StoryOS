@@ -1,34 +1,26 @@
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ProjectAssistanceRecord,
-    ProjectScope, UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect,
+    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DispatchClaim,
+    ProjectAssistanceRecord, ProjectScope, RequestAttempt, RetrievePurpose, RetrieveRequest,
+    UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect,
 };
 use storyos_core::{
-    ADVISORY_TEXT, AssistanceAvailability, HOST_FAKE_MAPPING_REVISION, LookupUnavailable,
-    SuccessorAllowance, SuccessorEffect, SuccessorLookup, UnknownCreateSuccessorDecision,
-    UnknownCreateSuccessorFacts, decide_unknown_create_successor, scripted_successor_conditions,
-    unknown_create_script,
+    ADVISORY_TEXT, AssistanceAvailability, LookupUnavailable, SuccessorAllowance, SuccessorEffect,
+    SuccessorLookup, UnknownCreateSuccessorDecision, UnknownCreateSuccessorFacts,
+    decide_unknown_create_successor, scripted_successor_conditions, unknown_create_script,
 };
 use uuid::Uuid;
 
 use crate::agent_run_work::update_run;
 
 pub(crate) struct SuccessorOrigin<'a> {
-    pub owner_user_id: &'a str,
-    pub project_id: &'a str,
-    pub conversation_id: &'a str,
-    pub destination_identity: &'a str,
     pub predecessor_attempt_id: &'a str,
     pub model_invocation_id: &'a str,
-}
-
-pub(crate) struct PreparedSuccessor {
-    pub retrieval: serde_json::Value,
-    pub marker: serde_json::Value,
 }
 
 pub(crate) enum SuccessorWork {
     Done(CompleteAgentRun),
     Hold(&'static str),
+    Retrieve(RetrieveRequest),
 }
 
 pub(crate) struct SuccessorSelection {
@@ -36,52 +28,18 @@ pub(crate) struct SuccessorSelection {
     pub continuation_binding_id: Option<String>,
 }
 
+/// The successor marker of one scripted unknown create, with the lookup its reference allows.
 pub(crate) fn prepare_subject(
     author_message: &str,
     origin: &SuccessorOrigin<'_>,
-) -> Option<PreparedSuccessor> {
-    let script = unknown_create_script(author_message);
-    let conditions = scripted_successor_conditions(script)?;
-    let reference_present = !matches!(
-        conditions.lookup,
-        SuccessorLookup::Unavailable {
-            reason: LookupUnavailable::MissingReference,
-        }
-    );
-    let reference_id = reference_present.then(|| Uuid::now_v7().to_string());
-    let capability = if matches!(
-        conditions.lookup,
-        SuccessorLookup::Unavailable {
-            reason: LookupUnavailable::UnsupportedRetrieval,
-        }
-    ) {
-        "unsupported"
-    } else {
-        "supported"
-    };
-    let result = if reference_present {
-        "unknown"
-    } else {
-        "absent"
-    };
-    let retrieval = serde_json::json!({
-        "reconciliation_id": Uuid::now_v7().to_string(),
-        "reconciled": false,
-        "owner_user_id": origin.owner_user_id,
-        "project_id": origin.project_id,
-        "conversation_id": origin.conversation_id,
-        "destination_identity": origin.destination_identity,
-        "mapping_revision": HOST_FAKE_MAPPING_REVISION,
-        "capability": capability,
-        "bounds": "declared_read_only",
-        "reference_id": reference_id,
-        "result": result
-    });
-    let lookup_reason = match conditions.lookup {
+    lookup: SuccessorLookup,
+) -> Option<serde_json::Value> {
+    let conditions = scripted_successor_conditions(unknown_create_script(author_message))?;
+    let lookup_reason = match lookup {
         SuccessorLookup::StillUnknown => serde_json::Value::Null,
         SuccessorLookup::Unavailable { reason } => serde_json::json!(reason.label()),
     };
-    let marker = serde_json::json!({
+    Some(serde_json::json!({
         "recovery_id": Uuid::now_v7().to_string(),
         "decided": false,
         "lookup_unavailable_reason": lookup_reason,
@@ -91,11 +49,7 @@ pub(crate) fn prepare_subject(
         "budget_covers_both": conditions.budget_covers_both,
         "effect": effect_label(conditions.effect),
         "context_changed": conditions.context_changed,
-        "late_result": if conditions.late_complete {
-            serde_json::json!("complete_selected")
-        } else {
-            serde_json::Value::Null
-        },
+        "late_result_checked": false,
         "allowance_consumed": false,
         "predecessor_fenced": false,
         "disposition": serde_json::Value::Null,
@@ -113,8 +67,7 @@ pub(crate) fn prepare_subject(
         "supplies_tool_call": false,
         "advances_predecessor_continuation": false,
         "reuses_changed_context": false
-    });
-    Some(PreparedSuccessor { retrieval, marker })
+    }))
 }
 
 pub(crate) async fn advance(
@@ -140,7 +93,7 @@ pub(crate) async fn advance(
     ));
     match decision {
         UnknownCreateSuccessorDecision::AlreadyDispatched => {
-            finish_dispatched(client, claim, &mut row, &mut marker).await
+            finish_dispatched(client, claim, &row, &marker).await
         }
         UnknownCreateSuccessorDecision::ProhibitedByCancellation => {
             let consumed = flag(&marker, "allowance_consumed");
@@ -341,24 +294,46 @@ pub(crate) async fn load_successor_selection(
     }))
 }
 
-struct DecisionRow {
+pub(crate) struct DecisionRow {
     status: String,
-    attempt_id: String,
+    pub attempt_id: String,
     invocation_id: String,
     conversation_id: String,
-    payload: serde_json::Value,
+    pub payload: serde_json::Value,
 }
 
 async fn finish_dispatched(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    row: &mut DecisionRow,
-    marker: &mut serde_json::Value,
+    row: &DecisionRow,
+    marker: &serde_json::Value,
 ) -> Result<SuccessorWork, CompleteAgentRunError> {
-    if late_pending(marker) {
-        apply_late(marker, &mut row.payload);
-        row.payload["unknown_create_successor"] = marker.clone();
-        write_decision_payload(client, claim, &row.attempt_id, &row.payload).await?;
+    if let Some(response_reference) = late_check_reference(&row.payload, marker) {
+        let existing = client
+            .query_opt(
+                "SELECT model_attempt_id::text FROM storyos.model_attempts
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND run_id = $3::text::uuid
+                    AND attempt_role = 'late_retrieval' AND decision_position = 0",
+                &[
+                    &claim.project_scope.owner_user_id.as_ref(),
+                    &claim.project_scope.project_id.as_ref(),
+                    &claim.run_id,
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        return Ok(SuccessorWork::Retrieve(RetrieveRequest {
+            attempt: match existing {
+                Some(found) => RequestAttempt::Claimed(DispatchClaim {
+                    model_attempt_id: found.get(0),
+                }),
+                None => RequestAttempt::New,
+            },
+            purpose: RetrievePurpose::LateResult,
+            original_model_attempt_id: row.attempt_id.clone(),
+            response_reference,
+        }));
     }
     update_run(
         client,
@@ -393,14 +368,14 @@ async fn dispatch_pending(
         row.payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": false});
         row.payload["usage"] = serde_json::json!({"kind": "unknown"});
         write_decision_payload(client, claim, &row.attempt_id, &row.payload).await?;
-        if late_pending(marker) {
+        if late_check_reference(&row.payload, marker).is_some() {
             return Ok(SuccessorWork::Hold("successor_late"));
         }
     }
     finish_dispatched(client, claim, row, marker).await
 }
 
-fn apply_late(marker: &mut serde_json::Value, payload: &mut serde_json::Value) {
+pub(crate) fn apply_late(marker: &mut serde_json::Value, payload: &mut serde_json::Value) {
     payload["usage"] = serde_json::json!({"kind": "reported"});
     payload["reservation"] = serde_json::json!({"kind": "worst_case", "released": true});
     let attempt_id = text(marker, "predecessor_model_attempt_id").unwrap_or("");
@@ -602,7 +577,7 @@ async fn copy_manifest(
     Ok(())
 }
 
-async fn load_decision(
+pub(crate) async fn load_decision(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<DecisionRow, CompleteAgentRunError> {
@@ -664,7 +639,7 @@ async fn decision_payload(
         .map_err(read_error)
 }
 
-async fn write_decision_payload(
+pub(crate) async fn write_decision_payload(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     attempt_id: &str,
@@ -762,9 +737,12 @@ fn seal(
     marker["reuses_changed_context"] = serde_json::json!(false);
 }
 
-fn late_pending(marker: &serde_json::Value) -> bool {
-    text(marker, "late_result") == Some("complete_selected")
-        && !flag(marker, "late_evidence_applied")
+/// The predecessor reference to read for a late result, once, after the original retrieval.
+fn late_check_reference(payload: &serde_json::Value, marker: &serde_json::Value) -> Option<String> {
+    let subject = payload.get("original_result_retrieval")?;
+    (!flag(marker, "late_result_checked") && text(subject, "retrieval_attempt_id").is_some())
+        .then(|| text(subject, "reference_id").map(str::to_owned))
+        .flatten()
 }
 
 fn effect_label(effect: SuccessorEffect) -> &'static str {

@@ -319,6 +319,7 @@ test("a cancelled Run reconciles the late result as evidence only", async () => 
     assert.equal(cancelled.effect.kind, "applied");
     unlinkSync(hold);
     await worker;
+    await settleOnce();
     const after = await inspect(started.baseUrl, prepared, created.effect.run_id);
     const found = retrieval(after);
     assert.equal(after.status, "cancelled");

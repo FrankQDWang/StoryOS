@@ -1,7 +1,7 @@
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateAttempt, CreateObservation,
-    CreateRequest, DeclaredTarget, DestinationRequest, DispatchClaim, DispatchRecord,
-    ModelDispatchStore, ModelUsage, NextDispatchWork, PreDispatchRefusal, StreamStop,
+    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateRequest, DeclaredTarget,
+    DestinationRequest, DispatchClaim, DispatchRecord, ModelDispatchStore, ModelUsage,
+    NextDispatchWork, Observation, PreDispatchRefusal, RequestAttempt, RetrievePurpose, StreamStop,
     WirePayloadProjection,
 };
 use storyos_core::{AgentDecisionOutcome, NativeStreamItem, validate_agent_decision};
@@ -44,11 +44,7 @@ impl ModelDispatchStore for PostgresProjectReader {
             match phase {
                 WorkPhase::Done(result) => return Ok(NextDispatchWork::Settled(result)),
                 WorkPhase::Hold(kind) => hold_if_requested(kind).await,
-                WorkPhase::Dispatch(request) => {
-                    return Ok(NextDispatchWork::Request(DestinationRequest::Create(
-                        *request,
-                    )));
-                }
+                WorkPhase::Dispatch(request) => return Ok(NextDispatchWork::Request(*request)),
             }
         }
     }
@@ -56,7 +52,7 @@ impl ModelDispatchStore for PostgresProjectReader {
     async fn commit_dispatch_claim(
         &self,
         claim: &ClaimedAgentRun,
-        request: &CreateRequest,
+        request: &DestinationRequest,
         projection: &WirePayloadProjection,
     ) -> Result<Option<DispatchClaim>, CompleteAgentRunError> {
         let lease_seconds = self.agent_run_lease_seconds()?;
@@ -67,6 +63,12 @@ impl ModelDispatchStore for PostgresProjectReader {
         let client = &transaction.client;
         let claimed = async {
             let run = load_run_phase(client, claim).await?;
+            let request = match request {
+                DestinationRequest::Create(create) => create,
+                DestinationRequest::Retrieve(retrieve) => {
+                    return commit_retrieve(client, claim, &run, retrieve, projection).await;
+                }
+            };
             if run.settled()
                 || run.attempt_id.is_some()
                 || run.author_message != request.author_message
@@ -204,11 +206,15 @@ impl ModelDispatchStore for PostgresProjectReader {
             .map_err(complete_challenge_error)?;
         let client = &transaction.client;
         let phase = async {
-            let run = load_run_phase(client, claim).await?;
-            if run.settled() {
-                return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
-            }
+            let run = match load_run_phase(client, claim).await {
+                Err(CompleteAgentRunError::StaleFence) => {
+                    return cancelled_evidence(client, claim, record).await;
+                }
+                loaded => loaded?,
+            };
+            let settled = WorkPhase::Done(CompleteAgentRun::AlreadySettled);
             let phase = match record {
+                DispatchRecord::Refusal(_) if run.settled() => return Ok(settled),
                 DispatchRecord::Refusal(refusal) => {
                     let capability = match refusal {
                         PreDispatchRefusal::CredentialUnavailable => {
@@ -229,18 +235,49 @@ impl ModelDispatchStore for PostgresProjectReader {
                     .await?;
                     WorkPhase::Done(CompleteAgentRun::Settled)
                 }
-                DispatchRecord::Create {
+                DispatchRecord::Exchange {
                     claim: dispatch,
-                    request,
+                    request: DestinationRequest::Create(request),
                     observation,
                 } => {
-                    if run.decision_id.is_some()
+                    if run.settled()
+                        || run.decision_id.is_some()
                         || run.attempt_id.as_deref() != Some(dispatch.model_attempt_id.as_str())
                     {
-                        return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
+                        return Ok(settled);
                     }
                     record_create(client, claim, &run, dispatch, request, observation).await?
                 }
+                DispatchRecord::Exchange {
+                    request: DestinationRequest::Retrieve(_),
+                    ..
+                } if run.settled() && run.status != "cancelled" => return Ok(settled),
+                DispatchRecord::Exchange {
+                    claim: dispatch,
+                    request: DestinationRequest::Retrieve(retrieve),
+                    observation,
+                } => match retrieve.purpose {
+                    RetrievePurpose::OriginalResult => {
+                        crate::agent_run_retrieval_dispatch::record_original_result(
+                            client,
+                            claim,
+                            &run,
+                            dispatch,
+                            observation,
+                        )
+                        .await?
+                    }
+                    RetrievePurpose::LateResult => {
+                        crate::agent_run_retrieval_dispatch::record_late_result(
+                            client,
+                            claim,
+                            dispatch,
+                            observation,
+                        )
+                        .await?;
+                        WorkPhase::Hold("recovery")
+                    }
+                },
             };
             advance_steering(client, claim, lease_seconds, phase).await
         }
@@ -284,37 +321,88 @@ async fn advance_steering(
     Ok(phase)
 }
 
+/// A cancelled Run fences this claim; it keeps only the reference of an unknown create.
+async fn cancelled_evidence(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    record: DispatchRecord<'_>,
+) -> Result<WorkPhase, CompleteAgentRunError> {
+    if let DispatchRecord::Exchange {
+        claim: dispatch,
+        request: DestinationRequest::Create(_),
+        observation: Observation::OutcomeUnknown { response_reference },
+    } = record
+        && crate::agent_run_recovery::record_cancelled_evidence(
+            client,
+            claim,
+            dispatch,
+            response_reference.as_ref(),
+        )
+        .await?
+    {
+        return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
+    }
+    Err(CompleteAgentRunError::StaleFence)
+}
+
+async fn commit_retrieve(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+    request: &storyos_application::RetrieveRequest,
+    projection: &WirePayloadProjection,
+) -> Result<Option<DispatchClaim>, CompleteAgentRunError> {
+    let role = match request.purpose {
+        RetrievePurpose::OriginalResult => "retrieval",
+        RetrievePurpose::LateResult => "late_retrieval",
+    };
+    let claimed = client
+        .query_one(
+            "SELECT count(*) FROM storyos.model_attempts
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND attempt_role = $4 AND decision_position = 0",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+                &role,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?
+        .get::<_, i64>(0);
+    if claimed > 0 || (run.settled() && run.status != "cancelled") {
+        return Ok(None);
+    }
+    crate::agent_run_retrieval_dispatch::commit(client, claim, run, request, projection)
+        .await
+        .map(Some)
+}
+
 async fn record_create(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     dispatch: &DispatchClaim,
     request: &CreateRequest,
-    observation: CreateObservation,
+    observation: Observation,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let retained: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let response = match observation {
-        CreateObservation::Terminal(response) => response,
-        CreateObservation::OutcomeUnknown { .. }
-            if retained.get("original_result_retrieval").is_some()
-                || retained.get("unknown_create_successor").is_some() =>
-        {
-            return Ok(WorkPhase::Hold("recovery"));
-        }
-        CreateObservation::OutcomeUnknown { .. } => {
-            update_run(
+        Observation::Terminal(response) => response,
+        Observation::OutcomeUnknown { response_reference } => {
+            return crate::agent_run_recovery::record_unknown_create(
                 client,
                 claim,
-                "waiting",
-                Some(&serde_json::json!({"kind": "outcome_unknown", "reason": "unknown_result"})),
-                /*clear_lease*/ true,
+                run,
+                dispatch,
+                response_reference.as_ref(),
             )
-            .await?;
-            return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
+            .await;
         }
-        CreateObservation::NotSubmitted | CreateObservation::Rejected { .. } => {
+        Observation::NotSubmitted | Observation::Rejected { .. } => {
             let result = CreateResult {
                 attempt_id: &dispatch.model_attempt_id,
                 items: &[],
@@ -355,7 +443,7 @@ pub(crate) async fn create_request(
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     record: &serde_json::Value,
-    attempt: CreateAttempt,
+    attempt: RequestAttempt,
 ) -> Result<CreateRequest, CompleteAgentRunError> {
     let passage_resolution = storyos_core::decode_assembly_record(record)
         .ok_or_else(|| {

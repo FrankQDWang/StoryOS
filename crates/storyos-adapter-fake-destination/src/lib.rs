@@ -2,10 +2,12 @@
 
 mod create_plan;
 mod prose_changes;
+mod recovery_plan;
 
 use storyos_application::{
-    CreateObservation, DestinationRequest, ModelProviderAdapter, ModelResponse, ModelStreamSink,
-    ModelUsage, PreDispatchRefusal, PreparedRequest, StreamControl, WirePayloadProjection,
+    DestinationRequest, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
+    Observation, PreDispatchRefusal, PreparedRequest, ResponseReference, StreamControl,
+    WirePayloadProjection,
 };
 use storyos_core::HOST_FAKE_MAPPING_REVISION;
 
@@ -15,7 +17,13 @@ const HOST_FAKE_EXECUTION_PROFILE: &str = "storyos.host-fake.execution.v1";
 pub struct FakeDestination;
 
 /// The single-use prepared exchange of one fake request.
-pub struct FakeExchange(Option<create_plan::FakeCreate>);
+pub struct FakeExchange(FakePlan);
+
+enum FakePlan {
+    Create(create_plan::FakeCreate),
+    UnknownCreate(Option<ResponseReference>),
+    Retrieve(Observation),
+}
 
 impl ModelProviderAdapter for FakeDestination {
     type Prepared = FakeExchange;
@@ -24,32 +32,48 @@ impl ModelProviderAdapter for FakeDestination {
         &self,
         request: &DestinationRequest,
     ) -> Result<PreparedRequest<FakeExchange>, PreDispatchRefusal> {
-        let DestinationRequest::Create(create) = request;
+        let create = match request {
+            DestinationRequest::Create(create) => create,
+            DestinationRequest::Retrieve(retrieve) => {
+                return Ok(PreparedRequest {
+                    projection: projection(
+                        wire_digest(&serde_json::json!({
+                            "operation": "retrieve",
+                            "response_reference": retrieve.response_reference,
+                            "mapping_revision": HOST_FAKE_MAPPING_REVISION,
+                        })),
+                        /*serialized_payload*/ None,
+                    ),
+                    prepared: FakeExchange(FakePlan::Retrieve(recovery_plan::retrieve(retrieve))),
+                });
+            }
+        };
         let projection = match &create.passage_input {
             Some(input) => {
                 let mut wire = input.clone();
                 wire["mapping_revision"] = serde_json::json!(HOST_FAKE_MAPPING_REVISION);
                 let bytes = storyos_core::canonical_json(&wire);
-                WirePayloadProjection {
-                    execution_profile: HOST_FAKE_EXECUTION_PROFILE.to_owned(),
-                    mapping_revision: HOST_FAKE_MAPPING_REVISION.to_owned(),
-                    digest: format!("sha256:{}", storyos_core::hex_sha256(bytes.as_bytes())),
-                    serialized_payload: Some(bytes),
-                }
+                projection(
+                    format!("sha256:{}", storyos_core::hex_sha256(bytes.as_bytes())),
+                    Some(bytes),
+                )
             }
-            None => WirePayloadProjection {
-                execution_profile: HOST_FAKE_EXECUTION_PROFILE.to_owned(),
-                mapping_revision: HOST_FAKE_MAPPING_REVISION.to_owned(),
-                digest: wire_digest(&create.author_message, &create.chapter_id),
-                serialized_payload: None,
-            },
+            None => projection(
+                wire_digest(&serde_json::json!({
+                    "author_message": create.author_message,
+                    "chapter_id": create.chapter_id,
+                    "mapping_revision": HOST_FAKE_MAPPING_REVISION,
+                })),
+                /*serialized_payload*/ None,
+            ),
+        };
+        let plan = match recovery_plan::unknown_create(&create.author_message, &projection.digest) {
+            Some(reference) => FakePlan::UnknownCreate(reference),
+            None => FakePlan::Create(create_plan::plan_create(create)),
         };
         Ok(PreparedRequest {
             projection,
-            prepared: FakeExchange(
-                (!create_plan::create_outcome_unknown(&create.author_message))
-                    .then(|| create_plan::plan_create(create)),
-            ),
+            prepared: FakeExchange(plan),
         })
     }
 
@@ -57,18 +81,20 @@ impl ModelProviderAdapter for FakeDestination {
         &self,
         prepared: FakeExchange,
         sink: &mut impl ModelStreamSink,
-    ) -> CreateObservation {
-        let FakeExchange(Some(planned)) = prepared else {
-            return CreateObservation::OutcomeUnknown {
-                response_reference: None,
-            };
+    ) -> Observation {
+        let planned = match prepared.0 {
+            FakePlan::Create(planned) => planned,
+            FakePlan::UnknownCreate(response_reference) => {
+                return Observation::OutcomeUnknown { response_reference };
+            }
+            FakePlan::Retrieve(observation) => return observation,
         };
         if sink.append(&planned.items).await == StreamControl::Stop {
-            return CreateObservation::OutcomeUnknown {
+            return Observation::OutcomeUnknown {
                 response_reference: None,
             };
         }
-        CreateObservation::Terminal(ModelResponse {
+        Observation::Terminal(ModelResponse {
             items: planned.items,
             output: planned.output,
             usage: ModelUsage::Unknown,
@@ -77,16 +103,18 @@ impl ModelProviderAdapter for FakeDestination {
     }
 }
 
-fn wire_digest(author_message: &str, chapter_id: &str) -> String {
+fn projection(digest: String, serialized_payload: Option<String>) -> WirePayloadProjection {
+    WirePayloadProjection {
+        execution_profile: HOST_FAKE_EXECUTION_PROFILE.to_owned(),
+        mapping_revision: HOST_FAKE_MAPPING_REVISION.to_owned(),
+        digest,
+        serialized_payload,
+    }
+}
+
+fn wire_digest(wire: &serde_json::Value) -> String {
     format!(
         "sha256:{}",
-        storyos_core::hex_sha256(
-            storyos_core::canonical_json(&serde_json::json!({
-                "author_message": author_message,
-                "chapter_id": chapter_id,
-                "mapping_revision": HOST_FAKE_MAPPING_REVISION,
-            }))
-            .as_bytes(),
-        )
+        storyos_core::hex_sha256(storyos_core::canonical_json(wire).as_bytes())
     )
 }

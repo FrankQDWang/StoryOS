@@ -170,7 +170,7 @@ async fn persist_control(
             CancelAgentRunResult::Applied => {
                 let effect =
                     apply_control(client, command, AgentRunControlStatus::Cancelled).await?;
-                crate::agent_run_retrieval::reconcile_fenced_original_result(
+                crate::agent_run_recovery::mark_cancelled_evidence(
                     client,
                     &command.project_scope,
                     &command.run_id,

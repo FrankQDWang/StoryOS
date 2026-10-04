@@ -19,17 +19,6 @@ pub(crate) struct FakeCreate {
     pub output: Option<ModelOutput>,
 }
 
-/// A scripted recovery subject: the destination never reports the create result.
-pub(crate) fn create_outcome_unknown(author_message: &str) -> bool {
-    !matches!(
-        storyos_core::original_result_script(author_message),
-        storyos_core::OriginalResultScript::NotSubject
-    ) || !matches!(
-        storyos_core::unknown_create_script(author_message),
-        storyos_core::UnknownCreateScript::NotSubject
-    )
-}
-
 pub(crate) fn plan_create(request: &CreateRequest) -> FakeCreate {
     let mut planned = plan_message(&request.author_message, request.passage_resolution);
     apply_prose_changes(request, &mut planned);
@@ -194,7 +183,11 @@ fn complete(candidate: DecisionCandidate, phase: OutputPhase) -> FakeCreate {
     }
 }
 
-fn assistant_item(item_id: &str, state: StreamItemState, text: &str) -> NativeStreamItem {
+pub(crate) fn assistant_item(
+    item_id: &str,
+    state: StreamItemState,
+    text: &str,
+) -> NativeStreamItem {
     NativeStreamItem {
         item_id: item_id.to_owned(),
         role: StreamItemRole::Assistant,

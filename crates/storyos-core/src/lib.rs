@@ -194,8 +194,8 @@ pub use replan_proposal::{
 };
 pub use retrieve_original_result::{
     OriginalResultKeepReason, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
-    OriginalResultScript, RetainedResponseReference, RetrievalBounds, RetrievalCapability,
-    RetrievedOriginalResult, decide_original_result_retrieval, original_result_script,
+    RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
+    decide_original_result_retrieval,
 };
 pub use revision_comparison::{
     ExactRevisionTexts, ReplacementSpan, RevisionComparison, RevisionComparisonAccess,

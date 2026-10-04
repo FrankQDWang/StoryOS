@@ -2,7 +2,7 @@
 
 use std::future::Future;
 
-use storyos_core::{ModelOutput, NativeStreamItem, OrdinaryPassageResolution};
+use storyos_core::{ModelOutput, NativeStreamItem, OrdinaryPassageResolution, RetrievalBounds};
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
 
@@ -10,11 +10,21 @@ use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DestinationRequest {
     Create(CreateRequest),
+    Retrieve(RetrieveRequest),
 }
 
-/// Whether a Create request still needs its dispatch claim.
+impl DestinationRequest {
+    pub fn attempt(&self) -> &RequestAttempt {
+        match self {
+            Self::Create(request) => &request.attempt,
+            Self::Retrieve(request) => &request.attempt,
+        }
+    }
+}
+
+/// Whether a request still needs its dispatch claim.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CreateAttempt {
+pub enum RequestAttempt {
     New,
     Claimed(DispatchClaim),
 }
@@ -22,7 +32,7 @@ pub enum CreateAttempt {
 /// One provider-neutral Create request for the active decision of one claimed AgentRun.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CreateRequest {
-    pub attempt: CreateAttempt,
+    pub attempt: RequestAttempt,
     pub author_message: String,
     pub chapter_id: String,
     pub passage_resolution: Option<OrdinaryPassageResolution>,
@@ -40,7 +50,24 @@ pub struct DeclaredTarget {
     pub collection: bool,
 }
 
-/// The committed dispatch claim of one Model Attempt.
+/// One read of a retained response reference. It never sends the original request again.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RetrieveRequest {
+    pub attempt: RequestAttempt,
+    pub purpose: RetrievePurpose,
+    pub original_model_attempt_id: String,
+    pub response_reference: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RetrievePurpose {
+    /// Reconciles an unknown create with its original result.
+    OriginalResult,
+    /// Looks for the late result of a predecessor after its successor was dispatched.
+    LateResult,
+}
+
+/// The committed dispatch claim of one Destination Attempt.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DispatchClaim {
     pub model_attempt_id: String,
@@ -68,13 +95,40 @@ pub enum PreDispatchRefusal {
     UnsupportedRequest,
 }
 
-/// The complete result of one Create exchange. It has no error channel.
+/// The complete result of one exchange. It has no error channel.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CreateObservation {
+pub enum Observation {
     NotSubmitted,
-    Rejected { reason: String },
+    Rejected {
+        reason: String,
+    },
     Terminal(ModelResponse),
-    OutcomeUnknown { response_reference: Option<String> },
+    OutcomeUnknown {
+        response_reference: Option<ResponseReference>,
+    },
+}
+
+/// A response reference that the destination reported before the result was known.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResponseReference {
+    pub reference_id: String,
+    pub retrieval: ReferenceRetrieval,
+    pub reported_binding: ReportedBinding,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReferenceRetrieval {
+    Unsupported,
+    Supported { bounds: RetrievalBounds },
+}
+
+/// The binding that the destination reports for a reference. An absent value reports nothing.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReportedBinding {
+    pub owner_user_id: Option<String>,
+    pub conversation_id: Option<String>,
+    pub destination_identity: Option<String>,
+    pub mapping_revision: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -122,10 +176,10 @@ pub enum StreamControl {
 /// One result that the store records after an exchange or a refusal.
 pub enum DispatchRecord<'a> {
     Refusal(PreDispatchRefusal),
-    Create {
+    Exchange {
         claim: &'a DispatchClaim,
-        request: &'a CreateRequest,
-        observation: CreateObservation,
+        request: &'a DestinationRequest,
+        observation: Observation,
     },
 }
 
@@ -143,7 +197,7 @@ pub trait ModelDispatchStore: Sync {
     fn commit_dispatch_claim(
         &self,
         claim: &ClaimedAgentRun,
-        request: &CreateRequest,
+        request: &DestinationRequest,
         projection: &WirePayloadProjection,
     ) -> impl Future<Output = Result<Option<DispatchClaim>, CompleteAgentRunError>> + Send;
 
@@ -186,7 +240,7 @@ pub trait ModelProviderAdapter: Sync {
         &self,
         prepared: Self::Prepared,
         sink: &mut impl ModelStreamSink,
-    ) -> impl Future<Output = CreateObservation> + Send;
+    ) -> impl Future<Output = Observation> + Send;
 }
 
 /// The opaque name of one Provider credential.

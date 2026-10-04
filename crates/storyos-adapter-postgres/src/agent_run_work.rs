@@ -1,6 +1,7 @@
 use storyos_application::{
-    AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateAttempt,
-    CreateRequest, DispatchClaim, ProjectId, ProjectReadError, ProjectScope, UserId,
+    AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
+    DestinationRequest, DispatchClaim, ProjectId, ProjectReadError, ProjectScope, RequestAttempt,
+    UserId,
 };
 use storyos_core::{ExecutionCapability, requested_execution_capability, stream_batch_plan};
 use uuid::Uuid;
@@ -27,7 +28,7 @@ impl AgentRunWorkStore for PostgresProjectReader {
 pub(crate) enum WorkPhase {
     Done(CompleteAgentRun),
     Hold(&'static str),
-    Dispatch(Box<CreateRequest>),
+    Dispatch(Box<DestinationRequest>),
 }
 
 async fn claim_agent_run_row(
@@ -46,6 +47,12 @@ async fn claim_agent_run_row(
                      AND run.lease_expires_at IS NOT NULL
                      AND run.lease_expires_at <= clock_timestamp()
                    )
+                   OR (
+                     run.status = 'cancelled'
+                     AND run.wakeup_pending
+                     AND (run.lease_expires_at IS NULL
+                          OR run.lease_expires_at <= clock_timestamp())
+                   )
                 ORDER BY run.run_id
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
@@ -55,8 +62,8 @@ async fn claim_agent_run_row(
                     fence_token = run.claim_generation + 1,
                     lease_expires_at = clock_timestamp()
                       + ($1::bigint * interval '1 second'),
-                    wakeup_pending = false,
-                    status = 'claimed'
+                    wakeup_pending = run.status = 'cancelled' AND run.wakeup_pending,
+                    status = CASE WHEN run.status = 'cancelled' THEN 'cancelled' ELSE 'claimed' END
                FROM next_work
               WHERE run.owner_user_id = next_work.owner_user_id
                 AND run.project_id = next_work.project_id
@@ -232,6 +239,9 @@ pub(crate) async fn settle_one_phase(
     lease_seconds: i64,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let run = load_run_phase(client, claim).await?;
+    if run.status == "cancelled" {
+        return crate::agent_run_recovery::settle_cancelled(client, claim, &run).await;
+    }
     if run.settled() {
         return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
     }
@@ -249,24 +259,24 @@ pub(crate) async fn settle_one_phase(
         return Ok(
             match admit_create(client, claim, &run, assistance.as_ref()).await? {
                 CreateAdmission::Settled => WorkPhase::Done(CompleteAgentRun::Settled),
-                CreateAdmission::Dispatch(_) => WorkPhase::Dispatch(Box::new(
-                    crate::agent_run_dispatch::create_request(
-                        client,
-                        claim,
-                        &run,
-                        &record,
-                        CreateAttempt::New,
-                    )
-                    .await?,
-                )),
+                CreateAdmission::Dispatch(_) => {
+                    WorkPhase::Dispatch(Box::new(DestinationRequest::Create(
+                        crate::agent_run_dispatch::create_request(
+                            client,
+                            claim,
+                            &run,
+                            &record,
+                            RequestAttempt::New,
+                        )
+                        .await?,
+                    )))
+                }
             },
         );
     };
     let RunPhaseRow {
-        status,
         author_message,
         chapter_id,
-        conversation_id,
         destination_manifest_id: destination_manifest,
         decision_id,
         continuation_id,
@@ -283,48 +293,28 @@ pub(crate) async fn settle_one_phase(
     if payload.get("original_result_retrieval").is_some()
         || payload.get("unknown_create_successor").is_some()
     {
-        let follow_successor = payload.get("unknown_create_successor").is_some();
-        if payload.get("original_result_retrieval").is_some() {
-            let result = crate::agent_run_retrieval::advance_original_result_retrieval(
-                client,
-                claim,
-                &payload,
-                crate::agent_run_retrieval::RetrievalAdvance {
-                    attempt_id: &attempt_id,
-                    conversation_id,
-                    run_status: status,
-                },
-                crate::agent_run_retrieval::RetrievalFence::Open,
-                if follow_successor {
-                    crate::agent_run_retrieval::RetrievalRunWrite::Defer
-                } else {
-                    crate::agent_run_retrieval::RetrievalRunWrite::Write
-                },
-            )
-            .await?;
-            if !follow_successor {
-                return Ok(WorkPhase::Done(result));
-            }
-        }
-        return match crate::agent_run_successor::advance(client, claim, assistance.as_ref()).await?
-        {
-            crate::agent_run_successor::SuccessorWork::Done(result) => Ok(WorkPhase::Done(result)),
-            crate::agent_run_successor::SuccessorWork::Hold(kind) => Ok(WorkPhase::Hold(kind)),
-        };
+        return crate::agent_run_recovery::advance(
+            client,
+            claim,
+            &run,
+            &payload,
+            assistance.as_ref(),
+        )
+        .await;
     }
     if decision_id.is_none() {
-        return Ok(WorkPhase::Dispatch(Box::new(
+        return Ok(WorkPhase::Dispatch(Box::new(DestinationRequest::Create(
             crate::agent_run_dispatch::create_request(
                 client,
                 claim,
                 &run,
                 &record,
-                CreateAttempt::Claimed(DispatchClaim {
+                RequestAttempt::Claimed(DispatchClaim {
                     model_attempt_id: attempt_id,
                 }),
             )
             .await?,
-        )));
+        ))));
     }
     if payload.pointer("/decision/locations").is_none()
         && stream_batch_plan(author_message).is_some()
