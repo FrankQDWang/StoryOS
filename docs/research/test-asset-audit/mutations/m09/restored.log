@@ -1,0 +1,12 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 5 skipped (6)
+   Start at  05:05:50
+   Duration  4.29s (transform 73ms, setup 0ms, import 94ms, tests 4.07s, environment 0ms)
+
+Verification passed: 14.49s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/050a07bee6dd4eb7b3ad2b46d504ae8a/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

@@ -1,0 +1,31 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/create-chapter-http.integration.test.ts (6 tests | 1 failed | 5 skipped) 841ms
+   × createChapter creates three named Chapters, keeps the first current, and fails closed 838ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/create-chapter-http.integration.test.ts > createChapter creates three named Chapters, keeps the first current, and fails closed
+StoryOSProtocolError: StoryOS command failed with HTTP 503
+ ❯ commandJson ../../generated/typescript/storyos-public-release-1/client.mjs:56:11
+     54|     const retryAfter = response.headers.get("retry-after");
+     55|     const retryAfterSeconds = /^(?:[1-9]|[1-5][0-9]|60)$/.test(retryAf…
+     56|     throw new StoryOSProtocolError("command_http_error", `StoryOS comm…
+       |           ^
+     57|   }
+     58|   try { return JSON.parse(responseBody); } catch { throw new StoryOSPr…
+ ❯ postChapter test/node-postgresql/create-chapter-http.integration.test.ts:192:19
+ ❯ test/node-postgresql/create-chapter-http.integration.test.ts:385:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  05:05:40
+   Duration  1.13s (transform 101ms, setup 0ms, import 122ms, tests 841ms, environment 0ms)
+
+Verification failed: 9.90s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/8841608549d641cb9d0f45e495532ff6/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

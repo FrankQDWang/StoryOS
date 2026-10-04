@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/create_chapter.rs
++++ b/crates/storyos-core/src/create_chapter.rs
+@@ -87,7 +87,7 @@
+     if command.current_lifecycle == ProjectLifecycle::Archived {
+         return CreateChapterResult::Refused(CreateChapterRefusal::ArchivedProject);
+     }
+-    if command.volume_join == VolumeJoin::Invalid {
++    if false && command.volume_join == VolumeJoin::Invalid {
+         return CreateChapterResult::Refused(CreateChapterRefusal::InvalidVolumeJoin);
+     }
+     if command.expected_tree_revision != command.current_tree_revision {

@@ -1,0 +1,13 @@
+--- a/crates/storyos-adapter-postgres/src/command_replay.rs
++++ b/crates/storyos-adapter-postgres/src/command_replay.rs
+@@ -99,9 +99,7 @@
+             Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                 Err(ReplayFault::HistoricalAcknowledgementUnavailable)
+             }
+-            Err(()) => Err(unavailable(std::io::Error::other(
+-                "command acknowledgement evidence is damaged",
+-            ))),
++            Err(()) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
+         }
+     }
+ }

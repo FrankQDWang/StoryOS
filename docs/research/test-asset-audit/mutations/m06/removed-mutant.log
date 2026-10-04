@@ -1,0 +1,25 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+   Compiling storyos-core v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-core)
+   Compiling storyos-application v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-application)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.67s
+     Running unittests src/lib.rs (target/rust-cache/gen-f249a5399a7e4905b98070796744bffd/debug/deps/storyos_application-c4d593f1c62281fd)
+
+running 1 test
+
+thread 'manuscript_search::tests::an_unmet_required_watermark_is_projection_not_ready' (103344747) panicked at crates/storyos-application/src/manuscript_search_tests.rs:258:5:
+assertion `left == right` failed
+  left: Ready(ManuscriptSearchPage { project_scope: ProjectScope { owner_user_id: UserId("user-a"), project_id: ProjectId("project-a") }, source_snapshot: CanonicalSnapshot { snapshot_id: "snapshot-search", project_activity_position: 4, replay_generation: 1, floor_position: 0, redaction_profile: "storyos.author.v1", schema_profile: "storyos.public.release.1", created_at: "2026-08-31T00:00:00.000Z", expires_at: None }, projection_kind: "manuscript_search", projection_generation: 4, projection_watermark: 4, required_watermark: Some(9), completeness: Complete, lag: 0, items: [], page_count: 0 })
+ right: ProjectionNotReady { source_snapshot: CanonicalSnapshot { snapshot_id: "snapshot-search", project_activity_position: 4, replay_generation: 1, floor_position: 0, redaction_profile: "storyos.author.v1", schema_profile: "storyos.public.release.1", created_at: "2026-08-31T00:00:00.000Z", expires_at: None }, projection_watermark: 4, required_watermark: 9 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test manuscript_search::tests::an_unmet_required_watermark_is_projection_not_ready ... FAILED
+
+failures:
+
+failures:
+    manuscript_search::tests::an_unmet_required_watermark_is_projection_not_ready
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 57 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p storyos-application --lib`
+Verification failed: 2.61s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/9a97ba6343da44c4903f4ce0cef71974/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

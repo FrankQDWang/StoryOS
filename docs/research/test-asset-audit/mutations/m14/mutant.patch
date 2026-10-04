@@ -1,0 +1,11 @@
+--- a/crates/storyos-contracts/src/release1_takeover_artifacts.rs
++++ b/crates/storyos-contracts/src/release1_takeover_artifacts.rs
+@@ -229,7 +229,7 @@
+         .get("observed_writer_generation")
+         .is_some()
+     {
+-        schema["properties"]["observed_writer_generation"] = canonical_u64.clone();
++        schema["properties"]["observed_writer_generation"] = json!({"type": "integer"});
+     }
+     if schema["$defs"].get("DomainReceipt").is_some() {
+         schema["$defs"]["DomainReceipt"]["properties"]["author_action_sequence"] =

@@ -1,0 +1,11 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running unittests src/lib.rs (target/rust-cache/gen-f249a5399a7e4905b98070796744bffd/debug/deps/storyos_contracts-c385fe4a9fcf1a53)
+
+running 1 test
+test release1_artifacts::tests::every_registered_operation_matches_the_reviewed_catalog_and_generated_wire ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.31s
+
+Verification passed: 1.89s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/6b124797fd0c4852af2b24770ce61860/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

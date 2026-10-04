@@ -1,0 +1,23 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running unittests src/lib.rs (target/rust-cache/gen-f249a5399a7e4905b98070796744bffd/debug/deps/storyos_contracts-c385fe4a9fcf1a53)
+
+running 1 test
+
+thread 'release1_artifacts::tests::take_over_project_writer_wire_is_generated_without_stage1_coverage' (103611989) panicked at crates/storyos-contracts/src/release1_artifacts_tests.rs:224:5:
+assertion `left == right` failed
+  left: String("integer")
+ right: "string"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test release1_artifacts::tests::take_over_project_writer_wire_is_generated_without_stage1_coverage ... FAILED
+
+failures:
+
+failures:
+    release1_artifacts::tests::take_over_project_writer_wire_is_generated_without_stage1_coverage
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.13s
+
+error: test failed, to rerun pass `-p storyos-contracts --lib`
+Verification failed: 1.40s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/0c16d4b0e6ca4d5f82ba2e20434bd197/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

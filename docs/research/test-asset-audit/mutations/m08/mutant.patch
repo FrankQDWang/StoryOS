@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/rebuild_expired_reference.rs
++++ b/crates/storyos-core/src/rebuild_expired_reference.rs
+@@ -94,7 +94,7 @@
+                     ..idle
+                 },
+                 None => ExpiryRebuildDecision {
+-                    disposition: ExpiryRebuildDisposition::Rebuilt,
++                    disposition: ExpiryRebuildDisposition::NotApplicable,
+                     new_run_step_and_invocation: facts.effective_model_context_changed,
+                     covered_content_included: !facts.covered_copy_restricted,
+                     ..idle

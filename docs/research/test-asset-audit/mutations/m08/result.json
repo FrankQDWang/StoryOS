@@ -1,0 +1,112 @@
+{
+  "sample": 8,
+  "id": "CO138",
+  "status": "candidate-kill",
+  "source": "crates/storyos-core/src/rebuild_expired_reference.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m08-baseline",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
+        "-t",
+        "^confirmed\\ reference\\ expiry\\ rebuilds\\ eligible\\ context\\ and\\ keeps\\ the\\ old\\ run$"
+      ],
+      "exit": 0,
+      "seconds": 16.458,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m08/baseline.log"
+    },
+    {
+      "phase": "build",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m08-build",
+        "--",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--target-dir",
+        "target/web-release",
+        "-p",
+        "storyos-server",
+        "-p",
+        "storyos-worker-bin",
+        "-p",
+        "storyos-adapter-postgres"
+      ],
+      "exit": 0,
+      "seconds": 101.926,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m08/build.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m08-mutant",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
+        "-t",
+        "^confirmed\\ reference\\ expiry\\ rebuilds\\ eligible\\ context\\ and\\ keeps\\ the\\ old\\ run$"
+      ],
+      "exit": 1,
+      "seconds": 10.961,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m08/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m08-restored",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
+        "-t",
+        "^confirmed\\ reference\\ expiry\\ rebuilds\\ eligible\\ context\\ and\\ keeps\\ the\\ old\\ run$"
+      ],
+      "exit": 0,
+      "seconds": 16.25,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m08/restored.log"
+    }
+  ]
+}

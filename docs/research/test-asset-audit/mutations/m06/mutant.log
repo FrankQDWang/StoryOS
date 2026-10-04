@@ -1,0 +1,32 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/manuscript-search-http.integration.test.ts (1 test | 1 failed) 362ms
+   × searchManuscript returns a ready empty page and fail-closes across Project Scope 361ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/manuscript-search-http.integration.test.ts > searchManuscript returns a ready empty page and fail-closes across Project Scope
+AssertionError: Missing expected rejection.
+
+simple
+
+ ❯ test/node-postgresql/manuscript-search-http.integration.test.ts:122:5
+    120|     assert.deepEqual(rebuilt.items, page.items);
+    121|
+    122|     await assert.rejects(
+       |     ^
+    123|       searchManuscript({
+    124|         baseUrl,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  04:58:37
+   Duration  509ms (transform 41ms, setup 0ms, import 55ms, tests 362ms, environment 0ms)
+
+Verification failed: 7.88s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/c4b10c686d5648cf8be4c2196ac2826c/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

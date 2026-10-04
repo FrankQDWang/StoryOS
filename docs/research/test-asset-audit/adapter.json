@@ -529,14 +529,11 @@
     "path": "crates/storyos-adapter-postgres/src/export_work_tests.rs",
     "line": 94,
     "test": "a_combined_export_claim_falls_back_to_archive_work",
-    "verdict": "DELETE",
-    "reason": "D1",
-    "evidence": "The ordinary archive fallback is already required by the HTTP Worker-to-ready case, which starts with only an Archive request and then downloads verified output. Removing the archive fallback would prevent that public case from reaching ready.",
-    "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
-    "remove": [
-      92,
-      118
-    ]
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Sample 13 drops the returned Archive claim. The HTTP Worker-to-ready case fails only after its bounded readiness wait; this audit does not count timeout-only evidence as a kill. Merge the exact Archive fallback kind/identity check into the retained readable-first Adapter case after it consumes the readable claim and before cleanup. That fixture already contains an unclaimed Archive and can prove the immediate second selection without another Server or Project setup. Keep this test until that transfer is made.",
+    "coverage": "crates/storyos-adapter-postgres/src/export_work_tests.rs:54; apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
+    "remove": null
   },
   {
     "id": "AD047",

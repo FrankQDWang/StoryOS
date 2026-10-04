@@ -1,0 +1,12 @@
+--- a/crates/storyos-adapter-postgres/src/export_work.rs
++++ b/crates/storyos-adapter-postgres/src/export_work.rs
+@@ -23,7 +23,8 @@
+             crate::project_export_work::claim_archive_export_row(&transaction, lease_seconds)
+                 .await?;
+         transaction.commit().await.map_err(read_error)?;
+-        Ok(claimed.map(ClaimedExportWork::Archive))
++        let _ = claimed;
++        Ok(None)
+     }
+ }
+ 

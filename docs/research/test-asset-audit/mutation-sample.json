@@ -49,7 +49,9 @@
       "test": "an_invalid_volume_join_classifies_as_refused_with_zero_authority_effect",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m04/result.json",
+      "finding": "Invalid Volume join becomes conflicted instead of refused at HTTP:565. Optional removed-test probe selected zero tests and is excluded."
     },
     {
       "sample": 5,
@@ -59,7 +61,9 @@
       "test": "deleteChapter distinguishes historical absence from damaged new-format evidence",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m05/result.json",
+      "finding": "Damaged replay evidence returns historical 409 instead of service failure at retained Create Volume:812."
     },
     {
       "sample": 6,
@@ -69,7 +73,9 @@
       "test": "an_unmet_required_watermark_is_projection_not_ready",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts:78",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m06/result.json",
+      "finding": "Required search watermark is no longer rejected at HTTP:122; original Application test also fails."
     },
     {
       "sample": 7,
@@ -79,7 +85,9 @@
       "test": "one_heading_roundtrips_through_versioned_payload_bytes",
       "reason": "D1",
       "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m07/result.json",
+      "finding": "Real browser full Block comparison sees paragraph instead of heading at :252."
     },
     {
       "sample": 8,
@@ -89,7 +97,9 @@
       "test": "confirmed_expiry_and_unusable_handles_rebuild_without_opaque_reuse",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m08/result.json",
+      "finding": "Skipping confirmed-expiry rebuild reuses a Model Attempt role; Worker hits model_attempts_one_role and cannot complete the expected recovery."
     },
     {
       "sample": 9,
@@ -99,7 +109,9 @@
       "test": "create_chapter_is_atomic_replayable_and_scope_safe",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361; crates/storyos-adapter-postgres/src/structure_command_tests.rs:313; crates/storyos-adapter-postgres/src/create_chapter_authority_tests.rs:393",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m09/result.json",
+      "finding": "First Chapter creation returns 503 when Current Chapter is not selected."
     },
     {
       "sample": 10,
@@ -109,7 +121,9 @@
       "test": "matching_proposal_heads_revise_the_candidate_without_authority",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:973",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m10/result.json",
+      "finding": "Exact candidate comparison sees the unchanged prior text at Inline HTTP:1017."
     },
     {
       "sample": 11,
@@ -119,7 +133,9 @@
       "test": "a_missing_root_is_unsettled_and_exposes_no_zip_bytes",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m11/result.json",
+      "finding": "In-progress HTTP download is rejected before Core packaging. Missing-root Core guard remains unexecuted; corrected CO124 from D1 to D5."
     },
     {
       "sample": 12,
@@ -129,7 +145,9 @@
       "test": "removing_a_non_current_chapter_preserves_the_current_chapter",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246",
-      "status": "pending"
+      "status": "kill",
+      "evidence": "mutations/m12/result.json",
+      "finding": "Deleting a non-current Chapter clears the current selection; HTTP:334 sees empty instead of current_chapter."
     },
     {
       "sample": 13,
@@ -139,7 +157,9 @@
       "test": "a_combined_export_claim_falls_back_to_archive_work",
       "reason": "D1",
       "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:558",
-      "status": "pending"
+      "status": "blocked-timeout",
+      "evidence": "mutations/m13/result.json",
+      "finding": "Archive never becomes Ready after the claim result is dropped. Only the bounded readiness wait fails; excluded from KILL under the no-timeout rule. AD046 becomes MERGE into the explicit Adapter queue-selection case."
     },
     {
       "sample": 14,
@@ -149,7 +169,9 @@
       "test": "take_over_project_writer_wire_is_generated_without_stage1_coverage",
       "reason": "D2",
       "coverage": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735; apps/web/test/node-postgresql/takeover-http.integration.test.ts:113",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m14/result.json",
+      "finding": "Generated Takeover generation type changes to integer; registry test still passes and original field test fails. CT010-CT012 now require schema-consumer assertion transfer before removal."
     },
     {
       "sample": 15,

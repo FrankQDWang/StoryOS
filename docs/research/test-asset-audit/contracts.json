@@ -115,45 +115,33 @@
     "path": "crates/storyos-contracts/src/release1_artifacts_tests.rs",
     "line": 57,
     "test": "apply_author_edit_outcome_query_is_one_protected_exact_get",
-    "verdict": "DELETE",
-    "reason": "D1",
-    "evidence": "The generated outcome client is executed by the browser proof-header test, which checks exact GET path, no body, no nonce in URL, same-origin credentials and the actual proof header. HTTP outcome cases exercise committed/rejected/reconfirmation/issued-unknown variants. Remaining required-field and discriminator lists are static schema shape.",
-    "coverage": "apps/web/test/browser-source/author-edit-outcome.integration.test.ts:14; apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-contracts/src/release1_artifacts_tests.rs:735",
-    "remove": [
-      56,
-      132
-    ]
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Transfer outcome request/response grammar to the retained registry-wide artifact test as schema-consumer validation: valid proof-free request document, required Project/key fields, closed response, and valid committed/rejected/reconfirmation/unknown documents. The real browser owns proof-header transport, but never consumes these published JSON Schemas. Sample 14 proves that registry route/schema-ID checks do not protect individual field constraints. Remove this literal inventory only after those document-consumer cases transfer.",
+    "coverage": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735; crates/storyos-contracts/src/release1_create_project_artifacts_tests.rs:67",
+    "remove": null
   },
   {
     "id": "CT011",
     "path": "crates/storyos-contracts/src/release1_artifacts_tests.rs",
     "line": 135,
     "test": "snapshot_and_activity_stream_are_generated_from_the_release_1_contract",
-    "verdict": "DELETE",
-    "reason": "D1",
-    "evidence": "The registry check covers the generated Snapshot/Activity routes, schemas and exports. Real HTTP Snapshot replay executes the client, receives event-stream data and checks exact Snapshot identity; this test only searches template text and repeats fixed schema properties.",
-    "coverage": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735; apps/web/test/node-postgresql/snapshot-replay-http.integration.test.ts:92",
-    "remove": [
-      134,
-      187
-    ]
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Transfer Activity frame grammar to the retained registry-wide artifact test using valid and malformed frame documents: required id/event/data, fixed event discriminator and ProjectActivityEvent data. HTTP SSE and browser parsing do not consume the published JSON Schema. Sample 14 invalidates treating schema-ID/route coverage as coverage of these field constraints. Generated export-name searches remain redundant; remove this fixture only after the grammar transfer.",
+    "coverage": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735; crates/storyos-contracts/src/release1_create_project_artifacts_tests.rs:67",
+    "remove": null
   },
   {
     "id": "CT012",
     "path": "crates/storyos-contracts/src/release1_artifacts_tests.rs",
     "line": 190,
     "test": "take_over_project_writer_wire_is_generated_without_stage1_coverage",
-    "verdict": "DELETE",
-    "reason": "D2",
-    "evidence": "This long table repeats generated Takeover enums, fields, receipt literals and export strings, plus a historical Stage 1 exclusion. The registry check owns wire assembly and real HTTP Takeover owns fencing and CompareFailed behavior. No independent malformed-document execution occurs here. Execution order: keep the cited covering test until NP138 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
-    "coverage": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735; apps/web/test/node-postgresql/takeover-http.integration.test.ts:113",
-    "remove": [
-      189,
-      386
-    ],
-    "coverage_dependencies": [
-      "NP138"
-    ]
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Transfer Takeover request/result grammar to the retained registry-wide artifact test as JSON Schema consumer checks, including valid string generations, numeric-generation rejection and both closed result variants. Sample 14 changes the emitted generation type to integer: the cited registry test stays green while this field test fails. HTTP Takeover uses the unchanged generated client and does not execute the freshly emitted schema. Retain this fixture until the schema checks transfer; literal enum/export inventories alone are not the target coverage.",
+    "coverage": "crates/storyos-contracts/src/release1_artifacts_tests.rs:735; crates/storyos-contracts/src/release1_create_project_artifacts_tests.rs:67",
+    "remove": null
   },
   {
     "id": "CT013",

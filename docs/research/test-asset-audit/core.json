@@ -1555,13 +1555,14 @@
     "line": 317,
     "test": "a_missing_root_is_unsettled_and_exposes_no_zip_bytes",
     "verdict": "DELETE",
-    "reason": "D1",
-    "evidence": "The public in-progress export download has no settled root and requires invalid_provenance with no ZIP output. It owns the same empty-root packaging refusal at the HTTP boundary.",
+    "reason": "D5",
+    "evidence": "Mutation sample 11 disproves the claimed same-path coverage: the HTTP in-progress download returns Unsettled before calling the Core packager (Adapter project_export.rs:229-242). Ready requires a non-NULL root at :132, and migration 0024:13-14 restricts it to sha256 plus 64 hex digits. Thus the current product reader never supplies the literal empty root used by this unit test. DELETE rests on this producer guarantee, not an equivalent HTTP assertion or mutation kill.",
     "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295",
     "remove": [
       316,
       322
-    ]
+    ],
+    "coverage_note": "Semantic public readiness behavior only; not equivalent coverage of the isolated empty-root guard. See sample 11."
   },
   {
     "id": "CO125",

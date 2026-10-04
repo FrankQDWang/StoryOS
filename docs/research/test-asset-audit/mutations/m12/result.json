@@ -1,0 +1,112 @@
+{
+  "sample": 12,
+  "id": "CO036",
+  "status": "candidate-kill",
+  "source": "crates/storyos-core/src/delete_chapter.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m12-baseline",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/delete-chapter-http.integration.test.ts",
+        "-t",
+        "^deleteChapter\\ removes\\ a\\ Chapter,\\ honors\\ deletion,\\ and\\ selects\\ next\\ then\\ previous\\ then\\ empty$"
+      ],
+      "exit": 0,
+      "seconds": 18.159,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m12/baseline.log"
+    },
+    {
+      "phase": "build",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m12-build",
+        "--",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--target-dir",
+        "target/web-release",
+        "-p",
+        "storyos-server",
+        "-p",
+        "storyos-worker-bin",
+        "-p",
+        "storyos-adapter-postgres"
+      ],
+      "exit": 0,
+      "seconds": 103.691,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m12/build.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m12-mutant",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/delete-chapter-http.integration.test.ts",
+        "-t",
+        "^deleteChapter\\ removes\\ a\\ Chapter,\\ honors\\ deletion,\\ and\\ selects\\ next\\ then\\ previous\\ then\\ empty$"
+      ],
+      "exit": 1,
+      "seconds": 9.386,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m12/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m12-restored",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "pnpm",
+        "--dir",
+        "apps/web",
+        "exec",
+        "vitest",
+        "run",
+        "--project",
+        "node-postgresql",
+        "test/node-postgresql/delete-chapter-http.integration.test.ts",
+        "-t",
+        "^deleteChapter\\ removes\\ a\\ Chapter,\\ honors\\ deletion,\\ and\\ selects\\ next\\ then\\ previous\\ then\\ empty$"
+      ],
+      "exit": 0,
+      "seconds": 9.59,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m12/restored.log"
+    }
+  ]
+}

@@ -12,7 +12,7 @@ import time
 root = Path(__file__).resolve().parents[4]
 plan_path = Path(sys.argv[1]).resolve()
 plan = json.loads(plan_path.read_text())
-out = root / 'target/test-asset-audit' / f'm{plan["sample"]:02}'
+out = root / 'target/test-asset-audit' / (f'm{plan["sample"]:02}' + ('-' + plan['attempt'] if plan.get('attempt') else ''))
 out.mkdir(parents=True, exist_ok=True)
 results = []
 def run(phase, argv, env=None):
