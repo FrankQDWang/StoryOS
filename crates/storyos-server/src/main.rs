@@ -111,7 +111,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let store = PostgresProjectReader::new(database_url)
             .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl_from_env());
-        let _worker = tokio::spawn(storyos_worker::run(store));
+        let destination = storyos_worker::ModelDestination {
+            adapter: storyos_adapter_fake_destination::FakeDestination,
+            observer: storyos_application::NoContractFaults,
+        };
+        let _worker = tokio::spawn(storyos_worker::run(store, destination));
     }
     axum::serve(listener, storyos_server::router_with_web(config, assets)).await?;
     Ok(())

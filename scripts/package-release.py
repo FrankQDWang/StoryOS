@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix="release-package-", dir=target) as tempo
                     "web-manifest", str(package / "web"), *source)
     build_target = target / "web-release"
     subprocess.run([*timer, "rust-release-build", "--", "cargo", "build", "--locked", "--release", "--target-dir", str(build_target),
-                    "-p", "storyos-server", "-p", "storyos-worker",
+                    "-p", "storyos-server", "-p", "storyos-worker-bin",
                     "-p", "storyos-adapter-postgres"], cwd=root,
                    env={**os.environ, "STORYOS_WEB_MANIFEST_SHA256": digest}, check=True)
     executable = "storyos-server.exe" if os.name == "nt" else "storyos-server"

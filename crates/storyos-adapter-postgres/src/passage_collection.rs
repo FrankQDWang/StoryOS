@@ -52,42 +52,28 @@ pub(crate) async fn assemble(
     ))
 }
 
-pub(crate) fn bind_wire(
+/// The provider-neutral passage collection input that the destination receives, if any.
+pub(crate) fn passage_input(
     record: &serde_json::Value,
     author_message: &str,
-    payload: &mut serde_json::Value,
-) {
+) -> Option<serde_json::Value> {
     if record
         .pointer("/operation_requirement/candidate_target")
-        .is_some()
-        || record
+        .is_none()
+        && record
             .pointer("/operation_requirement/passage_targets")
-            .is_some()
+            .is_none()
     {
-        let targets = &record["operation_requirement"]["passage_targets"];
-        let mut wire = serde_json::json!({
-            "author_message": author_message,
-            "source_chapter_id": record["operation_requirement"]["chapter_id"],
-            "targets": targets,
-            "selected": record["selected"],
-            "mapping_revision": storyos_core::HOST_FAKE_MAPPING_REVISION,
-        });
-        if let Some(target) = record.pointer("/operation_requirement/candidate_target") {
-            wire["candidate_target"] = target.clone();
-        }
-        let bytes = storyos_core::canonical_json(&wire);
-        payload["wire"]["serialized_payload"] = serde_json::json!(bytes);
-        payload["wire"]["digest"] = serde_json::json!(format!(
-            "sha256:{}",
-            storyos_core::hex_sha256(bytes.as_bytes())
-        ));
-        payload["evidence"][0]["content"] = serde_json::json!(bytes);
+        return None;
     }
-}
-
-pub(crate) fn retain_wire(original: &serde_json::Value, payload: &mut serde_json::Value) {
-    if original["wire"].get("serialized_payload").is_some() {
-        payload["wire"] = original["wire"].clone();
-        payload["evidence"] = original["evidence"].clone();
+    let mut input = serde_json::json!({
+        "author_message": author_message,
+        "source_chapter_id": record["operation_requirement"]["chapter_id"],
+        "targets": record["operation_requirement"]["passage_targets"],
+        "selected": record["selected"],
+    });
+    if let Some(target) = record.pointer("/operation_requirement/candidate_target") {
+        input["candidate_target"] = target.clone();
     }
+    Some(input)
 }

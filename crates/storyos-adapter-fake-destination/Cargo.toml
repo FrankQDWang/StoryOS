@@ -1,12 +1,13 @@
 [package]
-name = "storyos-worker"
+name = "storyos-adapter-fake-destination"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+serde_json.workspace = true
 storyos-application = { path = "../storyos-application" }
-tokio = { workspace = true, features = ["time"] }
+storyos-core = { path = "../storyos-core" }
 
 [lints]
 workspace = true

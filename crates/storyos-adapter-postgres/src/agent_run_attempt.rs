@@ -1,25 +1,29 @@
-use storyos_application::{ClaimedAgentRun, CompleteAgentRunError, ProjectAssistanceRecord};
-use storyos_core::{
-    HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, host_fake_wire_digest,
+use storyos_application::{
+    ClaimedAgentRun, CompleteAgentRunError, ProjectAssistanceRecord, WirePayloadProjection,
 };
 use uuid::Uuid;
 
 use crate::agent_run_expiry::RebuildDispatch;
-use crate::agent_run_work::{complete_database_error, evidence_values};
+use crate::agent_run_work::{RunPhaseRow, complete_database_error};
 
-#[allow(clippy::too_many_arguments)]
+/// Commits the dispatch claim: the Model Attempt, its Wire Payload Projection, and its
+/// Outbound Disclosure Event, which starts as OutcomeUnknown.
 pub(crate) async fn persist_uncertain_attempt(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    conversation_id: &str,
-    author_message: &str,
-    chapter_id: &str,
-    assembly_manifest_id: &str,
+    run: &RunPhaseRow,
     assistance: &ProjectAssistanceRecord,
     rebuild: Option<&RebuildDispatch>,
-    decision_position: &str,
-    record: &serde_json::Value,
+    projection: &WirePayloadProjection,
 ) -> Result<String, CompleteAgentRunError> {
+    let RunPhaseRow {
+        author_message,
+        chapter_id,
+        conversation_id,
+        assembly_manifest_id,
+        decision_position,
+        ..
+    } = run;
     let model_attempt_id = Uuid::now_v7().to_string();
     let destination_attempt_id = Uuid::now_v7().to_string();
     let outbound_disclosure_event_id = Uuid::now_v7().to_string();
@@ -42,16 +46,15 @@ pub(crate) async fn persist_uncertain_attempt(
         }
         None => Uuid::now_v7().to_string(),
     };
-    let digest = host_fake_wire_digest(author_message, chapter_id);
     let mut payload = serde_json::json!({
         "execution_profile": {
-            "profile_revision": HOST_FAKE_EXECUTION_PROFILE,
-            "mapping_revision": HOST_FAKE_MAPPING_REVISION,
+            "profile_revision": projection.execution_profile,
+            "mapping_revision": projection.mapping_revision,
             "network_io": false,
             "provider_bound": "unknown"
         },
         "wire": {
-            "digest": digest,
+            "digest": projection.digest,
             "author_message": author_message,
             "chapter_id": chapter_id,
             "prior_continuation_binding_id": continuation.prior_binding_id
@@ -67,7 +70,10 @@ pub(crate) async fn persist_uncertain_attempt(
             continuation.known_prior_binding_id.as_deref(),
         )
     });
-    crate::passage_collection::bind_wire(record, author_message, &mut payload);
+    if let Some(bytes) = &projection.serialized_payload {
+        payload["wire"]["serialized_payload"] = serde_json::json!(bytes);
+        payload["evidence"][0]["content"] = serde_json::json!(bytes);
+    }
     if decision_position == "0"
         && let Some(prepared) = crate::agent_run_successor::prepare_subject(
             author_message,
@@ -148,4 +154,47 @@ pub(crate) async fn persist_uncertain_attempt(
         .await
         .map_err(complete_database_error)?;
     Ok(model_attempt_id)
+}
+
+pub(crate) fn evidence_values(
+    attempt_id: &str,
+    author_message: &str,
+    assembly_manifest_id: &str,
+    known_prior_binding_id: Option<&str>,
+) -> Vec<serde_json::Value> {
+    let mut values = vec![
+        serde_json::json!({
+            "kind": "sent_content",
+            "attempt_id": attempt_id,
+            "availability": "current",
+            "content": author_message
+        }),
+        serde_json::json!({
+            "kind": "stored_reference",
+            "attempt_id": attempt_id,
+            "availability": "current",
+            "reference_id": assembly_manifest_id
+        }),
+    ];
+    if let Some(reference_id) = known_prior_binding_id {
+        values.push(serde_json::json!({
+            "kind": "stored_reference",
+            "attempt_id": attempt_id,
+            "availability": "current",
+            "reference_id": reference_id
+        }));
+    }
+    values.push(serde_json::json!({
+        "kind": "provider_report",
+        "attempt_id": attempt_id,
+        "availability": "current",
+        "report": "host_fake_no_provider_usage"
+    }));
+    values.push(serde_json::json!({
+        "kind": "provider_opaque",
+        "attempt_id": attempt_id,
+        "availability": "unknown",
+        "unknown_facts": ["provider_internal_content"]
+    }));
+    values
 }

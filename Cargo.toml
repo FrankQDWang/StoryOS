@@ -1,11 +1,13 @@
 [workspace]
 members = [
+  "crates/storyos-adapter-fake-destination",
   "crates/storyos-adapter-postgres",
   "crates/storyos-application",
   "crates/storyos-contracts",
   "crates/storyos-core",
   "crates/storyos-server",
   "crates/storyos-worker",
+  "crates/storyos-worker-bin",
 ]
 resolver = "3"
 [workspace.package]

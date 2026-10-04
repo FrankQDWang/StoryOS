@@ -4,12 +4,14 @@ use std::path::Path;
 use serde::Serialize;
 
 const EXPECTED_CRATES: &[&str] = &[
+    "crates/storyos-adapter-fake-destination",
     "crates/storyos-adapter-postgres",
     "crates/storyos-application",
     "crates/storyos-contracts",
     "crates/storyos-core",
     "crates/storyos-server",
     "crates/storyos-worker",
+    "crates/storyos-worker-bin",
 ];
 const EXCLUDED_TREES: &[&str] = &["prototypes/**", ".reference/**"];
 const JOURNEY_TEST: &str = "apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts";

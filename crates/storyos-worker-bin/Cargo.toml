@@ -1,25 +1,19 @@
 [package]
-name = "storyos-server"
+name = "storyos-worker-bin"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
+
+[[bin]]
+name = "storyos-worker"
+path = "src/main.rs"
+
 [dependencies]
-axum.workspace = true
-hmac.workspace = true
-mime.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-sha2.workspace = true
 storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
 storyos-adapter-postgres = { path = "../storyos-adapter-postgres" }
 storyos-application = { path = "../storyos-application" }
-storyos-contracts = { path = "../storyos-contracts" }
-storyos-core = { path = "../storyos-core" }
 storyos-worker = { path = "../storyos-worker" }
-tokio.workspace = true
-url.workspace = true
-uuid.workspace = true
-[dev-dependencies]
-tower.workspace = true
+tokio = { workspace = true, features = ["time"] }
+
 [lints]
 workspace = true

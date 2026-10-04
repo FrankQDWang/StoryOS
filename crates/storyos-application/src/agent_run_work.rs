@@ -10,7 +10,7 @@ pub struct ClaimedAgentRun {
     pub fence_token: i64,
 }
 
-/// Settlement of one claimed fake-model AgentRun.
+/// Settlement of one claimed AgentRun.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompleteAgentRun {
     Settled,
@@ -42,27 +42,15 @@ impl std::error::Error for CompleteAgentRunError {
     }
 }
 
-/// Claims and settles one focused AgentRun work family.
+/// Claims one queued or lease-expired AgentRun for the Worker.
 pub trait AgentRunWorkStore: Sync {
     fn claim_next_agent_run(
         &self,
     ) -> impl Future<Output = Result<Option<ClaimedAgentRun>, ProjectReadError>> + Send;
-
-    fn complete_agent_run(
-        &self,
-        claim: &ClaimedAgentRun,
-    ) -> impl Future<Output = Result<CompleteAgentRun, CompleteAgentRunError>> + Send;
 }
 
 pub async fn claim_next_agent_run(
     store: &impl AgentRunWorkStore,
 ) -> Result<Option<ClaimedAgentRun>, ProjectReadError> {
     store.claim_next_agent_run().await
-}
-
-pub async fn complete_agent_run(
-    store: &impl AgentRunWorkStore,
-    claim: &ClaimedAgentRun,
-) -> Result<CompleteAgentRun, CompleteAgentRunError> {
-    store.complete_agent_run(claim).await
 }

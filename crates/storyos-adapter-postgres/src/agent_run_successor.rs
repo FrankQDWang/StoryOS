@@ -467,7 +467,7 @@ async fn insert_successor(
         "usage": { "kind": "unknown" },
         "reservation": { "kind": "worst_case", "released": false },
         "settles_predecessor": false,
-        "evidence": crate::agent_run_work::evidence_values(
+        "evidence": crate::agent_run_attempt::evidence_values(
             &attempt_id,
             row.payload
                 .pointer("/wire/author_message")

@@ -14,6 +14,9 @@ tokio.workspace = true
 tokio-postgres.workspace = true
 uuid.workspace = true
 
+[dev-dependencies]
+storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
+
 [build-dependencies]
 serde_json.workspace = true
 sha2.workspace = true

@@ -1,0 +1,425 @@
+use std::sync::Mutex;
+
+use storyos_adapter_fake_destination::FakeDestination;
+use storyos_application::{
+    AuthorCommandAdmissionIds, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
+    ContractFaultObserver, ContractFaultPoint, ConversationSelection, CreateAgentRunCommand,
+    CreateObservation, DestinationRequest, EditorClientBinding, IssueProjectCommandChallenge,
+    ModelProviderAdapter, ModelStreamSink, PreDispatchRefusal, PreparedRequest, ProjectScope,
+    UpdateProjectAssistanceCommand, complete_agent_run, issue_project_command_challenge,
+    request_create_agent_run, update_project_assistance,
+};
+use storyos_core::AssistanceAvailability;
+use tokio_postgres::{Client, NoTls};
+
+use crate::PostgresProjectReader;
+use crate::update_volume_tests::{apply_chapter, apply_volume, named_issue, seed_project};
+
+const AVAILABLE_BYTES: &[u8] = br#"{"availability":"available"}"#;
+const RUN_BYTES: &[u8] = br#"{"conversation":{"kind":"new"}}"#;
+const VOLUME_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
+const CHAPTER_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter A"}"#;
+
+/// The durable dispatch evidence of one AgentRun.
+#[derive(Debug, PartialEq)]
+struct DispatchEvidence {
+    status: String,
+    settlement: Option<String>,
+    model_attempts: i64,
+    disclosure_events: i64,
+    destination_manifests: i64,
+    items: Option<String>,
+    decision_id: Option<String>,
+}
+
+#[derive(Debug, PartialEq)]
+struct ExchangeProbe {
+    claimed_attempts: i64,
+    run_locked: bool,
+}
+
+#[derive(Default)]
+struct RecordedPoints(Mutex<Vec<ContractFaultPoint>>);
+
+impl ContractFaultObserver for RecordedPoints {
+    async fn reached(&self, point: ContractFaultPoint) {
+        self.0.lock().unwrap().push(point);
+    }
+}
+
+enum Probe {
+    Refuse,
+    InspectBeforeExchange,
+    TakeOverBeforeExchange,
+}
+
+/// Wraps the fake adapter and acts on the database at a deterministic point of the sequence.
+struct ProbingDestination<'a> {
+    admin: &'a Client,
+    run_id: String,
+    probe: Probe,
+    seen: Mutex<Vec<ExchangeProbe>>,
+}
+
+impl ModelProviderAdapter for ProbingDestination<'_> {
+    type Prepared = <FakeDestination as ModelProviderAdapter>::Prepared;
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
+        if matches!(self.probe, Probe::Refuse) {
+            return Err(PreDispatchRefusal::CredentialUnavailable);
+        }
+        FakeDestination.prepare(request).await
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+        sink: &mut impl ModelStreamSink,
+    ) -> CreateObservation {
+        match self.probe {
+            Probe::Refuse => unreachable!("a refused request has no exchange"),
+            Probe::InspectBeforeExchange => {
+                let claimed_attempts = self
+                    .admin
+                    .query_one(
+                        "SELECT count(*) FROM storyos.model_attempts
+                          WHERE run_id = $1::text::uuid
+                            AND dispatch_state = 'uncertain'
+                            AND outbound_disclosure_event_id IS NOT NULL
+                            AND wire_payload_projection_id IS NOT NULL",
+                        &[&self.run_id],
+                    )
+                    .await
+                    .unwrap()
+                    .get(0);
+                let run_locked = self
+                    .admin
+                    .query_opt(
+                        "SELECT 1 FROM storyos.agent_runs
+                          WHERE run_id = $1::text::uuid FOR UPDATE NOWAIT",
+                        &[&self.run_id],
+                    )
+                    .await
+                    .is_err();
+                self.seen.lock().unwrap().push(ExchangeProbe {
+                    claimed_attempts,
+                    run_locked,
+                });
+            }
+            Probe::TakeOverBeforeExchange => {
+                self.admin
+                    .execute(
+                        "UPDATE storyos.agent_runs
+                            SET claim_generation = claim_generation + 1,
+                                fence_token = claim_generation + 1
+                          WHERE run_id = $1::text::uuid",
+                        &[&self.run_id],
+                    )
+                    .await
+                    .unwrap();
+            }
+        }
+        FakeDestination.exchange(prepared, sink).await
+    }
+}
+
+fn binding(issue: &IssueProjectCommandChallenge) -> EditorClientBinding {
+    EditorClientBinding {
+        binding_ref: issue.binding.client_session_binding_digest.clone(),
+        session_generation: issue.binding.client_session_generation,
+        client_contract_revision: issue.binding.client_contract_revision.clone(),
+        security_policy_revision: issue.binding.security_policy_revision.clone(),
+    }
+}
+
+fn ids(suffix: &str) -> AuthorCommandAdmissionIds {
+    AuthorCommandAdmissionIds {
+        command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
+        author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
+        receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
+    }
+}
+
+fn digest(kind: &str, bytes: &[u8]) -> String {
+    format!(
+        "sha256:storyos.command.{kind}.jcs.v1:{}",
+        crate::author_edit::sha256_hex(bytes)
+    )
+}
+
+/// Admits one fake-model AgentRun on a new chapter, then claims it with a known fence.
+async fn claimed_run(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+) -> ClaimedAgentRun {
+    let scope: ProjectScope = seed_project(store, &format!("{prefix}0")).await;
+    let assistance = named_issue(
+        &scope,
+        &format!("{prefix}1"),
+        "PUT",
+        "/api/v1/projects/{project_id}/assistance",
+        "storyos.command.update-project-assistance.request.v1",
+        "updateProjectAssistance",
+        &digest("updateProjectAssistance", AVAILABLE_BYTES),
+    );
+    issue_project_command_challenge(store, &assistance)
+        .await
+        .unwrap();
+    update_project_assistance(
+        store,
+        &UpdateProjectAssistanceCommand {
+            project_scope: scope.clone(),
+            client_binding: binding(&assistance),
+            challenge_binding: assistance.binding.clone(),
+            nonce_digest: assistance.nonce_digest.clone(),
+            canonical_command_bytes: AVAILABLE_BYTES.to_vec(),
+            correlation_id: format!("018f0000-0000-7001-8000-00000000{prefix}2"),
+            availability: AssistanceAvailability::Available,
+            expected_revision: 0,
+            ids: ids(&format!("{prefix}2")),
+        },
+    )
+    .await
+    .unwrap();
+    let volume_id = apply_volume(
+        store,
+        &scope,
+        &format!("{prefix}3"),
+        "Volume A",
+        VOLUME_BYTES,
+        &digest("createVolume", VOLUME_BYTES),
+        1,
+    )
+    .await;
+    let chapter_id = apply_chapter(
+        store,
+        &scope,
+        &format!("{prefix}4"),
+        &volume_id,
+        "Chapter A",
+        CHAPTER_BYTES,
+        2,
+    )
+    .await;
+    let run = named_issue(
+        &scope,
+        &format!("{prefix}5"),
+        "POST",
+        "/api/v1/projects/{project_id}/agent-runs",
+        "storyos.command.create-agent-run.request.v2",
+        "createAgentRun",
+        &digest("createAgentRun", RUN_BYTES),
+    );
+    issue_project_command_challenge(store, &run).await.unwrap();
+    let admitted = request_create_agent_run(
+        store,
+        &CreateAgentRunCommand {
+            passage_targets: None,
+            candidate_target: None,
+            project_scope: scope.clone(),
+            client_binding: binding(&run),
+            challenge_binding: run.binding.clone(),
+            nonce_digest: run.nonce_digest.clone(),
+            canonical_command_bytes: RUN_BYTES.to_vec(),
+            correlation_id: format!("018f0000-0000-7001-8000-00000000{prefix}6"),
+            conversation: ConversationSelection::New,
+            author_message: "Help with this passage.".to_owned(),
+            chapter_id,
+            ids: ids(&format!("{prefix}6")),
+            run_id: format!("018f0000-0000-7001-8000-00000004{prefix}6"),
+            conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
+            project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
+        },
+    )
+    .await
+    .unwrap();
+    let fence_token = admin
+        .query_one(
+            "UPDATE storyos.agent_runs
+                SET claim_generation = claim_generation + 1,
+                    fence_token = claim_generation + 1,
+                    lease_expires_at = clock_timestamp() + interval '1 minute',
+                    status = 'claimed'
+              WHERE run_id = $1::text::uuid
+          RETURNING fence_token",
+            &[&admitted.run_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    ClaimedAgentRun {
+        project_scope: scope,
+        run_id: admitted.run_id,
+        fence_token,
+    }
+}
+
+async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {
+    let row = admin
+        .query_one(
+            "SELECT run.status, run.settlement::text,
+                    (SELECT count(*) FROM storyos.model_attempts AS attempt
+                      WHERE attempt.run_id = run.run_id),
+                    (SELECT count(outbound_disclosure_event_id) FROM storyos.model_attempts AS attempt
+                      WHERE attempt.run_id = run.run_id),
+                    (SELECT count(destination_context_manifest_id)
+                       FROM storyos.context_assembly_manifests AS assembly
+                      WHERE assembly.run_id = run.run_id),
+                    (SELECT attempt.payload->>'items' FROM storyos.model_attempts AS attempt
+                      WHERE attempt.run_id = run.run_id),
+                    (SELECT attempt.decision_id::text FROM storyos.model_attempts AS attempt
+                      WHERE attempt.run_id = run.run_id)
+               FROM storyos.agent_runs AS run
+              WHERE run.run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+    DispatchEvidence {
+        status: row.get(0),
+        settlement: row.get(1),
+        model_attempts: row.get(2),
+        disclosure_events: row.get(3),
+        destination_manifests: row.get(4),
+        items: row.get(5),
+        decision_id: row.get(6),
+    }
+}
+
+async fn stores() -> (PostgresProjectReader, Client) {
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(connection);
+    (PostgresProjectReader::new(runtime_url), admin)
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn prepare_refusal_records_no_dispatch_evidence() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let claim = claimed_run(&store, &admin, "b91").await;
+    let destination = ProbingDestination {
+        admin: &admin,
+        run_id: claim.run_id.clone(),
+        probe: Probe::Refuse,
+        seen: Mutex::default(),
+    };
+    let points = RecordedPoints::default();
+
+    let result = complete_agent_run(&store, &destination, &points, &claim).await;
+
+    assert_eq!(
+        (result.ok(), points.0.into_inner().unwrap()),
+        (Some(CompleteAgentRun::AlreadySettled), Vec::new())
+    );
+    assert_eq!(
+        dispatch_evidence(&admin, &claim.run_id).await,
+        DispatchEvidence {
+            status: "refused".to_owned(),
+            settlement: Some(
+                r#"{"kind": "execution_refused", "capability": "destination_credential_unavailable"}"#
+                    .to_owned()
+            ),
+            model_attempts: 0,
+            disclosure_events: 0,
+            destination_manifests: 0,
+            items: None,
+            decision_id: None,
+        }
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn dispatch_claim_commits_before_an_exchange_with_no_open_transaction() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let claim = claimed_run(&store, &admin, "b92").await;
+    let destination = ProbingDestination {
+        admin: &admin,
+        run_id: claim.run_id.clone(),
+        probe: Probe::InspectBeforeExchange,
+        seen: Mutex::default(),
+    };
+    let points = RecordedPoints::default();
+
+    let result = complete_agent_run(&store, &destination, &points, &claim).await;
+
+    assert_eq!(
+        (
+            result.ok(),
+            destination.seen.into_inner().unwrap(),
+            points.0.into_inner().unwrap()
+        ),
+        (
+            Some(CompleteAgentRun::AlreadySettled),
+            vec![ExchangeProbe {
+                claimed_attempts: 1,
+                run_locked: false,
+            }],
+            vec![
+                ContractFaultPoint::DispatchClaimed,
+                ContractFaultPoint::StreamCommitted
+            ],
+        )
+    );
+    let evidence = dispatch_evidence(&admin, &claim.run_id).await;
+    assert_eq!(
+        (
+            evidence.status.as_str(),
+            evidence.model_attempts,
+            evidence.disclosure_events,
+            evidence.decision_id.is_some()
+        ),
+        ("completed", 1, 1, true)
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn stale_run_lease_fence_rejects_the_observation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let claim = claimed_run(&store, &admin, "b93").await;
+    let destination = ProbingDestination {
+        admin: &admin,
+        run_id: claim.run_id.clone(),
+        probe: Probe::TakeOverBeforeExchange,
+        seen: Mutex::default(),
+    };
+    let points = RecordedPoints::default();
+
+    let result = complete_agent_run(&store, &destination, &points, &claim).await;
+
+    assert!(matches!(result, Err(CompleteAgentRunError::StaleFence)));
+    assert_eq!(
+        points.0.into_inner().unwrap(),
+        vec![ContractFaultPoint::DispatchClaimed]
+    );
+    assert_eq!(
+        dispatch_evidence(&admin, &claim.run_id).await,
+        DispatchEvidence {
+            status: "claimed".to_owned(),
+            settlement: None,
+            model_attempts: 1,
+            disclosure_events: 1,
+            destination_manifests: 1,
+            items: Some("[]".to_owned()),
+            decision_id: None,
+        }
+    );
+}

@@ -1,12 +1,8 @@
 use storyos_application::{
-    AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ProjectId,
-    ProjectReadError, ProjectScope, UserId,
+    AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateAttempt,
+    CreateRequest, DispatchClaim, ProjectId, ProjectReadError, ProjectScope, UserId,
 };
-use storyos_core::{
-    ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
-    HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, StreamItemRole, StreamItemState,
-    host_fake_wire_digest, plan_resolved_fake_decision, stream_batch_plan,
-};
+use storyos_core::{ExecutionCapability, requested_execution_capability, stream_batch_plan};
 use uuid::Uuid;
 
 use super::*;
@@ -26,56 +22,12 @@ impl AgentRunWorkStore for PostgresProjectReader {
         transaction.commit().await.map_err(read_error)?;
         Ok(claimed)
     }
-
-    async fn complete_agent_run(
-        &self,
-        claim: &ClaimedAgentRun,
-    ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
-        let lease_seconds = i64::try_from(self.readable_export_lease_ttl.as_secs())
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-        loop {
-            let transaction = self
-                .begin_serializable_project_command_transaction(&claim.project_scope)
-                .await
-                .map_err(complete_challenge_error)?;
-            let phase = async {
-                let phase = settle_one_phase(&transaction.client, claim, lease_seconds).await?;
-                if let WorkPhase::Done(CompleteAgentRun::Settled) = phase
-                    && crate::agent_run_steering::advance(&transaction.client, claim, lease_seconds)
-                        .await?
-                {
-                    return Ok(WorkPhase::Hold("steering"));
-                }
-                Ok(phase)
-            }
-            .await;
-            match phase {
-                Ok(WorkPhase::Done(result)) => {
-                    transaction
-                        .commit()
-                        .await
-                        .map_err(complete_challenge_error)?;
-                    return Ok(result);
-                }
-                Ok(WorkPhase::Hold(kind)) => {
-                    transaction
-                        .commit()
-                        .await
-                        .map_err(complete_challenge_error)?;
-                    hold_if_requested(kind).await;
-                }
-                Err(error) => {
-                    let _rollback = transaction.rollback().await;
-                    return Err(error);
-                }
-            }
-        }
-    }
 }
 
-enum WorkPhase {
+pub(crate) enum WorkPhase {
     Done(CompleteAgentRun),
     Hold(&'static str),
+    Dispatch(Box<CreateRequest>),
 }
 
 async fn claim_agent_run_row(
@@ -127,20 +79,52 @@ async fn claim_agent_run_row(
     }))
 }
 
-async fn settle_one_phase(
+pub(crate) struct RunPhaseRow {
+    pub status: String,
+    pub author_message: String,
+    pub chapter_id: String,
+    pub conversation_id: String,
+    pub sufficiency: String,
+    pub assembly_manifest_id: String,
+    pub destination_manifest_id: Option<String>,
+    pub attempt_id: Option<String>,
+    pub decision_id: Option<String>,
+    pub continuation_id: Option<String>,
+    pub attempt_payload: Option<String>,
+    pub decision_position: String,
+    pub assembly_payload: String,
+}
+
+impl RunPhaseRow {
+    pub(crate) fn settled(&self) -> bool {
+        matches!(
+            self.status.as_str(),
+            "completed" | "waiting" | "refused" | "paused" | "cancelled"
+        )
+    }
+
+    pub(crate) fn assembly_record(&self) -> Result<serde_json::Value, CompleteAgentRunError> {
+        serde_json::from_str(&self.assembly_payload)
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))
+    }
+}
+
+/// Locks the fenced AgentRun row with its active decision Context Assembly and Model Attempt.
+pub(crate) async fn load_run_phase(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    lease_seconds: i64,
-) -> Result<WorkPhase, CompleteAgentRunError> {
-    let Some(run) = client
+) -> Result<RunPhaseRow, CompleteAgentRunError> {
+    let Some(row) = client
         .query_opt(
-            "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'),run.author_message), run.chapter_id::text,
-                    run.conversation_id::text, run.settlement,
-                    assembly.sufficiency, assembly.context_assembly_manifest_id::text,
-                    assembly.destination_context_manifest_id::text,
-                    attempt.model_attempt_id::text, attempt.decision_id::text,
-                    attempt.continuation_binding_id::text, attempt.dispatch_state,
-                    attempt.payload::text, run.active_decision_position::text, assembly.payload::text
+            "SELECT run.status, COALESCE((SELECT item->>'content' FROM jsonb_array_elements(assembly.payload->'selected') AS item WHERE item->>'source_class'='author_instruction'),run.author_message) AS author_message,
+                    run.chapter_id::text AS chapter_id, run.conversation_id::text AS conversation_id,
+                    assembly.sufficiency, assembly.context_assembly_manifest_id::text AS assembly_manifest_id,
+                    assembly.destination_context_manifest_id::text AS destination_manifest_id,
+                    attempt.model_attempt_id::text AS attempt_id, attempt.decision_id::text AS decision_id,
+                    attempt.continuation_binding_id::text AS continuation_id,
+                    attempt.payload::text AS attempt_payload,
+                    run.active_decision_position::text AS decision_position,
+                    assembly.payload::text AS assembly_payload
                FROM storyos.agent_runs AS run
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
@@ -167,131 +151,134 @@ async fn settle_one_phase(
     else {
         return Err(CompleteAgentRunError::StaleFence);
     };
-    let status: String = run.get(0);
-    if matches!(
-        status.as_str(),
-        "completed" | "waiting" | "refused" | "paused" | "cancelled"
-    ) {
+    Ok(RunPhaseRow {
+        status: row.get("status"),
+        author_message: row.get("author_message"),
+        chapter_id: row.get("chapter_id"),
+        conversation_id: row.get("conversation_id"),
+        sufficiency: row.get("sufficiency"),
+        assembly_manifest_id: row.get("assembly_manifest_id"),
+        destination_manifest_id: row.get("destination_manifest_id"),
+        attempt_id: row.get("attempt_id"),
+        decision_id: row.get("decision_id"),
+        continuation_id: row.get("continuation_id"),
+        attempt_payload: row.get("attempt_payload"),
+        decision_position: row.get("decision_position"),
+        assembly_payload: row.get("assembly_payload"),
+    })
+}
+
+pub(crate) enum CreateAdmission {
+    Settled,
+    Dispatch(Option<Box<crate::agent_run_expiry::RebuildDispatch>>),
+}
+
+/// Refuses a blocked or capability request before dispatch, or admits one new Model Attempt.
+pub(crate) async fn admit_create(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+    assistance: Option<&storyos_application::ProjectAssistanceRecord>,
+) -> Result<CreateAdmission, CompleteAgentRunError> {
+    let rebuild = match crate::agent_run_expiry::plan_expiry_rebuild(
+        client,
+        claim,
+        &run.conversation_id,
+        &run.author_message,
+        &run.sufficiency,
+        assistance,
+        &run.assembly_manifest_id,
+    )
+    .await?
+    {
+        crate::agent_run_expiry::ExpiryAdmission::Settled => return Ok(CreateAdmission::Settled),
+        crate::agent_run_expiry::ExpiryAdmission::Dispatch(rebuild) => rebuild,
+    };
+    let capability = requested_execution_capability(&run.author_message);
+    let blocked = run.sufficiency != "complete"
+        || !matches!(
+            assistance.map(|record| record.availability),
+            Some(storyos_core::AssistanceAvailability::Available)
+        );
+    if !blocked && capability.is_none() {
+        return Ok(CreateAdmission::Dispatch(rebuild));
+    }
+    let capability = match capability {
+        Some(ExecutionCapability::Tool) => "tool",
+        Some(ExecutionCapability::Mcp) => "mcp",
+        Some(ExecutionCapability::Research) => "research",
+        Some(ExecutionCapability::Embedding) => "embedding",
+        Some(ExecutionCapability::Memory) => "memory",
+        Some(ExecutionCapability::Skill) => "skill",
+        Some(ExecutionCapability::Subrun) => "subrun",
+        Some(ExecutionCapability::Eval) => "eval",
+        None => "blocked_context",
+    };
+    update_run(
+        client,
+        claim,
+        "refused",
+        Some(&serde_json::json!({"kind": "execution_refused", "capability": capability})),
+        /*clear_lease*/ true,
+    )
+    .await?;
+    Ok(CreateAdmission::Settled)
+}
+
+pub(crate) async fn settle_one_phase(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    lease_seconds: i64,
+) -> Result<WorkPhase, CompleteAgentRunError> {
+    let run = load_run_phase(client, claim).await?;
+    if run.settled() {
         return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
     }
-    let author_message: String = run.get(1);
-    let chapter_id: String = run.get(2);
-    let conversation_id: String = run.get(3);
-    let sufficiency: String = run.get(5);
-    let assembly_manifest_id: String = run.get(6);
-    let destination_manifest: Option<String> = run.get(7);
-    let attempt_id: Option<String> = run.get(8);
-    if attempt_id.is_none()
-        && run.get::<_, String>(13) == "0"
+    if run.attempt_id.is_none()
+        && run.decision_position == "0"
         && crate::agent_run_steering::advance(client, claim, lease_seconds).await?
     {
         return Ok(WorkPhase::Hold("steering"));
     }
-    let decision_id: Option<String> = run.get(9);
-    let continuation_id: Option<String> = run.get(10);
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let record: serde_json::Value = serde_json::from_str(&run.get::<_, String>(14))
-        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let resolution = storyos_core::decode_assembly_record(&record)
-        .ok_or_else(|| {
-            CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
-                "Invalid retained Context",
-            )))
-        })?
-        .operation_requirement
-        .ordinary_resolution;
-    let plan = plan_resolved_fake_decision(&author_message, resolution);
-    let blocked = sufficiency != "complete"
-        || !matches!(
-            assistance.as_ref().map(|record| record.availability),
-            Some(storyos_core::AssistanceAvailability::Available)
+    let record = run.assembly_record()?;
+    let Some(attempt_id) = run.attempt_id.clone() else {
+        return Ok(
+            match admit_create(client, claim, &run, assistance.as_ref()).await? {
+                CreateAdmission::Settled => WorkPhase::Done(CompleteAgentRun::Settled),
+                CreateAdmission::Dispatch(_) => WorkPhase::Dispatch(Box::new(
+                    crate::agent_run_dispatch::create_request(
+                        client,
+                        claim,
+                        &run,
+                        &record,
+                        CreateAttempt::New,
+                    )
+                    .await?,
+                )),
+            },
         );
-    if attempt_id.is_none() {
-        let rebuild = match crate::agent_run_expiry::plan_expiry_rebuild(
-            client,
-            claim,
-            &conversation_id,
-            &author_message,
-            &sufficiency,
-            assistance.as_ref(),
-            &assembly_manifest_id,
-        )
-        .await?
-        {
-            crate::agent_run_expiry::ExpiryAdmission::Settled => {
-                return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
-            }
-            crate::agent_run_expiry::ExpiryAdmission::Dispatch(rebuild) => {
-                rebuild.map(|dispatch| *dispatch)
-            }
-        };
-        if blocked || matches!(plan, FakeDispatchPlan::RefuseWithoutDispatch { .. }) {
-            let settlement = match plan {
-                FakeDispatchPlan::RefuseWithoutDispatch { capability } => {
-                    serde_json::json!({
-                        "kind": "execution_refused",
-                        "capability": match capability {
-                            ExecutionCapability::Tool => "tool",
-                            ExecutionCapability::Mcp => "mcp",
-                            ExecutionCapability::Research => "research",
-                            ExecutionCapability::Embedding => "embedding",
-                            ExecutionCapability::Memory => "memory",
-                            ExecutionCapability::Skill => "skill",
-                            ExecutionCapability::Subrun => "subrun",
-                            ExecutionCapability::Eval => "eval",
-                        }
-                    })
-                }
-                _ => serde_json::json!({"kind":"execution_refused","capability":"blocked_context"}),
-            };
-            update_run(
-                client,
-                claim,
-                "refused",
-                Some(&settlement),
-                /*clear_lease*/ true,
-            )
-            .await?;
-            return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
-        }
-        let created_attempt_id = crate::agent_run_attempt::persist_uncertain_attempt(
-            client,
-            claim,
-            &conversation_id,
-            &author_message,
-            &chapter_id,
-            &assembly_manifest_id,
-            assistance.as_ref().ok_or_else(|| {
-                CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
-                    "Dispatch requires current assistance admission",
-                )))
-            })?,
-            rebuild.as_ref(),
-            &run.get::<_, String>(13),
-            &record,
-        )
-        .await?;
-        if let Some(dispatch) = rebuild.as_ref() {
-            crate::agent_run_expiry::insert_recovery(
-                client,
-                claim,
-                &conversation_id,
-                &dispatch.row,
-                Some(created_attempt_id.as_str()),
-            )
-            .await?;
-        }
-        return Ok(WorkPhase::Hold("dispatch"));
-    }
+    };
+    let RunPhaseRow {
+        status,
+        author_message,
+        chapter_id,
+        conversation_id,
+        destination_manifest_id: destination_manifest,
+        decision_id,
+        continuation_id,
+        ..
+    } = &run;
     if destination_manifest.is_none() {
         return Err(CompleteAgentRunError::Unavailable(Box::new(
             std::io::Error::other("The Destination Manifest is missing after dispatch claim"),
         )));
     }
-    let payload: serde_json::Value = serde_json::from_str(&run.get::<_, String>(12))
-        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    let payload: serde_json::Value =
+        serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     if payload.get("original_result_retrieval").is_some()
         || payload.get("unknown_create_successor").is_some()
     {
@@ -302,9 +289,9 @@ async fn settle_one_phase(
                 claim,
                 &payload,
                 crate::agent_run_retrieval::RetrievalAdvance {
-                    attempt_id: attempt_id.as_deref().expect("attempt exists"),
-                    conversation_id: &conversation_id,
-                    run_status: &status,
+                    attempt_id: &attempt_id,
+                    conversation_id,
+                    run_status: status,
                 },
                 crate::agent_run_retrieval::RetrievalFence::Open,
                 if follow_successor {
@@ -324,42 +311,30 @@ async fn settle_one_phase(
             crate::agent_run_successor::SuccessorWork::Hold(kind) => Ok(WorkPhase::Hold(kind)),
         };
     }
-    let items_empty = payload
-        .get("items")
-        .and_then(serde_json::Value::as_array)
-        .is_none_or(Vec::is_empty);
     if decision_id.is_none() {
-        let FakeDispatchPlan::Dispatch { items, outcome } = plan else {
-            return Err(CompleteAgentRunError::Unavailable(Box::new(
-                std::io::Error::other("A dispatch claim cannot refuse after I/O began"),
-            )));
-        };
-        let next = persist_stream_and_decision(
-            client,
-            claim,
-            attempt_id.as_deref().expect("attempt exists"),
-            &author_message,
-            &chapter_id,
-            &assembly_manifest_id,
-            &items,
-            &outcome,
-            /*include_decision*/ !items_empty,
-            crate::agent_run_continuation::parse_wire(&payload).as_ref(),
-            &payload,
-        )
-        .await?;
-        return Ok(next);
+        return Ok(WorkPhase::Dispatch(Box::new(
+            crate::agent_run_dispatch::create_request(
+                client,
+                claim,
+                &run,
+                &record,
+                CreateAttempt::Claimed(DispatchClaim {
+                    model_attempt_id: attempt_id,
+                }),
+            )
+            .await?,
+        )));
     }
     if payload.pointer("/decision/locations").is_none()
-        && stream_batch_plan(&author_message).is_some()
+        && stream_batch_plan(author_message).is_some()
         && let Some(decision) = decision_id.as_deref()
     {
         let (_proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
             client,
             claim,
-            &chapter_id,
+            chapter_id,
             decision,
-            &author_message,
+            author_message,
         )
         .await?;
         if matches!(work, crate::stream_proposal_generation::StreamWork::Hold) {
@@ -380,7 +355,7 @@ async fn settle_one_phase(
             next_payload["produced_binding"] =
                 crate::agent_run_continuation::encode_produced_binding(
                     &binding,
-                    attempt_id.as_deref().expect("attempt exists"),
+                    &attempt_id,
                     &wire.admission,
                 );
         }
@@ -407,345 +382,12 @@ async fn settle_one_phase(
             )
             .await
             .map_err(complete_database_error)?;
-        return complete_or_compact(client, claim, &author_message).await;
+        return complete_or_compact(client, claim, author_message).await;
     }
-    complete_or_compact(client, claim, &author_message).await
+    complete_or_compact(client, claim, author_message).await
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn persist_stream_and_decision(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    attempt_id: &str,
-    author_message: &str,
-    chapter_id: &str,
-    assembly_manifest_id: &str,
-    items: &[storyos_core::NativeStreamItem],
-    outcome: &FakeAttemptOutcome,
-    include_decision: bool,
-    continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
-    retained_payload: &serde_json::Value,
-) -> Result<WorkPhase, CompleteAgentRunError> {
-    let crate::prose_change_decision::PreparedProseChange {
-        outcome,
-        items,
-        output: producer_output,
-    } = crate::prose_change_decision::prepare(
-        client,
-        claim,
-        chapter_id,
-        author_message,
-        items,
-        outcome,
-    )
-    .await?;
-    let (decision_id, status, hold) = match (include_decision, &outcome) {
-        (false, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
-        (false, FakeAttemptOutcome::Decision { .. }) => (None, "claimed", Some("stream")),
-        (true, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
-        (
-            true,
-            FakeAttemptOutcome::Decision {
-                selected,
-                advances_continuation,
-                ..
-            },
-        ) => {
-            let id = (*selected).then(|| Uuid::now_v7().to_string());
-            let hold = (*selected && *advances_continuation).then_some("decision");
-            let status = if hold.is_some() {
-                "claimed"
-            } else {
-                "completed"
-            };
-            (id, status, hold)
-        }
-    };
-    let mut stream_hold = false;
-    let mut locations = None;
-    let opened_proposal = match (decision_id.as_deref(), &outcome) {
-        (
-            Some(decision_id),
-            FakeAttemptOutcome::Decision {
-                kind:
-                    FakeDecisionKind::ProseChange {
-                        text,
-                        locations: produced,
-                        ..
-                    },
-                selected: true,
-                ..
-            },
-        ) => {
-            if let Some(record) = crate::candidate_revision_target::admitted(client, claim).await? {
-                let revised = crate::revise_candidate_generation::apply(
-                    client,
-                    claim,
-                    &record,
-                    produced.as_deref().unwrap_or_default(),
-                )
-                .await?;
-                locations = revised.locations;
-                revised.proposal_id
-            } else if produced.is_none() && author_message.starts_with("Revise this phrase:") {
-                crate::open_inline_proposal::open_selected_inline_change(
-                    client,
-                    claim,
-                    chapter_id,
-                    decision_id,
-                    text,
-                )
-                .await?
-            } else if produced.is_none() && stream_batch_plan(author_message).is_some() {
-                let (proposal_id, work) =
-                    crate::stream_proposal_generation::apply_streamed_proposal(
-                        client,
-                        claim,
-                        chapter_id,
-                        decision_id,
-                        author_message,
-                    )
-                    .await?;
-                stream_hold = matches!(work, crate::stream_proposal_generation::StreamWork::Hold);
-                proposal_id
-            } else {
-                let opened = crate::open_block_proposal::open_selected_prose_change(
-                    client,
-                    claim,
-                    chapter_id,
-                    decision_id,
-                    text,
-                    author_message,
-                    produced.as_deref(),
-                )
-                .await?;
-                locations = opened.locations;
-                opened.proposal_id
-            }
-        }
-        _ => None,
-    };
-    let mut payload = encode_payload(
-        author_message,
-        chapter_id,
-        assembly_manifest_id,
-        attempt_id,
-        &items,
-        &outcome,
-        producer_output.as_deref(),
-        decision_id.as_deref(),
-        opened_proposal.as_deref(),
-        locations.as_deref(),
-        continuation,
-    );
-    crate::passage_collection::retain_wire(retained_payload, &mut payload);
-    client
-        .execute(
-            "UPDATE storyos.model_attempts
-                SET decision_id = $4::text::uuid,
-                    dispatch_state = $5,
-                    payload = $6::text::jsonb
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND attempt_role = 'decision' AND model_attempt_id=$7::text::uuid",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &decision_id,
-                &if hold.is_some() {
-                    "uncertain"
-                } else {
-                    "settled"
-                },
-                &payload.to_string(),
-                &attempt_id,
-            ],
-        )
-        .await
-        .map_err(complete_database_error)?;
-    update_run(
-        client,
-        claim,
-        status,
-        /*settlement*/ None,
-        /*clear_lease*/ hold.is_none(),
-    )
-    .await?;
-    if stream_hold {
-        return requeue_generation(client, claim).await;
-    }
-    Ok(match hold {
-        Some(kind) => WorkPhase::Hold(kind),
-        None => WorkPhase::Done(CompleteAgentRun::Settled),
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-fn encode_payload(
-    author_message: &str,
-    chapter_id: &str,
-    assembly_manifest_id: &str,
-    attempt_id: &str,
-    items: &[storyos_core::NativeStreamItem],
-    outcome: &FakeAttemptOutcome,
-    producer_output: Option<&[storyos_core::ProseChangeCandidate]>,
-    decision_id: Option<&str>,
-    opened_proposal: Option<&str>,
-    locations: Option<&[storyos_contracts::ProseChangeLocationInspect]>,
-    continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
-) -> serde_json::Value {
-    let encoded_items: Vec<serde_json::Value> = items
-        .iter()
-        .map(|item| {
-            let phase = match item.state {
-                StreamItemState::Provisional => "provisional",
-                StreamItemState::Complete => "complete",
-                StreamItemState::Incomplete => "incomplete",
-                StreamItemState::Failed => "failed",
-                StreamItemState::Cancelled => "cancelled",
-                StreamItemState::Unknown => "unknown",
-            };
-            serde_json::json!({
-                "item_id": item.item_id,
-                "role": match item.role {
-                    StreamItemRole::Assistant => "assistant",
-                    StreamItemRole::Tool => "tool",
-                    StreamItemRole::Hosted => "hosted",
-                },
-                "state": phase,
-                "phase": phase,
-                "text": item.text,
-                "summary": item.summary,
-                "call_id": item.call_id,
-                "arguments": item.arguments,
-                "refusal": item.refusal,
-                "hosted_report": item.hosted_report
-            })
-        })
-        .collect();
-    let decision = match (outcome, decision_id) {
-        (
-            FakeAttemptOutcome::Decision {
-                kind,
-                selected,
-                advances_continuation,
-            },
-            Some(decision_id),
-        ) => Some(match kind {
-            FakeDecisionKind::Advisory { text } => serde_json::json!({
-                "kind": "advisory",
-                "decision_id": decision_id,
-                "selected": selected,
-                "text": text,
-                "authoritative": false,
-                "advances_continuation": advances_continuation
-            }),
-            FakeDecisionKind::ProseChange {
-                text,
-                producer_input,
-                ..
-            } => serde_json::json!({
-                "kind": "prose_change",
-                "decision_id": decision_id,
-                "selected": selected,
-                "text": text,
-                "producer_input": producer_input,
-                "authoritative": false,
-                "advances_continuation": advances_continuation,
-                "opened_proposal": match opened_proposal {
-                    Some(proposal_id) => serde_json::json!({
-                        "kind": "present",
-                        "proposal_id": proposal_id
-                    }),
-                    None => serde_json::json!({ "kind": "absent" }),
-                }
-            }),
-            FakeDecisionKind::Clarification { question } => serde_json::json!({
-                "kind": "clarification",
-                "decision_id": decision_id,
-                "selected": selected,
-                "question": question,
-                "required_reply": question,
-                "authoritative": false,
-                "advances_continuation": advances_continuation
-            }),
-        }),
-        _ => None,
-    };
-    let mut payload = serde_json::json!({
-        "execution_profile": {
-            "profile_revision": HOST_FAKE_EXECUTION_PROFILE,
-            "mapping_revision": HOST_FAKE_MAPPING_REVISION,
-            "network_io": false,
-            "provider_bound": "unknown"
-        },
-        "wire": {
-            "digest": host_fake_wire_digest(author_message, chapter_id),
-            "author_message": author_message,
-            "chapter_id": chapter_id,
-            "prior_continuation_binding_id": continuation.and_then(|wire| wire.prior_binding_id.clone())
-        },
-        "items": encoded_items,
-        "decision": decision,
-        "usage": { "kind": "unknown" },
-        "continuation": continuation.map(crate::agent_run_continuation::encode_wire),
-        "evidence": evidence_values(
-            attempt_id,
-            author_message,
-            assembly_manifest_id,
-            continuation.and_then(|wire| wire.known_prior_binding_id.as_deref()),
-        )
-    });
-    crate::prose_change_decision::encode(&mut payload, producer_output, locations);
-    payload
-}
-
-pub(crate) fn evidence_values(
-    attempt_id: &str,
-    author_message: &str,
-    assembly_manifest_id: &str,
-    known_prior_binding_id: Option<&str>,
-) -> Vec<serde_json::Value> {
-    let mut values = vec![
-        serde_json::json!({
-            "kind": "sent_content",
-            "attempt_id": attempt_id,
-            "availability": "current",
-            "content": author_message
-        }),
-        serde_json::json!({
-            "kind": "stored_reference",
-            "attempt_id": attempt_id,
-            "availability": "current",
-            "reference_id": assembly_manifest_id
-        }),
-    ];
-    if let Some(reference_id) = known_prior_binding_id {
-        values.push(serde_json::json!({
-            "kind": "stored_reference",
-            "attempt_id": attempt_id,
-            "availability": "current",
-            "reference_id": reference_id
-        }));
-    }
-    values.push(serde_json::json!({
-        "kind": "provider_report",
-        "attempt_id": attempt_id,
-        "availability": "current",
-        "report": "host_fake_no_provider_usage"
-    }));
-    values.push(serde_json::json!({
-        "kind": "provider_opaque",
-        "attempt_id": attempt_id,
-        "availability": "unknown",
-        "unknown_facts": ["provider_internal_content"]
-    }));
-    values
-}
-
-async fn complete_or_compact(
+pub(crate) async fn complete_or_compact(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     author_message: &str,
@@ -806,7 +448,7 @@ pub(crate) async fn update_run(
     Ok(())
 }
 
-async fn requeue_generation(
+pub(crate) async fn requeue_generation(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
@@ -817,10 +459,8 @@ async fn requeue_generation(
     Ok(WorkPhase::Done(CompleteAgentRun::Settled))
 }
 
-async fn hold_if_requested(kind: &str) {
+pub(crate) async fn hold_if_requested(kind: &str) {
     let key = match kind {
-        "dispatch" => "STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH",
-        "stream" => "STORYOS_TEST_FAKE_STREAM_HOLD_PATH",
         "decision" => "STORYOS_TEST_FAKE_DECISION_HOLD_PATH",
         "compaction_stage" => "STORYOS_TEST_FAKE_COMPACTION_STAGE_HOLD_PATH",
         "successor_fence" => "STORYOS_TEST_FAKE_SUCCESSOR_FENCE_HOLD_PATH",
@@ -839,7 +479,7 @@ async fn hold_if_requested(kind: &str) {
     }
 }
 
-fn complete_challenge_error(
+pub(crate) fn complete_challenge_error(
     error: storyos_application::ProjectCommandChallengeError,
 ) -> CompleteAgentRunError {
     CompleteAgentRunError::Unavailable(Box::new(error))

@@ -281,12 +281,14 @@ fn expected_provenance_evidence() -> Value {
         },
         "workspace": {
             "crates": [
+                "crates/storyos-adapter-fake-destination",
                 "crates/storyos-adapter-postgres",
                 "crates/storyos-application",
                 "crates/storyos-contracts",
                 "crates/storyos-core",
                 "crates/storyos-server",
-                "crates/storyos-worker"
+                "crates/storyos-worker",
+                "crates/storyos-worker-bin"
             ],
             "excluded_trees": ["prototypes/**", ".reference/**"]
         },
