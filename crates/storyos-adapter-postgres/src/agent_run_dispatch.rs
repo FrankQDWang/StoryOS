@@ -161,15 +161,6 @@ impl ModelDispatchStore for PostgresProjectReader {
                 Err(CompleteAgentRunError::StaleFence) => return Ok(Some(StreamStop::StaleFence)),
                 loaded => loaded?,
             };
-            if run.status == "cancelled"
-                && run.attempt_id.as_deref() == Some(dispatch.model_attempt_id.as_str())
-            {
-                return Ok(Some(StreamStop::Cancelled(CommittedCancellation {
-                    model_attempt_id: dispatch.model_attempt_id.clone(),
-                    response_reference: None,
-                    abort_attempt: RequestAttempt::New,
-                })));
-            }
             let target = transaction
                 .client
                 .query_opt(
@@ -186,9 +177,19 @@ impl ModelDispatchStore for PostgresProjectReader {
                 )
                 .await
                 .map_err(complete_database_error)?;
-            let Some(target) = target.filter(|_| !run.settled()) else {
+            let Some(target) = target else {
                 return Ok(Some(StreamStop::StaleFence));
             };
+            if run.status == "cancelled" {
+                return Ok(Some(StreamStop::Cancelled(CommittedCancellation {
+                    model_attempt_id: dispatch.model_attempt_id.clone(),
+                    response_reference: None,
+                    abort_attempt: RequestAttempt::New,
+                })));
+            }
+            if run.settled() {
+                return Ok(Some(StreamStop::StaleFence));
+            }
             let mut items = serde_json::from_str::<serde_json::Value>(&target.get::<_, String>(0))
                 .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
                 .get("items")

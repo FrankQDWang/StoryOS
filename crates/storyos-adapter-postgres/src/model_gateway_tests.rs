@@ -5,11 +5,11 @@ use storyos_application::{
     AuthorCommandAdmissionIds, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
     ContractFaultObserver, ContractFaultPoint, ConversationSelection, CreateAgentRunCommand,
     DestinationRequest, EditorClientBinding, IssueProjectCommandChallenge, ModelProviderAdapter,
-    ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
-    UpdateProjectAssistanceCommand, complete_agent_run, issue_project_command_challenge,
-    request_create_agent_run, update_project_assistance,
+    ModelResponse, ModelStreamSink, ModelUsage, Observation, PreDispatchRefusal, PreparedRequest,
+    ProjectScope, UpdateProjectAssistanceCommand, complete_agent_run,
+    issue_project_command_challenge, request_create_agent_run, update_project_assistance,
 };
-use storyos_core::AssistanceAvailability;
+use storyos_core::{AssistanceAvailability, NativeStreamItem, StreamItemRole, StreamItemState};
 use tokio_postgres::{Client, NoTls};
 
 use crate::PostgresProjectReader;
@@ -52,6 +52,7 @@ enum Probe {
     InspectBeforeExchange,
     TakeOverBeforeExchange,
     CancelBeforeExchange,
+    StreamTwoBatches,
 }
 
 /// Wraps the fake adapter and acts on the database at a deterministic point of the sequence.
@@ -60,6 +61,7 @@ struct ProbingDestination<'a> {
     run_id: String,
     probe: Probe,
     seen: Mutex<Vec<ExchangeProbe>>,
+    streamed: Mutex<Option<serde_json::Value>>,
 }
 
 impl ModelProviderAdapter for ProbingDestination<'_> {
@@ -82,6 +84,43 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
     ) -> Observation {
         match self.probe {
             Probe::Refuse => unreachable!("a refused request has no exchange"),
+            Probe::StreamTwoBatches => {
+                let item = |item_id: &str, state, text: &str| NativeStreamItem {
+                    item_id: item_id.to_owned(),
+                    role: StreamItemRole::Assistant,
+                    state,
+                    text: Some(text.to_owned()),
+                    summary: None,
+                    call_id: None,
+                    arguments: None,
+                    refusal: None,
+                    hosted_report: None,
+                };
+                let first = [item("1", StreamItemState::Provisional, "Guard")];
+                let second = [
+                    item("1", StreamItemState::Complete, "Guard the voice"),
+                    item("2", StreamItemState::Complete, "Keep it"),
+                ];
+                sink.append(&first).await;
+                sink.append(&second).await;
+                let streamed: String = self
+                    .admin
+                    .query_one(
+                        "SELECT payload->>'items' FROM storyos.model_attempts
+                          WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+                        &[&self.run_id],
+                    )
+                    .await
+                    .unwrap()
+                    .get(0);
+                *self.streamed.lock().unwrap() = serde_json::from_str(&streamed).ok();
+                return Observation::Terminal(ModelResponse {
+                    items: second.to_vec(),
+                    output: None,
+                    usage: ModelUsage::Unknown,
+                    response_reference: None,
+                });
+            }
             Probe::InspectBeforeExchange => {
                 let claimed_attempts = self
                     .admin
@@ -327,6 +366,7 @@ async fn prepare_refusal_records_no_dispatch_evidence() {
         run_id: claim.run_id.clone(),
         probe: Probe::Refuse,
         seen: Mutex::default(),
+        streamed: Mutex::default(),
     };
     let points = RecordedPoints::default();
 
@@ -366,6 +406,7 @@ async fn dispatch_claim_commits_before_an_exchange_with_no_open_transaction() {
         run_id: claim.run_id.clone(),
         probe: Probe::InspectBeforeExchange,
         seen: Mutex::default(),
+        streamed: Mutex::default(),
     };
     let points = RecordedPoints::default();
 
@@ -414,6 +455,7 @@ async fn stale_run_lease_fence_rejects_the_observation() {
         run_id: claim.run_id.clone(),
         probe: Probe::TakeOverBeforeExchange,
         seen: Mutex::default(),
+        streamed: Mutex::default(),
     };
     let points = RecordedPoints::default();
 
@@ -451,6 +493,7 @@ async fn a_new_claim_of_a_cancelled_run_sends_one_abort_through_the_same_sequenc
         run_id: claim.run_id.clone(),
         probe: Probe::CancelBeforeExchange,
         seen: Mutex::default(),
+        streamed: Mutex::default(),
     };
     let fenced_points = RecordedPoints::default();
     let fenced = complete_agent_run(&store, &destination, &fenced_points, &claim).await;
@@ -525,5 +568,52 @@ async fn a_new_claim_of_a_cancelled_run_sends_one_abort_through_the_same_sequenc
             items: Some("[]".to_owned()),
             decision_id: None,
         }
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let claim = claimed_run(&store, &admin, "b95").await;
+    let destination = ProbingDestination {
+        admin: &admin,
+        run_id: claim.run_id.clone(),
+        probe: Probe::StreamTwoBatches,
+        seen: Mutex::default(),
+        streamed: Mutex::default(),
+    };
+    let points = RecordedPoints::default();
+
+    let result = complete_agent_run(&store, &destination, &points, &claim).await;
+
+    let item = |item_id: &str, state: &str, text: &str| {
+        serde_json::json!({
+            "item_id": item_id, "role": "assistant", "state": state, "phase": state,
+            "text": text, "summary": null, "call_id": null, "arguments": null,
+            "refusal": null, "hosted_report": null
+        })
+    };
+    assert_eq!(
+        (
+            result.ok(),
+            destination.streamed.into_inner().unwrap(),
+            points.0.into_inner().unwrap(),
+        ),
+        (
+            Some(CompleteAgentRun::AlreadySettled),
+            Some(serde_json::json!([
+                item("1", "complete", "Guard the voice"),
+                item("2", "complete", "Keep it"),
+            ])),
+            vec![
+                ContractFaultPoint::DispatchClaimed,
+                ContractFaultPoint::StreamCommitted,
+                ContractFaultPoint::StreamCommitted,
+            ],
+        )
     );
 }

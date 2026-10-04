@@ -192,7 +192,7 @@ pub(crate) async fn record(
                     advances_continuation,
                 } => {
                     let decision_id = Uuid::now_v7().to_string();
-                    let binding_id = Uuid::now_v7().to_string();
+                    let binding_id = advances_continuation.then(|| Uuid::now_v7().to_string());
                     payload["decision"] = crate::agent_run_observation::encode_decision(
                         &kind,
                         &decision_id,
@@ -200,24 +200,38 @@ pub(crate) async fn record(
                         advances_continuation,
                         /*opened_proposal*/ None,
                     );
-                    if let Some(wire) = crate::agent_run_continuation::parse_wire(&row.payload) {
+                    if let (Some(binding_id), Some(wire)) = (
+                        &binding_id,
+                        crate::agent_run_continuation::parse_wire(&row.payload),
+                    ) {
                         payload["produced_binding"] =
                             crate::agent_run_continuation::encode_produced_binding(
-                                &binding_id,
+                                binding_id,
                                 &dispatch.model_attempt_id,
                                 &wire.admission,
                             );
                     }
-                    ("settled", Some(decision_id), Some(binding_id))
+                    ("settled", Some(decision_id), binding_id)
                 }
                 AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => {
                     ("settled", None, None)
                 }
             }
         }
-        Observation::OutcomeUnknown { .. }
-        | Observation::NotSubmitted
-        | Observation::Rejected { .. } => ("uncertain", None, None),
+        Observation::OutcomeUnknown { response_reference } => {
+            if let Some(reference) = response_reference {
+                payload["response_reference"] = serde_json::json!(reference.reference_id);
+            }
+            ("uncertain", None, None)
+        }
+        Observation::NotSubmitted => {
+            payload["submission"] = serde_json::json!("not_submitted");
+            ("settled", None, None)
+        }
+        Observation::Rejected { reason } => {
+            payload["rejection"] = serde_json::json!(reason);
+            ("settled", None, None)
+        }
     };
     client
         .execute(

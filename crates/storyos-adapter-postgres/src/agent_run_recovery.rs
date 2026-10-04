@@ -100,8 +100,12 @@ pub(crate) async fn settle_cancelled(
         }
     }
     let cancellation = crate::agent_run_abort::pending(client, claim, run).await?;
-    if let (Some(cancellation), Some(attempt_id)) = (cancellation, run.attempt_id.as_deref()) {
-        if payload.get("original_result_retrieval").is_none()
+    if let Some(cancellation) = cancellation {
+        if let Some(attempt_id) = run
+            .attempt_id
+            .as_deref()
+            .filter(|attempt_id| *attempt_id == cancellation.model_attempt_id)
+            && payload.get("original_result_retrieval").is_none()
             && payload.get("observed_after_cancellation").is_none()
             && run.decision_position == "0"
         {
@@ -166,8 +170,8 @@ pub(crate) async fn record_unknown_create(
     Ok(WorkPhase::Hold("recovery"))
 }
 
-/// The re-observation of a cancelled Create supplies no Agent Decision. It keeps only a
-/// retrievable reference as evidence for the fenced retrieval.
+/// The re-observation of a cancelled Create supplies no Agent Decision. An unknown outcome keeps
+/// its recovery facts as evidence for the fenced retrieval.
 pub(crate) async fn record_cancelled_create(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -175,17 +179,10 @@ pub(crate) async fn record_cancelled_create(
     dispatch: &DispatchClaim,
     observation: Observation,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let reference = match observation {
-        Observation::OutcomeUnknown {
-            response_reference: Some(reference),
-        } if matches!(reference.retrieval, ReferenceRetrieval::Supported { .. }) => Some(reference),
-        Observation::OutcomeUnknown { .. }
-        | Observation::NotSubmitted
-        | Observation::Rejected { .. }
-        | Observation::Terminal(_) => None,
-    };
-    if let Some(reference) = &reference {
-        write_subject(client, claim, run, dispatch, Some(reference)).await?;
+    if let Observation::OutcomeUnknown { response_reference } = &observation
+        && run.decision_position == "0"
+    {
+        write_subject(client, claim, run, dispatch, response_reference.as_ref()).await?;
     }
     client
         .execute(
@@ -280,7 +277,8 @@ async fn write_subject(
     Ok(())
 }
 
-/// Whether the decision Attempt of a claimed Run is in flight: dispatched with an unknown outcome.
+/// Whether a decision or successor Attempt of the Run is in flight: dispatched with an unknown
+/// outcome.
 pub(crate) async fn in_flight_attempt(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -293,10 +291,11 @@ pub(crate) async fn in_flight_attempt(
                  JOIN storyos.model_attempts AS attempt
                    ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                       (run.owner_user_id, run.project_id, run.run_id)
-                  AND attempt.attempt_role = 'decision'
-                  AND attempt.decision_position = run.active_decision_position
+                  AND (attempt.attempt_role = 'successor'
+                       OR (attempt.attempt_role = 'decision'
+                           AND attempt.decision_position = run.active_decision_position))
                 WHERE run.owner_user_id = $1::text::uuid AND run.project_id = $2::text::uuid
-                  AND run.run_id = $3::text::uuid AND run.status = 'claimed'
+                  AND run.run_id = $3::text::uuid
                   AND attempt.decision_id IS NULL AND attempt.dispatch_state = 'uncertain')",
             &[
                 &scope.owner_user_id.as_ref(),

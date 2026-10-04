@@ -6,5 +6,5 @@ ALTER TABLE storyos.model_attempts
   ADD CONSTRAINT model_attempts_attempt_role_check
   CHECK (attempt_role IN (
     'decision', 'compaction', 'later_request', 'retrieval', 'successor', 'late_retrieval',
-    'abort', 'rejected_create'
+    'abort', 'successor_abort', 'rejected_create'
   ));

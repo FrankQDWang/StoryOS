@@ -133,7 +133,7 @@ fn reference_code(reference: &str) -> Option<u8> {
         .rsplit('-')
         .next()
         .and_then(|group| group.get(0..2))
-        .and_then(|code| u8::from_str_radix(code, 16).ok())
+        .and_then(|code| u8::from_str_radix(code, /*radix*/ 16).ok())
 }
 
 /// Derives the retrieved result from the reference alone.
