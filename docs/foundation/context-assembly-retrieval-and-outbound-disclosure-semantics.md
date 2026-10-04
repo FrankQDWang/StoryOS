@@ -1129,8 +1129,8 @@ No new follow-up ticket is required. These existing owners cover every
 remaining physical, security, protocol, verification, slice, and retention
 decision exposed by this contract.
 Their older contracts and stage tickets are not declared aligned by this
-revision. Release and proof revisions precede /to-spec and the user-approved
-/to-tickets refresh. The current
+revision. Release and proof revisions precede the `to-spec` skill refresh and the
+user-approved `to-tickets` skill refresh. The current
 [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361) owns
 its accepted implementation handoff and pending final release evidence.
 Stage 4 and later remain on EXECUTION HOLD; exact Provider account/model
