@@ -163,7 +163,8 @@ fn digest(kind: &str, bytes: &[u8]) -> String {
     )
 }
 
-/// Admits one fake-model AgentRun on a new chapter, then claims it with a known fence.
+/// Admits one fake-model AgentRun on a new chapter, then claims it with a known fence. The lease
+/// is already expired, so a later Worker can drain a Run that a test leaves claimed.
 async fn claimed_run(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -255,7 +256,7 @@ async fn claimed_run(
             "UPDATE storyos.agent_runs
                 SET claim_generation = claim_generation + 1,
                     fence_token = claim_generation + 1,
-                    lease_expires_at = clock_timestamp() + interval '1 minute',
+                    lease_expires_at = clock_timestamp(),
                     status = 'claimed'
               WHERE run_id = $1::text::uuid
           RETURNING fence_token",
@@ -458,7 +459,7 @@ async fn a_new_claim_of_a_cancelled_run_sends_one_abort_through_the_same_sequenc
             "UPDATE storyos.agent_runs
                 SET claim_generation = claim_generation + 1,
                     fence_token = claim_generation + 1,
-                    lease_expires_at = clock_timestamp() + interval '1 minute'
+                    lease_expires_at = clock_timestamp()
               WHERE run_id = $1::text::uuid AND status = 'cancelled' AND wakeup_pending
           RETURNING fence_token",
             &[&claim.run_id],
