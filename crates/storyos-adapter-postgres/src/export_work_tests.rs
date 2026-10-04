@@ -142,7 +142,8 @@ async fn a_readable_export_status_read_keeps_one_snapshot_across_worker_settleme
         .await
         .unwrap();
 
-    // The status read waits on this lock after its output read; the Worker settles meanwhile.
+    // The status read waits on this lock after its output read. The Worker settles while it waits.
+    let activity_position_before = activity_position(&admin, &scope).await;
     begin_settlement_under_lock(
         &admin,
         &scope,
@@ -174,6 +175,13 @@ async fn a_readable_export_status_read_keeps_one_snapshot_across_worker_settleme
         .await
         .unwrap();
     remove_export_work_rows(&admin).await;
+    remove_export_settlement_rows(
+        &admin,
+        &scope,
+        &claim.author_command_admission_id,
+        activity_position_before.as_deref(),
+    )
+    .await;
 
     assert_eq!(settled, CompleteReadableExport::SettledReady);
     assert_eq!(racing, before_settlement);
@@ -208,6 +216,7 @@ async fn a_project_export_status_read_keeps_one_snapshot_across_worker_settlemen
         .await
         .unwrap();
 
+    let activity_position_before = activity_position(&admin, &scope).await;
     begin_settlement_under_lock(&admin, &scope, "storyos.project_export_operations").await;
     let racing_read = tokio::spawn({
         let store = store.clone();
@@ -226,6 +235,13 @@ async fn a_project_export_status_read_keeps_one_snapshot_across_worker_settlemen
         .await
         .unwrap();
     remove_export_work_rows(&admin).await;
+    remove_export_settlement_rows(
+        &admin,
+        &scope,
+        &claim.author_command_admission_id,
+        activity_position_before.as_deref(),
+    )
+    .await;
 
     assert_eq!(settled, CompleteArchiveExport::SettledReady);
     assert_eq!(racing, before_settlement);
@@ -253,6 +269,58 @@ async fn begin_settlement_under_lock(
                     set_config('storyos.project_id', $2, true)",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
+        .await
+        .unwrap();
+}
+
+async fn activity_position(admin: &tokio_postgres::Client, scope: &ProjectScope) -> Option<String> {
+    admin
+        .query_opt(
+            "SELECT project_activity_position::text FROM storyos.scope_counters
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap()
+        .map(|row| row.get(0))
+}
+
+async fn remove_export_settlement_rows(
+    admin: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    admission_id: &str,
+    activity_position_before: Option<&str>,
+) {
+    let owner = scope.owner_user_id.as_ref();
+    let project = scope.project_id.as_ref();
+    let restore_counter = match activity_position_before {
+        Some(position) => format!(
+            "UPDATE storyos.scope_counters SET project_activity_position = {position}
+              WHERE owner_user_id = '{owner}'::uuid AND project_id = '{project}'::uuid;"
+        ),
+        None => format!(
+            "DELETE FROM storyos.scope_counters
+              WHERE owner_user_id = '{owner}'::uuid AND project_id = '{project}'::uuid;"
+        ),
+    };
+    admin
+        .batch_execute(&format!(
+            "BEGIN; SET CONSTRAINTS ALL DEFERRED;
+             DELETE FROM storyos.project_activity_event_payloads
+              WHERE owner_user_id = '{owner}'::uuid AND project_id = '{project}'::uuid
+                AND receipt_id IN (
+                  SELECT receipt_id FROM storyos.domain_receipts
+                   WHERE owner_user_id = '{owner}'::uuid AND project_id = '{project}'::uuid
+                     AND author_command_admission_id = '{admission_id}'::uuid);
+             DELETE FROM storyos.author_command_admission_settlements
+              WHERE owner_user_id = '{owner}'::uuid AND project_id = '{project}'::uuid
+                AND author_command_admission_id = '{admission_id}'::uuid;
+             DELETE FROM storyos.domain_receipts
+              WHERE owner_user_id = '{owner}'::uuid AND project_id = '{project}'::uuid
+                AND author_command_admission_id = '{admission_id}'::uuid;
+             {restore_counter}
+             COMMIT;"
+        ))
         .await
         .unwrap();
 }
