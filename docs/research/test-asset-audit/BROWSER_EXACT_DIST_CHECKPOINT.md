@@ -1,6 +1,6 @@
 # Browser exact-dist checkpoint
 
-Source review is partial: 35 cases in 34 test files; 21 KEEP, three DELETE, 11 MERGE. Direct test candidate lines: 83. Exclusive support candidate lines: 434 (support-removals.json).
+Source review is complete: 43 cases in 37 test files; 29 KEEP, three DELETE, 11 MERGE. Direct test candidate lines: 83. Exclusive support candidate lines: 434 (support-removals.json).
 
 | Reviewed file | Verdict |
 |---|---|
@@ -37,15 +37,21 @@ Source review is partial: 35 cases in 34 test files; 21 KEEP, three DELETE, 11 M
 | apps/web/test/browser-exact-dist/s2-input.integration.test.ts:188 | KEEP |
 | apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284 | KEEP |
 | apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307 | KEEP |
-
 | apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts:5 | DELETE |
 | apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts:5 | DELETE |
 
-## Pending files
+| apps/web/test/browser-exact-dist/production-host.integration.test.ts:5 | KEEP |
+| apps/web/test/browser-exact-dist/production-host.integration.test.ts:10 | KEEP |
+| apps/web/test/browser-exact-dist/production-host.integration.test.ts:15 | KEEP |
+| apps/web/test/browser-exact-dist/production-host.integration.test.ts:19 | KEEP |
+| apps/web/test/browser-exact-dist/production-host.integration.test.ts:24 | KEEP |
+| apps/web/test/browser-exact-dist/production-host.integration.test.ts:30 | KEEP |
+| apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts:4 | KEEP |
+| apps/web/test/browser-exact-dist/restored-discard.integration.test.ts:4 | KEEP |
 
-- apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts
-- apps/web/test/browser-exact-dist/production-host.integration.test.ts
-- apps/web/test/browser-exact-dist/restored-discard.integration.test.ts
+## Pending work
+
+No exact-dist test file remains. Cross-directory reconciliation and the random mutation self-check remain pending.
 
 ## Decisions and evidence
 
@@ -114,3 +120,11 @@ Source review is partial: 35 cases in 34 test files; 21 KEEP, three DELETE, 11 M
 - support-removals.json records 434 additional exclusive helper lines (177 Memory + 257 Run evidence). Include these spans, unioned by path, in future directory/top-file totals; they are not additional runtime tests or separate sample rows. Do not count shared dispatcher/teardown cleanup yet.
 - acceptance.ts and production-composer-controls.ts are fully reviewed. Composer has real UI controls, held dispatch, lost steering acknowledgement plus exact reload retry, and read-only writer refusal; eventual production-host:30 verdict is KEEP. Other production-host scenarios still require the prose/mixed/conflict/multi helpers.
 - Current source totals: 35 exact-dist cases / 34 files, 21 KEEP, three DELETE, 11 MERGE. Test spans 83 lines plus 434 support lines. No runtime mutation or active process.
+
+## Production interaction and recovery completion
+
+- BD036-BD043 complete all eight remaining runtime cases. Every underlying scenario and Draft helper is fully read, including the previously truncated refused-edit target loop.
+- KEEP reasons identify real mounted controls, native selection/Copy, source-label races, explicit frozen retry, old-writer refusal and restored browser evidence. Direct backend assertions inside these journeys are overlap, not extra retention grounds.
+- Mixed recovery checks both lost and received candidate Undo, authoritative retry/Undo, corrupt Snapshot rejection, expansion retry and repeated Discard/reopen. The source Chapter helper also holds an old GET across rename and current selection.
+- Restored Discard installs original local rows into the new browser and consumes the physical restore fixture; it does not create a fresh equivalent Draft. The archive helper reads STORE ZIP entries, and the recovery case checks the retained byte digest.
+- Optional database oracle counts remain fixture dependencies. Remove only counters for BD034/BD035 during future consolidation. No product/test changes or runtime mutation occurred.

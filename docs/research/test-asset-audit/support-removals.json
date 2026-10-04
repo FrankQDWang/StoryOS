@@ -16,5 +16,14 @@
       257
     ],
     "reason": "Exclusive helper for the deleted production scenario. Remove its dispatch import/branch and update exact-dist-global-setup counters in the same future implementation."
+  },
+  {
+    "path": "apps/web/test/support/statistics-unicode-profile.ts",
+    "owner": "NC031",
+    "remove": [
+      1,
+      33
+    ],
+    "reason": "Exclusive test-only counting helper; remove the explicit Node tsconfig include together."
   }
 ]
