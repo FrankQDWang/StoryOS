@@ -96,10 +96,11 @@ pub(crate) struct RunPhaseRow {
 }
 
 impl RunPhaseRow {
+    /// A requeued Run has given back this claim, like a settled Run.
     pub(crate) fn settled(&self) -> bool {
         matches!(
             self.status.as_str(),
-            "completed" | "waiting" | "refused" | "paused" | "cancelled"
+            "queued" | "completed" | "waiting" | "refused" | "paused" | "cancelled"
         )
     }
 
