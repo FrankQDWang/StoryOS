@@ -699,8 +699,8 @@ release revision before implementation can resume.
 
 For this revision, the proof owner next consumes typed continuation, active
 compaction, bounded recovery, hosted-operation admission, and Memory publication,
-settings, restriction, cleanup, and restore obligations. Then `/to-spec` refreshes
-the existing Stage 3, 4, 5, and 7 parent specifications, and `/to-tickets` presents
+settings, restriction, cleanup, and restore obligations. Then the `to-spec` skill refreshes
+the existing Stage 3, 4, 5, and 7 parent specifications, and the `to-tickets` skill presents
 any changed child breakdown and native blockers for approval before publication.
 Reuse current owners and stable Requirement IDs. No old child body can stand in
 for that alignment. The current [Stage 3 specification](https://github.com/FrankQDWang/StoryOS/issues/361)

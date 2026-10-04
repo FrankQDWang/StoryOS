@@ -9,10 +9,11 @@ The main flow comes first; reference sections follow it.
 2. After each product or test edit, run the smallest check that can fail on that edit:
    `make verify-targeted CHECK=<check>`, or `make verify-changed BASE=<base>` for the
    whole selected scope. Set `BASE` to the actual comparison commit.
-3. After you add, rename, or delete a test, or change the runner or the
-   [input policy](verification-policy.json), run `make verify-policy` and inspect a
-   fresh plan with `make verify-plan BASE=<base>`.
-4. Start a long command in the background with the client's own mechanism. The
+3. After a test lifecycle change, run `make verify-policy`. A test lifecycle change
+   adds, renames, or deletes a test, or changes the runner or the
+   [input policy](verification-policy.json).
+4. After `make verify-policy`, inspect a new plan with `make verify-plan BASE=<base>`.
+5. Start a long command in the background with the client's own mechanism. The
    command is complete when its process exits and its structured result is
    available. A printed stage line is not the end signal.
 
@@ -27,18 +28,19 @@ PR with an ordinary merge commit.
 
 1. Open the PR and wait for current `verify` success. On the clean candidate, run `python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
 2. Start two independent read-only reviews, one for each axis. Each review runs in
-   a fresh context of an agent tool that is different from the implementer's tool.
+   a new context of an agent tool that is different from the implementer's tool.
    Give each reviewer the printed request and the scoped diff `git diff <base>...HEAD`.
    The Standards reviewer checks the diff against `AGENTS.md`, `GLOSSARY.md`, and
    ASD-STE100. The Spec reviewer checks the diff against the ticket or task contract.
    Each reviewer returns `PASS` or `FAIL` with `file:line` evidence.
-   - Current example when Claude Code implements: the Codex plugin, with one fresh
+   - Current example when Claude Code implements: the Codex plugin, with one new
      thread for each axis and without `--write`:
      `node ~/.claude/plugins/cache/openai-codex/codex/<version>/scripts/codex-companion.mjs task --fresh "<axis prompt>"`.
    - When Codex implements, use a different agent tool or a separate Claude Code
      session for each axis.
-3. Fix the findings, commit, push, and repeat steps 1 and 2 until both axes PASS.
-   Post each verdict as a PR comment.
+3. Post each verdict as a PR comment. If a verdict is `FAIL`, fix the findings.
+   Commit and push the fix. Then do steps 1 and 2 again. Continue until both axes
+   PASS.
 4. Write one review record for each axis as JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context` (for example `codex-standards-pr<pr>` or `codex-spec-pr<pr>`), `result` (`PASS` or `FAIL`), and `evidence`. The executor context and the two reviewer contexts must differ; IDs assert consistency, not authenticated identity.
 5. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
 6. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after the imports.
