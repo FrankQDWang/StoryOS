@@ -301,6 +301,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
         "project_export_entries",
         "project_export_manifests",
         "project_export_operations",
+        "pinned_export_sources",
         "project_activity_events",
         "project_activity_event_payloads",
         "author_command_admission_outcome_unknown_observations",
