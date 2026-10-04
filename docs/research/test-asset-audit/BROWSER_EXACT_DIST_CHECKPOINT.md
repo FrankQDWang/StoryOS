@@ -1,6 +1,6 @@
 # Browser exact-dist checkpoint
 
-Source review is partial: 10 cases in 10 test files; four KEEP, one DELETE, five MERGE. Direct candidate lines: 67.
+Source review is partial: 16 cases in 16 test files; eight KEEP, one DELETE, seven MERGE. Direct candidate lines: 67.
 
 | Reviewed file | Verdict |
 |---|---|
@@ -14,6 +14,12 @@ Source review is partial: 10 cases in 10 test files; four KEEP, one DELETE, five
 | apps/web/test/browser-exact-dist/s2-07-create-volume.integration.test.ts | MERGE |
 | apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts | KEEP |
 | apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-09-navigate-reopen.integration.test.ts | MERGE |
+| apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts | MERGE |
+| apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts | KEEP |
 
 ## Pending files
 
@@ -23,11 +29,6 @@ Source review is partial: 10 cases in 10 test files; four KEEP, one DELETE, five
 - apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts
 - apps/web/test/browser-exact-dist/restored-discard.integration.test.ts
 - apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-09-navigate-reopen.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-editor.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-input.integration.test.ts
@@ -37,7 +38,6 @@ Source review is partial: 10 cases in 10 test files; four KEEP, one DELETE, five
 - apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-search.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts
@@ -56,3 +56,12 @@ Source review is partial: 10 cases in 10 test files; four KEEP, one DELETE, five
 - exact-dist-plugin.ts and inline-chapter-creation.ts are fully read and have support dispositions. exact-dist-global-setup.ts has been read only through line 145; finish it before marking support complete. Its optional authority oracle has dependencies on production-host/prose/Inline/Memory/Run/composer/multi-location fixtures; do not remove those tests before checking all counters.
 - Read-ahead: s2-jrn-001.integration.test.ts is fully read but not adjudicated; compare its aggregate workflow to focused search/statistics/export/Chapter tests. s1-jrn-001 has only imports and the test body (307-439) reviewed; helpers remain. stage1-journey-expectation.ts has only lines 1-160 reviewed; remaining normalization and expected objects remain.
 - All completed declarations and cited starts checked. No runtime test, mutation or product/test change occurred.
+
+## Chapter operations and save display
+
+- Added BD011-BD016: navigation, Chapter rename/reorder, Current Chapter, Chapter deletion, Volume deletion and save truth. All six full source files reviewed.
+- MERGE navigation's conflicting localStorage/query/hash hints into save-truth before final reopen. Point them to inspected A while B is current. The receiver already checks actual prose and non-current inspection, so three extra empty Chapters are not required.
+- MERGE Current Chapter's remaining exact B query/editability/menu assertions into save-truth. Its two-Chapter create/type/switch/inspect/reload sequence is otherwise the same. Require an open menu before asserting that its current-selection action is absent; closed menus can mask that check.
+- KEEP Chapter rename/reorder for current identity and heading after the renamed Chapter moves away from first position; KEEP repeated current deletion for fresh writable successor and final no-editor state; KEEP Volume refusal then success for retained rows and error clearing.
+- KEEP save-truth for the first sampled local-text state. It has no held response and is not evidence that every frame stays unsaved until acknowledgement. This limitation must remain when its receiving fixture is consolidated.
+- Current totals: 16 cases/files, eight KEEP, one DELETE, seven MERGE; 67 direct lines. No runtime execution or source mutation.

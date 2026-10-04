@@ -1,6 +1,6 @@
 # browser-exact-dist test verdicts
 
-Reviewed: 10 cases in 10 files. See PROGRESS.md for directory completion.
+Reviewed: 16 cases in 16 files. See PROGRESS.md for directory completion.
 
 Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 
@@ -58,8 +58,44 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 |---|---|---|---|---|---|---|
 | BD009 | 43 — the author creates Chapters at inline menu positions and keeps the first current Chapter | KEEP | K2 | Pointer versus overflow Chapter menus must offer the correct before/after placements, put the title editor between exact siblings, cancel on Escape without insertion, choose the default last Volume versus an explicit Volume, and retain the first Current Chapter and order after reload. HTTP ordering never executes this menu position/selection wiring; ordinary journey setup only appends. Keep those behaviors, not the fixed 12px styling or screenshot creation as independent regressions. Receive the root/empty-Project assertion transfers. | apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:1002; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130 |
 
+## apps/web/test/browser-exact-dist/s2-09-navigate-reopen.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD011 | 95 — the author opens each Chapter from the tree and reopens the current Chapter | MERGE | M1 | Its distinct input is conflicting localStorage, query and hash Chapter hints on reopen: the server Current Chapter must win. Transfer those hints into save-truth before its final reopen, pointing them to inspected Chapter A while B is current. That receiver already inspects non-current A read-only, retains both Chapters' prose and reopens B. Three empty-Chapter clicks add no distinct ownership rule; removal depends on preserving the conflicting-hint input. | apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-source/chapter-navigation.integration.test.ts:38 |
+
 ## apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | BD010 | 65 — the author renames and reorders Volumes from the canonical tree and they survive reopen | KEEP | K2 | The packaged Volume menu must rename one exact Volume, reopen its persisted title, move the first Volume down and reopen the exact new order. Core/HTTP ordering cannot detect stale menu target/form wiring or a display order that diverges after reload; Chapter menu updates have separate component/command paths. Receive first-Volume empty-workspace/zero-Chapter checks before creating Volume B. | apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196; apps/web/test/browser-exact-dist/s2-07-create-volume.integration.test.ts:35 |
+
+## apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD012 | 91 — the author renames and reorders Chapters from the canonical tree and they survive reopen | KEEP | K2 | The actual Chapter menu/form must rename the selected Current Chapter, preserve that identity while moving it down, and reopen with the renamed Chapter still current although it is no longer first. Volume reorder has a separate menu/command and no current-editor binding; HTTP Chapter update cannot detect incorrect rendered heading/current selection after reorder. | apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts:65; apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252 |
+
+## apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD013 | 84 — writes in two Chapters, switches current Chapter, and reopens the current Chapter | MERGE | M1 | The save-truth case already types Alpha/Beta in two Chapters, makes B current, inspects A read-only and reopens B. Transfer the exact second Chapter GET, reopened editability and current-selection menu observations into that case. Check current-menu visibility only while the relevant menu is open; current absence checks can otherwise pass because a menu is closed. Keep the transfer prerequisite rather than maintaining the same create/type/switch fixture twice. | apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130 |
+
+## apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD014 | 181 — the author confirms Chapter removal, keeps the next current Chapter, then opens empty | KEEP | K2 | After confirming removal of a written Current Chapter, the packaged editor must bind the next Chapter, become writable with no old pending input, repeat that transition, and disappear after the last Chapter is deleted. HTTP deletion checks tree/head rules but cannot catch stale editor/controller attachment after the delete form completes. Statistics deletion does not by itself establish this repeated writable-successor-to-empty transition. | apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:571; apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts:66 |
+
+## apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD015 | 66 — the author cannot remove a nonempty Volume, then removes an empty Volume | KEEP | K2 | A confirmed nonempty Volume removal must show the refusal while retaining both rows; a following empty-Volume removal must succeed and clear that prior error. Chapter deletion uses another form and command, while HTTP Volume refusal cannot detect a stale error left in the mounted UI after a later success. | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts:181 |
+
+## apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD016 | 77 — shows pending, saving, and saved without calling local input saved, across Chapters | KEEP | K2 | The first sampled state with newly visible local text must be pending/saving rather than saved, and later saved labels must follow settled prose through current-Chapter change, read-only inspection and reopen. The ordinary current-Chapter case waits for saving eventually but does not reject saved at this first sample. This is a sampled observation with no held server response; it does not prove that every frame remains unsaved until acknowledgement. Receive conflicting reopen hints and remaining two-Chapter query/editability checks from navigation/current-Chapter duplicates. | apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts:84; apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307 |
