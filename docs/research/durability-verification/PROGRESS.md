@@ -150,3 +150,4 @@
   check the changed-path boundary, and push only the research branch.
 - Matrix minimal, `takeover-server`: invariant failure (exit 1). Evidence: `evidence/minimal/takeover-server.json`.
 - Matrix minimal, `takeover-concurrent`: invariant failure (exit 1). Evidence: `evidence/minimal/takeover-concurrent.json`.
+- Matrix minimal, `concurrent-rename`: invariant failure (exit 1). Evidence: `evidence/minimal/concurrent-rename.json`.
