@@ -70,7 +70,14 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
         export_id: &str,
     ) -> Result<GetHumanReadableManuscriptExport, ProjectReadError> {
         let mut client = self.connect().await?;
-        let transaction = client.transaction().await.map_err(read_error)?;
+        // One snapshot: the read does not see a Worker settlement that commits between its reads.
+        let transaction = client
+            .build_transaction()
+            .isolation_level(tokio_postgres::IsolationLevel::RepeatableRead)
+            .read_only(true)
+            .start()
+            .await
+            .map_err(read_error)?;
         set_scope(&transaction, scope).await?;
         let Some(project) = transaction
             .query_opt(
