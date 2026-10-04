@@ -1438,5 +1438,198 @@
     "evidence": "An existing Conversation must use eligible prior continuation with newly captured current text while old Run Context remains immutable; a new Conversation must omit it, explicit full input must retain known-but-unused prior evidence, and changed destination/restricted source must choose new transport. Oversized exact current input must refuse execution. Confirmed expiry/rebuild has a different provider rejection trigger; it does not replace these local eligibility and input-mapping checks.",
     "coverage": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:128",
     "remove": null
+  },
+  {
+    "id": "NP123",
+    "path": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+    "line": 324,
+    "test": "implemented assistance and Run Events replay from a retained public cursor",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move the pre-Assistance tree cursor, exact Assistance/Run Event kinds and aggregate identities, and resume-after-first/last-event checks into the setup/admission of :373. That owner creates the same Assistance, Volume, Chapter and queued Run, but currently does not inspect their public Activity events. Preserve this event sequence before removing the extra Project fixture; generic cross-table Activity tests do not substitute for these producer-specific envelopes.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/activity-stream-cross-table-http.integration.test.ts:168",
+    "remove": null
+  },
+  {
+    "id": "NP124",
+    "path": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+    "line": 373,
+    "test": "createAgentRun admits one conversation and keeps query scope closed",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The queued Run must capture exact instruction/Working Target and memory settings with no destination/disclosure manifests, reject a busy Conversation and invalid Chapter join, allow a separate new Conversation and expose only owned Run queries. Later Worker completion cannot detect premature destination manifest allocation during admission. Legacy settings recovery tests use different stored settings and omit these admission negatives. Receive the Activity assertions from :324.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:554; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:353",
+    "remove": null
+  },
+  {
+    "id": "NP125",
+    "path": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+    "line": 554,
+    "test": "Run settings stay captured when a legacy current revision is restored or evidence is unavailable",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A legacy nullable-current settings revision must be selected for a new Run without rewriting an old Run's captured settings; a second current settings row must fail the named unique constraint. Withholding only the old revision through a restrictive RLS policy must expose unavailable evidence for the old Run while keeping the new Run readable. Ordinary default-true capture and scoped foreign GET do not exercise revision selection or missing captured evidence.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237",
+    "remove": null
+  },
+  {
+    "id": "NP126",
+    "path": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+    "line": 626,
+    "test": "createAgentRun reopens an idle conversation and refuses digest or scope substitution",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A nonexistent existing Conversation must return scoped 404; absent Assistance must win over a foreign Chapter reference, allocate no Conversation/settings rows and return the exact assistance_unavailable code. Ordinary valid/new Run admission cannot prove those inputs. Idle Conversation reuse preserves its settings. The changed digest assertion rejects at Challenge acquisition, and the foreign helper also stops before Create; neither proves substitution rejection in the Create handler.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237",
+    "remove": null
+  },
+  {
+    "id": "NP127",
+    "path": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+    "line": 745,
+    "test": "createAgentRun exact retry after commit keeps the first acknowledgement",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "This hold occurs after settlement. While the first acknowledgement is held, the only intervening command is an existing-Conversation request expected to be busy; it makes no live state change. Exact replay is sent only after releasing and receiving the first acknowledgement. :373 already checks the same busy guard, accepted fields and exact response replay. There is no concurrent exact retry, changed projection or distinct observable assertion in this held variant.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
+    "remove": [
+      745,
+      821
+    ]
+  },
+  {
+    "id": "NP128",
+    "path": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+    "line": 833,
+    "test": "createAgentRun competing existing admission keeps one queued run",
+    "verdict": "MOVE",
+    "reason": "L1",
+    "evidence": "Move the Conversation exclusivity race to a real-Postgres Adapter command test with controlled scheduling: establish that the second admission has reached or blocked on the contested database boundary before releasing the first. The current test observes only the first hold, starts a fetch Promise and immediately removes the hold; the second request may arrive after commit, reducing the check to ordinary busy refusal. Keep :373 for HTTP mapping. Target the Adapter command test below; it does not currently prove this race.",
+    "coverage": "crates/storyos-adapter-postgres/src/create_agent_run_tests.rs:120; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:373",
+    "remove": null
+  },
+  {
+    "id": "NP129",
+    "path": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+    "line": 944,
+    "test": "createAgentRun blocks an over-limit Working Target before destination I/O",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move the pre-Worker blocked assembly details into the over-limit Working Target setup of the retained Worker-refusal case: exact_required_over_limit, selected instruction only, rejected token count 10001 and both SQL/public destination manifests absent. That owner already installs the same oversized payload, admits a Run and proves no Model Attempt after Worker execution. Transfer these admission-stage observations before the Worker runs.",
+    "coverage": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:303",
+    "remove": null
+  },
+  {
+    "id": "NP130",
+    "path": "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
+    "line": 355,
+    "test": "pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run immutable",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Pause must retain Conversation occupancy while Cancel releases it for a new Run; both commands must replay their Receipt, publish their distinct Activity schema and report the correct repeated NoEffect. A completed successor must remain terminal when Cancel is submitted. In-flight cancellation tests do not inspect paused Conversation admission, both event projections or terminal refusal. Foreign helper calls fail at Challenge acquisition.",
+    "coverage": "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:532; apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:672; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:128",
+    "remove": null
+  },
+  {
+    "id": "NP131",
+    "path": "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
+    "line": 484,
+    "test": "a rate-limited cancellation Challenge completes before a Worker is held",
+    "verdict": "DELETE",
+    "reason": "D4",
+    "evidence": "The apparent rate-limit recovery is test plumbing: cancelChallenge calls withChallengeBudget, which directly resets issued_count to zero in SQL before the second request. challengeAttempts=2 and absence of the hold file describe this fixture's order, not a product retry or wait contract. The retained real rate endpoint case covers 429; :532 already acquires a Challenge before the hold and cancels the same in-flight Worker. No independent product recovery behavior is established here.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:938; apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:532",
+    "remove": [
+      484,
+      530
+    ]
+  },
+  {
+    "id": "NP132",
+    "path": "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
+    "line": 532,
+    "test": "cancellation fences late Worker output and does not hide a Proposal",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A cancelled held dispatch must record one acknowledged Abort and never install late output; a competing expired-lease Worker must retain the original Attempt identity; Assistance disabled after admission must refuse rather than cancel; cancellation after Proposal creation must leave its reservation and Decision visible. These are distinct real Worker interleavings. Queued Pause/Cancel has no in-flight Attempt, and cancelled retrieval reconciles another Attempt role.",
+    "coverage": "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:355; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:277",
+    "remove": null
+  },
+  {
+    "id": "NP133",
+    "path": "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
+    "line": 672,
+    "test": "a Pause before the Cancel still sends one Abort for the in-flight Attempt",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Pause followed by Cancel on an already in-flight Attempt must still dispatch exactly one acknowledged Abort with one disclosure event. The queued Pause/Cancel case has no Attempt to abort, and direct in-flight Cancel does not test whether Pause accidentally clears the Abort target or makes the later Cancel skip it.",
+    "coverage": "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:355; apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts:532",
+    "remove": null
+  },
+  {
+    "id": "NP134",
+    "path": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
+    "line": 201,
+    "test": "confirmed reference expiry rebuilds eligible context and keeps the old run",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A destination-confirmed expired/unusable reference must record its rejected Create then rebuild a new invocation without rewriting the terminal predecessor; unknown Create, budget, changed processing boundary and missing exact input must refuse. Restricted covered content must be excluded while permitted current input rebuilds. Local continuation eligibility alone has no destination rejection or context_reference_recoveries row. The named restart subcase only holds/releases one Worker; it verifies stable recovery identity across that hold, not process-crash recovery.",
+    "coverage": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:128",
+    "remove": null
+  },
+  {
+    "id": "NP135",
+    "path": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
+    "line": 237,
+    "test": "Worker completes one Host-fake advisory Decision",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move completed advisory destination/disclosure visibility, settled Attempt and exact evidence projection, matched/missing/cross-Run Attempt query checks and one-Attempt count into the retained CFP hold case at its final advisory completion. That case already creates several same-Project Runs and transitions an advisory from dispatch through Decision and continuation. Transfer these terminal/query-scope assertions before removing the standalone ordinary advisory fixture.",
+    "coverage": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:353",
+    "remove": null
+  },
+  {
+    "id": "NP136",
+    "path": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
+    "line": 303,
+    "test": "Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and Eval without dispatch",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Each unsupported Tool/MCP/research/embedding/Memory/Skill/Subrun/Eval request must produce its exact execution_refused capability with no destination I/O or Model Attempt; subsequent requests can reuse the Conversation. A blocked exact Working Target must likewise produce zero Attempts after Worker execution. Candidate-discussion refusals check only unchanged candidate and do not pin all capabilities or absence of dispatch. Receive the pre-Worker over-limit assembly assertions from createAgentRun :944.",
+    "coverage": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:677; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:944",
+    "remove": null
+  },
+  {
+    "id": "NP137",
+    "path": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
+    "line": 353,
+    "test": "Worker distinguishes prose-change, clarification, and CFP holds",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Actual Worker holds distinguish dispatch without Decision, visible stream without Decision, selected Decision without continuation, and final continuation. Native provisional/incomplete/failed/cancelled/unknown, unselected complete, Tool, hosted and refusal items must retain their state/role without synthesizing a selected Decision. Candidate editing tests cover only a subset and different existing-target state. Receive ordinary advisory completion and Attempt-query isolation assertions from :237; these have not yet been transferred.",
+    "coverage": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:677; apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:96",
+    "remove": null
+  },
+  {
+    "id": "NP138",
+    "path": "apps/web/test/node-postgresql/takeover-http.integration.test.ts",
+    "line": 113,
+    "test": "an observer takeOverProjectWriter fences the prior writer and refuses its Author Edit",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move the complete Takeover response/Receipt shape, prior writer's superseded read-only projection, exact generation increment and the before/after authority comparison (one Takeover payload, no manuscript authority) into the late-result case at its Takeover step. That case already performs the same observer Takeover, exact retry and a fresh stale-writer Author Edit rejection, and additionally validates refreshed snapshots and replay of a previously committed edit. Capture the counts after its first edit but before Takeover. Preserve these missing assertions before removing this simpler fixture.",
+    "coverage": "apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts:119",
+    "remove": null
+  },
+  {
+    "id": "NP139",
+    "path": "apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts",
+    "line": 119,
+    "test": "a fenced writer's late ApplyAuthorEdit result does not mutate authority",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Takeover after an Author Edit has committed must refresh the winner's base from current authority, preserve all prior canonical Snapshots and the prior writer's base, and permit exact outcome/replay of that committed old-writer edit while rejecting a fresh old-generation edit. Basic Takeover has no intervening committed edit; Adapter counter/race tests do not inspect all public Snapshot/Session/Chapter projections and old-writer outcome query. Delivery loss here is thrown after reading the complete HTTP response, so it proves post-commit replay across Takeover, not a transport/process-cut race. Receive basic response and authority assertions from takeover-http:113.",
+    "coverage": "apps/web/test/node-postgresql/takeover-http.integration.test.ts:113; crates/storyos-adapter-postgres/src/takeover_admission_tests.rs:632; crates/storyos-adapter-postgres/src/takeover_persistence_tests.rs:535",
+    "remove": null
   }
 ]

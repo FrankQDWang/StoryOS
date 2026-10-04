@@ -1,6 +1,6 @@
 # Node PostgreSQL checkpoint
 
-Source review is partial: 122 runtime cases in 39 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
+Source review is partial: 139 runtime cases in 45 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
 
 | Reviewed file | Cases | Verdict counts |
 |---|---|---|
@@ -11,10 +11,12 @@ Source review is partial: 122 runtime cases in 39 files have individual verdicts
 | apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts | 7 | {'KEEP': 7} |
 | apps/web/test/node-postgresql/archive-project-http.integration.test.ts | 3 | {'MERGE': 1, 'KEEP': 2} |
 | apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts | 3 | {'MERGE': 1, 'KEEP': 2} |
 | apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts | 1 | {'MERGE': 1} |
 | apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts | 5 | {'KEEP': 5} |
 | apps/web/test/node-postgresql/continue-proposal-generation-claim-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts | 1 | {'MERGE': 1} |
+| apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts | 7 | {'MERGE': 2, 'KEEP': 3, 'DELETE': 1, 'MOVE': 1} |
 | apps/web/test/node-postgresql/create-chapter-http.integration.test.ts | 6 | {'KEEP': 5, 'DELETE': 1} |
 | apps/web/test/node-postgresql/create-project-challenge-http.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/node-postgresql/create-project-http.integration.test.ts | 2 | {'KEEP': 2} |
@@ -28,6 +30,8 @@ Source review is partial: 122 runtime cases in 39 files have individual verdicts
 | apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts | 2 | {'MERGE': 1, 'KEEP': 1} |
 | apps/web/test/node-postgresql/project-http.integration.test.ts | 8 | {'MERGE': 1, 'KEEP': 7} |
 | apps/web/test/node-postgresql/protocol-http-host.integration.test.ts | 5 | {'DELETE': 1, 'KEEP': 4} |
+| apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts | 4 | {'KEEP': 3, 'DELETE': 1} |
 | apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts | 1 | {'KEEP': 1} |
@@ -35,6 +39,8 @@ Source review is partial: 122 runtime cases in 39 files have individual verdicts
 | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts | 5 | {'KEEP': 5} |
 | apps/web/test/node-postgresql/snapshot-replay-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts | 2 | {'KEEP': 2} |
+| apps/web/test/node-postgresql/takeover-http.integration.test.ts | 1 | {'MERGE': 1} |
+| apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts | 4 | {'KEEP': 4} |
 | apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts | 3 | {'KEEP': 2, 'DELETE': 1} |
 | apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts | 7 | {'MERGE': 1, 'KEEP': 6} |
@@ -62,20 +68,14 @@ Continue Proposal, Run, context and export command families. Structural commands
 
 ## Pending files
 
-- apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts
-- apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts
 - apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts
 - apps/web/test/node-postgresql/export-acknowledgement-support.ts
 - apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts
 - apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts
 - apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts
 - apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts
-- apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts
-- apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts
 - apps/web/test/node-postgresql/recovery-archived-exports-http.integration.test.ts
 - apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts
-- apps/web/test/node-postgresql/takeover-http.integration.test.ts
-- apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts
 
 ## Structural and navigation checkpoint
 
@@ -124,3 +124,17 @@ Continue Proposal, Run, context and export command families. Structural commands
 - Several names say restart but execute a new Worker after SQL requeue, without Server restart. The successor failed-gates case retries only changed Context, not all seven gates. Verdicts use those actual observations.
 - Conversation guidance proves ordered same-Run consumption and compaction binding separately. The Chinese-message case has positive multibyte input (3000 characters/9000 bytes) plus 8001-character refusal at both Create and steering admission; unlike the earlier Author Edit count tests, it uses issued Challenges.
 - All 39 reviewed files have complete declaration-line coverage; all new cited test starts checked. No product/test/generated changes or runtime/database executions occurred. Mutation self-check remains 0/30.
+
+## Run admission, cancellation and Takeover checkpoint
+
+- NP123-NP139 cover six files and 17 cases. All declarations and new cited test starts checked.
+- DELETE create-agent-run:745. The hold is after commit; its sole intervening request receives conversation_busy and changes no state. Exact replay occurs after the first response is released. create-agent-run:373 already checks all product observations. This is not the earlier held-response/live-state-change pattern retained for rename or navigation.
+- MOVE create-agent-run:833 to the real-Postgres Adapter command boundary with deterministic coordination. Starting the second fetch and immediately deleting the first hold file does not prove the second transaction reached the contested point. The first request is held after its busy check; the second must be observed at a meaningful database barrier before release to prove serialization. create_agent_run_tests:120 is the proposed host, not existing race proof. Keep HTTP busy mapping at :373.
+- MERGE Assistance/Run Activity envelopes from create-agent-run:324 into :373, and pre-Worker over-limit Context/assembly checks from :944 into complete-fake-model-decision:303 before its Worker execution. Keep missing/invalid Conversation/Chapter and Assistance precedence inputs, plus nullable-current settings uniqueness and selectively withheld captured evidence.
+- DELETE recover-or-cancel-agent-run:484. withChallengeBudget at support/node-integration.ts:196 directly sets issued_count=0 before the second Challenge. This is helper preparation, not a product rate-window wait/retry. Actual 429 is covered by project-http:938 and preissued-Challenge in-flight cancellation by recover-or-cancel:532. The asserted helper call count and hold-file absence have no independent product consumer.
+- Keep Pause-then-Cancel for an in-flight Attempt separately from direct Cancel; Pause must not lose the Abort target. Queued Pause/Cancel has no in-flight target. Late direct output, expired-lease concurrent recovery, Assistance disabled after admission and cancellation after Proposal installation remain concrete inputs.
+- MERGE the ordinary advisory completion at complete-fake-model-decision:237 into its CFP transition case :353, including exact completed evidence/manifests, matched/missing/cross-Run Attempt queries and one-Attempt count. Preserve capability refusals with zero Model Attempts at :303 and each native-item state/role observation at :353.
+- Reference-expiry rebuild is distinct from local continuation eligibility and original-result retrieval. Its variable named restart only holds and releases one Worker; it is not crash or process restart evidence.
+- MERGE takeover-http:113 into takeover-late-result:119. Takeover authority counts must be captured after the initial Author Edit and before Takeover; transfer complete response and superseded-writer projections. The retained case already checks immutable canonical Snapshots, new winner base, prior base preservation, old committed replay and fresh stale-writer refusal. Its simulated delivery loss occurs after reading the response, so it is not a transport cut.
+- Earlier citations to these new MERGE/MOVE/DELETE rows need reconciliation. This checkpoint adds 124 direct candidate lines from two deleted test bodies; conditional transfers and sole-use helper cleanup are not included.
+- No source mutations, product/test/generated edits, database operations or runtime tests ran. Self-check remains 0/30.
