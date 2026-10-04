@@ -83,3 +83,13 @@ Seeds 114 through 119 completed on a new database. `structure-114-119.json.gz` r
 The second run also compared 1,098 exact Challenge retries and successful command replay bytes across the covered command kinds, with no mismatch. Final per-command replay counts still belong to Stage 4.
 
 Next: exercise the independent Proposal axes model through a real AgentRun and the packaged fake destination; finish Author Edit outcome coverage and minimal findings.
+
+## Step 7: Proposal production and lifecycle smoke
+
+The public path now creates its own assistance binding with Update Project Assistance, creates an AgentRun with 202 Accepted, waits for its fake-destination settlement, and reads the resulting Proposal. No fixture or SQL writes were added. The initial 404 assistance query means that no binding exists; the schema-valid zero-revision initialization probe succeeds. Its absent-binding revision convention needs clearer prose contract documentation. The earlier claim that a controlled fixture was necessary was disproved before any fixture work.
+
+Seed 300 exercised Proposal editing, Acceptance, rejection/reopen, and withdrawal/reopen through HTTP. All exact Challenge and command retries matched. Evidence: `proposals-first-survey.json`; run `b725626d10ac4fdf946e06eb0f5ae9ad` completed. Startup probes are retained separately.
+
+A-006: a candidate edit is already valid at its next public query, with a new Validation Receipt bound to its new Revision. Section 7.2 says the edit resets validation to pending; section 7.4 permits separate Core validation. HTTP does not expose the interval or specify when that validation may run. The model now checks the fresh validation identity and valid plain-text candidate rather than assuming a query must catch pending. The adapter writes that validation in `author_edit_proposal.rs:431-502`; record this timing ambiguity, not an unsupported claim that the old Receipt was reused.
+
+Next: verify conflict/replan and negative lifecycle results, then reach 20-hit counts. The first 202 assertion failure was a harness mistake and is retained in `proposal-agent-run-accepted.json`.

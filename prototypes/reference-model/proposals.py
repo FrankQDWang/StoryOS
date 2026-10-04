@@ -1,6 +1,7 @@
 """Proposal state axes from Manuscript State Machine sections 6, 7.4-7.6, and 8."""
 
 import time
+import random
 from copy import deepcopy
 from edits import Editor, units
 from run import compare
@@ -11,15 +12,22 @@ class Proposal:
         self.editor = Editor(http, seed, differences, coverage)
         self.http, self.differences, self.coverage = http, differences, coverage
         self.label = f'{seed}/proposal/{label}'
+        self.prior_head = self.editor.revision
         self.editor.edit(units('A quiet room before dawn.'), 'authoritative_applied', 'A quiet room before dawn.')
         self.body = self.editor.text
         self.start = self.editor.s.start
+        status, assistance = http.request('GET', f'/api/v1/projects/{self.editor.s.project}/assistance')
+        revision = assistance['assistance']['revision'] if status == 200 else '0'
+        status, enabled = http.command('updateProjectAssistance',
+            {'availability': 'available', 'expected_assistance_revision': revision},
+            project_id=self.editor.s.project)
+        assert status == 200, enabled
         status, result = http.command('createAgentRun',
             dict(conversation={'kind': 'new'}, author_message={'text': 'Revise this passage: keep the narrator voice.'},
                  working_target={'kind': 'current_chapter', 'chapter_id': self.editor.chapter},
                  instruction={'kind': 'absent'}, cause={'kind': 'author_request'}),
             project_id=self.editor.s.project)
-        assert status == 200, result
+        assert status == 202, result
         self.run_id = result['effect']['run_id']
         deadline = time.monotonic() + 40
         while time.monotonic() < deadline:
@@ -82,6 +90,8 @@ class Proposal:
         compare(self.label + '/' + name + '/kind', outcome, effect['kind'], self.differences)
         if status == 200:
             applied = effect['kind'] in ['resolved', 'applied']
+            if name == 'acceptProposal' and effect['kind'] in ['invalid', 'conflicted']:
+                self.expected['validation'] = effect['kind']
             compare(self.label + '/' + name + '/Commit count', int(name == 'acceptProposal' and applied),
                     len(result['receipt']['authoritative_commit_ids']), self.differences)
             if applied:
@@ -128,6 +138,11 @@ class Proposal:
             self.candidate = expected
             self.expected['validation'] = 'pending'
             self.p = self.query()
+            if self.p['validation_receipt']['kind'] == 'present':
+                compare(self.label + '/fresh validation identity', True,
+                        self.p['validation_receipt']['validation_receipt_id'] != p['validation_receipt']['validation_receipt_id'], self.differences)
+                # A-006: HTTP cannot observe the interval before a separate Core validation.
+                self.expected['validation'] = 'valid'
             compare(self.label + '/edited candidate', expected, self.p['candidate_text'], self.differences)
             compare(self.label + '/edited axes', self.expected, {key: self.p[key] for key in self.expected}, self.differences)
             compare(self.label + '/candidate edit Commit', [], result['receipt']['authoritative_commit_ids'], self.differences)
@@ -135,9 +150,10 @@ class Proposal:
 
 
 def run(http, seed, differences, coverage, selected=None):
-    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit']
+    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect']
     http.rng.shuffle(modes)
     for mode in modes:
+        http.rng = random.Random(f'{seed}/proposal/{mode}')
         print(f'Seed {seed}: Proposal {mode}', flush=True)
         p = Proposal(http, seed, differences, coverage, mode)
         if mode == 'accept':
@@ -151,3 +167,18 @@ def run(http, seed, differences, coverage, selected=None):
             p.command('reopenRejectedOperations', 'resolved', {'operation_resolution': 'pending', 'validation': 'pending'})
         elif mode == 'edit':
             p.edit()
+        elif mode == 'replan':
+            p.command('acceptProposal', 'conflicted', mutation={'expected_authoritative_revision_id': p.prior_head})
+            p.command('replanProposal', 'resolved', {'validation': 'pending'})
+        elif mode == 'invalid':
+            p.command('acceptProposal', 'invalid', mutation={'validation_receipt_id': http.identity()})
+            p.command('acceptProposal', 'refused')
+        elif mode == 'stale':
+            p.withdrawal, p.rejections = http.identity(), [http.identity()]
+            for name in ['acceptProposal', 'rejectProposalOperations', 'withdrawProposal', 'reopenWithdrawnProposal', 'reopenRejectedOperations']:
+                p.command(name, 'refused', mutation={'proposal_revision_id': http.identity()})
+        elif mode == 'reopen_no_effect':
+            p.withdrawal = http.identity()
+            p.command('reopenWithdrawnProposal', 'no_effect')
+            p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
+            p.command('reopenWithdrawnProposal', 'no_effect', mutation={'withdrawal_event_ref': http.identity()})

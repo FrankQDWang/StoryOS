@@ -93,7 +93,7 @@ class HTTP:
         headers = {'Idempotency-Key': key, 'X-StoryOS-Anti-Forgery': challenge['nonce']}
         status, response = self.request(route['method'], path, body, headers)
         self.last_command = (route['method'], path, body, headers, self.last_raw)
-        if self.replay and status == 200:
+        if self.replay and status in [200, 202]:
             retry_status, _ = self.request(route['method'], path, body, headers)
             equal = retry_status == status and self.last_raw == self.last_command[4]
             compare(name + '/Command exact retry bytes', True, equal, self.differences)
