@@ -1,13 +1,72 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::release1_operation_registry::{
+    GeneratedSchema, OperationArtifacts, RegisteredOperation, event_fixtures, fixture_triple,
+    operation_schemas, path_items,
+};
 use crate::release1_undo_latest_author_action::{
     UNDO_LATEST_AUTHOR_ACTION, UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE,
     UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID, UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID,
     UndoLatestAuthorActionConflictReason, UndoLatestAuthorActionEffect,
     UndoLatestAuthorActionInput, UndoLatestAuthorActionRequest, UndoLatestAuthorActionResponse,
     UndoLatestAuthorActionUnavailableReason,
+};
+use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &UNDO_LATEST_AUTHOR_ACTION,
+        &[
+            "server_derived_project_scope",
+            "project_active",
+            "editor_session_writer_generation",
+            "author_undo_frontier_exact",
+            "expected_authoritative_head",
+        ],
+    )],
+    schemas: || {
+        let [request, response] = operation_schemas(
+            &UNDO_LATEST_AUTHOR_ACTION,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        );
+        vec![
+            request,
+            response,
+            GeneratedSchema {
+                schema_id: "storyos.event.editor-flow-draft-reopened.v1",
+                path: EVENT_SCHEMA_PATH,
+                bytes: event_schema_bytes(),
+            },
+        ]
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &UNDO_LATEST_AUTHOR_ACTION,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into_iter()
+        .chain(event_fixtures(
+            EVENT_FIXTURE_PATHS,
+            [
+                "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.positive.v1",
+                "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.negative.v1",
+            ],
+            UNDO_LATEST_AUTHOR_ACTION.operation_id,
+            [|_| event_fixture_bytes(), |_| event_invalid_fixture_bytes()],
+        ))
+        .collect()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -210,24 +269,6 @@ fn command_fixture(created_at: &str) -> Value {
             "project_activity_position": "3"
         }
     })
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
 
 pub(super) const EVENT_SCHEMA_PATH: &str =
