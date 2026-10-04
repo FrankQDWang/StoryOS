@@ -195,3 +195,7 @@ Next: finish the Stage 4 sampling and real-clock expiry proof, then build the fi
 Seed 410 passes writer takeover, stale writer refusal, stable old Author Edit replay after takeover, changed-body and wrong-nonce refusal, new-key/old-nonce refusal, changed-digest Challenge conflict, and both independent rate classes. Its sole difference is the already minimized D-002 delayed Create Chapter retry. Evidence: `replay-410.json.gz`; run `14c40005989141f7a6f282a1f8eae201`, 16 seconds. Added an exact Challenge retry after each exhausted rate class to prove that settled challenge identity does not need fresh capacity.
 
 Next: run 25 bounded writer/rate seeds; count only stable-window capacity observations, then verify real expiry.
+
+## Writer and Challenge batch 420-424
+
+Managed exit: 0. D-002-shaped differences: 5. Other differences: 0. Evidence: `replay-420-424.json.gz` and `replay-420-424.log`. Final replay audit must confirm response status and changed fields before classification.
