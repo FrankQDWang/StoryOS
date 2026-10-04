@@ -781,3 +781,167 @@ fn changed_review_catalog_contract_is_rejected() {
     bytes[0] = b' ';
     assert!(validate_review_bindings(&bytes).is_err());
 }
+
+/// Operations whose source HTTP statuses differ from the reviewed route catalog before this test existed.
+const KNOWN_HTTP_STATUS_DRIFT: [&str; 6] = [
+    "createProject",
+    "createProjectCommandChallenge",
+    "getProject",
+    "expandRefusedEditDraftToProposal",
+    "closeEditorFlowDraft",
+    "getChapter",
+];
+
+#[test]
+fn every_registered_operation_matches_the_reviewed_catalog_and_generated_wire() {
+    let generated = super::generated_files()
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let text = |path: &str| String::from_utf8(generated[path].clone()).expect("UTF-8 artifact");
+    let openapi = text(OPENAPI_PATH);
+    let client = text("generated/typescript/storyos-public-release-1/client.mjs");
+    let declaration = text("generated/typescript/storyos-public-release-1/client.d.mts");
+    let fixture_catalog: serde_json::Value =
+        serde_json::from_slice(&generated["generated/fixtures/storyos-public-release-1.json"])
+            .expect("fixture catalog must be JSON");
+    let reviewed_catalog: serde_json::Value = serde_json::from_slice(include_bytes!(
+        "../../../docs/foundation/versioned-protocol-release-1-route-catalog.json"
+    ))
+    .expect("reviewed route catalog must be JSON");
+    let mut source_surfaces = Vec::new();
+    let mut reviewed_surfaces = Vec::new();
+    let mut http_status_drift = Vec::new();
+    for artifacts in crate::release1_operation_registry::RELEASE1_OPERATIONS {
+        let schema_paths = (artifacts.schemas)()
+            .into_iter()
+            .map(|schema| (schema.schema_id, schema.path))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        for registered in artifacts.operations {
+            let operation = registered.operation;
+            let id = operation.operation_id;
+            let reviewed = reviewed_catalog["operations"]
+                .as_array()
+                .expect("reviewed operations must be an array")
+                .iter()
+                .find(|entry| entry["operation_id"] == id)
+                .unwrap_or_else(|| panic!("reviewed catalog must contain {id}"));
+            let negative = reviewed["fixtures"]["negative"]
+                .as_array()
+                .expect("negative fixture IDs must be an array");
+            source_surfaces.push(serde_json::json!({
+                "operation_id": id,
+                "kind": registered.kind.as_str(),
+                "method": operation.method,
+                "path": operation.path,
+                "request_schema": operation.request_schema,
+                "response_schema": operation.response_schema,
+                "fixtures": operation.fixtures,
+            }));
+            reviewed_surfaces.push(serde_json::json!({
+                    "operation_id": reviewed["operation_id"],
+                    "kind": reviewed["kind"],
+                    "method": reviewed["method"],
+                    "path": reviewed["path"],
+                    "request_schema": reviewed["schemas"]["request"],
+                    "response_schema": reviewed["schemas"]["response"],
+                    "fixtures": std::iter::once(&reviewed["fixtures"]["positive"]).chain(negative).collect::<Vec<_>>(),
+                }));
+            let statuses = operation
+                .responses
+                .iter()
+                .map(|(status, _)| *status)
+                .collect::<Vec<_>>();
+            if serde_json::json!(statuses) != reviewed["settlement"]["http_statuses"] {
+                http_status_drift.push(id);
+            }
+
+            let schema_ref = |schema_id: &str| {
+                schema_paths[schema_id]
+                    .strip_prefix("generated/")
+                    .expect("schema is a generated artifact")
+            };
+            for schema_id in [operation.request_schema, operation.response_schema] {
+                let schema: serde_json::Value =
+                    serde_json::from_slice(&generated[schema_paths[schema_id]])
+                        .expect("generated schema must be JSON");
+                assert_eq!(schema["$id"], schema_id);
+            }
+            let request_schema: serde_json::Value =
+                serde_json::from_slice(&generated[schema_paths[operation.request_schema]])
+                    .expect("generated schema must be JSON");
+            assert_eq!(request_schema["additionalProperties"], false, "{id}");
+
+            let path_key = format!("\n  {}:\n", operation.path);
+            let path_start = openapi
+                .find(&path_key)
+                .unwrap_or_else(|| panic!("OpenAPI must contain the path of {id}"));
+            let method_key = format!(
+                "    {}:\n      operationId: {id}\n",
+                operation.method.to_ascii_lowercase()
+            );
+            let path_item = &openapi[path_start + path_key.len()..];
+            let path_item = &path_item[..path_item.find("\n  /").unwrap_or(path_item.len())];
+            let method_start = path_item
+                .find(&method_key)
+                .unwrap_or_else(|| panic!("OpenAPI must contain the method of {id}"));
+            let method_lines = path_item[method_start + method_key.len()..]
+                .lines()
+                .take_while(|line| line.starts_with("      "))
+                .collect::<Vec<_>>();
+            let responses_at = method_lines
+                .iter()
+                .position(|line| *line == "      responses:")
+                .unwrap_or_else(|| panic!("OpenAPI must list the responses of {id}"));
+            let references = |lines: &[&str]| {
+                lines
+                    .iter()
+                    .filter_map(|line| line.trim().strip_prefix("$ref: '../")?.strip_suffix('\''))
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            };
+            let request_references = references(&method_lines[..responses_at]);
+            if operation.method == "GET" {
+                assert_eq!(request_references, Vec::<String>::new(), "{id}");
+            } else {
+                assert_eq!(
+                    request_references,
+                    [schema_ref(operation.request_schema)],
+                    "{id}"
+                );
+            }
+            let response_references = references(&method_lines[responses_at..]);
+            assert!(!response_references.is_empty(), "{id}");
+            assert!(
+                response_references
+                    .iter()
+                    .all(|reference| reference == schema_ref(operation.response_schema)),
+                "{id}"
+            );
+            let openapi_statuses = method_lines[responses_at..]
+                .iter()
+                .filter_map(|line| {
+                    line.strip_prefix("        '")?
+                        .strip_suffix("':")?
+                        .parse()
+                        .ok()
+                })
+                .collect::<Vec<u16>>();
+            assert_eq!(openapi_statuses, statuses, "{id}");
+
+            assert!(client.contains(&format!("export async function {id}(")));
+            assert!(declaration.contains(&format!("export declare function {id}(")));
+
+            let fixture_ids = fixture_catalog["fixtures"]
+                .as_array()
+                .expect("fixture catalog entries must be an array")
+                .iter()
+                .filter(|fixture| fixture["operation_id"] == id)
+                .filter_map(|fixture| fixture["fixture_id"].as_str())
+                .filter(|fixture_id| !fixture_id.starts_with("storyos.golden.storyos.event."))
+                .collect::<Vec<_>>();
+            assert_eq!(fixture_ids, operation.fixtures, "{id}");
+        }
+    }
+    assert_eq!(source_surfaces, reviewed_surfaces);
+    assert_eq!(http_status_drift, KNOWN_HTTP_STATUS_DRIFT);
+}
