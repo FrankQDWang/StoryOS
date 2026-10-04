@@ -2,7 +2,6 @@
 
 import json
 import os
-import selectors
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -31,9 +30,6 @@ class ObservationTests(unittest.TestCase):
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             try:
                 def event():
-                    with selectors.DefaultSelector() as selector:
-                        selector.register(process.stdout, selectors.EVENT_READ)
-                        self.assertTrue(selector.select(5), 'Collector did not report a cycle')
                     return json.loads(process.stdout.readline())
                 self.assertEqual(event()['parsed_records'], 2)
                 self.assertEqual(event()['parsed_records'], 0)

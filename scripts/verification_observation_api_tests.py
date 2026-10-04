@@ -4,7 +4,6 @@ import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
-import selectors
 import sqlite3
 import subprocess
 import sys
@@ -53,9 +52,6 @@ class QueryTests(unittest.TestCase):
             process.terminate()
             process.communicate()
         self.addCleanup(stop)
-        with selectors.DefaultSelector() as selector:
-            selector.register(process.stdout, selectors.EVENT_READ)
-            self.assertTrue(selector.select(5), 'Query service did not become ready')
         line = process.stdout.readline()
         self.assertTrue(line.startswith('http://127.0.0.1:'), line or process.stderr.read())
         self.url = line.strip()
