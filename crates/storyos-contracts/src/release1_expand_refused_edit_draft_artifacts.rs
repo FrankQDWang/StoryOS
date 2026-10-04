@@ -1,4 +1,3 @@
-use crate::release1_close_editor_flow_draft_artifacts::{generated_ref, json_bytes, schema_value};
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
@@ -7,6 +6,47 @@ use crate::release1_expand_refused_edit_draft::{
     EXPAND_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID, EXPAND_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID,
     ExpandRefusedEditDraftEffect, ExpandRefusedEditDraftInput, ExpandRefusedEditDraftRequest,
     ExpandRefusedEditDraftResponse, WholeDraftPayload,
+};
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
+use crate::release1_wire::{canonical_u64_wire_schema, generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &EXPAND_REFUSED_EDIT_DRAFT,
+        &[
+            "exact_scope",
+            "current_writer",
+            "exact_retained_open_source",
+            "whole_draft_payload",
+            "current_target_anchors",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &EXPAND_REFUSED_EDIT_DRAFT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&EXPAND_REFUSED_EDIT_DRAFT, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &EXPAND_REFUSED_EDIT_DRAFT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/expand-refused-edit-draft-to-proposal-request.schema.json";
@@ -31,7 +71,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
     input["expected_source_draft_closure"]["const"] = json!("open");
     input["proposal_kind"]["const"] = json!("inline_edit");
     input["editor_session_id"]["format"] = json!("uuid");
-    input["writer_generation"] = super::release1_author_edit_artifacts::canonical_u64_wire_schema();
+    input["writer_generation"] = canonical_u64_wire_schema();
     input["correlation_id"]["format"] = json!("uuid");
     json_bytes(&schema)
 }
@@ -73,7 +113,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Expand one complete retained Refused Edit Draft\n",
+            "    post:\n      operationId: {}\n      summary: Expand one complete retained Refused Edit Draft\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: draft_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -82,10 +122,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        EXPAND_REFUSED_EDIT_DRAFT.path,
-        EXPAND_REFUSED_EDIT_DRAFT.operation_id,
-        request_schema,
-        responses,
+        EXPAND_REFUSED_EDIT_DRAFT.operation_id, request_schema, responses,
     )
 }
 
@@ -98,9 +135,8 @@ pub(super) fn typescript_type_declarations() -> String {
         ExpandRefusedEditDraftEffect::decl(&config),
         ExpandRefusedEditDraftResponse::decl(&config),
     ]
-    .iter()
-    .map(|declaration| format!("export {declaration}\n"))
-    .collect()
+    .map(|declaration| format!("export {declaration}"))
+    .join("\n")
 }
 
 pub(super) fn typescript_client_source() -> String {

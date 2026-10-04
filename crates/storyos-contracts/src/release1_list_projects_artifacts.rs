@@ -6,6 +6,41 @@ use crate::release1_list_projects::{
     LIST_PROJECTS, LIST_PROJECTS_REQUEST_SCHEMA_ID, LIST_PROJECTS_RESPONSE_SCHEMA_ID,
     ListProjectsResponse, ProjectLifecycleState, ProjectListItem,
 };
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
+use crate::release1_wire::{U64_WIRE, json_bytes};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &LIST_PROJECTS,
+        &["server_derived_user"],
+    )],
+    schemas: || {
+        operation_schemas(
+            &LIST_PROJECTS,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&LIST_PROJECTS, method_openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &LIST_PROJECTS,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
+};
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/project-list-request.schema.json";
@@ -39,7 +74,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     if let Some(item) = schema["$defs"].get_mut("ProjectListItem") {
         item["properties"]["revision"] = json!({
             "type": "string",
-            "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$"
+            "pattern": U64_WIRE
         });
         let title = &mut item["properties"]["title"];
         title["minLength"] = json!(1);
@@ -145,10 +180,4 @@ fn list_fixture(projects: Vec<Value>) -> Value {
         "owner_user_id": "018f0000-0000-7001-8000-000000000001",
         "projects": projects
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

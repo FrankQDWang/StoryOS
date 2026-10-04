@@ -11,6 +11,48 @@ use crate::release1_author_edit::{
     OrderedSourceSelection, RefusedEditOrigin, RefusedEditPayload, ReplacementBlock,
     SelectedEditSource, SelectionSnapshot, SourceSelectionEndpoint,
 };
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &APPLY_AUTHOR_EDIT,
+        &[
+            "server_derived_project_scope",
+            "strict_origin",
+            "protected_client_session_binding",
+            "project_command_challenge",
+            "editor_session_writer_generation",
+            "expected_authoritative_head",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &APPLY_AUTHOR_EDIT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&APPLY_AUTHOR_EDIT, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &APPLY_AUTHOR_EDIT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
+};
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/apply-author-edit-request.schema.json";
@@ -95,8 +137,8 @@ pub(super) fn openapi() -> String {
         if *status == 200 { format!("          content:\n            application/json:\n              schema:\n                $ref: '../{response_schema}'\n") } else { String::new() }
     )).collect::<String>();
     format!(
-        "  {}:\n    post:\n      operationId: {}\n      summary: Settle one direct Author Edit\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{request_schema}'\n      responses:\n{responses}",
-        APPLY_AUTHOR_EDIT.path, APPLY_AUTHOR_EDIT.operation_id
+        "    post:\n      operationId: {}\n      summary: Settle one direct Author Edit\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{request_schema}'\n      responses:\n{responses}",
+        APPLY_AUTHOR_EDIT.operation_id
     )
 }
 
@@ -235,12 +277,6 @@ pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
     json_bytes(&value)
 }
 
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
-}
-
 fn schema_bytes<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Vec<u8> {
     let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
     schema["$id"] = Value::String(schema_id.to_owned());
@@ -248,11 +284,4 @@ fn schema_bytes<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Vec<u8
     let canonical_u64 = canonical_u64_wire_schema();
     apply_u64_wire_constraints(&mut schema, &canonical_u64);
     json_bytes(&schema)
-}
-
-pub(super) fn canonical_u64_wire_schema() -> Value {
-    json!({
-        "type": "string",
-        "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$"
-    })
 }

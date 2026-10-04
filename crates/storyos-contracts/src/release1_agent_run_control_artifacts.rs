@@ -1,4 +1,3 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
@@ -14,6 +13,101 @@ use crate::release1_agent_run_control::{
     STEER_AGENT_RUN_DIGEST_PROFILE, STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
     STEER_AGENT_RUN_RESPONSE_SCHEMA_ID, SteerAgentRunEffect, SteerAgentRunInput,
     SteerAgentRunRequest, SteerAgentRunResponse,
+};
+use crate::release1_operation_registry::{
+    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
+};
+use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[
+        RegisteredOperation::command(
+            &STEER_AGENT_RUN,
+            &[
+                "server_derived_project_scope",
+                "run_scope_join",
+                "exact_conversation",
+                "nonterminal_run",
+                "bounded_author_input",
+            ],
+        ),
+        RegisteredOperation::command(
+            &PAUSE_AGENT_RUN,
+            &[
+                "server_derived_project_scope",
+                "run_scope_join",
+                "current_run_state_pauseable",
+                "current_fence_generation",
+            ],
+        ),
+        RegisteredOperation::command(
+            &CANCEL_AGENT_RUN,
+            &[
+                "server_derived_project_scope",
+                "run_scope_join",
+                "current_run_state_cancellable",
+                "current_fence_generation",
+            ],
+        ),
+    ],
+    schemas: || {
+        [
+            operation_schemas(
+                &STEER_AGENT_RUN,
+                (STEER_REQUEST_SCHEMA_PATH, steer_request_schema_bytes()),
+                (STEER_RESPONSE_SCHEMA_PATH, steer_response_schema_bytes()),
+            ),
+            operation_schemas(
+                &PAUSE_AGENT_RUN,
+                (PAUSE_REQUEST_SCHEMA_PATH, pause_request_schema_bytes()),
+                (PAUSE_RESPONSE_SCHEMA_PATH, pause_response_schema_bytes()),
+            ),
+            operation_schemas(
+                &CANCEL_AGENT_RUN,
+                (CANCEL_REQUEST_SCHEMA_PATH, cancel_request_schema_bytes()),
+                (CANCEL_RESPONSE_SCHEMA_PATH, cancel_response_schema_bytes()),
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    },
+    openapi,
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        [
+            fixture_triple(
+                STEER_FIXTURE_PATHS,
+                &STEER_AGENT_RUN,
+                [
+                    |_| steer_fixture_bytes(),
+                    |_| steer_invalid_fixture_bytes(),
+                    |_| steer_fixture_bytes(),
+                ],
+            ),
+            fixture_triple(
+                PAUSE_FIXTURE_PATHS,
+                &PAUSE_AGENT_RUN,
+                [
+                    |_| pause_fixture_bytes(),
+                    |_| pause_invalid_fixture_bytes(),
+                    |_| pause_boundary_fixture_bytes(),
+                ],
+            ),
+            fixture_triple(
+                CANCEL_FIXTURE_PATHS,
+                &CANCEL_AGENT_RUN,
+                [
+                    |_| cancel_fixture_bytes(),
+                    |_| cancel_invalid_fixture_bytes(),
+                    |_| cancel_boundary_fixture_bytes(),
+                ],
+            ),
+        ]
+        .concat()
+    },
 };
 
 pub(super) const PAUSE_REQUEST_SCHEMA_PATH: &str =
@@ -63,9 +157,14 @@ pub(super) fn cancel_response_schema_bytes() -> Vec<u8> {
     )
 }
 
-pub(super) fn openapi() -> String {
-    format!(
-        "{}{}{}",
+pub(super) fn openapi() -> Vec<OpenApiMethod> {
+    vec![
+        operation_openapi(
+            &STEER_AGENT_RUN,
+            "Retain guidance for the next safe decision",
+            STEER_REQUEST_SCHEMA_PATH,
+            STEER_RESPONSE_SCHEMA_PATH,
+        ),
         operation_openapi(
             &PAUSE_AGENT_RUN,
             "Pause one AgentRun without cancelling it",
@@ -78,13 +177,7 @@ pub(super) fn openapi() -> String {
             CANCEL_REQUEST_SCHEMA_PATH,
             CANCEL_RESPONSE_SCHEMA_PATH,
         ),
-        operation_openapi(
-            &STEER_AGENT_RUN,
-            "Retain guidance for the next safe decision",
-            STEER_REQUEST_SCHEMA_PATH,
-            STEER_RESPONSE_SCHEMA_PATH
-        )
-    )
+    ]
 }
 
 pub(super) fn typescript_type_declarations() -> String {
@@ -105,7 +198,7 @@ pub(super) fn typescript_type_declarations() -> String {
         CancelAgentRunResponse::decl(&config),
     );
     format!(
-        "{declarations}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\n{declarations}",
         SteerAgentRunInput::decl(&config),
         SteerAgentRunRequest::decl(&config),
         SteerAgentRunEffect::decl(&config),
@@ -153,7 +246,7 @@ pub(super) fn typescript_client_source() -> String {
             .replace("{run_id}", "${encodeURIComponent(runId)}"),
     );
     format!(
-        r#"{existing}
+        r#"
 export async function digestSteerAgentRun(request, cryptoImpl = globalThis.crypto) {{
   if (!request || typeof request !== "object") throw new TypeError("digestSteerAgentRun requires request");
   const bytes = new TextEncoder().encode(JSON.stringify(canonicalJson(request)));
@@ -164,7 +257,7 @@ export async function steerAgentRun({{ projectId, runId, request, idempotencyKey
   if (typeof projectId !== "string" || typeof runId !== "string" || !request || typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("steerAgentRun requires Scope, input and security bindings");
   return commandJson({{ ...options, path: `/api/v1/projects/${{encodeURIComponent(projectId)}}/agent-runs/${{encodeURIComponent(runId)}}/steering-inputs`, body: request, commandHeaders: {{ "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery }} }});
 }}
-"#
+{existing}"#
     )
 }
 
@@ -284,13 +377,13 @@ fn operation_openapi(
     summary: &str,
     request_path: &str,
     response_path: &str,
-) -> String {
+) -> OpenApiMethod {
     let request = generated_ref(request_path);
     let response = generated_ref(response_path);
     let responses = status_block(operation.responses, response);
-    format!(
+    let yaml = format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: {}\n",
+            "    post:\n      operationId: {}\n      summary: {}\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: run_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -299,8 +392,12 @@ fn operation_openapi(
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        operation.path, operation.operation_id, summary, request, responses,
-    )
+        operation.operation_id, summary, request, responses,
+    );
+    OpenApiMethod {
+        path: operation.path,
+        yaml,
+    }
 }
 
 fn control_fixture(
@@ -421,24 +518,6 @@ fn status_block(responses: &[(u16, &str)], response_schema: &str) -> String {
             format!("        '{status}':\n          description: {description}\n{retry_after}{content}")
         })
         .collect()
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
 
 pub(super) const STEER_REQUEST_SCHEMA_PATH: &str =

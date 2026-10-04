@@ -3,135 +3,27 @@ use std::io;
 use std::path::Path;
 use std::sync::LazyLock;
 
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::digest::sha256_prefixed;
 use crate::release1::{
-    ACTIVITY_PROFILE, API_MAJOR, APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
-    APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID, ArtifactDigests, AuthoritativeChapterRevision,
-    CHAPTER_REQUEST_SCHEMA_ID, CHAPTER_RESPONSE_SCHEMA_ID, COMPATIBILITY_PROFILE,
-    CONTRACT_REVISION, CREATE_EDITOR_SESSION, CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-    CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID, CREATE_PROJECT_COMMAND_CHALLENGE, ControlledProject,
-    CreateEditorSessionRequest, CreateEditorSessionResponse, CreateProjectCommandChallengeRequest,
-    CreateProjectCommandChallengeResponse, CurrentChapter, DigestAlgorithm, DigestValue,
-    ENVELOPE_PROFILE, ENVELOPE_VERSION, EditorBaseSnapshot, EditorReadOnlyReason,
-    EditorSessionBinding, EditorWriterProjection, GENERATED_CLIENT_REVISION, GET_CHAPTER,
-    GET_EDITOR_SESSION, GET_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-    GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID, GET_PROJECT, GET_PROTOCOL_PROFILE, GetChapterResponse,
-    GetEditorSessionResponse, GetProjectResponse, LIMIT_PROFILE_REVISION, ManuscriptBlock,
-    ManuscriptBlockKind, PROBLEM_PROFILE, PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
-    PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID, PROJECT_REQUEST_SCHEMA_ID,
-    PROJECT_RESPONSE_SCHEMA_ID, PROTOCOL_PROFILE_REQUEST_SCHEMA_ID, PROTOCOL_PROFILE_SCHEMA_ID,
-    PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope, RELEASE_IDENTITY_SCHEMA_ID,
-    REQUIRED_CAPABILITIES, Release1CompatibilityIdentity, Release1ProtocolProfile,
+    ACTIVITY_PROFILE, API_MAJOR, ArtifactDigests, AuthoritativeChapterRevision,
+    COMPATIBILITY_PROFILE, CONTRACT_REVISION, ControlledProject, CurrentChapter, DigestAlgorithm,
+    DigestValue, ENVELOPE_PROFILE, ENVELOPE_VERSION, GENERATED_CLIENT_REVISION,
+    LIMIT_PROFILE_REVISION, ManuscriptBlock, ManuscriptBlockKind, PROBLEM_PROFILE,
+    PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope, QueryOperation,
+    RELEASE_IDENTITY_SCHEMA_ID, REQUIRED_CAPABILITIES, Release1ProtocolProfile,
     SERVER_CONTRACT_REVISION, WEB_CLIENT_CONTRACT_REVISION, WORKER_CONTRACT_REVISION,
     protocol_profile,
 };
-use crate::release1_accept_proposal::ACCEPT_PROPOSAL;
-use crate::release1_accept_proposal_artifacts as accept_proposal_artifacts;
-use crate::release1_agent_run::{CREATE_AGENT_RUN, GET_AGENT_RUN};
-use crate::release1_agent_run_artifacts as agent_run_artifacts;
-use crate::release1_agent_run_control::{CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, STEER_AGENT_RUN};
-use crate::release1_agent_run_control_artifacts as agent_run_control_artifacts;
-use crate::release1_archive_project::ARCHIVE_PROJECT;
-use crate::release1_archive_project_artifacts as archive_project_artifacts;
-use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
-use crate::release1_author_edit_outcome::GET_APPLY_AUTHOR_EDIT_OUTCOME;
-use crate::release1_author_edit_outcome_artifacts as author_edit_outcome_artifacts;
-use crate::release1_close_editor_flow_draft::CLOSE_EDITOR_FLOW_DRAFT;
-use crate::release1_close_editor_flow_draft_artifacts as close_draft_artifacts;
-use crate::release1_create_chapter::CREATE_CHAPTER;
-use crate::release1_create_chapter_artifacts as create_chapter_artifacts;
-use crate::release1_create_project::{CREATE_PROJECT, CREATE_PROJECT_CHALLENGE};
-use crate::release1_create_project_artifacts as create_project_artifacts;
-use crate::release1_create_volume::CREATE_VOLUME;
-use crate::release1_create_volume_artifacts as create_volume_artifacts;
-use crate::release1_delete_chapter::DELETE_CHAPTER;
-use crate::release1_delete_chapter_artifacts as delete_chapter_artifacts;
-use crate::release1_delete_volume::DELETE_VOLUME;
-use crate::release1_delete_volume_artifacts as delete_volume_artifacts;
-use crate::release1_expand_refused_edit_draft::EXPAND_REFUSED_EDIT_DRAFT;
-use crate::release1_expand_refused_edit_draft_artifacts as expand_draft_artifacts;
-use crate::release1_list_projects::LIST_PROJECTS;
-use crate::release1_list_projects_artifacts as list_projects_artifacts;
-use crate::release1_manuscript_search::SEARCH_MANUSCRIPT;
-use crate::release1_manuscript_search_artifacts as manuscript_search_artifacts;
-use crate::release1_manuscript_statistics::GET_STATISTICS;
-use crate::release1_manuscript_statistics_artifacts as manuscript_statistics_artifacts;
-use crate::release1_manuscript_tree::GET_MANUSCRIPT_TREE;
-use crate::release1_manuscript_tree_artifacts as manuscript_tree_artifacts;
-use crate::release1_project_assistance::{GET_PROJECT_ASSISTANCE, UPDATE_PROJECT_ASSISTANCE};
-use crate::release1_project_assistance_artifacts as project_assistance_artifacts;
-use crate::release1_project_export::EXPORT_PROJECT_ARCHIVE;
-use crate::release1_project_export_artifacts as project_export_artifacts;
-use crate::release1_project_export_query::GET_EXPORT_OPERATION;
-use crate::release1_project_export_query_artifacts as project_export_query_artifacts;
-use crate::release1_proposal::GET_PROPOSAL;
-use crate::release1_proposal_artifacts as proposal_artifacts;
-use crate::release1_proposal_generation_decision::{
-    COMPLETE_READY_PARTIAL_PROPOSAL, CONTINUE_PROPOSAL_GENERATION,
+use crate::release1_operation_registry::{
+    ContractGraphEntry, GeneratedSchema, OpenApiMethod, OperationKind, RELEASE1_OPERATIONS,
+    RegisteredOperation,
 };
-use crate::release1_proposal_generation_decision_artifacts as proposal_generation_decision_artifacts;
-use crate::release1_readable_export::EXPORT_HUMAN_READABLE_MANUSCRIPT;
-use crate::release1_readable_export_artifacts as readable_export_artifacts;
-use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
-use crate::release1_readable_export_query_artifacts as readable_export_query_artifacts;
-use crate::release1_refused_edit_draft::GET_REFUSED_EDIT_DRAFT;
-use crate::release1_refused_edit_draft_artifacts as refused_draft_artifacts;
-use crate::release1_reject_proposal_operations::REJECT_PROPOSAL_OPERATIONS;
-use crate::release1_reject_proposal_operations_artifacts as reject_proposal_operations_artifacts;
-use crate::release1_reopen_rejected_operations::REOPEN_REJECTED_OPERATIONS;
-use crate::release1_reopen_rejected_operations_artifacts as reopen_rejected_operations_artifacts;
-use crate::release1_reopen_withdrawn_proposal::REOPEN_WITHDRAWN_PROPOSAL;
-use crate::release1_reopen_withdrawn_proposal_artifacts as reopen_withdrawn_proposal_artifacts;
-use crate::release1_replan_proposal::REPLAN_PROPOSAL;
-use crate::release1_replan_proposal_artifacts as replan_proposal_artifacts;
-use crate::release1_set_current_chapter::SET_CURRENT_CHAPTER;
-use crate::release1_set_current_chapter_artifacts as set_current_chapter_artifacts;
-use crate::release1_snapshot::{ACTIVITY_STREAM, GET_SNAPSHOT};
-use crate::release1_snapshot_artifacts as snapshot_artifacts;
-use crate::release1_takeover::TAKE_OVER_PROJECT_WRITER;
-use crate::release1_takeover_artifacts as takeover_artifacts;
-use crate::release1_undo_latest_author_action::UNDO_LATEST_AUTHOR_ACTION;
-use crate::release1_undo_latest_author_action_artifacts as undo_latest_author_action_artifacts;
-use crate::release1_update_chapter::UPDATE_CHAPTER;
-use crate::release1_update_chapter_artifacts as update_chapter_artifacts;
-use crate::release1_update_project::UPDATE_PROJECT;
-use crate::release1_update_project_artifacts as update_project_artifacts;
-use crate::release1_update_volume::UPDATE_VOLUME;
-use crate::release1_update_volume_artifacts as update_volume_artifacts;
-use crate::release1_withdraw_proposal::WITHDRAW_PROPOSAL;
-use crate::release1_withdraw_proposal_artifacts as withdraw_proposal_artifacts;
-
+use crate::release1_wire::{json_bytes, schema_value};
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
-const REQUEST_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/protocol-profile-request.schema.json";
-const RESPONSE_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/protocol-profile-response.schema.json";
-const PROJECT_REQUEST_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/project-request.schema.json";
-const PROJECT_RESPONSE_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/project-response.schema.json";
-const CHAPTER_REQUEST_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/chapter-request.schema.json";
-const CHAPTER_RESPONSE_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/chapter-response.schema.json";
-const CHALLENGE_REQUEST_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/project-command-challenge-request.schema.json";
-const CHALLENGE_RESPONSE_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/project-command-challenge-response.schema.json";
-pub(super) const EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json";
-pub(super) const EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/editor-session-create-response.schema.json";
-pub(super) const EDITOR_SESSION_GET_REQUEST_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/editor-session-get-request.schema.json";
-pub(super) const EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH: &str =
-    "generated/json-schema/storyos-public-release-1/editor-session-get-response.schema.json";
 const TYPESCRIPT_CLIENT_PATH: &str = "generated/typescript/storyos-public-release-1/client.mjs";
 const PROJECT_ACTIVITY_MODULE_PATH: &str =
     "generated/typescript/storyos-public-release-1/project-activity.mjs";
@@ -145,42 +37,11 @@ const RELEASE_PROFILE_DECLARATION_PATH: &str =
     "generated/typescript/storyos-public-release-1/release-profile.d.mts";
 const SCHEMA_CATALOG_PATH: &str = "generated/schema-catalog/storyos-public-release-1.json";
 const FIXTURE_CATALOG_PATH: &str = "generated/fixtures/storyos-public-release-1.json";
-const GOLDEN_PROFILE_PATH: &str =
-    "generated/golden-wire/storyos-public-release-1/get-protocol-profile.json";
-const INVALID_PROFILE_PATH: &str =
-    "generated/golden-wire/storyos-public-release-1/get-protocol-profile.invalid.json";
-const BOUNDARY_PROFILE_PATH: &str =
-    "generated/golden-wire/storyos-public-release-1/get-protocol-profile.boundary.json";
-const PROJECT_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-project.json",
-    "generated/golden-wire/storyos-public-release-1/get-project.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-project.boundary.json",
-];
-const CHAPTER_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-chapter.json",
-    "generated/golden-wire/storyos-public-release-1/get-chapter.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json",
-];
-const CHALLENGE_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json",
-    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json",
-];
-const CREATE_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
-    "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
-];
-const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
-    "generated/golden-wire/storyos-public-release-1/get-editor-session.json",
-    "generated/golden-wire/storyos-public-release-1/get-editor-session.invalid.json",
-    "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json",
-];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:724246c75a29c503e9deee608707399dbd7277928724854d23418b63093a7595";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:5bf2f580f40b5d8b3d8843f22aaed10b97b99e44043b096cac70e6d4ea9e125e";
+    "sha256:e18e4b121933df479b274b93a57a3ae93cb638a442e6329de006d8d670fc9f68";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -192,7 +53,7 @@ use release1_fixture_corpus::{
 
 struct Release1ArtifactAssembly {
     openapi: Vec<u8>,
-    schemas: Vec<(&'static str, &'static str, Vec<u8>)>,
+    schemas: Vec<GeneratedSchema>,
     schema_catalog: Vec<u8>,
     typescript_client: Vec<u8>,
     typescript_declaration: Vec<u8>,
@@ -202,669 +63,10 @@ struct Release1ArtifactAssembly {
 
 fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let openapi = openapi_bytes();
-    let request_schema = json_bytes(&protocol_profile_request_schema());
-    let response_schema = json_bytes(&protocol_profile_schema());
-    let project_request_schema = json_bytes(&path_request_schema(
-        PROJECT_REQUEST_SCHEMA_ID,
-        &["project_id"],
-    ));
-    let project_response_schema = json_bytes(&typed_schema::<GetProjectResponse>(
-        PROJECT_RESPONSE_SCHEMA_ID,
-        "StoryOS Project Query Response",
-    ));
-    let chapter_request_schema = json_bytes(&path_request_schema(
-        CHAPTER_REQUEST_SCHEMA_ID,
-        &["project_id", "chapter_id"],
-    ));
-    let chapter_response_schema = json_bytes(&typed_schema::<GetChapterResponse>(
-        CHAPTER_RESPONSE_SCHEMA_ID,
-        "StoryOS Chapter Query Response",
-    ));
-    let challenge_request_schema =
-        json_bytes(&typed_schema::<CreateProjectCommandChallengeRequest>(
-            PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
-            "StoryOS Project Command Challenge Request",
-        ));
-    let challenge_response_schema = json_bytes(&challenge_response_schema());
-    let create_project_challenge_request_schema =
-        create_project_artifacts::challenge_request_schema_bytes();
-    let create_project_challenge_response_schema =
-        create_project_artifacts::challenge_response_schema_bytes();
-    let create_project_request_schema = create_project_artifacts::command_request_schema_bytes();
-    let create_project_response_schema = create_project_artifacts::command_response_schema_bytes();
-    let editor_create_request_schema = json_bytes(&typed_schema::<CreateEditorSessionRequest>(
-        CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-        "StoryOS Create Editor Session Request",
-    ));
-    let editor_create_response_schema = json_bytes(&typed_schema::<CreateEditorSessionResponse>(
-        CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-        "StoryOS Create Editor Session Response",
-    ));
-    let editor_get_request_schema = json_bytes(&path_request_schema(
-        GET_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-        &["project_id", "editor_session_id"],
-    ));
-    let editor_get_response_schema = json_bytes(&typed_schema::<GetEditorSessionResponse>(
-        GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-        "StoryOS Get Editor Session Response",
-    ));
-    let apply_edit_request_schema = author_edit_artifacts::request_schema_bytes();
-    let apply_edit_response_schema = author_edit_artifacts::response_schema_bytes();
-    let apply_edit_outcome_request_schema = author_edit_outcome_artifacts::request_schema_bytes();
-    let apply_edit_outcome_response_schema = author_edit_outcome_artifacts::response_schema_bytes();
-    let snapshot_request_schema = snapshot_artifacts::snapshot_request_schema_bytes();
-    let snapshot_response_schema = snapshot_artifacts::snapshot_response_schema_bytes();
-    let activity_stream_request_schema = snapshot_artifacts::activity_stream_request_schema_bytes();
-    let activity_stream_response_schema =
-        snapshot_artifacts::activity_stream_response_schema_bytes();
-    let takeover_request_schema = takeover_artifacts::request_schema_bytes();
-    let takeover_response_schema = takeover_artifacts::response_schema_bytes();
-    let list_projects_request_schema = list_projects_artifacts::request_schema_bytes();
-    let list_projects_response_schema = list_projects_artifacts::response_schema_bytes();
-    let manuscript_tree_request_schema = manuscript_tree_artifacts::request_schema_bytes();
-    let manuscript_tree_response_schema = manuscript_tree_artifacts::response_schema_bytes();
-    let manuscript_search_request_schema = manuscript_search_artifacts::request_schema_bytes();
-    let manuscript_search_response_schema = manuscript_search_artifacts::response_schema_bytes();
-    let manuscript_statistics_request_schema =
-        manuscript_statistics_artifacts::request_schema_bytes();
-    let manuscript_statistics_response_schema =
-        manuscript_statistics_artifacts::response_schema_bytes();
-    let readable_export_request_schema = readable_export_artifacts::request_schema_bytes();
-    let readable_export_response_schema = readable_export_artifacts::response_schema_bytes();
-    let readable_export_query_request_schema =
-        readable_export_query_artifacts::request_schema_bytes();
-    let readable_export_query_response_schema =
-        readable_export_query_artifacts::response_schema_bytes();
-    let project_export_request_schema = project_export_artifacts::request_schema_bytes();
-    let project_export_response_schema = project_export_artifacts::response_schema_bytes();
-    let project_export_query_request_schema =
-        project_export_query_artifacts::request_schema_bytes();
-    let project_export_query_response_schema =
-        project_export_query_artifacts::response_schema_bytes();
-    let update_project_request_schema = update_project_artifacts::request_schema_bytes();
-    let update_project_response_schema = update_project_artifacts::response_schema_bytes();
-    let get_project_assistance_request_schema =
-        project_assistance_artifacts::get_request_schema_bytes();
-    let get_project_assistance_response_schema =
-        project_assistance_artifacts::get_response_schema_bytes();
-    let update_project_assistance_request_schema =
-        project_assistance_artifacts::update_request_schema_bytes();
-    let update_project_assistance_response_schema =
-        project_assistance_artifacts::update_response_schema_bytes();
-    let create_agent_run_request_schema = agent_run_artifacts::create_request_schema_bytes();
-    let create_agent_run_response_schema = agent_run_artifacts::create_response_schema_bytes();
-    let get_agent_run_request_schema = agent_run_artifacts::get_request_schema_bytes();
-    let get_agent_run_response_schema = agent_run_artifacts::get_response_schema_bytes();
-    let steer_request = agent_run_control_artifacts::steer_request_schema_bytes();
-    let steer_response = agent_run_control_artifacts::steer_response_schema_bytes();
-    let pause_agent_run_request_schema = agent_run_control_artifacts::pause_request_schema_bytes();
-    let pause_agent_run_response_schema =
-        agent_run_control_artifacts::pause_response_schema_bytes();
-    let cancel_agent_run_request_schema =
-        agent_run_control_artifacts::cancel_request_schema_bytes();
-    let cancel_agent_run_response_schema =
-        agent_run_control_artifacts::cancel_response_schema_bytes();
-    let refused_draft_event_schema = refused_draft_artifacts::event_schema_bytes();
-    let get_refused_draft_request_schema = refused_draft_artifacts::request_schema_bytes();
-    let get_refused_draft_response_schema = refused_draft_artifacts::response_schema_bytes();
-    let get_proposal_request_schema = proposal_artifacts::request_schema_bytes();
-    let get_proposal_response_schema = proposal_artifacts::response_schema_bytes();
-    let accept_proposal_request_schema = accept_proposal_artifacts::request_schema_bytes();
-    let accept_proposal_response_schema = accept_proposal_artifacts::response_schema_bytes();
-    let reject_proposal_operations_request_schema =
-        reject_proposal_operations_artifacts::request_schema_bytes();
-    let reject_proposal_operations_response_schema =
-        reject_proposal_operations_artifacts::response_schema_bytes();
-    let reopen_rejected_operations_request_schema =
-        reopen_rejected_operations_artifacts::request_schema_bytes();
-    let reopen_rejected_operations_response_schema =
-        reopen_rejected_operations_artifacts::response_schema_bytes();
-    let reopen_withdrawn_proposal_request_schema =
-        reopen_withdrawn_proposal_artifacts::request_schema_bytes();
-    let reopen_withdrawn_proposal_response_schema =
-        reopen_withdrawn_proposal_artifacts::response_schema_bytes();
-    let replan_proposal_request_schema = replan_proposal_artifacts::request_schema_bytes();
-    let replan_proposal_response_schema = replan_proposal_artifacts::response_schema_bytes();
-    let withdraw_proposal_request_schema = withdraw_proposal_artifacts::request_schema_bytes();
-    let withdraw_proposal_response_schema = withdraw_proposal_artifacts::response_schema_bytes();
-    let archive_project_request_schema = archive_project_artifacts::request_schema_bytes();
-    let archive_project_response_schema = archive_project_artifacts::response_schema_bytes();
-    let create_volume_request_schema = create_volume_artifacts::request_schema_bytes();
-    let create_volume_response_schema = create_volume_artifacts::response_schema_bytes();
-    let update_volume_request_schema = update_volume_artifacts::request_schema_bytes();
-    let update_volume_response_schema = update_volume_artifacts::response_schema_bytes();
-    let delete_volume_request_schema = delete_volume_artifacts::request_schema_bytes();
-    let delete_volume_response_schema = delete_volume_artifacts::response_schema_bytes();
-    let update_chapter_request_schema = update_chapter_artifacts::request_schema_bytes();
-    let update_chapter_response_schema = update_chapter_artifacts::response_schema_bytes();
-    let delete_chapter_request_schema = delete_chapter_artifacts::request_schema_bytes();
-    let delete_chapter_response_schema = delete_chapter_artifacts::response_schema_bytes();
-    let create_chapter_request_schema = create_chapter_artifacts::request_schema_bytes();
-    let create_chapter_response_schema = create_chapter_artifacts::response_schema_bytes();
-    let set_current_chapter_request_schema = set_current_chapter_artifacts::request_schema_bytes();
-    let set_current_chapter_response_schema =
-        set_current_chapter_artifacts::response_schema_bytes();
-    let undo_latest_author_action_request_schema =
-        undo_latest_author_action_artifacts::request_schema_bytes();
-    let undo_latest_author_action_response_schema =
-        undo_latest_author_action_artifacts::response_schema_bytes();
-    let schemas = vec![
-        (
-            crate::EXPAND_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID,
-            expand_draft_artifacts::REQUEST_SCHEMA_PATH,
-            expand_draft_artifacts::request_schema_bytes(),
-        ),
-        (
-            crate::EXPAND_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID,
-            expand_draft_artifacts::RESPONSE_SCHEMA_PATH,
-            expand_draft_artifacts::response_schema_bytes(),
-        ),
-        (
-            crate::CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID,
-            close_draft_artifacts::REQUEST_SCHEMA_PATH,
-            close_draft_artifacts::request_schema_bytes(),
-        ),
-        (
-            crate::CLOSE_EDITOR_FLOW_DRAFT_RESPONSE_SCHEMA_ID,
-            close_draft_artifacts::RESPONSE_SCHEMA_PATH,
-            close_draft_artifacts::response_schema_bytes(),
-        ),
-        (
-            "storyos.event.editor-flow-draft-reopened.v1",
-            undo_latest_author_action_artifacts::EVENT_SCHEMA_PATH,
-            undo_latest_author_action_artifacts::event_schema_bytes(),
-        ),
-        (
-            crate::EDITOR_FLOW_DRAFT_CLOSED_SCHEMA_ID,
-            close_draft_artifacts::EVENT_SCHEMA_PATH,
-            close_draft_artifacts::event_schema_bytes(),
-        ),
-        (
-            crate::REFUSED_EDIT_DRAFT_CREATED_SCHEMA_ID,
-            refused_draft_artifacts::EVENT_SCHEMA_PATH,
-            refused_draft_event_schema,
-        ),
-        (
-            PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
-            REQUEST_SCHEMA_PATH,
-            request_schema,
-        ),
-        (
-            PROTOCOL_PROFILE_SCHEMA_ID,
-            RESPONSE_SCHEMA_PATH,
-            response_schema,
-        ),
-        (
-            PROJECT_REQUEST_SCHEMA_ID,
-            PROJECT_REQUEST_SCHEMA_PATH,
-            project_request_schema,
-        ),
-        (
-            PROJECT_RESPONSE_SCHEMA_ID,
-            PROJECT_RESPONSE_SCHEMA_PATH,
-            project_response_schema,
-        ),
-        (
-            CHAPTER_REQUEST_SCHEMA_ID,
-            CHAPTER_REQUEST_SCHEMA_PATH,
-            chapter_request_schema,
-        ),
-        (
-            CHAPTER_RESPONSE_SCHEMA_ID,
-            CHAPTER_RESPONSE_SCHEMA_PATH,
-            chapter_response_schema,
-        ),
-        (
-            PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
-            CHALLENGE_REQUEST_SCHEMA_PATH,
-            challenge_request_schema,
-        ),
-        (
-            PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
-            CHALLENGE_RESPONSE_SCHEMA_PATH,
-            challenge_response_schema,
-        ),
-        (
-            crate::CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID,
-            create_project_artifacts::CHALLENGE_REQUEST_SCHEMA_PATH,
-            create_project_challenge_request_schema,
-        ),
-        (
-            crate::CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID,
-            create_project_artifacts::CHALLENGE_RESPONSE_SCHEMA_PATH,
-            create_project_challenge_response_schema,
-        ),
-        (
-            crate::CREATE_PROJECT_REQUEST_SCHEMA_ID,
-            create_project_artifacts::REQUEST_SCHEMA_PATH,
-            create_project_request_schema,
-        ),
-        (
-            crate::CREATE_PROJECT_RESPONSE_SCHEMA_ID,
-            create_project_artifacts::RESPONSE_SCHEMA_PATH,
-            create_project_response_schema,
-        ),
-        (
-            crate::LIST_PROJECTS_REQUEST_SCHEMA_ID,
-            list_projects_artifacts::REQUEST_SCHEMA_PATH,
-            list_projects_request_schema,
-        ),
-        (
-            crate::LIST_PROJECTS_RESPONSE_SCHEMA_ID,
-            list_projects_artifacts::RESPONSE_SCHEMA_PATH,
-            list_projects_response_schema,
-        ),
-        (
-            crate::GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
-            manuscript_tree_artifacts::REQUEST_SCHEMA_PATH,
-            manuscript_tree_request_schema,
-        ),
-        (
-            crate::GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID,
-            manuscript_tree_artifacts::RESPONSE_SCHEMA_PATH,
-            manuscript_tree_response_schema,
-        ),
-        (
-            crate::SEARCH_MANUSCRIPT_REQUEST_SCHEMA_ID,
-            manuscript_search_artifacts::REQUEST_SCHEMA_PATH,
-            manuscript_search_request_schema,
-        ),
-        (
-            crate::SEARCH_MANUSCRIPT_RESPONSE_SCHEMA_ID,
-            manuscript_search_artifacts::RESPONSE_SCHEMA_PATH,
-            manuscript_search_response_schema,
-        ),
-        (
-            crate::GET_STATISTICS_REQUEST_SCHEMA_ID,
-            manuscript_statistics_artifacts::REQUEST_SCHEMA_PATH,
-            manuscript_statistics_request_schema,
-        ),
-        (
-            crate::GET_STATISTICS_RESPONSE_SCHEMA_ID,
-            manuscript_statistics_artifacts::RESPONSE_SCHEMA_PATH,
-            manuscript_statistics_response_schema,
-        ),
-        (
-            crate::EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
-            readable_export_artifacts::REQUEST_SCHEMA_PATH,
-            readable_export_request_schema,
-        ),
-        (
-            crate::EXPORT_HUMAN_READABLE_MANUSCRIPT_RESPONSE_SCHEMA_ID,
-            readable_export_artifacts::RESPONSE_SCHEMA_PATH,
-            readable_export_response_schema,
-        ),
-        (
-            crate::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_REQUEST_SCHEMA_ID,
-            readable_export_query_artifacts::REQUEST_SCHEMA_PATH,
-            readable_export_query_request_schema,
-        ),
-        (
-            crate::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID,
-            readable_export_query_artifacts::RESPONSE_SCHEMA_PATH,
-            readable_export_query_response_schema,
-        ),
-        (
-            crate::EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
-            project_export_artifacts::REQUEST_SCHEMA_PATH,
-            project_export_request_schema,
-        ),
-        (
-            crate::EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID,
-            project_export_artifacts::RESPONSE_SCHEMA_PATH,
-            project_export_response_schema,
-        ),
-        (
-            crate::GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
-            project_export_query_artifacts::REQUEST_SCHEMA_PATH,
-            project_export_query_request_schema,
-        ),
-        (
-            crate::GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID,
-            project_export_query_artifacts::RESPONSE_SCHEMA_PATH,
-            project_export_query_response_schema,
-        ),
-        (
-            crate::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
-            update_project_artifacts::REQUEST_SCHEMA_PATH,
-            update_project_request_schema,
-        ),
-        (
-            crate::UPDATE_PROJECT_RESPONSE_SCHEMA_ID,
-            update_project_artifacts::RESPONSE_SCHEMA_PATH,
-            update_project_response_schema,
-        ),
-        (
-            crate::GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
-            project_assistance_artifacts::GET_REQUEST_SCHEMA_PATH,
-            get_project_assistance_request_schema,
-        ),
-        (
-            crate::GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
-            project_assistance_artifacts::GET_RESPONSE_SCHEMA_PATH,
-            get_project_assistance_response_schema,
-        ),
-        (
-            crate::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
-            project_assistance_artifacts::UPDATE_REQUEST_SCHEMA_PATH,
-            update_project_assistance_request_schema,
-        ),
-        (
-            crate::UPDATE_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
-            project_assistance_artifacts::UPDATE_RESPONSE_SCHEMA_PATH,
-            update_project_assistance_response_schema,
-        ),
-        (
-            crate::CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
-            agent_run_artifacts::CREATE_REQUEST_SCHEMA_PATH,
-            create_agent_run_request_schema,
-        ),
-        (
-            crate::CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
-            agent_run_artifacts::CREATE_RESPONSE_SCHEMA_PATH,
-            create_agent_run_response_schema,
-        ),
-        (
-            crate::GET_AGENT_RUN_REQUEST_SCHEMA_ID,
-            agent_run_artifacts::GET_REQUEST_SCHEMA_PATH,
-            get_agent_run_request_schema,
-        ),
-        (
-            crate::GET_AGENT_RUN_RESPONSE_SCHEMA_ID,
-            agent_run_artifacts::GET_RESPONSE_SCHEMA_PATH,
-            get_agent_run_response_schema,
-        ),
-        (
-            crate::STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
-            agent_run_control_artifacts::STEER_REQUEST_SCHEMA_PATH,
-            steer_request,
-        ),
-        (
-            crate::STEER_AGENT_RUN_RESPONSE_SCHEMA_ID,
-            agent_run_control_artifacts::STEER_RESPONSE_SCHEMA_PATH,
-            steer_response,
-        ),
-        (
-            crate::PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
-            agent_run_control_artifacts::PAUSE_REQUEST_SCHEMA_PATH,
-            pause_agent_run_request_schema,
-        ),
-        (
-            crate::PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
-            agent_run_control_artifacts::PAUSE_RESPONSE_SCHEMA_PATH,
-            pause_agent_run_response_schema,
-        ),
-        (
-            crate::CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
-            agent_run_control_artifacts::CANCEL_REQUEST_SCHEMA_PATH,
-            cancel_agent_run_request_schema,
-        ),
-        (
-            crate::CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
-            agent_run_control_artifacts::CANCEL_RESPONSE_SCHEMA_PATH,
-            cancel_agent_run_response_schema,
-        ),
-        (
-            crate::GET_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID,
-            refused_draft_artifacts::REQUEST_SCHEMA_PATH,
-            get_refused_draft_request_schema,
-        ),
-        (
-            crate::GET_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID,
-            refused_draft_artifacts::RESPONSE_SCHEMA_PATH,
-            get_refused_draft_response_schema,
-        ),
-        (
-            crate::GET_PROPOSAL_REQUEST_SCHEMA_ID,
-            proposal_artifacts::REQUEST_SCHEMA_PATH,
-            get_proposal_request_schema,
-        ),
-        (
-            crate::GET_PROPOSAL_RESPONSE_SCHEMA_ID,
-            proposal_artifacts::RESPONSE_SCHEMA_PATH,
-            get_proposal_response_schema,
-        ),
-        (
-            crate::ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID,
-            accept_proposal_artifacts::REQUEST_SCHEMA_PATH,
-            accept_proposal_request_schema,
-        ),
-        (
-            crate::ACCEPT_PROPOSAL_RESPONSE_SCHEMA_ID,
-            accept_proposal_artifacts::RESPONSE_SCHEMA_PATH,
-            accept_proposal_response_schema,
-        ),
-        (
-            crate::REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,
-            reject_proposal_operations_artifacts::REQUEST_SCHEMA_PATH,
-            reject_proposal_operations_request_schema,
-        ),
-        (
-            crate::REJECT_PROPOSAL_OPERATIONS_RESPONSE_SCHEMA_ID,
-            reject_proposal_operations_artifacts::RESPONSE_SCHEMA_PATH,
-            reject_proposal_operations_response_schema,
-        ),
-        (
-            crate::REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
-            reopen_rejected_operations_artifacts::REQUEST_SCHEMA_PATH,
-            reopen_rejected_operations_request_schema,
-        ),
-        (
-            crate::REOPEN_REJECTED_OPERATIONS_RESPONSE_SCHEMA_ID,
-            reopen_rejected_operations_artifacts::RESPONSE_SCHEMA_PATH,
-            reopen_rejected_operations_response_schema,
-        ),
-        (
-            crate::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
-            reopen_withdrawn_proposal_artifacts::REQUEST_SCHEMA_PATH,
-            reopen_withdrawn_proposal_request_schema,
-        ),
-        (
-            crate::REOPEN_WITHDRAWN_PROPOSAL_RESPONSE_SCHEMA_ID,
-            reopen_withdrawn_proposal_artifacts::RESPONSE_SCHEMA_PATH,
-            reopen_withdrawn_proposal_response_schema,
-        ),
-        (
-            crate::REPLAN_PROPOSAL_REQUEST_SCHEMA_ID,
-            replan_proposal_artifacts::REQUEST_SCHEMA_PATH,
-            replan_proposal_request_schema,
-        ),
-        (
-            crate::REPLAN_PROPOSAL_RESPONSE_SCHEMA_ID,
-            replan_proposal_artifacts::RESPONSE_SCHEMA_PATH,
-            replan_proposal_response_schema,
-        ),
-        (
-            crate::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
-            withdraw_proposal_artifacts::REQUEST_SCHEMA_PATH,
-            withdraw_proposal_request_schema,
-        ),
-        (
-            crate::WITHDRAW_PROPOSAL_RESPONSE_SCHEMA_ID,
-            withdraw_proposal_artifacts::RESPONSE_SCHEMA_PATH,
-            withdraw_proposal_response_schema,
-        ),
-        (
-            crate::COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
-            proposal_generation_decision_artifacts::COMPLETE_REQUEST_SCHEMA_PATH,
-            proposal_generation_decision_artifacts::complete_request_schema_bytes(),
-        ),
-        (
-            crate::COMPLETE_READY_PARTIAL_PROPOSAL_RESPONSE_SCHEMA_ID,
-            proposal_generation_decision_artifacts::COMPLETE_RESPONSE_SCHEMA_PATH,
-            proposal_generation_decision_artifacts::complete_response_schema_bytes(),
-        ),
-        (
-            crate::CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,
-            proposal_generation_decision_artifacts::CONTINUE_REQUEST_SCHEMA_PATH,
-            proposal_generation_decision_artifacts::continue_request_schema_bytes(),
-        ),
-        (
-            crate::CONTINUE_PROPOSAL_GENERATION_RESPONSE_SCHEMA_ID,
-            proposal_generation_decision_artifacts::CONTINUE_RESPONSE_SCHEMA_PATH,
-            proposal_generation_decision_artifacts::continue_response_schema_bytes(),
-        ),
-        (
-            crate::ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
-            archive_project_artifacts::REQUEST_SCHEMA_PATH,
-            archive_project_request_schema,
-        ),
-        (
-            crate::ARCHIVE_PROJECT_RESPONSE_SCHEMA_ID,
-            archive_project_artifacts::RESPONSE_SCHEMA_PATH,
-            archive_project_response_schema,
-        ),
-        (
-            crate::CREATE_VOLUME_REQUEST_SCHEMA_ID,
-            create_volume_artifacts::REQUEST_SCHEMA_PATH,
-            create_volume_request_schema,
-        ),
-        (
-            crate::CREATE_VOLUME_RESPONSE_SCHEMA_ID,
-            create_volume_artifacts::RESPONSE_SCHEMA_PATH,
-            create_volume_response_schema,
-        ),
-        (
-            crate::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
-            update_volume_artifacts::REQUEST_SCHEMA_PATH,
-            update_volume_request_schema,
-        ),
-        (
-            crate::UPDATE_VOLUME_RESPONSE_SCHEMA_ID,
-            update_volume_artifacts::RESPONSE_SCHEMA_PATH,
-            update_volume_response_schema,
-        ),
-        (
-            crate::DELETE_VOLUME_REQUEST_SCHEMA_ID,
-            delete_volume_artifacts::REQUEST_SCHEMA_PATH,
-            delete_volume_request_schema,
-        ),
-        (
-            crate::DELETE_VOLUME_RESPONSE_SCHEMA_ID,
-            delete_volume_artifacts::RESPONSE_SCHEMA_PATH,
-            delete_volume_response_schema,
-        ),
-        (
-            crate::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
-            update_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            update_chapter_request_schema,
-        ),
-        (
-            crate::UPDATE_CHAPTER_RESPONSE_SCHEMA_ID,
-            update_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            update_chapter_response_schema,
-        ),
-        (
-            crate::DELETE_CHAPTER_REQUEST_SCHEMA_ID,
-            delete_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            delete_chapter_request_schema,
-        ),
-        (
-            crate::DELETE_CHAPTER_RESPONSE_SCHEMA_ID,
-            delete_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            delete_chapter_response_schema,
-        ),
-        (
-            crate::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
-            create_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            create_chapter_request_schema,
-        ),
-        (
-            crate::CREATE_CHAPTER_RESPONSE_SCHEMA_ID,
-            create_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            create_chapter_response_schema,
-        ),
-        (
-            crate::SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
-            set_current_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            set_current_chapter_request_schema,
-        ),
-        (
-            crate::SET_CURRENT_CHAPTER_RESPONSE_SCHEMA_ID,
-            set_current_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            set_current_chapter_response_schema,
-        ),
-        (
-            crate::UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID,
-            undo_latest_author_action_artifacts::REQUEST_SCHEMA_PATH,
-            undo_latest_author_action_request_schema,
-        ),
-        (
-            crate::UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID,
-            undo_latest_author_action_artifacts::RESPONSE_SCHEMA_PATH,
-            undo_latest_author_action_response_schema,
-        ),
-        (
-            CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-            EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
-            editor_create_request_schema,
-        ),
-        (
-            CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-            EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
-            editor_create_response_schema,
-        ),
-        (
-            GET_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-            EDITOR_SESSION_GET_REQUEST_SCHEMA_PATH,
-            editor_get_request_schema,
-        ),
-        (
-            GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-            EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
-            editor_get_response_schema,
-        ),
-        (
-            APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
-            author_edit_artifacts::REQUEST_SCHEMA_PATH,
-            apply_edit_request_schema,
-        ),
-        (
-            APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
-            author_edit_artifacts::RESPONSE_SCHEMA_PATH,
-            apply_edit_response_schema,
-        ),
-        (
-            crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
-            author_edit_outcome_artifacts::REQUEST_SCHEMA_PATH,
-            apply_edit_outcome_request_schema,
-        ),
-        (
-            crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
-            author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH,
-            apply_edit_outcome_response_schema,
-        ),
-        (
-            crate::GET_SNAPSHOT_REQUEST_SCHEMA_ID,
-            snapshot_artifacts::SNAPSHOT_REQUEST_SCHEMA_PATH,
-            snapshot_request_schema,
-        ),
-        (
-            crate::GET_SNAPSHOT_RESPONSE_SCHEMA_ID,
-            snapshot_artifacts::SNAPSHOT_RESPONSE_SCHEMA_PATH,
-            snapshot_response_schema,
-        ),
-        (
-            crate::release1_snapshot::ACTIVITY_STREAM_REQUEST_SCHEMA_ID,
-            snapshot_artifacts::ACTIVITY_STREAM_REQUEST_SCHEMA_PATH,
-            activity_stream_request_schema,
-        ),
-        (
-            crate::release1_snapshot::ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
-            snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH,
-            activity_stream_response_schema,
-        ),
-        (
-            crate::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
-            takeover_artifacts::REQUEST_SCHEMA_PATH,
-            takeover_request_schema,
-        ),
-        (
-            crate::TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
-            takeover_artifacts::RESPONSE_SCHEMA_PATH,
-            takeover_response_schema,
-        ),
-    ];
+    let schemas = RELEASE1_OPERATIONS
+        .iter()
+        .flat_map(|artifacts| (artifacts.schemas)())
+        .collect::<Vec<_>>();
     let schema_catalog = schema_catalog_bytes(&schemas);
     let typescript_client = typescript_client_bytes();
     let typescript_declaration = typescript_declaration_bytes();
@@ -953,7 +155,7 @@ fn generated_files() -> Vec<GeneratedFile> {
     let mut generated = vec![
         (
             "generated/json-schema/storyos-web-assets/manifest.schema.json",
-            json_bytes(&typed_schema::<crate::WebAssetManifest>(
+            json_bytes(&schema_value::<crate::WebAssetManifest>(
                 crate::WEB_ASSET_SCHEMA,
                 "StoryOS Web Asset Manifest",
             )),
@@ -963,7 +165,7 @@ fn generated_files() -> Vec<GeneratedFile> {
     generated.extend(
         schemas
             .into_iter()
-            .map(|(_schema_id, path, bytes)| (path, bytes)),
+            .map(|schema| (schema.path, schema.bytes)),
     );
     generated.extend([
         (TYPESCRIPT_CLIENT_PATH, typescript_client),
@@ -1027,61 +229,21 @@ fn validate_review_bindings(catalog: &[u8]) -> io::Result<()> {
 }
 
 fn contract_graph_bytes() -> Vec<u8> {
+    let operations = registered_operations()
+        .filter_map(|registered| match registered.graph {
+            ContractGraphEntry::Preconditions(preconditions) => Some(operation_graph(
+                registered.operation,
+                registered.kind,
+                preconditions,
+            )),
+            ContractGraphEntry::Absent => None,
+        })
+        .collect::<Vec<_>>();
     serde_json::to_vec(&json!({
         "schema_id": "storyos.contract-graph.release-1-profile-slice.v1",
         "contract_revision": CONTRACT_REVISION,
         "review_catalog_sha256": REVIEW_CATALOG_SHA256,
-        "operations": [
-            operation_graph(&GET_PROTOCOL_PROFILE, &["active_public_release_profile"]),
-            operation_graph(&GET_PROJECT, &["server_derived_project_scope", "project_visibility"]),
-            command_operation_graph(&UPDATE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_active"]),
-            operation_graph(&GET_PROJECT_ASSISTANCE, &["server_derived_project_scope", "project_visibility"]),
-            command_operation_graph(&UPDATE_PROJECT_ASSISTANCE, &["server_derived_project_scope", "expected_assistance_revision", "project_active"]),
-            command_operation_graph(&CREATE_AGENT_RUN, &["server_derived_project_scope", "operation_requirement", "working_target_or_explicit_not_applicable", "capability_and_destination_grant"]),
-            command_operation_graph(&PAUSE_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_pauseable", "current_fence_generation"]),
-            command_operation_graph(&STEER_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "exact_conversation", "nonterminal_run", "bounded_author_input"]),
-            command_operation_graph(&CANCEL_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_cancellable", "current_fence_generation"]),
-            operation_graph(&GET_AGENT_RUN, &["run_scope_join", "run_projection_watermark_or_snapshot"]),
-            command_operation_graph(&CLOSE_EDITOR_FLOW_DRAFT, &["exact_scope", "current_writer", "exact_retained_open_source", "explicit_editor_command"]),
-            command_operation_graph(&EXPAND_REFUSED_EDIT_DRAFT, &["exact_scope", "current_writer", "exact_retained_open_source", "whole_draft_payload", "current_target_anchors"]),
-            operation_graph(&GET_REFUSED_EDIT_DRAFT, &["exact_scope", "retained_revision_digest", "immutable_creation_source"]),
-            operation_graph(&GET_PROPOSAL, &["proposal_scope_join", "exact_revision_or_current_projection", "redaction_profile"]),
-            command_operation_graph(&ACCEPT_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "valid_validation_receipt", "selected_pending_operations", "expected_target_revisions", "acceptance_admission"]),
-            command_operation_graph(&REJECT_PROPOSAL_OPERATIONS, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "selected_pending_operations", "expected_target_revisions", "explicit_editor_control"]),
-            command_operation_graph(&REOPEN_REJECTED_OPERATIONS, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "selected_rejected_operations", "matching_rejection_event_refs", "expected_target_revisions", "explicit_editor_control"]),
-            command_operation_graph(&REPLAN_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "exact_conflict_or_recovery_conflict_source", "expected_current_proposal_head", "expected_current_target_revisions", "explicit_editor_control"]),
-            command_operation_graph(&WITHDRAW_PROPOSAL, &["proposal_scope_join", "current_open_proposal_revision", "expected_target_revisions", "author_or_exact_current_producer_cause"]),
-            command_operation_graph(&REOPEN_WITHDRAWN_PROPOSAL, &["proposal_scope_join", "current_closure_withdrawn", "exact_withdrawal_event_ref", "expected_target_revisions"]),
-            command_operation_graph(&COMPLETE_READY_PARTIAL_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_ready_partial_generation", "expected_candidate_digest", "last_applied_stream_seq", "expected_target_revisions", "explicit_editor_control"]),
-            command_operation_graph(&CONTINUE_PROPOSAL_GENERATION, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_generation_ready_partial_or_ready", "prior_generation_id", "expected_candidate_digest", "selected_pending_operations", "expected_target_revisions", "explicit_editor_control"]),
-            command_operation_graph(&ARCHIVE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_not_deleted"]),
-            command_operation_graph(&CREATE_VOLUME, &["server_derived_project_scope", "project_active", "expected_tree_revision"]),
-            command_operation_graph(&UPDATE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_tree_revision"]),
-            command_operation_graph(&DELETE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_tree_revision", "child_chapter_policy"]),
-            command_operation_graph(&CREATE_CHAPTER, &["server_derived_project_scope", "volume_scope_join", "project_active", "expected_tree_revision"]),
-            command_operation_graph(&UPDATE_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "expected_tree_revision"]),
-            command_operation_graph(&DELETE_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "expected_tree_revision"]),
-            command_operation_graph(&SET_CURRENT_CHAPTER, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "expected_current_chapter", "expected_authoritative_head"]),
-            command_operation_graph(&UNDO_LATEST_AUTHOR_ACTION, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "author_undo_frontier_exact", "expected_authoritative_head"]),
-            operation_graph(&GET_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "canonical_snapshot"]),
-            challenge_operation_graph(&CREATE_PROJECT_CHALLENGE, &["server_derived_user", "prospective_project_scope", "strict_origin", "protected_client_session_binding", "closed_create_project_schema", "body_idempotency_key"]),
-            command_operation_graph(&CREATE_PROJECT, &["server_derived_user", "prospective_project_scope", "strict_origin", "protected_client_session_binding", "challenge_nonce_record", "expected_absent_project"]),
-            operation_graph(&LIST_PROJECTS, &["server_derived_user"]),
-            challenge_operation_graph(&CREATE_PROJECT_COMMAND_CHALLENGE, &["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "route_method_schema_digest_match", "closed_command_schema"]),
-            command_operation_graph(&CREATE_EDITOR_SESSION, &["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "project_command_challenge"]),
-            operation_graph(&GET_EDITOR_SESSION, &["server_derived_project_scope", "session_scope_join", "protected_client_session_binding"]),
-            command_operation_graph(&APPLY_AUTHOR_EDIT, &["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "project_command_challenge", "editor_session_writer_generation", "expected_authoritative_head"]),
-            operation_graph(&GET_APPLY_AUTHOR_EDIT_OUTCOME, &["server_derived_project_scope", "sensitive_safe_read_origin", "protected_client_session_binding", "idempotency_key", "project_command_challenge_proof", "receipt_first_settlement_validation"]),
-            operation_graph(&GET_SNAPSHOT, &["snapshot_scope_join", "snapshot_signature", "snapshot_lifecycle_available"]),
-            operation_graph(&GET_MANUSCRIPT_TREE, &["server_derived_project_scope", "canonical_snapshot", "tree_scope_join"]),
-            operation_graph(&SEARCH_MANUSCRIPT, &["server_derived_project_scope", "bounded_search_query", "projection_watermark_if_required", "redaction_profile"]),
-            operation_graph(&GET_STATISTICS, &["server_derived_project_scope", "canonical_snapshot_or_projection_watermark"]),
-            command_operation_graph(&EXPORT_HUMAN_READABLE_MANUSCRIPT, &["server_derived_project_scope", "consistent_source_snapshot", "deterministic_volume_chapter_order", "unavailable_content_representation_profile"]),
-            operation_graph(&GET_HUMAN_READABLE_MANUSCRIPT_EXPORT, &["server_derived_project_scope", "export_scope_join", "export_operation_visibility", "deterministic_order_profile", "unavailable_content_representation_profile"]),
-            command_operation_graph(&EXPORT_PROJECT_ARCHIVE, &["server_derived_project_scope", "consistent_source_snapshot", "archive_path_profile", "integrity_protection_before_completion"]),
-            operation_graph(&GET_EXPORT_OPERATION, &["export_scope_join", "export_operation_visibility", "redaction_profile"]),
-            stream_operation_graph(&ACTIVITY_STREAM, &["server_derived_project_scope", "snapshot_binding_or_last_event_id", "activity_profile", "replay_generation", "filter_digest", "reauthorize_on_connect"]),
-        ],
+        "operations": operations,
         "release": {
             "api_major": API_MAJOR, "public_protocol_release": PUBLIC_PROTOCOL_RELEASE, "envelope_version": ENVELOPE_VERSION,
             "envelope_profile": ENVELOPE_PROFILE, "problem_profile": PROBLEM_PROFILE, "activity_profile": ACTIVITY_PROFILE,
@@ -1095,36 +257,19 @@ fn contract_graph_bytes() -> Vec<u8> {
     .expect("the contract graph contains only serializable values")
 }
 
-fn command_operation_graph(
-    operation: &crate::release1::QueryOperation,
-    preconditions: &[&str],
-) -> Value {
-    let mut graph = operation_graph(operation, preconditions);
-    graph["kind"] = json!("command");
-    graph
+fn registered_operations() -> impl Iterator<Item = &'static RegisteredOperation> {
+    RELEASE1_OPERATIONS
+        .iter()
+        .flat_map(|artifacts| artifacts.operations)
 }
 
-fn challenge_operation_graph(
-    operation: &crate::release1::QueryOperation,
+fn operation_graph(
+    operation: &QueryOperation,
+    kind: OperationKind,
     preconditions: &[&str],
 ) -> Value {
-    let mut graph = operation_graph(operation, preconditions);
-    graph["kind"] = json!("challenge");
-    graph
-}
-
-fn stream_operation_graph(
-    operation: &crate::release1::QueryOperation,
-    preconditions: &[&str],
-) -> Value {
-    let mut graph = operation_graph(operation, preconditions);
-    graph["kind"] = json!("stream");
-    graph
-}
-
-fn operation_graph(operation: &crate::release1::QueryOperation, preconditions: &[&str]) -> Value {
     json!({
-        "operation_id": operation.operation_id, "kind": "query", "method": operation.method,
+        "operation_id": operation.operation_id, "kind": kind.as_str(), "method": operation.method,
         "path": operation.path, "request_schema": operation.request_schema,
         "response_schema": operation.response_schema, "preconditions": preconditions,
         "http_statuses": operation.responses.iter().map(|(status, _)| status).collect::<Vec<_>>(),
@@ -1134,324 +279,45 @@ fn operation_graph(operation: &crate::release1::QueryOperation, preconditions: &
 }
 
 fn openapi_bytes() -> Vec<u8> {
-    let operations = [
-        (
-            &GET_PROTOCOL_PROFILE,
-            "Discover the active StoryOS Release 1 protocol profile",
-            RESPONSE_SCHEMA_PATH,
-            &[][..],
-        ),
-        (
-            &GET_PROJECT,
-            "Read one controlled StoryOS Project",
-            PROJECT_RESPONSE_SCHEMA_PATH,
-            &["project_id"][..],
-        ),
-        (
-            &GET_CHAPTER,
-            "Read the controlled Project current Chapter",
-            CHAPTER_RESPONSE_SCHEMA_PATH,
-            &["project_id", "chapter_id"][..],
-        ),
-        (
-            &GET_EDITOR_SESSION,
-            "Read one exact Editor Session",
-            EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
-            &["project_id", "editor_session_id"][..],
-        ),
-    ];
-    let mut paths = String::new();
-    for (operation, summary, response_schema, parameters) in operations {
-        paths.push_str(&operation_openapi(
-            operation,
-            summary,
-            response_schema,
-            parameters,
-        ));
-        if operation.operation_id == GET_PROJECT.operation_id {
-            paths.push_str(&update_project_artifacts::method_openapi());
-        }
-        if operation.operation_id == GET_CHAPTER.operation_id {
-            paths.push_str(&update_chapter_artifacts::method_openapi());
-            paths.push_str(&delete_chapter_artifacts::method_openapi());
+    let mut path_items: Vec<OpenApiMethod> = Vec::new();
+    for method in RELEASE1_OPERATIONS
+        .iter()
+        .flat_map(|artifacts| (artifacts.openapi)())
+    {
+        match path_items.iter_mut().find(|item| item.path == method.path) {
+            Some(item) => item.yaml.push_str(&method.yaml),
+            None => path_items.push(method),
         }
     }
-    paths.push_str(&project_assistance_artifacts::openapi());
-    paths.push_str(&agent_run_artifacts::openapi());
-    paths.push_str(&agent_run_control_artifacts::openapi());
-    paths.push_str(&refused_draft_artifacts::openapi());
-    paths.push_str(&close_draft_artifacts::openapi());
-    paths.push_str(&expand_draft_artifacts::openapi());
-    paths.push_str(&proposal_artifacts::openapi());
-    paths.push_str(&accept_proposal_artifacts::openapi());
-    paths.push_str(&reject_proposal_operations_artifacts::openapi());
-    paths.push_str(&reopen_rejected_operations_artifacts::openapi());
-    paths.push_str(&replan_proposal_artifacts::openapi());
-    paths.push_str(&withdraw_proposal_artifacts::openapi());
-    paths.push_str(&reopen_withdrawn_proposal_artifacts::openapi());
-    paths.push_str(&proposal_generation_decision_artifacts::openapi());
-    paths.push_str(&archive_project_artifacts::openapi());
-    paths.push_str(&create_volume_artifacts::openapi());
-    paths.push_str(&update_volume_artifacts::openapi());
-    paths.push_str(&delete_volume_artifacts::method_openapi());
-    paths.push_str(&create_chapter_artifacts::openapi());
-    paths.push_str(&set_current_chapter_artifacts::openapi());
-    paths.push_str(&undo_latest_author_action_artifacts::openapi());
-    paths.push_str(&create_project_artifacts::openapi());
-    paths.push_str(&challenge_openapi());
-    paths.push_str(&editor_session_create_openapi());
-    if author_edit_artifacts::IS_IMPLEMENTED {
-        paths.push_str(&author_edit_artifacts::openapi());
-    }
-    paths.push_str(&author_edit_outcome_artifacts::openapi());
-    paths.push_str(&snapshot_artifacts::snapshot_openapi());
-    paths.push_str(&manuscript_tree_artifacts::openapi());
-    paths.push_str(&manuscript_search_artifacts::openapi());
-    paths.push_str(&manuscript_statistics_artifacts::openapi());
-    paths.push_str(&readable_export_artifacts::openapi());
-    paths.push_str(&readable_export_query_artifacts::openapi());
-    paths.push_str(&project_export_artifacts::openapi());
-    paths.push_str(&project_export_query_artifacts::openapi());
-    paths.push_str(&snapshot_artifacts::activity_stream_openapi());
-    paths.push_str(&takeover_artifacts::openapi());
+    let paths = path_items
+        .iter()
+        .map(|item| format!("  {}:\n{}", item.path, item.yaml))
+        .collect::<String>();
     let implemented_slice = implemented_operation_ids().join(",");
     format!(
         "openapi: 3.1.0\ninfo:\n  title: StoryOS Public Release 1\n  version: {PUBLIC_PROTOCOL_RELEASE}\n  x-storyos-contract-revision: {CONTRACT_REVISION}\n  x-storyos-implemented-slice: {implemented_slice}\npaths:\n{paths}components: {{}}\n",
     ).into_bytes()
 }
 
-fn editor_session_create_openapi() -> String {
-    let request_schema = EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH
-        .strip_prefix("generated/")
-        .unwrap();
-    let response_schema = EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH
-        .strip_prefix("generated/")
-        .unwrap();
-    let responses = CREATE_EDITOR_SESSION.responses.iter().map(|(status, description)| format!(
-        "        '{status}':\n          description: {description}\n{}",
-        if matches!(status, 200 | 201) { format!("          content:\n            application/json:\n              schema:\n                $ref: '../{response_schema}'\n") } else { String::new() }
-    )).collect::<String>();
-    format!(
-        "  {}:\n    post:\n      operationId: {}\n      summary: Create one Editor Session\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{request_schema}'\n      responses:\n{responses}",
-        CREATE_EDITOR_SESSION.path, CREATE_EDITOR_SESSION.operation_id
-    )
-}
-
-fn challenge_openapi() -> String {
-    let operation = &CREATE_PROJECT_COMMAND_CHALLENGE;
-    let request_schema = CHALLENGE_REQUEST_SCHEMA_PATH
-        .strip_prefix("generated/")
-        .unwrap();
-    let response_schema = CHALLENGE_RESPONSE_SCHEMA_PATH
-        .strip_prefix("generated/")
-        .unwrap();
-    let responses = operation.responses.iter().map(|(status, description)| format!(
-        "        '{status}':\n          description: {description}\n{}{}",
-        if *status == 429 { "          headers:\n            Retry-After:\n              required: true\n              schema:\n                type: integer\n                minimum: 1\n                maximum: 60\n" } else { "" },
-        if *status == 200 { format!("          content:\n            application/json:\n              schema:\n                $ref: '../{response_schema}'\n") } else { String::new() }
-    )).collect::<String>();
-    format!(
-        "  {}:\n    post:\n      operationId: {}\n      summary: Issue one exact Project command challenge\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{request_schema}'\n      responses:\n{responses}",
-        operation.path, operation.operation_id,
-    )
-}
-
-fn operation_openapi(
-    operation: &crate::release1::QueryOperation,
-    summary: &str,
-    response_schema: &str,
-    parameters: &[&str],
-) -> String {
-    let response_schema = response_schema
-        .strip_prefix("generated/")
-        .expect("OpenAPI response schemas must be generated artifacts");
-    let parameters = if parameters.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "      parameters:\n{}",
-            parameters
-                .iter()
-                .map(|name| format!("        - name: {name}\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n"))
-                .collect::<String>()
-        )
-    };
-    let responses = operation.responses.iter().map(|(status, description)| format!(
-        "        '{status}':\n          description: {description}\n{}",
-        if *status == 200 { format!("          content:\n            application/json:\n              schema:\n                $ref: '../{response_schema}'\n") } else { String::new() }
-    )).collect::<String>();
-    format!(
-        "  {}:\n    {}:\n      operationId: {}\n      summary: {summary}\n{parameters}      responses:\n{responses}",
-        operation.path,
-        operation.method.to_ascii_lowercase(),
-        operation.operation_id,
-    )
-}
-
-fn protocol_profile_request_schema() -> Value {
-    json!({"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
-           "title": "StoryOS Release 1 Protocol Profile Request", "type": "object",
-           "additionalProperties": false, "maxProperties": 0})
-}
-
-fn protocol_profile_schema() -> Value {
-    typed_schema::<Release1ProtocolProfile>(
-        PROTOCOL_PROFILE_SCHEMA_ID,
-        "StoryOS Release 1 Protocol Profile",
-    )
-}
-
-fn typed_schema<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema =
-        serde_json::to_value(schema_for!(T)).expect("contract schema should serialize");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    if matches!(
-        schema_id,
-        CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID | GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID
-    ) {
-        apply_u64_wire_constraints(&mut schema);
-    }
-    schema
-}
-
-fn apply_u64_wire_constraints(schema: &mut Value) {
-    let canonical_u64 = canonical_u64_wire_schema();
-    schema["$defs"]["EditorSessionBinding"]["properties"]["client_session_generation"] =
-        canonical_u64.clone();
-    schema["$defs"]["EditorBaseSnapshot"]["properties"]["project_activity_position"] =
-        canonical_u64.clone();
-    schema["$defs"]["EditorWriterProjection"]["oneOf"][0]["properties"]["writer_generation"] =
-        canonical_u64.clone();
-    schema["$defs"]["EditorWriterProjection"]["oneOf"][1]["properties"]["observed_writer_generation"] =
-        canonical_u64;
-}
-
-fn canonical_u64_wire_schema() -> Value {
-    json!({
-        "type": "string",
-        "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$"
-    })
-}
-
-fn challenge_response_schema() -> Value {
-    let mut schema = typed_schema::<CreateProjectCommandChallengeResponse>(
-        PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
-        "StoryOS Project Command Challenge Response",
-    );
-    schema["properties"]["expires_at"]["format"] = Value::String("date-time".to_owned());
-    schema
-}
-
-fn path_request_schema(schema_id: &str, fields: &[&str]) -> Value {
-    let properties = fields
-        .iter()
-        .map(|field| {
-            (
-                (*field).to_owned(),
-                json!({"type": "string", "format": "uuid"}),
-            )
-        })
-        .collect::<serde_json::Map<_, _>>();
-    json!({"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": schema_id,
-           "type": "object", "additionalProperties": false, "required": fields,
-           "properties": properties})
-}
-
-fn schema_catalog_bytes(schemas: &[(&str, &str, Vec<u8>)]) -> Vec<u8> {
+fn schema_catalog_bytes(schemas: &[GeneratedSchema]) -> Vec<u8> {
     json_bytes(&json!({
         "schema_id": "storyos.schema-catalog.v1", "public_protocol_release": PUBLIC_PROTOCOL_RELEASE,
         "implemented_operations": implemented_operation_ids(),
-        "schemas": schemas.iter().map(|(schema_id, path, bytes)| json!({
-            "schema_id": schema_id, "path": path, "sha256": sha256_prefixed(bytes)
+        "schemas": schemas.iter().map(|schema| json!({
+            "schema_id": schema.schema_id, "path": schema.path, "sha256": sha256_prefixed(&schema.bytes)
         })).collect::<Vec<_>>()
     }))
 }
 
 fn implemented_operation_ids() -> Vec<&'static str> {
-    let mut operation_ids = vec![
-        GET_PROTOCOL_PROFILE.operation_id,
-        GET_PROJECT.operation_id,
-        GET_CHAPTER.operation_id,
-        CREATE_PROJECT_CHALLENGE.operation_id,
-        CREATE_PROJECT.operation_id,
-        LIST_PROJECTS.operation_id,
-        UPDATE_PROJECT.operation_id,
-        GET_PROJECT_ASSISTANCE.operation_id,
-        UPDATE_PROJECT_ASSISTANCE.operation_id,
-        CREATE_AGENT_RUN.operation_id,
-        PAUSE_AGENT_RUN.operation_id,
-        CANCEL_AGENT_RUN.operation_id,
-        STEER_AGENT_RUN.operation_id,
-        GET_AGENT_RUN.operation_id,
-        GET_REFUSED_EDIT_DRAFT.operation_id,
-        CLOSE_EDITOR_FLOW_DRAFT.operation_id,
-        EXPAND_REFUSED_EDIT_DRAFT.operation_id,
-        GET_PROPOSAL.operation_id,
-        ACCEPT_PROPOSAL.operation_id,
-        REJECT_PROPOSAL_OPERATIONS.operation_id,
-        REOPEN_REJECTED_OPERATIONS.operation_id,
-        REPLAN_PROPOSAL.operation_id,
-        WITHDRAW_PROPOSAL.operation_id,
-        REOPEN_WITHDRAWN_PROPOSAL.operation_id,
-        COMPLETE_READY_PARTIAL_PROPOSAL.operation_id,
-        CONTINUE_PROPOSAL_GENERATION.operation_id,
-        ARCHIVE_PROJECT.operation_id,
-        CREATE_VOLUME.operation_id,
-        UPDATE_VOLUME.operation_id,
-        DELETE_VOLUME.operation_id,
-        CREATE_CHAPTER.operation_id,
-        UPDATE_CHAPTER.operation_id,
-        DELETE_CHAPTER.operation_id,
-        SET_CURRENT_CHAPTER.operation_id,
-        CREATE_PROJECT_COMMAND_CHALLENGE.operation_id,
-        CREATE_EDITOR_SESSION.operation_id,
-        GET_EDITOR_SESSION.operation_id,
-    ];
-    if author_edit_artifacts::IS_IMPLEMENTED {
-        operation_ids.push(APPLY_AUTHOR_EDIT.operation_id);
-    }
-    operation_ids.push(GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id);
-    operation_ids.push(GET_SNAPSHOT.operation_id);
-    operation_ids.push(GET_MANUSCRIPT_TREE.operation_id);
-    operation_ids.push(SEARCH_MANUSCRIPT.operation_id);
-    operation_ids.push(GET_STATISTICS.operation_id);
-    operation_ids.push(EXPORT_HUMAN_READABLE_MANUSCRIPT.operation_id);
-    operation_ids.push(GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.operation_id);
-    operation_ids.push(EXPORT_PROJECT_ARCHIVE.operation_id);
-    operation_ids.push(GET_EXPORT_OPERATION.operation_id);
-    operation_ids.push(ACTIVITY_STREAM.operation_id);
-    operation_ids.push(TAKE_OVER_PROJECT_WRITER.operation_id);
-    operation_ids.push(UNDO_LATEST_AUTHOR_ACTION.operation_id);
-    operation_ids
+    registered_operations()
+        .map(|registered| registered.operation.operation_id)
+        .collect()
 }
 
 fn typescript_client_bytes() -> Vec<u8> {
-    let create_project_client = create_project_artifacts::typescript_client_source();
-    let list_projects_client = list_projects_artifacts::typescript_client_source();
-    let update_project_client = update_project_artifacts::typescript_client_source();
-    let archive_project_client = archive_project_artifacts::typescript_client_source();
-    let create_volume_client = create_volume_artifacts::typescript_client_source();
-    let update_volume_client = update_volume_artifacts::typescript_client_source();
-    let delete_volume_client = delete_volume_artifacts::typescript_client_source();
-    let create_chapter_client = create_chapter_artifacts::typescript_client_source();
-    let update_chapter_client = update_chapter_artifacts::typescript_client_source();
-    let delete_chapter_client = delete_chapter_artifacts::typescript_client_source();
-    let set_current_chapter_client = set_current_chapter_artifacts::typescript_client_source();
-    let undo_latest_author_action_client =
-        undo_latest_author_action_artifacts::typescript_client_source();
-    let accept_proposal_client = accept_proposal_artifacts::typescript_client_source();
-    let reject_proposal_operations_client =
-        reject_proposal_operations_artifacts::typescript_client_source();
-    let reopen_rejected_operations_client =
-        reopen_rejected_operations_artifacts::typescript_client_source();
-    let replan_proposal_client = replan_proposal_artifacts::typescript_client_source();
-    let withdraw_proposal_client = withdraw_proposal_artifacts::typescript_client_source();
-    let reopen_withdrawn_proposal_client =
-        reopen_withdrawn_proposal_artifacts::typescript_client_source();
-    let author_edit_client = author_edit_artifacts::typescript_client_source();
-    let author_edit_outcome_client = author_edit_outcome_artifacts::typescript_client_source();
-    format!(concat!(
+    let preamble = format!(
+        concat!(
             "// @generated by storyos-contracts; do not edit.\n",
             "export const GENERATED_CLIENT_REVISION = \"{}\";\n\n",
             "export class StoryOSProtocolError extends Error {{\n",
@@ -1489,222 +355,55 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  const responseBody = await response.text();\n",
             "  if (!response.ok) {{\n    const retryAfter = response.headers.get(\"retry-after\");\n    const retryAfterSeconds = /^(?:[1-9]|[1-5][0-9]|60)$/.test(retryAfter ?? \"\") ? Number(retryAfter) : undefined;\n    throw new StoryOSProtocolError(\"command_http_error\", `StoryOS command failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody, retryAfterSeconds }});\n  }}\n",
             "  try {{ return JSON.parse(responseBody); }} catch {{ throw new StoryOSProtocolError(\"command_invalid_json\", \"StoryOS command returned invalid JSON\", {{ status: response.status, responseBody }}); }}\n}}\n\n",
-            "function canonicalJson(value) {{\n  if (Array.isArray(value)) return value.map(canonicalJson);\n  if (value && typeof value === \"object\") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalJson(value[key])]));\n  return value;\n}}\n\n",
-            "export async function getProtocolProfile(options = {{}}) {{\n  return queryJson({{ ...options, path: \"{}\" }});\n}}\n\n",
-            "export async function getProject({{ projectId, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getProject requires projectId\");\n",
-            "  return queryJson({{ ...options, path: `{}` }});\n}}\n\n",
-            "export async function getChapter({{ projectId, chapterId, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getChapter requires projectId\");\n",
-            "  if (typeof chapterId !== \"string\" || chapterId.length === 0) throw new TypeError(\"getChapter requires chapterId\");\n",
-            "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-            "\nexport async function createProjectCommandChallenge({{ projectId, request, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createProjectCommandChallenge requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProjectCommandChallenge requires request\");\n",
-            "  return commandJson({{ ...options, path: `{}`, body: request }});\n}}\n",
-            "\nexport async function digestCreateEditorSession(request, cryptoImpl = globalThis.crypto) {{\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestCreateEditorSession requires request\");\n",
-            "  const canonical = {{ client_contract_revision: request.client_contract_revision, command_schema: request.command_schema, correlation_id: request.correlation_id, security_policy_revision: request.security_policy_revision }};\n",
-            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-            "  return {{ algorithm: \"sha256\", profile: \"storyos.command.createEditorSession.jcs.v1\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-            "\nexport async function createEditorSession({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createEditorSession requires projectId\");\n",
-            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createEditorSession requires request\");\n",
-            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"createEditorSession requires security bindings\");\n",
-            "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-            "\nexport async function getEditorSession({{ projectId, editorSessionId, ...options }} = {{}}) {{\n",
-            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
-            "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
-            "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
-    ),
+            "function canonicalJson(value) {{\n  if (Array.isArray(value)) return value.map(canonicalJson);\n  if (value && typeof value === \"object\") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalJson(value[key])]));\n  return value;\n}}\n",
+        ),
         GENERATED_CLIENT_REVISION,
-        GET_PROTOCOL_PROFILE.path,
-        GET_PROJECT
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        GET_CHAPTER
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{chapter_id}", "${encodeURIComponent(chapterId)}"),
-        CREATE_PROJECT_COMMAND_CHALLENGE
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        CREATE_EDITOR_SESSION
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        GET_EDITOR_SESSION
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace(
-                "{editor_session_id}",
-                "${encodeURIComponent(editorSessionId)}"
-            ),
-        create_project_client,
-        list_projects_client,
-        update_project_client,
-        project_assistance_artifacts::typescript_client_source(),
-        agent_run_artifacts::typescript_client_source(),
-        agent_run_control_artifacts::typescript_client_source(),
-        proposal_artifacts::typescript_client_source() + &refused_draft_artifacts::typescript_client_source() + &close_draft_artifacts::typescript_client_source() + &expand_draft_artifacts::typescript_client_source(),
-        accept_proposal_client,
-        reject_proposal_operations_client,
-        reopen_rejected_operations_client,
-        replan_proposal_client,
-        withdraw_proposal_client,
-        reopen_withdrawn_proposal_client,
-        proposal_generation_decision_artifacts::typescript_client_source(),
-        archive_project_client,
-        create_volume_client,
-        update_volume_client,
-        delete_volume_client,
-        create_chapter_client,
-        update_chapter_client,
-        delete_chapter_client,
-        set_current_chapter_client,
-        undo_latest_author_action_client,
-        author_edit_client,
-        author_edit_outcome_client,
-        snapshot_artifacts::typescript_client_source(),
-        manuscript_tree_artifacts::typescript_client_source(),
-        manuscript_search_artifacts::typescript_client_source(),
-        manuscript_statistics_artifacts::typescript_client_source(),
-        readable_export_artifacts::typescript_client_source(),
-        readable_export_query_artifacts::typescript_client_source(),
-        project_export_artifacts::typescript_client_source(),
-        project_export_query_artifacts::typescript_client_source(),
-        takeover_artifacts::typescript_client_source(),
-    ).into_bytes()
+    );
+    let operations = RELEASE1_OPERATIONS
+        .iter()
+        .map(|artifacts| (artifacts.typescript_client)())
+        .collect::<String>();
+    (preamble + &operations).into_bytes()
 }
 
 fn typescript_declaration_bytes() -> Vec<u8> {
     let config = Config::default();
-    let identity = Release1CompatibilityIdentity::decl(&config);
-    let profile = Release1ProtocolProfile::decl(&config);
-    let project_scope = ProjectScope::decl(&config);
-    let controlled_project = ControlledProject::decl(&config);
-    let project_open = ProjectOpenState::decl(&config);
-    let chapter_revision = AuthoritativeChapterRevision::decl(&config);
-    let manuscript_block = ManuscriptBlock::decl(&config);
-    let block_kind = ManuscriptBlockKind::decl(&config);
-    let current_chapter = CurrentChapter::decl(&config);
-    let project = GetProjectResponse::decl(&config);
-    let chapter = GetChapterResponse::decl(&config);
-    let challenge_request = CreateProjectCommandChallengeRequest::decl(&config);
-    let challenge_response = CreateProjectCommandChallengeResponse::decl(&config);
-    let digest_value = DigestValue::decl(&config);
-    let digest_algorithm = DigestAlgorithm::decl(&config);
-    let create_editor_request = CreateEditorSessionRequest::decl(&config);
-    let create_editor_response = CreateEditorSessionResponse::decl(&config);
-    let get_editor_response = GetEditorSessionResponse::decl(&config);
-    let editor_binding = EditorSessionBinding::decl(&config);
-    let editor_writer = EditorWriterProjection::decl(&config);
-    let editor_reason = EditorReadOnlyReason::decl(&config);
-    let editor_snapshot = EditorBaseSnapshot::decl(&config);
-    let mut declaration = format!(
-        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {project_open}\n\nexport {controlled_project}\n\nexport {block_kind}\n\nexport {manuscript_block}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
-        create_project_artifacts::typescript_type_declarations(),
-        list_projects_artifacts::typescript_type_declarations(),
-        update_project_artifacts::typescript_type_declarations(),
-        archive_project_artifacts::typescript_type_declarations(),
-        create_volume_artifacts::typescript_type_declarations(),
-        update_volume_artifacts::typescript_type_declarations(),
-        delete_volume_artifacts::typescript_type_declarations(),
-        create_chapter_artifacts::typescript_type_declarations(),
-        update_chapter_artifacts::typescript_type_declarations(),
-        delete_chapter_artifacts::typescript_type_declarations(),
-        set_current_chapter_artifacts::typescript_type_declarations(),
-        undo_latest_author_action_artifacts::typescript_type_declarations(),
-        author_edit_artifacts::typescript_type_declarations(),
-        author_edit_outcome_artifacts::typescript_type_declarations(),
-        snapshot_artifacts::typescript_type_declarations(),
-        manuscript_tree_artifacts::typescript_type_declarations(),
-        manuscript_search_artifacts::typescript_type_declarations(),
-        manuscript_statistics_artifacts::typescript_type_declarations(),
-        readable_export_artifacts::typescript_type_declarations(),
-        readable_export_query_artifacts::typescript_type_declarations(),
-        project_export_artifacts::typescript_type_declarations(),
-        project_export_query_artifacts::typescript_type_declarations(),
-        takeover_artifacts::typescript_type_declarations(),
-    );
-    declaration.push_str("\n\n");
-    declaration.push_str(&project_assistance_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(&agent_run_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(&agent_run_control_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(&refused_draft_artifacts::typescript_type_declarations());
-    declaration.push_str(&close_draft_artifacts::typescript_type_declarations());
-    declaration.push_str(&expand_draft_artifacts::typescript_type_declarations());
-    declaration.push_str(&proposal_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(&accept_proposal_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(&reject_proposal_operations_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(&reopen_rejected_operations_artifacts::typescript_type_declarations());
-    declaration.push_str(&replan_proposal_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(&withdraw_proposal_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(&reopen_withdrawn_proposal_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(&proposal_generation_decision_artifacts::typescript_type_declarations());
-    declaration.push_str("\n\n");
-    declaration.push_str(
-        concat!(
-            "export declare const GENERATED_CLIENT_REVISION: string;\n",
-            "export declare class StoryOSProtocolError extends Error {\n  readonly code: string;\n  readonly status?: number;\n  readonly responseBody?: string;\n  readonly retryAfterSeconds?: number;\n}\n",
-            "export interface StoryOSQueryOptions {\n  baseUrl: string;\n  fetchImpl?: typeof fetch;\n  signal?: AbortSignal;\n}\n",
-            "export declare function getProtocolProfile(options: StoryOSQueryOptions): Promise<Release1ProtocolProfile>;\n",
-            "export declare function getProject(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectResponse>;\n",
-            "export declare function getChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string }): Promise<GetChapterResponse>;\n",
-            "export declare function createProjectCommandChallenge(options: StoryOSQueryOptions & { projectId: string; request: CreateProjectCommandChallengeRequest }): Promise<CreateProjectCommandChallengeResponse>;\n",
-            "export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
-            "export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;\n",
-            "export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;\n",
+    let shared_types = [
+        ProjectScope::decl(&config),
+        ProjectOpenState::decl(&config),
+        ControlledProject::decl(&config),
+        ManuscriptBlockKind::decl(&config),
+        ManuscriptBlock::decl(&config),
+        AuthoritativeChapterRevision::decl(&config),
+        CurrentChapter::decl(&config),
+        DigestAlgorithm::decl(&config),
+        DigestValue::decl(&config),
+    ]
+    .map(|declaration| format!("export {declaration}"));
+    let types = shared_types
+        .into_iter()
+        .chain(
+            RELEASE1_OPERATIONS
+                .iter()
+                .map(|artifacts| (artifacts.typescript_types)()),
         )
-    );
-    declaration.push_str(create_project_artifacts::typescript_declarations());
-    declaration.push_str(list_projects_artifacts::typescript_declarations());
-    declaration.push_str(update_project_artifacts::typescript_declarations());
-    declaration.push_str(project_assistance_artifacts::typescript_declarations());
-    declaration.push_str(agent_run_artifacts::typescript_declarations());
-    declaration.push_str(agent_run_control_artifacts::typescript_declarations());
-    declaration.push_str(refused_draft_artifacts::typescript_declarations());
-    declaration.push_str(close_draft_artifacts::typescript_declarations());
-    declaration.push_str(expand_draft_artifacts::typescript_declarations());
-    declaration.push_str(proposal_artifacts::typescript_declarations());
-    declaration.push_str(accept_proposal_artifacts::typescript_declarations());
-    declaration.push_str(reject_proposal_operations_artifacts::typescript_declarations());
-    declaration.push_str(reopen_rejected_operations_artifacts::typescript_declarations());
-    declaration.push_str(replan_proposal_artifacts::typescript_declarations());
-    declaration.push_str(withdraw_proposal_artifacts::typescript_declarations());
-    declaration.push_str(reopen_withdrawn_proposal_artifacts::typescript_declarations());
-    declaration.push_str(proposal_generation_decision_artifacts::typescript_declarations());
-    declaration.push_str(archive_project_artifacts::typescript_declarations());
-    declaration.push_str(create_volume_artifacts::typescript_declarations());
-    declaration.push_str(update_volume_artifacts::typescript_declarations());
-    declaration.push_str(delete_volume_artifacts::typescript_declarations());
-    declaration.push_str(create_chapter_artifacts::typescript_declarations());
-    declaration.push_str(update_chapter_artifacts::typescript_declarations());
-    declaration.push_str(delete_chapter_artifacts::typescript_declarations());
-    declaration.push_str(set_current_chapter_artifacts::typescript_declarations());
-    declaration.push_str(undo_latest_author_action_artifacts::typescript_declarations());
-    declaration.push_str(author_edit_artifacts::typescript_declarations());
-    declaration.push_str(author_edit_outcome_artifacts::typescript_declarations());
-    declaration.push_str(snapshot_artifacts::typescript_declarations());
-    declaration.push_str(manuscript_tree_artifacts::typescript_declarations());
-    declaration.push_str(manuscript_search_artifacts::typescript_declarations());
-    declaration.push_str(manuscript_statistics_artifacts::typescript_declarations());
-    declaration.push_str(readable_export_artifacts::typescript_declarations());
-    declaration.push_str(readable_export_query_artifacts::typescript_declarations());
-    declaration.push_str(project_export_artifacts::typescript_declarations());
-    declaration.push_str(project_export_query_artifacts::typescript_declarations());
-    declaration.push_str(takeover_artifacts::typescript_declarations());
-    declaration.into_bytes()
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let functions = RELEASE1_OPERATIONS
+        .iter()
+        .map(|artifacts| (artifacts.typescript_declarations)())
+        .collect::<String>();
+    format!(
+        concat!(
+            "// @generated by storyos-contracts; do not edit.\n{}\n\n",
+            "export declare const GENERATED_CLIENT_REVISION: string;\n",
+            "export declare class StoryOSProtocolError extends Error {{\n  readonly code: string;\n  readonly status?: number;\n  readonly responseBody?: string;\n  readonly retryAfterSeconds?: number;\n}}\n",
+            "export interface StoryOSQueryOptions {{\n  baseUrl: string;\n  fetchImpl?: typeof fetch;\n  signal?: AbortSignal;\n}}\n",
+            "{}",
+        ),
+        types, functions,
+    )
+    .into_bytes()
 }
 
 // Keep this small generator beside the digest and output list that own it. The locked TypeScript
@@ -1721,277 +420,13 @@ fn release_profile_declaration_bytes() -> Vec<u8> {
     .to_vec()
 }
 
-fn golden_profile_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
-    json_bytes(&serde_json::to_value(profile).expect("protocol profile should serialize"))
-}
-
-fn invalid_profile_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
-    let mut invalid = serde_json::to_value(profile).expect("protocol profile should serialize");
-    invalid
-        .as_object_mut()
-        .expect("protocol profile should be an object")
-        .remove("release_identity");
-    json_bytes(&invalid)
-}
-
-fn boundary_profile_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
-    let mut boundary = profile.clone();
-    boundary.release_identity.generated_client_revision =
-        "storyos.typescript-client.release-0.v1".to_owned();
-    golden_profile_bytes(&boundary)
-}
-
-fn project_fixture() -> Value {
-    json!({
-        "schema_id": PROJECT_RESPONSE_SCHEMA_ID,
-        "correlation_id": "018f0000-0000-7001-8000-000000000005",
-        "project_scope": {"owner_user_id": "018f0000-0000-7001-8000-000000000001", "project_id": "018f0000-0000-7001-8000-000000000002"},
-        "project": {"project_id": "018f0000-0000-7001-8000-000000000002", "title": "受控项目", "open": {"kind": "current_chapter", "current_chapter_id": "018f0000-0000-7001-8000-000000000003"}}
-    })
-}
-
-fn chapter_fixture() -> Value {
-    json!({
-        "schema_id": CHAPTER_RESPONSE_SCHEMA_ID,
-        "correlation_id": "018f0000-0000-7001-8000-000000000006",
-        "project_scope": {"owner_user_id": "018f0000-0000-7001-8000-000000000001", "project_id": "018f0000-0000-7001-8000-000000000002"},
-        "project_activity_position": "0",
-        "chapter": {"chapter_id": "018f0000-0000-7001-8000-000000000003", "title": "第一章", "current_revision": {"revision_id": "018f0000-0000-7001-8000-000000000004", "body": "雨落在窗沿。", "blocks": [{"manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1", "block_kind": "paragraph", "text": "雨落在窗沿。"}]}}
-    })
-}
-
-fn challenge_fixture() -> Value {
-    json!({
-        "nonce": "4f9f5ad05c4d1294d4114fb15595d831b64e3f4312a17e639213ad36e941ca71",
-        "expires_at": "2026-08-12T08:05:00.000Z",
-        "limit_profile_revision": LIMIT_PROFILE_REVISION
-    })
-}
-
-fn editor_session_fixture(schema_id: &str) -> Value {
-    json!({
-        "schema_id": schema_id,
-        "correlation_id": "018f0000-0000-7001-8000-000000000020",
-        "project_scope": {"owner_user_id": "018f0000-0000-7001-8000-000000000001", "project_id": "018f0000-0000-7001-8000-000000000002"},
-        "editor_session": {
-            "editor_session_id": "018f0000-0000-7001-8000-000000000021",
-            "client_session_binding_ref": "binding:7af2", "client_session_generation": "1",
-            "client_contract_revision": WEB_CLIENT_CONTRACT_REVISION,
-            "security_policy_revision": "storyos.web-security-policy.release-1.v1",
-            "opened_at": "2026-08-13T08:00:00.000Z", "disposition": "open"
-        },
-        "writer": {"kind": "current_writer", "writer_generation": "1"},
-        "base_snapshot": {
-            "snapshot_id": "018f0000-0000-7001-8000-000000000022",
-            "chapter_id": "018f0000-0000-7001-8000-000000000003",
-            "project_activity_position": "0",
-            "authoritative_head_revision_id": "018f0000-0000-7001-8000-000000000004",
-            "proposal_head_revision_ids": [], "target_refs": ["manuscript:018f0000-0000-7001-8000-000000000003"],
-            "observed_ownership_partition": "authoritative",
-            "materialized_revision": {"revision_id": "018f0000-0000-7001-8000-000000000004", "body": "雨落在窗沿。", "blocks": [{"manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1", "block_kind": "paragraph", "text": "雨落在窗沿。"}]},
-            "materialized_payload_digest": {"algorithm": "sha256", "profile": "storyos.canonical-payload.sha256.v1", "value_hex_lowercase": "b".repeat(64)},
-            "created_at": "2026-08-13T08:00:00.000Z"
-        }
-    })
-}
-
-fn invalid_fixture(mut value: Value) -> Vec<u8> {
-    value
-        .as_object_mut()
-        .expect("fixture is an object")
-        .remove("project_scope");
-    json_bytes(&value)
-}
-
-fn boundary_fixture(mut value: Value) -> Vec<u8> {
-    value["project_scope"]["project_id"] =
-        Value::String("018f0000-0000-7001-8000-000000000102".to_owned());
-    json_bytes(&value)
-}
-
-fn project_fixture_bytes() -> Vec<u8> {
-    json_bytes(&project_fixture())
-}
-fn invalid_project_fixture_bytes() -> Vec<u8> {
-    invalid_fixture(project_fixture())
-}
-fn boundary_project_fixture_bytes() -> Vec<u8> {
-    boundary_fixture(project_fixture())
-}
-fn chapter_fixture_bytes() -> Vec<u8> {
-    json_bytes(&chapter_fixture())
-}
-fn invalid_chapter_fixture_bytes() -> Vec<u8> {
-    invalid_fixture(chapter_fixture())
-}
-fn boundary_chapter_fixture_bytes() -> Vec<u8> {
-    boundary_fixture(chapter_fixture())
-}
-fn challenge_fixture_bytes() -> Vec<u8> {
-    json_bytes(&challenge_fixture())
-}
-fn invalid_challenge_fixture_bytes() -> Vec<u8> {
-    let mut invalid = challenge_fixture();
-    invalid.as_object_mut().unwrap().remove("nonce");
-    json_bytes(&invalid)
-}
-fn boundary_challenge_fixture_bytes() -> Vec<u8> {
-    let mut boundary = challenge_fixture();
-    boundary["expires_at"] = json!("1970-01-01T00:00:00.000Z");
-    json_bytes(&boundary)
-}
-fn create_editor_session_fixture_bytes() -> Vec<u8> {
-    json_bytes(&editor_session_fixture(
-        CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-fn get_editor_session_fixture_bytes() -> Vec<u8> {
-    json_bytes(&editor_session_fixture(
-        GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-fn invalid_create_editor_session_fixture_bytes() -> Vec<u8> {
-    invalid_fixture(editor_session_fixture(
-        CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-fn boundary_create_editor_session_fixture_bytes() -> Vec<u8> {
-    boundary_fixture(editor_session_fixture(
-        CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-fn invalid_get_editor_session_fixture_bytes() -> Vec<u8> {
-    invalid_fixture(editor_session_fixture(
-        GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-fn boundary_get_editor_session_fixture_bytes() -> Vec<u8> {
-    boundary_fixture(editor_session_fixture(
-        GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-    ))
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
-}
-
 #[cfg(test)]
 #[path = "release1_create_project_artifacts_tests.rs"]
 mod create_project_tests;
 
 #[cfg(test)]
-#[path = "release1_list_projects_artifacts_tests.rs"]
-mod list_projects_tests;
-
-#[cfg(test)]
-#[path = "release1_manuscript_tree_artifacts_tests.rs"]
-mod manuscript_tree_tests;
-
-#[cfg(test)]
-#[path = "release1_manuscript_search_artifacts_tests.rs"]
-mod manuscript_search_tests;
-
-#[cfg(test)]
-#[path = "release1_manuscript_statistics_artifacts_tests.rs"]
-mod manuscript_statistics_tests;
-
-#[cfg(test)]
-#[path = "release1_readable_export_artifacts_tests.rs"]
-mod readable_export_tests;
-
-#[cfg(test)]
-#[path = "release1_readable_export_query_artifacts_tests.rs"]
-mod readable_export_query_tests;
-
-#[cfg(test)]
-#[path = "release1_project_export_artifacts_tests.rs"]
-mod project_export_tests;
-
-#[cfg(test)]
-#[path = "release1_project_export_query_artifacts_tests.rs"]
-mod project_export_query_tests;
-
-#[cfg(test)]
-#[path = "release1_archive_project_artifacts_tests.rs"]
-mod archive_project_tests;
-
-#[cfg(test)]
-#[path = "release1_create_volume_artifacts_tests.rs"]
-mod create_volume_tests;
-
-#[cfg(test)]
-#[path = "release1_update_volume_artifacts_tests.rs"]
-mod update_volume_tests;
-
-#[cfg(test)]
-#[path = "release1_delete_volume_artifacts_tests.rs"]
-mod delete_volume_tests;
-
-#[cfg(test)]
-#[path = "release1_update_chapter_artifacts_tests.rs"]
-mod update_chapter_tests;
-
-#[cfg(test)]
-#[path = "release1_delete_chapter_artifacts_tests.rs"]
-mod delete_chapter_tests;
-
-#[cfg(test)]
-#[path = "release1_create_chapter_artifacts_tests.rs"]
-mod create_chapter_tests;
-
-#[cfg(test)]
-#[path = "release1_set_current_chapter_artifacts_tests.rs"]
-mod set_current_chapter_tests;
-
-#[cfg(test)]
-#[path = "release1_undo_latest_author_action_artifacts_tests.rs"]
-mod undo_latest_author_action_tests;
-
-#[cfg(test)]
-#[path = "release1_update_project_artifacts_tests.rs"]
-mod update_project_tests;
-
-#[cfg(test)]
-#[path = "release1_project_assistance_artifacts_tests.rs"]
-mod project_assistance_tests;
-
-#[cfg(test)]
 #[path = "release1_agent_run_artifacts_tests.rs"]
 mod agent_run_tests;
-
-#[cfg(test)]
-#[path = "release1_agent_run_control_artifacts_tests.rs"]
-mod agent_run_control_tests;
-
-#[cfg(test)]
-#[path = "release1_proposal_artifacts_tests.rs"]
-mod proposal_tests;
-
-#[cfg(test)]
-#[path = "release1_accept_proposal_artifacts_tests.rs"]
-mod accept_proposal_tests;
-
-#[cfg(test)]
-#[path = "release1_reject_proposal_operations_artifacts_tests.rs"]
-mod reject_proposal_operations_tests;
-
-#[cfg(test)]
-#[path = "release1_reopen_rejected_operations_artifacts_tests.rs"]
-mod reopen_rejected_operations_tests;
-
-#[cfg(test)]
-#[path = "release1_replan_proposal_artifacts_tests.rs"]
-mod replan_proposal_tests;
-
-#[cfg(test)]
-#[path = "release1_reopen_withdrawn_proposal_artifacts_tests.rs"]
-mod reopen_withdrawn_proposal_tests;
-
-#[cfg(test)]
-#[path = "release1_withdraw_proposal_artifacts_tests.rs"]
-mod withdraw_proposal_tests;
 
 #[cfg(test)]
 #[path = "release1_fixture_corpus_tests.rs"]

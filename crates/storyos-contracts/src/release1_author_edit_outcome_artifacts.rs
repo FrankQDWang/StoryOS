@@ -1,4 +1,3 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
@@ -9,6 +8,48 @@ use crate::release1_author_edit_outcome::{
     GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
     GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID, GetApplyAuthorEditOutcomeRequest,
     GetApplyAuthorEditOutcomeResponse,
+};
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &GET_APPLY_AUTHOR_EDIT_OUTCOME,
+        &[
+            "server_derived_project_scope",
+            "sensitive_safe_read_origin",
+            "protected_client_session_binding",
+            "idempotency_key",
+            "project_command_challenge_proof",
+            "receipt_first_settlement_validation",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &GET_APPLY_AUTHOR_EDIT_OUTCOME,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&GET_APPLY_AUTHOR_EDIT_OUTCOME, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &GET_APPLY_AUTHOR_EDIT_OUTCOME,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -22,7 +63,7 @@ pub(super) const FIXTURE_PATHS: [&str; 3] = [
 ];
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
-    let mut schema = typed_schema::<GetApplyAuthorEditOutcomeRequest>(
+    let mut schema = schema_value::<GetApplyAuthorEditOutcomeRequest>(
         GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
         "StoryOS Apply Author Edit Outcome Request",
     );
@@ -32,11 +73,11 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
 }
 
 pub(super) fn response_schema_bytes() -> Vec<u8> {
-    let mut schema = typed_schema::<GetApplyAuthorEditOutcomeResponse>(
+    let mut schema = schema_value::<GetApplyAuthorEditOutcomeResponse>(
         GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
         "StoryOS Apply Author Edit Outcome Response",
     );
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     author_edit_artifacts::apply_u64_wire_constraints(&mut schema, &canonical_u64);
     schema["$defs"]["ApplyAuthorEditResponse"]["properties"]["local_intent_sequence"] =
         canonical_u64;
@@ -111,8 +152,8 @@ pub(super) fn openapi() -> String {
         })
         .collect::<String>();
     format!(
-        "  {}:\n    get:\n      operationId: {}\n      summary: Read one exact Apply Author Edit outcome\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: idempotency_key\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      responses:\n{responses}",
-        GET_APPLY_AUTHOR_EDIT_OUTCOME.path, GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id,
+        "    get:\n      operationId: {}\n      summary: Read one exact Apply Author Edit outcome\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: idempotency_key\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n      responses:\n{responses}",
+        GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id,
     )
 }
 
@@ -156,17 +197,4 @@ fn fixture() -> Value {
             "response": author_edit_artifacts::fixture()
         }
     })
-}
-
-fn typed_schema<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

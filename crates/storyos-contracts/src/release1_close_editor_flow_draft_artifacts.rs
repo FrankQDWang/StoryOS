@@ -1,4 +1,3 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
@@ -8,6 +7,65 @@ use crate::release1_close_editor_flow_draft::{
     CloseEditorFlowDraftEffect, CloseEditorFlowDraftInput, CloseEditorFlowDraftRequest,
     CloseEditorFlowDraftResponse, DraftCloseRefusal, EDITOR_FLOW_DRAFT_CLOSED_SCHEMA_ID,
     EditorFlowDraftClosed,
+};
+use crate::release1_operation_registry::{
+    GeneratedSchema, OperationArtifacts, RegisteredOperation, event_fixtures, fixture_triple,
+    method, operation_schemas,
+};
+use crate::release1_wire::{canonical_u64_wire_schema, generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &CLOSE_EDITOR_FLOW_DRAFT,
+        &[
+            "exact_scope",
+            "current_writer",
+            "exact_retained_open_source",
+            "explicit_editor_command",
+        ],
+    )],
+    schemas: || {
+        let [request, response] = operation_schemas(
+            &CLOSE_EDITOR_FLOW_DRAFT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        );
+        vec![
+            request,
+            response,
+            GeneratedSchema {
+                schema_id: EDITOR_FLOW_DRAFT_CLOSED_SCHEMA_ID,
+                path: EVENT_SCHEMA_PATH,
+                bytes: event_schema_bytes(),
+            },
+        ]
+    },
+    openapi: || method(&CLOSE_EDITOR_FLOW_DRAFT, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &CLOSE_EDITOR_FLOW_DRAFT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into_iter()
+        .chain(event_fixtures(
+            EVENT_FIXTURE_PATHS,
+            [
+                "storyos.golden.storyos.event.editor-flow-draft-closed.v1.positive.v1",
+                "storyos.golden.storyos.event.editor-flow-draft-closed.v1.negative.v1",
+            ],
+            CLOSE_EDITOR_FLOW_DRAFT.operation_id,
+            [|_| event_fixture_bytes(), |_| event_invalid_fixture_bytes()],
+        ))
+        .collect()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -39,7 +97,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
         input[field]["const"] = json!(value);
     }
     input["editor_session_id"]["format"] = json!("uuid");
-    input["writer_generation"] = super::release1_author_edit_artifacts::canonical_u64_wire_schema();
+    input["writer_generation"] = canonical_u64_wire_schema();
     input["correlation_id"]["format"] = json!("uuid");
     json_bytes(&schema)
 }
@@ -80,7 +138,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Discard one open retained Refused Edit Draft\n",
+            "    post:\n      operationId: {}\n      summary: Discard one open retained Refused Edit Draft\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: draft_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -89,10 +147,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        CLOSE_EDITOR_FLOW_DRAFT.path,
-        CLOSE_EDITOR_FLOW_DRAFT.operation_id,
-        request_schema,
-        responses,
+        CLOSE_EDITOR_FLOW_DRAFT.operation_id, request_schema, responses,
     )
 }
 
@@ -106,9 +161,8 @@ pub(super) fn typescript_type_declarations() -> String {
         CloseEditorFlowDraftEffect::decl(&config),
         CloseEditorFlowDraftResponse::decl(&config),
     ]
-    .iter()
-    .map(|declaration| format!("export {declaration}\n"))
-    .collect()
+    .map(|declaration| format!("export {declaration}"))
+    .join("\n")
 }
 
 pub(super) fn typescript_client_source() -> String {
@@ -185,24 +239,6 @@ fn command_fixture(created_at: &str) -> Value {
             "source":{"command_id":id,"author_command_admission_id":id,"receipt_id":id,"idempotency_key":id,"command_digest":digest},
             "author_action_sequence":"3","created_at":created_at}}
     })
-}
-
-pub(super) fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-pub(super) fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-pub(super) fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
 
 pub(super) const EVENT_SCHEMA_PATH: &str =

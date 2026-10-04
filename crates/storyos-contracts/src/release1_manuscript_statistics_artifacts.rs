@@ -3,11 +3,48 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::{LIMIT_PROFILE_REVISION, PUBLIC_PROTOCOL_RELEASE};
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_manuscript_statistics::{
     ChapterStatistics, GET_STATISTICS, GET_STATISTICS_REQUEST_SCHEMA_ID,
     GET_STATISTICS_RESPONSE_SCHEMA_ID, GetStatisticsResponse, ManuscriptStatisticsCompleteness,
     ManuscriptTotals,
+};
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &GET_STATISTICS,
+        &[
+            "server_derived_project_scope",
+            "canonical_snapshot_or_projection_watermark",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &GET_STATISTICS,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&GET_STATISTICS, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &GET_STATISTICS,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -32,7 +69,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
             "project_id": {"type": "string", "format": "uuid"},
             "required_watermark": {
                 "anyOf": [
-                    author_edit_artifacts::canonical_u64_wire_schema(),
+                    canonical_u64_wire_schema(),
                     { "type": "null" }
                 ]
             }
@@ -52,7 +89,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     schema["properties"]["projection_kind"]["const"] = json!("manuscript_statistics");
     schema["properties"]["counting_profile"]["const"] =
         json!("storyos.statistics.unicode-16.0.0.v1");
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     schema["properties"]["projection_generation"] = canonical_u64.clone();
     schema["properties"]["projection_watermark"] = canonical_u64.clone();
     schema["properties"]["required_watermark"] = json!({
@@ -105,12 +142,12 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Rebuild Chapter and manuscript statistics\n",
+            "    get:\n      operationId: {}\n      summary: Rebuild Chapter and manuscript statistics\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: required_watermark\n          in: query\n          required: false\n          schema:\n            type: string\n            pattern: '^(0|[1-9][0-9]*)$'\n",
             "      responses:\n{}",
         ),
-        GET_STATISTICS.path, GET_STATISTICS.operation_id, responses,
+        GET_STATISTICS.operation_id, responses,
     )
 }
 
@@ -211,10 +248,4 @@ fn statistics_fixture() -> Value {
         "redaction_profile": "storyos.author.v1",
         "limit_profile_revision": LIMIT_PROFILE_REVISION
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

@@ -3,11 +3,49 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
-use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_manuscript_tree::{
     GET_MANUSCRIPT_TREE, GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
     GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID, GetManuscriptTreeResponse, ManuscriptChapterNode,
     ManuscriptVolumeNode,
+};
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
+use crate::release1_wire::{canonical_u64_wire_schema, json_bytes};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &GET_MANUSCRIPT_TREE,
+        &[
+            "server_derived_project_scope",
+            "canonical_snapshot",
+            "tree_scope_join",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &GET_MANUSCRIPT_TREE,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&GET_MANUSCRIPT_TREE, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &GET_MANUSCRIPT_TREE,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -40,7 +78,7 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
     schema["title"] = json!("StoryOS Manuscript Tree Response");
     schema["properties"]["schema_id"]["const"] = json!(GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID);
     schema["properties"]["correlation_id"]["format"] = json!("uuid");
-    let canonical_u64 = author_edit_artifacts::canonical_u64_wire_schema();
+    let canonical_u64 = canonical_u64_wire_schema();
     schema["properties"]["tree_revision"] = canonical_u64.clone();
     if let Some(scope) = schema["$defs"].get_mut("ProjectScope") {
         scope["properties"]["owner_user_id"]["format"] = json!("uuid");
@@ -89,8 +127,8 @@ pub(super) fn openapi() -> String {
         })
         .collect::<String>();
     format!(
-        "  {}:\n    get:\n      operationId: {}\n      summary: Read the ordered canonical manuscript tree\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n      responses:\n{responses}",
-        GET_MANUSCRIPT_TREE.path, GET_MANUSCRIPT_TREE.operation_id,
+        "    get:\n      operationId: {}\n      summary: Read the ordered canonical manuscript tree\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n      responses:\n{responses}",
+        GET_MANUSCRIPT_TREE.operation_id,
     )
 }
 
@@ -163,10 +201,4 @@ fn tree_fixture(volumes: Vec<Value>) -> Value {
         },
         "volumes": volumes
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

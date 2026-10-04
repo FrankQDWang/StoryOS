@@ -1,7 +1,9 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::release1_operation_registry::{
+    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
+};
 use crate::release1_proposal_generation_decision::{
     COMPLETE_READY_PARTIAL_PROPOSAL, COMPLETE_READY_PARTIAL_PROPOSAL_DIGEST_PROFILE,
     COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
@@ -14,6 +16,95 @@ use crate::release1_proposal_generation_decision::{
     ContinueProposalGenerationRefusalReason, ContinueProposalGenerationRequest,
     ContinueProposalGenerationResponse, ProposalGenerationConflictReason,
     ProposalGenerationReceipt, ProposalGenerationReceiptResult, ProposalGenerationUndoDisposition,
+};
+use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[
+        RegisteredOperation::command(
+            &COMPLETE_READY_PARTIAL_PROPOSAL,
+            &[
+                "server_derived_project_scope",
+                "project_active",
+                "editor_session_writer_generation",
+                "current_ready_partial_generation",
+                "expected_candidate_digest",
+                "last_applied_stream_seq",
+                "expected_target_revisions",
+                "explicit_editor_control",
+            ],
+        ),
+        RegisteredOperation::command(
+            &CONTINUE_PROPOSAL_GENERATION,
+            &[
+                "server_derived_project_scope",
+                "project_active",
+                "editor_session_writer_generation",
+                "current_generation_ready_partial_or_ready",
+                "prior_generation_id",
+                "expected_candidate_digest",
+                "selected_pending_operations",
+                "expected_target_revisions",
+                "explicit_editor_control",
+            ],
+        ),
+    ],
+    schemas: || {
+        [
+            operation_schemas(
+                &COMPLETE_READY_PARTIAL_PROPOSAL,
+                (
+                    COMPLETE_REQUEST_SCHEMA_PATH,
+                    complete_request_schema_bytes(),
+                ),
+                (
+                    COMPLETE_RESPONSE_SCHEMA_PATH,
+                    complete_response_schema_bytes(),
+                ),
+            ),
+            operation_schemas(
+                &CONTINUE_PROPOSAL_GENERATION,
+                (
+                    CONTINUE_REQUEST_SCHEMA_PATH,
+                    continue_request_schema_bytes(),
+                ),
+                (
+                    CONTINUE_RESPONSE_SCHEMA_PATH,
+                    continue_response_schema_bytes(),
+                ),
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    },
+    openapi,
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        [
+            fixture_triple(
+                COMPLETE_FIXTURE_PATHS,
+                &COMPLETE_READY_PARTIAL_PROPOSAL,
+                [
+                    |_| complete_fixture_bytes(),
+                    |_| complete_invalid_fixture_bytes(),
+                    |_| complete_boundary_fixture_bytes(),
+                ],
+            ),
+            fixture_triple(
+                CONTINUE_FIXTURE_PATHS,
+                &CONTINUE_PROPOSAL_GENERATION,
+                [
+                    |_| continue_fixture_bytes(),
+                    |_| continue_invalid_fixture_bytes(),
+                    |_| continue_boundary_fixture_bytes(),
+                ],
+            ),
+        ]
+        .concat()
+    },
 };
 
 pub(super) const COMPLETE_REQUEST_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/complete-ready-partial-proposal-request.schema.json";
@@ -61,9 +152,8 @@ pub(super) fn continue_response_schema_bytes() -> Vec<u8> {
     )
 }
 
-pub(super) fn openapi() -> String {
-    format!(
-        "{}{}",
+pub(super) fn openapi() -> Vec<OpenApiMethod> {
+    vec![
         operation_openapi(
             &COMPLETE_READY_PARTIAL_PROPOSAL,
             COMPLETE_REQUEST_SCHEMA_PATH,
@@ -76,7 +166,7 @@ pub(super) fn openapi() -> String {
             CONTINUE_RESPONSE_SCHEMA_PATH,
             "Continue one Proposal Generation",
         ),
-    )
+    ]
 }
 
 pub(super) fn typescript_type_declarations() -> String {
@@ -289,7 +379,7 @@ fn operation_openapi(
     request_path: &str,
     response_path: &str,
     summary: &str,
-) -> String {
+) -> OpenApiMethod {
     let request_schema = generated_ref(request_path);
     let response_schema = generated_ref(response_path);
     let responses = operation
@@ -311,9 +401,9 @@ fn operation_openapi(
             format!("        '{status}':\n          description: {description}\n{retry_after}{content}")
         })
         .collect::<String>();
-    format!(
+    let yaml = format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: {}\n",
+            "    post:\n      operationId: {}\n      summary: {}\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: proposal_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -322,8 +412,12 @@ fn operation_openapi(
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        operation.path, operation.operation_id, summary, request_schema, responses,
-    )
+        operation.operation_id, summary, request_schema, responses,
+    );
+    OpenApiMethod {
+        path: operation.path,
+        yaml,
+    }
 }
 
 fn client_source(digest_name: &str, function_name: &str, profile: &str, path: &str) -> String {
@@ -333,22 +427,4 @@ fn client_source(digest_name: &str, function_name: &str, profile: &str, path: &s
     format!(
         "\nexport async function {digest_name}(request, cryptoImpl = globalThis.crypto) {{\n  if (!request || typeof request !== \"object\") throw new TypeError(\"{digest_name} requires request\");\n  const canonical = canonicalJson(request);\n  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n  return {{ algorithm: \"sha256\", profile: \"{profile}\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n\nexport async function {function_name}({{ projectId, proposalId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"{function_name} requires projectId\");\n  if (typeof proposalId !== \"string\" || proposalId.length === 0) throw new TypeError(\"{function_name} requires proposalId\");\n  if (!request || typeof request !== \"object\") throw new TypeError(\"{function_name} requires request\");\n  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"{function_name} requires security bindings\");\n  return commandJson({{ ...options, method: \"POST\", path: `{route}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
     )
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

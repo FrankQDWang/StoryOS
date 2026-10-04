@@ -1,12 +1,52 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
+};
 use crate::release1_set_current_chapter::{
     SET_CURRENT_CHAPTER, SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
     SET_CURRENT_CHAPTER_RESPONSE_SCHEMA_ID, SetCurrentChapterConflictReason,
     SetCurrentChapterEffect, SetCurrentChapterInput, SetCurrentChapterNoEffectReason,
     SetCurrentChapterRefusalReason, SetCurrentChapterRequest, SetCurrentChapterResponse,
+};
+use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &SET_CURRENT_CHAPTER,
+        &[
+            "server_derived_project_scope",
+            "project_active",
+            "editor_session_writer_generation",
+            "expected_current_chapter",
+            "expected_authoritative_head",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &SET_CURRENT_CHAPTER,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || method(&SET_CURRENT_CHAPTER, openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &SET_CURRENT_CHAPTER,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -70,7 +110,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    put:\n      operationId: {}\n      summary: Make one eligible Chapter current\n",
+            "    put:\n      operationId: {}\n      summary: Make one eligible Chapter current\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
@@ -78,7 +118,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        SET_CURRENT_CHAPTER.path, SET_CURRENT_CHAPTER.operation_id, request_schema, responses,
+        SET_CURRENT_CHAPTER.operation_id, request_schema, responses,
     )
 }
 
@@ -195,22 +235,4 @@ fn command_fixture(created_at: &str) -> Value {
             "project_activity_position": "4"
         }
     })
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
