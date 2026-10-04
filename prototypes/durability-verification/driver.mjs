@@ -113,9 +113,9 @@ async function takeover(editor, generation) {
   }, editor.session, { editorSessionId: editor.value.editor_session.editor_session_id });
 }
 async function rename(session, title) {
-  const project = await api.getProject(options(session));
+  const revision = (await monitor.query(`SELECT revision::text FROM storyos.projects WHERE ${scope}`))[0];
   return command('updateProject', '', { command_schema: 'storyos.command.update-project.request.v1',
-    update_project_input: { ...common(), title, expected_project_revision: project.project.revision } }, session, {}, 'PATCH');
+    update_project_input: { ...common(), title, expected_project_revision: revision } }, session, {}, 'PATCH');
 }
 async function counts() {
   return monitor.json(`SELECT json_build_object('commits',(SELECT count(*) FROM storyos.authoritative_commits WHERE ${scope}),
@@ -131,11 +131,12 @@ async function blocked(count, pattern = '') {
       WHERE application_name='durability_server' AND wait_event_type='Lock' AND query LIKE '%${pattern}%'`);
     if (rows.length >= count) { record('barrier', rows); return rows; }
   }
+  record('activity_at_deadline', await monitor.json("SELECT coalesce(json_agg(json_build_object('app',application_name,'state',state,'wait',wait_event,'query',query)), '[]') FROM pg_stat_activity WHERE usename='storyos_runtime'"));
   throw new Error(`Barrier not reached: ${count} ${pattern}`);
 }
 const capture = async promise => {
-  try { return { ok: true, value: await promise }; }
-  catch (e) { return { ok: false, status: e.status ?? 'transport', problem: e.responseBody ? JSON.parse(e.responseBody) : e.message }; }
+  try { const value = await promise; record('request_settled', { ok: true }); return { ok: true, value }; }
+  catch (e) { const result = { ok: false, status: e.status ?? 'transport', problem: e.responseBody ? JSON.parse(e.responseBody) : e.message }; record('request_settled', result); return result; }
 };
 async function hold(table, predicate = scope) { await gate.query(`BEGIN; SELECT 1 FROM storyos.${table} WHERE ${predicate} FOR UPDATE`); }
 async function cut(mode, rows) {
@@ -170,7 +171,7 @@ async function run() {
     const cmd = await edit(writer, 'cut'), before = await counts(), body = await chapter();
     await hold(phase === 'admission' ? 'command_idempotency' : 'authoritative_heads',
       phase === 'admission' ? `${scope} AND idempotency_key='${cmd.key}'` : `${scope} AND manuscript_object_id='${CHAPTER}'`);
-    const pending = capture(cmd.send()); const rows = await blocked(1, phase === 'admission' ? 'FOR UPDATE OF challenge' : 'FOR UPDATE OF head');
+    const pending = capture(cmd.send()); const rows = await blocked(1);
     await cut(mode, rows); record('interrupted_reply', await pending); await gate.query('ROLLBACK');
     if (mode === 'server') await start();
     assert.deepEqual(await chapter(), body); record('before_recovery', { before, after: await counts() });
@@ -184,7 +185,7 @@ async function run() {
     await smoke(writer);
   } else if (scenario === 'concurrent-rename' || scenario === 'concurrent-retry') {
     const first = await rename('a', 'First'), second = scenario === 'concurrent-retry' ? first : await rename('b', 'Second');
-    await hold('projects'); const p1 = capture(first.send()); await blocked(1, 'FROM storyos.projects');
+    await hold('projects'); const p1 = capture(first.send()); await blocked(1);
     const p2 = capture(second.send()); await blocked(2); await gate.query('ROLLBACK');
     const replies = await Promise.all([p1, p2]); record('concurrent_results', replies);
     const ack = await first.send(); assert.deepEqual(await first.send(), ack);
@@ -204,7 +205,7 @@ async function run() {
     const mode = scenario.slice('takeover-'.length), observer = await open('b');
     const old = await edit(writer, 'OLD'), take = await takeover(observer, writer.value.writer.writer_generation);
     const before = await counts(); await hold('authoritative_heads', `${scope} AND manuscript_object_id='${CHAPTER}'`);
-    const pending = capture(old.send()); const rows = await blocked(1, 'FOR UPDATE OF head');
+    const pending = capture(old.send()); const rows = await blocked(1);
     if (mode !== 'concurrent') { await cut(mode, rows); record('interrupted_old', await pending); }
     if (mode === 'server') await start();
     const won = await take.send(); assert.equal(won.result.kind, 'takeover_applied');

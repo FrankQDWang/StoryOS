@@ -61,3 +61,13 @@
   Write execution evidence to ignored target first, then retain it after the
   command ends; this avoids the verification wrapper's source-change status.
   Next: concurrent commands and Admission/Core interruption schedules.
+- Step 4: `concurrent-rename` reached two observed lock waits. The first legal
+  rename succeeded; the other returned HTTP 503 `project_store_unavailable`.
+  PostgreSQL reported `could not serialize access due to concurrent update`.
+  A subsequent Author Edit succeeded. D3/concurrency has a reproducible failure.
+  Preliminary evidence: `target/durability-verification/concurrent-rename-v3.json`.
+  Probe input correction: GetProject omits revision, so read the fixture's
+  current Project revision through PostgreSQL. Wait queries use visible SQL
+  prefixes; PostgreSQL truncates long activity query text.
+  Root-cause candidates: missing whole-transaction retry, exhausted retry, or
+  invalid binding. Next: replay, locate the cause, and run takeover schedules.
