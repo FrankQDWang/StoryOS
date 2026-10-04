@@ -2,12 +2,16 @@
 
 ## Resume here
 
-- Status: active. Inventory captured; node-contract source review complete.
-- Worktree: `/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS`.
-- Branch: `codex/test-asset-audit`.
-- Fixed baseline: `479224809cdaae997cda51cb8853e3fafa242b65` (fetched `origin/main`, 2026-10-05 Asia/Singapore).
-- Read this file before each resumed session. Do not refresh the audit baseline.
-- Next: review crates/storyos-core/src next. Revisit cross-layer owners as each directory is read.
+- Status: active. 82 test cases in 18 files have source verdicts. The audit is not complete.
+- Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
+- Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
+- Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
+- Complete directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases).
+- Partial directory: crates/storyos-core/src (9 files, 49 tests). core.json and core.md contain its completed files. Do not repeat those reviews.
+- Next: set_current_chapter_tests.rs, undo_latest_author_action_tests.rs, then the remaining Core files. Compare exact inputs and assertions, not test names. After Core, proceed through Application, Adapter, Server, Contracts, and remaining Web directories.
+- No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
+- No active processes or temporary source mutations remain at this checkpoint.
+- A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
 
 ## Contract
 
@@ -70,3 +74,6 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - make release-package PASS in 352.63 seconds, with install, strict TypeScript checks, Vite build, Rust release build, and offline binary checks. No full tests ran. Package source: d1d8393cd32156f0485b5982a2cf37f5515fdcc3; manifest sha256:f4eb3d9d8aeba46dc2bfacfb881c43838a676c2a6a2be782623ab2b775e90bba. Report: target/verification/88f7e20a28e345b380ae15c2133bd0e4/report.json. Product sources equal the audit baseline; later report commits do not change package behavior.
 - Docker is available. Use only scripts/dev-postgres.sh run for future database checks.
 - Read-ahead (not adjudicated): set_current_chapter_tests.rs, undo_latest_author_action_tests.rs, accept_proposal_tests.rs, append_proposal_generation_batch_tests.rs, open_block_proposal_tests.rs, pause_proposal_generation_tests.rs, compact_active_context_tests.rs, archive_path_tests.rs, readable_export_tests.rs. Re-read the exact body when needed; do not treat this list as completed coverage.
+
+- Latest baseline result: startup 7/7 and two browser cases 2/2 PASS. BASELINES.md and baseline-evidence.json preserve the actual runner outcomes, including the earlier SOURCE-CHANGED result.
+- Current partial counts: {'DELETE': 55, 'KEEP': 25, 'MERGE': 1, 'MOVE': 1}; 829 candidate source lines. These are not full-repository totals or mutation-validated savings.
