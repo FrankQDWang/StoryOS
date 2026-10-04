@@ -4,7 +4,7 @@
 - Wayfinder resolution: [Define the Modular-Monolith and Repository Governance Boundaries](https://github.com/FrankQDWang/StoryOS/issues/59)
 - Canonical glossary: [`GLOSSARY.md`](../../GLOSSARY.md)
 - Repository-wide rules: [`AGENTS.md`](../../AGENTS.md)
-- Related decisions: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md), [ADR 0005](../adr/0005-require-ordered-context-assembly-before-destination-disclosure.md), [ADR 0006](../adr/0006-adopt-foundation-monorepo-governance.md), and [ADR 0007](../adr/0007-preserve-process-separable-server-worker-boundary.md)
+- Related decisions: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md), [ADR 0005](../adr/0005-require-ordered-context-assembly-before-destination-disclosure.md), [ADR 0006](../adr/0006-adopt-foundation-monorepo-governance.md), [ADR 0007](../adr/0007-preserve-process-separable-server-worker-boundary.md), and [ADR 0040](../adr/0040-show-assistance-results-not-run-internals-to-the-author.md)
 
 ## 1. Purpose and authority
 
@@ -114,7 +114,7 @@ own every mechanism convenient to its current caller.
 | **Contracts** | External HTTP/SSE DTOs, public schema/protocol identifiers, compatibility profiles, public limits, generated-contract metadata, and persisted/cross-process DTOs needing a stable wire owner | Domain truth, SQL rows, provider SDK behavior, browser state, or manually edited generated artifacts |
 | **Core** | Project-Scoped domain commands, Authoritative State, Core Proposals, Acceptance, immutable Revisions, Receipts, and domain-owned transactional outcomes | HTTP, cookies, SQL/RLS syntax, Provider/MCP SDKs, queues, DOM, or UI workflow state |
 | **Agent Kernel** | The general project-scoped Agent Loop, AgentRun/Subrun orchestration, plans, budgets, waits, finalization, causal execution records, and Kernel-owned ports | Novel-outline policy, direct authoritative writes, provider implementation, or a task-specific workflow runtime |
-| **Context, Memory, and Research** | Operation Requirement, context gates, retrieval/projection policy, manifests, Memory/Research semantics, source/disclosure eligibility, and author inspection/control semantics | Hidden truth, direct Provider I/O, a global cache namespace, or implicit author instructions |
+| **Context, Memory, and Research** | Operation Requirement, context gates, retrieval/projection policy, manifests, Memory/Research semantics, source/disclosure eligibility, author control semantics, author inspection of Memory and Research Artifacts, and context and Run evidence inspection as a read-only audit query, not an author view (ADR 0040) | Hidden truth, direct Provider I/O, a global cache namespace, or implicit author instructions |
 | **Tool, Skill, and MCP** | ToolSpec, SkillPackage, Registration, Capability/Approval semantics, Tool Gateway policy, MCP trust, and App-action ingress | A second Agent runtime, direct authority mutation, ambient project context, or raw client authority |
 | **Model Gateway** | Provider-neutral registration, routing, route decisions, Invocation/Attempt semantics, capability mapping, recovery, and fallback policy | Provider-selected authority, secret storage, ambient context, or a permanent Bailian dependency |
 | **Transcript and App Host** | Message projections, App View Artifacts, resource/instance lifecycle, sandbox mediation, static fallbacks, and App action routing | App-owned canonical state, iframe/DOM persistence, direct Tool invocation, or editor Proposal handling |

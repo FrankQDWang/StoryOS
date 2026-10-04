@@ -1,5 +1,10 @@
 # Codex execution options for the Stage 3 repair graph
 
+> **Historical document.** This Codex-only execution proposal for Stage 3 is not
+> current process. From Stage 4, [Issue tracker](../agents/issue-tracker.md) and
+> [Repository verification](../agents/verification.md) apply to Claude Code and
+> Codex. This file is retained as research evidence from 2026-09-30.
+
 Status: research and proposed operating plan. No implementation authorization.
 Date: 2026-09-30.
 Repository baseline: `7ae035119749c5f5dc93794797aa71fd0b4c79c5`.
