@@ -1,11 +1,14 @@
 use storyos_application::{DeleteVolumeInput, VolumeId};
 use storyos_core::TransitionOutcome;
 
+use super::command_admission::{
+    ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
+    positive,
+};
 use super::contract_reason::contract_reason;
-use super::structure_admission::{SettledReceipt, StructureRoute, admit, positive};
 use super::*;
 
-const DELETE_VOLUME: StructureRoute = StructureRoute {
+const DELETE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Delete Volume",
     command_kind: "deleteVolume",
     method: contracts::DELETE_VOLUME_METHOD,
@@ -13,6 +16,9 @@ const DELETE_VOLUME: StructureRoute = StructureRoute {
     schema_id: contracts::DELETE_VOLUME_REQUEST_SCHEMA_ID,
     digest_profile: contracts::DELETE_VOLUME_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::DeleteVolume,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn delete_volume(

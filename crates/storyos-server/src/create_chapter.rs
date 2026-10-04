@@ -1,13 +1,14 @@
 use storyos_application::{CreateChapterInput, CreateChapterPublicOrder};
 use storyos_core::TransitionOutcome;
 
-use super::contract_reason::contract_reason;
-use super::structure_admission::{
-    SettledReceipt, StructureRoute, admit, positive, structure_title,
+use super::command_admission::{
+    ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
+    positive, structure_title,
 };
+use super::contract_reason::contract_reason;
 use super::*;
 
-const CREATE_CHAPTER: StructureRoute = StructureRoute {
+const CREATE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Create Chapter",
     command_kind: "createChapter",
     method: contracts::CREATE_CHAPTER_METHOD,
@@ -15,6 +16,9 @@ const CREATE_CHAPTER: StructureRoute = StructureRoute {
     schema_id: contracts::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
     digest_profile: contracts::CREATE_CHAPTER_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::CreateChapter,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn create_chapter(
