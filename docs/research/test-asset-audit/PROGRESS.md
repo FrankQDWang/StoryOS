@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 513 test cases in 130 files have source verdicts. The audit is not complete.
+- Status: active. 545 test cases in 142 files have source verdicts. The audit is not complete.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
 - Complete source-review directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests); crates/storyos-server/src (11 files, 59 tests); crates/storyos-contracts/src (14 files, 62 tests). Cross-directory reconciliation and mutation review are still pending.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: apps/web/test/node-postgresql, then browser-source, browser-exact-dist, node-process-cut and support. All 482 Rust tests in 122 files have source verdicts; CONTRACTS_CHECKPOINT.md records the last Rust directory. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
+- Next: continue apps/web/test/node-postgresql structural command families. Its first 32 tests in 12 files are adjudicated; read NODE_POSTGRESQL_CHECKPOINT.md. Then browser-source, browser-exact-dist, node-process-cut and support. All 482 Rust tests in 122 files have source verdicts; CONTRACTS_CHECKPOINT.md records the last Rust directory. Reconcile cross-directory covering-test chains and accepted-contract D5 rows before sampling.
 - No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -34,7 +34,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | Directory | State | Evidence |
 |---|---|---|
 | apps/web/test/node-contract | Source review complete | node-contract.md; 31 runtime cases, 8 files; mutation review pending |
-| apps/web/test/node-postgresql | Pending | inventory.json |
+| apps/web/test/node-postgresql | Partial | node-postgresql.md; 32 tests in 12 files; NODE_POSTGRESQL_CHECKPOINT.md |
 | apps/web/test/browser-source | Pending | inventory.json |
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
 | apps/web/test/node-process-cut | Pending | inventory.json |
@@ -111,3 +111,7 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Contracts directory complete: 62 tests in 14 files; {'KEEP': 16, 'DELETE': 46}; 1521 candidate source lines, including three exclusive adjacent expected-JSON helpers. Ten module-link files have dispositions. No product/test/generated changes.
 - All Rust inventory pairs now match verdicts: 482 tests in 122 test files. Remaining Web source review and support-file disposition are pending.
 - Current cumulative source review: 513 cases in 130 files; {'DELETE': 304, 'KEEP': 196, 'MERGE': 10, 'MOVE': 3}; 11568 unioned candidate source lines. Random self-check remains 0/30. No samples selected, temporary mutations or active processes.
+
+- Node PostgreSQL checkpoint: 32 tests in 12 files reviewed; {'DELETE': 1, 'KEEP': 27, 'MERGE': 4}. Protocol hosting, Project/Challenge admission, library/tree/search, Snapshot/Activity, rename and Archive are covered. Directory remains incomplete.
+- Evidence correction: the two Author Edit count-limit subcases can be masked by invalid nonce rejection; CT007 and NP008 document this. NC022 was corrected to reflect both actual UUID validation sites. No runtime mutation proof is claimed.
+- Current cumulative source review: 545 cases in 142 files; {'DELETE': 305, 'KEEP': 223, 'MERGE': 14, 'MOVE': 3}; 11578 unioned candidate source lines. Self-check 0/30. Product and existing tests remain unchanged; no active processes.

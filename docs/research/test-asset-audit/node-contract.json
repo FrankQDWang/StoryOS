@@ -252,7 +252,7 @@
     "test": "packaged production startup refuses session mappings that are not exactly one handle",
     "verdict": "MOVE",
     "reason": "L1",
-    "evidence": "Run this at the packaged startup boundary with all later prerequisites valid, and assert the specific refusal. Current cases remove DATABASE_URL: bypassing session validation can still exit 1 there, and the invalid User UUID is parsed only after Storage Activation and bind. Parser rejection is independently covered; production startup integration is not proved by these assertions.",
+    "evidence": "Run this at the packaged startup boundary with all later prerequisites valid, and assert the specific refusal. Current cases remove DATABASE_URL: bypassing session validation can still exit 1 there, and the broad process-exit oracle does not distinguish malformed mappings from that later failure. The User UUID is checked in the startup parser and again after Storage Activation; this case does not isolate either check. Parser rejection is independently covered; production startup integration is not proved by these assertions.",
     "coverage": "crates/storyos-server/src/session_bootstrap_tests.rs:10",
     "remove": null
   },

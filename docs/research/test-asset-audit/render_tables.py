@@ -26,7 +26,7 @@ def render(name):
                       row["reason"], row["evidence"], row["coverage"]]
             text.append("| " + " | ".join(value.replace("|", "\\|") for value in values) + " |")
         text.append("")
-    (OUT / f"{name}.md").write_text("\n".join(text) + "\n")
+    (OUT / f"{name}.md").write_text("\n".join(text).rstrip() + "\n")
 
 
 def append(name, groups):

@@ -75,7 +75,7 @@
     "test": "apply_author_edit_contract_activates_the_bounded_batch_policy",
     "verdict": "DELETE",
     "reason": "D2",
-    "evidence": "Method/path/revision literals and policy-constant equality repeat source declarations. Real HTTP commits a bounded two-unit batch and tests count/body limits; the registry test checks published method/path/schema. No distinct execution is established by serializing a single literal ReplaceSelection variant or copying policy numbers.",
+    "evidence": "Method/path/revision literals and policy-constant equality repeat source declarations. Real HTTP commits a bounded two-unit batch and discriminates the body-byte ceiling; its count-limit subcases can be masked by their invalid nonce, so they are not proof of count rejection; the registry test checks published method/path/schema. No distinct execution is established by serializing a single literal ReplaceSelection variant or copying policy numbers.",
     "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; crates/storyos-contracts/src/release1_artifacts_tests.rs:735",
     "remove": [
       57,
