@@ -49,6 +49,10 @@
     "proposal-structure-356.json.gz": "2d1425d6fc66868e38ead67f6ed1ef9e7aa5cf715e0ff058bf06928aef234b39",
     "expiry-450.json.gz": "acbaff8f8ab676839b6c52b176eab24569682550b34c3e2c5cee0f77b7521e35",
     "target-refusal-380-399.json.gz": "e0e231da90bd1231e3c1715f62183252ec073fd3f351a097f9c02c980b7797bb",
-    "zero-revision-1.json.gz": "3c2b0ec5924d293caba723494a3ba7d643cbafb564289e50f248a8e75d29234f"
-  }
+    "zero-revision-1.json.gz": "3c2b0ec5924d293caba723494a3ba7d643cbafb564289e50f248a8e75d29234f",
+    "final-smoke-460.json.gz": "079908c1c390e4189a364f8d02587f647e8188b8f0748a3f8b48981bbbcbcf26"
+  },
+  "validation_only_evidence": [
+    "final-smoke-460.json.gz"
+  ]
 }

@@ -73,3 +73,7 @@ Replay reconstructs the same semantic sequence with new database identities and 
 - All tracked changes are under `prototypes/reference-model/` and `docs/research/reference-model/`.
 
 The primary command denominator follows the four requested stages and includes every generated effect and reason for those commands. Auxiliary Draft/assistance setup paths are retained; this is not a Cartesian-product proof of every optional DraftRetry metadata combination, browser interaction, provider, or concurrency schedule.
+
+## Final validation
+
+Final smoke seed 460 completes the changed refusal-status assertions through the real Server/PostgreSQL boundary. Its sole difference is known D-002. This validation trace is retained separately and does not increase coverage counts. Python syntax compilation, whitespace checks, and the fixed-base changed-path audit pass. The path audit finds no tracked change outside the two authorized directories.

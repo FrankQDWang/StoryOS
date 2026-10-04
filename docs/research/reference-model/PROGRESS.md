@@ -239,3 +239,9 @@ A final oracle review identified A-012: Admission-versus-Core precedence for a m
 Seeds 380-399 pass all strengthened target-refusal invariants: current candidate Head, candidate text, axes, prose, and zero allocations. Seed 1 independently replays the zero-revision HTTP 400 observation. Both traces are retained. The generated ledger has 99 typed branches at threshold, 24 justified reachability limits, two foundation-only gaps, and zero unclassified compared-value differences. Its 51 difference assertions map to the five minimized implementation defects; Project allocation is separately audited across distinct Receipts.
 
 All four stage criteria are met. The benchmark preserves known defects and contract questions; it does not fix product behavior. The report and replay guide are complete. Final work: one impact-scoped writer smoke for the refusal-status assertion, whitespace/path checks, and optional branch push.
+
+## Step 23: Delivery complete
+
+Final writer smoke seed 460 completed in 14 seconds. Its only comparison failure is known D-002; all writer, binding, and rate checks pass. Evidence: `final-smoke-460.json.gz`, managed run `418cd781f0c4417d933168210bd93c82`. It is validation-only evidence and does not inflate the reported threshold counts. Python syntax compilation and git diff whitespace checks pass. The fixed-base path audit finds no tracked change outside the two allowed directories.
+
+All four stages and the final report are complete. No implementation work remains for this goal. Known defects stay recorded and reproducible; no product fix, main change, other-worktree change, Issue, PR, full test suite, or verify-local run was made. Delivery branch: `codex/reference-model`.
