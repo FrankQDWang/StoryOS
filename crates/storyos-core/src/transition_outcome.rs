@@ -80,6 +80,7 @@ impl<A, N: ReasonCode, C: ReasonCode, R: ReasonCode> TransitionOutcome<A, N, C, 
         }
     }
 
+    /// Replaces the applied value and keeps every other outcome.
     pub fn map_applied<B>(self, applied: impl FnOnce(A) -> B) -> TransitionOutcome<B, N, C, R> {
         match self {
             Self::Applied(value) => TransitionOutcome::Applied(applied(value)),

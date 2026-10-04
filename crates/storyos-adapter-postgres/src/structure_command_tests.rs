@@ -9,9 +9,7 @@ use storyos_application::{
     UpdateVolumeInput, UpdateVolumeSettlement, issue_project_command_challenge,
 };
 use storyos_application::{ChapterId, IssueProjectCommandChallenge, VolumeId};
-use storyos_core::{
-    CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome, UpdateVolumeApplied,
-};
+use storyos_core::{CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome};
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
@@ -21,9 +19,7 @@ use super::{
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::update_volume_tests::{
-    UpdateFixture, apply_volume, seed_project, update_command, update_issue,
-};
+use crate::update_volume_tests::seed_project;
 
 /// One admitted command envelope and its typed Manuscript Structure input.
 #[derive(Clone)]
@@ -124,8 +120,6 @@ pub(crate) fn applied<A: Clone + Debug, N: Debug, C: Debug, R: Debug>(
     }
 }
 
-const BYTES: &[u8] = br#"{"expected_tree_revision":"3","order":"2","title":"Volume B"}"#;
-const DIGEST: &str = "sha256:storyos.command.updateVolume.jcs.v1:contract";
 const MISSING_VOLUME: &str = "018f0000-0000-7001-8000-00000000ffff";
 
 async fn stores() -> (PostgresProjectReader, Client) {
@@ -136,40 +130,6 @@ async fn stores() -> (PostgresProjectReader, Client) {
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(connection);
     (PostgresProjectReader::new(runtime_url), admin)
-}
-
-/// A Project with Volumes A and B at Manuscript Tree Revision 3; returns the Volume A identity.
-async fn two_volumes(store: &PostgresProjectReader, suffix: u16) -> (ProjectScope, String) {
-    let scope = seed_project(store, &format!("{suffix:04x}")).await;
-    let volume_a = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
-    let volume_b = br#"{"expected_tree_revision":"2","title":"Volume B"}"#;
-    let digest = |bytes: &[u8]| {
-        format!(
-            "sha256:storyos.command.createVolume.jcs.v1:{}",
-            crate::author_edit::sha256_hex(bytes)
-        )
-    };
-    let volume_a_id = apply_volume(
-        store,
-        &scope,
-        &format!("{:04x}", suffix + 1),
-        "Volume A",
-        volume_a,
-        &digest(volume_a),
-        /*expected_tree_revision*/ 1,
-    )
-    .await;
-    apply_volume(
-        store,
-        &scope,
-        &format!("{:04x}", suffix + 2),
-        "Volume B",
-        volume_b,
-        &digest(volume_b),
-        /*expected_tree_revision*/ 2,
-    )
-    .await;
-    (scope, volume_a_id)
 }
 
 /// Counts the Receipt, Author Action, Activity, Commit, and Snapshot rows of one Receipt.
@@ -501,48 +461,148 @@ async fn every_structural_outcome_replays_its_first_settlement_and_writes_author
     );
 }
 
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn an_in_progress_exact_retry_conflicts_and_writes_no_row() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let (scope, volume_a) = two_volumes(&store, 0x5c10).await;
-    let issue = update_issue(&scope, "5c13", DIGEST);
-    issue_project_command_challenge(&store, &issue)
-        .await
-        .unwrap();
+/// One applicable Create Volume in a new Project.
+async fn create_volume_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<CreateVolumeInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let input = CreateVolumeInput {
+        title: "Volume".to_owned(),
+        expected_tree_revision: 1,
+    };
+    issued(store, &scope, base + 9, &CREATE_VOLUME, input).await
+}
+
+/// One applicable Update Volume in a new Project with one Volume.
+async fn update_volume_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<UpdateVolumeInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let volume_id = new_volume(store, &scope, base + 1, 1).await;
+    let input = UpdateVolumeInput {
+        volume_id,
+        title: "Renamed".to_owned(),
+        order: 1,
+        expected_tree_revision: 2,
+    };
+    issued(store, &scope, base + 9, &UPDATE_VOLUME, input).await
+}
+
+/// One applicable Delete Volume in a new Project with one empty Volume.
+async fn delete_volume_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<DeleteVolumeInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let volume_id = new_volume(store, &scope, base + 1, 1).await;
+    let input = DeleteVolumeInput {
+        volume_id,
+        expected_tree_revision: 2,
+    };
+    issued(store, &scope, base + 9, &DELETE_VOLUME, input).await
+}
+
+/// One applicable Create Chapter in a new Project with one Volume.
+async fn create_chapter_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<CreateChapterInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let volume_id = new_volume(store, &scope, base + 1, 1).await;
+    let input = CreateChapterInput {
+        volume_id: volume_id.as_ref().to_owned(),
+        title: "Chapter".to_owned(),
+        placement: CreateChapterPlacement::Append,
+        expected_tree_revision: 2,
+    };
+    issued(store, &scope, base + 9, &CREATE_CHAPTER, input).await
+}
+
+/// One applicable Update Chapter in a new Project with one Volume and one Chapter.
+async fn update_chapter_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<UpdateChapterInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let volume_id = new_volume(store, &scope, base + 1, 1).await;
+    let chapter_id = new_chapter(store, &scope, base + 2, &volume_id, 2).await;
+    let input = UpdateChapterInput {
+        chapter_id,
+        title: "Renamed".to_owned(),
+        order: 1,
+        expected_tree_revision: 3,
+    };
+    issued(store, &scope, base + 9, &UPDATE_CHAPTER, input).await
+}
+
+/// One applicable Delete Chapter in a new Project with one Volume and one Chapter.
+async fn delete_chapter_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<DeleteChapterInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let volume_id = new_volume(store, &scope, base + 1, 1).await;
+    let chapter_id = new_chapter(store, &scope, base + 2, &volume_id, 2).await;
+    let input = DeleteChapterInput {
+        chapter_id,
+        expected_tree_revision: 3,
+    };
+    issued(store, &scope, base + 9, &DELETE_CHAPTER, input).await
+}
+
+fn with_new_request_ids<I: Clone>(call: &CommandCall<I>) -> CommandCall<I> {
+    let mut retry = call.clone();
+    retry.envelope.ids = AuthorCommandAdmissionIds {
+        command_id: Uuid::now_v7().to_string(),
+        author_command_admission_id: Uuid::now_v7().to_string(),
+        receipt_id: Uuid::now_v7().to_string(),
+    };
+    retry
+}
+
+/// Marks the Command Challenge consumed and the Command Idempotency Fence in progress, then retries.
+///
+/// Returns whether the retry is a binding conflict and the rows of the retry Receipt.
+async fn in_progress_retry<C: StructureCommand>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+) -> (bool, [i64; 5]) {
     admin
         .batch_execute(&format!(
             "UPDATE storyos.project_command_challenges SET consumed_at = clock_timestamp()
               WHERE idempotency_key = '{key}';
              UPDATE storyos.command_idempotency SET outcome_kind = 'in_progress'
               WHERE idempotency_key = '{key}';",
-            key = issue.binding.idempotency_key,
+            key = call.envelope.challenge_binding.idempotency_key,
         ))
         .await
         .unwrap();
-    let call = update_command(
-        issue.binding,
-        &issue.nonce_digest,
-        "5c13",
-        UpdateFixture {
-            volume_id: &volume_a,
-            title: "Volume B",
-            order: 2,
-            expected_tree_revision: 3,
-            bytes: BYTES,
-        },
-    );
-    assert!(matches!(
-        update_volume(&store, &call).await,
-        Err(ProjectCommandError::BindingConflict)
-    ));
-    assert_eq!(
-        settlement_rows(&admin, &call.envelope.ids.receipt_id).await,
-        [0; 5]
-    );
+    let retry = settle_structure_command(store, &call.envelope, &call.input).await;
+    (
+        matches!(retry, Err(ProjectCommandError::BindingConflict)),
+        settlement_rows(admin, &call.envelope.ids.receipt_id).await,
+    )
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn every_structural_in_progress_exact_retry_conflicts_and_writes_no_row() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        in_progress_retry(&store, &admin, &create_volume_call(&store, 0x5e00).await).await,
+        in_progress_retry(&store, &admin, &update_volume_call(&store, 0x5e10).await).await,
+        in_progress_retry(&store, &admin, &delete_volume_call(&store, 0x5e20).await).await,
+        in_progress_retry(&store, &admin, &create_chapter_call(&store, 0x5e30).await).await,
+        in_progress_retry(&store, &admin, &update_chapter_call(&store, 0x5e40).await).await,
+        in_progress_retry(&store, &admin, &delete_chapter_call(&store, 0x5e50).await).await,
+    ];
+    assert_eq!(observed, vec![(true, [0; 5]); 6]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -551,20 +611,20 @@ enum FailurePoint {
     Apply,
 }
 
-/// Update Volume that fails after one step has written its rows.
-struct Failing {
-    input: UpdateVolumeInput,
+/// A structural command that fails after one step has written its rows.
+struct Failing<C> {
+    command: C,
     at: FailurePoint,
 }
 
-impl StructureCommand for Failing {
-    const SPEC: CommandSpec = <UpdateVolumeInput as StructureCommand>::SPEC;
-    type Applied = <UpdateVolumeInput as StructureCommand>::Applied;
-    type Plan = <UpdateVolumeInput as StructureCommand>::Plan;
-    type Effect = <UpdateVolumeInput as StructureCommand>::Effect;
-    type NoEffect = <UpdateVolumeInput as StructureCommand>::NoEffect;
-    type Conflict = <UpdateVolumeInput as StructureCommand>::Conflict;
-    type Refusal = <UpdateVolumeInput as StructureCommand>::Refusal;
+impl<C: StructureCommand> StructureCommand for Failing<C> {
+    const SPEC: CommandSpec = C::SPEC;
+    type Applied = C::Applied;
+    type Plan = C::Plan;
+    type Effect = C::Effect;
+    type NoEffect = C::NoEffect;
+    type Conflict = C::Conflict;
+    type Refusal = C::Refusal;
 
     async fn classify(
         &self,
@@ -572,7 +632,7 @@ impl StructureCommand for Failing {
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
     ) -> Result<Classified<Self>, ProjectCommandError> {
-        let classified = self.input.classify(client, envelope, project).await?;
+        let classified = self.command.classify(client, envelope, project).await?;
         match self.at {
             FailurePoint::Classify => Err(unavailable("injected classify failure")),
             FailurePoint::Apply => Ok(classified),
@@ -587,70 +647,139 @@ impl StructureCommand for Failing {
         plan: Self::Plan,
         applied: Self::Applied,
     ) -> Result<StructureWrite<Self::Effect>, ProjectCommandError> {
-        self.input
+        self.command
             .apply(client, envelope, project, plan, applied)
             .await?;
         Err(unavailable("injected apply failure"))
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault> {
-        self.input.decode(replay)
+        self.command.decode(replay)
     }
+}
+
+/// Fails the call in classify and then in apply, and then settles it for real.
+///
+/// Returns, for each failure, whether it is a store fault and the rows of its Receipt, then the
+/// Receipt result kind of the real settlement.
+async fn failed_then_settled<C: StructureCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+) -> (Vec<(bool, [i64; 5])>, ReceiptResult) {
+    let mut failures = Vec::new();
+    for at in [FailurePoint::Classify, FailurePoint::Apply] {
+        let failing = Failing {
+            command: call.input.clone(),
+            at,
+        };
+        let failed = settle_structure_command(store, &call.envelope, &failing).await;
+        failures.push((
+            matches!(failed, Err(ProjectCommandError::Unavailable(_))),
+            settlement_rows(admin, &call.envelope.ids.receipt_id).await,
+        ));
+    }
+    let Ok(settled) = settle_structure_command(store, &call.envelope, &call.input).await else {
+        panic!("the unused Command Challenge must still settle");
+    };
+    (failures, settled.outcome.receipt_result())
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused() {
+async fn every_structural_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    for (base, at) in [
-        (0x5c20, FailurePoint::Classify),
-        (0x5c30, FailurePoint::Apply),
+    let observed = vec![
+        failed_then_settled(&store, &admin, &create_volume_call(&store, 0x5f00).await).await,
+        failed_then_settled(&store, &admin, &update_volume_call(&store, 0x5f10).await).await,
+        failed_then_settled(&store, &admin, &delete_volume_call(&store, 0x5f20).await).await,
+        failed_then_settled(&store, &admin, &create_chapter_call(&store, 0x5f30).await).await,
+        failed_then_settled(&store, &admin, &update_chapter_call(&store, 0x5f40).await).await,
+        failed_then_settled(&store, &admin, &delete_chapter_call(&store, 0x5f50).await).await,
+    ];
+    let rolled_back = (
+        vec![(true, [0; 5]), (true, [0; 5])],
+        ReceiptResult::AuthoritativeApplied,
+    );
+    assert_eq!(observed, vec![rolled_back; 6]);
+}
+
+/// The replay error of one exact retry.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ReplayError {
+    BindingConflict,
+    HistoricalAcknowledgementUnavailable,
+    InvalidChallenge,
+    MissingProject,
+    Unavailable,
+}
+
+/// Settles the call, then replays it with pre-capture and then with damaged acknowledgement evidence.
+async fn evidence_replays<C: StructureCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+) -> (ReceiptResult, [ReplayError; 2]) {
+    let Ok(settled) = settle_structure_command(store, &call.envelope, &call.input).await else {
+        panic!("the structural command must settle");
+    };
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    let mut errors = Vec::new();
+    for evidence in [
+        "acknowledgement_format = NULL, response_project = NULL",
+        "acknowledgement_format = 'command_response_project.v1',
+         response_project = '{\"broken\":true}'::jsonb",
     ] {
-        let (scope, volume_a) = two_volumes(&store, base).await;
-        let suffix = format!("{:04x}", base + 3);
-        let issue = update_issue(&scope, &suffix, DIGEST);
-        issue_project_command_challenge(&store, &issue)
+        admin
+            .batch_execute(&format!(
+                "UPDATE storyos.command_idempotency SET {evidence}
+                  WHERE idempotency_key = '{key}'"
+            ))
             .await
             .unwrap();
-        let call = update_command(
-            issue.binding,
-            &issue.nonce_digest,
-            &suffix,
-            UpdateFixture {
-                volume_id: &volume_a,
-                title: "Volume A Renamed",
-                order: 2,
-                expected_tree_revision: 3,
-                bytes: BYTES,
-            },
-        );
-        let failing = Failing {
-            input: call.input.clone(),
-            at,
+        let retry = with_new_request_ids(call);
+        let Err(error) = settle_structure_command(store, &retry.envelope, &retry.input).await
+        else {
+            panic!("a replay without complete evidence must fail");
         };
-        let failed = settle_structure_command(&store, &call.envelope, &failing).await;
-        assert!(
-            matches!(failed, Err(ProjectCommandError::Unavailable(_))),
-            "{at:?}"
-        );
-        assert_eq!(
-            settlement_rows(&admin, &call.envelope.ids.receipt_id).await,
-            [0; 5]
-        );
-        let (effect, authority) = applied(&update_volume(&store, &call).await.unwrap());
-        assert_eq!(
-            (effect, authority.prior_manuscript_tree_revision),
-            (
-                UpdateVolumeApplied {
-                    title: "Volume A Renamed".to_owned(),
-                    order: 2,
-                    tree_revision: 4,
-                },
-                3
-            )
-        );
+        errors.push(match error {
+            ProjectCommandError::BindingConflict => ReplayError::BindingConflict,
+            ProjectCommandError::HistoricalAcknowledgementUnavailable => {
+                ReplayError::HistoricalAcknowledgementUnavailable
+            }
+            ProjectCommandError::InvalidChallenge => ReplayError::InvalidChallenge,
+            ProjectCommandError::MissingProject => ReplayError::MissingProject,
+            ProjectCommandError::Unavailable(_) => ReplayError::Unavailable,
+        });
     }
+    let errors: [ReplayError; 2] = errors.try_into().unwrap();
+    (settled.outcome.receipt_result(), errors)
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn every_structural_replay_separates_pre_capture_from_damaged_evidence() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        evidence_replays(&store, &admin, &create_volume_call(&store, 0x6a00).await).await,
+        evidence_replays(&store, &admin, &update_volume_call(&store, 0x6a10).await).await,
+        evidence_replays(&store, &admin, &delete_volume_call(&store, 0x6a20).await).await,
+        evidence_replays(&store, &admin, &create_chapter_call(&store, 0x6a30).await).await,
+        evidence_replays(&store, &admin, &update_chapter_call(&store, 0x6a40).await).await,
+        evidence_replays(&store, &admin, &delete_chapter_call(&store, 0x6a50).await).await,
+    ];
+    let separated = (
+        ReceiptResult::AuthoritativeApplied,
+        [
+            ReplayError::HistoricalAcknowledgementUnavailable,
+            ReplayError::Unavailable,
+        ],
+    );
+    assert_eq!(observed, vec![separated; 6]);
 }
