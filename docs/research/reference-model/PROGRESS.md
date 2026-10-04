@@ -199,3 +199,7 @@ Next: run 25 bounded writer/rate seeds; count only stable-window capacity observ
 ## Writer and Challenge batch 420-424
 
 Managed exit: 0. D-002-shaped differences: 5. Other differences: 0. Evidence: `replay-420-424.json.gz` and `replay-420-424.log`. Final replay audit must confirm response status and changed fields before classification.
+
+## Writer and Challenge batch 425-429
+
+Managed exit: 0. D-002-shaped differences: 5. Other differences: 0. Evidence: `replay-425-429.json.gz` and `replay-425-429.log`. Final replay audit must confirm response status and changed fields before classification.
