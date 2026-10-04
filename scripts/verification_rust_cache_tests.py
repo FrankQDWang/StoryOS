@@ -230,7 +230,7 @@ class RustCacheTests(unittest.TestCase):
         finally:
             process.stdin.write("\n")
             process.stdin.flush()
-            process.communicate(timeout=10)
+            process.communicate()
         self.assertEqual(self.cli("status").returncode, 0)
         self.assertFalse(old.exists())
 

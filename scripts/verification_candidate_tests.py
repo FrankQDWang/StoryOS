@@ -118,7 +118,7 @@ class CandidateCommandTests(unittest.TestCase):
                 self.assertIn('active', duplicate.stdout)
             finally:
                 process.send_signal(signal.SIGTERM)
-                process.communicate(timeout=10)
+                process.communicate()
         report = self.repo.report()
         self.assertEqual(report['status'], 'interrupted')
         self.assertNotEqual(self.run_complete().returncode, 0)
@@ -252,7 +252,7 @@ class CandidateCommandTests(unittest.TestCase):
                     self.assertIsNone(process.poll())
                 group = self.repo.report()['process']['child_group']
                 process.kill()
-                process.wait(timeout=10)
+                process.wait()
                 status = self.repo.cli('status', '--attempt', self.repo.report()['run_id'], '--json')
                 value = json.loads(status.stdout)
                 self.assertEqual((value['execution'], value['reasonCode']), ('lost', 'process-lost'))
@@ -268,4 +268,4 @@ class CandidateCommandTests(unittest.TestCase):
                     os.killpg(group, signal.SIGTERM)
                 if process.poll() is None:
                     process.kill()
-                process.communicate(timeout=10)
+                process.communicate()

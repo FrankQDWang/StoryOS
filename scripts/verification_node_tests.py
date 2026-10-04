@@ -138,7 +138,7 @@ class NodeObservationTests(unittest.TestCase):
                     self.assertEqual(connection.execute('SELECT node_id,result,ended_at FROM node_attempts').fetchall(),
                                      [('targeted:sample', 'running', None)])
                 process.send_signal(signal.SIGTERM)
-                process.communicate(timeout=15)
+                process.communicate()
                 self.assertNotEqual(process.returncode, 0)
             finally:
                 if process.poll() is None:

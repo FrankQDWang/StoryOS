@@ -170,7 +170,10 @@ export function BlockProposalDisplay({
         return { locator };
       }
     })).then((result) => {
-      if (active) setReads((current) => canonical(current) === canonical(result) ? current : result);
+      // Navigation can reorder the same locators; a new value starts an Acceptance check that locks the editor.
+      const unordered = (items: readonly ProposalRead[]) => canonical([...items].sort((left, right) =>
+        left.locator.proposalId.localeCompare(right.locator.proposalId)));
+      if (active) setReads((current) => unordered(current) === unordered(result) ? current : result);
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, locatorKey, refreshKey,
