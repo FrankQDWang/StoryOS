@@ -57,3 +57,7 @@ The following DELETE rows still cite a current MERGE/MOVE owner. They can be rem
 | BD035 | NP129, NP135 |
 
 All current coverage paths exist. Source comparison does not replace the pending random mutation self-check.
+
+## Mutation correction: private guard equivalence
+
+Samples 2 (AP004), 3 (AP055) and 22 (CT033) each pass the cited coverage after guard removal, while the original unit test fails. All three clean/restored runs pass. These are MISS results. The same limitation is now explicit on every remaining D5 row: public behavior coverage is not equivalent guard coverage. Their deletion recommendation still rests on the documented lack of a current producer for the synthetic tuple, under the user's burden-of-proof rule. No mutation-confirmed redundancy or independent guard coverage is claimed for this class. If the internal contract becomes an actual input boundary, re-audit it.

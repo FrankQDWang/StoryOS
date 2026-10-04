@@ -1,0 +1,25 @@
+{
+  "sample": 8,
+  "id": "CO138",
+  "source": "crates/storyos-core/src/rebuild_expired_reference.rs",
+  "source_sha256": "09b9b7011b89278c339f5cc3ea0361ba0dff525701e8ffde23b704c6e8598feb",
+  "old": "disposition: ExpiryRebuildDisposition::Rebuilt,",
+  "new": "disposition: ExpiryRebuildDisposition::NotApplicable,",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
+    "-t",
+    "^confirmed\\ reference\\ expiry\\ rebuilds\\ eligible\\ context\\ and\\ keeps\\ the\\ old\\ run$"
+  ],
+  "defect": "Do not rebuild a confirmed expired or unusable reference."
+}

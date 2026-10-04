@@ -350,7 +350,8 @@
     "remove": [
       143,
       183
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "SV029",
@@ -378,7 +379,8 @@
     "remove": [
       214,
       230
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "SV031",
@@ -392,7 +394,8 @@
     "remove": [
       232,
       247
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "SV032",

@@ -25,7 +25,9 @@
       "test": "a_changed_update_project_binding_is_refused_before_the_store",
       "reason": "D5",
       "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:210",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m02/result.json",
+      "finding": "Named covering test passes the mutant; original proposed-removal test fails. Clean and restored covering tests pass. The isolated guard is not equivalent coverage; D5 deletion depends on current producer reachability, not redundancy."
     },
     {
       "sample": 3,
@@ -35,7 +37,9 @@
       "test": "a_changed_retry_digest_is_refused_before_the_store",
       "reason": "D5",
       "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m03/result.json",
+      "finding": "Named covering test passes the mutant; original proposed-removal test fails. Clean and restored covering tests pass. The isolated guard is not equivalent coverage; D5 deletion depends on current producer reachability, not redundancy."
     },
     {
       "sample": 4,
@@ -227,7 +231,9 @@
       "test": "open_parent_is_rejected",
       "reason": "D5",
       "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
-      "status": "pending"
+      "status": "miss",
+      "evidence": "mutations/m22/result.json",
+      "finding": "Named covering test passes the mutant; original proposed-removal test fails. Clean and restored covering tests pass. The isolated guard is not equivalent coverage; D5 deletion depends on current producer reachability, not redundancy."
     },
     {
       "sample": 23,

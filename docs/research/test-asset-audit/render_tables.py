@@ -18,12 +18,12 @@ def render(name):
     for path in paths:
         text += [f"## {path}", "",
                  "| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |",
-                 "|---|---|---|---|---|---|---|"]
+                 "|---|---|---|---|---|---|"]
         for row in rows:
             if row["path"] != path:
                 continue
             values = [row["id"], f'{row["line"]} — {row["test"]}', row["verdict"],
-                      row["reason"], row["evidence"], row["coverage"]]
+                      row["reason"], row["evidence"], row["coverage"] + (" " + row["coverage_note"] if row.get("coverage_note") else "")]
             text.append("| " + " | ".join(value.replace("|", "\\|") for value in values) + " |")
         text.append("")
     (OUT / f"{name}.md").write_text("\n".join(text).rstrip() + "\n")

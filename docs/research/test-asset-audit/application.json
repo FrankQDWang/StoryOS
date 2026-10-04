@@ -22,7 +22,8 @@
     "reason": "D5",
     "evidence": "Server create_project.rs supplies command_kind=createProject as a literal when constructing the command. The test mutates this internal value without changing the route. Public challenge substitution is checked against stored Admission evidence, not this unreachable wrong-kind tuple.",
     "coverage": "apps/web/test/node-postgresql/create-project-http.integration.test.ts:75",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP003",
@@ -53,7 +54,8 @@
     "remove": null,
     "coverage_dependencies": [
       "NP025"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP005",
@@ -67,7 +69,8 @@
     "remove": null,
     "coverage_dependencies": [
       "NP025"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP006",
@@ -81,7 +84,8 @@
     "remove": null,
     "coverage_dependencies": [
       "NP025"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP007",
@@ -112,7 +116,8 @@
     "remove": null,
     "coverage_dependencies": [
       "NP030"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP009",
@@ -126,7 +131,8 @@
     "remove": null,
     "coverage_dependencies": [
       "NP030"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP010",
@@ -140,7 +146,8 @@
     "remove": null,
     "coverage_dependencies": [
       "NP030"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP011",
@@ -165,7 +172,8 @@
     "reason": "D5",
     "evidence": "The Server supplies the setCurrentChapter literal with the route's computed binding. The mismatched createVolume kind is an internal-only tuple; public command binding remains protected by stored challenge validation.",
     "coverage": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP013",
@@ -196,7 +204,8 @@
     "remove": null,
     "coverage_dependencies": [
       "BD021"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP015",
@@ -210,7 +219,8 @@
     "remove": [
       1,
       80
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP016",
@@ -235,7 +245,8 @@
     "reason": "D5",
     "evidence": "Server editor_session.rs puts one computed binding_ref and the same session generation into both client and challenge fields. A direct mismatch is not a current request input; real cross-session challenge substitution is checked against stored evidence.",
     "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP018",
@@ -260,7 +271,8 @@
     "reason": "D5",
     "evidence": "Server takeover.rs creates digest and canonical bytes from one request. Mutating only canonical bytes in a direct Application fixture is not public retry substitution; the real endpoint binds changed input against the stored challenge.",
     "coverage": "apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts:119",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP020",
@@ -285,7 +297,8 @@
     "reason": "D5",
     "evidence": "Server author_edit.rs clones the same authenticated scope into command and challenge. The fixture independently replaces only challenge.project_id, which cannot come from the current handler. Public foreign-scope/challenge tests own the actual authorization behavior.",
     "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP022",
@@ -296,7 +309,8 @@
     "reason": "D5",
     "evidence": "Server computes the command digest from its canonical bytes before Application dispatch. The fixture changes bytes alone to an invalid escaped JSON fragment and never invokes the request parser. Public request substitution is a different stored-Admission check; no kill of this isolated redundant guard is claimed.",
     "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP023",
@@ -321,7 +335,8 @@
     "reason": "D5",
     "evidence": "The only product ChapterQueryReader constructs facts.project_scope by cloning the requested scope after its scoped SQL query. A foreign scope inside otherwise found facts is synthetic. Public foreign access is covered, but does not execute the redundant inconsistent-facts branch.",
     "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP025",
@@ -354,7 +369,8 @@
     "reason": "D5",
     "evidence": "The Adapter selects manuscript_object_id by the requested Chapter ID and returns that selected ID. A Reader returning Chapter B for requested Chapter A is not current product input. The public exact-ID lookup owns real Chapter selection, not the synthetic mismatch guard.",
     "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP028",
@@ -379,7 +395,8 @@
     "reason": "D5",
     "evidence": "Postgres tree loading clones request scope into its top-level facts. Foreign access is denied by scoped loading; the fixture's contradictory returned scope has no current product producer.",
     "coverage": "apps/web/test/node-postgresql/manuscript-tree-http.integration.test.ts:72",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP030",
@@ -390,7 +407,8 @@
     "reason": "D5",
     "evidence": "Every VolumeFact receives the requested scope clone from the scoped Adapter query. A fake foreign Volume nested under owned facts is not a reachable response from that Reader; HTTP covers actual owner isolation.",
     "coverage": "apps/web/test/node-postgresql/manuscript-tree-http.integration.test.ts:72",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP031",
@@ -401,7 +419,8 @@
     "reason": "D5",
     "evidence": "Every ChapterFact receives the requested scope clone and is selected by owner/project SQL. The foreign child scope here is fabricated independently of those product facts.",
     "coverage": "apps/web/test/node-postgresql/manuscript-tree-http.integration.test.ts:72",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP032",
@@ -468,7 +487,8 @@
     "remove": [
       81,
       141
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP037",
@@ -482,7 +502,8 @@
     "remove": [
       143,
       197
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP038",
@@ -538,7 +559,8 @@
     "remove": [
       288,
       306
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP042",
@@ -599,7 +621,8 @@
     "reason": "D5",
     "evidence": "The Server constructs exportProjectArchive command kind as a literal. Changing it to createVolume only in the direct fixture cannot arrive from the endpoint.",
     "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP047",
@@ -610,7 +633,8 @@
     "reason": "D5",
     "evidence": "Server project_export.rs rejects a nonmatching archive profile before constructing the Application command. The HTTP export test owns the observable profile refusal; this duplicated inner check has no independent current input.",
     "coverage": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts:295",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP048",
@@ -660,7 +684,8 @@
     "remove": [
       151,
       161
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP052",
@@ -696,7 +721,8 @@
     "reason": "D5",
     "evidence": "Server supplies updateProjectAssistance from a literal. A different in-memory command kind is not accepted as request data.",
     "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP055",
@@ -707,7 +733,8 @@
     "reason": "D5",
     "evidence": "Server computes the canonical digest and bytes together. This fixture changes only bytes; real retry substitution remains a stored challenge/admission comparison at the public boundary.",
     "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "AP056",

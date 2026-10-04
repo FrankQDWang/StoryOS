@@ -1,0 +1,25 @@
+{
+  "sample": 20,
+  "id": "AD091",
+  "source": "crates/storyos-core/src/delete_chapter.rs",
+  "source_sha256": "d2656181c5a3bdaabc04f80c92954bcc641fdfc8dda95af81b656a079dfaee2b",
+  "old": "            chapter_id: next.clone(),",
+  "new": "            chapter_id: command.chapter_id.clone(),",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/delete-chapter-http.integration.test.ts",
+    "-t",
+    "^deleteChapter\\ removes\\ a\\ Chapter,\\ honors\\ deletion,\\ and\\ selects\\ next\\ then\\ previous\\ then\\ empty$"
+  ],
+  "defect": "Keep the removed Current Chapter instead of its next sibling."
+}

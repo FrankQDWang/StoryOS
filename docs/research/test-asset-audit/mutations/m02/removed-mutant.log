@@ -1,0 +1,41 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+   Compiling syn v3.0.3
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.2
+   Compiling pin-project-lite v0.2.17
+   Compiling serde_derive_internals v0.30.0
+   Compiling serde_derive v1.0.229
+   Compiling ref-cast-impl v1.0.26
+   Compiling thiserror-impl v2.0.20
+   Compiling tokio-macros v2.7.2
+   Compiling schemars_derive v1.2.2
+   Compiling ref-cast v1.0.26
+   Compiling tokio v1.53.1
+   Compiling thiserror v2.0.20
+   Compiling ts-rs v12.0.1
+   Compiling serde v1.0.229
+   Compiling schemars v1.2.2
+   Compiling storyos-core v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-core)
+   Compiling storyos-contracts v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-contracts)
+   Compiling storyos-application v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-application)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 25.05s
+     Running unittests src/lib.rs (target/rust-cache/gen-f249a5399a7e4905b98070796744bffd/debug/deps/storyos_application-c4d593f1c62281fd)
+
+running 1 test
+
+thread 'update_project::tests::a_changed_update_project_binding_is_refused_before_the_store' (103303468) panicked at crates/storyos-application/src/update_project_tests.rs:90:5:
+assertion failed: matches!(update_project(&store, &changed).await,
+    Err(UpdateProjectError::BindingConflict))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test update_project::tests::a_changed_update_project_binding_is_refused_before_the_store ... FAILED
+
+failures:
+
+failures:
+    update_project::tests::a_changed_update_project_binding_is_refused_before_the_store
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 57 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p storyos-application --lib`
+Verification failed: 26.14s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/db395c67e5d74ad88d1f7dbacb3af42b/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

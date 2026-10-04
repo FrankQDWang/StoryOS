@@ -1,0 +1,25 @@
+{
+  "sample": 16,
+  "id": "CO074",
+  "source": "crates/storyos-core/src/accept_proposal.rs",
+  "source_sha256": "1a5ba23754f6daed80d61f23f248ab5ef87a42abc527363ce33d553e241c1d25",
+  "old": "    if !command.expected_target_matches_head {",
+  "new": "    if false && !command.expected_target_matches_head {",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/accept-proposal-http.integration.test.ts",
+    "-t",
+    "^acceptProposal\\ retains\\ changed_head\\ across\\ reload\\ and\\ refuses\\ another\\ attempt\\ until\\ revision$"
+  ],
+  "defect": "Accept against a changed authoritative Head."
+}

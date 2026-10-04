@@ -1,0 +1,18 @@
+--- a/crates/storyos-contracts/src/stage1_handoff.rs
++++ b/crates/storyos-contracts/src/stage1_handoff.rs
+@@ -140,15 +140,6 @@
+     if evidence.out_of_scope.later_journeys != LATER_JOURNEYS {
+         return Err("handoff later journeys drifted".into());
+     }
+-    if evidence.parent_issue.issue != mandatory.fx_handoff.parent_issue.issue
+-        || evidence.parent_issue.state != "closed"
+-        || mandatory.fx_handoff.parent_issue.state != "closed"
+-        || evidence.parent_issue.closeout != PARENT_CLOSEOUT
+-        || evidence.residual_risks.parent_closeout != PARENT_CLOSEOUT
+-        || evidence.next_issue != NEXT_ISSUE
+-    {
+-        return Err("handoff must record performed parent #100 closeout".into());
+-    }
+     if !evidence.emitted.is_empty() {
+         return Err(format!(
+             "handoff must not emit {}",

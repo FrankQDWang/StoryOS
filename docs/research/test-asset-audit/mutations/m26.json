@@ -1,0 +1,25 @@
+{
+  "sample": 26,
+  "id": "AD089",
+  "source": "crates/storyos-core/src/delete_volume.rs",
+  "source_sha256": "db83eefdb2cf320c23e90d0989b16271c9e95a10d88d869a921a306d5eff998f",
+  "old": "    if command.child_chapters == VolumeChildPolicy::Nonempty {",
+  "new": "    if false && command.child_chapters == VolumeChildPolicy::Nonempty {",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/delete-volume-http.integration.test.ts",
+    "-t",
+    "^deleteVolume\\ removes\\ an\\ empty\\ Volume,\\ refuses\\ a\\ nonempty\\ Volume,\\ and\\ honors\\ deletion$"
+  ],
+  "defect": "Remove a Volume that still contains active Chapters."
+}

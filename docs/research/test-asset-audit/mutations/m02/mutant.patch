@@ -1,0 +1,10 @@
+--- a/crates/storyos-application/src/update_project.rs
++++ b/crates/storyos-application/src/update_project.rs
+@@ -110,7 +110,6 @@
+         || challenge.client_session_generation != command.client_binding.session_generation
+         || challenge.client_contract_revision != command.client_binding.client_contract_revision
+         || challenge.security_policy_revision != command.client_binding.security_policy_revision
+-        || challenge.command_kind != "updateProject"
+         || challenge.canonical_command_digest != command_digest
+         || challenge.method != "PATCH"
+         || challenge.route_template != "/api/v1/projects/{project_id}"

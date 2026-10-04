@@ -7,7 +7,7 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 ## apps/web/test/node-contract/chapter-navigation.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | NC001 | 48 — openSelectedChapter returns the requested Chapter Head | DELETE | D1 | The browser test requests Chapter B, renders its empty Head and checks its exact GET path. This pure success assertion adds no different input or effect. | apps/web/test/browser-source/chapter-navigation.integration.test.ts:38 |
 | NC002 | 68 — openSelectedChapter classifies missing, expired, and Scope-mismatched Chapters | KEEP | K1 | Unique cases: 404 resource_unavailable, foreign owner, and wrong Chapter identity must yield no Chapter bytes. The browser navigation test only supplies snapshot_expired. Search across Web tests found no other openSelectedChapter rejection cases. Retain the 404 and identity cases; the expired case can share the browser assertion. | apps/web/test/browser-source/chapter-navigation.integration.test.ts:38 |
 | NC003 | 125 — completeJournalOrRefuse waits for a durable Journal or refuses with a typed gate | KEEP | K1 | Unfinished semantic input must not call the Journal drain, and a rejected drain must refuse navigation. The browser navigation scenario drains successfully and never injects either condition. This test does not prove asynchronous wait ordering: whenIdle resolves immediately. | apps/web/test/browser-source/chapter-navigation.integration.test.ts:38 |
@@ -16,20 +16,20 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 ## apps/web/test/node-contract/generated-profile.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | NC005 | 9 — exposes the exact frozen runtime profile through its generated declaration | DELETE | D2 | The equality assertion compares two static outputs from the same generator; the type annotation is compiler evidence. Object.isFrozen only locks the generator wrapper. No caller mutates this profile, and no concrete user-visible failure specific to freezing was found. Boot execution still checks whether the generated profile interoperates with the server fixture. This is not a claim that a boot test checks Object.isFrozen. | apps/web/test/node-contract/project-open.test.ts:31 |
 
 ## apps/web/test/node-contract/production-build.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | NC006 | 31 — make web packages the production graph before Web tests | KEEP | K2 | Removing or moving package-release after Web execution can run tests against stale dist. This is the only test that inspects make web ordering. Exact-dist tests read existing bytes and do not assert Make dependency order. | apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts:22 |
 | NC007 | 45 — the Vite production build emits hashed Protected Web Client assets | KEEP | K2 | Changing Vite asset names to stable unhashed JavaScript can break immutable cache invalidation. The exact-dist transport only requires an assets URL; Server unit fixtures hard-code a hashed name and do not inspect the Vite result. | apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts:22; crates/storyos-server/src/web_assets_tests.rs:48 |
 
 ## apps/web/test/node-contract/project-open.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | NC008 | 31 — the protected Web client opens the authoritative current Chapter | KEEP | K1 | With IndexedDB unavailable in Node, opening must retain the authoritative Chapter and return editor-read-only-recovery. Browser project entry supplies IndexedDB and returns editor-ready. Request-order and same-origin assertions are redundant, but this distinct recovery branch is not. | apps/web/test/browser-source/project-entry.integration.test.ts:18 |
 | NC009 | 75 — an empty Project opens the Canonical Query empty tree without a Chapter identity | DELETE | D1 | The listed-empty browser scenario calls the same openControlledProject path, verifies the authoritative title and empty tree, and verifies the Canonical Query request. Unexpected Chapter calls throw. The Node test adds no alternative failure case. | apps/web/test/browser-source/list-open.integration.test.ts:11 |
 | NC010 | 115 — a Canonical Query tree with a foreign Project Scope fails closed | KEEP | K1 | A tree with a foreign owner must not enter empty-project-ready. list-open supplies a matching Scope. Searches for tree Scope mismatches found no other Web test that corrupts this response. | apps/web/test/browser-source/list-open.integration.test.ts:11 |
@@ -41,7 +41,7 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 ## apps/web/test/node-contract/protocol-boot.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | NC015 | 26 — a compatible Release 1 profile exposes protected application state | DELETE | D1 | Both Project-open and browser entry call validateProtocolProfile through bootProtectedWebClient with this valid profile and require success. Direct equality repeats the same successful gate. | apps/web/test/node-contract/project-open.test.ts:31 |
 | NC016 | 33 — missing compatibility identity | KEEP | K1 | A response without release_identity must block instead of entering protected state. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input. | apps/web/test/browser-source/project-entry.integration.test.ts:18 |
 | NC017 | 39 — stale generated-client identity | KEEP | K1 | A server with a different generated-client revision must require an upgrade. This is a separate generated case at line 77. Repository search found no browser test that supplies this incompatible profile; successful boot tests cannot fail for acceptance of this bad input. | apps/web/test/browser-source/project-entry.integration.test.ts:18 |
@@ -52,7 +52,7 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 ## apps/web/test/node-contract/protocol-http.integration.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | NC021 | 54 — production startup refuses an absent root or invalid resource set before readiness | DELETE | D3 | The resource loop inherits bootstrap settings and supplies no valid session or database prerequisites. main.rs validates session mappings before loading assets. Exit 1 without a readiness line does not identify an asset failure. The missing-root first case only checks argument parsing. Asset validation has direct coverage for absent, extra, altered, mixed and symbolic-link resources. | crates/storyos-server/src/web_assets_tests.rs:63; crates/storyos-server/src/web_assets_tests.rs:110 |
 | NC022 | 94 — packaged production startup refuses session mappings that are not exactly one handle | MOVE | L1 | Run this at the packaged startup boundary with all later prerequisites valid, and assert the specific refusal. Current cases remove DATABASE_URL: bypassing session validation can still exit 1 there, and the broad process-exit oracle does not distinguish malformed mappings from that later failure. The User UUID is checked in the startup parser and again after Storage Activation; this case does not isolate either check. Parser rejection is independently covered; production startup integration is not proved by these assertions. | crates/storyos-server/src/session_bootstrap_tests.rs:10 |
 | NC023 | 105 — offline web-root check does not require session mappings or PostgreSQL | KEEP | K2 | Moving web-root validation after session or database admission breaks this offline operational command. The test executes the actual package with unusable database URLs and no session map; unit WebAssetSet tests cannot catch CLI order changes. Search found no second --check-web-root test. | crates/storyos-server/src/web_assets_tests.rs:48 |
@@ -64,7 +64,7 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 ## apps/web/test/node-contract/required-global-teardown.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | NC028 | 37 — managed verification reports required teardown fails | KEEP | K2 | A Vitest teardown rejection must propagate through the repository runner even when the ordinary test passes. These are independent exit-status combinations in test.each at line 36. Python runner tests do not execute this Vitest teardown adapter. Search found no other use of this oracle-failure marker. | apps/web/test/support/required-global-teardown.ts:1 |
 | NC029 | 38 — managed verification reports required teardown passes | KEEP | K2 | A successful teardown must not force failure of an otherwise green child process. These are independent exit-status combinations in test.each at line 36. Python runner tests do not execute this Vitest teardown adapter. Search found no other use of this oracle-failure marker. | apps/web/test/support/required-global-teardown.ts:1 |
 | NC030 | 39 — managed verification reports ordinary test fails | KEEP | K2 | An ordinary assertion failure must survive a successful required teardown instead of being overwritten with success. These are independent exit-status combinations in test.each at line 36. Python runner tests do not execute this Vitest teardown adapter. Search found no other use of this oracle-failure marker. | apps/web/test/support/required-global-teardown.ts:1 |
@@ -72,5 +72,5 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 ## apps/web/test/node-contract/statistics-profile.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | NC031 | 12 — matches the pinned Rust/TypeScript golden cases | DELETE | D4 | countStoredText in test/support is imported only by this test; production code does not use this TypeScript reimplementation. The Rust golden test owns actual Unicode counting. Its coverage is semantic coverage of product counting, not executable coverage of this unused helper; a mutation confined to the helper cannot make Rust fail. Remove the unused helper together after its support-file review. | crates/storyos-core/src/statistics_profile_tests.rs:4 |

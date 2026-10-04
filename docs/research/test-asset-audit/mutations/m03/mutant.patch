@@ -1,0 +1,10 @@
+--- a/crates/storyos-application/src/update_project_assistance.rs
++++ b/crates/storyos-application/src/update_project_assistance.rs
+@@ -137,7 +137,6 @@
+         || challenge.client_contract_revision != command.client_binding.client_contract_revision
+         || challenge.security_policy_revision != command.client_binding.security_policy_revision
+         || challenge.command_kind != "updateProjectAssistance"
+-        || challenge.canonical_command_digest != command_digest
+         || challenge.method != "PUT"
+         || challenge.route_template != "/api/v1/projects/{project_id}/assistance"
+         || challenge.command_schema != "storyos.command.update-project-assistance.request.v1"

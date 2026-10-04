@@ -1,0 +1,93 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+   Compiling stable_deref_trait v1.2.1
+   Compiling autocfg v1.5.1
+   Compiling libc v0.2.189
+   Compiling smallvec v1.15.2
+   Compiling writeable v0.6.3
+   Compiling litemap v0.8.2
+   Compiling zerocopy v0.8.56
+   Compiling syn v2.0.119
+   Compiling icu_normalizer_data v2.2.0
+   Compiling utf8_iter v1.0.4
+   Compiling serde_json v1.0.151
+   Compiling icu_properties_data v2.2.0
+   Compiling version_check v0.9.5
+   Compiling getrandom v0.3.4
+   Compiling regex-syntax v0.8.11
+   Compiling num-traits v0.2.19
+   Compiling ahash v0.8.12
+   Compiling parking_lot_core v0.9.12
+   Compiling aho-corasick v1.1.5
+   Compiling scopeguard v1.2.0
+   Compiling once_cell v1.21.4
+   Compiling lock_api v0.4.14
+   Compiling allocator-api2 v0.2.21
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.2
+   Compiling regex-automata v0.4.18
+   Compiling unicode-general-category v1.1.0
+   Compiling bit-vec v0.8.0
+   Compiling heck v0.5.0
+   Compiling borrow-or-share v0.2.4
+   Compiling bit-set v0.8.0
+   Compiling num-integer v0.1.47
+   Compiling num-complex v0.4.6
+   Compiling fluent-uri v0.4.1
+   Compiling hashbrown v0.17.1
+   Compiling num-bigint v0.4.8
+   Compiling num-iter v0.1.46
+   Compiling parking_lot v0.12.5
+   Compiling bytecount v0.6.9
+   Compiling num-cmp v0.1.0
+   Compiling percent-encoding v2.3.2
+   Compiling vsimd v0.8.0
+   Compiling outref v0.5.2
+   Compiling micromap v0.3.0
+   Compiling jsonschema-regex v0.50.1
+   Compiling cpufeatures v0.3.0
+   Compiling email_address v0.2.9
+   Compiling data-encoding v2.11.1
+   Compiling uuid-simd v0.8.0
+   Compiling schemars v1.2.2
+   Compiling sha2 v0.11.0
+   Compiling synstructure v0.13.2
+   Compiling num-rational v0.4.2
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling zerovec-derive v0.11.3
+   Compiling displaydoc v0.2.6
+   Compiling strum_macros v0.28.0
+   Compiling num v0.4.3
+   Compiling fraction v0.16.0
+   Compiling ts-rs-macros v12.0.1
+   Compiling regex v1.13.1
+   Compiling fancy-regex v0.19.0
+   Compiling jsonschema-value v0.50.1
+   Compiling referencing v0.50.1
+   Compiling zerofrom v0.1.8
+   Compiling yoke v0.8.3
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling strum v0.28.0
+   Compiling ts-rs v12.0.1
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling icu_collections v2.2.0
+   Compiling icu_locale_core v2.2.0
+   Compiling icu_provider v2.2.0
+   Compiling icu_properties v2.2.0
+   Compiling icu_normalizer v2.2.0
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling jsonschema v0.50.1
+   Compiling storyos-contracts v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-contracts)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 49.72s
+     Running unittests src/lib.rs (target/rust-cache/gen-f249a5399a7e4905b98070796744bffd/debug/deps/storyos_contracts-c385fe4a9fcf1a53)
+
+running 1 test
+test stage1_crosswalk::tests::checked_in_crosswalk_matches_fresh_generation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.35s
+
+Verification passed: 51.52s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/90c2bd9c8f9a48288df374ab83cadfb7/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

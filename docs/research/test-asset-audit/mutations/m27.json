@@ -1,0 +1,25 @@
+{
+  "sample": 27,
+  "id": "CO152",
+  "source": "crates/storyos-core/src/reopen_rejected_operations.rs",
+  "source_sha256": "8c62136944855e93f207d8c4f411c8483e19d01d0b2d8b4dd6155e232ebc5a37",
+  "old": "    ReopenRejectedOperationsResult::Resolved\n",
+  "new": "    ReopenRejectedOperationsResult::Refused { reason: ReopenRejectedOperationsRefusal::NotEligible }\n",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/reopen-rejected-operations-http.integration.test.ts",
+    "-t",
+    "^reopenRejectedOperations\\ appends\\ a\\ pending\\ Revision\\ without\\ rewriting\\ Rejection$"
+  ],
+  "defect": "Refuse a valid explicit Reopen of one rejected Operation."
+}

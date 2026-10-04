@@ -253,7 +253,8 @@
     "remove": [
       1,
       73
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT021",
@@ -264,7 +265,8 @@
     "reason": "D5",
     "evidence": "The private constructor always uses MANDATORY_SET_MEMBERS and MANDATORY_SET_EXCLUDED together. Replacing a member with B-RESTORE only in a test is not a current input path. Full crosswalk comparison owns published bundle membership; an excluded-entry guard removal alone has no public effect with the fixed constructor.",
     "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT022",
@@ -275,7 +277,8 @@
     "reason": "D5",
     "evidence": "The historical parent state is constructed as the literal closed; no live Issue state enters mandatory_evidence. This test changes the private struct to open. The full crosswalk snapshot protects the historical declaration, not a live tracker transition.",
     "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT023",
@@ -286,7 +289,8 @@
     "reason": "D5",
     "evidence": "The constructor copies the same fixed delivery baseline constants which this verifier compares. A separately injected wrong-tree field cannot arrive through generation. Published baseline bytes are covered by the full crosswalk test.",
     "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT024",
@@ -297,7 +301,8 @@
     "reason": "D5",
     "evidence": "The private evidence class list comes from fixed Stage 1 constants; no incoming record can append EV-SR. Crosswalk comparison owns the emitted no-stage-release statement. This synthetic array is not an independently reachable release gate.",
     "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT025",
@@ -311,7 +316,8 @@
     "remove": [
       1,
       276
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT026",
@@ -322,7 +328,8 @@
     "reason": "D5",
     "evidence": "Requirements, gates and evidence-class slices all come from fixed ticket definitions in the sole generation path. The test swaps private slices after construction. Full crosswalk equality checks published coverage; these injections are not live tracker edits.",
     "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT027",
@@ -391,7 +398,8 @@
     "remove": [
       1,
       58
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT033",
@@ -402,7 +410,8 @@
     "reason": "D5",
     "evidence": "Both historical parent records are literal closed in their constructors; no live Issue query supplies an open state here. The test mutates both private records. Full crosswalk comparison owns the historical closeout bytes.",
     "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT034",
@@ -413,7 +422,8 @@
     "reason": "D5",
     "evidence": "Later-stage map exclusions are copied from the same private constant slice that the verifier compares. No supplied map list reaches generation. The complete crosswalk comparison preserves the published exclusions.",
     "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT035",
@@ -424,7 +434,8 @@
     "reason": "D5",
     "evidence": "provenance_evidence builds excluded_trees from a fixed constant before this verifier is called. A post-construction slice without .reference is not a production input. Actual Cargo workspace inspection is separate from this synthetic declaration check.",
     "coverage": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs:14; crates/storyos-contracts/src/stage1_provenance_tests.rs:62",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT036",
@@ -463,7 +474,8 @@
     "remove": [
       39,
       51
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT039",
@@ -477,7 +489,8 @@
     "remove": [
       53,
       71
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT040",
@@ -505,7 +518,8 @@
     "remove": [
       89,
       95
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT042",
@@ -519,7 +533,8 @@
     "remove": [
       97,
       104
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT043",
@@ -533,7 +548,8 @@
     "remove": [
       106,
       113
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT044",
@@ -723,7 +739,8 @@
     "remove": [
       168,
       190
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT058",
@@ -773,7 +790,8 @@
     "remove": [
       74,
       96
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CT062",

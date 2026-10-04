@@ -1,0 +1,25 @@
+{
+  "sample": 24,
+  "id": "NP035",
+  "source": "crates/storyos-adapter-postgres/src/command_replay.rs",
+  "source_sha256": "fc353119e5001e96a47ccebca2f2d1d93dbdd5a880a8dcf8ebc2f19c70b9e333",
+  "old": "            Ok(CommandResponseProjectEvidence::Captured(project)) => Ok(project),",
+  "new": "            Ok(CommandResponseProjectEvidence::Captured(mut project)) => { project.title = \"Changed replay title\".to_owned(); Ok(project) },",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/delete-chapter-http.integration.test.ts",
+    "-t",
+    "^deleteChapter\\ freezes\\ applied\\ empty\\ Current\\ Chapter,\\ no\\-effect,\\ and\\ conflict\\ acknowledgements\\ after\\ later\\ title\\ and\\ Current\\ Chapter\\ changes$"
+  ],
+  "defect": "Change frozen Project title while reconstructing the replay acknowledgement."
+}

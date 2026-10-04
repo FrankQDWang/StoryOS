@@ -1,0 +1,25 @@
+{
+  "sample": 9,
+  "id": "AD077",
+  "source": "crates/storyos-core/src/create_chapter.rs",
+  "source_sha256": "32adbd9213631675eb03487cb03aba9c9c406e08259330ce38dc0a3b1cf2a4ce",
+  "old": "CreateChapterOpen::Empty => CreateChapterCurrent::SelectCreated,",
+  "new": "CreateChapterOpen::Empty => CreateChapterCurrent::PreserveExisting,",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/create-chapter-http.integration.test.ts",
+    "-t",
+    "^createChapter\\ creates\\ three\\ named\\ Chapters,\\ keeps\\ the\\ first\\ current,\\ and\\ fails\\ closed$"
+  ],
+  "defect": "Fail to select the first created Chapter as Current Chapter."
+}

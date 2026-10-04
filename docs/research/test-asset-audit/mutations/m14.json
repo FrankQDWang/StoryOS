@@ -1,0 +1,33 @@
+{
+  "sample": 14,
+  "id": "CT012",
+  "source": "crates/storyos-contracts/src/release1_takeover_artifacts.rs",
+  "source_sha256": "4ed5eff7d460c01971e0d9f9fdc03ff7b1ee4f97e0800f6ebb6f2cd4b08c61a1",
+  "old": "        schema[\"properties\"][\"observed_writer_generation\"] = canonical_u64.clone();",
+  "new": "        schema[\"properties\"][\"observed_writer_generation\"] = json!({\"type\": \"integer\"});",
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-contracts",
+    "--lib",
+    "release1_artifacts::tests::every_registered_operation_matches_the_reviewed_catalog_and_generated_wire",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-contracts",
+    "--lib",
+    "release1_artifacts::tests::take_over_project_writer_wire_is_generated_without_stage1_coverage",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "defect": "Generate an integer Takeover generation schema instead of the required string."
+}

@@ -1,0 +1,25 @@
+{
+  "sample": 10,
+  "id": "CO093",
+  "source": "crates/storyos-core/src/lib.rs",
+  "source_sha256": "6b43014d79564e63e98051435e7037592dfa1c3442eb23e91f0fa584ab2ea49c",
+  "old": "            AuthorEditAppliedKind::Proposal => ApplyAuthorEditResult::ProposalRevised {\n                candidate_text: body,\n            },",
+  "new": "            AuthorEditAppliedKind::Proposal => ApplyAuthorEditResult::ProposalRevised {\n                candidate_text: command.current_body.clone(),\n            },",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "-t",
+    "^inline\\ Proposal\\ uses\\ exact\\ Anchors,\\ keeps\\ source\\ and\\ candidate\\ distinct,\\ and\\ Accepts\\ a\\ splice$"
+  ],
+  "defect": "Return old candidate text after a successful Proposal-owned Author Edit."
+}

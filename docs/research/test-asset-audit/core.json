@@ -81,7 +81,8 @@
     "remove": null,
     "coverage_dependencies": [
       "NP030"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO007",
@@ -137,7 +138,8 @@
     "reason": "D5",
     "evidence": "Application admission rejects empty and over-1024-byte titles before invoking the store. Thus the Core invalid-title branch is not an independent reachable product protection. The retained HTTP test covers the empty-title public refusal. It does not execute a mutation confined to this Core guard or prove the overlong HTTP input.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:294",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO011",
@@ -151,7 +153,8 @@
     "remove": null,
     "coverage_dependencies": [
       "NP025"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO012",
@@ -198,7 +201,8 @@
     "reason": "D5",
     "evidence": "Both invalid lengths are refused by structure_title at the current HTTP ingress before Core. No other production caller of the adapter create_volume method was found. The HTTP empty-title 400 covers the observable refusal, not a mutation confined to the duplicate Core guard. The overlong public request case is not covered by this named test.",
     "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO016",
@@ -278,7 +282,8 @@
     "reason": "D5",
     "evidence": "structure_title rejects empty and overlong titles before the only current production entry to update_volume. The HTTP empty-title assertion covers the public refusal, not this duplicate Core guard. A new internal consumer would require revisiting this verdict.",
     "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO023",
@@ -347,7 +352,8 @@
     "reason": "D5",
     "evidence": "HTTP structure_title rejects invalid title lengths before calling the sole current product adapter entry. The empty title is asserted as HTTP 400. This named test does not exercise the Core invalid-title branch or the overlong HTTP case.",
     "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO029",
@@ -427,7 +433,8 @@
     "reason": "D5",
     "evidence": "Invalid title lengths are rejected by structure_title at the sole current product ingress. HTTP checks the empty title as 400; it does not execute this internal Core guard or test the overlong HTTP variant.",
     "coverage": "apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO036",
@@ -675,7 +682,8 @@
     "reason": "D5",
     "evidence": "The only product classifier call follows a successful Project row read and always passes Present; adapter set_current_chapter.rs:109 returns MissingProject before classification. The public foreign-Project refusal is covered, but cannot kill a mutation in the unreachable Core presence guard.",
     "coverage": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO055",
@@ -708,7 +716,8 @@
     "reason": "D5",
     "evidence": "This fixture combines no Current Chapter with a valid target Chapter. Current product creation selects the first Chapter and last-Chapter deletion removes the final target. No current product flow was found that supplies this combination. The named HTTP cases protect those real empty-state transitions, not this synthetic Core branch.",
     "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO058",
@@ -1011,7 +1020,8 @@
     "remove": [
       43,
       69
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO082",
@@ -1039,7 +1049,8 @@
     "reason": "D5",
     "evidence": "Scope is fixed true. Opening callers derive target presence from current Head presence; candidate loading requires both by SQL. The independent present-Block/None-Head case is not produced there. Public deleted-target coverage owns unavailable-target behavior. Candidate revalidation supplies Some(Head); no distinct reachable missing-Block regression was established for this isolated classifier fixture. This is not proof that HTTP kills a mutation confined to its redundant None arm.",
     "coverage": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:141",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO084",
@@ -1709,7 +1720,8 @@
     "remove": [
       26,
       41
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO137",
@@ -1776,7 +1788,8 @@
     "remove": [
       142,
       150
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO142",
@@ -2028,7 +2041,8 @@
     ],
     "coverage_dependencies": [
       "NP104"
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO161",
@@ -2067,7 +2081,8 @@
     "remove": [
       26,
       53
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO164",
@@ -2147,7 +2162,8 @@
     "reason": "D5",
     "evidence": "The Adapter loads the Project before classification and always passes Present. Missing or foreign Project rejection belongs to that lookup; changing the isolated Absent arm cannot affect the current route.",
     "coverage": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts:134",
-    "remove": null
+    "remove": null,
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO171",
@@ -2348,7 +2364,8 @@
     "remove": [
       85,
       100
-    ]
+    ],
+    "coverage_note": "Semantic public behavior only; not equivalent coverage of this isolated guard. See mutation samples 2, 3 and 22."
   },
   {
     "id": "CO186",
