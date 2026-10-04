@@ -75,8 +75,8 @@ steps 5 and 6.
    Visibility Proof; projections rebuild and a new Snapshot/resync is used.
 6. Request Project deletion, observe new work/disclosure/export/restore fenced,
    find settled or `OutcomeUnknown` in-flight evidence through the audit
-   Query, and never see the
-   deleted Scope become readable through Project Restore.
+   Query, and never see the deleted Scope become readable through Project
+   Restore.
 
 An inspection surface reports the truth available under current authorization;
 it does not dispatch a Provider, Tool, MCP server, embedding service, or
