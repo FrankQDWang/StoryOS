@@ -2,13 +2,13 @@
 
 ## Resume here
 
-- Status: active. 377 test cases in 97 files have source verdicts. The audit is not complete.
+- Status: active. 392 test cases in 105 files have source verdicts. The audit is not complete.
 - Worktree: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS.
 - Branch: codex/test-asset-audit. Fixed baseline: 479224809cdaae997cda51cb8853e3fafa242b65.
 - Read this file before each resumed session. Do not refresh the baseline or touch the main checkout.
-- Complete source-review directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests). Cross-directory reconciliation and mutation review are still pending.
+- Complete source-review directories: apps/web/test/node-contract (8 files, 31 cases); crates/storyos-server/tests (1 file, 2 cases); crates/storyos-core/src (38 files, 202 tests); crates/storyos-application/src (20 files, 58 tests); crates/storyos-adapter-postgres/tests (2 files, 12 tests); crates/storyos-adapter-postgres/src (36 files, 87 tests). Cross-directory reconciliation and mutation review are still pending.
 - Core coverage: CORE_CHECKPOINT.md records all 38 test files and 29 module-link files; core.json and core.md hold every test verdict.
-- Next: remaining crates/storyos-adapter-postgres/src files. 28 source test files with 72 tests and both integration files with 12 tests are reviewed in adapter.json. Remaining: delete_chapter, delete_volume, set_current_chapter (ordinary and authority), takeover (admission and persistence), and Chapter/Volume rank batch files. Then Server, Contracts, and remaining Web directories.
+- Next: crates/storyos-server/src, then crates/storyos-contracts/src and remaining Web directories. ADAPTER_CHECKPOINT.md records all 36 source test files and the shared/module-link disposition. Adapter totals: 99 tests in 38 files.
 - No mutation samples selected or executed: 0/30. Select randomly only after the complete DELETE population is stable.
 - No active processes or temporary source mutations remain at this checkpoint.
 - A clean paired release package and Node dependencies are ready. Startup baseline 7/7 and browser navigation/list-open baseline 2/2 passed. Run managed commands serially; they share one execution budget.
@@ -41,7 +41,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | apps/web/test/support | Pending | inventory.json |
 | crates/storyos-core/src | Source review complete | core.md; 202 tests in 38 files; CORE_CHECKPOINT.md |
 | crates/storyos-application/src | Source review complete | application.md; 58 tests in 20 files; APPLICATION_CHECKPOINT.md |
-| crates/storyos-adapter-postgres/src | In progress | adapter.md; 28 test files, 72 tests reviewed |
+| crates/storyos-adapter-postgres/src | Source review complete | adapter.md; 36 test files, 87 tests; ADAPTER_CHECKPOINT.md |
 | crates/storyos-adapter-postgres/tests | Source review complete | adapter.md; 12 tests in 2 files; ADAPTER_INTEGRATION_CHECKPOINT.md |
 | crates/storyos-server/src | Pending | inventory.json |
 | crates/storyos-server/tests | Source review complete | server-integration.md; 2 tests; 33 candidate lines |
@@ -99,3 +99,8 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Create AgentRun has a vacuous final foreign query: it queries a Run that its own setup already deleted. Retain only its distinct missing-Revision scenario and other proven unique evidence; HTTP owns actual foreign isolation.
 - Project rename and archive Activity counts, plus Chapter Head identity preservation on rename, are MERGE recommendations. Do not count their files as immediately removable before those assertions reach the named HTTP owners.
 - Positive structural Commit-shape assertions duplicate executable Undo paths. Direct SQL CHECK violations and real rollback faults remain distinct. No temporary mutation or targeted test run occurred in this source-review checkpoint.
+
+- Adapter source directory complete: 87 tests in 36 files. Combined Adapter source/integration: 99 tests, 30 DELETE / 65 KEEP / 4 MERGE. Inventory completeness and all cited Rust/TypeScript declaration lines checked.
+- Overall source review: 392 cases / 105 files, DELETE 232, KEEP 153, MERGE 6, MOVE 1; 9370 candidate source lines. Still 0/30 mutation checks, no full-audit claim.
+- The hand-written Takeover persistence test never invokes the product Takeover operation; its final invalid insert can fail on missing Commit/Author Action foreign keys even if the intended CHECK is removed. D3 records this masked oracle.
+- Direct SQL rank counters measure statement work, not latency. Keep actual five-/seven-Chapter batching and Volume sparse/tombstone cases. Keep independently blocked Takeover races and unequal-counter preservation.

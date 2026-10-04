@@ -1,6 +1,6 @@
 # adapter test verdicts
 
-Reviewed: 84 cases in 30 files. See PROGRESS.md for directory completion.
+Reviewed: 99 cases in 38 files. See PROGRESS.md for directory completion.
 
 Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 
@@ -92,6 +92,20 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 | AD068 | 361 — create_volume_replays_canonical_sibling_order_and_keeps_historical_acks | DELETE | D1 | The HTTP canonical-order case covers persisted Receipt/Activity order, exact replay after later reorder/deletion and the same empty historical result_payload. Two fresh Volumes here add no different decoder or ordering input. | apps/web/test/node-postgresql/create-volume-http.integration.test.ts:392 |
 | AD069 | 521 — stale_latest_snapshot_resyncs_and_does_not_return_the_live_tree | DELETE | D1 | The public tree test expires the latest Snapshot and requires snapshot_expired. The Reader uses the same Snapshot validity gate before materializing an empty or nonempty tree. The normal Create Volume HTTP cases already prove publication of the new Snapshot and canonical tree. | apps/web/test/node-postgresql/manuscript-tree-http.integration.test.ts:127; apps/web/test/node-postgresql/create-volume-http.integration.test.ts:392 |
 
+## crates/storyos-adapter-postgres/src/delete_chapter_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| AD091 | 354 — delete_chapter_is_atomic_replayable_and_scope_safe | DELETE | D1 | HTTP deletion and canonical-order tests exercise non-current removal, Current Chapter preservation, missing/archived refusal, stale input, exact retry and already-removed NoEffect. The shared structural matrix counts persisted authority only for Applied; retained deletion Undo consumes the empty-pair Commit. This success/count sequence adds no distinct failure. | apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:417; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:767; crates/storyos-adapter-postgres/src/structure_command_tests.rs:313; crates/storyos-adapter-postgres/src/delete_chapter_tests.rs:611 |
+| AD092 | 611 — author_undo_compensates_delete_chapter_and_restores_prior_chapter_identity | KEEP | K1 | Undo of deleting the Current Chapter must restore the same removed Chapter, prior Current Chapter selection and original tree, remove its tombstone and record Compensation without a createChapter Receipt. Ordinary deletion selects a successor but never restores the deleted current identity; Create Chapter Undo removes newly created identity and takes a different frontier variant. | apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246; crates/storyos-adapter-postgres/src/create_chapter_authority_tests.rs:393 |
+
+## crates/storyos-adapter-postgres/src/delete_volume_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| AD089 | 282 — delete_volume_is_atomic_replayable_and_scope_safe | DELETE | D1 | Public Delete Volume executes empty removal, nonempty refusal, exact retry and already-removed NoEffect. The retained structural outcome matrix counts one settlement and no authority for unsuccessful results. The retained repeated-Undo scenario consumes the deletion Commit and restores the original identity/order; this raw positive shape adds no distinct fault. | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238; crates/storyos-adapter-postgres/src/structure_command_tests.rs:313; crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs:7 |
+| AD090 | 480 — author_undo_compensates_delete_volume_and_restores_prior_volume_identity | MERGE | M1 | Merge the no-createVolume Receipt, one Compensation linked to the deleted source and cleared removal-decision assertions into update_volume_storage_order_tests at line 7. That existing test already undoes deletion after two reorders and compares the full original tree. Preserve these durable-history assertions there before removing this simpler one-deletion fixture. Keep apply_delete support for both rank and Undo tests. | crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs:7 |
+
 ## crates/storyos-adapter-postgres/src/export_work_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
@@ -161,6 +175,19 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 | AD054 | 363 — recovery_visibility_proof_accepts_lawful_null_current_chapter | KEEP | K2 | A restored lawful empty Project has no Current Chapter. The visibility proof must permit runtime login, record visible state and leave empty search/statistics rebuilds without creating a Chapter. Ordinary Project HTTP reads never call the recovery proof; the archived-export case proves retained bytes but not activation of an empty restored Project. | apps/web/test/node-postgresql/create-project-http.integration.test.ts:75; apps/web/test/node-postgresql/recovery-archived-exports-http.integration.test.ts:122 |
 | AD055 | 423 — recovery_visibility_proof_keeps_hold_for_broken_required_checks | KEEP | K2 | The recovery proof must keep the runtime role unable to log in and write no visibility proof after a broken Current Chapter reference, missing replay floor, missing FORCE RLS, or unproved archival state. Each fault is restored before the next. Ordinary scope tests inspect current RLS and Snapshot reads, not recovery activation after those faults. | crates/storyos-adapter-postgres/src/recovery_visibility_proof_tests.rs:363; crates/storyos-adapter-postgres/tests/project_scope.rs:35; apps/web/test/node-postgresql/snapshot-replay-http.integration.test.ts:92 |
 
+## crates/storyos-adapter-postgres/src/set_current_chapter_authority_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| AD094 | 433 — applied_set_current_chapter_writes_action_snapshot_and_no_commit | KEEP | K1 | Retain independent per-User Current Chapter action sequences and the exact zero stale-command Action/Snapshot counts. This navigation command has its own sequence allocator, separate from structural Commit allocation. HTTP checks null public authority on conflicts but does not count hidden stale Snapshots or run the second User's successful switch. Common switch/tree/retry assertions can be trimmed. | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313; crates/storyos-adapter-postgres/src/create_chapter_authority_tests.rs:302 |
+| AD095 | 648 — author_undo_restores_prior_current_chapter_or_stays_unavailable | KEEP | K2 | Undo of Current Chapter selection must restore the prior selection without a Commit, and a persisted prior_chapter_id that no longer resolves must yield Barrier, preserve current selection and invent no Chapter or Author Action. HTTP Undo compensates prose and does not corrupt navigation history; schema checks only verify Commit-list restrictions. | apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts:335; crates/storyos-adapter-postgres/src/structural_authority_schema_tests.rs:559 |
+
+## crates/storyos-adapter-postgres/src/set_current_chapter_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| AD093 | 229 — set_current_chapter_is_atomic_replayable_and_fail_closed | DELETE | D1 | The public Current Chapter test uses the same switch/replay, stale-current and wrong-target-Head inputs, then reads the Project and Editor Session base. There is no injected transaction failure or additional persisted observation in this Adapter example. | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313 |
+
 ## crates/storyos-adapter-postgres/src/structural_authority_schema_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
@@ -182,6 +209,28 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 | AD065 | 690 — every_structural_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused | KEEP | K2 | A failure after classification or after each concrete command's effect writes must roll back the five settlement families and leave the same Challenge usable. The Failing adapter delegates to the actual apply operation before injecting failure, then the real command must settle. Success-only HTTP cases cannot prove this rollback after command-specific writes. | apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361; crates/storyos-adapter-postgres/src/structure_command_tests.rs:592 |
 | AD066 | 764 — every_structural_replay_separates_pre_capture_from_damaged_evidence | DELETE | D1 | Each command has an HTTP test that writes the identical NULL historical evidence and malformed new-format Project acknowledgement, requires distinct 409/503 outcomes, and checks no new domain rows. This repeats the same shared replay decoder through the Adapter without a distinct persisted input. | apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760; apps/web/test/node-postgresql/update-volume-http.integration.test.ts:694; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:742; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:1239; apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:901; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:765 |
 
+## crates/storyos-adapter-postgres/src/takeover_admission_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| AD096 | 550 — admission_returns_the_prior_writer_and_rejections_leave_no_evidence | KEEP | K2 | Rejected same-writer or stale-generation Takeover must leave every Session base, admission/settlement family and Challenge consumption unchanged. A successful Takeover replaces only the winning observer's base with a fresh base Snapshot distinct from the canonical Snapshot. Public takeover checks writer roles and manuscript authority but does not compare all observer base rows or unused rejected Challenges. | apps/web/test/node-postgresql/takeover-http.integration.test.ts:113; apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts:119 |
+| AD097 | 632 — two_observers_race_with_one_complete_settlement_and_one_full_rollback | KEEP | K2 | Two observer commands are forced to wait at the same generation-insert gate before release. Exactly one must commit; the loser must preserve its unused Challenge with no Admission, Receipt, Snapshot, Activity, settlement or base handoff. Public takeover is sequential and cannot expose partial loser writes or two winners under this race. | crates/storyos-adapter-postgres/src/takeover_admission_tests.rs:550; apps/web/test/node-postgresql/takeover-http.integration.test.ts:113 |
+
+## crates/storyos-adapter-postgres/src/takeover_persistence_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| AD098 | 197 — observer_takeover_settles_no_effect_activity_without_manuscript_authority | DELETE | D3 | The positive half hand-writes Takeover Admission, Receipt, generation, Snapshot and Activity in SQL, then checks those same literals; it never executes the product Takeover operation. HTTP and retained admission tests execute that path. The final invalid Author Edit Activity insert also references a nonexistent Commit/Author Action, so foreign keys still reject it if the intended no_effect CHECK is removed; is_err alone does not isolate the claimed constraint. | apps/web/test/node-postgresql/takeover-http.integration.test.ts:113; crates/storyos-adapter-postgres/src/takeover_admission_tests.rs:550; crates/storyos-adapter-postgres/src/author_edit_tests.rs:184 |
+| AD099 | 535 — takeover_activity_counter_handles_missing_and_existing_rows | KEEP | K1 | Takeover must create a missing scope counter with zero Author Action/Commit counters, then increase only Activity when existing Author Action and Commit counters differ (7 and 11). Reusing the structural counter allocator would create false manuscript authority. The Author Edit counter test correctly increments all three through a different operation; HTTP does not set unequal counters. | crates/storyos-adapter-postgres/src/author_edit_counter_tests.rs:197; apps/web/test/node-postgresql/takeover-http.integration.test.ts:113 |
+
+## crates/storyos-adapter-postgres/src/update_chapter_rank_batch_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| AD086 | 375 — applied_chapter_reorder_uses_one_rank_write_for_many_siblings | KEEP | K1 | Five- and seven-Chapter reorders in opposite directions must each use one rank-write statement, touch all live sibling ranks, and use four total object/Project updates. PostgreSQL statement triggers measure actual writes; final HTTP order cannot detect a per-sibling query loop. This is an operation-count invariant, not a latency measurement. | apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252; crates/storyos-adapter-postgres/src/update_volume_rank_batch_tests.rs:66 |
+| AD087 | 448 — applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_storage_keys | KEEP | K1 | Reordering live Chapters with a removed sibling must preserve the removed storage key and leave another Volume and another Project unchanged. A missing parent-Volume filter or a rank batch that includes tombstones can corrupt hidden retained data while a one-Volume HTTP tree still looks right. The Volume rank test has no parent-Volume dimension. | apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252; crates/storyos-adapter-postgres/src/update_volume_rank_batch_tests.rs:66 |
+| AD088 | 636 — failed_chapter_rank_write_rolls_back_the_entire_command | KEEP | K2 | A real PostgreSQL rank-write trigger error must prevent acknowledgement and leave the original Chapter order, tree revision, Admission/Receipt/Activity counts and authority baseline unchanged. The generic sequence test injects an error only after apply returns; it does not require this concrete SQL error to reach the caller. The Volume trigger exercises a different batch implementation. | crates/storyos-adapter-postgres/src/structure_command_tests.rs:690; crates/storyos-adapter-postgres/src/update_volume_rank_batch_tests.rs:66 |
+
 ## crates/storyos-adapter-postgres/src/update_chapter_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
@@ -201,6 +250,12 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | AD050 | 83 — update_project_is_atomic_replayable_and_scope_safe | MERGE | M1 | Merge the one project_updated Activity assertion into the existing HTTP rename/stale case at line 210 before removing this file. A conflicted or repeated rename must not append another Activity. HTTP already checks the same rename, replay and stale sequence but does not count that event kind. The remaining frozen acknowledgement and raw Project isolation checks already have retained owners. | apps/web/test/node-postgresql/update-project-http.integration.test.ts:210; apps/web/test/node-postgresql/update-project-http.integration.test.ts:294; crates/storyos-adapter-postgres/tests/project_scope.rs:321 |
+
+## crates/storyos-adapter-postgres/src/update_volume_rank_batch_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| AD085 | 66 — volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement | KEEP | K1 | Retain the actual SQL statement/changed-row counters for sparse live Volume ranks, unchanged tombstone bytes, title-only zero rank writes, and a large tombstone storage key. A loop that rewrites each sibling still returns the correct HTTP tree but violates these measured work bounds. The injected trigger fault and numeric storage-key overflow also require unchanged durable rows. The separate Undo test verifies later compensation, not forward statement work. | apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196; crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs:7; crates/storyos-adapter-postgres/src/structure_command_tests.rs:690 |
 
 ## crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs
 
