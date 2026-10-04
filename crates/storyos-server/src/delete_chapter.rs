@@ -1,11 +1,14 @@
 use storyos_application::{ChapterId, DeleteChapterInput};
 use storyos_core::TransitionOutcome;
 
+use super::command_admission::{
+    ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
+    positive,
+};
 use super::contract_reason::contract_reason;
-use super::structure_admission::{SettledReceipt, StructureRoute, admit, positive};
 use super::*;
 
-const DELETE_CHAPTER: StructureRoute = StructureRoute {
+const DELETE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Delete Chapter",
     command_kind: "deleteChapter",
     method: contracts::DELETE_CHAPTER_METHOD,
@@ -13,6 +16,9 @@ const DELETE_CHAPTER: StructureRoute = StructureRoute {
     schema_id: contracts::DELETE_CHAPTER_REQUEST_SCHEMA_ID,
     digest_profile: contracts::DELETE_CHAPTER_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::DeleteChapter,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn delete_chapter(

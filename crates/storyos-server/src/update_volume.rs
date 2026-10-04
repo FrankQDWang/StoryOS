@@ -1,13 +1,14 @@
 use storyos_application::{UpdateVolumeInput, VolumeId};
 use storyos_core::TransitionOutcome;
 
-use super::contract_reason::contract_reason;
-use super::structure_admission::{
-    SettledReceipt, StructureRoute, admit, positive, structure_title,
+use super::command_admission::{
+    ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch, SettledReceipt, admit,
+    positive, structure_title,
 };
+use super::contract_reason::contract_reason;
 use super::*;
 
-const UPDATE_VOLUME: StructureRoute = StructureRoute {
+const UPDATE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Update Volume",
     command_kind: "updateVolume",
     method: contracts::UPDATE_VOLUME_METHOD,
@@ -15,6 +16,9 @@ const UPDATE_VOLUME: StructureRoute = StructureRoute {
     schema_id: contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
     digest_profile: contracts::UPDATE_VOLUME_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::UpdateVolume,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn update_volume(
