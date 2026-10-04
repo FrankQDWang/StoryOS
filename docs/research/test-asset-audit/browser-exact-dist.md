@@ -1,6 +1,6 @@
 # browser-exact-dist test verdicts
 
-Reviewed: 16 cases in 16 files. See PROGRESS.md for directory completion.
+Reviewed: 22 cases in 22 files. See PROGRESS.md for directory completion.
 
 Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 
@@ -94,8 +94,44 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 |---|---|---|---|---|---|---|
 | BD015 | 66 — the author cannot remove a nonempty Volume, then removes an empty Volume | KEEP | K2 | A confirmed nonempty Volume removal must show the refusal while retaining both rows; a following empty-Volume removal must succeed and clear that prior error. Chapter deletion uses another form and command, while HTTP Volume refusal cannot detect a stale error left in the mounted UI after a later success. | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts:181 |
 
+## apps/web/test/browser-exact-dist/s2-editor.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD017 | 77 — hydrates production Tiptap for one paragraph Block without a textarea write path | MERGE | M1 | Move initial no-editor state and first paragraph/Block identity, editability and zero-pending hydration checks into Create Chapter:43, which already transitions from an empty Project to its first packaged editor. The Ctrl+B check runs on an empty document with no subsequent typing, so enabled stored marks could still produce no strong/b element and no text change; it does not establish unsupported formatting rejection. Do not preserve a separate fixture for that masked assertion. | apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43; apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284 |
+
+## apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD019 | 69 — keeps the editor writable through frequent Author Undo between Author Edit batches | KEEP | K2 | Repeated real Edit/Edit/Undo cycles must keep the packaged editor writable and create exactly 24 Author Edit and 12 Undo requests with only successful Challenge responses, without resetting quota windows. Single Undo covers one cycle, the long-session journey performs one Undo and explicitly resets quotas, and source tests mock network admission. Retain continued-cycle/frontier behavior; elapsed time is logged but has no threshold, so this does not prove 12 Undos occurred inside one minute. Receive exact Block/frontier/reload assertions from the single-Undo case. | apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:143 |
+
+## apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD018 | 95 — recovers Local Edit Journal text after reload without a second Author Edit | MERGE | M1 | Transfer the repeated reload and complete authoritative Revision equality check into Stage 1 journey after its recovered saved state. That journey already observes a retained pending Journal intent before reloading and settles the same visible text. This test accepts either pending or already saved before its supposed interruption, so it can exercise only ordinary reload. It counts no POSTs; unchanged Revision on the final reload proves no new authoritative revision, not necessarily no duplicate request. | apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307; apps/web/test/browser-source/reload-recovery.integration.test.ts:68 |
+
+## apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD020 | 123 — repeats Chapter switching, Undo, search, and reload without losing work | KEEP | K2 | After 2401 individual trusted inputs, the packaged editor must complete automatic batching/collection, switch Chapters, reload and save another input without losing either Chapter. The source working-set test calls persist/collect directly and cannot detect broken mounted-controller collection or post-reload continued input. Search/statistics smoke is incidental. This journey resets Challenge windows and logs timings with no performance thresholds; it proves neither sustained quota behavior nor a latency/RPO/RTO bound. | apps/web/test/browser-source/journal-working-set.integration.test.ts:16; apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77 |
+
 ## apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | BD016 | 77 — shows pending, saving, and saved without calling local input saved, across Chapters | KEEP | K2 | The first sampled state with newly visible local text must be pending/saving rather than saved, and later saved labels must follow settled prose through current-Chapter change, read-only inspection and reopen. The ordinary current-Chapter case waits for saving eventually but does not reject saved at this first sample. This is a sampled observation with no held server response; it does not prove that every frame remains unsaved until acknowledgement. Receive conflicting reopen hints and remaining two-Chapter query/editability checks from navigation/current-Chapter duplicates. | apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts:84; apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307 |
+
+## apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD022 | 74 — saves sustained Chinese composition, idle pauses, and Block boundaries without a quota reset | KEEP | K2 | Repeated Chinese composition, punctuation, split and join must yield exactly 50 Author Edit requests, successful Challenge responses and exact final text without quota-window resets. Packaged input exercises only a few such operations; long-session explicitly resets quota windows and uses plain characters, while frequent Undo exercises a different command family. This case detects additional composition submissions or boundary edits that exhaust real admission during sustained writing. Runtime measurements are logged, not a declared latency target. | apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69 |
+
+## apps/web/test/browser-exact-dist/s2-undo.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD021 | 162 — undoes one exact admitted Author Action and restores identity after reload | MERGE | M1 | Frequent Undo already types two distinct settled edits, reverses only the latest and continues editing. Transfer the exact stable Block identity, before/after undo frontier and final reload/restored frontier checks into a selected cycle and final reload of that case. The current receiver checks text/request counts but not these identities; complete the transfer before removing this duplicate setup. | apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69 |

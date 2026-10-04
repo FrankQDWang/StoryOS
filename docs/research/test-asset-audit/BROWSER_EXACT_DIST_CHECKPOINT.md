@@ -1,6 +1,6 @@
 # Browser exact-dist checkpoint
 
-Source review is partial: 16 cases in 16 test files; eight KEEP, one DELETE, seven MERGE. Direct candidate lines: 67.
+Source review is partial: 22 cases in 22 test files; 11 KEEP, one DELETE, 10 MERGE. Direct candidate lines: 67.
 
 | Reviewed file | Verdict |
 |---|---|
@@ -20,6 +20,12 @@ Source review is partial: 16 cases in 16 test files; eight KEEP, one DELETE, sev
 | apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts | KEEP |
 | apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts | KEEP |
 | apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-editor.integration.test.ts | MERGE |
+| apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts | MERGE |
+| apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts | KEEP |
+| apps/web/test/browser-exact-dist/s2-undo.integration.test.ts | MERGE |
+| apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts | KEEP |
 
 ## Pending files
 
@@ -29,20 +35,14 @@ Source review is partial: 16 cases in 16 test files; eight KEEP, one DELETE, sev
 - apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts
 - apps/web/test/browser-exact-dist/restored-discard.integration.test.ts
 - apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-editor.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-input.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-search.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-undo.integration.test.ts
 - apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts
 - apps/web/test/browser-exact-dist/stage1-journey-expectation.ts
 
@@ -65,3 +65,13 @@ Source review is partial: 16 cases in 16 test files; eight KEEP, one DELETE, sev
 - KEEP Chapter rename/reorder for current identity and heading after the renamed Chapter moves away from first position; KEEP repeated current deletion for fresh writable successor and final no-editor state; KEEP Volume refusal then success for retained rows and error clearing.
 - KEEP save-truth for the first sampled local-text state. It has no held response and is not evidence that every frame stays unsaved until acknowledgement. This limitation must remain when its receiving fixture is consolidated.
 - Current totals: 16 cases/files, eight KEEP, one DELETE, seven MERGE; 67 direct lines. No runtime execution or source mutation.
+
+## Editor hydration, reload and sustained input
+
+- BD017-BD022 add editor hydration, interruption, frequent Undo, long session, single Undo and sustained writing. All six full files reviewed.
+- MERGE hydration into first Chapter creation; the empty-document Ctrl+B check cannot detect an enabled stored bold mark and is not a KEEP reason.
+- MERGE repeated-reload exact Revision equality into Stage 1's recovery journey. Interruption:95 permits either pending or saved before reload, and never counts POSTs. It can pass without an actual unsettled cut; unchanged final Revision is weaker than no repeated request.
+- KEEP frequent Undo for real repeated Edit/Edit/Undo and exact request counts without quota resets. Transfer single-Undo Block identity/frontier and final reload observations into that receiver before removing the separate test. Twelve rounds do not prove all Undos happened in one rate-limit minute: elapsed time is logged but not bounded to that window.
+- KEEP long-session for 2401 trusted inputs through mounted automatic collection, Chapter switching and continued writing after reload. Source working-set directly invokes collection. Long-session explicitly resets rate windows and has no asserted latency/RPO/RTO target.
+- KEEP sustained writing for 50 real submissions through repeated IME, punctuation, split and join without quota reset. It complements Undo's different command family and the long-session fixture's reset windows. Do not count printed timings as performance assertions.
+- Current totals: 22 cases/files, 11 KEEP, one DELETE, 10 MERGE; 67 direct candidate lines. No runtime test or source mutation.
