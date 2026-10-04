@@ -958,7 +958,9 @@ It is not an author view. The Protected Web Client does not show it to the
 author. The author sees assistance results and the decisions that the author
 must make. This section covers only the inspection of context and Run
 evidence. Author inspection of Memory and Research Artifacts keeps its owning
-contract. Context Inspect may show current or historical:
+contract.
+
+Context Inspect may show current or historical:
 
 - Operation Requirements;
 - Context Candidates and discovery reasons;

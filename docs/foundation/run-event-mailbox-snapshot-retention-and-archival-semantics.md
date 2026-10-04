@@ -56,8 +56,10 @@ The retention contract is complete only when one consistent history surface
 supports these steps. Under ADR 0040, steps 1, 3, and 4 are audit and
 verification steps. The in-flight evidence check in step 6 is also an audit
 step. These steps use the read-only Query in section 11. No author-facing view
-shows these Run internals. Step 2 is Protected Web Client behavior. The author
-performs the other parts of steps 5 and 6.
+shows these Run internals.
+
+Step 2 is Protected Web Client behavior. The author performs the other parts
+of steps 5 and 6.
 
 1. Query Project Activity or a Run and distinguish historical occurrence,
    current payload eligibility, and service availability.
