@@ -1,0 +1,5644 @@
+{
+  "baseline": "479224809cdaae997cda51cb8853e3fafa242b65",
+  "note": "Source declarations, not runtime case counts. Expand table and loop cases during manual review. Module links and support files are not tests.",
+  "files": [
+    {
+      "path": "crates/storyos-adapter-postgres/src/agent_run_dispatch.rs",
+      "lines": 444,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/archive_project_tests.rs",
+      "lines": 259,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 89,
+          "name": "archive_project_is_atomic_replayable_and_scope_safe"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/author_command_outcome_unknown_tests.rs",
+      "lines": 350,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 106,
+          "name": "append_is_exact_serialized_and_has_zero_authority_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/author_edit.rs",
+      "lines": 713,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/author_edit_counter_tests.rs",
+      "lines": 556,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 195,
+          "name": "author_edit_counters_cover_missing_existing_and_limit_rows"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/author_edit_outcome_tests.rs",
+      "lines": 328,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 57,
+          "name": "unexpired_challenge_is_unknown_and_the_query_does_not_consume_it"
+        },
+        {
+          "line": 104,
+          "name": "expired_unconsumed_challenge_without_admission_is_rejected"
+        },
+        {
+          "line": 160,
+          "name": "missing_foreign_and_changed_proof_bindings_share_one_unavailable_oracle"
+        },
+        {
+          "line": 227,
+          "name": "outcome_resolution_waits_for_consume_and_cannot_report_a_false_rejection"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/author_edit_tests.rs",
+      "lines": 1826,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 26,
+          "name": "payload_digest_is_lowercase_sha256"
+        },
+        {
+          "line": 182,
+          "name": "three_author_edit_fault_cuts_have_complete_negative_evidence"
+        },
+        {
+          "line": 1597,
+          "name": "an_open_admission_with_an_incomplete_payload_requires_reconfirmation"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/connection_pool.rs",
+      "lines": 143,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/connection_pool_tests.rs",
+      "lines": 59,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 22,
+          "name": "a_settled_connection_is_reused_and_an_unsettled_transaction_is_not"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/create_agent_run_tests.rs",
+      "lines": 459,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 118,
+          "name": "create_agent_run_admits_one_conversation_and_stays_scope_safe"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/create_chapter_authority_tests.rs",
+      "lines": 636,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 300,
+          "name": "two_users_and_two_projects_keep_separate_chapter_sequences"
+        },
+        {
+          "line": 391,
+          "name": "author_undo_compensates_create_chapter_and_restores_the_initial_revision"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/create_chapter_tests.rs",
+      "lines": 880,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 181,
+          "name": "create_chapter_is_atomic_replayable_and_scope_safe"
+        },
+        {
+          "line": 693,
+          "name": "create_chapter_replays_canonical_sibling_order_and_keeps_historical_acks"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/create_project_challenge_tests.rs",
+      "lines": 128,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 43,
+          "name": "create_project_challenge_replays_conflicts_and_stays_user_isolated"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/create_project_tests.rs",
+      "lines": 203,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 70,
+          "name": "create_project_is_atomic_empty_replayable_and_fail_closed"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/create_volume_authority_tests.rs",
+      "lines": 701,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 195,
+          "name": "two_users_and_two_projects_keep_separate_structure_sequences"
+        },
+        {
+          "line": 253,
+          "name": "author_undo_compensates_create_volume_and_still_reverses_a_later_edit_first"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/create_volume_tests.rs",
+      "lines": 603,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 145,
+          "name": "create_volume_is_atomic_replayable_and_scope_safe"
+        },
+        {
+          "line": 359,
+          "name": "create_volume_replays_canonical_sibling_order_and_keeps_historical_acks"
+        },
+        {
+          "line": 519,
+          "name": "stale_latest_snapshot_resyncs_and_does_not_return_the_live_tree"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/delete_chapter_tests.rs",
+      "lines": 861,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 352,
+          "name": "delete_chapter_is_atomic_replayable_and_scope_safe"
+        },
+        {
+          "line": 609,
+          "name": "author_undo_compensates_delete_chapter_and_restores_prior_chapter_identity"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/delete_volume_tests.rs",
+      "lines": 699,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 280,
+          "name": "delete_volume_is_atomic_replayable_and_scope_safe"
+        },
+        {
+          "line": 478,
+          "name": "author_undo_compensates_delete_volume_and_restores_prior_volume_identity"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/export_work.rs",
+      "lines": 48,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/export_work_tests.rs",
+      "lines": 571,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 22,
+          "name": "an_empty_combined_export_claim_uses_one_session_and_one_transaction"
+        },
+        {
+          "line": 52,
+          "name": "a_combined_export_claim_takes_readable_work_before_archive_work"
+        },
+        {
+          "line": 92,
+          "name": "a_combined_export_claim_falls_back_to_archive_work"
+        },
+        {
+          "line": 120,
+          "name": "a_readable_export_status_read_keeps_one_snapshot_across_worker_settlement"
+        },
+        {
+          "line": 194,
+          "name": "a_project_export_status_read_keeps_one_snapshot_across_worker_settlement"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/lib.rs",
+      "lines": 839,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/manuscript_block.rs",
+      "lines": 343,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/manuscript_block_tests.rs",
+      "lines": 250,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 18,
+          "name": "two_paragraphs_including_empty_right_roundtrip_through_canonical_bytes"
+        },
+        {
+          "line": 38,
+          "name": "one_heading_roundtrips_through_versioned_payload_bytes"
+        },
+        {
+          "line": 59,
+          "name": "ordered_versioned_ids_decode_the_complete_payload"
+        },
+        {
+          "line": 73,
+          "name": "versioned_id_mismatch_decodes_no_blocks"
+        },
+        {
+          "line": 90,
+          "name": "legacy_payload_with_zero_members_decodes_no_blocks"
+        },
+        {
+          "line": 98,
+          "name": "legacy_payload_with_one_member_upgrades_that_block"
+        },
+        {
+          "line": 109,
+          "name": "legacy_payload_with_more_than_one_member_decodes_no_blocks"
+        },
+        {
+          "line": 129,
+          "name": "several_ordered_blocks_persist_complete_payload_and_member_rows"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/manuscript_search.rs",
+      "lines": 204,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/manuscript_search_tests.rs",
+      "lines": 543,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 80,
+          "name": "search_rebuilds_from_canonical_facts_without_a_write_and_separates_not_ready_from_zero"
+        },
+        {
+          "line": 215,
+          "name": "several_live_chapters_load_membership_in_one_statement"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/manuscript_tree.rs",
+      "lines": 142,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/manuscript_tree_tests.rs",
+      "lines": 146,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 70,
+          "name": "empty_canonical_tree_is_scope_safe_and_snapshot_bound"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/model_gateway_tests.rs",
+      "lines": 722,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 368,
+          "name": "prepare_refusal_records_no_dispatch_evidence"
+        },
+        {
+          "line": 408,
+          "name": "dispatch_claim_commits_before_an_exchange_with_no_open_transaction"
+        },
+        {
+          "line": 457,
+          "name": "stale_run_lease_fence_rejects_the_observation"
+        },
+        {
+          "line": 495,
+          "name": "a_new_claim_of_a_cancelled_run_sends_one_abort_through_the_same_sequence"
+        },
+        {
+          "line": 586,
+          "name": "stream_batches_keep_earlier_items_and_replace_by_item_id"
+        },
+        {
+          "line": 646,
+          "name": "a_refused_cancellation_duty_ends_the_cancelled_claim"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/project_archive_build.rs",
+      "lines": 614,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/project_archive_build_tests.rs",
+      "lines": 402,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 99,
+          "name": "project_export_packs_and_reloads_requires_reconfirmation"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/project_command_challenge_tests.rs",
+      "lines": 340,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 46,
+          "name": "fixed_window_capacity_and_rollover_are_deterministic_under_concurrency"
+        },
+        {
+          "line": 133,
+          "name": "exact_retry_uses_one_rate_unit_and_rate_rows_obey_forced_rls"
+        },
+        {
+          "line": 213,
+          "name": "author_edit_and_shared_challenges_use_separate_rate_budgets"
+        },
+        {
+          "line": 280,
+          "name": "author_undo_and_author_edit_share_the_author_edit_rate_budget_for_one_project"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/recovery_visibility_proof_tests.rs",
+      "lines": 533,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 361,
+          "name": "recovery_visibility_proof_accepts_lawful_null_current_chapter"
+        },
+        {
+          "line": 421,
+          "name": "recovery_visibility_proof_keeps_hold_for_broken_required_checks"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/set_current_chapter_authority_tests.rs",
+      "lines": 864,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 431,
+          "name": "applied_set_current_chapter_writes_action_snapshot_and_no_commit"
+        },
+        {
+          "line": 646,
+          "name": "author_undo_restores_prior_current_chapter_or_stays_unavailable"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/set_current_chapter_tests.rs",
+      "lines": 475,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 227,
+          "name": "set_current_chapter_is_atomic_replayable_and_fail_closed"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/structural_authority_schema_tests.rs",
+      "lines": 972,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 280,
+          "name": "authority_history_floor_exists_without_rewriting_structure_activity"
+        },
+        {
+          "line": 350,
+          "name": "applied_structure_receipt_may_bind_empty_pair_commit_and_author_action"
+        },
+        {
+          "line": 419,
+          "name": "unsuccessful_structure_receipt_still_rejects_commit_ids"
+        },
+        {
+          "line": 466,
+          "name": "applied_create_chapter_receipt_may_bind_genesis_revision_pair"
+        },
+        {
+          "line": 557,
+          "name": "applied_set_current_chapter_receipt_may_bind_author_action_without_commit"
+        },
+        {
+          "line": 726,
+          "name": "applied_update_volume_receipt_may_bind_empty_pair_commit_and_author_action"
+        },
+        {
+          "line": 851,
+          "name": "applied_update_chapter_receipt_may_bind_empty_pair_commit_and_author_action"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/structure_command.rs",
+      "lines": 421,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/structure_command_tests.rs",
+      "lines": 785,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 311,
+          "name": "every_structural_outcome_replays_its_first_settlement_and_writes_authority_only_when_applied"
+        },
+        {
+          "line": 590,
+          "name": "every_structural_in_progress_exact_retry_conflicts_and_writes_no_row"
+        },
+        {
+          "line": 688,
+          "name": "every_structural_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused"
+        },
+        {
+          "line": 762,
+          "name": "every_structural_replay_separates_pre_capture_from_damaged_evidence"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/takeover_admission_tests.rs",
+      "lines": 763,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 548,
+          "name": "admission_returns_the_prior_writer_and_rejections_leave_no_evidence"
+        },
+        {
+          "line": 630,
+          "name": "two_observers_race_with_one_complete_settlement_and_one_full_rollback"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/takeover_persistence_tests.rs",
+      "lines": 682,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 195,
+          "name": "observer_takeover_settles_no_effect_activity_without_manuscript_authority"
+        },
+        {
+          "line": 533,
+          "name": "takeover_activity_counter_handles_missing_and_existing_rows"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/update_chapter_rank_batch_tests.rs",
+      "lines": 734,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 373,
+          "name": "applied_chapter_reorder_uses_one_rank_write_for_many_siblings"
+        },
+        {
+          "line": 446,
+          "name": "applied_chapter_reorder_keeps_other_volume_scope_and_removed_sibling_storage_keys"
+        },
+        {
+          "line": 634,
+          "name": "failed_chapter_rank_write_rolls_back_the_entire_command"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/update_chapter_tests.rs",
+      "lines": 1297,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 250,
+          "name": "update_chapter_is_atomic_replayable_and_scope_safe"
+        },
+        {
+          "line": 779,
+          "name": "author_undo_compensates_update_chapter_and_restores_title_and_canonical_sibling_order"
+        },
+        {
+          "line": 1034,
+          "name": "author_undo_compensates_update_chapter_and_restores_prior_live_sibling_place"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/update_project_assistance_tests.rs",
+      "lines": 425,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 86,
+          "name": "update_project_assistance_initializes_toggles_and_stays_scope_safe"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/update_project_tests.rs",
+      "lines": 247,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 81,
+          "name": "update_project_is_atomic_replayable_and_scope_safe"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/update_volume_rank_batch_tests.rs",
+      "lines": 403,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 64,
+          "name": "volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/update_volume_storage_order_tests.rs",
+      "lines": 124,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 5,
+          "name": "undo_volume_reorders_then_delete_restores_the_original_tree"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/src/update_volume_tests.rs",
+      "lines": 1233,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 210,
+          "name": "update_volume_is_atomic_replayable_and_scope_safe"
+        },
+        {
+          "line": 690,
+          "name": "author_undo_compensates_update_volume_and_restores_title_and_canonical_sibling_order"
+        },
+        {
+          "line": 957,
+          "name": "author_undo_compensates_update_volume_and_restores_prior_live_sibling_place"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/tests/fixture.sql",
+      "lines": 49,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/tests/project_command_challenge.rs",
+      "lines": 561,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 54,
+          "name": "issue_and_consume_are_exact_retry_safe_under_forced_rls"
+        },
+        {
+          "line": 185,
+          "name": "issue_and_consume_preserve_the_full_u64_client_session_generation"
+        },
+        {
+          "line": 263,
+          "name": "changed_binding_and_wrong_scope_fail_closed_without_consumption"
+        },
+        {
+          "line": 398,
+          "name": "consumption_rolls_back_with_the_caller_owned_transaction"
+        },
+        {
+          "line": 438,
+          "name": "an_expired_unconsumed_challenge_cannot_enter_the_command_transaction"
+        },
+        {
+          "line": 483,
+          "name": "an_author_edit_challenge_issued_under_the_shared_revision_stays_consumable"
+        },
+        {
+          "line": 523,
+          "name": "an_author_undo_challenge_issued_under_the_shared_revision_stays_consumable"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-adapter-postgres/tests/project_scope.rs",
+      "lines": 457,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "database_error_keeps_its_cause_without_exposing_it_in_display"
+        },
+        {
+          "line": 33,
+          "name": "two_users_and_projects_are_isolated_at_application_and_rls_boundaries"
+        },
+        {
+          "line": 157,
+          "name": "composite_identity_rejects_a_foreign_revision_reference"
+        },
+        {
+          "line": 190,
+          "name": "editor_session_tables_force_scope_and_composite_references"
+        },
+        {
+          "line": 319,
+          "name": "user_level_list_is_isolated_from_exact_project_scope_reads"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/archive_project.rs",
+      "lines": 125,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/archive_project_tests.rs",
+      "lines": 112,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 67,
+          "name": "an_exact_archive_project_binding_reaches_the_store"
+        },
+        {
+          "line": 78,
+          "name": "a_changed_archive_project_binding_is_refused_before_the_store"
+        },
+        {
+          "line": 90,
+          "name": "a_changed_retry_digest_is_refused_before_the_store"
+        },
+        {
+          "line": 102,
+          "name": "an_invalid_expected_revision_is_refused_before_the_store"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/author_command_outcome_unknown_tests.rs",
+      "lines": 58,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "append_delegates_once_and_returns_the_complete_immutable_observation"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/author_edit.rs",
+      "lines": 173,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/author_edit_outcome.rs",
+      "lines": 108,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/author_edit_outcome_tests.rs",
+      "lines": 61,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 40,
+          "name": "outcome_query_resolves_once_without_retrying_a_command"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/author_edit_tests.rs",
+      "lines": 168,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 106,
+          "name": "matching_bindings_reach_the_atomic_store_once"
+        },
+        {
+          "line": 146,
+          "name": "scope_substitution_fails_before_the_store"
+        },
+        {
+          "line": 158,
+          "name": "canonical_payload_substitution_fails_before_the_store"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/chapter_query.rs",
+      "lines": 50,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/chapter_query_tests.rs",
+      "lines": 143,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 58,
+          "name": "a_later_in_scope_chapter_returns_its_snapshot_and_head"
+        },
+        {
+          "line": 79,
+          "name": "a_chapter_outside_project_scope_fails_closed"
+        },
+        {
+          "line": 97,
+          "name": "an_expired_snapshot_fails_closed"
+        },
+        {
+          "line": 112,
+          "name": "a_missing_chapter_fails_closed"
+        },
+        {
+          "line": 127,
+          "name": "a_chapter_identity_mismatch_fails_closed"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/create_agent_run.rs",
+      "lines": 475,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/create_agent_run_tests.rs",
+      "lines": 80,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 74,
+          "name": "rejects_a_digest_mismatch_before_the_store"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/create_project.rs",
+      "lines": 91,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/create_project_tests.rs",
+      "lines": 81,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 63,
+          "name": "an_exact_create_project_binding_reaches_the_store"
+        },
+        {
+          "line": 71,
+          "name": "a_changed_create_project_binding_is_refused_before_the_store"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/editor_session.rs",
+      "lines": 151,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/editor_session_tests.rs",
+      "lines": 141,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 54,
+          "name": "use_cases_preserve_the_exact_session_binding"
+        },
+        {
+          "line": 103,
+          "name": "create_refuses_mismatched_challenge_and_session_bindings"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/lib.rs",
+      "lines": 575,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/manuscript_search.rs",
+      "lines": 252,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/manuscript_search_tests.rs",
+      "lines": 431,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 81,
+          "name": "a_manuscript_search_returns_ordered_matches_with_chapter_block_and_range_identity"
+        },
+        {
+          "line": 143,
+          "name": "a_current_chapter_search_excludes_other_live_chapters"
+        },
+        {
+          "line": 199,
+          "name": "zero_matches_are_a_complete_ready_page_not_projection_not_ready"
+        },
+        {
+          "line": 233,
+          "name": "an_unmet_required_watermark_is_projection_not_ready"
+        },
+        {
+          "line": 268,
+          "name": "a_rebuild_from_the_same_canonical_facts_returns_the_same_page"
+        },
+        {
+          "line": 288,
+          "name": "foreign_scope_facts_fail_closed"
+        },
+        {
+          "line": 308,
+          "name": "a_bounded_page_stops_at_the_absolute_item_limit"
+        },
+        {
+          "line": 340,
+          "name": "astral_unicode_before_and_inside_matches_keeps_exact_utf16_ranges"
+        },
+        {
+          "line": 387,
+          "name": "dense_ascii_page_decodes_each_utf16_unit_once"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/manuscript_statistics.rs",
+      "lines": 134,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/manuscript_statistics_tests.rs",
+      "lines": 188,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 70,
+          "name": "chapter_and_manuscript_counts_use_the_same_unicode_profile"
+        },
+        {
+          "line": 125,
+          "name": "unmet_required_watermark_is_not_an_empty_success"
+        },
+        {
+          "line": 157,
+          "name": "omitted_chapters_do_not_contribute_invented_counts"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/manuscript_tree.rs",
+      "lines": 142,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/manuscript_tree_tests.rs",
+      "lines": 138,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 45,
+          "name": "an_empty_active_project_returns_an_ordered_canonical_tree_with_zero_volumes_and_zero_chapters"
+        },
+        {
+          "line": 72,
+          "name": "a_snapshot_outside_project_scope_returns_no_canonical_tree"
+        },
+        {
+          "line": 89,
+          "name": "a_volume_outside_project_scope_returns_no_canonical_tree"
+        },
+        {
+          "line": 112,
+          "name": "a_chapter_outside_project_scope_returns_no_canonical_tree"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/project_activity.rs",
+      "lines": 26,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/project_activity_tests.rs",
+      "lines": 9,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 3,
+          "name": "an_unknown_persisted_kind_fails_closed"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/project_export.rs",
+      "lines": 215,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/project_export_tests.rs",
+      "lines": 246,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 137,
+          "name": "an_exact_export_binding_reaches_the_store"
+        },
+        {
+          "line": 155,
+          "name": "a_changed_export_binding_is_refused_before_the_store"
+        },
+        {
+          "line": 167,
+          "name": "a_changed_format_profile_is_refused_before_the_store"
+        },
+        {
+          "line": 179,
+          "name": "get_export_operation_reports_ready_only_with_an_immutable_root"
+        },
+        {
+          "line": 196,
+          "name": "verified_archive_bytes_are_refused_while_in_progress"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/project_read_tests.rs",
+      "lines": 59,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 49,
+          "name": "stale_chapter_identity_is_refused_before_the_chapter_query"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/readable_export.rs",
+      "lines": 221,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/readable_export_tests.rs",
+      "lines": 175,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 141,
+          "name": "an_exact_export_binding_reaches_the_store"
+        },
+        {
+          "line": 151,
+          "name": "a_changed_export_binding_is_refused_before_the_store"
+        },
+        {
+          "line": 163,
+          "name": "live_tree_order_joins_block_text_and_marks_unavailable_chapters"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/set_current_chapter.rs",
+      "lines": 143,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/set_current_chapter_tests.rs",
+      "lines": 93,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 74,
+          "name": "a_matching_challenge_reaches_the_store"
+        },
+        {
+          "line": 85,
+          "name": "a_mismatched_command_kind_is_a_binding_conflict"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/takeover.rs",
+      "lines": 116,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/takeover_tests.rs",
+      "lines": 103,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 74,
+          "name": "matching_bindings_reach_the_store_once"
+        },
+        {
+          "line": 93,
+          "name": "canonical_payload_substitution_fails_before_the_store"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/undo_latest_author_action.rs",
+      "lines": 167,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/undo_latest_author_action_tests.rs",
+      "lines": 92,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 71,
+          "name": "a_matching_challenge_reaches_the_store"
+        },
+        {
+          "line": 82,
+          "name": "a_mismatched_command_kind_is_a_binding_conflict"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/update_project.rs",
+      "lines": 129,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/update_project_assistance.rs",
+      "lines": 152,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-application/src/update_project_assistance_tests.rs",
+      "lines": 119,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 83,
+          "name": "an_exact_assistance_binding_reaches_the_store"
+        },
+        {
+          "line": 97,
+          "name": "a_changed_assistance_binding_is_refused_before_the_store"
+        },
+        {
+          "line": 109,
+          "name": "a_changed_retry_digest_is_refused_before_the_store"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-application/src/update_project_tests.rs",
+      "lines": 125,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 71,
+          "name": "an_exact_update_project_binding_reaches_the_store"
+        },
+        {
+          "line": 85,
+          "name": "a_changed_update_project_binding_is_refused_before_the_store"
+        },
+        {
+          "line": 97,
+          "name": "an_invalid_title_is_refused_before_the_store"
+        },
+        {
+          "line": 115,
+          "name": "a_changed_retry_digest_is_refused_before_the_store"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1.rs",
+      "lines": 511,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1_agent_run_artifacts_tests.rs",
+      "lines": 60,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 1,
+          "name": "agent_run_query_rejects_malformed_captured_settings_revision"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1_artifacts.rs",
+      "lines": 441,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1_artifacts_tests.rs",
+      "lines": 955,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 14,
+          "name": "controlled_project_queries_are_generated_from_the_release_1_contract"
+        },
+        {
+          "line": 56,
+          "name": "apply_author_edit_outcome_query_is_one_protected_exact_get"
+        },
+        {
+          "line": 134,
+          "name": "snapshot_and_activity_stream_are_generated_from_the_release_1_contract"
+        },
+        {
+          "line": 189,
+          "name": "take_over_project_writer_wire_is_generated_without_stage1_coverage"
+        },
+        {
+          "line": 388,
+          "name": "apply_author_edit_unknown_observation_cannot_disable_reconciliation"
+        },
+        {
+          "line": 435,
+          "name": "generated_openapi_file_references_resolve_from_the_openapi_directory"
+        },
+        {
+          "line": 499,
+          "name": "fixture_digest_uses_the_declared_self_normalization"
+        },
+        {
+          "line": 508,
+          "name": "chapter_fixtures_conform_to_the_typed_response_contract"
+        },
+        {
+          "line": 524,
+          "name": "author_edit_response_v2_keeps_activity_only_on_the_applied_variant"
+        },
+        {
+          "line": 700,
+          "name": "changed_review_catalog_contract_is_rejected"
+        },
+        {
+          "line": 734,
+          "name": "every_registered_operation_matches_the_reviewed_catalog_and_generated_wire"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1_create_project_artifacts_tests.rs",
+      "lines": 190,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 66,
+          "name": "prospective_create_project_challenge_schemas_reject_malformed_wire_values"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1_fixture_corpus_tests.rs",
+      "lines": 122,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "fixture_corpus_digest_covers_every_declared_catalog_fixture"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1_operation_registry.rs",
+      "lines": 232,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1_operation_registry_tests.rs",
+      "lines": 34,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 5,
+          "name": "registry_follows_the_reviewed_route_catalog_order"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1_refused_edit_draft_artifacts_tests.rs",
+      "lines": 52,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 3,
+          "name": "refused_edit_query_and_creation_reject_incomplete_or_operational_content"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/release1_tests.rs",
+      "lines": 172,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 13,
+          "name": "challenge_targets_equal_the_project_scoped_release_1_command_catalog"
+        },
+        {
+          "line": 57,
+          "name": "apply_author_edit_contract_activates_the_bounded_batch_policy"
+        },
+        {
+          "line": 133,
+          "name": "apply_author_edit_route_uses_response_v2_and_zero_activity_for_zero_authority"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_bundle.rs",
+      "lines": 284,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_bundle_tests.rs",
+      "lines": 73,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 7,
+          "name": "missing_mandatory_set_member_is_rejected"
+        },
+        {
+          "line": 27,
+          "name": "excluded_stage2_bundle_is_rejected"
+        },
+        {
+          "line": 47,
+          "name": "open_fx_handoff_parent_is_rejected"
+        },
+        {
+          "line": 55,
+          "name": "stale_fx_handoff_delivery_baseline_is_rejected"
+        },
+        {
+          "line": 64,
+          "name": "smap_stage_1_rejects_stage_release_evidence"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_crosswalk.rs",
+      "lines": 494,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_crosswalk_tests.rs",
+      "lines": 359,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 13,
+          "name": "checked_in_crosswalk_matches_fresh_generation"
+        },
+        {
+          "line": 22,
+          "name": "generated_crosswalk_releases_only_the_historical_web_client_owner"
+        },
+        {
+          "line": 39,
+          "name": "missing_stage1_operation_is_rejected"
+        },
+        {
+          "line": 53,
+          "name": "missing_project_scope_precondition_is_rejected"
+        },
+        {
+          "line": 73,
+          "name": "baseline_reader_never_falls_through_to_the_worktree"
+        },
+        {
+          "line": 89,
+          "name": "wrong_baseline_tree_is_rejected"
+        },
+        {
+          "line": 97,
+          "name": "wrong_delivery_baseline_tree_is_rejected"
+        },
+        {
+          "line": 106,
+          "name": "wrong_historical_foundation_crosswalk_digest_is_rejected"
+        },
+        {
+          "line": 115,
+          "name": "generated_crosswalk_proves_the_complete_stage1_mandatory_bundle"
+        },
+        {
+          "line": 244,
+          "name": "generated_crosswalk_proves_complete_production_shaped_provenance"
+        },
+        {
+          "line": 305,
+          "name": "generated_crosswalk_proves_complete_residual_risk_handoff"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_delivery.rs",
+      "lines": 597,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_delivery_tests.rs",
+      "lines": 276,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 16,
+          "name": "stale_ticket_body_binding_is_rejected"
+        },
+        {
+          "line": 25,
+          "name": "stale_requirement_gate_and_evidence_bindings_are_rejected"
+        },
+        {
+          "line": 41,
+          "name": "delivery_ticket_blockers_serialize_as_closed_arrays"
+        },
+        {
+          "line": 76,
+          "name": "protected_web_client_toolchain_ticket_matches_the_current_delivery_lock"
+        },
+        {
+          "line": 145,
+          "name": "stage1_handoff_delivery_lock_matches_the_composed_main"
+        },
+        {
+          "line": 162,
+          "name": "acknowledgement_loss_ticket_matches_the_current_process_profile"
+        },
+        {
+          "line": 222,
+          "name": "acknowledgement_loss_global_selection_is_exact_and_ordered"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_handoff.rs",
+      "lines": 216,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_handoff_tests.rs",
+      "lines": 58,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 17,
+          "name": "emitted_stage_release_is_rejected"
+        },
+        {
+          "line": 27,
+          "name": "open_parent_is_rejected"
+        },
+        {
+          "line": 40,
+          "name": "missing_later_stage_map_is_rejected"
+        },
+        {
+          "line": 50,
+          "name": "missing_reference_exclusion_is_rejected"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_provenance.rs",
+      "lines": 169,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage1_provenance_tests.rs",
+      "lines": 100,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 33,
+          "name": "equal_clock_values_get_distinct_temp_workspaces"
+        },
+        {
+          "line": 46,
+          "name": "current_repository_proves_production_shaped_provenance"
+        },
+        {
+          "line": 52,
+          "name": "reference_workspace_member_is_rejected"
+        },
+        {
+          "line": 61,
+          "name": "missing_production_journey_is_rejected"
+        },
+        {
+          "line": 75,
+          "name": "windows_prototype_workspace_member_is_rejected"
+        },
+        {
+          "line": 84,
+          "name": "journey_missing_postgresql_marker_is_rejected"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage2_crosswalk.rs",
+      "lines": 624,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage2_crosswalk_tests.rs",
+      "lines": 199,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 49,
+          "name": "generated_crosswalk_records_hnd_003_without_stage_release"
+        },
+        {
+          "line": 84,
+          "name": "generated_crosswalk_covers_rel_requirements_evidence_and_journey_steps"
+        },
+        {
+          "line": 104,
+          "name": "generated_crosswalk_keeps_evidence_classes_distinct_and_attributable"
+        },
+        {
+          "line": 155,
+          "name": "binding_evidence_paths_exist_in_the_worktree"
+        },
+        {
+          "line": 168,
+          "name": "missing_rel_007_is_rejected"
+        },
+        {
+          "line": 192,
+          "name": "checked_in_stage2_crosswalk_matches_fresh_generation"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage3_crosswalk.rs",
+      "lines": 381,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-contracts/src/stage3_crosswalk_tests.rs",
+      "lines": 105,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 13,
+          "name": "generated_crosswalk_records_hnd_003_without_stage_release"
+        },
+        {
+          "line": 58,
+          "name": "binding_evidence_paths_exist_in_the_worktree"
+        },
+        {
+          "line": 74,
+          "name": "missing_rel_007_is_rejected"
+        },
+        {
+          "line": 98,
+          "name": "checked_in_stage3_crosswalk_matches_fresh_generation"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/accept_proposal.rs",
+      "lines": 214,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/accept_proposal_tests.rs",
+      "lines": 222,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 27,
+          "name": "applies_one_pending_operation_for_an_exact_eligible_revision"
+        },
+        {
+          "line": 35,
+          "name": "refuses_wrong_scope_admission_stale_revision_and_ineligible_state"
+        },
+        {
+          "line": 79,
+          "name": "refuses_duplicate_identities_missing_dependencies_and_incomplete_bundle_closure"
+        },
+        {
+          "line": 107,
+          "name": "invalidates_bad_validation_and_altered_candidates"
+        },
+        {
+          "line": 135,
+          "name": "classifies_duplicate_dependency_and_bundle_selection_sets"
+        },
+        {
+          "line": 212,
+          "name": "conflicts_a_changed_target_head"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/append_proposal_generation_batch.rs",
+      "lines": 91,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/append_proposal_generation_batch_tests.rs",
+      "lines": 95,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 24,
+          "name": "applies_the_next_contiguous_canonical_batch"
+        },
+        {
+          "line": 32,
+          "name": "returns_the_existing_outcome_for_an_exact_duplicate"
+        },
+        {
+          "line": 42,
+          "name": "waits_for_a_gap_and_refuses_a_late_or_closed_generation"
+        },
+        {
+          "line": 69,
+          "name": "refuses_wrong_scope_and_conflicts_a_digest_mismatch"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/apply_author_edit_tests.rs",
+      "lines": 230,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 35,
+          "name": "one_replace_selection_is_classified_as_one_authoritative_result"
+        },
+        {
+          "line": 45,
+          "name": "ordered_units_apply_against_one_transient_body"
+        },
+        {
+          "line": 85,
+          "name": "invalid_later_unit_refuses_the_complete_batch"
+        },
+        {
+          "line": 108,
+          "name": "stale_head_and_invalid_selections_fail_without_a_partial_result"
+        },
+        {
+          "line": 140,
+          "name": "current_proposal_fact_conflicts_with_a_stale_authoritative_observation"
+        },
+        {
+          "line": 152,
+          "name": "matching_proposal_heads_revise_the_candidate_without_authority"
+        },
+        {
+          "line": 179,
+          "name": "exclusive_edge_input_applies_to_authority_without_revising_the_candidate"
+        },
+        {
+          "line": 207,
+          "name": "unchanged_content_is_a_no_effect_core_result"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/archive_path.rs",
+      "lines": 100,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/archive_path_tests.rs",
+      "lines": 73,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 3,
+          "name": "protocol_example_path_is_admitted"
+        },
+        {
+          "line": 10,
+          "name": "structural_refusals_match_the_pinned_profile"
+        },
+        {
+          "line": 43,
+          "name": "length_and_depth_limits_are_exact"
+        },
+        {
+          "line": 60,
+          "name": "ascii_case_folding_does_not_rewrite_the_admitted_path"
+        },
+        {
+          "line": 67,
+          "name": "combining_mark_paths_are_refused_rather_than_normalized"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/archive_project_tests.rs",
+      "lines": 58,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 15,
+          "name": "a_matching_revision_and_active_lifecycle_classifies_as_applied"
+        },
+        {
+          "line": 23,
+          "name": "a_stale_revision_classifies_as_conflicted_with_zero_lifecycle_effect"
+        },
+        {
+          "line": 36,
+          "name": "an_already_archived_project_classifies_as_no_effect"
+        },
+        {
+          "line": 48,
+          "name": "a_missing_project_classifies_as_refused_with_zero_lifecycle_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/assemble_context.rs",
+      "lines": 319,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/assemble_context_tests.rs",
+      "lines": 366,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 49,
+          "name": "assembles_complete_current_passage_context_without_destination_io"
+        },
+        {
+          "line": 115,
+          "name": "blocks_exact_required_working_target_over_the_item_limit"
+        },
+        {
+          "line": 182,
+          "name": "blocks_an_unavailable_required_instruction_revision"
+        },
+        {
+          "line": 259,
+          "name": "blocks_a_working_target_without_an_exact_revision"
+        },
+        {
+          "line": 325,
+          "name": "persisted_assembly_record_roundtrips"
+        },
+        {
+          "line": 334,
+          "name": "historical_assembly_without_block_selection_remains_readable"
+        },
+        {
+          "line": 354,
+          "name": "present_invalid_block_selection_is_not_historical_absence"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/compact_active_context.rs",
+      "lines": 68,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/compact_active_context_tests.rs",
+      "lines": 69,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "ordinary_assistance_does_not_request_active_compaction"
+        },
+        {
+          "line": 26,
+          "name": "input_digest_binds_the_exact_message_revision_and_body"
+        },
+        {
+          "line": 34,
+          "name": "install_refuses_a_restricted_changed_or_incomplete_exact_input"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/continuation_input.rs",
+      "lines": 72,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/continuation_input_tests.rs",
+      "lines": 86,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 43,
+          "name": "first_run_and_matching_prior_choose_the_declared_mapping"
+        },
+        {
+          "line": 59,
+          "name": "identity_mismatch_or_covered_copy_uses_new_transport"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/create_agent_run.rs",
+      "lines": 88,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/create_agent_run_tests.rs",
+      "lines": 93,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 7,
+          "name": "admits_a_new_conversation_when_assistance_and_target_are_current"
+        },
+        {
+          "line": 21,
+          "name": "refuses_an_inaccessible_existing_conversation"
+        },
+        {
+          "line": 47,
+          "name": "refuses_an_archived_project"
+        },
+        {
+          "line": 59,
+          "name": "refuses_unavailable_assistance"
+        },
+        {
+          "line": 71,
+          "name": "refuses_a_busy_existing_conversation"
+        },
+        {
+          "line": 83,
+          "name": "refuses_an_invalid_working_target_chapter"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/create_chapter_tests.rs",
+      "lines": 94,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "the_first_chapter_on_an_empty_active_project_becomes_current"
+        },
+        {
+          "line": 32,
+          "name": "a_later_chapter_preserves_the_existing_current_chapter"
+        },
+        {
+          "line": 49,
+          "name": "a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 60,
+          "name": "an_invalid_volume_join_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 70,
+          "name": "an_archived_project_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 80,
+          "name": "an_invalid_title_classifies_as_refused_with_zero_authority_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/create_project_tests.rs",
+      "lines": 17,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 3,
+          "name": "an_absent_project_classifies_as_the_closed_empty_open_state"
+        },
+        {
+          "line": 11,
+          "name": "an_existing_project_classifies_as_a_closed_refusal"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/create_volume_tests.rs",
+      "lines": 58,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 15,
+          "name": "a_matching_tree_revision_and_active_project_classifies_as_applied"
+        },
+        {
+          "line": 23,
+          "name": "a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 34,
+          "name": "an_archived_project_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 44,
+          "name": "an_invalid_title_classifies_as_refused_with_zero_authority_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/delete_chapter.rs",
+      "lines": 119,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/delete_chapter_tests.rs",
+      "lines": 119,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "removing_a_non_current_chapter_preserves_the_current_chapter"
+        },
+        {
+          "line": 31,
+          "name": "removing_the_current_chapter_selects_the_next_remaining_chapter"
+        },
+        {
+          "line": 47,
+          "name": "removing_the_last_current_chapter_selects_the_previous_remaining_chapter"
+        },
+        {
+          "line": 63,
+          "name": "removing_the_only_current_chapter_opens_an_explicit_empty_state"
+        },
+        {
+          "line": 80,
+          "name": "an_already_removed_chapter_classifies_as_no_effect"
+        },
+        {
+          "line": 91,
+          "name": "a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 101,
+          "name": "an_invalid_chapter_join_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 111,
+          "name": "an_archived_project_classifies_as_refused_with_zero_authority_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/delete_volume.rs",
+      "lines": 95,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/delete_volume_tests.rs",
+      "lines": 86,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 19,
+          "name": "removing_an_empty_volume_applies_the_next_tree_revision"
+        },
+        {
+          "line": 27,
+          "name": "a_nonempty_volume_is_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 39,
+          "name": "an_already_removed_volume_is_a_no_effect_retry"
+        },
+        {
+          "line": 52,
+          "name": "a_stale_tree_revision_is_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 64,
+          "name": "an_invalid_volume_join_is_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 76,
+          "name": "an_archived_project_is_refused_with_zero_authority_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/lib.rs",
+      "lines": 633,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/manuscript_payload_tests.rs",
+      "lines": 648,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 3,
+          "name": "upgrade_legacy_string_preserves_exact_unicode_and_one_stable_block"
+        },
+        {
+          "line": 19,
+          "name": "empty_legacy_string_becomes_one_empty_paragraph_block"
+        },
+        {
+          "line": 67,
+          "name": "versioned_replace_preserves_unicode_line_breaks_and_block_identity"
+        },
+        {
+          "line": 85,
+          "name": "legacy_replace_against_versioned_payload_is_unsupported"
+        },
+        {
+          "line": 102,
+          "name": "replace_on_unknown_block_is_invalid_selection"
+        },
+        {
+          "line": 171,
+          "name": "split_keeps_the_starting_fragment_identity_and_assigns_the_new_right_id"
+        },
+        {
+          "line": 181,
+          "name": "join_keeps_the_left_identity_and_drops_the_right_from_current_payload"
+        },
+        {
+          "line": 205,
+          "name": "join_of_nonadjacent_blocks_is_invalid"
+        },
+        {
+          "line": 249,
+          "name": "replace_still_targets_one_block_inside_a_split_payload"
+        },
+        {
+          "line": 290,
+          "name": "split_at_the_end_keeps_an_empty_right_block_and_the_starting_identity"
+        },
+        {
+          "line": 317,
+          "name": "one_unit_joins_then_replaces_across_adjacent_blocks_atomically"
+        },
+        {
+          "line": 349,
+          "name": "a_later_invalid_primitive_in_the_same_unit_refuses_the_complete_range"
+        },
+        {
+          "line": 381,
+          "name": "one_unit_replaces_then_splits_so_pasted_paragraphs_receive_new_identities"
+        },
+        {
+          "line": 429,
+          "name": "one_unit_moves_a_block_and_keeps_both_identities"
+        },
+        {
+          "line": 468,
+          "name": "an_invalid_move_index_refuses_without_changing_payload_order"
+        },
+        {
+          "line": 492,
+          "name": "one_to_one_retype_keeps_identity_and_text"
+        },
+        {
+          "line": 531,
+          "name": "a_stale_head_still_has_zero_authority_effect_for_move"
+        },
+        {
+          "line": 556,
+          "name": "two_disconnected_block_replacements_in_one_unit_are_an_unsupported_intent"
+        },
+        {
+          "line": 590,
+          "name": "chapter_display_body_joins_current_paragraphs_with_one_line_break"
+        },
+        {
+          "line": 602,
+          "name": "versioned_range_edits_preserve_unicode_and_reject_invalid_selections"
+        },
+        {
+          "line": 633,
+          "name": "a_versioned_range_replacement_with_the_same_text_has_no_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/open_block_proposal.rs",
+      "lines": 76,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/open_block_proposal_tests.rs",
+      "lines": 69,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 16,
+          "name": "opens_one_block_proposal_for_an_exact_current_base"
+        },
+        {
+          "line": 23,
+          "name": "refuses_wrong_scope_and_unavailable_targets"
+        },
+        {
+          "line": 51,
+          "name": "conflicts_changed_heads_and_overlapping_reservations"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/open_inline_proposal.rs",
+      "lines": 257,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/open_inline_proposal_tests.rs",
+      "lines": 193,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 40,
+          "name": "opens_one_inline_proposal_for_exact_anchors"
+        },
+        {
+          "line": 48,
+          "name": "refuses_wrong_scope_unavailable_target_and_unsupported_profiles"
+        },
+        {
+          "line": 84,
+          "name": "conflicts_changed_head_outside_the_displayed_range"
+        },
+        {
+          "line": 96,
+          "name": "conflicts_reservation_invalid_anchor_digest_and_coordinate_drift"
+        },
+        {
+          "line": 134,
+          "name": "preserves_ordered_anchors_across_two_blocks"
+        },
+        {
+          "line": 166,
+          "name": "routes_interior_edge_and_crossing_input_to_the_owner"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/pause_proposal_generation.rs",
+      "lines": 70,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/pause_proposal_generation_tests.rs",
+      "lines": 69,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "pauses_the_admitted_head_without_an_author_action"
+        },
+        {
+          "line": 30,
+          "name": "retries_the_same_fence_without_fabricating_an_author_action"
+        },
+        {
+          "line": 43,
+          "name": "refuses_wrong_scope_stale_heads_and_non_generating_state"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/project_archive.rs",
+      "lines": 356,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/project_archive_tests.rs",
+      "lines": 402,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 34,
+          "name": "protocol_example_entry_and_root_digests_are_golden"
+        },
+        {
+          "line": 53,
+          "name": "corrupt_entry_digest_is_a_typed_terminal_failure"
+        },
+        {
+          "line": 61,
+          "name": "case_colliding_paths_are_refused"
+        },
+        {
+          "line": 81,
+          "name": "file_path_that_equals_a_directory_prefix_is_refused"
+        },
+        {
+          "line": 109,
+          "name": "nested_archive_records_keep_escaped_empty_and_sorted_bytes"
+        },
+        {
+          "line": 133,
+          "name": "archive_row_sort_keys_follow_canonical_object_bytes"
+        },
+        {
+          "line": 148,
+          "name": "representative_row_array_appends_payload_once_into_one_buffer"
+        },
+        {
+          "line": 186,
+          "name": "unsigned_byte_order_is_the_sort_key"
+        },
+        {
+          "line": 205,
+          "name": "foreign_missing_lifecycle_and_provenance_are_typed_failures"
+        },
+        {
+          "line": 251,
+          "name": "catalog_include_names_ignore_other_export_policies"
+        },
+        {
+          "line": 277,
+          "name": "required_export_tables_are_live_catalog_include_names"
+        },
+        {
+          "line": 316,
+          "name": "a_missing_root_is_unsettled_and_exposes_no_zip_bytes"
+        },
+        {
+          "line": 324,
+          "name": "a_corrupt_payload_is_refused_before_zip_bytes"
+        },
+        {
+          "line": 339,
+          "name": "verified_archive_zip_repeats_and_contains_uncompressed_entry_bytes"
+        },
+        {
+          "line": 385,
+          "name": "representative_payload_is_hashed_once_during_verified_packaging"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/project_export.rs",
+      "lines": 40,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/project_export_tests.rs",
+      "lines": 27,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 5,
+          "name": "archived_project_is_refused"
+        },
+        {
+          "line": 18,
+          "name": "active_project_is_admitted"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/readable_export.rs",
+      "lines": 55,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/readable_export_command.rs",
+      "lines": 44,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/readable_export_command_tests.rs",
+      "lines": 27,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 5,
+          "name": "archived_project_is_refused"
+        },
+        {
+          "line": 18,
+          "name": "active_project_is_admitted"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/readable_export_tests.rs",
+      "lines": 90,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 3,
+          "name": "utf8_lf_profile_matches_pinned_golden_cases"
+        },
+        {
+          "line": 51,
+          "name": "representative_manuscript_appends_each_chapter_body_once"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/rebuild_expired_reference.rs",
+      "lines": 109,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/rebuild_expired_reference_tests.rs",
+      "lines": 150,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 26,
+          "name": "usable_reference_does_not_rebuild_or_erase_an_ordinary_correction"
+        },
+        {
+          "line": 43,
+          "name": "unknown_create_is_not_confirmed_expiry"
+        },
+        {
+          "line": 54,
+          "name": "confirmed_expiry_and_unusable_handles_rebuild_without_opaque_reuse"
+        },
+        {
+          "line": 71,
+          "name": "automatic_rebuild_blocks_when_a_required_gate_fails"
+        },
+        {
+          "line": 130,
+          "name": "copy_restriction_omits_covered_content_and_still_rebuilds_eligible_input"
+        },
+        {
+          "line": 142,
+          "name": "unchanged_effective_context_does_not_mint_a_new_step"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/reject_proposal_operations.rs",
+      "lines": 98,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/reject_proposal_operations_tests.rs",
+      "lines": 110,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "resolves_one_pending_operation_without_authority"
+        },
+        {
+          "line": 28,
+          "name": "refuses_wrong_scope_admission_stale_revision_and_non_pending_work"
+        },
+        {
+          "line": 72,
+          "name": "refuses_duplicate_identities_missing_dependencies_and_incomplete_bundle_closure"
+        },
+        {
+          "line": 100,
+          "name": "conflicts_a_changed_target_head"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/reopen_rejected_operations.rs",
+      "lines": 85,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/reopen_rejected_operations_tests.rs",
+      "lines": 97,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 19,
+          "name": "resolves_one_rejected_operation_without_authority"
+        },
+        {
+          "line": 27,
+          "name": "refuses_stale_lineage_unavailable_proof_and_non_rejected_work"
+        },
+        {
+          "line": 87,
+          "name": "conflicts_a_changed_target_head"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/reopen_withdrawn_proposal.rs",
+      "lines": 91,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/reopen_withdrawn_proposal_tests.rs",
+      "lines": 89,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 18,
+          "name": "a_matching_withdrawn_proposal_reopens"
+        },
+        {
+          "line": 26,
+          "name": "terminal_supersession_and_a_mismatched_event_have_no_effect"
+        },
+        {
+          "line": 55,
+          "name": "reopen_refuses_scope_admission_and_a_stale_revision_and_conflicts_on_the_head"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/replan_proposal.rs",
+      "lines": 73,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/replan_proposal_tests.rs",
+      "lines": 97,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 19,
+          "name": "resolves_one_current_conflict_without_authority"
+        },
+        {
+          "line": 27,
+          "name": "refuses_stale_ineligible_and_unproven_sources"
+        },
+        {
+          "line": 87,
+          "name": "conflicts_a_changed_target_head"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/retrieve_original_result.rs",
+      "lines": 133,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/retrieve_original_result_tests.rs",
+      "lines": 61,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 21,
+          "name": "retrieval_follows_the_retained_reference_and_fence"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/revision_comparison.rs",
+      "lines": 383,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/revision_comparison_tests.rs",
+      "lines": 86,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 46,
+          "name": "comparison_binds_exact_revisions_and_normalizes_adjacent_fragments"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/set_current_chapter_tests.rs",
+      "lines": 116,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 24,
+          "name": "a_matching_current_chapter_and_target_head_classifies_as_applied"
+        },
+        {
+          "line": 34,
+          "name": "an_already_current_target_classifies_as_no_effect"
+        },
+        {
+          "line": 46,
+          "name": "a_stale_current_chapter_classifies_as_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 58,
+          "name": "a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 70,
+          "name": "a_missing_project_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 82,
+          "name": "an_archived_project_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 94,
+          "name": "an_invalid_chapter_join_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 106,
+          "name": "an_empty_project_classifies_as_refused_with_zero_authority_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/statistics_profile.rs",
+      "lines": 96,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/statistics_profile_tests.rs",
+      "lines": 81,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 3,
+          "name": "unicode_16_profile_matches_pinned_golden_cases"
+        },
+        {
+          "line": 29,
+          "name": "chapter_blocks_join_like_display_body_before_counting"
+        },
+        {
+          "line": 40,
+          "name": "empty_blocks_still_contribute_their_separating_lf"
+        },
+        {
+          "line": 66,
+          "name": "block_stream_counts_equal_the_joined_chapter_reference"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/undo_latest_author_action_tests.rs",
+      "lines": 174,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 36,
+          "name": "a_matching_reversible_frontier_classifies_as_compensated"
+        },
+        {
+          "line": 44,
+          "name": "a_frontier_mismatch_classifies_as_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 58,
+          "name": "a_missing_frontier_classifies_as_unavailable"
+        },
+        {
+          "line": 70,
+          "name": "a_barrier_frontier_classifies_as_unavailable_and_cannot_be_skipped"
+        },
+        {
+          "line": 85,
+          "name": "a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 97,
+          "name": "a_matching_acceptance_frontier_classifies_as_compensated"
+        },
+        {
+          "line": 105,
+          "name": "a_drifted_acceptance_head_with_usable_evidence_requires_reversal"
+        },
+        {
+          "line": 116,
+          "name": "unusable_acceptance_evidence_is_unavailable"
+        },
+        {
+          "line": 135,
+          "name": "a_stale_expected_acceptance_head_stays_conflicted"
+        },
+        {
+          "line": 147,
+          "name": "an_acceptance_frontier_mismatch_stays_conflicted"
+        },
+        {
+          "line": 161,
+          "name": "a_matching_structure_frontier_classifies_as_compensated_without_head_proof"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/unknown_create_successor.rs",
+      "lines": 219,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/unknown_create_successor_tests.rs",
+      "lines": 130,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 22,
+          "name": "successor_scripts_are_distinct_from_ordinary_and_retrieval_text"
+        },
+        {
+          "line": 39,
+          "name": "missing_or_unsupported_lookup_still_permits_one_successor"
+        },
+        {
+          "line": 61,
+          "name": "failed_gates_pause_without_consuming_the_allowance"
+        },
+        {
+          "line": 102,
+          "name": "cancellation_and_spent_allowance_do_not_reset_or_duplicate"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/update_chapter.rs",
+      "lines": 101,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/update_chapter_tests.rs",
+      "lines": 103,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "a_matching_revision_rename_and_reorder_classifies_as_applied"
+        },
+        {
+          "line": 32,
+          "name": "a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 42,
+          "name": "an_unchanged_title_and_order_classifies_as_no_effect"
+        },
+        {
+          "line": 53,
+          "name": "a_wrong_scope_chapter_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 63,
+          "name": "an_invalid_order_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 79,
+          "name": "an_archived_project_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 89,
+          "name": "an_invalid_title_classifies_as_refused_with_zero_authority_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/update_project_assistance.rs",
+      "lines": 109,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/update_project_assistance_tests.rs",
+      "lines": 96,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 28,
+          "name": "a_first_prepare_classifies_as_initialized"
+        },
+        {
+          "line": 39,
+          "name": "a_repeated_prepare_with_the_same_availability_is_no_effect"
+        },
+        {
+          "line": 51,
+          "name": "a_matching_revision_and_new_availability_classifies_as_applied"
+        },
+        {
+          "line": 62,
+          "name": "a_stale_revision_classifies_as_conflicted"
+        },
+        {
+          "line": 74,
+          "name": "a_nonzero_expected_revision_before_initialization_is_stale"
+        },
+        {
+          "line": 86,
+          "name": "a_missing_project_classifies_as_refused"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/update_project_tests.rs",
+      "lines": 82,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 16,
+          "name": "a_matching_revision_and_new_title_classifies_as_applied"
+        },
+        {
+          "line": 27,
+          "name": "a_stale_revision_classifies_as_conflicted_with_zero_title_effect"
+        },
+        {
+          "line": 40,
+          "name": "an_unchanged_title_classifies_as_no_effect"
+        },
+        {
+          "line": 52,
+          "name": "an_invalid_title_classifies_as_refused_with_zero_title_effect"
+        },
+        {
+          "line": 72,
+          "name": "a_missing_project_classifies_as_refused_with_zero_title_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/update_volume_tests.rs",
+      "lines": 103,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 20,
+          "name": "a_matching_revision_rename_and_reorder_classifies_as_applied"
+        },
+        {
+          "line": 32,
+          "name": "a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect"
+        },
+        {
+          "line": 42,
+          "name": "an_unchanged_title_and_order_classifies_as_no_effect"
+        },
+        {
+          "line": 53,
+          "name": "a_wrong_scope_volume_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 63,
+          "name": "an_invalid_order_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 79,
+          "name": "an_archived_project_classifies_as_refused_with_zero_authority_effect"
+        },
+        {
+          "line": 89,
+          "name": "an_invalid_title_classifies_as_refused_with_zero_authority_effect"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-core/src/withdraw_proposal.rs",
+      "lines": 103,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-core/src/withdraw_proposal_tests.rs",
+      "lines": 111,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 28,
+          "name": "author_withdrawal_allocates_one_forward_action"
+        },
+        {
+          "line": 38,
+          "name": "current_producer_withdrawal_allocates_no_author_action"
+        },
+        {
+          "line": 48,
+          "name": "unsupported_cause_and_terminal_supersession_have_no_effect"
+        },
+        {
+          "line": 77,
+          "name": "withdraw_refuses_scope_admission_and_stale_revision_and_conflicts_on_head"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/author_edit.rs",
+      "lines": 527,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-server/src/author_edit_outcome.rs",
+      "lines": 167,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-server/src/author_edit_outcome_tests.rs",
+      "lines": 38,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 9,
+          "name": "admitted_unsettled_outcome_requires_visible_reconciliation"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/author_edit_tests.rs",
+      "lines": 85,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 42,
+          "name": "request_validation_rejects_a_foreign_target"
+        },
+        {
+          "line": 49,
+          "name": "request_validation_accepts_a_bounded_ordered_batch"
+        },
+        {
+          "line": 69,
+          "name": "apply_author_edit_rejects_referer_without_origin"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/client_session_binding_tests.rs",
+      "lines": 280,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 94,
+          "name": "current_client_session_binding_accepts_its_exact_request_site_and_identities"
+        },
+        {
+          "line": 111,
+          "name": "public_read_admission_uses_normalized_config_binding_and_header_origins"
+        },
+        {
+          "line": 143,
+          "name": "stale_or_identity_mismatched_client_session_bindings_fail_closed"
+        },
+        {
+          "line": 185,
+          "name": "missing_origin_and_ambiguous_cookie_fail_closed"
+        },
+        {
+          "line": 214,
+          "name": "invalid_allowed_origin_configuration_admits_no_protected_request"
+        },
+        {
+          "line": 232,
+          "name": "invalid_binding_origin_configuration_fails_authentication"
+        },
+        {
+          "line": 249,
+          "name": "multiple_cookie_headers_fail_closed"
+        },
+        {
+          "line": 262,
+          "name": "empty_or_mixed_empty_session_cookie_values_fail_closed"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/contract_reason.rs",
+      "lines": 21,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-server/src/contract_reason_tests.rs",
+      "lines": 160,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 26,
+          "name": "every_volume_reason_maps_to_its_public_reason"
+        },
+        {
+          "line": 92,
+          "name": "every_chapter_reason_maps_to_its_public_reason"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/editor_session_tests.rs",
+      "lines": 31,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 7,
+          "name": "editor_session_routes_exist_and_state_change_never_uses_referer"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/lib.rs",
+      "lines": 928,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-server/src/project_command_challenge_tests.rs",
+      "lines": 329,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 72,
+          "name": "public_challenge_route_requires_origin_and_never_uses_referer"
+        },
+        {
+          "line": 82,
+          "name": "public_challenge_route_rejects_every_invalid_origin_class_before_storage"
+        },
+        {
+          "line": 132,
+          "name": "public_challenge_route_reaches_the_project_store_after_security_validation"
+        },
+        {
+          "line": 142,
+          "name": "public_challenge_route_refuses_retired_semantic_context_controls"
+        },
+        {
+          "line": 178,
+          "name": "public_challenge_route_accepts_case_insensitive_json_content_type"
+        },
+        {
+          "line": 194,
+          "name": "public_challenge_route_rejects_repeated_content_type_without_disclosure"
+        },
+        {
+          "line": 218,
+          "name": "public_challenge_route_rejects_malformed_json_content_types"
+        },
+        {
+          "line": 245,
+          "name": "server_config_debug_redacts_the_challenge_secret"
+        },
+        {
+          "line": 258,
+          "name": "challenge_secret_derivation_uses_hmac_sha256"
+        },
+        {
+          "line": 272,
+          "name": "rate_refusal_has_a_bounded_retry_time_without_binding_disclosure"
+        },
+        {
+          "line": 292,
+          "name": "public_challenge_route_enforces_the_absolute_json_body_ceiling"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/public_origin.rs",
+      "lines": 99,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-server/src/public_origin_tests.rs",
+      "lines": 90,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 5,
+          "name": "a_configured_http_origin_refuses_startup"
+        },
+        {
+          "line": 16,
+          "name": "a_configured_https_origin_is_the_printed_site"
+        },
+        {
+          "line": 30,
+          "name": "an_invalid_configured_origin_refuses_startup"
+        },
+        {
+          "line": 50,
+          "name": "a_public_origin_refuses_a_non_loopback_listen"
+        },
+        {
+          "line": 61,
+          "name": "unset_public_origin_keeps_the_local_http_profile"
+        },
+        {
+          "line": 69,
+          "name": "a_public_origin_admits_loopback_localhost_and_unix_listens"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/request_origin.rs",
+      "lines": 112,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-server/src/request_origin_tests.rs",
+      "lines": 253,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 17,
+          "name": "tuple_origins_normalize_default_ports_host_case_idna_and_ip_hosts"
+        },
+        {
+          "line": 29,
+          "name": "tuple_origins_keep_scheme_host_and_non_default_port_distinct"
+        },
+        {
+          "line": 42,
+          "name": "origin_header_uses_the_same_tuple_normalization_as_configuration"
+        },
+        {
+          "line": 55,
+          "name": "sensitive_safe_read_derives_one_referer_tuple_with_path_and_query"
+        },
+        {
+          "line": 71,
+          "name": "state_changing_policy_requires_origin_and_never_uses_referer"
+        },
+        {
+          "line": 86,
+          "name": "present_invalid_origin_refuses_without_referer_fallback"
+        },
+        {
+          "line": 105,
+          "name": "valid_origin_is_authoritative_over_referer"
+        },
+        {
+          "line": 124,
+          "name": "empty_repeated_and_non_utf8_origin_values_refuse"
+        },
+        {
+          "line": 152,
+          "name": "empty_repeated_and_non_utf8_referer_values_refuse"
+        },
+        {
+          "line": 180,
+          "name": "unsupported_or_malformed_url_classes_refuse"
+        },
+        {
+          "line": 198,
+          "name": "every_representable_syntax_violation_class_refuses"
+        },
+        {
+          "line": 217,
+          "name": "configured_and_header_origins_require_origin_only_shape"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/session_bootstrap.rs",
+      "lines": 126,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-server/src/session_bootstrap_tests.rs",
+      "lines": 84,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 9,
+          "name": "packaged_production_requires_exactly_one_handle"
+        },
+        {
+          "line": 49,
+          "name": "one_handle_issues_that_cookie_value"
+        },
+        {
+          "line": 63,
+          "name": "multiple_mapping_test_allowance_disables_issuance"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/web_assets.rs",
+      "lines": 75,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-server/src/web_assets_tests.rs",
+      "lines": 131,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 47,
+          "name": "validated_resources_survive_directory_changes"
+        },
+        {
+          "line": 62,
+          "name": "refuses_missing_extra_altered_and_mixed_resources"
+        },
+        {
+          "line": 90,
+          "name": "refuses_invalid_manifest_even_with_its_exact_digest"
+        },
+        {
+          "line": 109,
+          "name": "refuses_symbolic_links_and_unlisted_directories"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/src/web_host.rs",
+      "lines": 158,
+      "kind": "rust-support-or-module-link",
+      "tests": []
+    },
+    {
+      "path": "crates/storyos-server/src/web_host_tests.rs",
+      "lines": 494,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 128,
+          "name": "public_https_profile_cookie_includes_secure_and_ignores_forwarded_headers"
+        },
+        {
+          "line": 237,
+          "name": "html_document_get_issues_the_configured_session_cookie"
+        },
+        {
+          "line": 266,
+          "name": "static_index_html_path_does_not_issue_a_session"
+        },
+        {
+          "line": 295,
+          "name": "protocol_assets_and_failures_do_not_issue_a_session"
+        },
+        {
+          "line": 363,
+          "name": "issuance_requires_the_printed_host_and_does_not_need_origin"
+        },
+        {
+          "line": 393,
+          "name": "matching_cookie_refreshes_an_expired_binding"
+        },
+        {
+          "line": 438,
+          "name": "mismatched_cookie_is_not_overwritten_and_does_not_authorize"
+        },
+        {
+          "line": 477,
+          "name": "disabled_bootstrap_does_not_issue_a_cookie"
+        }
+      ]
+    },
+    {
+      "path": "crates/storyos-server/tests/public_origin_startup.rs",
+      "lines": 33,
+      "kind": "rust-test",
+      "tests": [
+        {
+          "line": 13,
+          "name": "invalid_public_origin_refuses_before_storage"
+        },
+        {
+          "line": 24,
+          "name": "public_origin_refuses_a_non_loopback_listen_before_storage"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts",
+      "lines": 67,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 21,
+          "declaration": "it(\"serves untransformed dist bytes in a reloadable same-origin child frame\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
+      "lines": 7,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 3,
+          "declaration": "it(\"edits an exact Inline Proposal in the packaged writing workspace\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts",
+      "lines": 8,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 4,
+          "declaration": "it(\"shows exact captured Memory settings through Run selection, reload, and unavailable evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+      "lines": 33,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 4,
+          "declaration": "it(\"opens, edits, reloads, and takes over through the real production host in Chrome\", async () => {"
+        },
+        {
+          "line": 9,
+          "declaration": "it(\"recovers one prose request through the production Web, Server, database, and Worker\", async () => {"
+        },
+        {
+          "line": 14,
+          "declaration": "it(\"preserves and copies a complete mixed edit through response loss, reload and Server restart\", async () => {"
+        },
+        {
+          "line": 18,
+          "declaration": "it(\"recovers a conflicted Proposal through reload, replan, and an explicit retry\", async () => {"
+        },
+        {
+          "line": 23,
+          "declaration": "it(\"revises real cross-Chapter locations through the composer and central editor\", async () => {"
+        },
+        {
+          "line": 28,
+          "declaration": "it(\"uses the approved composer and controls the retained Run through the production host\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/production-page.integration.test.ts",
+      "lines": 67,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 33,
+          "declaration": "it(\"loads the exact Vite production page in Google Chrome and shows the Stage 1 surface\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts",
+      "lines": 8,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 4,
+          "declaration": "it(\"shows bounded selected Run input and recovery evidence through the packaged production host\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/restored-discard.integration.test.ts",
+      "lines": 7,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 3,
+          "declaration": "it(\"consumes the original production Discard and local Journal after isolated physical restore\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts",
+      "lines": 439,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 306,
+          "declaration": "it(\"S1-JRN-001 uses the Vite production page, storyos-server, Application, Core, and PostgreSQL\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-01-bootstrap-challenge.integration.test.ts",
+      "lines": 83,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 47,
+          "declaration": "it(\"a new local browser session reaches protected-ready without AI and acquires createProjectChallenge\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-02-create-empty-project.integration.test.ts",
+      "lines": 66,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 33,
+          "declaration": "it(\"the protected browser creates one empty workspace without a starter Chapter\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-03-list-open-library.integration.test.ts",
+      "lines": 87,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 33,
+          "declaration": "it(\"the current User library lists owned Projects and opens an empty Project from getProject\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-04-rename-project.integration.test.ts",
+      "lines": 99,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 45,
+          "declaration": "it(\"the author renames one exact Project and the library plus opened title converge\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-05-archive-project.integration.test.ts",
+      "lines": 96,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 46,
+          "declaration": "it(\"the library fails closed on open and write for an archived Project\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-07-create-volume.integration.test.ts",
+      "lines": 79,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 34,
+          "declaration": "it(\"the author creates one named Volume from the empty manuscript workspace\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts",
+      "lines": 181,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 42,
+          "declaration": "it(\"the author creates Chapters at inline menu positions and keeps the first current Chapter\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-09-navigate-reopen.integration.test.ts",
+      "lines": 154,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 94,
+          "declaration": "it(\"the author opens each Chapter from the tree and reopens the current Chapter\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts",
+      "lines": 158,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 64,
+          "declaration": "it(\"the author renames and reorders Volumes from the canonical tree and they survive reopen\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts",
+      "lines": 183,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 90,
+          "declaration": "it(\"the author renames and reorders Chapters from the canonical tree and they survive reopen\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts",
+      "lines": 213,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 83,
+          "declaration": "it(\"writes in two Chapters, switches current Chapter, and reopens the current Chapter\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts",
+      "lines": 236,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 180,
+          "declaration": "it(\"the author confirms Chapter removal, keeps the next current Chapter, then opens empty\", { timeout: 90_000 }, async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts",
+      "lines": 146,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 65,
+          "declaration": "it(\"the author cannot remove a nonempty Volume, then removes an empty Volume\", { timeout: 90_000 }, async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-editor.integration.test.ts",
+      "lines": 172,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 76,
+          "declaration": "it(\"hydrates production Tiptap for one paragraph Block without a textarea write path\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts",
+      "lines": 151,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 68,
+          "declaration": "it(\"keeps the editor writable through frequent Author Undo between Author Edit batches\", {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts",
+      "lines": 434,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 187,
+          "declaration": "it(\"consumes real assistance and Run Activity before the author continues writing\", async () => {"
+        },
+        {
+          "line": 283,
+          "declaration": "it(\"settles IME, clipboard, drop, and contiguous Block replacement without reusing identity\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts",
+      "lines": 210,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 94,
+          "declaration": "it(\"recovers Local Edit Journal text after reload without a second Author Edit\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
+      "lines": 277,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 129,
+          "declaration": "it(\"runs the AI-disabled production journey without losing Chapter work\", {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts",
+      "lines": 307,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 122,
+          "declaration": "it(\"repeats Chapter switching, Undo, search, and reload without losing work\", {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts",
+      "lines": 281,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 183,
+          "declaration": "it(\"moves and retypes Blocks with stable identity and refuses copy as a move\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts",
+      "lines": 146,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 88,
+          "declaration": "it(\"writes Chinese and English after restore, settles, reloads, and keeps isolation\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts",
+      "lines": 218,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 114,
+          "declaration": "it(\"exports a durable human-readable manuscript through the Worker\", { timeout: 120_000 }, async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts",
+      "lines": 219,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 76,
+          "declaration": "it(\"shows pending, saving, and saved without calling local input saved, across Chapters\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-search.integration.test.ts",
+      "lines": 250,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 126,
+          "declaration": "it(\"searches the current Chapter and manuscript with bounded Snapshot identity\", { timeout: 90_000 }, async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts",
+      "lines": 273,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 178,
+          "declaration": "it(\"splits and joins adjacent Blocks and reopens the same identities\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts",
+      "lines": 247,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 119,
+          "declaration": "it(\"rebuilds Chapter and manuscript statistics after edit, switch, and deletion\", { timeout: 120_000 }, async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts",
+      "lines": 159,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 73,
+          "declaration": "it(\"saves sustained Chinese composition, idle pauses, and Block boundaries without a quota reset\", {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-undo.integration.test.ts",
+      "lines": 229,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 161,
+          "declaration": "it(\"undoes one exact admitted Author Action and restores identity after reload\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
+      "lines": 232,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 64,
+          "declaration": "it(\"the production page uses the approved workspace without losing writing state\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-exact-dist/stage1-journey-expectation.ts",
+      "lines": 562,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/browser-source/accept-block-proposal.integration.test.ts",
+      "lines": 186,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 11,
+          "declaration": "it(\"retries the same protected Acceptance after an unknown delivery\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/acceptance-journal.integration.test.ts",
+      "lines": 69,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 8,
+          "declaration": "it(\"rejects a foreign Acceptance flight before it can disappear from Journal recovery\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/acknowledgement-loss.integration.test.ts",
+      "lines": 633,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 96,
+          "declaration": "it(\"converges lost ApplyAuthorEdit acknowledgement from persistent outcome evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/activity-reorder.integration.test.ts",
+      "lines": 144,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 27,
+          "declaration": "it(\"converges duplicate and reordered Activity frames to one durable ingest\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+      "lines": 412,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 47,
+          "declaration": "it(\"preserves local payload and resumes after a new Snapshot generation\", async () => {"
+        },
+        {
+          "line": 196,
+          "declaration": "it.each(["
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts",
+      "lines": 440,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 104,
+          "declaration": "it(\"resumes a retained cursor and resynchronizes from an authorized Snapshot after 409\", async () => {"
+        },
+        {
+          "line": 227,
+          "declaration": "it(\"does not treat an unrecoverable expired cursor as an empty successful replay\", async () => {"
+        },
+        {
+          "line": 276,
+          "declaration": "it(\"refuses a Snapshot whose Scope does not match the Editor Session\", async () => {"
+        },
+        {
+          "line": 321,
+          "declaration": "it(\"ingests assistance and Run Activity without disabling manual writing or skipping unknown Events\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/archive-historical-acknowledgement.integration.test.ts",
+      "lines": 61,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 10,
+          "declaration": "it(\"explains a historical Archive Project acknowledgement and does not retry it\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/author-edit-outcome.integration.test.ts",
+      "lines": 63,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 13,
+          "declaration": "it(\"keeps the generated outcome Query proof header-only\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/author-edit-rate-limit.integration.test.ts",
+      "lines": 143,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 112,
+          "declaration": "it(\"keeps an Author Edit saving through a Challenge rate limit and retries the same group\", async () => {"
+        },
+        {
+          "line": 131,
+          "declaration": "it(\"ends a Challenge rate-limit wait when the editor closes\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts",
+      "lines": 260,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 142,
+          "declaration": "it(\"keeps the editor editable while an Author Undo waits for Challenge admission and retries the same Undo\", async () => {"
+        },
+        {
+          "line": 163,
+          "declaration": "it(\"ignores another Ctrl/Cmd+Z while an Author Undo is in progress\", async () => {"
+        },
+        {
+          "line": 182,
+          "declaration": "it.each([\"input\", \"unmount\"] as const)(\"abandons an Author Undo Challenge wait at the editor %s boundary\", async (boundary) => {"
+        },
+        {
+          "line": 199,
+          "declaration": "it(\"keeps new input when the author types while the retried Author Undo request is in flight\", async () => {"
+        },
+        {
+          "line": 224,
+          "declaration": "it(\"does not send an abandoned Author Undo when its Challenge request completes after new input\", async () => {"
+        },
+        {
+          "line": 242,
+          "declaration": "it(\"starts no Retry-After wait for an abandoned Author Undo and accepts the next Ctrl/Cmd+Z at once\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/browser-command-foundation.test.ts",
+      "lines": 65,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 17,
+          "declaration": "it(\"uses typed input, clipboard, and Client Session commands in Google Chrome\", async () => {"
+        },
+        {
+          "line": 58,
+          "declaration": "it(\"refuses navigation and code inputs at the production command boundary\", () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/chapter-navigation.integration.test.ts",
+      "lines": 179,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 37,
+          "declaration": "it(\"selects a tree Chapter through getChapter and keeps pending on the current Chapter\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/create-historical-acknowledgement.integration.test.ts",
+      "lines": 202,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 73,
+          "declaration": "it(\"explains a historical Create Volume acknowledgement and does not retry it\", async () => {"
+        },
+        {
+          "line": 124,
+          "declaration": "it(\"keeps the pending inline title when another creation is requested and explains the historical acknowledgement\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/current-chapter-historical-acknowledgement.integration.test.ts",
+      "lines": 149,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 25,
+          "declaration": "it(\"explains a historical Set Current Chapter acknowledgement and does not retry it\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/delete-historical-acknowledgement.integration.test.ts",
+      "lines": 187,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 73,
+          "declaration": "it(\"explains a historical Delete Volume acknowledgement and does not retry it\", async () => {"
+        },
+        {
+          "line": 130,
+          "declaration": "it(\"explains a historical Delete Chapter acknowledgement and does not retry it\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts",
+      "lines": 118,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 13,
+          "declaration": "it.each([\"unmount\", \"replace\", \"secret\", \"schema\"] as const)(\"Draft Undo respects the editor %s boundary\", async (boundary) => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/editor-session.integration.test.ts",
+      "lines": 1267,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 64,
+          "declaration": "it.each([\"changed_head\", \"legacy_editor_contract\"] as const)(\"preserves the complete Journal during %s recovery\", async (boundary) => {"
+        },
+        {
+          "line": 120,
+          "declaration": "it(\"keeps incompatible pending ReplaceSelection inspectable until Block reconfirmation\", async () => {"
+        },
+        {
+          "line": 238,
+          "declaration": "it(\"keeps the bounded IndexedDB Journal valid through batching and settlement\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/journal-gc-fenced.integration.test.ts",
+      "lines": 232,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 42,
+          "declaration": "it(\"collects a fenced partition under its immutable old writer generation\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/journal-gc.integration.test.ts",
+      "lines": 222,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 42,
+          "declaration": "it(\"collects Journal payload only after settlement and a durable successor\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/journal-version-three.ts",
+      "lines": 30,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/browser-source/journal-working-set.integration.test.ts",
+      "lines": 194,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 15,
+          "declaration": "it(\"continues writing after 2400 saved and collected input intents\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/list-open.integration.test.ts",
+      "lines": 79,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 10,
+          "declaration": "it(\"opens a listed empty Project from getProject, not from the list payload\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/local-edit-journal-append-drift.integration.test.ts",
+      "lines": 94,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 11,
+          "declaration": "it.each([\"intent_payload\", \"project_allocator\"] as const)("
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/local-edit-journal-append-fixture.ts",
+      "lines": 124,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts",
+      "lines": 341,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 16,
+          "declaration": "it(\"returns the valid append projection without a second Journal reconstruction\", async () => {"
+        },
+        {
+          "line": 43,
+          "declaration": "it(\"keeps a complete mixed intent in the immutable Journal without projecting it as manuscript truth\", async () => {"
+        },
+        {
+          "line": 155,
+          "declaration": "it(\"freezes one complete mixed Tiptap IME intent only after confirmation and ignores cancellation\", async () => {"
+        },
+        {
+          "line": 217,
+          "declaration": "it(\"keeps newer captured input visible when an earlier Author Edit settles\", async () => {"
+        },
+        {
+          "line": 288,
+          "declaration": "it(\"keeps captured manuscript input during a background Draft refresh\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/local-recovery-panel.integration.test.ts",
+      "lines": 87,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 9,
+          "declaration": "it.each([\"multi_block\", \"candidate\"] as const)(\"keeps complete %s recovery visible through Copy, explicit continuation and reload\", async (kind) => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/manual-input.integration.test.ts",
+      "lines": 709,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 57,
+          "declaration": "it(\"settles trusted input, clipboard actions, and controlled Chrome IME in the Journal\", async () => {"
+        },
+        {
+          "line": 578,
+          "declaration": "it.each(["
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts",
+      "lines": 250,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 29,
+          "declaration": "it(\"refuses an unsupported Block document and keeps the previous text\", () => {"
+        },
+        {
+          "line": 54,
+          "declaration": "it(\"splits on Enter and keeps the starting fragment identity\", () => {"
+        },
+        {
+          "line": 76,
+          "declaration": "it(\"inserts a line break in the same paragraph on Shift-Enter\", () => {"
+        },
+        {
+          "line": 92,
+          "declaration": "it(\"deletes a nonempty selection then splits on Enter\", () => {"
+        },
+        {
+          "line": 109,
+          "declaration": "it(\"joins adjacent paragraphs on Backspace at the start of the following paragraph\", () => {"
+        },
+        {
+          "line": 128,
+          "declaration": "it(\"carries the validated replacement on an accepted document transaction\", () => {"
+        },
+        {
+          "line": 155,
+          "declaration": "it(\"captures a complete backward mixed selection without changing either durable projection\", async () => {"
+        },
+        {
+          "line": 201,
+          "declaration": "it(\"retains paragraph boundaries from a real multi-line mixed paste\", () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/project-entry.integration.test.ts",
+      "lines": 203,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 17,
+          "declaration": "it(\"opens the URL-selected Project and fails closed before invalid entry requests\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/readable-export-historical-acknowledgement.integration.test.ts",
+      "lines": 138,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 21,
+          "declaration": "it(\"explains a historical human-readable export acknowledgement and does not retry it\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/refused-edit-discard.integration.test.ts",
+      "lines": 121,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 12,
+          "declaration": "it(\"persists the complete immutable explicit Discard before Admission and only reconciles its exact public event\", async () => {"
+        },
+        {
+          "line": 89,
+          "declaration": "it(\"keeps exact Receipt-backed refusal and conflict distinct from an infrastructure outcome\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/reload-recovery.integration.test.ts",
+      "lines": 517,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 67,
+          "declaration": "it(\"recovers ApplyAuthorEdit from a persisted capsule after reload without a second POST\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/rename-historical-acknowledgement.integration.test.ts",
+      "lines": 88,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 14,
+          "declaration": "it(\"explains a historical Update Project acknowledgement and does not retry it\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/scenario.ts",
+      "lines": 350,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/browser-source/takeover-late-result.integration.test.ts",
+      "lines": 209,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 36,
+          "declaration": "it(\"fences the old Journal partition before a late applied result settles\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/undo-historical-acknowledgement.integration.test.ts",
+      "lines": 146,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 21,
+          "declaration": "it(\"explains a historical Undo Latest Author Action acknowledgement and does not retry it\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/browser-source/update-historical-acknowledgement.integration.test.ts",
+      "lines": 201,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 73,
+          "declaration": "it(\"explains a historical Update Volume acknowledgement and does not retry it\", async () => {"
+        },
+        {
+          "line": 137,
+          "declaration": "it(\"explains a historical Update Chapter acknowledgement and does not retry it\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-contract/chapter-navigation.test.ts",
+      "lines": 212,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 47,
+          "declaration": "test(\"openSelectedChapter returns the requested Chapter Head\", async () => {"
+        },
+        {
+          "line": 67,
+          "declaration": "test(\"openSelectedChapter classifies missing, expired, and Scope-mismatched Chapters\", async () => {"
+        },
+        {
+          "line": 124,
+          "declaration": "test(\"completeJournalOrRefuse waits for a durable Journal or refuses with a typed gate\", async () => {"
+        },
+        {
+          "line": 147,
+          "declaration": "test(\"selectedChapterSurface keeps pending bytes on the current Chapter\", () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-contract/generated-profile.test.ts",
+      "lines": 20,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 9,
+          "declaration": "it(\"exposes the exact frozen runtime profile through its generated declaration\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-contract/production-build.test.ts",
+      "lines": 55,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 30,
+          "declaration": "test(\"make web packages the production graph before Web tests\", async () => {"
+        },
+        {
+          "line": 44,
+          "declaration": "test(\"the Vite production build emits hashed Protected Web Client assets\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-contract/project-open.test.ts",
+      "lines": 285,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 30,
+          "declaration": "test(\"the protected Web client opens the authoritative current Chapter\", async () => {"
+        },
+        {
+          "line": 74,
+          "declaration": "test(\"an empty Project opens the Canonical Query empty tree without a Chapter identity\", async () => {"
+        },
+        {
+          "line": 114,
+          "declaration": "test(\"a Canonical Query tree with a foreign Project Scope fails closed\", async () => {"
+        },
+        {
+          "line": 157,
+          "declaration": "test(\"an archived Project fails closed without opening a workspace\", async () => {"
+        },
+        {
+          "line": 192,
+          "declaration": "test(\"a Project missing from the library fails closed without opening a workspace\", async () => {"
+        },
+        {
+          "line": 225,
+          "declaration": "test(\"an unavailable Project fails closed without displaying response data\", async () => {"
+        },
+        {
+          "line": 247,
+          "declaration": "test(\"missing, empty, invalid, or mismatched owner identities fail closed\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-contract/protocol-boot.test.ts",
+      "lines": 81,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 25,
+          "declaration": "test(\"a compatible Release 1 profile exposes protected application state\", () => {"
+        },
+        {
+          "line": 77,
+          "declaration": "test(name, () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-contract/protocol-http.integration.test.ts",
+      "lines": 156,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 53,
+          "declaration": "test(\"production startup refuses an absent root or invalid resource set before readiness\", async () => {"
+        },
+        {
+          "line": 93,
+          "declaration": "test(\"packaged production startup refuses session mappings that are not exactly one handle\", async () => {"
+        },
+        {
+          "line": 104,
+          "declaration": "test(\"offline web-root check does not require session mappings or PostgreSQL\", async () => {"
+        },
+        {
+          "line": 113,
+          "declaration": "test(\"offline worker check does not require PostgreSQL\", async () => {"
+        },
+        {
+          "line": 126,
+          "declaration": "test(\"packaged production startup refuses an invalid public Origin before Storage Activation\", async () => {"
+        },
+        {
+          "line": 136,
+          "declaration": "test(\"packaged production startup refuses a non-loopback listen when a public Origin is set\", async () => {"
+        },
+        {
+          "line": 146,
+          "declaration": "test(\"packaged production startup refuses bind without a reachable Active proof\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-contract/required-global-teardown.test.ts",
+      "lines": 62,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 35,
+          "declaration": "test.each(["
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-contract/statistics-profile.test.ts",
+      "lines": 30,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 12,
+          "declaration": "it(\"matches the pinned Rust/TypeScript golden cases\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
+      "lines": 401,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 13,
+          "declaration": "test(\"acceptProposal applies one pending Operation and retries the settled outcome\", async () => {"
+        },
+        {
+          "line": 165,
+          "declaration": "test.each([\"invalid_validation\", \"changed_head\", \"altered_candidate\"] as const)(\"acceptProposal retains %s across reload and refuses another attempt until revision\", async (reason) => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts",
+      "lines": 212,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 13,
+          "declaration": "test(\"Acceptance retains a stale-writer refusal without changing Proposal validity\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/activity-stream-cross-table-http.integration.test.ts",
+      "lines": 349,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 167,
+          "declaration": "test(\"activityStream delivers a payload-table Event then an Author Edit in position order\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/activity-stream-duplicate-http.integration.test.ts",
+      "lines": 251,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 132,
+          "declaration": "test(\"activityStream replays a complete applied Event and Last-Event-ID resumes exclusively\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts",
+      "lines": 213,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 57,
+          "declaration": "test.each(["
+        },
+        {
+          "line": 140,
+          "declaration": "test(\"a removed admitted Chapter cannot open a Proposal from retained historical blocks\", async () => {"
+        },
+        {
+          "line": 165,
+          "declaration": "test(\"a later reservation cannot become an admitted Run's Proposal\", async () => {"
+        },
+        {
+          "line": 183,
+          "declaration": "test(\"a historical single-Block Run reclaims and opens one H0 Proposal\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts",
+      "lines": 534,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 157,
+          "declaration": "test(\"archiveProject settles lifecycle, replays, lists archived, and fails closed\", async () => {"
+        },
+        {
+          "line": 307,
+          "declaration": "test(\"archiveProject freezes the acknowledgement and does not archive twice\", async () => {"
+        },
+        {
+          "line": 430,
+          "declaration": "test(\"archiveProject distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts",
+      "lines": 323,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 164,
+          "declaration": "test(\"active context compaction stages, then installs or refuses for a later request\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts",
+      "lines": 469,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 236,
+          "declaration": "test(\"Worker completes one Host-fake advisory Decision\", async () => {"
+        },
+        {
+          "line": 302,
+          "declaration": "test(\"Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and Eval without dispatch\", async () => {"
+        },
+        {
+          "line": 352,
+          "declaration": "test(\"Worker distinguishes prose-change, clarification, and CFP holds\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
+      "lines": 240,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 88,
+          "declaration": "test(\"complete keeps the partial candidate ready without accepting its content\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts",
+      "lines": 334,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 127,
+          "declaration": "test.each([FIRST, \"Compact active context between calls.\"])(\"ordered guidance is consumed by the same active Run with exact replay: %s\", async (original) => {"
+        },
+        {
+          "line": 170,
+          "declaration": "test(\"author messages are limited by characters, not UTF-8 bytes\", async () => {"
+        },
+        {
+          "line": 206,
+          "declaration": "test(\"guidance after a visible stream keeps the Proposal bound to its original Decision\", async () => {"
+        },
+        {
+          "line": 236,
+          "declaration": "test(\"continuation consumes an eligible prior binding and keeps current input inspectable\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/continue-proposal-generation-claim-http.integration.test.ts",
+      "lines": 340,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 127,
+          "declaration": "test(\"Worker claims a Continue successor and writes the next batch into the new Generation\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
+      "lines": 289,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 109,
+          "declaration": "test(\"continue opens a fresh generation without accepting the candidate\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts",
+      "lines": 1011,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 323,
+          "declaration": "test(\"implemented assistance and Run Events replay from a retained public cursor\", async () => {"
+        },
+        {
+          "line": 372,
+          "declaration": "test(\"createAgentRun admits one conversation and keeps query scope closed\", async () => {"
+        },
+        {
+          "line": 553,
+          "declaration": "test(\"Run settings stay captured when a legacy current revision is restored or evidence is unavailable\", async () => {"
+        },
+        {
+          "line": 625,
+          "declaration": "test(\"createAgentRun reopens an idle conversation and refuses digest or scope substitution\", async () => {"
+        },
+        {
+          "line": 744,
+          "declaration": "test(\"createAgentRun exact retry after commit keeps the first acknowledgement\", async () => {"
+        },
+        {
+          "line": 832,
+          "declaration": "test(\"createAgentRun competing existing admission keeps one queued run\", async () => {"
+        },
+        {
+          "line": 943,
+          "declaration": "test(\"createAgentRun blocks an over-limit Working Target before destination I/O\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts",
+      "lines": 1349,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 203,
+          "declaration": "test(\"createChapter places a new Chapter atomically beside its exact live anchor\", async () => {"
+        },
+        {
+          "line": 261,
+          "declaration": "test(\"Editor Sessions capture nonzero Activity and preserve legacy Snapshot evidence\", async () => {"
+        },
+        {
+          "line": 360,
+          "declaration": "test(\"createChapter creates three named Chapters, keeps the first current, and fails closed\", async () => {"
+        },
+        {
+          "line": 766,
+          "declaration": "test(\"createChapter reports Canonical Sibling Order through removal, replay, and historical acks\", async () => {"
+        },
+        {
+          "line": 1001,
+          "declaration": "test(\"createChapter freezes the acknowledgement after later title and Current Chapter changes\", async () => {"
+        },
+        {
+          "line": 1238,
+          "declaration": "test(\"createChapter distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/create-project-challenge-http.integration.test.ts",
+      "lines": 121,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 61,
+          "declaration": "test(\"createProjectChallenge replays, conflicts, isolates Users, and creates no Project\", async () => {"
+        },
+        {
+          "line": 101,
+          "declaration": "test(\"createProjectChallenge refuses a missing Origin without disclosing User identity\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/create-project-http.integration.test.ts",
+      "lines": 295,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 74,
+          "declaration": "test(\"createProject creates one empty Project, replays, and fails closed\", async () => {"
+        },
+        {
+          "line": 193,
+          "declaration": "test(\"createProject replays its creation evidence after rename and restart\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts",
+      "lines": 851,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 147,
+          "declaration": "test(\"createVolume creates one named Volume, replays, and fails closed\", async () => {"
+        },
+        {
+          "line": 391,
+          "declaration": "test(\"createVolume reports Canonical Sibling Order through removal, replay, and historical acks\", async () => {"
+        },
+        {
+          "line": 596,
+          "declaration": "test(\"createVolume freezes the acknowledgement after later title and Current Chapter changes\", async () => {"
+        },
+        {
+          "line": 759,
+          "declaration": "test(\"createVolume distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts",
+      "lines": 884,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 246,
+          "declaration": "test(\"deleteChapter removes a Chapter, honors deletion, and selects next then previous then empty\", async () => {"
+        },
+        {
+          "line": 416,
+          "declaration": "test(\"deleteChapter refuses a missing Chapter join and an archived Project\", async () => {"
+        },
+        {
+          "line": 571,
+          "declaration": "test(\"deleteChapter freezes applied empty Current Chapter, no-effect, and conflict acknowledgements after later title and Current Chapter changes\", async () => {"
+        },
+        {
+          "line": 764,
+          "declaration": "test(\"deleteChapter distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts",
+      "lines": 850,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 237,
+          "declaration": "test(\"deleteVolume removes an empty Volume, refuses a nonempty Volume, and honors deletion\", async () => {"
+        },
+        {
+          "line": 383,
+          "declaration": "test(\"deleteVolume refuses an archived Project\", async () => {"
+        },
+        {
+          "line": 517,
+          "declaration": "test(\"deleteVolume freezes applied, no-effect, conflict, and refusal acknowledgements after later title and Current Chapter changes\", async () => {"
+        },
+        {
+          "line": 741,
+          "declaration": "test(\"deleteVolume distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+      "lines": 2241,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 263,
+          "declaration": "test(\"whole Draft expansion preserves structured content in a fresh pending Proposal and supersedes its source\", async () => {"
+        },
+        {
+          "line": 426,
+          "declaration": "test(\"an explicit narrowed public Draft retry changes content and supersedes only its exact source\", async () => {"
+        },
+        {
+          "line": 484,
+          "declaration": "test(\"narrow Draft retry preserves candidate, refusal, no-effect and conflict outcomes with exact source replay\", async () => {"
+        },
+        {
+          "line": 636,
+          "declaration": "test(\"a cross-block Unicode Draft retry rolls back atomically and recovers one exact replacement after restart\", async () => {"
+        },
+        {
+          "line": 806,
+          "declaration": "test(\"a protected mixed replacement retains complete content after response loss, replay, and restart\", async () => {"
+        },
+        {
+          "line": 972,
+          "declaration": "test(\"inline Proposal uses exact Anchors, keeps source and candidate distinct, and Accepts a splice\", async () => {"
+        },
+        {
+          "line": 1075,
+          "declaration": "test.each([\"paragraph\", \"heading\"] as const)(\"inline Acceptance preserves complete two-Block state with a %s sibling after response loss and restart\", async (siblingKind) => {"
+        },
+        {
+          "line": 1173,
+          "declaration": "test(\"edge input stays authoritative, reserved-block change conflicts, and Reject leaves prose\", async () => {"
+        },
+        {
+          "line": 1286,
+          "declaration": "test(\"changed Heads, source identities, order, text, and ranges create no Draft or authority change\", async () => {"
+        },
+        {
+          "line": 1344,
+          "declaration": "test(\"a pre-commit database fault rolls back all Draft records and GET settles only the retained Admission\", async () => {"
+        },
+        {
+          "line": 1399,
+          "declaration": "test(\"243 ordered sources and two distinct Proposal owners retain a near-1-MiB structured request\", async () => {"
+        },
+        {
+          "line": 1498,
+          "declaration": "test(\"closed and archived Drafts keep their lifecycle, while tombstoned content fences old packages and leaves exact archive gaps\", async () => {"
+        },
+        {
+          "line": 1872,
+          "declaration": "test(\"a distant generating Proposal does not block a proven span, while a selected generating source stays unchanged\", async () => {"
+        },
+        {
+          "line": 1948,
+          "declaration": "test(\"Root Undo reopens the exact public Discard without changing manuscript or Proposal content\", async () => {"
+        },
+        {
+          "line": 2077,
+          "declaration": "test(\"a complete source cannot prove a selection inside a UTF-16 surrogate pair\", async () => {"
+        },
+        {
+          "line": 2108,
+          "declaration": "test(\"explicit Inline candidate input binds the exact Operation and preserves source prose\", async () => {"
+        },
+        {
+          "line": 2145,
+          "declaration": "test(\"canonical Inline boundary input preserves exact target and refuses wrong, stale, or interior ownership\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+      "lines": 703,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 222,
+          "declaration": "test(\"applyAuthorEdit revises one Proposal candidate in place and Root Undo restores it\", async () => {"
+        },
+        {
+          "line": 527,
+          "declaration": "test(\"a fresh instruction revises the exact pending candidate through the real Worker\", async () => {"
+        },
+        {
+          "line": 610,
+          "declaration": "test(\"guidance after a candidate Decision revises that Run's exact output and preserves history\", async () => {"
+        },
+        {
+          "line": 676,
+          "declaration": "test.each([\"What would make this sharper?\", \"This feels slow\", \"Which wording should I keep?\","
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/export-acknowledgement-support.ts",
+      "lines": 309,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/node-postgresql/list-projects-http.integration.test.ts",
+      "lines": 157,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 73,
+          "declaration": "test(\"listProjects returns only the current User library and getProject opens in Project Scope\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts",
+      "lines": 184,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 77,
+          "declaration": "test(\"searchManuscript returns a ready empty page and fail-closes across Project Scope\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/manuscript-tree-http.integration.test.ts",
+      "lines": 162,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 71,
+          "declaration": "test(\"getManuscriptTree returns the empty canonical tree and fail-closes across Project Scope\", async () => {"
+        },
+        {
+          "line": 126,
+          "declaration": "test(\"getManuscriptTree resyncs when the latest Snapshot is stale\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
+      "lines": 370,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 202,
+          "declaration": "test(\"Worker opens one Block Proposal in place without changing Authoritative prose\", async () => {"
+        },
+        {
+          "line": 285,
+          "declaration": "test(\"Worker keeps two non-overlapping Block Proposals and refuses a reserved current Block\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts",
+      "lines": 880,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 294,
+          "declaration": "test(\"exportProjectArchive admits one inspectable in-progress operation\", async () => {"
+        },
+        {
+          "line": 557,
+          "declaration": "test(\"the in-process Worker settles an admitted Project Export Archive to ready\", async () => {"
+        },
+        {
+          "line": 663,
+          "declaration": "test(\"the Worker settles failed when the Project is archived after admission\", async () => {"
+        },
+        {
+          "line": 750,
+          "declaration": "test(\"the Worker settles failed when the pinned Snapshot is unavailable before output exists\", async () => {"
+        },
+        {
+          "line": 814,
+          "declaration": "test(\"exportProjectArchive freezes the Accepted acknowledgement after later title and Current Chapter changes and Worker settlement\", async () => {"
+        },
+        {
+          "line": 841,
+          "declaration": "test(\"exportProjectArchive distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts",
+      "lines": 385,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 147,
+          "declaration": "test(\"an admitted Project Export Archive settles the pinned families after later live changes\", async () => {"
+        },
+        {
+          "line": 272,
+          "declaration": "test(\"an Archive whose Pinned Export Source is missing settles failed without live fallback\", async () => {"
+        },
+        {
+          "line": 333,
+          "declaration": "test(\"a later Archive packs other in-progress Pinned Export Sources and not its own\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/project-http.integration.test.ts",
+      "lines": 1119,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 131,
+          "declaration": "test(\"two authenticated Users open only their own Project and current Chapter over real HTTP\", async () => {"
+        },
+        {
+          "line": 169,
+          "declaration": "test(\"Project command challenges bind Origin, Scope, nonce, and idempotency on real PostgreSQL\", async () => {"
+        },
+        {
+          "line": 252,
+          "declaration": "test(\"one current writer settles one Author Edit and exact retries return one result\", async () => {"
+        },
+        {
+          "line": 937,
+          "declaration": "test(\"the real challenge endpoint returns a sanitized rate refusal with retry time\", async () => {"
+        },
+        {
+          "line": 988,
+          "declaration": "test(\"a sensitive Project read accepts same-origin Referer paths and queries\", async () => {"
+        },
+        {
+          "line": 1007,
+          "declaration": "test(\"hostile Origin and Referer inputs refuse without Project disclosure\", async () => {"
+        },
+        {
+          "line": 1072,
+          "declaration": "test(\"invalid bootstrap User identity prevents the Server from becoming ready\", async () => {"
+        },
+        {
+          "line": 1079,
+          "declaration": "test(\"missing authentication, cross-Project scope, and unknown Chapter identity use non-oracular errors\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts",
+      "lines": 154,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 23,
+          "declaration": "test(\"the generated client boots protected Web state over the real Server HTTP boundary\", async () => {"
+        },
+        {
+          "line": 34,
+          "declaration": "test(\"printed origin HTML GET issues the configured session cookie\", async () => {"
+        },
+        {
+          "line": 65,
+          "declaration": "test(\"two-User isolation mappings start without issuing a cookie\", async () => {"
+        },
+        {
+          "line": 79,
+          "declaration": "test(\"ready production responses use the validated snapshot after its directory moves\", async () => {"
+        },
+        {
+          "line": 105,
+          "declaration": "test(\"the production process serves exact pages and resources with restrictive HTTP policy\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts",
+      "lines": 732,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 232,
+          "declaration": "test(\"exportHumanReadableManuscript admits one inspectable in-progress operation\", async () => {"
+        },
+        {
+          "line": 475,
+          "declaration": "test(\"the in-process Worker settles an admitted human-readable export to ready\", async () => {"
+        },
+        {
+          "line": 539,
+          "declaration": "test(\"the Worker settles failed when the Project is archived after admission\", async () => {"
+        },
+        {
+          "line": 629,
+          "declaration": "test(\"the Worker settles failed when the pinned Snapshot is unavailable before output exists\", async () => {"
+        },
+        {
+          "line": 687,
+          "declaration": "test(\"exportHumanReadableManuscript freezes the Accepted acknowledgement after later title and Current Chapter changes and Worker settlement\", async () => {"
+        },
+        {
+          "line": 714,
+          "declaration": "test(\"exportHumanReadableManuscript distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts",
+      "lines": 525,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 123,
+          "declaration": "test(\"an admitted human-readable export settles the pinned manuscript after later live changes\", async () => {"
+        },
+        {
+          "line": 447,
+          "declaration": "test(\"missing, partial, and digest-invalid Pinned Export Sources settle failed without live fallback\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts",
+      "lines": 394,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 200,
+          "declaration": "test(\"confirmed reference expiry rebuilds eligible context and keeps the old run\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts",
+      "lines": 710,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 354,
+          "declaration": "test(\"pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run immutable\", async () => {"
+        },
+        {
+          "line": 483,
+          "declaration": "test(\"a rate-limited cancellation Challenge completes before a Worker is held\", async () => {"
+        },
+        {
+          "line": 531,
+          "declaration": "test(\"cancellation fences late Worker output and does not hide a Proposal\", async () => {"
+        },
+        {
+          "line": 671,
+          "declaration": "test(\"a Pause before the Cancel still sends one Abort for the in-flight Attempt\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/recovery-archived-exports-http.integration.test.ts",
+      "lines": 261,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 121,
+          "declaration": "test(\"public completed exports remain retained after lawful archive for physical recovery\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
+      "lines": 354,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 15,
+          "declaration": "test(\"rejectProposalOperations freezes one pending Operation without changing authority\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts",
+      "lines": 364,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 16,
+          "declaration": "test(\"reopenRejectedOperations appends a pending Revision without rewriting Rejection\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts",
+      "lines": 404,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 14,
+          "declaration": "test(\"replanProposal appends a pending Revision bound to the current Head\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts",
+      "lines": 386,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 127,
+          "declaration": "test(\"a retained complete result settles once and a repeat keeps that identity\", async () => {"
+        },
+        {
+          "line": 219,
+          "declaration": "test(\"missing, unsupported, unbounded, foreign, incomplete, and unknown results stay unresolved\", async () => {"
+        },
+        {
+          "line": 276,
+          "declaration": "test(\"a cancelled Run reconciles the late result as evidence only\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts",
+      "lines": 1152,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 313,
+          "declaration": "test(\"setCurrentChapter switches the current Chapter, replays, and fails closed\", async () => {"
+        },
+        {
+          "line": 541,
+          "declaration": "test(\"setCurrentChapter refuses a missing Chapter join and an archived Project\", async () => {"
+        },
+        {
+          "line": 804,
+          "declaration": "test(\"setCurrentChapter freezes the selected chapter and title\", async () => {"
+        },
+        {
+          "line": 929,
+          "declaration": "test(\"setCurrentChapter first acknowledgement excludes a later selection\", async () => {"
+        },
+        {
+          "line": 1042,
+          "declaration": "test(\"setCurrentChapter distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts",
+      "lines": 1094,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 215,
+          "declaration": "test.each([\"\", \"chinese\", \" SCRIPT:reverse_locations\"])(\"one collection request produces three exact locations across two Chapters%s\", async (script) => {"
+        },
+        {
+          "line": 272,
+          "declaration": "test(\"ordinary clarification keeps the Conversation and resolves fresh targets with continuation\", async () => {"
+        },
+        {
+          "line": 304,
+          "declaration": "test.each([\"deleted\", \"foreign\", \"stale\", \"missing_block\", \"over_budget\", \"reservation\"])(\"collection refuses %s before destination dispatch\", async (boundary) => {"
+        },
+        {
+          "line": 353,
+          "declaration": "test(\"one request produces explained exact locations and keeps them after restart\", async () => {"
+        },
+        {
+          "line": 395,
+          "declaration": "test.each([\"stream\", \"decision\", \"cancelled\", \"collection_stream\", \"collection_decision\", \"collection_cancelled\", \"collection_paused\", \"collection_rejected\", \"candidate_stream\", \"candidate_decision\", \"candidate_cancelled\", \"candidate_paused\"])(\"typed result recovers the %s boundary without revival\", async (scenario) => {"
+        },
+        {
+          "line": 524,
+          "declaration": "test.each([\"undeclared_location\", \"stale_location_base\"])(\"scalar requests do not enter the typed script %s\", async (script) => {"
+        },
+        {
+          "line": 547,
+          "declaration": "test.each([\"malformed_locations\", \"undeclared_location\", \"stale_location_base\", \"oversized_explanation\", \"incomplete\", \"unselected\"])("
+        },
+        {
+          "line": 570,
+          "declaration": "test.each([\"\", \" SCRIPT:reverse_locations\"])(\"a later reservation preserves the permitted location%s\", async (script) => {"
+        },
+        {
+          "line": 656,
+          "declaration": "test(\"acceptProposal applies a reversed multi-operation set without using array order as authority\", async () => {"
+        },
+        {
+          "line": 712,
+          "declaration": "test(`partial Acceptance preserves ${history} evidence and conflicts the remaining Operation`, async () => {"
+        },
+        {
+          "line": 998,
+          "declaration": "test(\"acceptProposal refuses incomplete atomic Bundle closure then applies the closed set\", async () => {"
+        },
+        {
+          "line": 1053,
+          "declaration": "test.each([\"pending\", \"rejected\"])(\"AI revises only the secondary candidate with a %s sibling\", async (sibling) => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/snapshot-replay-http.integration.test.ts",
+      "lines": 214,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 91,
+          "declaration": "test(\"getSnapshot and activityStream use the Editor Session Snapshot identity at the public HTTP boundary\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts",
+      "lines": 221,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 95,
+          "declaration": "test(\"Worker applies contiguous canonical batches and completes one streamed candidate\", async () => {"
+        },
+        {
+          "line": 133,
+          "declaration": "test(\"first author input fences the admitted Head and late batches stay ineligible\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/takeover-http.integration.test.ts",
+      "lines": 308,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 112,
+          "declaration": "test(\"an observer takeOverProjectWriter fences the prior writer and refuses its Author Edit\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/takeover-late-result-http.integration.test.ts",
+      "lines": 414,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 118,
+          "declaration": "test(\"a fenced writer's late ApplyAuthorEdit result does not mutate authority\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts",
+      "lines": 254,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 15,
+          "declaration": "test(\"undo acceptance restores the prior chapter, reopens the proposal, and reapply is a fresh acceptance\", async () => {"
+        },
+        {
+          "line": 76,
+          "declaration": "test(\"undo acceptance derives a proposal when the accepted lineage has drifted\", async () => {"
+        },
+        {
+          "line": 107,
+          "declaration": "test(\"undo acceptance requires a reversal proposal when the authoritative head has drifted\", async () => {"
+        },
+        {
+          "line": 148,
+          "declaration": "test(\"undo acceptance is unavailable when the accepted payload digest does not match\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts",
+      "lines": 825,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 335,
+          "declaration": "test(\"undoLatestAuthorAction freezes compensation and conflict acknowledgements after later title and Current Chapter changes\", async () => {"
+        },
+        {
+          "line": 602,
+          "declaration": "test(\"undoLatestAuthorAction distinguishes historical absence from damaged new-format evidence\", async () => {"
+        },
+        {
+          "line": 768,
+          "declaration": "test(\"undoLatestAuthorAction Challenges use the author_edit Challenge Rate Class, not the shared budget\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts",
+      "lines": 629,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 196,
+          "declaration": "test(\"one successor shares the invocation and a restart does not add another\", async () => {"
+        },
+        {
+          "line": 287,
+          "declaration": "test(\"missing and unsupported lookup still permit one successor\", async () => {"
+        },
+        {
+          "line": 316,
+          "declaration": "test(\"failed gates pause and a restart keeps that pause\", async () => {"
+        },
+        {
+          "line": 361,
+          "declaration": "test(\"cancellation after the fence prohibits the successor\", async () => {"
+        },
+        {
+          "line": 432,
+          "declaration": "test(\"a crash after the fence resumes the same successor once\", async () => {"
+        },
+        {
+          "line": 494,
+          "declaration": "test(\"a late predecessor updates evidence and usage only\", async () => {"
+        },
+        {
+          "line": 564,
+          "declaration": "test(\"cancellation during the successor stream aborts the successor once\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/update-chapter-http.integration.test.ts",
+      "lines": 1022,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 252,
+          "declaration": "test(\"updateChapter renames and reorders one Chapter, replays, and fails closed\", async () => {"
+        },
+        {
+          "line": 469,
+          "declaration": "test(\"updateChapter refuses a missing Chapter join and an archived Project\", async () => {"
+        },
+        {
+          "line": 632,
+          "declaration": "test(\"updateChapter freezes applied, no-effect, and conflict acknowledgements after later title and Current Chapter changes\", async () => {"
+        },
+        {
+          "line": 900,
+          "declaration": "test(\"updateChapter distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts",
+      "lines": 364,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 133,
+          "declaration": "test(\"project assistance prepares the host fake binding without a run\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/update-project-http.integration.test.ts",
+      "lines": 851,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 209,
+          "declaration": "test(\"updateProject renames one exact Project, replays, and fails closed\", async () => {"
+        },
+        {
+          "line": 293,
+          "declaration": "test(\"updateProject refuses an invalid title and replays the settled Receipt\", async () => {"
+        },
+        {
+          "line": 497,
+          "declaration": "test(\"updateProject first acknowledgement excludes a later committed rename\", async () => {"
+        },
+        {
+          "line": 574,
+          "declaration": "test(\"updateProject distinguishes historical absence from damaged new-format evidence\", async () => {"
+        },
+        {
+          "line": 668,
+          "declaration": "test(\"updateProject acknowledgement freezes Current Chapter\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts",
+      "lines": 798,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 195,
+          "declaration": "test(\"updateVolume renames and reorders one Volume, replays, and fails closed\", async () => {"
+        },
+        {
+          "line": 496,
+          "declaration": "test(\"updateVolume freezes applied, no-effect, and conflict acknowledgements after later title and Current Chapter changes\", async () => {"
+        },
+        {
+          "line": 693,
+          "declaration": "test(\"updateVolume distinguishes historical absence from damaged new-format evidence\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts",
+      "lines": 659,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 16,
+          "declaration": "test(\"author withdraw closes the current Proposal without changing authority\", async () => {"
+        },
+        {
+          "line": 216,
+          "declaration": "test(\"current producer withdraw closes the Proposal with zero author actions\", async () => {"
+        },
+        {
+          "line": 359,
+          "declaration": "test(\"explicit reopen appends a pending open revision and leaves authority unchanged\", async () => {"
+        },
+        {
+          "line": 481,
+          "declaration": "test(\"root undo of an author withdrawal reopens the Proposal under the existing frontier\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-process-cut/apply-author-edit-process-cut.integration.test.ts",
+      "lines": 286,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 178,
+          "declaration": "test(\"Server restart and bounded PostgreSQL interruption keep GET-first ApplyAuthorEdit recovery\","
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-process-cut/project-export-admission-process-cut.integration.test.ts",
+      "lines": 300,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 103,
+          "declaration": "test(\"an admitted Project Export Archive stays in progress across a Server process cut\", async () => {"
+        },
+        {
+          "line": 179,
+          "declaration": "test(\"a Worker claim without settlement is outcome_unknown, then takeover settles ready\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/node-process-cut/readable-export-admission-process-cut.integration.test.ts",
+      "lines": 291,
+      "kind": "web-test",
+      "tests": [
+        {
+          "line": 105,
+          "declaration": "test(\"an admitted human-readable export stays in progress across a Server process cut\", async () => {"
+        },
+        {
+          "line": 181,
+          "declaration": "test(\"a Worker claim without settlement is outcome_unknown, then takeover settles ready\", async () => {"
+        }
+      ]
+    },
+    {
+      "path": "apps/web/test/support/acceptance.ts",
+      "lines": 239,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/api-proxy.ts",
+      "lines": 26,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/archive.ts",
+      "lines": 20,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/browser-command-client.ts",
+      "lines": 86,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/browser-command-contract.ts",
+      "lines": 236,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/browser-commands.ts",
+      "lines": 150,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/candidate-revision.ts",
+      "lines": 24,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/exact-dist-global-setup.ts",
+      "lines": 247,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/exact-dist-plugin.ts",
+      "lines": 139,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/inline-chapter-creation.ts",
+      "lines": 30,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/manuscript-surface.ts",
+      "lines": 50,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/node-integration.ts",
+      "lines": 210,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-captured-memory.ts",
+      "lines": 177,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-composer-controls.ts",
+      "lines": 220,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-conflict-recovery-command.ts",
+      "lines": 271,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-discard-command.ts",
+      "lines": 290,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-draft-chapter-source.ts",
+      "lines": 124,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-draft-expansion-command.ts",
+      "lines": 82,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-draft-retry-race.ts",
+      "lines": 164,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-draft-undo-command.ts",
+      "lines": 139,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-host-command.ts",
+      "lines": 293,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-inline-proposal-command.ts",
+      "lines": 435,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-multi-proposal-command.ts",
+      "lines": 342,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-prose-request-command.ts",
+      "lines": 740,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-refused-edit-command.ts",
+      "lines": 353,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/production-run-evidence-command.ts",
+      "lines": 257,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/refused-edit-recovery.ts",
+      "lines": 26,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/required-global-teardown.ts",
+      "lines": 10,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/script-order-sequencer.ts",
+      "lines": 29,
+      "kind": "web-support",
+      "tests": []
+    },
+    {
+      "path": "apps/web/test/support/statistics-unicode-profile.ts",
+      "lines": 33,
+      "kind": "web-support",
+      "tests": []
+    }
+  ]
+}
