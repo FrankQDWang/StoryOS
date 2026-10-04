@@ -177,3 +177,9 @@ Seed 352 reaches ownership_changed and source_binding_changed through HTTP. Draf
 New implementation difference D-005: immediate exact retry of the withdrawal compensation changes effect.project_activity_position from 8 to 0. Both statuses are 200; every other response field matches. The first settlement stores the position in its payload as authoritative_applied, but replay only reads that payload position for proposal_revised and otherwise falls back to zero. Locations: undo_withdrawal.rs:162-173 and undo_latest_author_action.rs:1230-1246. Evidence: `draft-binding-352.json.gz`, run `0c9a07dd81a64ad4a4ff51dab6fcde5d`.
 
 Next: minimize D-004 and D-005 separately; sample the two remaining reasons 20 times while retaining this known replay difference. Rejection Undo availability remains a contract question because section 10.1 names reopening but also permits an explicit Barrier for an unregistered handler.
+
+## Step 16: Five isolated implementation differences
+
+Seed 353 independently confirms D-004, the empty authoritative payload in Proposal Undo response. Seed 354 independently confirms D-005, withdrawal Undo retry changing only Activity position to zero; it also shows D-004. Seed 355 records A-010, the rejection Undo registration/Barrier question, with no guessed failure. All three compressed traces and source/contract locations are committed. No product source changed.
+
+Next: reach 20 ownership_changed/source_binding_changed cases, then complete writer, challenge binding, rate-limit, and expiry sampling.

@@ -31,3 +31,9 @@ A-008 has no seed capable of selecting its missing branch: inventing one would i
 - M-009: sent a Proposal target without its required expected Proposal Head. This fails Admission and cannot test a Core ownership conflict.
 
 Earlier evidence is retained with its original failures. Counted evidence is selected explicitly in `evidence-manifest.json`; old model errors do not become unexplained product differences.
+
+## A-010: Rejection Undo handler availability
+
+Section 10.1 names rejection-to-reopen routing and permits Barrier when no exact handler is registered. It does not expose a versioned per-action registration policy. Seed 355, case `rejection-undo`, rejects one pending Operation and submits Undo with the published exact frontier and Head. It returns unavailable/barrier and preserves rejection. This is recorded as an availability ambiguity, not a guessed mandatory compensation failure. The fallback is in `crates/storyos-adapter-postgres/src/undo_frontier.rs:185-203`; the supported handler lookup in `author_edit_proposal.rs:539-592` requires a parent Revision. The generated query/response exposes no handler registration field. Evidence: `rejection-undo-355.json.gz`.
+
+Additional corrected probes: the ordered-source conflict assertion omitted its required current Head; a withdrawn Operation still held its unresolved reservation; a structured Draft-derived candidate did not support the legacy plain candidate-edit shape. Later probes use complete response objects, rejection to release reservations, and withdrawal compensation to change the derived Head.

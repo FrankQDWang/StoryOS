@@ -38,6 +38,30 @@ Locations: `crates/storyos-adapter-postgres/src/editor_session.rs:108-127` resol
 
 Replay: `scripts/dev-postgres.sh run python3 prototypes/reference-model/run.py --stage replay --case session-after-edit --seed 402 --replay --output target/reference-model/D-003.json`. Evidence: second scenario in `replay-minimals.json`.
 
+## D-004: Proposal Undo returns an empty payload for an existing authoritative Revision (P2)
+
+Classification: implementation defect. Canonical prose is preserved, but the command response describes that same Revision ID with an empty body and no Blocks. A client cannot treat this projection as the current authoritative payload.
+
+Minimal sequence: Create Project, Volume, Chapter, and Editor Session; Author Edit to `A quiet room before dawn.`; enable assistance and generate one Proposal with the fake destination; edit that candidate; Undo. The candidate is restored and no authoritative Commit is created. The response's authoritative Revision ID is the unchanged Chapter Head, but its body is empty. A Chapter/Session query retains the original nonempty body.
+
+Contract: Manuscript State Machine sections 4.1-4.2 bind immutable Revision identity and payload; section 10.1 requires Proposal-only compensation to restore a Proposal Revision with zero authoritative Commits. The generated Undo response labels the object `AuthoritativeChapterRevision`; it defines no empty-payload sentinel for an unchanged Head.
+
+Location: `crates/storyos-server/src/undo_latest_author_action.rs:190-207` constructs a CompensatedProposal response with the real expected Head ID, `String::new()`, and empty Blocks. The same projection is used for withdrawal compensation.
+
+Replay: `scripts/dev-postgres.sh run python3 prototypes/reference-model/run.py --stage proposals --case proposal-undo --seed 353 --replay --output target/reference-model/D-004.json`. Evidence: `proposal-undo-353.json.gz`. This is a response defect; this run did not erase canonical prose.
+
+## D-005: Withdrawal Undo exact retry changes Activity position to zero (P2)
+
+Classification: implementation defect.
+
+Minimal sequence: create the same nonempty Chapter and fake-destination Proposal; Withdraw Proposal; Undo; exact retry that Undo. Both responses are 200. The only changed JSON field is `effect.project_activity_position`, from the original positive position to `0`.
+
+Contract: protocol section 7.3 requires the same immutable acknowledgement; Manuscript State Machine section 10.2 requires exact root and child Undo Receipt replay without another Action.
+
+Locations: `crates/storyos-adapter-postgres/src/undo_withdrawal.rs:162-173` stores the position in the result payload under `authoritative_applied`. `undo_latest_author_action.rs:1230-1246` reads the payload position only for `proposal_revised`; this branch falls back to zero.
+
+Replay: `scripts/dev-postgres.sh run python3 prototypes/reference-model/run.py --stage proposals --case withdrawal-undo --seed 354 --replay --output target/reference-model/D-005.json`. Evidence: `withdrawal-undo-354.json.gz`. D-004 also appears in that response; it is independently reproduced by seed 353.
+
 ## Contract questions
 
-A-001 through A-006 are recorded in PROGRESS.md. Their final source and reachability crosswalk remains in progress. They must not be converted into implementation defects by guessing missing semantics.
+See `CONTRACT-QUESTIONS.md`. They remain explicit restrictions on the oracle and are not converted to implementation defects by guessing missing semantics.
