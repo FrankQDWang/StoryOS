@@ -24,10 +24,10 @@ Next: inventory the public command contracts, prepare the existing release packa
 
 | Stage | Status | Evidence |
 | --- | --- | --- |
-| 1. Structure and Current Chapter | Started | Baseline only |
-| 2. Author Edit and Undo | Pending | None |
-| 3. Proposal lifecycle | Pending | None |
-| 4. Idempotency and writer | Pending | None |
+| 1. Structure and Current Chapter | Complete | 43 typed variants at 20+ hits; 5 reachability limits; D-001 retained |
+| 2. Author Edit and Undo | Complete | 18 typed variants at 20+ hits; 1 reachability limit; D-004/D-005 retained |
+| 3. Proposal lifecycle | Complete | 37 typed variants at 20+ hits; 16 reachability limits; two foundation-only gaps explicit |
+| 4. Idempotency and writer | Complete | 25 writer/binding/rate cases; 20 real-expiry cases; 2 typed compare-failure limits; D-002/D-003/D-005 retained |
 
 ## Step 2: First HTTP chain
 
@@ -233,3 +233,9 @@ Created the explicit counted-evidence manifest. Future result files record compl
 Seed 450 waited for the real returned Challenge deadline. All 20 distinct pending challenges were refused without a Receipt; all 20 distinct committed Author Edit acknowledgements remained byte-stable after expiry. Current prose stayed at the final committed edit. Evidence: `expiry-450.json.gz`; run `084d377ede7145e791067fa1142e2f79`, 317 seconds, zero differences.
 
 A final oracle review identified A-012: Admission-versus-Core precedence for a missing Proposal Operation is not explicit. Its model now permits the documented refusal alternatives and separately asserts zero allocations and unchanged state. Recheck that narrow case for 20 seeds, then finalize the report.
+
+## Step 22: Final classification and report
+
+Seeds 380-399 pass all strengthened target-refusal invariants: current candidate Head, candidate text, axes, prose, and zero allocations. Seed 1 independently replays the zero-revision HTTP 400 observation. Both traces are retained. The generated ledger has 99 typed branches at threshold, 24 justified reachability limits, two foundation-only gaps, and zero unclassified compared-value differences. Its 51 difference assertions map to the five minimized implementation defects; Project allocation is separately audited across distinct Receipts.
+
+All four stage criteria are met. The benchmark preserves known defects and contract questions; it does not fix product behavior. The report and replay guide are complete. Final work: one impact-scoped writer smoke for the refusal-status assertion, whitespace/path checks, and optional branch push.

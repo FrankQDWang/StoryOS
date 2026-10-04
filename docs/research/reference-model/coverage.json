@@ -3,7 +3,7 @@
     "stage-1": [
       {
         "outcome": "createVolume:authoritative_applied",
-        "hits": 1329,
+        "hits": 1350,
         "status": "threshold_met",
         "reachability": null
       },
@@ -27,7 +27,7 @@
       },
       {
         "outcome": "createChapter:authoritative_applied",
-        "hits": 933,
+        "hits": 954,
         "status": "threshold_met",
         "reachability": null
       },
@@ -299,7 +299,7 @@
       },
       {
         "outcome": "applyAuthorEdit:authoritative_applied",
-        "hits": 556,
+        "hits": 596,
         "status": "threshold_met",
         "reachability": null
       },
@@ -323,7 +323,7 @@
       },
       {
         "outcome": "applyAuthorEdit:conflicted:proposal_head_present",
-        "hits": 20,
+        "hits": 40,
         "status": "threshold_met",
         "reachability": null
       },
@@ -347,7 +347,7 @@
       },
       {
         "outcome": "applyAuthorEdit:refused:target_mismatch",
-        "hits": 20,
+        "hits": 40,
         "status": "threshold_met",
         "reachability": null
       },
@@ -758,14 +758,14 @@
     "acceptProposal:refused:operation_not_pending": 20,
     "acceptProposal:refused:stale_proposal_revision": 20,
     "applyAuthorEdit:HTTP_422:command_target_refused": 20,
-    "applyAuthorEdit:authoritative_applied": 556,
+    "applyAuthorEdit:authoritative_applied": 596,
     "applyAuthorEdit:conflicted:ownership_changed": 20,
-    "applyAuthorEdit:conflicted:proposal_head_present": 20,
+    "applyAuthorEdit:conflicted:proposal_head_present": 40,
     "applyAuthorEdit:conflicted:stale_authoritative_head": 20,
     "applyAuthorEdit:no_effect:content_unchanged": 20,
     "applyAuthorEdit:proposal_revised": 21,
     "applyAuthorEdit:refused:invalid_selection": 20,
-    "applyAuthorEdit:refused:target_mismatch": 20,
+    "applyAuthorEdit:refused:target_mismatch": 40,
     "applyAuthorEdit:refused:unsupported_intent_shape": 20,
     "applyAuthorEdit:refused_to_draft": 40,
     "archiveProject:authoritative_applied": 186,
@@ -774,22 +774,27 @@
     "challenge:author_edit:capacity_120": 25,
     "challenge:author_edit:retry_after_limit": 25,
     "challenge:changed_digest_conflict": 25,
-    "challenge:exact_retry:True": 5990,
+    "challenge:exact_retry:True": 6196,
+    "challenge:expired_pending_refused": 20,
     "challenge:shared:capacity_10": 25,
     "challenge:shared:retry_after_limit": 25,
-    "createAgentRun:proposal_ready": 404,
+    "createAgentRun:admitted": 444,
+    "createAgentRun:proposal_ready": 424,
     "createChapter:HTTP_400:invalid_request": 21,
-    "createChapter:authoritative_applied": 933,
+    "createChapter:authoritative_applied": 954,
     "createChapter:conflicted:stale_tree_revision": 21,
     "createChapter:refused:archived_project": 20,
     "createChapter:refused:invalid_placement": 20,
     "createChapter:refused:invalid_volume_join": 21,
-    "createProject:created": 1494,
+    "createEditorSession:current_writer": 617,
+    "createEditorSession:read_only": 25,
+    "createProject:created": 1516,
     "createVolume:HTTP_400:invalid_request": 20,
-    "createVolume:authoritative_applied": 1329,
+    "createVolume:authoritative_applied": 1350,
     "createVolume:conflicted:stale_tree_revision": 21,
     "createVolume:refused:archived_project": 21,
     "delayed_replay:applyAuthorEdit:True": 25,
+    "delayed_replay:applyAuthorEdit_after_expiry:True": 20,
     "delayed_replay:createChapter:False": 26,
     "delayed_replay:createEditorSession:False": 1,
     "delayed_replay:createProject:True": 25,
@@ -832,14 +837,14 @@
     "replanProposal:refused:unavailable_proof": 40,
     "replanProposal:resolved": 20,
     "replay:acceptProposal:True": 200,
-    "replay:applyAuthorEdit:True": 837,
+    "replay:applyAuthorEdit:True": 917,
     "replay:archiveProject:True": 66,
     "replay:closeEditorFlowDraft:True": 20,
-    "replay:createAgentRun:True": 424,
-    "replay:createChapter:True": 613,
-    "replay:createEditorSession:True": 520,
-    "replay:createProject:True": 771,
-    "replay:createVolume:True": 720,
+    "replay:createAgentRun:True": 444,
+    "replay:createChapter:True": 634,
+    "replay:createEditorSession:True": 541,
+    "replay:createProject:True": 793,
+    "replay:createVolume:True": 741,
     "replay:deleteChapter:True": 43,
     "replay:deleteVolume:True": 54,
     "replay:expandRefusedEditDraftToProposal:True": 20,
@@ -853,12 +858,13 @@
     "replay:undoLatestAuthorAction:True": 203,
     "replay:updateChapter:True": 39,
     "replay:updateProject:True": 44,
-    "replay:updateProjectAssistance:True": 404,
+    "replay:updateProjectAssistance:True": 424,
     "replay:updateVolume:True": 47,
     "replay:withdrawProposal:True": 201,
     "replay_binding:changed_body:refused": 25,
     "replay_binding:new_key_old_nonce:refused": 25,
     "replay_binding:wrong_nonce:refused": 25,
+    "schema_probe:createVolume:HTTP_400": 1,
     "setCurrentChapter:authoritative_applied": 21,
     "setCurrentChapter:conflicted:stale_current_chapter": 20,
     "setCurrentChapter:conflicted:wrong_target_head": 21,
@@ -900,298 +906,408 @@
     "writer:stale_refused": 25
   },
   "project_allocation_audit": {
-    "createProject:missing_action": 1494,
+    "createProject:missing_action": 1516,
     "archiveProject:missing_action": 186,
     "updateProject:missing_action": 46
   },
+  "foundation_outcomes": [
+    {
+      "outcome": "acceptProposal:no_effect",
+      "hits": 0,
+      "status": "contract_gap",
+      "explanation": "A-008: no wire variant or specified trigger"
+    },
+    {
+      "outcome": "applyAuthorEdit:proposal_revised:structural_reshape_conflict",
+      "hits": 0,
+      "status": "current_profile_limit",
+      "explanation": "A-011: explicit Proposal target is replacement-only; structured classifier has no ProposalRevised"
+    }
+  ],
   "differences": [
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "draft-binding-360-379.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-420-424.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-420-424.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-420-424.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-420-424.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-420-424.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-425-429.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-425-429.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-425-429.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-425-429.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-425-429.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-430-434.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-430-434.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-430-434.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-430-434.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-430-434.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-435-439.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-435-439.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-435-439.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-435-439.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-435-439.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-440-444.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-440-444.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-440-444.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-440-444.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-440-444.json.gz",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-minimals.json",
       "label": "createChapter/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-minimals.json",
       "label": "createEditorSession/delayed immutable acknowledgement",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-003",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "replay-minimals.json",
       "label": "Project rename must not be skipped by Author Undo",
       "expected": "Keep this sentence.",
-      "actual": ""
+      "actual": "",
+      "finding_id": "D-001",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "proposal-undo-353.json.gz",
@@ -1206,13 +1322,17 @@
       },
       "seed_case": "353/proposal/proposal-undo",
       "trace_start": 1,
-      "trace_end": 56
+      "trace_end": 56,
+      "finding_id": "D-004",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "withdrawal-undo-354.json.gz",
       "label": "undoLatestAuthorAction/Command exact retry bytes",
       "expected": true,
-      "actual": false
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
     },
     {
       "evidence": "withdrawal-undo-354.json.gz",
@@ -1227,7 +1347,10 @@
       },
       "seed_case": "354/proposal/withdrawal-undo",
       "trace_start": 1,
-      "trace_end": 55
+      "trace_end": 55,
+      "finding_id": "D-004",
+      "classification": "implementation_defect"
     }
-  ]
+  ],
+  "unclassified_differences": 0
 }

@@ -68,7 +68,7 @@ def run(http, seed, differences, coverage, selected=None):
     coverage['takeOverProjectWriter:takeover_applied'] += 1
     old_session_id = e.session_id
     status, stale = http.command('applyAuthorEdit', e.request(units('Stale writer')), project_id=e.s.project)
-    compare('Stale writer pre-Admission refusal', True, status >= 400 and 'receipt' not in stale, differences)
+    compare('Stale writer pre-Admission refusal', True, 400 <= status < 500 and 'receipt' not in stale, differences)
     coverage['writer:stale_refused'] += 1
     e.refresh()
     compare('Old writer fenced', 'read_only', e.session['writer']['kind'], differences)
@@ -85,14 +85,14 @@ def run(http, seed, differences, coverage, selected=None):
         ('new_key_old_nonce', body, {**headers, 'Idempotency-Key': http.identity()}),
     ]:
         refused_status, refused_result = http.request(method, path, payload, sent_headers)
-        compare(label + '/no fresh authority', True, refused_status >= 400 and 'receipt' not in refused_result, differences)
-        coverage['replay_binding:' + label + ':refused'] += int(refused_status >= 400 and 'receipt' not in refused_result)
+        compare(label + '/no fresh authority', True, 400 <= refused_status < 500 and 'receipt' not in refused_result, differences)
+        coverage['replay_binding:' + label + ':refused'] += int(400 <= refused_status < 500 and 'receipt' not in refused_result)
     replay(http, old_edit, 'applyAuthorEdit', differences, coverage)
     _, chapter = http.request('GET', f'/api/v1/projects/{e.s.project}/chapters/{e.chapter}')
     compare('Replay does not restore old prose', e.text, chapter['chapter']['current_revision']['body'], differences)
     values['editor_session_id'] = old_session_id
     status, refused = http.command('takeOverProjectWriter', values, project_id=e.s.project, editor_session_id=old_session_id)
-    compare('Stale takeover pre-Admission refusal', True, status >= 400 and 'receipt' not in refused, differences)
+    compare('Stale takeover pre-Admission refusal', True, 400 <= status < 500 and 'receipt' not in refused, differences)
     coverage['takeOverProjectWriter:stale_before_admission'] += 1
 
     challenge_path, challenge_body, challenge = http.last_challenge

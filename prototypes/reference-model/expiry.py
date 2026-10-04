@@ -36,7 +36,7 @@ def run(http, seed, differences, coverage):
     for (body, key, challenge), saved in zip(pending, settled):
         status, response = http.request('POST', path, body,
             {'Idempotency-Key': key, 'X-StoryOS-Anti-Forgery': challenge['nonce']})
-        refused = status >= 400 and 'receipt' not in response
+        refused = 400 <= status < 500 and 'receipt' not in response
         compare('Expired pending Challenge has no authority', True, refused, differences)
         coverage['challenge:expired_pending_refused'] += int(refused)
         replay(http, saved, 'applyAuthorEdit_after_expiry', differences, coverage)

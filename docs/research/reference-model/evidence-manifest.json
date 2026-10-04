@@ -21,8 +21,34 @@
     "withdrawal-undo-354.json.gz",
     "rejection-undo-355.json.gz",
     "proposal-structure-356.json.gz",
-    "expiry-450.json.gz"
+    "expiry-450.json.gz",
+    "target-refusal-380-399.json.gz",
+    "zero-revision-1.json.gz"
   ],
   "policy": "Count only actual recorded outcomes. Exact retries do not multiply ordinary domain outcome counts. Partial structure evidence is explicitly retained; seed 114 restarts in a fresh database.",
-  "excluded": "Earlier smoke and model-correction traces remain retained as historical observations; they are not needed for the 20-hit threshold."
+  "excluded": "Earlier smoke and model-correction traces remain retained as historical observations; they are not needed for the 20-hit threshold.",
+  "evidence_sha256": {
+    "structure-partial-100-114.json.gz": "6abc0a3aa91b32ab7c5276163b50209f3bddd23f2f0279e5ebaa2d5c4bf1546a",
+    "structure-114-119.json.gz": "3864172e2e17340eeb5d238142b65a071d957f0f3307753b507b4ea2e56526d6",
+    "edits-220-239.json.gz": "359b81317aafec12bb975623c383103e7e39b6e1dc30177866ca215e56dedfde",
+    "proposals-320-323.json.gz": "aca0aac52ccf2265e30867a9654478a58caa22e7206044d3d0c2293135a422fc",
+    "proposals-324-327.json.gz": "c4ca7dd11bc9a2566c5246856bbb709e0fa836aaf99fb9134273aa33abe57bf1",
+    "proposals-328-331.json.gz": "5ed7b584f0d49a25d72439c1b26bfd00f264464cce755539cdda2bc10b1c9b17",
+    "proposals-332-335.json.gz": "e5f5eb69ae11df14baf5e4cef381e309f67635e67202a26eeda46483e2cc9fcb",
+    "proposals-336-339.json.gz": "bc456b04314851f6c7e2561e70f5a28ab56523bd4ac12ff75059c364e91fcc46",
+    "draft-binding-360-379.json.gz": "016c0890b2aee514e21129b06c9f4d08d90bcf1a8b1f1d55e1ee8e021114069e",
+    "replay-420-424.json.gz": "242e3c93bf35d283173c5aae2e0611ff0ee6ea0645adf693c093781aa7f02b98",
+    "replay-425-429.json.gz": "dbbe8711e10672490d343d416ba95876a6142600142381e3660d0496224a9a53",
+    "replay-430-434.json.gz": "66079e16ebd955e2c59cec59480dbbff1420daaf7d8e61096ae8d959856ab319",
+    "replay-435-439.json.gz": "9ea8efb3f481256f76d8ed5f0fbf7f2503ae1a3d41a7ef7fa7769520b43c6d06",
+    "replay-440-444.json.gz": "1cccd576528001d541ad35c9879e5731057ef623936c39286c17b97a65d723b8",
+    "replay-minimals.json": "bbdef651e590c833f96cf661ef23b023b21b9a34858a1a58340a779874ce9ec9",
+    "proposal-undo-353.json.gz": "ff4dc312ce203f9414c0e833d064d9276587c442bdd223d89ee949bdad72d9e0",
+    "withdrawal-undo-354.json.gz": "8e1ad15fcf8d1eb9554d062af08efbd44479e4177f60c1105d4088b351c3d920",
+    "rejection-undo-355.json.gz": "4b61e9dbda49026db1b4a53915a2a2ecdc67df0f6b2a8cee5091e2943f0de443",
+    "proposal-structure-356.json.gz": "2d1425d6fc66868e38ead67f6ed1ef9e7aa5cf715e0ff058bf06928aef234b39",
+    "expiry-450.json.gz": "acbaff8f8ab676839b6c52b176eab24569682550b34c3e2c5cee0f77b7521e35",
+    "target-refusal-380-399.json.gz": "e0e231da90bd1231e3c1715f62183252ec073fd3f351a097f9c02c980b7797bb",
+    "zero-revision-1.json.gz": "3c2b0ec5924d293caba723494a3ba7d643cbafb564289e50f248a8e75d29234f"
+  }
 }
