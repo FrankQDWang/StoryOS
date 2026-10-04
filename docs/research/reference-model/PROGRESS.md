@@ -137,3 +137,5 @@ Next: add two-Operation ordered and atomic Bundle negative selections, then run 
 Seed 310 passed 19 scenarios with zero differences, including missing required dependencies and incomplete atomic Bundle closure for both Accept and Reject. The generator identifies a selected Operation by its declared Block identity, not incidental query order. Evidence: `proposals-310.json.gz`; run `684c6a3493bf4a08b87dc559c8bc6b35`, 96 seconds. Added standalone replay modes for the zero-revision schema discrepancy and Replan Undo observation.
 
 Next: check the new Reversal Proposal frontier, collect Proposal counts, and verify real five-minute Challenge expiry without clock injection.
+
+Step 13 follow-up: seed 311 confirms that the new Reversal Proposal action becomes a Barrier for the next Undo. Its first Revision has no exact restoration handler. The request returns unavailable/barrier with stable exact retry and no authority change. Evidence: `reversal-barrier-311.json.gz`; managed run `a72a7d666617458fbddf6d2f57c2b323`.
