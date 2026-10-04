@@ -183,3 +183,9 @@ Next: minimize D-004 and D-005 separately; sample the two remaining reasons 20 t
 Seed 353 independently confirms D-004, the empty authoritative payload in Proposal Undo response. Seed 354 independently confirms D-005, withdrawal Undo retry changing only Activity position to zero; it also shows D-004. Seed 355 records A-010, the rejection Undo registration/Barrier question, with no guessed failure. All three compressed traces and source/contract locations are committed. No product source changed.
 
 Next: reach 20 ownership_changed/source_binding_changed cases, then complete writer, challenge binding, rate-limit, and expiry sampling.
+
+## Step 17: Author Edit and Undo threshold
+
+Seeds 360-379 reached ownership_changed and source_binding_changed 20 times each. All state checks passed. The 20 exact-retry differences are individually audited in `draft-binding-replay-audit.json`: both HTTP statuses are 200 and only effect.project_activity_position changes to zero, the same D-005. Evidence: `draft-binding-360-379.json.gz`; run `54b4ded917914b72962298563570c01b`, 80 seconds. SourceUnavailable remains unreachable without missing retained source evidence; no destructive retention or SQL mutation is authorized.
+
+Next: finish the Stage 4 sampling and real-clock expiry proof, then build the final outcome ledger and report.

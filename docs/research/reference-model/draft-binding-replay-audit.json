@@ -1,0 +1,322 @@
+[
+  {
+    "trace_indices": [
+      95,
+      96
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      199,
+      200
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      303,
+      304
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      407,
+      408
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      511,
+      512
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      615,
+      616
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      719,
+      720
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      823,
+      824
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      927,
+      928
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1030,
+      1031
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1135,
+      1136
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1239,
+      1240
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1343,
+      1344
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1447,
+      1448
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1551,
+      1552
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1654,
+      1655
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1758,
+      1759
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1862,
+      1863
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      1966,
+      1967
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  },
+  {
+    "trace_indices": [
+      2070,
+      2071
+    ],
+    "status": [
+      200,
+      200
+    ],
+    "changed_fields": [
+      "/effect/project_activity_position"
+    ],
+    "first": "8",
+    "retry": "0",
+    "finding": "D-005"
+  }
+]
