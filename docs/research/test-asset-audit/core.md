@@ -1,22 +1,50 @@
-# Core tests — partial review
+# core test verdicts
 
-Completed: nine Project, Volume and Chapter test files, 49 tests. The directory is not complete. Reason codes: [METHOD.md](METHOD.md).
+Reviewed: 87 cases in 16 files. See PROGRESS.md for directory completion.
 
-D5 does not claim that the named public test executes an unreachable guard. Record an uncovered mutation if selected; do not present it as a successful coverage experiment.
+Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
+
+## crates/storyos-core/src/accept_proposal_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| CO069 | 28 — applies_one_pending_operation_for_an_exact_eligible_revision | DELETE | D1 | HTTP Acceptance checks Applied, exact candidate prose in the Authoritative Revision, resolved reservation and idempotent replay. | apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:14 |
+| CO070 | 36 — refuses_wrong_scope_admission_stale_revision_and_ineligible_state | KEEP | K1 | The Operation-not-pending case is not covered by a second Acceptance with a fresh key: the HTTP success test only replays the settled key. Removing the pending guard could accept a resolved Operation again. Keep that case; wrong Scope/admission are fixed true at the Core call and stale-revision behavior is already in the HTTP table. | apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:14; apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:175 |
+| CO071 | 80 — refuses_duplicate_identities_missing_dependencies_and_incomplete_bundle_closure | KEEP | K1 | Duplicate selections and unsatisfied predecessor dependencies must be refused by Acceptance, not merely reported as false by classify_proposal_selection. HTTP tests cover atomic Bundle closure and reversed valid sets, but never duplicate IDs or a missing predecessor. The shared selection test does not invoke accept_proposal. | apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:999; crates/storyos-core/src/accept_proposal_tests.rs:141 |
+| CO072 | 108 — invalidates_bad_validation_and_altered_candidates | KEEP | K1 | A valid-looking Validation Receipt bound to another Proposal Revision must be Invalid independently of its validity flag. The HTTP invalid-validation case submits an old Receipt identity, making the validity check fail as well; it does not isolate a true validity flag with a false revision match. The altered-candidate assertion itself is covered by HTTP. | apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:175 |
+| CO073 | 136 — classifies_duplicate_dependency_and_bundle_selection_sets | KEEP | K1 | Only this test independently distinguishes applied versus rejected predecessor satisfaction and Reject versus Accept intent, plus duplicate IDs. HTTP Bundle tests cover closure and reversed order but not that dependency matrix. Accepting a dependent Operation after a rejected predecessor would lose the required ordering rule. | apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:999 |
+| CO074 | 213 — conflicts_a_changed_target_head | DELETE | D1 | The changed_head HTTP case changes the stored Head and checks a durable conflict, unchanged Chapter, and refusal of another attempt until revision. | apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:175 |
+
+## crates/storyos-core/src/append_proposal_generation_batch_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| CO075 | 25 — applies_the_next_contiguous_canonical_batch | DELETE | D1 | The Worker HTTP stream case consumes canonical batches and checks the final candidate, ready Generation, valid Receipt and completed Run. | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:96 |
+| CO076 | 33 — returns_the_existing_outcome_for_an_exact_duplicate | KEEP | K1 | An existing batch digest equal to the received batch must classify Duplicate rather than Apply and append another candidate revision. Current HTTP stream tests do not inject an existing batch record with the same sequence/digest. This is the only matching-digest replay case for the classifier; final candidate equality alone does not check this branch. | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:96 |
+| CO077 | 43 — waits_for_a_gap_and_refuses_a_late_or_closed_generation | KEEP | K1 | A sequence gap must Wait, not Apply and lose a batch. The HTTP stream tests only supply contiguous sequences; late-generation refusal uses an earlier Adapter guard. Retain the sequence-gap input. The stale-revision subcase uses equal revision inputs at both current production call sites and adds no current independent protection. | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:134 |
+| CO078 | 70 — refuses_wrong_scope_and_conflicts_a_digest_mismatch | KEEP | K1 | A reused batch identity with different content must conflict, and a revised candidate whose Block/base binding no longer owns the target must refuse. HTTP streaming and secondary-candidate success scenarios do not inject a batch digest collision or isolate reservation_owns_target=false. Scope is fixed true at both current callers and can be dropped from this group. | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:96; apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:1055 |
 
 ## crates/storyos-core/src/archive_project_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | CO003 | 16 — a_matching_revision_and_active_lifecycle_classifies_as_applied | DELETE | D1 | The HTTP test asserts an Applied archive, revision 2 and archived library state. The Core success tuple adds no input or effect. | apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158 |
 | CO004 | 24 — a_stale_revision_classifies_as_conflicted_with_zero_lifecycle_effect | DELETE | D1 | The HTTP test archives at revision 1, then submits a new key at stale revision 1 and expects Conflicted. The current Project is already archived, so this also observes stale-revision precedence. | apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158 |
 | CO005 | 37 — an_already_archived_project_classifies_as_no_effect | DELETE | D1 | The HTTP test sends a new key at revision 2 to an already archived Project and expects NoEffect. It exercises the same Core lifecycle condition. | apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158 |
 | CO006 | 49 — a_missing_project_classifies_as_refused_with_zero_lifecycle_effect | DELETE | D5 | Only persist_archive_project calls this classifier in product code. It returns MissingProject before the call and always passes ProjectPresence::Present (archive_project.rs:83,101 in the adapter). Absent is an internal synthetic input here. HTTP Scope refusal remains covered, but that test cannot kill a mutation confined to this unreachable Core guard. | apps/web/test/node-postgresql/archive-project-http.integration.test.ts:158 |
 
+## crates/storyos-core/src/compact_active_context_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| CO085 | 21 — ordinary_assistance_does_not_request_active_compaction | DELETE | D1 | The compaction HTTP test requests this prefix and observes installed compaction; the ordinary advisory HTTP test sends the exact ordinary message and asserts exactly one model_attempt row, so accidental compaction would violate that count. | apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:165; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237 |
+| CO086 | 27 — input_digest_binds_the_exact_message_revision_and_body | KEEP | K1 | Changing the digest encoding can make retained staged compactions incomparable across a process upgrade. HTTP computes both digests through the same current function, so a simultaneous representation change can pass its equality checks. This fixed known vector binds the persisted representation; it is not a static object literal comparison. | apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:165 |
+| CO087 | 35 — install_refuses_a_restricted_changed_or_incomplete_exact_input | DELETE | D1 | HTTP stages then installs, changes Chapter input, marks source restricted, and makes exact-required input too large. It checks installed/changed_input/restricted_source/exact_required_unsatisfied and whether later requests were dispatched. The pure four outcomes repeat those cases. | apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:165 |
+
 ## crates/storyos-core/src/create_chapter_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | CO023 | 21 — the_first_chapter_on_an_empty_active_project_becomes_current | DELETE | D1 | The HTTP test creates the first Chapter and checks its identity becomes Current Chapter, order 1 and tree revision 3. | apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361 |
 | CO024 | 33 — a_later_chapter_preserves_the_existing_current_chapter | DELETE | D1 | Later Chapter creation checks the first Chapter remains current and the tree revision advances. The pure fixture uses an empty ordered list with an existing Current Chapter, but that synthetic combination adds no observable production case. | apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361 |
 | CO025 | 50 — a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect | DELETE | D1 | The stale Create Chapter request checks conflicted/stale_tree_revision and no Commit or Author Action. | apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361 |
@@ -27,14 +55,14 @@ D5 does not claim that the named public test executes an unreachable guard. Reco
 ## crates/storyos-core/src/create_project_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | CO001 | 4 — an_absent_project_classifies_as_the_closed_empty_open_state | DELETE | D1 | The HTTP create case asserts an empty opened Project, zero Chapters, and one project row. It reaches the Core classifier through persist_create_project. Returning ExistingProject for Absent would reject the same observed operation. | apps/web/test/node-postgresql/create-project-http.integration.test.ts:75 |
 | CO002 | 12 — an_existing_project_classifies_as_a_closed_refusal | DELETE | D1 | The HTTP test creates the prospective Project before command submission and expects 409. Bypassing the Core ExistingProject result would reach the INSERT and return a different error, so this is not merely an idempotency-replay assertion. | apps/web/test/node-postgresql/create-project-http.integration.test.ts:75 |
 
 ## crates/storyos-core/src/create_volume_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | CO012 | 16 — a_matching_tree_revision_and_active_project_classifies_as_applied | DELETE | D1 | HTTP creation asserts tree revision 2, Volume title/order, one Authoritative Commit, and the queried tree. The pure Applied result repeats its revision increment. | apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148 |
 | CO013 | 24 — a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect | DELETE | D1 | HTTP creation with the prior tree revision must produce stale_tree_revision and keep the tree and Volume count unchanged. | apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148 |
 | CO014 | 35 — an_archived_project_classifies_as_refused_with_zero_authority_effect | DELETE | D1 | The HTTP test archives the Project, then creates a Volume and checks refused/archived_project. This reaches the Core lifecycle rule. | apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148 |
@@ -43,7 +71,7 @@ D5 does not claim that the named public test executes an unreachable guard. Reco
 ## crates/storyos-core/src/delete_chapter_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | CO036 | 21 — removing_a_non_current_chapter_preserves_the_current_chapter | DELETE | D1 | Deleting non-current Chapter B retains A as Current Chapter and removes B from the queried tree. | apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246 |
 | CO037 | 32 — removing_the_current_chapter_selects_the_next_remaining_chapter | DELETE | D1 | Deleting current A with C remaining selects C. The same forward-successor rule is observed through the public command and Project response. | apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246 |
 | CO038 | 48 — removing_the_last_current_chapter_selects_the_previous_remaining_chapter | KEEP | K1 | Deleting the last current Chapter while earlier Chapters remain must select the preceding Chapter, not Empty. The HTTP test name says next then previous but its actual sequence deletes non-current B, then A, then sole remaining C; it never selects a previous sibling. The exact-dist test removes A/B/C in forward order, and Adapter tests cover non-current or forward deletion. This Core case is the only reviewed previous-sibling input. | apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246; apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts:181; crates/storyos-adapter-postgres/src/delete_chapter_tests.rs:354 |
@@ -56,7 +84,7 @@ D5 does not claim that the named public test executes an unreachable guard. Reco
 ## crates/storyos-core/src/delete_volume_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | CO044 | 20 — removing_an_empty_volume_applies_the_next_tree_revision | DELETE | D1 | Deleting an empty Volume checks Applied, an Authoritative Commit and a queried tree without that Volume. The frozen-acknowledgement case also uses the next revision for NoEffect. | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238 |
 | CO045 | 28 — a_nonempty_volume_is_refused_with_zero_authority_effect | DELETE | D1 | The nonempty Volume case checks nonempty_volume, no Commit/Author Action, and unchanged tree revision and sibling order. | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238 |
 | CO046 | 40 — an_already_removed_volume_is_a_no_effect_retry | DELETE | D1 | A new-key delete of the removed Volume checks no_effect/already_removed with no authority allocation. | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238 |
@@ -64,10 +92,55 @@ D5 does not claim that the named public test executes an unreachable guard. Reco
 | CO048 | 65 — an_invalid_volume_join_is_refused_with_zero_authority_effect | KEEP | K1 | A syntactically valid missing or foreign Volume identity in the owned Project must refuse InvalidVolumeJoin instead of returning Applied/NoEffect. The HTTP delete test rejects a foreign Project and tests createChapter into a removed Volume, which are different calls. Neither it nor the Adapter deletion test supplies a missing Volume to delete_volume. | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238; crates/storyos-adapter-postgres/src/delete_volume_tests.rs:282 |
 | CO049 | 77 — an_archived_project_is_refused_with_zero_authority_effect | DELETE | D1 | The archive-specific HTTP test creates a Volume, archives its Project and checks refused/archived_project on deletion. | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:384 |
 
+## crates/storyos-core/src/open_block_proposal_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| CO082 | 17 — opens_one_block_proposal_for_an_exact_current_base | DELETE | D1 | The Worker HTTP open scenario checks a valid Validation Receipt, exact Block/base and an unchanged Authoritative Chapter. | apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts:203 |
+| CO083 | 24 — refuses_wrong_scope_and_unavailable_targets | DELETE | D5 | Scope is fixed true. Opening callers derive target presence from current Head presence; candidate loading requires both by SQL. The independent present-Block/None-Head case is not produced there. Public deleted-target coverage owns unavailable-target behavior. Candidate revalidation supplies Some(Head); no distinct reachable missing-Block regression was established for this isolated classifier fixture. This is not proof that HTTP kills a mutation confined to its redundant None arm. | apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:141 |
+| CO084 | 52 — conflicts_changed_heads_and_overlapping_reservations | DELETE | D1 | The reserved-block HTTP author edit changes the authoritative Head while keeping the candidate, and asserts Proposal validation becomes conflicted. author_edit_proposal.rs calls this exact classifier with the retained base and new Head. The Worker overlap test separately owns the reservation case. | apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1174; apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts:286 |
+
+## crates/storyos-core/src/pause_proposal_generation_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| CO079 | 21 — pauses_the_admitted_head_without_an_author_action | DELETE | D1 | The first-input HTTP stream test checks ready_partial, retained first candidate, no changed Author Undo frontier and no late-batch installation. Core's static allocates_author_action=false field is not read by the Adapter, which matches Applied with .. . | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:134 |
+| CO080 | 31 — retries_the_same_fence_without_fabricating_an_author_action | KEEP | K1 | An existing Fence must not be classified Applied and install a second Fence. The SQL caller selects the existing-fence bit even for a generating row. HTTP tests observe only the first Fence and late Worker batches, not a repeated pause against an existing Fence. Keep the duplicate disposition check; the false allocation field repeats a constant. | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:134 |
+| CO081 | 44 — refuses_wrong_scope_stale_heads_and_non_generating_state | DELETE | D5 | The sole product caller supplies scope=true, generation=generating, equal expected/current revisions and digests, and equal admitted/last sequence. SQL already selects only generating revisions. These three refusal inputs cannot arise at that call. HTTP first-input fencing covers the actual boundary but not these synthetic Core branches. | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:134 |
+
+## crates/storyos-core/src/set_current_chapter_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| CO050 | 25 — a_matching_current_chapter_and_target_head_classifies_as_applied | DELETE | D1 | The HTTP switch checks Applied, the exact target Current Chapter, queried Project and Editor Session base Snapshot. | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313 |
+| CO051 | 35 — an_already_current_target_classifies_as_no_effect | DELETE | D1 | A new-key switch to the already-current target checks no_effect/already_current and no Author Action. | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313 |
+| CO052 | 47 — a_stale_current_chapter_classifies_as_conflicted_with_zero_authority_effect | DELETE | D1 | The HTTP stale-current request checks conflicted/stale_current_chapter, not only generic failure. | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313 |
+| CO053 | 59 — a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect | DELETE | D1 | The HTTP wrong-target-Head request checks conflicted/wrong_target_head and no Author Action. | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313 |
+| CO054 | 71 — a_missing_project_classifies_as_refused_with_zero_authority_effect | DELETE | D5 | The only product classifier call follows a successful Project row read and always passes Present; adapter set_current_chapter.rs:109 returns MissingProject before classification. The public foreign-Project refusal is covered, but cannot kill a mutation in the unreachable Core presence guard. | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313 |
+| CO055 | 83 — an_archived_project_classifies_as_refused_with_zero_authority_effect | DELETE | D1 | The HTTP refusal scenario archives the Project before switching and checks archived_project. | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:542 |
+| CO056 | 95 — an_invalid_chapter_join_classifies_as_refused_with_zero_authority_effect | DELETE | D1 | The same HTTP scenario selects a missing Chapter and checks refused/invalid_chapter_join. | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:542 |
+| CO057 | 107 — an_empty_project_classifies_as_refused_with_zero_authority_effect | DELETE | D5 | This fixture combines no Current Chapter with a valid target Chapter. Current product creation selects the first Chapter and last-Chapter deletion removes the final target. No current product flow was found that supplies this combination. The named HTTP cases protect those real empty-state transitions, not this synthetic Core branch. | apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:361; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246 |
+
+## crates/storyos-core/src/undo_latest_author_action_tests.rs
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| CO058 | 37 — a_matching_reversible_frontier_classifies_as_compensated | DELETE | D1 | The exact-dist test saves Hello then Hello World, invokes real Author Undo and checks prior Block identity and text after reload. This observes compensation of the direct Author Action. | apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162 |
+| CO059 | 45 — a_frontier_mismatch_classifies_as_conflicted_with_zero_authority_effect | DELETE | D1 | The public Draft Close scenario submits a stale frontier and checks the exact current sequence in frontier_mismatch. The Core sequence guard is shared and runs before frontier-kind dispatch. | apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1499 |
+| CO060 | 59 — a_missing_frontier_classifies_as_unavailable | KEEP | K1 | Undo with no remaining Forward Author Action must return NoFrontier rather than panic or claim compensation. The Application fake merely returns that outcome; it never calls Core. Public HTTP Undo scenarios create structural or prose actions first and do not assert no_frontier. This is the only executable empty-frontier classification found. | crates/storyos-application/src/undo_latest_author_action_tests.rs:70; apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts:335 |
+| CO061 | 71 — a_barrier_frontier_classifies_as_unavailable_and_cannot_be_skipped | DELETE | D1 | The Adapter integration test changes the recorded prior Current Chapter to an unavailable identity, calls real Author Undo, checks Barrier and proves current identity is unchanged. It exercises the actual barrier classification. | crates/storyos-adapter-postgres/src/set_current_chapter_authority_tests.rs:648 |
+| CO062 | 86 — a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect | KEEP | K1 | A direct-author-action undo against a changed current Head must conflict instead of restoring stale prose. The exact-dist undo case has matching Heads. The HTTP stale-Head Draft Close case uses another match arm, and the Acceptance branch is separate. No other test supplies a changed direct-action Head. | apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1949 |
+| CO063 | 98 — a_matching_acceptance_frontier_classifies_as_compensated | DELETE | D1 | Public Undo Acceptance checks compensated, restores prior prose, retains historical revisions and reopens the Proposal. | apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:16 |
+| CO064 | 106 — a_drifted_acceptance_head_with_usable_evidence_requires_reversal | DELETE | D1 | The HTTP case changes the accepted Head and submits the new actual Head; it checks reversal_required and no compensation of authority. | apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:108 |
+| CO065 | 117 — unusable_acceptance_evidence_is_unavailable | KEEP | K1 | Unusable Acceptance evidence with a drifted Head must be SourceUnavailable, not ReversalRequired. HTTP corrupts the digest with an unchanged Head only. Retain the drifted-Head case; its second unchanged-Head assertion is redundant with HTTP. A branch rewrite that permits reversal whenever Head differs would escape the HTTP corruption case. | apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:149 |
+| CO066 | 136 — a_stale_expected_acceptance_head_stays_conflicted | KEEP | K1 | An Acceptance undo with a stale expected Head must conflict before choosing compensation or reversal. HTTP reversal supplies the current actual Head and is therefore not this stale-request case. The direct-action and Draft Close guards are separate match arms. | apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:108 |
+| CO067 | 148 — an_acceptance_frontier_mismatch_stays_conflicted | DELETE | D1 | The shared frontier mismatch guard executes before matching Acceptance, so the public Draft Close stale frontier covers this assertion too. No Acceptance-specific calculation occurs before that guard. | apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1499 |
+| CO068 | 162 — a_matching_structure_frontier_classifies_as_compensated_without_head_proof | DELETE | D1 | HTTP deletes the only Chapter then undoes its structural action using the old Editor Session Head. The observed frontier has no prose Head; successful compensation proves a global Head equality gate must not block structure undo. | apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts:335 |
+
 ## crates/storyos-core/src/update_chapter_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | CO029 | 21 — a_matching_revision_rename_and_reorder_classifies_as_applied | DELETE | D1 | The HTTP rename/reorder checks title, order, tree revision, unchanged prose and queried placement. | apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252 |
 | CO030 | 33 — a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect | DELETE | D1 | A stale tree request produces conflicted/stale_tree_revision and leaves tree revision and sibling count unchanged. | apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252 |
 | CO031 | 43 — an_unchanged_title_and_order_classifies_as_no_effect | DELETE | D1 | The unchanged title/order request checks no_effect/unchanged and allocates neither Commit nor Author Action. | apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252 |
@@ -79,7 +152,7 @@ D5 does not claim that the named public test executes an unreachable guard. Reco
 ## crates/storyos-core/src/update_project_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | CO007 | 17 — a_matching_revision_and_new_title_classifies_as_applied | DELETE | D1 | The HTTP test renames and then reads both Project and library, including revision 2. It observes the same Core title/revision effect. | apps/web/test/node-postgresql/update-project-http.integration.test.ts:210 |
 | CO008 | 28 — a_stale_revision_classifies_as_conflicted_with_zero_title_effect | DELETE | D1 | The HTTP test sends Stale Title with revision 1 after a successful rename and expects Conflicted without a title change. | apps/web/test/node-postgresql/update-project-http.integration.test.ts:210 |
 | CO009 | 41 — an_unchanged_title_classifies_as_no_effect | DELETE | D1 | The HTTP test sends the same title at the current revision and expects a NoEffect Receipt. The pure classifier repeats that condition. | apps/web/test/node-postgresql/update-project-http.integration.test.ts:210 |
@@ -89,7 +162,7 @@ D5 does not claim that the named public test executes an unreachable guard. Reco
 ## crates/storyos-core/src/update_volume_tests.rs
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | CO016 | 21 — a_matching_revision_rename_and_reorder_classifies_as_applied | DELETE | D1 | HTTP rename/reorder asserts title, order 2, incremented tree revision and queried canonical placement. This includes all fields in the pure Applied assertion. | apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196 |
 | CO017 | 33 — a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect | DELETE | D1 | The HTTP test submits a stale tree revision and checks conflicted/stale_tree_revision, no Authoritative Commit and unchanged tree. | apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196 |
 | CO018 | 43 — an_unchanged_title_and_order_classifies_as_no_effect | DELETE | D1 | The HTTP unchanged title/order case asserts no_effect/unchanged with no Commit or Author Action. | apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196 |
