@@ -108,3 +108,4 @@
 - Matrix round-1, `takeover-server`: blocked (exit 2). Evidence: `evidence/round-1/takeover-server.json`.
   Reason: fetch failed
 - Matrix round-1, `takeover-database`: invariant failure (exit 1). Evidence: `evidence/round-1/takeover-database.json`.
+- Matrix round-1, `takeover-concurrent`: invariant failure (exit 1). Evidence: `evidence/round-1/takeover-concurrent.json`.
