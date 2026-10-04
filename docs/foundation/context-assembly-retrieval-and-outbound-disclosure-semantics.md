@@ -9,7 +9,7 @@
 - Tool and MCP boundary: [ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48)
 - Model routing boundary: [ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50)
 - Ownership and deployment decision: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
-- Ordered assembly decision: [ADR 0005](../adr/0005-require-ordered-context-assembly-before-destination-disclosure.md)
+- Ordered assembly decision: [ADR 0005](../adr/0005-require-ordered-context-assembly-before-destination-disclosure.md), with its inspection consequence revised by [ADR 0040](../adr/0040-show-assistance-results-not-run-internals-to-the-author.md)
 - Accepted inputs: [Model continuation](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md), [hosted operations](../adr/0034-bound-provider-hosted-tool-operations.md), and [Project Memory](../adr/0035-use-background-generated-project-memory.md)
 - Research evidence: [Context Assembly, Retrieval, and Outbound Disclosure Source Audit](../research/context-assembly-retrieval-outbound-disclosure-source-audit.md)
 
@@ -948,12 +948,19 @@ An MCP App remains a sandboxed view or controller over StoryOS-owned typed
 records. Its Host Context, update-model-context contribution, Tool result, and
 App Action never become ambient model context or an authoritative write path.
 
-## 11. Author inspection and controls
+## 11. Audit inspection and author controls
 
 ### 11.1 Inspect
 
-Context Inspect is read-only and available on demand. It may show current or
-historical:
+Context Inspect is a read-only audit query for diagnosis and verification
+([ADR 0040](../adr/0040-show-assistance-results-not-run-internals-to-the-author.md)).
+It is not an author view. The Protected Web Client does not show it to the
+author. The author sees assistance results and the decisions that the author
+must make. This section covers only the inspection of context and Run
+evidence. Author inspection of Memory and Research Artifacts keeps its owning
+contract.
+
+Context Inspect may show current or historical:
 
 - Operation Requirements;
 - Context Candidates and discovery reasons;
@@ -1016,8 +1023,9 @@ The editor Agent automatically receives the eligible current Working Target,
 current instructions, and bounded conversation continuity. Memory can provide
 summary navigation and on-demand reads when enabled. The author need not
 configure context scopes, source versions, a character sheet, pins, manifests,
-or Project Instruction before ordinary help works. Inspection stays on demand;
-ordinary already-authorized work has no additional confirmation ceremony.
+or Project Instruction before ordinary help works. The author sees assistance
+results, not Run internals. Context Inspect stays an audit query. Ordinary
+already-authorized work has no additional confirmation ceremony.
 
 ## 12. Project Instruction
 
