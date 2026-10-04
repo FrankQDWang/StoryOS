@@ -1,7 +1,9 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
 use crate::release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT, EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE,
     EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
@@ -9,6 +11,43 @@ use crate::release1_readable_export::{
     ExportHumanReadableManuscriptEffect, ExportHumanReadableManuscriptInput,
     ExportHumanReadableManuscriptRefusalReason, ExportHumanReadableManuscriptRequest,
     ExportHumanReadableManuscriptResponse, HumanReadableManuscriptExportRef,
+};
+use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &EXPORT_HUMAN_READABLE_MANUSCRIPT,
+        &[
+            "server_derived_project_scope",
+            "consistent_source_snapshot",
+            "deterministic_volume_chapter_order",
+            "unavailable_content_representation_profile",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &EXPORT_HUMAN_READABLE_MANUSCRIPT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &EXPORT_HUMAN_READABLE_MANUSCRIPT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/export-human-readable-manuscript-request.schema.json";
@@ -185,22 +224,4 @@ fn command_fixture(created_at: &str) -> Value {
             }
         }
     })
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

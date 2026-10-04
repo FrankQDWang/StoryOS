@@ -9,6 +9,46 @@ use crate::release1_manuscript_search::{
     SEARCH_MANUSCRIPT, SEARCH_MANUSCRIPT_REQUEST_SCHEMA_ID, SEARCH_MANUSCRIPT_RESPONSE_SCHEMA_ID,
     SearchManuscriptRequest, SearchManuscriptResponse,
 };
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
+use crate::release1_wire::json_bytes;
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &SEARCH_MANUSCRIPT,
+        &[
+            "server_derived_project_scope",
+            "bounded_search_query",
+            "projection_watermark_if_required",
+            "redaction_profile",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &SEARCH_MANUSCRIPT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &SEARCH_MANUSCRIPT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
+};
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/manuscript-search-request.schema.json";
@@ -199,10 +239,4 @@ fn search_fixture() -> Value {
         "redaction_profile": "storyos.author.v1",
         "limit_profile_revision": LIMIT_PROFILE_REVISION
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
