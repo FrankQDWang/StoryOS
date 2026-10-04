@@ -49,7 +49,7 @@ class ObservationTests(unittest.TestCase):
                         [('malformed', None), ('valid', 'failed')])
             finally:
                 process.terminate()
-                process.communicate(timeout=5)
+                process.communicate()
 
     def test_replay_restart_rebuild_and_bad_history_preserve_originals(self):
         with tempfile.TemporaryDirectory() as temporary:

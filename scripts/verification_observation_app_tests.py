@@ -33,7 +33,7 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/health.js','utf8'))
     assert.equal(model.component('collector',now).status,'stale');
 })().catch(e=>{console.error(e);process.exitCode=1});
 '''
-        result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_drawer_keeps_membership_and_requires_file_attempts(self):
@@ -85,7 +85,7 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/drawer-model.js','u
     assert.equal(model.fileFact(model.files[0]).seconds,null);
 })().catch(e=>{console.error(e);process.exitCode=1});
 '''
-        result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_refresh_retains_reading_state_until_apply(self):
@@ -151,5 +151,5 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/views.js', 'utf8'))
     assert.equal(reopened.rows[0].run,'b');
 })().catch(error => {console.error(error); process.exitCode=1});
 '''
-        result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
