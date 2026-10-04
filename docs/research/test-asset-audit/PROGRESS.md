@@ -35,7 +35,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | apps/web/test/browser-exact-dist | Pending | inventory.json |
 | apps/web/test/node-process-cut | Pending | inventory.json |
 | apps/web/test/support | Pending | inventory.json |
-| crates/storyos-core/src | In progress | core.md; first 5 files, 22 tests reviewed |
+| crates/storyos-core/src | In progress | core.md; first 9 files, 49 tests reviewed |
 | crates/storyos-application/src | Pending | inventory.json |
 | crates/storyos-adapter-postgres/src | Pending | inventory.json |
 | crates/storyos-adapter-postgres/tests | Pending | inventory.json |
@@ -64,3 +64,9 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Node/Server citation check corrected test-start line numbers; all cited source spans refer to the fixed baseline.
 - `make verify-targeted CHECK=verify-policy` ended with `source-changed` after 389.26 seconds because audit documents were committed during the run. Its printed Python groups passed, but the managed result is NOT PASS. Report: `target/verification/62fab459d82d4bb29a1967e8f6fcbe95/report.json`. Preserve this result. This is a read-only audit; do not run a full verification to replace it.
 - Added CROSS_LAYER.md with the comparisons already reviewed. Other layers in those rows remain pending; do not infer their final verdicts.
+
+- Core checkpoint: 49 tests in 9 files reviewed; 82 runtime cases reviewed overall. Continue with set_current_chapter and undo_latest_author_action, then Proposal, text, export, and context modules.
+- Exact source comparison found a misleading HTTP deletion test name: no previous-sibling deletion is executed. Keep the Core previous-sibling case. Keep missing-Volume deletion too; foreign-Project refusal is not the same case.
+- make release-package PASS in 352.63 seconds, with install, strict TypeScript checks, Vite build, Rust release build, and offline binary checks. No full tests ran. Package source: d1d8393cd32156f0485b5982a2cf37f5515fdcc3; manifest sha256:f4eb3d9d8aeba46dc2bfacfb881c43838a676c2a6a2be782623ab2b775e90bba. Report: target/verification/88f7e20a28e345b380ae15c2133bd0e4/report.json. Product sources equal the audit baseline; later report commits do not change package behavior.
+- Docker is available. Use only scripts/dev-postgres.sh run for future database checks.
+- Read-ahead (not adjudicated): set_current_chapter_tests.rs, undo_latest_author_action_tests.rs, accept_proposal_tests.rs, append_proposal_generation_batch_tests.rs, open_block_proposal_tests.rs, pause_proposal_generation_tests.rs, compact_active_context_tests.rs, archive_path_tests.rs, readable_export_tests.rs. Re-read the exact body when needed; do not treat this list as completed coverage.
