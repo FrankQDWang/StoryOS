@@ -75,3 +75,11 @@ M-004: a random absent Revision is not a stale same-Scope Revision. It failed Ad
 A-005: after the newest manual edit is compensated, a second undo reaches the correct prior frontier but returns `wrong_target_head`: the first compensation created a new Head. Section 10.1 specifies routing but does not define direct-edit eligibility after a later compensation. The model records both possible typed outcomes for this unresolved contract case and continues to require exact text for any compensation. Core location: `crates/storyos-core/src/undo_latest_author_action.rs:134`. This is not proof of a complete multi-step undo experience.
 
 The transport can now compare exact Challenge retry results and exact command acknowledgement bytes, without writing nonce or cookie values into evidence. It remains separate from model expectations.
+
+## Step 6: Structure count threshold
+
+Seeds 114 through 119 completed on a new database. `structure-114-119.json.gz` retains the evidence; managed run `7e9efe8f889443418e7c5143da22cc14` passed in 145 seconds. Aggregate only actual counts from this run and the retained partial run. `stage-1-coverage.json` lists all 48 effect/reason variants: 43 reached at least 20 times; four invalid-title Core branches are stopped by public title validation, and the empty-Project branch is stopped by the invalid live-Chapter join. Every reachable variant passed the structure model's current checks. This does not resolve the recorded contract gaps or the separate Project Author Action allocation finding.
+
+The second run also compared 1,098 exact Challenge retries and successful command replay bytes across the covered command kinds, with no mismatch. Final per-command replay counts still belong to Stage 4.
+
+Next: exercise the independent Proposal axes model through a real AgentRun and the packaged fake destination; finish Author Edit outcome coverage and minimal findings.

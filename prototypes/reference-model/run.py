@@ -2,6 +2,7 @@
 
 import argparse
 from collections import Counter
+from copy import deepcopy
 import hashlib
 import http.cookiejar
 import json
@@ -118,7 +119,7 @@ class Structure:
 
 def compare(label, expected, actual, differences):
     if expected != actual:
-        differences.append(dict(label=label, expected=expected, actual=actual))
+        differences.append(dict(label=label, expected=deepcopy(expected), actual=deepcopy(actual)))
 
 
 def chain(http, seed, differences, coverage):
@@ -172,7 +173,8 @@ def main():
     package = ROOT / 'target/release-package'
     environment = {**os.environ, 'STORYOS_DATABASE_URL': os.environ['STORYOS_TEST_DATABASE_URL'],
         'STORYOS_BOOTSTRAP_SESSIONS': json.dumps({'reference-model': '018f0000-0000-7001-8000-000000000001'}),
-        'STORYOS_CHALLENGE_SECRET': 'reference-model-disposable-database-secret', 'STORYOS_WORKER': '0'}
+        'STORYOS_CHALLENGE_SECRET': 'reference-model-disposable-database-secret',
+        'STORYOS_WORKER': '1' if args.stage == 'proposals' else '0'}
     server = subprocess.Popen([str(package / 'storyos-server'), '--bind', '127.0.0.1:0', '--web-root', str(package / 'web')],
         env=environment, stdout=subprocess.PIPE, text=True)
     trace, differences, coverage = [], [], Counter()
@@ -190,6 +192,9 @@ def main():
                 run(http, seed, differences, coverage, args.case)
             elif args.stage == 'edits':
                 from edits import run
+                run(http, seed, differences, coverage, args.case)
+            elif args.stage == 'proposals':
+                from proposals import run
                 run(http, seed, differences, coverage, args.case)
     finally:
         server.terminate()

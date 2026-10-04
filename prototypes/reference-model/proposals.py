@@ -1,0 +1,153 @@
+"""Proposal state axes from Manuscript State Machine sections 6, 7.4-7.6, and 8."""
+
+import time
+from copy import deepcopy
+from edits import Editor, units
+from run import compare
+
+
+class Proposal:
+    def __init__(self, http, seed, differences, coverage, label):
+        self.editor = Editor(http, seed, differences, coverage)
+        self.http, self.differences, self.coverage = http, differences, coverage
+        self.label = f'{seed}/proposal/{label}'
+        self.editor.edit(units('A quiet room before dawn.'), 'authoritative_applied', 'A quiet room before dawn.')
+        self.body = self.editor.text
+        self.start = self.editor.s.start
+        status, result = http.command('createAgentRun',
+            dict(conversation={'kind': 'new'}, author_message={'text': 'Revise this passage: keep the narrator voice.'},
+                 working_target={'kind': 'current_chapter', 'chapter_id': self.editor.chapter},
+                 instruction={'kind': 'absent'}, cause={'kind': 'author_request'}),
+            project_id=self.editor.s.project)
+        assert status == 200, result
+        self.run_id = result['effect']['run_id']
+        deadline = time.monotonic() + 40
+        while time.monotonic() < deadline:
+            _, run = http.request('GET', f'/api/v1/projects/{self.editor.s.project}/agent-runs/{self.run_id}')
+            if run['status'] in ['completed', 'refused', 'cancelled', 'waiting']:
+                break
+            time.sleep(0.05)
+        assert run['status'] == 'completed', run
+        compare(self.label + '/fake output has no authority', False, run['decision']['authoritative'], differences)
+        self.proposal_id = run['decision']['opened_proposal']['proposal_id']
+        self.p = self.query()
+        self.expected = {'generation': 'ready', 'validation': 'valid', 'closure': 'open', 'operation_resolution': 'pending'}
+        # Generated candidate bytes are an external input; the model never copies fake implementation constants.
+        self.candidate = self.p['candidate_text']
+        compare(self.label + '/generated axes', self.expected, {key: self.p[key] for key in self.expected}, differences)
+        _, chapter = http.request('GET', f'/api/v1/projects/{self.editor.s.project}/chapters/{self.editor.chapter}')
+        compare(self.label + '/generation leaves prose', self.body, chapter['chapter']['current_revision']['body'], differences)
+        coverage['createAgentRun:proposal_ready'] += 1
+        self.editor.refresh()
+
+    def query(self):
+        status, response = self.http.request('GET',
+            f'/api/v1/projects/{self.editor.s.project}/proposals/{self.proposal_id}')
+        assert status == 200, response
+        return response['proposal']
+
+    def values(self, name):
+        p, e = self.p, self.editor
+        common = dict(proposal_revision_id=p['revision_id'], editor_session_id=e.session_id,
+                      expected_target_revisions=[e.revision])
+        if name == 'acceptProposal':
+            return dict(proposal_revision_id=p['revision_id'], editor_session_id=e.session_id,
+                validation_receipt_id=p['validation_receipt']['validation_receipt_id'],
+                selected_operation_ids=[p['operation_id']], expected_authoritative_revision_id=e.revision)
+        if name == 'rejectProposalOperations':
+            common.update(selected_pending_operation_ids=[p['operation_id']],
+                          rejection_reason={'kind': 'author_declined', 'note': {'kind': 'omitted'}})
+        elif name == 'withdrawProposal':
+            common.update(cause='author', expected_closure='open',
+                          withdrawal_reason={'kind': 'author_withdrew', 'note': {'kind': 'omitted'}})
+        elif name == 'reopenWithdrawnProposal':
+            common.update(expected_closure='withdrawn', withdrawal_event_ref=self.withdrawal)
+        elif name == 'reopenRejectedOperations':
+            common.update(selected_rejected_operation_ids=[p['operation_id']], rejection_event_refs=self.rejections)
+        elif name == 'replanProposal':
+            return dict(conflicted_proposal_revision_id=p['revision_id'], expected_current_proposal_head=p['revision_id'],
+                expected_current_target_revisions=[e.revision], replacement_operations=[p['operation_id']],
+                source_condition=p['source_condition'], editor_session_id=e.session_id)
+        return common
+
+    def command(self, name, outcome, update=None, mutation=None):
+        values = self.values(name)
+        values.update(mutation or {})
+        prior = deepcopy(self.p)
+        before = len(self.differences)
+        status, result = self.http.command(name, values, project_id=self.editor.s.project, proposal_id=self.proposal_id)
+        effect = result.get('effect', {'kind': f'HTTP_{status}', 'reason': result.get('code')})
+        key = name + ':' + effect['kind'] + (':' + effect['reason'] if effect.get('reason') else '')
+        self.coverage[key] += 1
+        compare(self.label + '/' + name + '/kind', outcome, effect['kind'], self.differences)
+        if status == 200:
+            applied = effect['kind'] in ['resolved', 'applied']
+            compare(self.label + '/' + name + '/Commit count', int(name == 'acceptProposal' and applied),
+                    len(result['receipt']['authoritative_commit_ids']), self.differences)
+            if applied:
+                self.editor.actions += 1
+                compare(self.label + '/' + name + '/Action', str(self.editor.actions), effect['author_action_sequence'], self.differences)
+                self.expected.update(update or {})
+                if name == 'withdrawProposal':
+                    self.withdrawal = effect['closure_event_refs'][0]
+                if name == 'rejectProposalOperations':
+                    self.rejections = effect['resolution_event_refs']
+                if name == 'acceptProposal':
+                    self.body = self.candidate
+                    self.editor.text = self.body
+                    self.editor.revision = effect['authoritative_revision']['revision_id']
+            self.p = self.query()
+            compare(self.label + '/' + name + '/axes', self.expected,
+                    {key: self.p[key] for key in self.expected}, self.differences)
+            compare(self.label + '/' + name + '/candidate', self.candidate, self.p['candidate_text'], self.differences)
+            if applied and name in ['reopenWithdrawnProposal', 'reopenRejectedOperations', 'replanProposal']:
+                compare(self.label + '/new Revision', True, prior['revision_id'] != self.p['revision_id'], self.differences)
+            _, chapter = self.http.request('GET', f'/api/v1/projects/{self.editor.s.project}/chapters/{self.editor.chapter}')
+            compare(self.label + '/' + name + '/prose', self.body, chapter['chapter']['current_revision']['body'], self.differences)
+        for item in self.differences[before:]:
+            item.update(seed_case=self.label, trace_start=self.start, trace_end=len(self.http.trace))
+        return result
+
+    def edit(self):
+        e, p = self.editor, self.p
+        e.refresh()
+        left = self.http.rng.randrange(len(self.candidate) + 1)
+        replacement = 'quiet ' + str(self.http.rng.randrange(100))
+        offset = len(self.candidate[:left].encode('utf-16-le')) // 2
+        expected = self.candidate[:left] + replacement + self.candidate[left:]
+        values = e.request(units(replacement, offset, offset))
+        values.update(expected_proposal_head_revision_ids=[p['revision_id']], observed_ownership_partition='mixed',
+            proposal_target=dict(proposal_id=self.proposal_id, operation_id=p['operation_id'],
+                                 revision_id=p['revision_id'], manuscript_block_id=p['manuscript_block_id']))
+        status, result = self.http.command('applyAuthorEdit', values, project_id=e.s.project)
+        effect = result.get('effect', {'kind': f'HTTP_{status}'})
+        self.coverage['applyAuthorEdit:' + effect['kind']] += 1
+        compare(self.label + '/candidate edit', 'proposal_revised', effect['kind'], self.differences)
+        if effect['kind'] == 'proposal_revised':
+            e.actions += 1
+            self.candidate = expected
+            self.expected['validation'] = 'pending'
+            self.p = self.query()
+            compare(self.label + '/edited candidate', expected, self.p['candidate_text'], self.differences)
+            compare(self.label + '/edited axes', self.expected, {key: self.p[key] for key in self.expected}, self.differences)
+            compare(self.label + '/candidate edit Commit', [], result['receipt']['authoritative_commit_ids'], self.differences)
+        return result
+
+
+def run(http, seed, differences, coverage, selected=None):
+    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit']
+    http.rng.shuffle(modes)
+    for mode in modes:
+        print(f'Seed {seed}: Proposal {mode}', flush=True)
+        p = Proposal(http, seed, differences, coverage, mode)
+        if mode == 'accept':
+            p.command('acceptProposal', 'applied', {'operation_resolution': 'applied'})
+        elif mode == 'withdraw':
+            p.command('withdrawProposal', 'resolved', {'closure': 'withdrawn'})
+            p.command('withdrawProposal', 'no_effect')
+            p.command('reopenWithdrawnProposal', 'resolved', {'closure': 'open', 'validation': 'pending'})
+        elif mode == 'reject':
+            p.command('rejectProposalOperations', 'resolved', {'operation_resolution': 'rejected'})
+            p.command('reopenRejectedOperations', 'resolved', {'operation_resolution': 'pending', 'validation': 'pending'})
+        elif mode == 'edit':
+            p.edit()

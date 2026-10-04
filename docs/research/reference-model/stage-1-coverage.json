@@ -1,0 +1,379 @@
+{
+  "base": "479224809cdaae997cda51cb8853e3fafa242b65",
+  "completed_seeds": [
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119
+  ],
+  "partial_seed_114_retained": true,
+  "differences": [],
+  "outcomes": [
+    {
+      "outcome": "createVolume:authoritative_applied",
+      "count": 877,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "createVolume:conflicted:stale_tree_revision",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "createVolume:refused:archived_project",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "createVolume:refused:invalid_title",
+      "count": 0,
+      "disposition": "unreachable_in_public_sequence",
+      "evidence": "Public title validation rejects the request before Core. Server structure_admission.rs:311; generated request title limits."
+    },
+    {
+      "outcome": "createChapter:authoritative_applied",
+      "count": 481,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "createChapter:conflicted:stale_tree_revision",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "createChapter:refused:archived_project",
+      "count": 20,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "createChapter:refused:invalid_title",
+      "count": 0,
+      "disposition": "unreachable_in_public_sequence",
+      "evidence": "Public title validation rejects the request before Core. Server structure_admission.rs:311; generated request title limits."
+    },
+    {
+      "outcome": "createChapter:refused:invalid_volume_join",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "createChapter:refused:invalid_placement",
+      "count": 20,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateVolume:authoritative_applied",
+      "count": 58,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateVolume:no_effect:unchanged",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateVolume:conflicted:stale_tree_revision",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateVolume:refused:archived_project",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateVolume:refused:invalid_title",
+      "count": 0,
+      "disposition": "unreachable_in_public_sequence",
+      "evidence": "Public title validation rejects the request before Core. Server structure_admission.rs:311; generated request title limits."
+    },
+    {
+      "outcome": "updateVolume:refused:invalid_order",
+      "count": 20,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateVolume:refused:invalid_volume_join",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateChapter:authoritative_applied",
+      "count": 31,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateChapter:no_effect:unchanged",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateChapter:conflicted:stale_tree_revision",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateChapter:refused:archived_project",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateChapter:refused:invalid_title",
+      "count": 0,
+      "disposition": "unreachable_in_public_sequence",
+      "evidence": "Public title validation rejects the request before Core. Server structure_admission.rs:311; generated request title limits."
+    },
+    {
+      "outcome": "updateChapter:refused:invalid_order",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateChapter:refused:invalid_chapter_join",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteVolume:authoritative_applied",
+      "count": 67,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteVolume:no_effect:already_removed",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteVolume:conflicted:stale_tree_revision",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteVolume:refused:archived_project",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteVolume:refused:invalid_volume_join",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteVolume:refused:nonempty_volume",
+      "count": 27,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteChapter:authoritative_applied",
+      "count": 74,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteChapter:no_effect:already_removed",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteChapter:conflicted:stale_tree_revision",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteChapter:refused:archived_project",
+      "count": 20,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "deleteChapter:refused:invalid_chapter_join",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "setCurrentChapter:authoritative_applied",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "setCurrentChapter:no_effect:already_current",
+      "count": 20,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "setCurrentChapter:conflicted:stale_current_chapter",
+      "count": 20,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "setCurrentChapter:conflicted:wrong_target_head",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "setCurrentChapter:refused:archived_project",
+      "count": 20,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "setCurrentChapter:refused:invalid_chapter_join",
+      "count": 41,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "setCurrentChapter:refused:empty_project",
+      "count": 0,
+      "disposition": "unreachable_in_public_sequence",
+      "evidence": "No live target exists in an Empty Project. The invalid Chapter join is refused first. Core set_current_chapter.rs:56-64. Contract does not specify the priority."
+    },
+    {
+      "outcome": "updateProject:authoritative_applied",
+      "count": 20,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateProject:no_effect:title_unchanged",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "updateProject:conflicted:stale_project_revision",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "archiveProject:authoritative_applied",
+      "count": 186,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "archiveProject:no_effect:already_archived",
+      "count": 21,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    },
+    {
+      "outcome": "archiveProject:conflicted:stale_project_revision",
+      "count": 20,
+      "disposition": "covered",
+      "evidence": "Reached at least 20 times."
+    }
+  ],
+  "all_counts": {
+    "createProject:created": 1017,
+    "updateProject:no_effect:title_unchanged": 21,
+    "createVolume:authoritative_applied": 877,
+    "updateVolume:refused:invalid_order": 20,
+    "createChapter:authoritative_applied": 481,
+    "deleteChapter:authoritative_applied": 74,
+    "updateChapter:conflicted:stale_tree_revision": 21,
+    "setCurrentChapter:authoritative_applied": 21,
+    "archiveProject:authoritative_applied": 186,
+    "deleteChapter:refused:archived_project": 20,
+    "setCurrentChapter:refused:invalid_chapter_join": 41,
+    "deleteChapter:no_effect:already_removed": 21,
+    "createVolume:conflicted:stale_tree_revision": 21,
+    "updateVolume:authoritative_applied": 58,
+    "createVolume:refused:archived_project": 21,
+    "updateChapter:no_effect:unchanged": 21,
+    "updateChapter:authoritative_applied": 31,
+    "setCurrentChapter:conflicted:wrong_target_head": 21,
+    "createChapter:refused:invalid_volume_join": 21,
+    "updateVolume:HTTP_400:invalid_request": 21,
+    "updateVolume:conflicted:stale_tree_revision": 21,
+    "updateChapter:refused:invalid_chapter_join": 21,
+    "updateChapter:refused:archived_project": 21,
+    "updateProject:authoritative_applied": 20,
+    "updateProject:conflicted:stale_project_revision": 21,
+    "deleteVolume:refused:invalid_volume_join": 21,
+    "setCurrentChapter:no_effect:already_current": 20,
+    "createChapter:refused:archived_project": 20,
+    "deleteVolume:authoritative_applied": 67,
+    "deleteVolume:conflicted:stale_tree_revision": 21,
+    "archiveProject:conflicted:stale_project_revision": 20,
+    "setCurrentChapter:conflicted:stale_current_chapter": 20,
+    "updateChapter:HTTP_400:invalid_request": 20,
+    "updateVolume:refused:archived_project": 21,
+    "createVolume:HTTP_400:invalid_request": 20,
+    "updateVolume:refused:invalid_volume_join": 21,
+    "createChapter:conflicted:stale_tree_revision": 21,
+    "setCurrentChapter:refused:archived_project": 20,
+    "deleteChapter:refused:invalid_chapter_join": 21,
+    "createChapter:HTTP_400:invalid_request": 21,
+    "deleteChapter:conflicted:stale_tree_revision": 21,
+    "deleteVolume:refused:archived_project": 21,
+    "updateChapter:refused:invalid_order": 21,
+    "deleteVolume:no_effect:already_removed": 21,
+    "updateVolume:no_effect:unchanged": 21,
+    "archiveProject:no_effect:already_archived": 21,
+    "deleteVolume:refused:nonempty_volume": 27,
+    "createChapter:refused:invalid_placement": 20,
+    "challenge:exact_retry:True": 1098,
+    "replay:createProject:True": 294,
+    "replay:createVolume:True": 268,
+    "replay:createChapter:True": 161,
+    "replay:deleteChapter:True": 43,
+    "replay:archiveProject:True": 66,
+    "replay:updateChapter:True": 39,
+    "replay:deleteVolume:True": 54,
+    "replay:createEditorSession:True": 42,
+    "replay:setCurrentChapter:True": 42,
+    "replay:updateVolume:True": 47,
+    "replay:updateProject:True": 18
+  }
+}
