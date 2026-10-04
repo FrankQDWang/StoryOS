@@ -116,8 +116,15 @@ def run(http, seed, differences, coverage, selected=None):
                     value_hex_lowercase=hashlib.sha256(wire([seed, label, index])).hexdigest()))
             status, response = http.request('POST', path, body)
             statuses.append(status)
+            if index == 0:
+                first_challenge = (body, response)
         if int(time.time() // 60) != window:
             coverage['challenge:' + label + ':window_boundary_observed'] += 1
         else:
             compare(label + ' inclusive capacity', [200] * capacity + [429], statuses, differences)
             coverage['challenge:' + label + ':capacity_' + str(capacity)] += int(statuses == [200] * capacity + [429])
+        if statuses[-1] == 429:
+            retry_status, retry = http.request('POST', path, first_challenge[0])
+            equal = retry_status == 200 and retry == first_challenge[1]
+            compare(label + '/exact Challenge retry after capacity', True, equal, differences)
+            coverage['challenge:' + label + ':retry_after_limit'] += int(equal)

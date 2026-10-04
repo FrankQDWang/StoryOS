@@ -189,3 +189,9 @@ Next: reach 20 ownership_changed/source_binding_changed cases, then complete wri
 Seeds 360-379 reached ownership_changed and source_binding_changed 20 times each. All state checks passed. The 20 exact-retry differences are individually audited in `draft-binding-replay-audit.json`: both HTTP statuses are 200 and only effect.project_activity_position changes to zero, the same D-005. Evidence: `draft-binding-360-379.json.gz`; run `54b4ded917914b72962298563570c01b`, 80 seconds. SourceUnavailable remains unreachable without missing retained source evidence; no destructive retention or SQL mutation is authorized.
 
 Next: finish the Stage 4 sampling and real-clock expiry proof, then build the final outcome ledger and report.
+
+## Step 18: Writer and binding smoke
+
+Seed 410 passes writer takeover, stale writer refusal, stable old Author Edit replay after takeover, changed-body and wrong-nonce refusal, new-key/old-nonce refusal, changed-digest Challenge conflict, and both independent rate classes. Its sole difference is the already minimized D-002 delayed Create Chapter retry. Evidence: `replay-410.json.gz`; run `14c40005989141f7a6f282a1f8eae201`, 16 seconds. Added an exact Challenge retry after each exhausted rate class to prove that settled challenge identity does not need fresh capacity.
+
+Next: run 25 bounded writer/rate seeds; count only stable-window capacity observations, then verify real expiry.
