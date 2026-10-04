@@ -3,7 +3,7 @@
 ## Resume here
 
 - Goal: assess D1 through D4 with deterministic concurrent schedules and process cuts.
-- Status: verification complete. Final delivery checks and branch publication remain.
+- Status: complete. Read REPORT.md for results and README.md for replay.
 - Baseline: `479224809cdaae997cda51cb8853e3fafa242b65` (fetched `origin/main`).
 - Branch: `codex/durability-verification`.
 - Worktree: `/Users/frankqdwang/.codex/worktrees/durability-verification/StoryOS`.
@@ -162,3 +162,6 @@
   records, and the changed-path boundary passed final checks. Product paths
   have no diff from the baseline. No owned PostgreSQL container or resource
   lease remains. The primary checkout is clean. Ready to publish this branch.
+- Step 11: published `codex/durability-verification` to origin. No PR or Issue
+  was created. The worktree is retained with the package, raw logs, committed
+  evidence, and final report. The complete repeat round found no new findings.
