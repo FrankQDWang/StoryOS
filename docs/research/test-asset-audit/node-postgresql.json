@@ -2413,5 +2413,211 @@
     "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:1055 [other sibling]; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:529",
     "remove": null,
     "id": "NP197"
+  },
+  {
+    "id": "NP198",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 264,
+    "test": "whole Draft expansion preserves structured content in a fresh pending Proposal and supersedes its source",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Expanding a whole structured Draft must create a pending Proposal with heading/paragraph content and exact source provenance, supersede only that source and leave authoritative state unchanged. A deferred close-event failure must roll back expansion; Undo must reopen the source and withdraw the derived Proposal, but refuse drifted/tombstoned source bindings. Narrow Author Edit retry and ordinary Discard Undo create different child effects and cannot cover expansion compensation. Concurrent requests are released together, but one may fail; this is not proof that both concurrent calls return replay.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:427; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1949",
+    "remove": null
+  },
+  {
+    "id": "NP199",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 427,
+    "test": "an explicit narrowed public Draft retry changes content and supersedes only its exact source",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A narrowed Draft retry that applies to authoritative prose must supersede the exact source, bind its close event to that Receipt, and Root Undo must reopen that source through the Author Edit compensation path with stable replay. Candidate retry compensation at :485 changes a Proposal; expansion and Discard Undo use other frontier effects. The test checks outcome kind and lifecycle linkage, not exact post-retry prose.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:485; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:264; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1949",
+    "remove": null
+  },
+  {
+    "id": "NP200",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 485,
+    "test": "narrow Draft retry preserves candidate, refusal, no-effect and conflict outcomes with exact source replay",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Eight internal inputs distinguish candidate revision, replacement Draft, NoEffect, target conflict, source digest conflict, split-surrogate slice, changed replacement bytes and reserved-block refusal. Only successful revision/replacement closes the source; replacement creates no Author Action. Candidate-retry Undo must roll back five damaged compensation Receipt forms and recover exact reopened-source/candidate state across restart. Single authoritative retry and fresh mixed intent do not bind these retry dispositions or compensation payloads. This is one runtime test, not eight.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:427; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:637; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:2078",
+    "remove": null
+  },
+  {
+    "id": "NP201",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 637,
+    "test": "a cross-block Unicode Draft retry rolls back atomically and recovers one exact replacement after restart",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A cross-Block UTF-16 slice must retain heading and emoji content through retry failure, GET reconciliation, restart and exact replay. Tombstoning the replacement must fence earlier ZIPs, retain the source, and export exact retry provenance/gaps; absent or changed archived retry-source evidence must refuse download even with refreshed entry digests. Fresh-Draft tombstone coverage lacks replacement-source linkage, and the retry outcome matrix has no cross-Block range or Archive tampering.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:485; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1499",
+    "remove": null
+  },
+  {
+    "id": "NP202",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 807,
+    "test": "a protected mixed replacement retains complete content after response loss, replay, and restart",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A fresh mixed edit must retain the complete ordered-source payload and canonical digest, allocate no authority, and reconcile the original Admission after response loss/Server restart. Exact Receipt/Draft linkage, concurrent replay, scoped GET and nonempty exported Draft/event rows are checked. Retry replacement tests execute another source-disposition path; successful setup elsewhere does not compare this complete fresh-intent projection. The response loss is injected after a received durable HTTP response, not a transport-level crash cut.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:637; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1346; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1499",
+    "remove": null
+  },
+  {
+    "id": "NP203",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 973,
+    "test": "inline Proposal uses exact Anchors, keeps source and candidate distinct, and Accepts a splice",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "An AI revision of an Inline candidate must retain its exact Anchors, then a legacy interior Author Edit must revise candidate text and Validation Receipt without applying source prose; Acceptance must splice that revised text into the original source. Two-Block Acceptance never revises the candidate first. Explicit candidate input uses candidate-local offsets and bypasses legacy Inline routing; Block candidate editing has no Inline Anchor splice.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1076; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:2109; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:223",
+    "remove": null
+  },
+  {
+    "id": "NP204",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 1076,
+    "test": "inline Acceptance preserves complete two-Block state with a paragraph sibling after response loss and restart",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Two paragraph Blocks must remain canonical separate Blocks after Inline Acceptance, response loss/restart and repeated replay. persist_canonical_bytes has an all-paragraph shortcut that is lawful only for at most one Block; dropping that length condition would collapse this case while the heading-sibling case still takes canonical JSON. The comparison checks both Block IDs/text/kinds and settled Proposal state, not only flattened body.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1076 [heading]; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:973",
+    "remove": null,
+    "case": {
+      "sibling_kind": "paragraph",
+      "source_line": 1076
+    }
+  },
+  {
+    "id": "NP205",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 1076,
+    "test": "inline Acceptance preserves complete two-Block state with a heading sibling after response loss and restart",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Inline Acceptance must preserve a non-target heading Block's kind, identity and emoji text through settlement and restarted replay. Defaulting all persisted or decoded Blocks to paragraph would pass the paragraph-sibling case. Single-Block splice cannot detect loss of a sibling or its non-default kind; the full Chapter comparison supplies that oracle.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1076 [paragraph]; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:973",
+    "remove": null,
+    "case": {
+      "sibling_kind": "heading",
+      "source_line": 1076
+    }
+  },
+  {
+    "id": "NP206",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 1174,
+    "test": "edge input stays authoritative, reserved-block change conflicts, and Reject leaves prose",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A legacy author edit outside the Inline range must keep candidate text but invalidate its now-stale base. A separate Inline rejection must leave authoritative prose unchanged and export the retained Anchor with its original range/digest. Canonical boundary editing uses a Block-target path and intentionally preserves an already invalid Proposal; Block rejection has no Anchor family. The edit is outside the range, not exactly at an Anchor endpoint.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:2146; apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts:16",
+    "remove": null
+  },
+  {
+    "id": "NP207",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 1288,
+    "test": "changed Heads, source identities, order, text, and ranges create no Draft or authority change",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Changed authoritative/Proposal Heads, altered source text, reversed/missing sources, stale source Revision and overrun ranges must refuse/conflict without creating Draft or authority records. A stale writer and extra untyped primitive field must also fail before an Admission is stored. Successful mixed selection has no damaged evidence; the surrogate and generating-source tests exercise different predicates. The reversed list expects Refused while most source-proof failures expect Conflicted.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:807; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:2078; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1873",
+    "remove": null
+  },
+  {
+    "id": "NP208",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 1346,
+    "test": "a pre-commit database fault rolls back all Draft records and GET settles only the retained Admission",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A deferred failure when committing the fresh Draft creation event must leave no Draft rows or Receipt, while GET reconciliation settles the original retained Admission into exactly one complete Draft and no other retained-state changes. Retry fault coverage injects earlier Receipt insertion failure on a different disposition; response-loss coverage starts after a successful commit and cannot prove rollback.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:637; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:807",
+    "remove": null
+  },
+  {
+    "id": "NP209",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 1400,
+    "test": "243 ordered sources and two distinct Proposal owners retain a near-1-MiB structured request",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A valid 243-source selection with two distinct Proposal owners must preserve its entire structured payload at exactly 1048576 encoded request bytes, including large emoji content; adding one byte must return 413 without changing retained state. Small mixed fixtures cannot catch source truncation or accidental per-source use of the 240-unit limit. This proves size/retention behavior, not a latency or allocation bound.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:807; apps/web/test/node-postgresql/project-http.integration.test.ts:253",
+    "remove": null
+  },
+  {
+    "id": "NP210",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 1499,
+    "test": "closed and archived Drafts keep their lifecycle, while tombstoned content fences old packages and leaves exact archive gaps",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Discard must reject an old writer generation after two Takeovers, roll back deferred close-event failure, and replay exact settlement after restart without changing prose. Closed/archived/tombstoned Drafts must enforce distinct query and Undo availability; database constraints must reject incomplete or altered lifecycle records. Old ZIPs retain roots but lose download eligibility, while new ZIPs contain exact withheld-payload gaps and unchanged unrelated families. Retry tombstone coverage adds retry provenance but does not exercise these Discard authority/constraint/lifecycle inputs.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:637; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1949; apps/web/test/browser-source/refused-edit-discard.integration.test.ts:13",
+    "remove": null
+  },
+  {
+    "id": "NP211",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 1873,
+    "test": "a distant generating Proposal does not block a proven span, while a selected generating source stays unchanged",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An unrelated generating Proposal must not block a proven mixed selection, while including that generating source must conflict without changing its partial candidate or any retained state. Generic stream fencing edits the generation itself; invalid source identity/text tests never compare a valid distant generating owner against a selected one.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1288; apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:134",
+    "remove": null
+  },
+  {
+    "id": "NP212",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 1949,
+    "test": "Root Undo reopens the exact public Discard without changing manuscript or Proposal content",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Root Undo of a public Discard must reject a stale authoritative Head, roll back a deferred reopen-event fault with no Admission/Receipt, then preserve exact reopen event/handler Receipt and one compensation action across response loss/restart/concurrent replay. It must leave manuscript and Proposal unchanged and reject a later closure against the old lifecycle state. Retry Undo also reverses an edit, and expansion Undo withdraws a derived Proposal; neither replaces this Discard frontier branch.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:427; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:264; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1499",
+    "remove": null
+  },
+  {
+    "id": "NP213",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 2078,
+    "test": "a complete source cannot prove a selection inside a UTF-16 surrogate pair",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An ordered mixed selection beginning inside an emoji surrogate pair in the current candidate must conflict with no retained-state changes, even when complete source text and Revision bindings are correct. Retry split-surrogate coverage validates a Draft replacement slice; primitive range tests splice authoritative text through another classifier.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:485; crates/storyos-core/src/manuscript_payload_tests.rs:603",
+    "remove": null
+  },
+  {
+    "id": "NP214",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 2109,
+    "test": "explicit Inline candidate input binds the exact Operation and preserves source prose",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "An explicit Inline proposal_target must reject a wrong Operation identity and apply a valid candidate-local offset without changing source prose. Legacy Inline input instead interprets editor/source coordinates through Anchor ownership; the same offset would be outside that range. Block candidate input has no Inline routing/range loader and cannot detect accidentally applying that mapping to an explicit Inline target.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:973; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:223",
+    "remove": null
+  },
+  {
+    "id": "NP215",
+    "path": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts",
+    "line": 2146,
+    "test": "canonical Inline boundary input preserves exact target and refuses wrong, stale, or interior ownership",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Canonical Block-target insertion at both exclusive Anchor endpoints must edit only the named authoritative Block while preserving the Inline candidate and sibling. Wrong Block, stale Proposal Head and interior positions must conflict unchanged. A preexisting invalid Proposal must remain invalid and ineligible after edge input. Legacy outside-range edits invalidate a valid Proposal through another path; explicit candidate input intentionally owns its interior.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1174; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:2109; crates/storyos-core/src/open_inline_proposal_tests.rs:167",
+    "remove": null
   }
 ]

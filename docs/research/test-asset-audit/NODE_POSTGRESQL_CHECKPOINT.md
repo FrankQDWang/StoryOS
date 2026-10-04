@@ -1,6 +1,6 @@
 # Node PostgreSQL checkpoint
 
-Source review is partial: 197 runtime cases in 51 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
+Source review is complete: 215 runtime cases in all 52 test files have individual verdicts. The one support file is recorded in SUPPORT.md. Cross-directory reconciliation and mutation review remain pending. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
 
 | Reviewed file | Cases | Verdict counts |
 |---|---|---|
@@ -23,6 +23,7 @@ Source review is partial: 197 runtime cases in 51 files have individual verdicts
 | apps/web/test/node-postgresql/create-volume-http.integration.test.ts | 4 | {'KEEP': 3, 'DELETE': 1} |
 | apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts | 4 | {'KEEP': 3, 'DELETE': 1} |
 | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts | 4 | {'KEEP': 3, 'DELETE': 1} |
+| apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts | 18 | {'KEEP': 18} |
 | apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts | 10 | {'KEEP': 7, 'DELETE': 3} |
 | apps/web/test/node-postgresql/list-projects-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts | 1 | {'KEEP': 1} |
@@ -58,7 +59,7 @@ Source review is partial: 197 runtime cases in 51 files have individual verdicts
 
 ## Next files
 
-Continue Inline Proposal tests. Other Node PostgreSQL command files are reviewed.
+Continue browser-source, browser-exact-dist, node-process-cut and support. Then reconcile covering-test chains before random sampling.
 
 ## Evidence corrections and execution dependencies
 
@@ -74,7 +75,7 @@ Continue Inline Proposal tests. Other Node PostgreSQL command files are reviewed
 
 ## Pending files
 
-- apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts
+None in this directory. All test declaration-line sets match the verdict ledger; parameter multiplicities were reviewed separately.
 
 ## Structural and navigation checkpoint
 
@@ -161,3 +162,16 @@ Continue Inline Proposal tests. Other Node PostgreSQL command files are reviewed
 - Delete partial-Acceptance history=retained in favor of history=collection: the latter runs all the same first-Chapter mutation, rollback, replay, Replan and captured-source corruption assertions, then adds cross-Chapter/wire checks. Keep legacy_overwritten, which damages live history and exercises unavailable GET plus rejected Archive admission instead of failed Archive completion.
 - Keep both secondary-candidate sibling states. A bug that revises every pending Operation would pass the rejected-sibling variant; a bug that revives a rejected sibling would pass the pending-sibling variant.
 - All six DELETE recommendations remove shared-line parameter elements, so their conservative immediate line estimate is zero. They still enter the final random sample population. No product/test mutation or execution occurred at this checkpoint.
+
+## Inline Proposal and directory closeout
+
+- NP198-NP215 cover 18 runtime cases in 17 declarations. All are KEEP after comparing inputs, persistence paths and existing owners. The paragraph/heading test.each inputs are separate rows. Internal outcome, mutation and boundary loops remain described within their owning runtime test.
+- Keep both two-Block Acceptance inputs at :1076. All-paragraph storage can wrongly take the plain-text shortcut if its at-most-one-Block guard is removed; the heading input bypasses that shortcut. Conversely, defaulting all Block kinds to paragraph loses the heading while passing the paragraph case. Both require full Chapter equality after response loss/restart/replay.
+- Distinguish fresh mixed refusal, narrowed authoritative retry, candidate retry, replacement Draft and whole-Draft expansion. Their source closure and Undo effects differ: authoritative/candidate compensation, replacement without an Author Action, and expansion withdrawal plus source reopen. Deferred event faults and damaged compensation Receipt faults test distinct failure stages.
+- Response-loss helpers receive successful HTTP responses before throwing and stopping the Server. These are persisted-response/replay tests, not transport-level crash-cut evidence. Expansion concurrency permits one 409/503; it does not prove both callers return a replay.
+- Preserve the 243-source, two-Proposal-owner case at exactly 1048576 encoded bytes and one byte above. It proves retention and ingress size behavior, not latency. The selected-source surrogate check differs from Draft retry slicing and the Core primitive splice helper.
+- Canonical Inline boundary input addresses a Block and tests both exact exclusive endpoints; legacy outside-range input at :1174 changes 0..5, not an endpoint. Explicit candidate input instead binds an Operation and uses candidate-local offsets. Neither can replace the others' ownership route.
+- The selected-versus-distant generating-source case proves availability is scoped to the actual selection. It is not the ordinary generation fence test.
+- Eight tests call retainRefusedEditRecoveryExpectation, with :485 contributing eight Projects. The mixed physical recovery script expects 15 Project records and 20 Drafts, compares full retained tables and exact available Draft/expanded Proposal queries, and checks ready export roots plus download status/byte digests. These tests create the evidence; the recovery script executes the restore comparison. No physical drill was run by this audit. Record this dependency in any later slimming implementation; fixture counts alone are not a reason to retain a redundant scenario.
+- All 52 Node PostgreSQL test files match declaration-line coverage. Total 215 runtime cases: 178 KEEP, 21 DELETE, 15 MERGE, one MOVE. The export acknowledgement helper is the directory's only non-test file and has a disposition in SUPPORT.md.
+- No product/test/generated changes, temporary mutations or runtime test commands occurred during this source review. Cross-directory reconciliation and all 30 mutation samples remain pending.
