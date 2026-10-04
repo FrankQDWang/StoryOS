@@ -3,7 +3,7 @@
 ## Resume here
 
 - Goal: assess D1 through D4 with deterministic concurrent schedules and process cuts.
-- Status: step 1 complete. Next: build the local package and map public commands.
+- Status: verification complete. Final delivery checks and branch publication remain.
 - Baseline: `479224809cdaae997cda51cb8853e3fafa242b65` (fetched `origin/main`).
 - Branch: `codex/durability-verification`.
 - Worktree: `/Users/frankqdwang/.codex/worktrees/durability-verification/StoryOS`.
@@ -17,10 +17,10 @@
 
 | Invariant | Concurrent schedule | Process interruption |
 | --- | --- | --- |
-| D1: acknowledged Author Edit persists | Pending | Pending |
-| D2: exact retry returns original acknowledgement once | Pending | Pending |
-| D3: concurrent legal commands preserve availability | Pending | Pending |
-| D4: takeover fences the old writer | Pending | Pending |
+| D1: acknowledged Author Edit persists | Holds in executed cases | Holds in executed cases |
+| D2: exact retry returns original acknowledgement once | Fails: F2, F3 | Fails: F3 |
+| D3: concurrent legal commands preserve availability | Fails: F2 | Fails: F2 after restart |
+| D4: takeover fences the old writer | Fails: F1 | Fails: F1 |
 
 ## Decisions and evidence
 
@@ -154,3 +154,11 @@
 - Matrix minimal, `concurrent-retry`: invariant failure (exit 1). Evidence: `evidence/minimal/concurrent-retry.json`.
 - Matrix minimal, `concurrent-rename-restart`: invariant failure (exit 1). Evidence: `evidence/minimal/concurrent-rename-restart.json`.
 - Matrix minimal, `session-replay`: invariant failure (exit 1). Evidence: `evidence/minimal/session-replay.json`.
+- Step 9: all six minimal schedules reproduced F1/F2/F3 with exit 1 and no
+  probe error. REPORT.md now contains the eight matrix verdicts, severity,
+  minimum schedules, root-cause lines, evidence, and coverage limits. README.md
+  gives one-case and full-matrix replay commands. No product fix was made.
+- Step 10: Node syntax, Python parsing, report links, whitespace, all 38 evidence
+  records, and the changed-path boundary passed final checks. Product paths
+  have no diff from the baseline. No owned PostgreSQL container or resource
+  lease remains. The primary checkout is clean. Ready to publish this branch.
