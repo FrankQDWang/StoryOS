@@ -1,0 +1,14 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Seed 440: writer takeover and delayed replay
+Seed 440: independent Challenge rate classes
+Seed 441: writer takeover and delayed replay
+Seed 441: independent Challenge rate classes
+Seed 442: writer takeover and delayed replay
+Seed 442: independent Challenge rate classes
+Seed 443: writer takeover and delayed replay
+Seed 443: independent Challenge rate classes
+Seed 444: writer takeover and delayed replay
+Seed 444: independent Challenge rate classes
+{"coverage": {"challenge:exact_retry:True": 60, "replay:createProject:True": 10, "createProject:created": 10, "replay:createVolume:True": 5, "createVolume:authoritative_applied": 5, "replay:createChapter:True": 5, "createChapter:authoritative_applied": 5, "replay:createEditorSession:True": 10, "replay:applyAuthorEdit:True": 10, "applyAuthorEdit:authoritative_applied": 10, "replay:updateProject:True": 5, "updateProject:authoritative_applied": 5, "delayed_replay:createProject:True": 5, "delayed_replay:createVolume:True": 5, "delayed_replay:createChapter:False": 5, "replay:takeOverProjectWriter:True": 5, "takeOverProjectWriter:takeover_applied": 5, "writer:stale_refused": 5, "replay_binding:wrong_nonce:refused": 5, "replay_binding:changed_body:refused": 5, "replay_binding:new_key_old_nonce:refused": 5, "delayed_replay:applyAuthorEdit:True": 5, "takeOverProjectWriter:stale_before_admission": 5, "challenge:changed_digest_conflict": 5, "challenge:shared:capacity_10": 5, "challenge:shared:retry_after_limit": 5, "challenge:author_edit:capacity_120": 5, "challenge:author_edit:retry_after_limit": 5}, "differences": [{"label": "createChapter/delayed immutable acknowledgement", "expected": true, "actual": false}, {"label": "createChapter/delayed immutable acknowledgement", "expected": true, "actual": false}, {"label": "createChapter/delayed immutable acknowledgement", "expected": true, "actual": false}, {"label": "createChapter/delayed immutable acknowledgement", "expected": true, "actual": false}, {"label": "createChapter/delayed immutable acknowledgement", "expected": true, "actual": false}]}
+Verification passed: 27.89s; report: /Users/frankqdwang/.codex/worktrees/reference-model/StoryOS/target/verification/44ebfa18eb064dfb81a6c74ac4731e7d/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

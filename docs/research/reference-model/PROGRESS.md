@@ -211,3 +211,7 @@ Managed exit: 0. D-002-shaped differences: 5. Other differences: 0. Evidence: `r
 ## Writer and Challenge batch 435-439
 
 Managed exit: 0. D-002-shaped differences: 5. Other differences: 0. Evidence: `replay-435-439.json.gz` and `replay-435-439.log`. Final replay audit must confirm response status and changed fields before classification.
+
+## Writer and Challenge batch 440-444
+
+Managed exit: 0. D-002-shaped differences: 5. Other differences: 0. Evidence: `replay-440-444.json.gz` and `replay-440-444.log`. Final replay audit must confirm response status and changed fields before classification.
