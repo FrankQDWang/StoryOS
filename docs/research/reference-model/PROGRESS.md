@@ -28,3 +28,15 @@ Next: inventory the public command contracts, prepare the existing release packa
 | 2. Author Edit and Undo | Pending | None |
 | 3. Proposal lifecycle | Pending | None |
 | 4. Idempotency and writer | Pending | None |
+
+## Step 2: First HTTP chain
+
+Done: built the existing release package with `make release-package` (278 seconds; no tests). Package source is `0dfe5184`; product sources equal the fixed base. The model uses Python standard-library HTTP, its own seeded UUIDv7 inputs, and a list-based tree model. The first successful seed is 1: Empty Project, Create Volume, Create Chapter. It compared empty state, command effects, one Commit and one Author Action per structure change, and the public tree query. No differences remained in this chain.
+
+Evidence: `bootstrap.json`; managed database run `5bb9e87e01d844398f8a22b0da83657f` passed. The first database setup hit the existing readiness limit and cleaned up; the second setup succeeded. No foreign container was changed.
+
+Model correction M-001: the first model assumed initial Tree Revision zero without a source. The HTTP input was refused with 400. `bootstrap-initial-model-error.json` preserves it. The contract defines increments but no initial number; the model now accepts an opaque initial query baseline and computes later increments independently. The zero-valued generated schema versus positive-only Server parser is a separate contract discrepancy to investigate.
+
+Decision: execution writes evidence to ignored `target/reference-model/`, then copies it to the report directory after the managed command exits. Writing the first trace straight into tracked-source scope caused a `source-changed` observation. That run is retained, not relabeled PASS. Nonce and cookie values are omitted from traces.
+
+Next: expand structure scenarios and retain a complete outcome/reachability matrix, then implement Author Edit and Undo.
