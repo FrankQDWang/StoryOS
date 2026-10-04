@@ -104,3 +104,4 @@
 - Matrix round-1, `concurrent-retry`: invariant failure (exit 1). Evidence: `evidence/round-1/concurrent-retry.json`.
 - Matrix round-1, `concurrent-rename-restart`: invariant failure (exit 1). Evidence: `evidence/round-1/concurrent-rename-restart.json`.
 - Matrix round-1, `concurrent-author`: completed (exit 0). Evidence: `evidence/round-1/concurrent-author.json`.
+- Matrix round-1, `session-replay`: invariant failure (exit 1). Evidence: `evidence/round-1/session-replay.json`.
