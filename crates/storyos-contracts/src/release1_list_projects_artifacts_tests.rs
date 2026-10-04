@@ -73,8 +73,8 @@ fn list_projects_wire_is_generated_from_one_closed_contract() {
     let openapi =
         String::from_utf8(generated["generated/openapi/storyos-public-release-1.yaml"].clone())
             .expect("OpenAPI must be UTF-8");
-    assert!(openapi.contains("/api/v1/projects:\n    get:\n      operationId: listProjects"));
-    assert!(openapi.contains("    post:\n      operationId: createProject"));
+    assert!(openapi.contains("/api/v1/projects:\n    post:\n      operationId: createProject"));
+    assert!(openapi.contains("    get:\n      operationId: listProjects"));
 
     let schema_catalog: serde_json::Value = serde_json::from_slice(
         &generated["generated/schema-catalog/storyos-public-release-1.json"],

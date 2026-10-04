@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_reopen_rejected_operations::{
     REOPEN_REJECTED_OPERATIONS, REOPEN_REJECTED_OPERATIONS_DIGEST_PROFILE,
@@ -36,7 +36,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&REOPEN_REJECTED_OPERATIONS, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -114,7 +114,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Reopen rejected Proposal Operations\n",
+            "    post:\n      operationId: {}\n      summary: Reopen rejected Proposal Operations\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: proposal_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -123,10 +123,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        REOPEN_REJECTED_OPERATIONS.path,
-        REOPEN_REJECTED_OPERATIONS.operation_id,
-        request_schema,
-        responses,
+        REOPEN_REJECTED_OPERATIONS.operation_id, request_schema, responses,
     )
 }
 

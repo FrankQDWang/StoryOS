@@ -23,7 +23,7 @@ use crate::release1_agent_run::{
     SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
 };
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
@@ -60,7 +60,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         .flatten()
         .collect()
     },
-    openapi: || path_items(openapi()),
+    openapi,
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -316,7 +316,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
     json_bytes(&schema)
 }
 
-pub(super) fn openapi() -> String {
+pub(super) fn openapi() -> Vec<OpenApiMethod> {
     let create_request = generated_ref(CREATE_REQUEST_SCHEMA_PATH);
     let create_response = generated_ref(CREATE_RESPONSE_SCHEMA_PATH);
     let get_response = generated_ref(GET_RESPONSE_SCHEMA_PATH);
@@ -332,29 +332,36 @@ pub(super) fn openapi() -> String {
         /*content_status*/ 200,
         /*command*/ false,
     );
-    format!(
-        concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Admit one bounded assistance request\n",
-            "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
-            "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
-            "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
-            "        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n",
-            "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
-            "      responses:\n{}",
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one durable AgentRun status\n",
-            "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
-            "        - name: run_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
-            "        - name: model_attempt_id\n          in: query\n          required: false\n          schema:\n            type: string\n            format: uuid\n",
-            "      responses:\n{}",
-        ),
-        CREATE_AGENT_RUN.path,
-        CREATE_AGENT_RUN.operation_id,
-        create_request,
-        create_responses,
-        GET_AGENT_RUN.path,
-        GET_AGENT_RUN.operation_id,
-        get_responses,
-    )
+    vec![
+        OpenApiMethod {
+            path: CREATE_AGENT_RUN.path,
+            yaml: format!(
+                concat!(
+                    "    post:\n      operationId: {}\n      summary: Admit one bounded assistance request\n",
+                    "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
+                    "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
+                    "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
+                    "        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n",
+                    "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
+                    "      responses:\n{}",
+                ),
+                CREATE_AGENT_RUN.operation_id, create_request, create_responses,
+            ),
+        },
+        OpenApiMethod {
+            path: GET_AGENT_RUN.path,
+            yaml: format!(
+                concat!(
+                    "    get:\n      operationId: {}\n      summary: Inspect one durable AgentRun status\n",
+                    "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
+                    "        - name: run_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
+                    "        - name: model_attempt_id\n          in: query\n          required: false\n          schema:\n            type: string\n            format: uuid\n",
+                    "      responses:\n{}",
+                ),
+                GET_AGENT_RUN.operation_id, get_responses,
+            ),
+        },
+    ]
 }
 
 pub(super) fn typescript_type_declarations() -> String {

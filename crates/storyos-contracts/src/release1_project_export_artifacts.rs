@@ -3,7 +3,7 @@ use ts_rs::{Config, TS};
 
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_project_export::{
     EXPORT_PROJECT_ARCHIVE, EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE,
@@ -31,7 +31,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&EXPORT_PROJECT_ARCHIVE, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -106,7 +106,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Admit one durable Project Export Archive operation\n",
+            "    post:\n      operationId: {}\n      summary: Admit one durable Project Export Archive operation\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
@@ -114,7 +114,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        EXPORT_PROJECT_ARCHIVE.path, EXPORT_PROJECT_ARCHIVE.operation_id, request_schema, responses,
+        EXPORT_PROJECT_ARCHIVE.operation_id, request_schema, responses,
     )
 }
 

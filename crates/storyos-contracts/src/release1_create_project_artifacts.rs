@@ -9,7 +9,7 @@ use crate::release1_create_project::{
     CreateProjectRequest, CreateProjectResponse,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
 };
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
@@ -61,7 +61,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         .flatten()
         .collect()
     },
-    openapi: || path_items(openapi()),
+    openapi,
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -151,22 +151,29 @@ pub(super) fn typescript_type_declarations() -> String {
     )
 }
 
-pub(super) fn openapi() -> String {
+pub(super) fn openapi() -> Vec<OpenApiMethod> {
     let request_schema = generated_ref(CHALLENGE_REQUEST_SCHEMA_PATH);
     let response_schema = generated_ref(CHALLENGE_RESPONSE_SCHEMA_PATH);
     let responses = response_block(CREATE_PROJECT_CHALLENGE.responses, response_schema, &[200]);
-    format!(
+    let challenge = format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Issue one prospective Project command challenge\n",
+            "    post:\n      operationId: {}\n      summary: Issue one prospective Project command challenge\n",
             "      parameters:\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        CREATE_PROJECT_CHALLENGE.path,
-        CREATE_PROJECT_CHALLENGE.operation_id,
-        request_schema,
-        responses,
-    ) + &command_openapi()
+        CREATE_PROJECT_CHALLENGE.operation_id, request_schema, responses,
+    );
+    vec![
+        OpenApiMethod {
+            path: CREATE_PROJECT_CHALLENGE.path,
+            yaml: challenge,
+        },
+        OpenApiMethod {
+            path: CREATE_PROJECT.path,
+            yaml: command_openapi(),
+        },
+    ]
 }
 
 pub(super) fn command_request_schema_bytes() -> Vec<u8> {
@@ -217,7 +224,6 @@ fn command_openapi() -> String {
     let responses = response_block(CREATE_PROJECT.responses, response_schema, &[200]);
     format!(
         concat!(
-            "  {}:\n{}",
             "    post:\n      operationId: {}\n      summary: Create one empty Project\n",
             "      parameters:\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
@@ -225,11 +231,7 @@ fn command_openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        CREATE_PROJECT.path,
-        crate::release1_list_projects_artifacts::method_openapi(),
-        CREATE_PROJECT.operation_id,
-        request_schema,
-        responses,
+        CREATE_PROJECT.operation_id, request_schema, responses,
     )
 }
 

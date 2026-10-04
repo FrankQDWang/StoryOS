@@ -1,8 +1,4 @@
 //! The Release 1 operation registry: one `OperationArtifacts` value for each artifacts module.
-#![expect(
-    dead_code,
-    reason = "the generator reads the registry after the expand-contract switch"
-)]
 
 use crate::Release1ProtocolProfile;
 use crate::release1::QueryOperation;
@@ -99,7 +95,7 @@ pub(super) struct GeneratedSchema {
 
 /// One OpenAPI method block; the generator groups blocks that share a path under one path key.
 pub(super) struct OpenApiMethod {
-    pub(super) path: String,
+    pub(super) path: &'static str,
     pub(super) yaml: String,
 }
 
@@ -114,16 +110,16 @@ pub(super) struct FixtureMembership {
 }
 
 /// Modules sort by the reviewed route-catalog position of their first operation.
-#[expect(
-    dead_code,
-    reason = "the generator reads the registry after the expand-contract switch"
-)]
 pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
+    &crate::release1_artifacts::PROTOCOL_PROFILE_ARTIFACTS,
     &crate::release1_create_project_artifacts::ARTIFACTS,
+    &crate::release1_artifacts::PROJECT_COMMAND_CHALLENGE_ARTIFACTS,
     &crate::release1_list_projects_artifacts::ARTIFACTS,
+    &crate::release1_artifacts::PROJECT_QUERY_ARTIFACTS,
     &crate::release1_update_project_artifacts::ARTIFACTS,
     &crate::release1_project_assistance_artifacts::ARTIFACTS,
     &crate::release1_archive_project_artifacts::ARTIFACTS,
+    &crate::release1_artifacts::EDITOR_SESSION_ARTIFACTS,
     &crate::release1_takeover_artifacts::ARTIFACTS,
     &crate::release1_create_volume_artifacts::ARTIFACTS,
     &crate::release1_update_volume_artifacts::ARTIFACTS,
@@ -148,6 +144,7 @@ pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
     &crate::release1_project_export_artifacts::ARTIFACTS,
     &crate::release1_readable_export_artifacts::ARTIFACTS,
     &crate::release1_manuscript_tree_artifacts::ARTIFACTS,
+    &crate::release1_artifacts::CHAPTER_QUERY_ARTIFACTS,
     &crate::release1_manuscript_statistics_artifacts::ARTIFACTS,
     &crate::release1_proposal_artifacts::ARTIFACTS,
     &crate::release1_refused_edit_draft_artifacts::ARTIFACTS,
@@ -225,26 +222,11 @@ pub(super) fn event_fixtures(
 
 pub(super) fn method(operation: &QueryOperation, yaml: String) -> Vec<OpenApiMethod> {
     vec![OpenApiMethod {
-        path: operation.path.to_owned(),
+        path: operation.path,
         yaml,
     }]
 }
 
-// Splits path-keyed OpenAPI YAML into method blocks until each module returns blocks itself.
-pub(super) fn path_items(yaml: String) -> Vec<OpenApiMethod> {
-    let mut methods: Vec<OpenApiMethod> = Vec::new();
-    for line in yaml.split_inclusive('\n') {
-        match line.strip_prefix("  ").filter(|rest| rest.starts_with('/')) {
-            Some(path) => methods.push(OpenApiMethod {
-                path: path.trim_end().trim_end_matches(':').to_owned(),
-                yaml: String::new(),
-            }),
-            None => methods
-                .last_mut()
-                .expect("OpenAPI YAML starts with a path key")
-                .yaml
-                .push_str(line),
-        }
-    }
-    methods
-}
+#[cfg(test)]
+#[path = "release1_operation_registry_tests.rs"]
+mod tests;

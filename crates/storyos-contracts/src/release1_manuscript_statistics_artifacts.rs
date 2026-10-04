@@ -10,7 +10,7 @@ use crate::release1_manuscript_statistics::{
     ManuscriptTotals,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_wire::json_bytes;
 
@@ -30,7 +30,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&GET_STATISTICS, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -143,12 +143,12 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Rebuild Chapter and manuscript statistics\n",
+            "    get:\n      operationId: {}\n      summary: Rebuild Chapter and manuscript statistics\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: required_watermark\n          in: query\n          required: false\n          schema:\n            type: string\n            pattern: '^(0|[1-9][0-9]*)$'\n",
             "      responses:\n{}",
         ),
-        GET_STATISTICS.path, GET_STATISTICS.operation_id, responses,
+        GET_STATISTICS.operation_id, responses,
     )
 }
 

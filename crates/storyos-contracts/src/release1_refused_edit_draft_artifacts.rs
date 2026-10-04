@@ -5,7 +5,7 @@ use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, event_fixtures, fixture_triple,
-    operation_schemas, path_items,
+    method, operation_schemas,
 };
 use crate::release1_refused_edit_draft::{
     GET_REFUSED_EDIT_DRAFT, GET_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID,
@@ -40,7 +40,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             },
         ]
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&GET_REFUSED_EDIT_DRAFT, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -168,12 +168,12 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one retained Refused Edit Draft\n",
+            "    get:\n      operationId: {}\n      summary: Inspect one retained Refused Edit Draft\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: draft_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
         ),
-        GET_REFUSED_EDIT_DRAFT.path, GET_REFUSED_EDIT_DRAFT.operation_id, responses,
+        GET_REFUSED_EDIT_DRAFT.operation_id, responses,
     )
 }
 

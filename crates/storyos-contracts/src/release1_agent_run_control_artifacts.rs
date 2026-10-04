@@ -15,7 +15,7 @@ use crate::release1_agent_run_control::{
     SteerAgentRunRequest, SteerAgentRunResponse,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
 };
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
@@ -72,7 +72,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         .flatten()
         .collect()
     },
-    openapi: || path_items(openapi()),
+    openapi,
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -157,9 +157,8 @@ pub(super) fn cancel_response_schema_bytes() -> Vec<u8> {
     )
 }
 
-pub(super) fn openapi() -> String {
-    format!(
-        "{}{}{}",
+pub(super) fn openapi() -> Vec<OpenApiMethod> {
+    vec![
         operation_openapi(
             &PAUSE_AGENT_RUN,
             "Pause one AgentRun without cancelling it",
@@ -176,9 +175,9 @@ pub(super) fn openapi() -> String {
             &STEER_AGENT_RUN,
             "Retain guidance for the next safe decision",
             STEER_REQUEST_SCHEMA_PATH,
-            STEER_RESPONSE_SCHEMA_PATH
-        )
-    )
+            STEER_RESPONSE_SCHEMA_PATH,
+        ),
+    ]
 }
 
 pub(super) fn typescript_type_declarations() -> String {
@@ -378,13 +377,13 @@ fn operation_openapi(
     summary: &str,
     request_path: &str,
     response_path: &str,
-) -> String {
+) -> OpenApiMethod {
     let request = generated_ref(request_path);
     let response = generated_ref(response_path);
     let responses = status_block(operation.responses, response);
-    format!(
+    let yaml = format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: {}\n",
+            "    post:\n      operationId: {}\n      summary: {}\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: run_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -393,8 +392,12 @@ fn operation_openapi(
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        operation.path, operation.operation_id, summary, request, responses,
-    )
+        operation.operation_id, summary, request, responses,
+    );
+    OpenApiMethod {
+        path: operation.path,
+        yaml,
+    }
 }
 
 fn control_fixture(

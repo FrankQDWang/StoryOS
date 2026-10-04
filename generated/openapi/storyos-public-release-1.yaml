@@ -3,7 +3,7 @@ info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
   x-storyos-contract-revision: release1-wire-catalog-2026-09-27-expiry-rebuild
-  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,steerAgentRun,getAgentRun,getRefusedEditDraft,closeEditorFlowDraft,expandRefusedEditDraftToProposal,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,replanProposal,withdrawProposal,reopenWithdrawnProposal,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction
+  x-storyos-implemented-slice: getProtocolProfile,createProjectChallenge,createProject,createProjectCommandChallenge,listProjects,getProject,updateProject,getProjectAssistance,updateProjectAssistance,archiveProject,createEditorSession,getEditorSession,takeOverProjectWriter,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,applyAuthorEdit,acceptProposal,rejectProposalOperations,withdrawProposal,replanProposal,reopenWithdrawnProposal,reopenRejectedOperations,completeReadyPartialProposal,continueProposalGeneration,expandRefusedEditDraftToProposal,closeEditorFlowDraft,undoLatestAuthorAction,createAgentRun,getAgentRun,steerAgentRun,pauseAgentRun,cancelAgentRun,exportProjectArchive,exportHumanReadableManuscript,getManuscriptTree,getChapter,getStatistics,getProposal,getRefusedEditDraft,getApplyAuthorEditOutcome,getSnapshot,activityStream,searchManuscript,getExportOperation,getHumanReadableManuscriptExport
 paths:
   /api/v1/protocol:
     get:
@@ -24,6 +24,215 @@ paths:
           description: Active release conflict
         '429':
           description: Rate limited
+  /api/v1/anti-forgery-challenges:
+    post:
+      operationId: createProjectChallenge
+      summary: Issue one prospective Project command challenge
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/create-project-challenge-request.schema.json'
+      responses:
+        '200':
+          description: Prospective Project command challenge
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/create-project-challenge-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency binding conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Command target refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+  /api/v1/projects:
+    post:
+      operationId: createProject
+      summary: Create one empty Project
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/create-project-request.schema.json'
+      responses:
+        '200':
+          description: Empty Project created
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/create-project-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or existing Project conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Create Project refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+    get:
+      operationId: listProjects
+      summary: List Projects owned by the current User
+      responses:
+        '200':
+          description: Current User Project library
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/project-list-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Active release conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/anti-forgery-challenges:
+    post:
+      operationId: createProjectCommandChallenge
+      summary: Issue one exact Project command challenge
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/project-command-challenge-request.schema.json'
+      responses:
+        '200':
+          description: Project command challenge
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/project-command-challenge-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency binding conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Command target refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
   /api/v1/projects/{project_id}:
     get:
       operationId: getProject
@@ -130,10 +339,10 @@ paths:
                 maximum: 60
         '503':
           description: Service unavailable
-  /api/v1/projects/{project_id}/chapters/{chapter_id}:
+  /api/v1/projects/{project_id}/assistance:
     get:
-      operationId: getChapter
-      summary: Read the controlled Project current Chapter
+      operationId: getProjectAssistance
+      summary: Inspect Project assistance and its Host-owned fake binding
       parameters:
         - name: project_id
           in: path
@@ -141,19 +350,13 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: chapter_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
       responses:
         '200':
-          description: Current Project
+          description: Project assistance binding
           content:
             application/json:
               schema:
-                $ref: '../json-schema/storyos-public-release-1/chapter-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/project-assistance-response.schema.json'
         '400':
           description: Invalid request
         '401':
@@ -164,10 +367,691 @@ paths:
           description: Resource unavailable
         '405':
           description: Method not allowed
+        '409':
+          description: Active release conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
         '429':
           description: Rate limited
         '503':
           description: Service unavailable
+    put:
+      operationId: updateProjectAssistance
+      summary: Prepare or change Project assistance availability
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/update-project-assistance-request.schema.json'
+      responses:
+        '200':
+          description: Project assistance prepared
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/update-project-assistance-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or assistance revision conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Update Project Assistance refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/archival:
+    put:
+      operationId: archiveProject
+      summary: Archive one exact Project
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/archive-project-request.schema.json'
+      responses:
+        '200':
+          description: Project archived
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/archive-project-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Project revision conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Archive Project refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/editor-sessions:
+    post:
+      operationId: createEditorSession
+      summary: Create one Editor Session
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/editor-session-create-request.schema.json'
+      responses:
+        '200':
+          description: Current Editor Session
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/editor-session-create-response.schema.json'
+        '201':
+          description: Created Editor Session
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/editor-session-create-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency binding conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}:
+    get:
+      operationId: getEditorSession
+      summary: Read one exact Editor Session
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: editor_session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Editor Session
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/editor-session-get-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Session binding conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers:
+    post:
+      operationId: takeOverProjectWriter
+      summary: Take over the current Project writer generation
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: editor_session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/take-over-project-writer-request.schema.json'
+      responses:
+        '200':
+          description: Committed writer takeover
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/take-over-project-writer-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or authoritative Head conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Author command refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/volumes:
+    post:
+      operationId: createVolume
+      summary: Create one named Volume
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/create-volume-request.schema.json'
+      responses:
+        '200':
+          description: Volume created
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/create-volume-response.schema.json'
+        '201':
+          description: Volume created
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/create-volume-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or tree revision conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Create Volume refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/volumes/{volume_id}:
+    patch:
+      operationId: updateVolume
+      summary: Rename or reorder one named Volume
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/update-volume-request.schema.json'
+      responses:
+        '200':
+          description: Volume renamed or reordered
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/update-volume-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or tree revision conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Update Volume refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+    delete:
+      operationId: deleteVolume
+      summary: Remove one named empty Volume
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/delete-volume-request.schema.json'
+      responses:
+        '200':
+          description: Volume removed
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/delete-volume-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or tree revision conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Delete Volume refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/volumes/{volume_id}/chapters:
+    post:
+      operationId: createChapter
+      summary: Create one named Chapter
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/create-chapter-request.schema.json'
+      responses:
+        '200':
+          description: Chapter created
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/create-chapter-response.schema.json'
+        '201':
+          description: Chapter created
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/create-chapter-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or tree revision conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Create Chapter refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/chapters/{chapter_id}:
     patch:
       operationId: updateChapter
       summary: Rename or reorder one named Chapter
@@ -328,10 +1212,9 @@ paths:
                 maximum: 60
         '503':
           description: Service unavailable
-  /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}:
     get:
-      operationId: getEditorSession
-      summary: Read one exact Editor Session
+      operationId: getChapter
+      summary: Read the controlled Project current Chapter
       parameters:
         - name: project_id
           in: path
@@ -339,7 +1222,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: editor_session_id
+        - name: chapter_id
           in: path
           required: true
           schema:
@@ -347,11 +1230,11 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Editor Session
+          description: Current Project
           content:
             application/json:
               schema:
-                $ref: '../json-schema/storyos-public-release-1/editor-session-get-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/chapter-response.schema.json'
         '400':
           description: Invalid request
         '401':
@@ -362,61 +1245,14 @@ paths:
           description: Resource unavailable
         '405':
           description: Method not allowed
-        '409':
-          description: Session binding conflict
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Request refused
         '429':
           description: Rate limited
         '503':
           description: Service unavailable
-  /api/v1/projects/{project_id}/assistance:
-    get:
-      operationId: getProjectAssistance
-      summary: Inspect Project assistance and its Host-owned fake binding
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Project assistance binding
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/project-assistance-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Active release conflict
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Request refused
-        '429':
-          description: Rate limited
-        '503':
-          description: Service unavailable
+  /api/v1/projects/{project_id}/current-chapter:
     put:
-      operationId: updateProjectAssistance
-      summary: Prepare or change Project assistance availability
+      operationId: setCurrentChapter
+      summary: Make one eligible Chapter current
       parameters:
         - name: project_id
           in: path
@@ -447,14 +1283,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../json-schema/storyos-public-release-1/update-project-assistance-request.schema.json'
+              $ref: '../json-schema/storyos-public-release-1/set-current-chapter-request.schema.json'
       responses:
         '200':
-          description: Project assistance prepared
+          description: Current Chapter updated
           content:
             application/json:
               schema:
-                $ref: '../json-schema/storyos-public-release-1/update-project-assistance-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/set-current-chapter-response.schema.json'
         '400':
           description: Invalid request
         '401':
@@ -466,15 +1302,960 @@ paths:
         '405':
           description: Method not allowed
         '409':
-          description: Idempotency or assistance revision conflict
+          description: Idempotency, current Chapter, or Head conflict
         '412':
-          description: Session binding refused
+          description: Session or writer binding refused
         '413':
           description: Request too large
         '415':
           description: Unsupported content type
         '422':
-          description: Update Project Assistance refused
+          description: Set Current Chapter refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/manuscript/author-edits:
+    post:
+      operationId: applyAuthorEdit
+      summary: Settle one direct Author Edit
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/apply-author-edit-request.schema.json'
+      responses:
+        '200':
+          description: Committed author edit
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/apply-author-edit-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or authoritative Head conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Author edit refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances:
+    post:
+      operationId: acceptProposal
+      summary: Accept a permitted pending Proposal Operation set
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/accept-proposal-request.schema.json'
+      responses:
+        '200':
+          description: Acceptance settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/accept-proposal-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Admission conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Acceptance refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/proposals/{proposal_id}/rejections:
+    post:
+      operationId: rejectProposalOperations
+      summary: Reject one pending Proposal Operation
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/reject-proposal-operations-request.schema.json'
+      responses:
+        '200':
+          description: Rejection settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/reject-proposal-operations-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Admission conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Rejection refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals:
+    post:
+      operationId: withdrawProposal
+      summary: Withdraw an open Proposal
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/withdraw-proposal-request.schema.json'
+      responses:
+        '200':
+          description: Withdrawal settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/withdraw-proposal-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Admission conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Withdrawal refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/proposals/{proposal_id}/replans:
+    post:
+      operationId: replanProposal
+      summary: Replan a conflicted Proposal
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/replan-proposal-request.schema.json'
+      responses:
+        '200':
+          description: Replan settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/replan-proposal-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Admission conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Replan refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/proposals/{proposal_id}/reopenings:
+    post:
+      operationId: reopenWithdrawnProposal
+      summary: Reopen a withdrawn Proposal
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/reopen-withdrawn-proposal-request.schema.json'
+      responses:
+        '200':
+          description: Reopen settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/reopen-withdrawn-proposal-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Admission conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Reopen refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/proposals/{proposal_id}/operation-reopenings:
+    post:
+      operationId: reopenRejectedOperations
+      summary: Reopen rejected Proposal Operations
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/reopen-rejected-operations-request.schema.json'
+      responses:
+        '200':
+          description: Reopen settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/reopen-rejected-operations-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Admission conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Reopen refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/proposals/{proposal_id}/generation-completions:
+    post:
+      operationId: completeReadyPartialProposal
+      summary: Complete one ready partial Proposal
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/complete-ready-partial-proposal-request.schema.json'
+      responses:
+        '200':
+          description: Generation completion settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/complete-ready-partial-proposal-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Admission conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Generation completion refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/proposals/{proposal_id}/generation-continuations:
+    post:
+      operationId: continueProposalGeneration
+      summary: Continue one Proposal Generation
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/continue-proposal-generation-request.schema.json'
+      responses:
+        '200':
+          description: Generation continuation settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/continue-proposal-generation-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Admission conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Generation continuation refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/drafts/{draft_id}/proposal-expansions:
+    post:
+      operationId: expandRefusedEditDraftToProposal
+      summary: Expand one complete retained Refused Edit Draft
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: draft_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/expand-refused-edit-draft-to-proposal-request.schema.json'
+      responses:
+        '200':
+          description: Draft Discard settlement
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/expand-refused-edit-draft-to-proposal-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Binding conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Challenge refused
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/drafts/{draft_id}/closures:
+    post:
+      operationId: closeEditorFlowDraft
+      summary: Discard one open retained Refused Edit Draft
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: draft_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/close-editor-flow-draft-request.schema.json'
+      responses:
+        '200':
+          description: Draft Discard settlement
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/close-editor-flow-draft-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Binding conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Challenge refused
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/author-actions/undo:
+    post:
+      operationId: undoLatestAuthorAction
+      summary: Undo one exact admitted Author Action
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/undo-latest-author-action-request.schema.json'
+      responses:
+        '200':
+          description: Author Undo settled
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/undo-latest-author-action-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or frontier conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Undo Latest Author Action refused
         '428':
           description: Precondition required
         '429':
@@ -856,10 +2637,10 @@ paths:
                 maximum: 60
         '503':
           description: Service unavailable
-  /api/v1/projects/{project_id}/refused-edit-drafts/{draft_id}:
-    get:
-      operationId: getRefusedEditDraft
-      summary: Inspect one retained Refused Edit Draft
+  /api/v1/projects/{project_id}/exports:
+    post:
+      operationId: exportProjectArchive
+      summary: Admit one durable Project Export Archive operation
       parameters:
         - name: project_id
           in: path
@@ -867,7 +2648,147 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: draft_id
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/export-project-archive-request.schema.json'
+      responses:
+        '202':
+          description: Project Export Archive operation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/export-project-archive-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Export refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/manuscript/exports:
+    post:
+      operationId: exportHumanReadableManuscript
+      summary: Admit one durable human-readable manuscript export
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/export-human-readable-manuscript-request.schema.json'
+      responses:
+        '202':
+          description: Human-readable manuscript export admitted
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/export-human-readable-manuscript-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Export refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/manuscript/tree:
+    get:
+      operationId: getManuscriptTree
+      summary: Read the ordered canonical manuscript tree
+      parameters:
+        - name: project_id
           in: path
           required: true
           schema:
@@ -875,11 +2796,11 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Retained Refused Edit Draft
+          description: Ordered canonical manuscript tree
           content:
             application/json:
               schema:
-                $ref: '../json-schema/storyos-public-release-1/refused-edit-draft-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/manuscript-tree-response.schema.json'
         '400':
           description: Invalid request
         '401':
@@ -902,10 +2823,10 @@ paths:
           description: Rate limited
         '503':
           description: Service unavailable
-  /api/v1/projects/{project_id}/drafts/{draft_id}/closures:
-    post:
-      operationId: closeEditorFlowDraft
-      summary: Discard one open retained Refused Edit Draft
+  /api/v1/projects/{project_id}/manuscript/statistics:
+    get:
+      operationId: getStatistics
+      summary: Rebuild Chapter and manuscript statistics
       parameters:
         - name: project_id
           in: path
@@ -913,43 +2834,19 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: draft_id
-          in: path
-          required: true
+        - name: required_watermark
+          in: query
+          required: false
           schema:
             type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/close-editor-flow-draft-request.schema.json'
+            pattern: '^(0|[1-9][0-9]*)$'
       responses:
         '200':
-          description: Draft Discard settlement
+          description: Rebuildable Chapter and manuscript statistics
           content:
             application/json:
               schema:
-                $ref: '../json-schema/storyos-public-release-1/close-editor-flow-draft-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/statistics-response.schema.json'
         '400':
           description: Invalid request
         '401':
@@ -961,101 +2858,17 @@ paths:
         '405':
           description: Method not allowed
         '409':
-          description: Binding conflict
+          description: Snapshot expired
         '413':
           description: Request too large
         '415':
           description: Unsupported content type
         '422':
-          description: Challenge refused
+          description: Request refused
         '429':
           description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
         '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/drafts/{draft_id}/proposal-expansions:
-    post:
-      operationId: expandRefusedEditDraftToProposal
-      summary: Expand one complete retained Refused Edit Draft
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: draft_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/expand-refused-edit-draft-to-proposal-request.schema.json'
-      responses:
-        '200':
-          description: Draft Discard settlement
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/expand-refused-edit-draft-to-proposal-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Binding conflict
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Challenge refused
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
+          description: Projection not ready
   /api/v1/projects/{project_id}/proposals/{proposal_id}:
     get:
       operationId: getProposal
@@ -1102,1272 +2915,30 @@ paths:
           description: Rate limited
         '503':
           description: Service unavailable
-  /api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances:
-    post:
-      operationId: acceptProposal
-      summary: Accept a permitted pending Proposal Operation set
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: proposal_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/accept-proposal-request.schema.json'
-      responses:
-        '200':
-          description: Acceptance settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/accept-proposal-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Admission conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Acceptance refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/proposals/{proposal_id}/rejections:
-    post:
-      operationId: rejectProposalOperations
-      summary: Reject one pending Proposal Operation
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: proposal_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/reject-proposal-operations-request.schema.json'
-      responses:
-        '200':
-          description: Rejection settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/reject-proposal-operations-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Admission conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Rejection refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/proposals/{proposal_id}/operation-reopenings:
-    post:
-      operationId: reopenRejectedOperations
-      summary: Reopen rejected Proposal Operations
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: proposal_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/reopen-rejected-operations-request.schema.json'
-      responses:
-        '200':
-          description: Reopen settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/reopen-rejected-operations-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Admission conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Reopen refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/proposals/{proposal_id}/replans:
-    post:
-      operationId: replanProposal
-      summary: Replan a conflicted Proposal
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: proposal_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/replan-proposal-request.schema.json'
-      responses:
-        '200':
-          description: Replan settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/replan-proposal-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Admission conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Replan refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals:
-    post:
-      operationId: withdrawProposal
-      summary: Withdraw an open Proposal
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: proposal_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/withdraw-proposal-request.schema.json'
-      responses:
-        '200':
-          description: Withdrawal settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/withdraw-proposal-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Admission conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Withdrawal refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/proposals/{proposal_id}/reopenings:
-    post:
-      operationId: reopenWithdrawnProposal
-      summary: Reopen a withdrawn Proposal
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: proposal_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/reopen-withdrawn-proposal-request.schema.json'
-      responses:
-        '200':
-          description: Reopen settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/reopen-withdrawn-proposal-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Admission conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Reopen refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/proposals/{proposal_id}/generation-completions:
-    post:
-      operationId: completeReadyPartialProposal
-      summary: Complete one ready partial Proposal
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: proposal_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/complete-ready-partial-proposal-request.schema.json'
-      responses:
-        '200':
-          description: Generation completion settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/complete-ready-partial-proposal-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Admission conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Generation completion refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/proposals/{proposal_id}/generation-continuations:
-    post:
-      operationId: continueProposalGeneration
-      summary: Continue one Proposal Generation
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: proposal_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/continue-proposal-generation-request.schema.json'
-      responses:
-        '200':
-          description: Generation continuation settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/continue-proposal-generation-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Admission conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Generation continuation refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/archival:
-    put:
-      operationId: archiveProject
-      summary: Archive one exact Project
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/archive-project-request.schema.json'
-      responses:
-        '200':
-          description: Project archived
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/archive-project-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or Project revision conflict
-        '412':
-          description: Session binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Archive Project refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/volumes:
-    post:
-      operationId: createVolume
-      summary: Create one named Volume
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/create-volume-request.schema.json'
-      responses:
-        '200':
-          description: Volume created
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/create-volume-response.schema.json'
-        '201':
-          description: Volume created
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/create-volume-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or tree revision conflict
-        '412':
-          description: Session binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Create Volume refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/volumes/{volume_id}:
-    patch:
-      operationId: updateVolume
-      summary: Rename or reorder one named Volume
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: volume_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/update-volume-request.schema.json'
-      responses:
-        '200':
-          description: Volume renamed or reordered
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/update-volume-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or tree revision conflict
-        '412':
-          description: Session binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Update Volume refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-    delete:
-      operationId: deleteVolume
-      summary: Remove one named empty Volume
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: volume_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/delete-volume-request.schema.json'
-      responses:
-        '200':
-          description: Volume removed
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/delete-volume-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or tree revision conflict
-        '412':
-          description: Session binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Delete Volume refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/volumes/{volume_id}/chapters:
-    post:
-      operationId: createChapter
-      summary: Create one named Chapter
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: volume_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/create-chapter-request.schema.json'
-      responses:
-        '200':
-          description: Chapter created
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/create-chapter-response.schema.json'
-        '201':
-          description: Chapter created
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/create-chapter-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or tree revision conflict
-        '412':
-          description: Session binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Create Chapter refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/current-chapter:
-    put:
-      operationId: setCurrentChapter
-      summary: Make one eligible Chapter current
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/set-current-chapter-request.schema.json'
-      responses:
-        '200':
-          description: Current Chapter updated
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/set-current-chapter-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency, current Chapter, or Head conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Set Current Chapter refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/author-actions/undo:
-    post:
-      operationId: undoLatestAuthorAction
-      summary: Undo one exact admitted Author Action
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/undo-latest-author-action-request.schema.json'
-      responses:
-        '200':
-          description: Author Undo settled
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/undo-latest-author-action-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or frontier conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Undo Latest Author Action refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/anti-forgery-challenges:
-    post:
-      operationId: createProjectChallenge
-      summary: Issue one prospective Project command challenge
-      parameters:
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/create-project-challenge-request.schema.json'
-      responses:
-        '200':
-          description: Prospective Project command challenge
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/create-project-challenge-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency binding conflict
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Command target refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-  /api/v1/projects:
+  /api/v1/projects/{project_id}/refused-edit-drafts/{draft_id}:
     get:
-      operationId: listProjects
-      summary: List Projects owned by the current User
+      operationId: getRefusedEditDraft
+      summary: Inspect one retained Refused Edit Draft
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: draft_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
-          description: Current User Project library
+          description: Retained Refused Edit Draft
           content:
             application/json:
               schema:
-                $ref: '../json-schema/storyos-public-release-1/project-list-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/refused-edit-draft-response.schema.json'
         '400':
           description: Invalid request
         '401':
@@ -2386,271 +2957,6 @@ paths:
           description: Unsupported content type
         '422':
           description: Request refused
-        '429':
-          description: Rate limited
-        '503':
-          description: Service unavailable
-    post:
-      operationId: createProject
-      summary: Create one empty Project
-      parameters:
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/create-project-request.schema.json'
-      responses:
-        '200':
-          description: Empty Project created
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/create-project-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or existing Project conflict
-        '412':
-          description: Session binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Create Project refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/anti-forgery-challenges:
-    post:
-      operationId: createProjectCommandChallenge
-      summary: Issue one exact Project command challenge
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/project-command-challenge-request.schema.json'
-      responses:
-        '200':
-          description: Project command challenge
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/project-command-challenge-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency binding conflict
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Command target refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/editor-sessions:
-    post:
-      operationId: createEditorSession
-      summary: Create one Editor Session
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/editor-session-create-request.schema.json'
-      responses:
-        '200':
-          description: Current Editor Session
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/editor-session-create-response.schema.json'
-        '201':
-          description: Created Editor Session
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/editor-session-create-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency binding conflict
-        '412':
-          description: Session binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Request refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/manuscript/author-edits:
-    post:
-      operationId: applyAuthorEdit
-      summary: Settle one direct Author Edit
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/apply-author-edit-request.schema.json'
-      responses:
-        '200':
-          description: Committed author edit
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/apply-author-edit-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency or authoritative Head conflict
-        '412':
-          description: Session or writer binding refused
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Author edit refused
-        '428':
-          description: Precondition required
         '429':
           description: Rate limited
         '503':
@@ -2825,380 +3131,6 @@ paths:
           description: Rate limited
         '503':
           description: Service unavailable
-  /api/v1/projects/{project_id}/manuscript/tree:
-    get:
-      operationId: getManuscriptTree
-      summary: Read the ordered canonical manuscript tree
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Ordered canonical manuscript tree
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/manuscript-tree-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Active release conflict
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Request refused
-        '429':
-          description: Rate limited
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/queries/manuscript-search:
-    post:
-      operationId: searchManuscript
-      summary: Search the current Chapter or manuscript
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/manuscript-search-request.schema.json'
-      responses:
-        '200':
-          description: Bounded manuscript search page
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/manuscript-search-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Snapshot expired
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Request refused
-        '429':
-          description: Rate limited
-        '503':
-          description: Projection not ready
-  /api/v1/projects/{project_id}/manuscript/statistics:
-    get:
-      operationId: getStatistics
-      summary: Rebuild Chapter and manuscript statistics
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: required_watermark
-          in: query
-          required: false
-          schema:
-            type: string
-            pattern: '^(0|[1-9][0-9]*)$'
-      responses:
-        '200':
-          description: Rebuildable Chapter and manuscript statistics
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/statistics-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Snapshot expired
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Request refused
-        '429':
-          description: Rate limited
-        '503':
-          description: Projection not ready
-  /api/v1/projects/{project_id}/manuscript/exports:
-    post:
-      operationId: exportHumanReadableManuscript
-      summary: Admit one durable human-readable manuscript export
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/export-human-readable-manuscript-request.schema.json'
-      responses:
-        '202':
-          description: Human-readable manuscript export admitted
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/export-human-readable-manuscript-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency conflict
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Export refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/manuscript/exports/{export_id}:
-    get:
-      operationId: getHumanReadableManuscriptExport
-      summary: Inspect one human-readable manuscript export
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: export_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Human-readable manuscript export status
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/human-readable-manuscript-export-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Snapshot expired
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Request refused
-        '429':
-          description: Rate limited
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/exports:
-    post:
-      operationId: exportProjectArchive
-      summary: Admit one durable Project Export Archive operation
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '../json-schema/storyos-public-release-1/export-project-archive-request.schema.json'
-      responses:
-        '202':
-          description: Project Export Archive operation accepted
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/export-project-archive-response.schema.json'
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Idempotency conflict
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Export refused
-        '428':
-          description: Precondition required
-        '429':
-          description: Rate limited
-          headers:
-            Retry-After:
-              required: true
-              schema:
-                type: integer
-                minimum: 1
-                maximum: 60
-        '503':
-          description: Service unavailable
-  /api/v1/projects/{project_id}/exports/{export_id}:
-    get:
-      operationId: getExportOperation
-      summary: Inspect or download one settled Project Export Archive
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: export_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Admitted Project Export operation
-          content:
-            application/json:
-              schema:
-                $ref: '../json-schema/storyos-public-release-1/export-operation-response.schema.json'
-            application/vnd.storyos.project-archive+zip:
-              schema:
-                type: string
-                format: binary
-        '400':
-          description: Invalid request
-        '401':
-          description: Authentication required
-        '403':
-          description: Request origin refused
-        '404':
-          description: Resource unavailable
-        '405':
-          description: Method not allowed
-        '409':
-          description: Snapshot expired
-        '413':
-          description: Request too large
-        '415':
-          description: Unsupported content type
-        '422':
-          description: Request refused
-        '429':
-          description: Rate limited
-        '503':
-          description: Service unavailable
   /api/v1/projects/{project_id}/activity:
     get:
       operationId: activityStream
@@ -3249,10 +3181,10 @@ paths:
           description: Rate limited
         '503':
           description: Service unavailable
-  /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers:
+  /api/v1/projects/{project_id}/queries/manuscript-search:
     post:
-      operationId: takeOverProjectWriter
-      summary: Take over the current Project writer generation
+      operationId: searchManuscript
+      summary: Search the current Chapter or manuscript
       parameters:
         - name: project_id
           in: path
@@ -3260,43 +3192,19 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: editor_session_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: X-StoryOS-Anti-Forgery
-          in: header
-          required: true
-          schema:
-            type: string
-            pattern: '^[0-9a-f]{64}$'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '../json-schema/storyos-public-release-1/take-over-project-writer-request.schema.json'
+              $ref: '../json-schema/storyos-public-release-1/manuscript-search-request.schema.json'
       responses:
         '200':
-          description: Committed writer takeover
+          description: Bounded manuscript search page
           content:
             application/json:
               schema:
-                $ref: '../json-schema/storyos-public-release-1/take-over-project-writer-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/manuscript-search-response.schema.json'
         '400':
           description: Invalid request
         '401':
@@ -3308,17 +3216,109 @@ paths:
         '405':
           description: Method not allowed
         '409':
-          description: Idempotency or authoritative Head conflict
-        '412':
-          description: Session or writer binding refused
+          description: Snapshot expired
         '413':
           description: Request too large
         '415':
           description: Unsupported content type
         '422':
-          description: Author command refused
-        '428':
-          description: Precondition required
+          description: Request refused
+        '429':
+          description: Rate limited
+        '503':
+          description: Projection not ready
+  /api/v1/projects/{project_id}/exports/{export_id}:
+    get:
+      operationId: getExportOperation
+      summary: Inspect or download one settled Project Export Archive
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: export_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admitted Project Export operation
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/export-operation-response.schema.json'
+            application/vnd.storyos.project-archive+zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Snapshot expired
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/manuscript/exports/{export_id}:
+    get:
+      operationId: getHumanReadableManuscriptExport
+      summary: Inspect one human-readable manuscript export
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: export_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Human-readable manuscript export status
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/human-readable-manuscript-export-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Snapshot expired
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
         '429':
           description: Rate limited
         '503':

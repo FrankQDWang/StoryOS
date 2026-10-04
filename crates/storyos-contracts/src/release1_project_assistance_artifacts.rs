@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_project_assistance::{
     GET_PROJECT_ASSISTANCE, GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
@@ -48,7 +48,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         .flatten()
         .collect()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&GET_PROJECT_ASSISTANCE, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -161,7 +161,7 @@ pub(super) fn openapi() -> String {
     );
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect Project assistance and its Host-owned fake binding\n",
+            "    get:\n      operationId: {}\n      summary: Inspect Project assistance and its Host-owned fake binding\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
             "    put:\n      operationId: {}\n      summary: Prepare or change Project assistance availability\n",
@@ -172,7 +172,6 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        GET_PROJECT_ASSISTANCE.path,
         GET_PROJECT_ASSISTANCE.operation_id,
         get_responses,
         UPDATE_PROJECT_ASSISTANCE.operation_id,

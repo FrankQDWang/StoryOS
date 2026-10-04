@@ -8,7 +8,7 @@ use crate::release1_expand_refused_edit_draft::{
     ExpandRefusedEditDraftResponse, WholeDraftPayload,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_wire::{generated_ref, json_bytes, schema_value};
 
@@ -31,7 +31,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&EXPAND_REFUSED_EDIT_DRAFT, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -113,7 +113,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Expand one complete retained Refused Edit Draft\n",
+            "    post:\n      operationId: {}\n      summary: Expand one complete retained Refused Edit Draft\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: draft_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -122,10 +122,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        EXPAND_REFUSED_EDIT_DRAFT.path,
-        EXPAND_REFUSED_EDIT_DRAFT.operation_id,
-        request_schema,
-        responses,
+        EXPAND_REFUSED_EDIT_DRAFT.operation_id, request_schema, responses,
     )
 }
 

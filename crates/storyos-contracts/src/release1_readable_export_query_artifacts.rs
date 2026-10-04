@@ -4,7 +4,7 @@ use ts_rs::{Config, TS};
 
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_readable_export_query::{
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT, GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_REQUEST_SCHEMA_ID,
@@ -32,7 +32,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&GET_HUMAN_READABLE_MANUSCRIPT_EXPORT, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -101,14 +101,12 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one human-readable manuscript export\n",
+            "    get:\n      operationId: {}\n      summary: Inspect one human-readable manuscript export\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: export_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
         ),
-        GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.path,
-        GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.operation_id,
-        responses,
+        GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.operation_id, responses,
     )
 }
 

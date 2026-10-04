@@ -3,7 +3,7 @@ use ts_rs::{Config, TS};
 
 use crate::release1_operation_registry::{
     GeneratedSchema, OperationArtifacts, RegisteredOperation, event_fixtures, fixture_triple,
-    operation_schemas, path_items,
+    method, operation_schemas,
 };
 use crate::release1_undo_latest_author_action::{
     UNDO_LATEST_AUTHOR_ACTION, UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE,
@@ -41,7 +41,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
             },
         ]
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&UNDO_LATEST_AUTHOR_ACTION, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -130,7 +130,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Undo one exact admitted Author Action\n",
+            "    post:\n      operationId: {}\n      summary: Undo one exact admitted Author Action\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
@@ -138,10 +138,7 @@ pub(super) fn openapi() -> String {
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        UNDO_LATEST_AUTHOR_ACTION.path,
-        UNDO_LATEST_AUTHOR_ACTION.operation_id,
-        request_schema,
-        responses,
+        UNDO_LATEST_AUTHOR_ACTION.operation_id, request_schema, responses,
     )
 }
 

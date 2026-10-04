@@ -10,7 +10,7 @@ use crate::release1_manuscript_tree::{
     ManuscriptVolumeNode,
 };
 use crate::release1_operation_registry::{
-    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+    OperationArtifacts, RegisteredOperation, fixture_triple, method, operation_schemas,
 };
 use crate::release1_wire::json_bytes;
 
@@ -31,7 +31,7 @@ pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
         )
         .into()
     },
-    openapi: || path_items(openapi()),
+    openapi: || method(&GET_MANUSCRIPT_TREE, openapi()),
     typescript_types: typescript_type_declarations,
     typescript_client: typescript_client_source,
     typescript_declarations,
@@ -128,8 +128,8 @@ pub(super) fn openapi() -> String {
         })
         .collect::<String>();
     format!(
-        "  {}:\n    get:\n      operationId: {}\n      summary: Read the ordered canonical manuscript tree\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n      responses:\n{responses}",
-        GET_MANUSCRIPT_TREE.path, GET_MANUSCRIPT_TREE.operation_id,
+        "    get:\n      operationId: {}\n      summary: Read the ordered canonical manuscript tree\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n      responses:\n{responses}",
+        GET_MANUSCRIPT_TREE.operation_id,
     )
 }
 
