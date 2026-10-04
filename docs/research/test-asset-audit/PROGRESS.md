@@ -40,7 +40,7 @@ Each test needs KEEP, DELETE, MERGE, or MOVE with a source line, reason code, ob
 | crates/storyos-adapter-postgres/src | Pending | inventory.json |
 | crates/storyos-adapter-postgres/tests | Pending | inventory.json |
 | crates/storyos-server/src | Pending | inventory.json |
-| crates/storyos-server/tests | Pending | inventory.json |
+| crates/storyos-server/tests | Source review complete | server-integration.md; 2 tests; 33 candidate lines |
 | crates/storyos-contracts/src | Pending | inventory.json |
 
 ## Self-check
@@ -56,3 +56,5 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Node contract: 31 runtime cases reviewed across 8 files. See node-contract.json for source spans and node-contract.md for decisions.
 - Discovery: startup asset cases can fail before asset loading; session-map cases can fail later on missing DATABASE_URL even if mapping validation is bypassed. No runtime mutation has yet been used to validate these findings.
 - Discovery: the TypeScript Unicode counter has no product consumer and is imported only by its own test. Do not describe its Rust counterpart as executing that helper.
+
+- Server integration directory complete: 2 duplicate process tests select the packaged Node cases as retained owners. Candidate savings: 33 lines, not yet mutation-proved.
