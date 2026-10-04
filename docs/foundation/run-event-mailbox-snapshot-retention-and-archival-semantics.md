@@ -53,10 +53,11 @@ cleanup is still pending.
 ### 1.1 Author journey and acceptance surface
 
 The retention contract is complete only when one consistent history surface
-supports these steps. Under ADR 0040, steps 1, 3, and 4 are audit and
-verification steps through the read-only Query in section 11; no author-facing
-view shows these Run internals. Step 2 is Protected Web Client behavior. The
-author performs steps 5 and 6.
+supports these steps. Under ADR 0040, steps 1, 3, and 4 and the in-flight
+evidence check in step 6 are audit and verification steps through the
+read-only Query in section 11. No author-facing view shows these Run internals.
+Step 2 is Protected Web Client behavior. The author performs the other parts of
+steps 5 and 6.
 
 1. Query Project Activity or a Run and distinguish historical occurrence,
    current payload eligibility, and service availability.
@@ -73,7 +74,8 @@ author performs steps 5 and 6.
    and restore only the same absent Scope after lifecycle and Recovery
    Visibility Proof; projections rebuild and a new Snapshot/resync is used.
 6. Request Project deletion, observe new work/disclosure/export/restore fenced,
-   see settled or `OutcomeUnknown` in-flight evidence, and never see the
+   find settled or `OutcomeUnknown` in-flight evidence through the audit
+   Query, and never see the
    deleted Scope become readable through Project Restore.
 
 An inspection surface reports the truth available under current authorization;
@@ -219,8 +221,9 @@ A Retention Profile is a versioned policy contract selected for one exact
 Project Scope. It supplies the effective hot replay, checkpoint, archive,
 compaction, capacity, and retention values for each Operational Retention Class
 and the generated Memory payload role in section 2.10.
-The default profile is a product policy, not routine author configuration, but
-its identity and effective values are inspectable to the author.
+The default profile is a product policy, not routine author configuration.
+Its identity and effective values are inspectable through an audit Query, not
+an author view (ADR 0040).
 
 Every checkpoint, archive, compaction, purge, or explicit refusal appends one
 Retention Decision. That immutable decision binds the Project Scope, exact
@@ -702,7 +705,7 @@ Tombstone and gap remain queryable only through the safe lifecycle surface.
 The inspection Query for Run evidence is a read-only audit Query for diagnosis
 and verification
 ([ADR 0040](../adr/0040-show-assistance-results-not-run-internals-to-the-author.md)).
-The Protected Web Client does not show it to the author; the author sees
+The Protected Web Client does not show it to the author. The author sees
 assistance results and the decisions that the author must make. This section
 covers only Run evidence. Author inspection of Memory and Research Artifacts
 keeps its owning contract.
@@ -717,8 +720,8 @@ applicable current state without inventing completeness:
 | retained | The authorized payload remains inspectable under current policy. |
 | archived | The payload remains retained but requires an explicit authorized archive inspection or restoration; it is not ordinary model context or replay service. |
 | compacted | The historical fact and compacted evidence remain, but the original payload bytes are unavailable. |
-| redacted or tombstoned | Current policy prevents payload inspection; only the safe identity, reason category, and availability gap are reported where permitted. |
-| recovery hold or Project deletion settlement | The Scope is not safely readable or executable; the Query reports only the safe lifecycle state permitted by non-oracle policy. |
+| redacted or tombstoned | Current policy prevents payload inspection. Only the safe identity, reason category, and availability gap are reported where permitted. |
+| recovery hold or Project deletion settlement | The Scope is not safely readable or executable. The Query reports only the safe lifecycle state permitted by non-oracle policy. |
 
 Inspection never dispatches a Provider, Tool, MCP, embedding, telemetry, or
 support request merely to reconstruct history. It is a current authorized Query

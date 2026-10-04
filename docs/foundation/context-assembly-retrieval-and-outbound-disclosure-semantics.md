@@ -955,7 +955,7 @@ App Action never become ambient model context or an authoritative write path.
 Context Inspect is a read-only audit query for diagnosis and verification
 ([ADR 0040](../adr/0040-show-assistance-results-not-run-internals-to-the-author.md)).
 It is not an author view. The Protected Web Client does not show it to the
-author; the author sees assistance results and the decisions that the author
+author. The author sees assistance results and the decisions that the author
 must make. This section covers only the inspection of context and Run
 evidence. Author inspection of Memory and Research Artifacts keeps its owning
 contract. Context Inspect may show current or historical:
@@ -1022,7 +1022,7 @@ current instructions, and bounded conversation continuity. Memory can provide
 summary navigation and on-demand reads when enabled. The author need not
 configure context scopes, source versions, a character sheet, pins, manifests,
 or Project Instruction before ordinary help works. The author sees assistance
-results, not Run internals; Context Inspect stays an audit query. Ordinary
+results, not Run internals. Context Inspect stays an audit query. Ordinary
 already-authorized work has no additional confirmation ceremony.
 
 ## 12. Project Instruction
