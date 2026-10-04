@@ -53,16 +53,17 @@ cleanup is still pending.
 ### 1.1 Author journey and acceptance surface
 
 The retention contract is complete only when one consistent history surface
-supports these steps. Under ADR 0040, steps 1, 3, and 4 are audit and
-verification steps. The in-flight evidence check in step 6 is also an audit
-step. These steps use the read-only Query in section 11. No author-facing view
-shows these Run internals.
+supports these steps. Under ADR 0040, the Run check in step 1 and steps 3 and
+4 are audit and verification steps. The in-flight evidence check in step 6 is
+also an audit step. These steps use the read-only Query in section 11. No
+author-facing view shows these Run internals.
 
-Step 2 is Protected Web Client behavior. The author performs the other parts
-of steps 5 and 6.
+The author opens the Project Activity view in step 1. Step 2 is Protected Web
+Client behavior. The author performs the other parts of steps 5 and 6.
 
-1. Query Project Activity or a Run and distinguish historical occurrence,
-   current payload eligibility, and service availability.
+1. Open a Project Activity view and distinguish historical occurrence,
+   current payload eligibility, and service availability. Make the same
+   distinctions for a Run through the audit Query.
 2. Resume strictly after a valid cursor in its Replay Generation, or receive
    the existing `activity_cursor_too_old` result and a fresh Snapshot when the
    cursor is below the floor. The client never receives a guessed mapping or a
