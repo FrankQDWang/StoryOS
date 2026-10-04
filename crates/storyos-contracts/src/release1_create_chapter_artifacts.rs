@@ -1,4 +1,3 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
@@ -7,6 +6,46 @@ use crate::release1_create_chapter::{
     CREATE_CHAPTER_RESPONSE_SCHEMA_ID, CreateChapterConflictReason, CreateChapterEffect,
     CreateChapterInput, CreateChapterPlacement, CreateChapterRefusalReason, CreateChapterRequest,
     CreateChapterResponse,
+};
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
+use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &CREATE_CHAPTER,
+        &[
+            "server_derived_project_scope",
+            "volume_scope_join",
+            "project_active",
+            "expected_tree_revision",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &CREATE_CHAPTER,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &CREATE_CHAPTER,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -18,8 +57,6 @@ pub(super) const FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/create-chapter.invalid.json",
     "generated/golden-wire/storyos-public-release-1/create-chapter.boundary.json",
 ];
-
-const U64_WIRE: &str = "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$";
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<CreateChapterRequest>(
@@ -212,22 +249,4 @@ fn command_fixture(created_at: &str) -> Value {
             "project_activity_position": "3"
         }
     })
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

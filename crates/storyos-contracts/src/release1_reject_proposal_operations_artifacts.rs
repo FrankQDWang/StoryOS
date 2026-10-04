@@ -1,7 +1,9 @@
-use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
 use crate::release1_reject_proposal_operations::{
     AuthorUndoDisposition, BoundedAuthorNote, ProposalRejectionReason, REJECT_PROPOSAL_OPERATIONS,
     REJECT_PROPOSAL_OPERATIONS_DIGEST_PROFILE, REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,
@@ -9,6 +11,46 @@ use crate::release1_reject_proposal_operations::{
     RejectProposalOperationsEffect, RejectProposalOperationsInput,
     RejectProposalOperationsRefusalReason, RejectProposalOperationsRequest,
     RejectProposalOperationsResponse, RejectionReceipt, RejectionReceiptResult,
+};
+use crate::release1_wire::{generated_ref, json_bytes, schema_value};
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &REJECT_PROPOSAL_OPERATIONS,
+        &[
+            "server_derived_project_scope",
+            "project_active",
+            "editor_session_writer_generation",
+            "current_open_ready_proposal_revision",
+            "selected_pending_operations",
+            "expected_target_revisions",
+            "explicit_editor_control",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &REJECT_PROPOSAL_OPERATIONS,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &REJECT_PROPOSAL_OPERATIONS,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -208,22 +250,4 @@ fn command_fixture(created_at: &str) -> Value {
             "resolution_event_refs": ["018f0000-0000-7001-8000-000000000d15"]
         }
     })
-}
-
-fn generated_ref(path: &str) -> &str {
-    path.strip_prefix("generated/")
-        .expect("schema is a generated artifact")
-}
-
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
-    let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
-    schema["$id"] = Value::String(schema_id.to_owned());
-    schema["title"] = Value::String(title.to_owned());
-    schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
