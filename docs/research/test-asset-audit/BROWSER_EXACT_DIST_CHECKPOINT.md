@@ -1,37 +1,41 @@
 # Browser exact-dist checkpoint
 
-Source review is partial: 28 cases in 28 test files; 16 KEEP, one DELETE, 11 MERGE. Direct candidate lines: 67.
+Source review is partial: 32 cases in 31 test files; 20 KEEP, one DELETE, 11 MERGE. Direct candidate lines: 67.
 
 | Reviewed file | Verdict |
 |---|---|
-| apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts | DELETE |
-| apps/web/test/browser-exact-dist/production-page.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-01-bootstrap-challenge.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-02-create-empty-project.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-03-list-open-library.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-04-rename-project.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-05-archive-project.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-07-create-volume.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-09-navigate-reopen.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-editor.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-undo.integration.test.ts | MERGE |
-| apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-search.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts | KEEP |
-| apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts | MERGE |
+| apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts:22 | DELETE |
+| apps/web/test/browser-exact-dist/production-page.integration.test.ts:34 | MERGE |
+| apps/web/test/browser-exact-dist/s2-01-bootstrap-challenge.integration.test.ts:48 | MERGE |
+| apps/web/test/browser-exact-dist/s2-02-create-empty-project.integration.test.ts:34 | MERGE |
+| apps/web/test/browser-exact-dist/s2-03-list-open-library.integration.test.ts:34 | MERGE |
+| apps/web/test/browser-exact-dist/s2-04-rename-project.integration.test.ts:46 | KEEP |
+| apps/web/test/browser-exact-dist/s2-05-archive-project.integration.test.ts:47 | KEEP |
+| apps/web/test/browser-exact-dist/s2-07-create-volume.integration.test.ts:35 | MERGE |
+| apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43 | KEEP |
+| apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts:65 | KEEP |
+| apps/web/test/browser-exact-dist/s2-09-navigate-reopen.integration.test.ts:95 | MERGE |
+| apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts:91 | KEEP |
+| apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts:84 | MERGE |
+| apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts:181 | KEEP |
+| apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts:66 | KEEP |
+| apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77 | KEEP |
+| apps/web/test/browser-exact-dist/s2-editor.integration.test.ts:77 | MERGE |
+| apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts:95 | MERGE |
+| apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69 | KEEP |
+| apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123 | KEEP |
+| apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162 | MERGE |
+| apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74 | KEEP |
+| apps/web/test/browser-exact-dist/s2-search.integration.test.ts:127 | KEEP |
+| apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts:120 | KEEP |
+| apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts:115 | KEEP |
+| apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts:89 | KEEP |
+| apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts:65 | KEEP |
+| apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130 | MERGE |
+| apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184 | KEEP |
+| apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179 | KEEP |
+| apps/web/test/browser-exact-dist/s2-input.integration.test.ts:188 | KEEP |
+| apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284 | KEEP |
 
 ## Pending files
 
@@ -41,9 +45,6 @@ Source review is partial: 28 cases in 28 test files; 16 KEEP, one DELETE, 11 MER
 - apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts
 - apps/web/test/browser-exact-dist/restored-discard.integration.test.ts
 - apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-input.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts
-- apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts
 - apps/web/test/browser-exact-dist/stage1-journey-expectation.ts
 
 ## Decisions and evidence
@@ -85,3 +86,12 @@ Source review is partial: 28 cases in 28 test files; 16 KEEP, one DELETE, 11 MER
 - MERGE the Stage 2 aggregate journey into the focused retained cases, transferring final two-Chapter GET equality to save-truth and unavailable/no-AI presentation to readable export. Preserve release-gate evidence when implementing consolidation; this audit changes no gate.
 - exact-dist-global-setup.ts is fully reviewed. With STORYOS_STAGE1_AUTHORITY_ORACLE=1, its required teardown compares exact production-host and assistance scenario counters, Stage 1's four edits/activities/actions and no foreign or unexpected receipts. Production tests/support remain pending; their fixture counts cannot be silently dropped.
 - Current totals: 28 cases/files, 16 KEEP, one DELETE, 11 MERGE; 67 direct candidate lines. No runtime execution or source mutation.
+
+## Block identity and real Activity consumer
+
+- BD029-BD032 add move/retype, split/join and both input cases. All three files fully reviewed (32 cases in 31 files total).
+- KEEP move/retype selection wiring and stable identities across reload. Its title says copy is refused as a move, but the body actually performs a paste and checks a new identity; no explicit refusal occurs.
+- KEEP nonempty right-Block join after rehydration. Sustained writing joins an empty new Block; source adapter duplicate does not persist. Middle split remains a separate source KEEP input.
+- KEEP repeated multiline replacement identity allocation, cross-Block cut, composition and reload. Drop uses a synthetic DragEvent, not a native drag gesture.
+- KEEP real assistance/Run/Author Edit cursor convergence followed by another saved edit. The optional database oracle requires the fixed f802/f804 receipts from this case; mocked stream tests cannot replace the actual wire/consumer pair.
+- Current exact-dist counts: 32 cases in 31 files, 20 KEEP, one DELETE, 11 MERGE; 67 direct candidate lines. No runtime execution, product edit or temporary mutation.

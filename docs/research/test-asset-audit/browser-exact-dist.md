@@ -1,6 +1,6 @@
 # browser-exact-dist test verdicts
 
-Reviewed: 28 cases in 28 files. See PROGRESS.md for directory completion.
+Reviewed: 32 cases in 31 files. See PROGRESS.md for directory completion.
 
 Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 
@@ -106,6 +106,13 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 |---|---|---|---|---|---|---|
 | BD019 | 69 — keeps the editor writable through frequent Author Undo between Author Edit batches | KEEP | K2 | Repeated real Edit/Edit/Undo cycles must keep the packaged editor writable and create exactly 24 Author Edit and 12 Undo requests with only successful Challenge responses, without resetting quota windows. Single Undo covers one cycle, the long-session journey performs one Undo and explicitly resets quotas, and source tests mock network admission. Retain continued-cycle/frontier behavior; elapsed time is logged but has no threshold, so this does not prove 12 Undos occurred inside one minute. Receive exact Block/frontier/reload assertions from the single-Undo case. | apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:143 |
 
+## apps/web/test/browser-exact-dist/s2-input.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD031 | 188 — consumes real assistance and Run Activity before the author continues writing | KEEP | K2 | The packaged Activity consumer must advance its rendered cursor through real assistance_updated, agent_run_created and Author Edit events, then allow another saved edit. Mock SSE tests cannot detect drift between real Server event bytes and this mounted consumer; enabled composer journeys do not assert this exact stream/cursor sequence. The optional database teardown also expects these two fixed-key assistance/Run receipts. Preserve that fixture dependency during any future consolidation. | apps/web/test/browser-source/activity-stream-consume.integration.test.ts:105; apps/web/test/browser-source/activity-stream-consume.integration.test.ts:322; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10 |
+| BD032 | 284 — settles IME, clipboard, drop, and contiguous Block replacement without reusing identity | KEEP | K2 | Two complete multiline replacements must allocate distinct new right Block identities; cross-Block cut must remove the old right identity; IME cancellation/confirmation and drop must persist the resulting text across reload. Single paste in move/retype cannot detect reusing an earlier replacement identity, and repeated composition/split writing never performs a cross-Block selected cut. Drop is a synthesized DragEvent with DataTransfer, while clipboard commands drive the actual browser; do not label it native drag gesture coverage. | apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184; apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:156 |
+
 ## apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts
 
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
@@ -123,6 +130,12 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | BD020 | 123 — repeats Chapter switching, Undo, search, and reload without losing work | KEEP | K2 | After 2401 individual trusted inputs, the packaged editor must complete automatic batching/collection, switch Chapters, reload and save another input without losing either Chapter. The source working-set test calls persist/collect directly and cannot detect broken mounted-controller collection or post-reload continued input. Search/statistics smoke is incidental. This journey resets Challenge windows and logs timings with no performance thresholds; it proves neither sustained quota behavior nor a latency/RPO/RTO bound. | apps/web/test/browser-source/journal-working-set.integration.test.ts:16; apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77 |
+
+## apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD029 | 184 — moves and retypes Blocks with stable identity and refuses copy as a move | KEEP | K2 | A real move shortcut must reorder the selected Block without changing either identity, while later multiline paste must mint a third identity and retype must change only the selected moved Block's kind. The final reload checks all identities/kinds/text together. Core primitives and split/join do not execute selection-to-move/retype key binding. Despite the title, no copy-as-move request is refused; the actual copy protection is a newly allocated pasted Block identity. | apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179; apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284 |
 
 ## apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts
 
@@ -147,6 +160,12 @@ Reason codes: [METHOD.md](METHOD.md). Locations use the fixed audit baseline.
 | ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
 |---|---|---|---|---|---|---|
 | BD023 | 127 — searches the current Chapter and manuscript with bounded Snapshot identity | KEEP | K2 | The packaged search radio/form must distinguish current-Chapter misses from manuscript hits, render exact Chapter/Block/range identities, clear prior hits for no-match, and exclude a deleted Chapter on later search while preserving another Chapter's hit. HTTP query logic cannot detect a radio value ignored by the client or stale result DOM; the aggregate journey checks only one positive hit. | apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts:78; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130 |
+
+## apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts
+
+| ID | Line / test | Verdict | Reason | Regression and coverage comparison | Covering or compared test |
+|---|---|---|---|---|---|---|
+| BD030 | 179 — splits and joins adjacent Blocks and reopens the same identities | KEEP | K2 | Splitting, reloading the two stored Blocks, then Backspace-joining a nonempty right Block must retain the left identity and complete concatenated text through another reload. Sustained writing joins an empty newly split Block; source adapter join does not persist/reload and is DELETE. This case protects actual hydrated Block identity plus the right text after join; middle-of-text splitting remains a distinct source input. | apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts:55; apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts:110 |
 
 ## apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts
 
