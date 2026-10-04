@@ -57,3 +57,11 @@ Classified contract limits (full report pending):
 - R-001: `invalid_title` Core effects cannot pass public title validation: the Server and Core use the same byte limits. Exercise the public refusal and document the unreachable Core variant.
 
 Next: collect 20-hit structure evidence and complete replay cases; prepare the Author Edit model.
+
+## Step 4: Retained structure batch and Author Edit chain
+
+The 20-seed structure run was interrupted by `RemoteDisconnected` during Create Chapter in seed 114. Seeds 100 through 113 completed; seed 114 is partial. All 723 created Projects and observed commands were retained, with zero model differences. The minimum reached outcome count is 14. This is partial evidence, not a completed batch. Evidence: `structure-partial-100-114.json.gz` and its log; managed run `b2b43f2f4b284bae8694daaded6d9a81` failed after 561 seconds. The owned database and Server were stopped. The preceding launch also hit the database readiness limit; no product or resource script was changed.
+
+New finding to verify: successful Create Project, Update Project, and Archive Project return no Author Action. Manuscript State Machine section 3.2 requires one for each successful author-owned Core Transition. The current structure sequence comparison starts after Project creation; it does not excuse this missing allocation. Add a separate allocation audit and minimal replay instead of changing the contract model to match it.
+
+Next: run the Author Edit/Undo smoke chain, then use a fresh database for six structure seeds (114 through 119) and aggregate actual counts. Keep all earlier failed evidence. The Author Edit model calculates text from input units independently and uses returned IDs only as opaque future preconditions.

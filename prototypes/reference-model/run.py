@@ -61,7 +61,7 @@ class HTTP:
         schema = route['schemas']['request']
         stem = schema.split('.')[2]
         body = {'command_schema': schema, stem.replace('-', '_') + '_input': {**self.meta(), **values}}
-        if name in ['createEditorSession', 'takeOverProjectWriter']:
+        if name in ['createEditorSession', 'takeOverProjectWriter', 'applyAuthorEdit']:
             body = {'command_schema': schema, **self.meta(), **values}
         key = self.identity()
         if name == 'createProject':
@@ -165,8 +165,11 @@ def main():
             http.rng = random.Random(seed)
             if args.stage == 'bootstrap':
                 chain(http, seed, differences, coverage)
-            else:
+            elif args.stage == 'structure':
                 from structure import run
+                run(http, seed, differences, coverage, args.case)
+            elif args.stage == 'edits':
+                from edits import run
                 run(http, seed, differences, coverage, args.case)
     finally:
         server.terminate()
