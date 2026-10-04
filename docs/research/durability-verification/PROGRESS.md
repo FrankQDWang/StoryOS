@@ -98,3 +98,4 @@
 - Matrix round-1, `cut-admission-database`: completed (exit 0). Evidence: `evidence/round-1/cut-admission-database.json`.
 - Matrix round-1, `cut-core-server`: completed (exit 0). Evidence: `evidence/round-1/cut-core-server.json`.
 - Matrix round-1, `cut-core-database`: completed (exit 0). Evidence: `evidence/round-1/cut-core-database.json`.
+- Matrix round-1, `cut-commit-server`: completed (exit 0). Evidence: `evidence/round-1/cut-commit-server.json`.
