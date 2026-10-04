@@ -148,3 +148,4 @@
   retains F2's 503 while its D1 preservation oracle passes.
 - Next: execute six minimized cases (the failed matrix cells), write REPORT.md,
   check the changed-path boundary, and push only the research branch.
+- Matrix minimal, `takeover-server`: invariant failure (exit 1). Evidence: `evidence/minimal/takeover-server.json`.
