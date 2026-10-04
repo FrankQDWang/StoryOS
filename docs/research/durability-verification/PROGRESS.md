@@ -39,3 +39,14 @@
 
 - Step 1: created the isolated worktree and branch from current `origin/main`.
   The primary checkout was clean and remains unchanged.
+- Step 2: built the package with `make release-package` in 177.06 seconds.
+  Package source: `d82ccf6ab8abeceb8ce35695d609b2cc6c5be321`; product code equals
+  the baseline. Report: `target/verification/5d8a2fe3bfec4bbe8ef9935b4cbd8559/report.json`.
+  Web type checks and package integrity checks passed. No full test run occurred.
+  Next: implement and execute the public-interface schedules.
+- Use the fixture Project and two local authenticated handles for its one User.
+  Each case gets a fresh command-owned database. Disable the in-process Worker
+  to keep the schedules focused on author commands. Keep the same allocated
+  port across a Server restart to preserve the Client Session Binding origin.
+- PostgreSQL `pg_stat_activity`, `pg_blocking_pids`, and explicit row/table locks
+  supply barriers. A timeout reports a blocked case; it never releases a barrier.
