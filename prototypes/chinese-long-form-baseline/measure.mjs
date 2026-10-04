@@ -1,14 +1,16 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as api from '../../generated/typescript/storyos-public-release-1/client.mjs';
 import { startStoryOSServer, stopStoryOSServer, sessionFetch } from '../../apps/web/test/support/node-integration.ts';
 import { RELEASE_1_PROTOCOL_PROFILE as profile } from '../../generated/typescript/storyos-public-release-1/release-profile.mjs';
+import { browserRun } from './browser.mjs';
 
 const root = process.cwd(), scale = Number(process.env.SCALE ?? 30000);
 const lab = resolve('prototypes/chinese-long-form-baseline');
 const out = resolve(lab, 'out', String(scale));
+if (existsSync(out)) renameSync(out, `${out}-attempt-${Date.now()}`);
 mkdirSync(out, { recursive: true });
 const corpus = JSON.parse(readFileSync(resolve(lab, 'out', `corpus-${scale}.json`)));
 const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
@@ -21,7 +23,7 @@ execFileSync('docker', ['restart', container]);
 execFileSync('docker', ['exec', container, 'sh', '-c', 'until pg_isready -U postgres >/dev/null 2>&1; do sleep 0.1; done'], { timeout: 60000 });
 const postgresPort = execFileSync('docker', ['port', container, '5432/tcp'], { encoding: 'utf8' }).trim().split(':').at(-1);
 process.env.STORYOS_TEST_DATABASE_URL = `postgres://storyos_runtime:runtime@127.0.0.1:${postgresPort}/postgres`;
-sql("CREATE EXTENSION pg_stat_statements; ALTER ROLE storyos_runtime SET session_preload_libraries = 'auto_explain'; ALTER ROLE storyos_runtime SET auto_explain.log_analyze = on; ALTER ROLE storyos_runtime SET auto_explain.log_buffers = on; ALTER ROLE storyos_runtime SET auto_explain.log_timing = off; ALTER ROLE storyos_runtime SET auto_explain.log_format = 'json'; ALTER ROLE storyos_runtime SET auto_explain.log_min_duration = -1;");
+sql("CREATE EXTENSION pg_stat_statements; ALTER ROLE storyos_runtime SET session_preload_libraries = 'auto_explain'; ALTER ROLE storyos_runtime SET auto_explain.log_analyze = on; ALTER ROLE storyos_runtime SET auto_explain.log_buffers = on; ALTER ROLE storyos_runtime SET auto_explain.log_timing = off; ALTER ROLE storyos_runtime SET auto_explain.log_format = 'json'; ALTER ROLE storyos_runtime SET auto_explain.log_parameter_max_length = 0; ALTER ROLE storyos_runtime SET auto_explain.log_min_duration = -1;");
 let started, baseUrl, options, projectId, session, treeRevision = '1', seq = 0;
 let wire = [];
 async function start(bind = '127.0.0.1:0') {
@@ -39,6 +41,7 @@ const routes = {
   UpdateVolume: ['PATCH', '/volumes/{volume_id}'], DeleteVolume: ['DELETE', '/volumes/{volume_id}'],
   UpdateChapter: ['PATCH', '/chapters/{chapter_id}'], DeleteChapter: ['DELETE', '/chapters/{chapter_id}'],
   CreateEditorSession: ['POST', '/editor-sessions'], SetCurrentChapter: ['PUT', '/current-chapter'],
+  TakeOverProjectWriter: ['POST', '/editor-sessions/{editor_session_id}/takeovers'],
   ApplyAuthorEdit: ['POST', '/manuscript/author-edits'], UndoLatestAuthorAction: ['POST', '/author-actions/undo'],
   ExportHumanReadableManuscript: ['POST', '/manuscript/exports'], UpdateProjectAssistance: ['PUT', '/assistance'],
   CreateAgentRun: ['POST', '/agent-runs'], AcceptProposal: ['POST', '/proposals/{proposal_id}/acceptances'],
@@ -70,7 +73,7 @@ async function edit(chapter, paragraphs) {
     chapter_id: chapter.chapter_id, expected_authoritative_revision_id: chapter.current_revision.revision_id,
     expected_proposal_head_revision_ids: [], target_refs: [`manuscript:${chapter.chapter_id}`], observed_ownership_partition: 'authoritative',
     editor_contract_revision: 'storyos.editor-contract.release-1.v3', undo_group_id: id(), completed_intent_record_id: id(), local_intent_sequence: String(++seq),
-    author_edit_units: [{ normalized_primitives: primitives, selection_snapshot: { coordinate_profile: 'storyos.editor.utf16-code-unit.v1', from: 0, to: 0 } }],
+    author_edit_units: [{ normalized_primitives: primitives, selection_snapshot: { coordinate_profile: 'storyos.editor.utf16-code-unit.v1', from: primitives[0].from, to: primitives[0].to } }],
   }, {}, true);
 }
 const query = (name, extra = {}) => api[name]({ ...options, projectId, ...extra });
@@ -80,11 +83,11 @@ async function measure(name, action) {
   sql(`DO $$ BEGIN RAISE LOG 'BASELINE_START ${scale}:${name}'; END $$`);
   const begin = performance.now();
   let result, error;
-  try { result = await action(); } catch (e) { error = { message: String(e), response: e.responseBody }; }
+  try { result = await action(); } catch (e) { error = { message: String(e), response: e.responseBody }; result = { browser: e.baselineBrowser }; }
   const elapsed_ms = performance.now() - begin;
   const statements = JSON.parse(sql(statQuery));
   sql(`DO $$ BEGIN RAISE LOG 'BASELINE_END ${scale}:${name}'; END $$`);
-  const row = { scale, operation: name, elapsed_ms, error, outcome: result?.effect?.kind ?? result?.status ?? 'query', wire, sql_calls: statements.reduce((n, s) => n + s.calls, 0), sql_rows: statements.reduce((n, s) => n + s.rows, 0), shared_hit: statements.reduce((n, s) => n + s.shared_blks_hit, 0), shared_read: statements.reduce((n, s) => n + s.shared_blks_read, 0), statements };
+  const row = { scale, operation: name, elapsed_ms, error, outcome: result?.effect?.kind ?? result?.status ?? 'query', browser: result?.browser, wire, sql_calls: statements.reduce((n, s) => n + s.calls, 0), sql_rows: statements.reduce((n, s) => n + s.rows, 0), shared_hit: statements.reduce((n, s) => n + s.shared_blks_hit, 0), shared_read: statements.reduce((n, s) => n + s.shared_blks_read, 0), statements };
   writeFileSync(resolve(out, `${name}.json`), JSON.stringify(row, null, 2));
   console.log(JSON.stringify({ scale, operation: name, sql_calls: row.sql_calls, response_bytes: wire.reduce((n, r) => n + r.response_bytes, 0), error, elapsed_ms }));
   return result;
@@ -115,7 +118,7 @@ try {
     if ((i + 1) % 25 === 0 || i === 0) console.log(`Imported ${i + 1}/${corpus.chapters.length} chapters`);
   }
   const loaded = await query('getStatistics');
-  writeFileSync(resolve(out, 'import.json'), JSON.stringify({ source: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), scale, projectId, chapters, volumes, session, elapsed_ms: performance.now() - importStart, statistics: loaded, wire_requests: wire.length, body_sha256: createHash('sha256').update(corpus.chapters.map(c => c.paragraphs.join('\n')).join('')).digest('hex') }, null, 2));
+  writeFileSync(resolve(out, 'import.json'), JSON.stringify({ source: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), runner_sha256: createHash('sha256').update(readFileSync(resolve(lab, 'measure.mjs'))).digest('hex'), package: JSON.parse(readFileSync('target/release-package/web/manifest.json')), node: process.version, postgres: sql('SELECT version()'), scale, projectId, chapters, volumes, session, elapsed_ms: performance.now() - importStart, statistics: loaded, statements: JSON.parse(sql(statQuery)), wire_requests: wire.length, response_bytes: wire.reduce((n, r) => n + r.response_bytes, 0), body_sha256: createHash('sha256').update(corpus.chapters.map(c => c.paragraphs.join('\n')).join('')).digest('hex') }, null, 2));
   if (Number(loaded.manuscript.character_count) !== scale) throw new Error('Imported scalar count differs');
   const bind = new URL(baseUrl).host;
   await stopStoryOSServer(started.server);
@@ -156,11 +159,25 @@ try {
   if (proposalId) {
     const opened = await measure('proposal-open', () => query('getProposal', { proposalId }));
     const head = (await query('getChapter', { chapterId: chapters[0] })).chapter.current_revision.revision_id;
-    await measure('proposal-accept', () => command('AcceptProposal', { proposal_revision_id: opened.proposal.revision_id, validation_receipt_id: opened.proposal.validation_receipt.validation_receipt_id, selected_operation_ids: [opened.proposal.operation_id], expected_authoritative_revision_id: head, editor_session_id: session.editor_session.editor_session_id }, { proposalId }));
+    const accepted = await measure('proposal-accept', () => command('AcceptProposal', { proposal_revision_id: opened.proposal.revision_id, validation_receipt_id: opened.proposal.validation_receipt.validation_receipt_id, selected_operation_ids: [opened.proposal.operation_id], expected_authoritative_revision_id: head, editor_session_id: session.editor_session.editor_session_id }, { proposalId }));
+    if (accepted?.effect.kind === 'applied') {
+      const undoSession = await query('getEditorSession', { editorSessionId: session.editor_session.editor_session_id });
+      budget();
+      await command('UndoLatestAuthorAction', { expected_author_undo_frontier_sequence: undoSession.author_undo_frontier_sequence, expected_authoritative_revision_id: accepted.effect.authoritative_revision.revision_id, editor_session_id: session.editor_session.editor_session_id });
+    }
   } else {
     for (const name of ['proposal-open', 'proposal-accept']) await measure(name, () => { throw new Error('Proposal setup did not produce an opened Proposal; inspect proposal-setup.json'); });
   }
   writeFileSync(resolve(out, 'context.json'), JSON.stringify({ projectId, chapters, volumes, treeRevision, session, baseUrl }, null, 2));
+  if (process.env.SKIP_BROWSER !== '1') {
+    budget();
+    const fresh = await command('CreateEditorSession', {}, {}, true);
+    const editorSessionId = fresh.editor_session.editor_session_id;
+    await command('TakeOverProjectWriter', { editor_session_id: editorSessionId, observed_writer_generation: fresh.writer.observed_writer_generation, editor_contract_revision: 'storyos.editor-contract.release-1.v3' }, { editorSessionId }, true);
+    const target = (await query('getChapter', { chapterId: chapters[1] })).chapter;
+    await command('SetCurrentChapter', { chapter_id: chapters[1], expected_current_chapter_id: chapters[0], expected_target_revision_id: target.current_revision.revision_id, editor_session_id: editorSessionId });
+    await browserRun({ baseUrl, projectId, chapters, out, measure, budget, recordWire: row => wire.push(row), sql, user, worker, editorSessionId });
+  }
 } finally {
   if (started) await stopStoryOSServer(started.server);
   const logs = spawnSync('docker', ['logs', container], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 });

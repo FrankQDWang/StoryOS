@@ -1,0 +1,4 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+PostgreSQL did not become ready: storyos-test-603760aeeb49517b75c3-6961da57baec43559fb7f0a5841572fa
+Verification failed: 30.43s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/515f8839e32c4edfb5e254fed4351644/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

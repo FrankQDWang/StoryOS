@@ -1,0 +1,31 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Imported 1/15 chapters
+{"scale":30000,"operation":"open-project","sql_calls":7,"response_bytes":421,"elapsed_ms":21.73020799999904}
+{"scale":30000,"operation":"tree","sql_calls":12,"response_bytes":2387,"elapsed_ms":56.418792000000394}
+{"scale":30000,"operation":"read-chapter","sql_calls":8,"response_bytes":15391,"elapsed_ms":55.01204200000029}
+{"scale":30000,"operation":"statistics","sql_calls":9,"response_bytes":1326,"elapsed_ms":94.507708000001}
+{"scale":30000,"operation":"search-current_chapter","sql_calls":9,"response_bytes":1085,"elapsed_ms":79.71708299999955}
+{"scale":30000,"operation":"search-manuscript","sql_calls":9,"response_bytes":1085,"elapsed_ms":69.61166700000103}
+{"scale":30000,"operation":"session-read","sql_calls":8,"response_bytes":16365,"elapsed_ms":334.2545829999981}
+{"scale":30000,"operation":"switch-chapter","sql_calls":61,"response_bytes":1943,"elapsed_ms":203.66708399999698}
+{"scale":30000,"operation":"save-input","sql_calls":76,"response_bytes":15467,"elapsed_ms":310.393082999999}
+{"scale":30000,"operation":"undo","sql_calls":71,"response_bytes":15627,"elapsed_ms":407.8345419999969}
+{"scale":30000,"operation":"create-volume","sql_calls":65,"response_bytes":1843,"elapsed_ms":216.8921249999985}
+{"scale":30000,"operation":"create-chapter","sql_calls":71,"response_bytes":1958,"elapsed_ms":270.9292499999974}
+{"scale":30000,"operation":"reorder-chapter","sql_calls":67,"response_bytes":1859,"elapsed_ms":368.6297919999997}
+{"scale":30000,"operation":"reorder-volume","sql_calls":67,"response_bytes":1843,"elapsed_ms":483.5670829999981}
+{"scale":30000,"operation":"delete-chapter","sql_calls":68,"response_bytes":1860,"elapsed_ms":270.8062499999978}
+{"scale":30000,"operation":"delete-volume","sql_calls":68,"response_bytes":1805,"elapsed_ms":211.28858299999774}
+{"scale":30000,"operation":"export","sql_calls":90,"response_bytes":92716,"elapsed_ms":754.0222499999982}
+UpdateProjectAssistance {"kind":"initialized","availability":"available","revision":"1","project_activity_position":"57"}
+{"scale":30000,"operation":"proposal-open","sql_calls":11,"response_bytes":1946,"elapsed_ms":56.61437499999738}
+{"scale":30000,"operation":"proposal-accept","sql_calls":71,"response_bytes":15282,"elapsed_ms":328.4488330000022}
+{"scale":30000,"operation":"web-open-project","sql_calls":111,"response_bytes":41394,"elapsed_ms":1249.8830830000006}
+{"scale":30000,"operation":"web-input-save","sql_calls":0,"response_bytes":7888,"error":{"message":"TimeoutError: page.waitForFunction: Timeout 30000ms exceeded."},"elapsed_ms":30033.515}
+{"scale":30000,"operation":"web-undo","sql_calls":0,"response_bytes":0,"error":{"message":"TimeoutError: page.waitForFunction: Timeout 30000ms exceeded."},"elapsed_ms":30352.803207999998}
+{"scale":30000,"operation":"web-switch-chapter","sql_calls":187,"response_bytes":80585,"elapsed_ms":3636.626375000007}
+{"scale":30000,"operation":"web-search","sql_calls":9,"response_bytes":1085,"elapsed_ms":245.29370799999742}
+{"scale":30000,"operation":"web-session-recovery","sql_calls":116,"response_bytes":64394,"elapsed_ms":515.7199999999866}
+{"scale":30000,"operation":"web-unicode-insert","sql_calls":112,"response_bytes":38455,"elapsed_ms":886.4845000000059}
+Verification source-changed: 147.66s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/5f963d5b01a44e91bbd185576e5044ac/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

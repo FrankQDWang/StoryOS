@@ -92,3 +92,30 @@ measurement, integration, progress, and commits.
 - Repeat native Word with `WORD_COUNTS=1 sh prototypes/chinese-long-form-baseline/run.sh`.
 - Expanded operation run found a database startup race after restart (attempt 04).
   Added an explicit `pg_isready` barrier; no product or database schema change.
+
+### Step 4: complete small-scale operation and coordinate run
+
+- All 19 isolated HTTP/Worker operations and 14 ordinary Web observations completed
+  at 30,000 scalars. The extra post-structure reload probe produced a recorded
+  `needs_attention` outcome. This is a product-visible observation, not a harness
+  timeout or a text-equality failure. No product change was made.
+- The ordinary reload before structural mutations succeeded. The subsequent
+  create/reorder/delete/export sequence followed by reload made the editor read-only.
+  The runner keeps both outcomes and continues from each independent scope.
+- Browser preparation now uses public Create Editor Session, Take Over Project
+  Writer, and Set Current Chapter commands, then seeds the exact issued session
+  reference in sessionStorage. The browser journal starts empty. This separates
+  book-size measurement from setup recovery and preserves real product input.
+- Six UTF-16 observations passed: insert, supplementary-Han replacement,
+  decomposed-letter replacement, ZWJ-family replacement, full-width punctuation
+  replacement, and reload. The latest probe includes regional-indicator and VS16
+  emoji. Each compares expected text, DOM, public GET Chapter, and stored UTF-8.
+- `COMPLEXITY.md` completes the primary-source operation map and superlinear
+  inventory. `TEXT-COORDINATES.md` records the earlier pilot and owning source map;
+  update its measurements from the final four-scale evidence.
+- `python3 prototypes/chinese-long-form-baseline/summarize.py` derived 34 operation
+  rows and actual-plan scan visits from the completed small-scale run.
+- Calibration attempts 05–09 retain resource startup, request-shape, and Web
+  recovery observations. The main apparatus now archives every prior run directory.
+- Next: freeze the apparatus, run the single command at all four scales, inspect
+  the counts and retained failures, and write the scale and final reports.

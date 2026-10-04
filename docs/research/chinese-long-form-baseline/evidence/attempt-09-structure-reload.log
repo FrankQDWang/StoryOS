@@ -1,0 +1,52 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+Imported 1/15 chapters
+{"scale":30000,"operation":"open-project","sql_calls":7,"response_bytes":421,"elapsed_ms":18.259624999998778}
+{"scale":30000,"operation":"tree","sql_calls":12,"response_bytes":2387,"elapsed_ms":30.994042000000263}
+{"scale":30000,"operation":"read-chapter","sql_calls":8,"response_bytes":15391,"elapsed_ms":16.782666999999492}
+{"scale":30000,"operation":"statistics","sql_calls":9,"response_bytes":1326,"elapsed_ms":39.46929199999795}
+{"scale":30000,"operation":"search-current_chapter","sql_calls":9,"response_bytes":1085,"elapsed_ms":14.727708999998868}
+{"scale":30000,"operation":"search-manuscript","sql_calls":9,"response_bytes":1085,"elapsed_ms":19.990208999999595}
+{"scale":30000,"operation":"session-read","sql_calls":8,"response_bytes":16365,"elapsed_ms":11.333000000002357}
+{"scale":30000,"operation":"switch-chapter","sql_calls":61,"response_bytes":1943,"elapsed_ms":70.00083400000221}
+{"scale":30000,"operation":"save-input","sql_calls":76,"response_bytes":15467,"elapsed_ms":387.9459169999973}
+{"scale":30000,"operation":"undo","sql_calls":71,"response_bytes":15627,"elapsed_ms":217.97325000000274}
+{"scale":30000,"operation":"create-volume","sql_calls":65,"response_bytes":1843,"elapsed_ms":125.98333300000013}
+{"scale":30000,"operation":"create-chapter","sql_calls":71,"response_bytes":1958,"elapsed_ms":125.48083400000178}
+{"scale":30000,"operation":"reorder-chapter","sql_calls":67,"response_bytes":1859,"elapsed_ms":119.48079199999847}
+{"scale":30000,"operation":"reorder-volume","sql_calls":67,"response_bytes":1843,"elapsed_ms":63.05649999999878}
+{"scale":30000,"operation":"delete-chapter","sql_calls":68,"response_bytes":1860,"elapsed_ms":99.64404099999956}
+{"scale":30000,"operation":"delete-volume","sql_calls":68,"response_bytes":1805,"elapsed_ms":80.19883400000253}
+{"scale":30000,"operation":"export","sql_calls":90,"response_bytes":92716,"elapsed_ms":344.88787500000035}
+UpdateProjectAssistance {"kind":"initialized","availability":"available","revision":"1","project_activity_position":"57"}
+{"scale":30000,"operation":"proposal-open","sql_calls":11,"response_bytes":1946,"elapsed_ms":35.422209000000294}
+{"scale":30000,"operation":"proposal-accept","sql_calls":71,"response_bytes":15282,"elapsed_ms":125.1742090000007}
+{"scale":30000,"operation":"web-open-project","sql_calls":116,"response_bytes":64394,"elapsed_ms":831.9964999999975}
+{"scale":30000,"operation":"web-input-save","sql_calls":112,"response_bytes":35183,"elapsed_ms":722.4110000000001}
+{"scale":30000,"operation":"web-undo","sql_calls":97,"response_bytes":55317,"elapsed_ms":387.2897920000032}
+{"scale":30000,"operation":"web-switch-chapter","sql_calls":178,"response_bytes":74016,"elapsed_ms":893.1457080000037}
+{"scale":30000,"operation":"web-search","sql_calls":9,"response_bytes":1085,"elapsed_ms":224.23266699999658}
+{"scale":30000,"operation":"web-create-volume","sql_calls":86,"response_bytes":5667,"elapsed_ms":967.2803340000028}
+{"scale":30000,"operation":"web-create-chapter","sql_calls":92,"response_bytes":4550,"elapsed_ms":387.92520800000057}
+{"scale":30000,"operation":"web-reorder-chapter","sql_calls":88,"response_bytes":4447,"elapsed_ms":491.18937500000175}
+{"scale":30000,"operation":"web-reorder-volume","sql_calls":88,"response_bytes":5761,"elapsed_ms":364.3486669999984}
+{"scale":30000,"operation":"web-delete-chapter","sql_calls":189,"response_bytes":70750,"elapsed_ms":904.7117500000022}
+{"scale":30000,"operation":"web-delete-volume","sql_calls":189,"response_bytes":62304,"elapsed_ms":888.0173330000034}
+{"scale":30000,"operation":"web-export","sql_calls":100,"response_bytes":93625,"elapsed_ms":467.95670800000516}
+{"scale":30000,"operation":"web-session-recovery","sql_calls":98,"response_bytes":44317,"error":{"message":"TimeoutError: page.waitForFunction: Timeout 30000ms exceeded."},"elapsed_ms":30285.238375}
+{"scale":30000,"operation":"web-unicode-insert","sql_calls":0,"response_bytes":0,"error":{"message":"TimeoutError: page.waitForFunction: Timeout 30000ms exceeded."},"elapsed_ms":30024.959833}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.evaluate: IndexSizeError: Failed to execute 'setStart' on 'Range': The offset 4294967295 is larger than the node's length (14).
+    at eval (eval at evaluate (:311:30), <anonymous>:3:56)
+    at UtilityScript.evaluate (<anonymous>:313:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at browserRun (/Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/prototypes/chinese-long-form-baseline/browser.mjs:159:20)
+    at async file:///Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/prototypes/chinese-long-form-baseline/measure.mjs:179:5 {
+  log: []
+}
+
+Node.js v24.16.0
+Verification source-changed: 124.30s; report: /Users/frankqdwang/.codex/worktrees/chinese-long-form-baseline/StoryOS/target/verification/2f241f36f15e42a5bd11a4fbebec4ede/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
