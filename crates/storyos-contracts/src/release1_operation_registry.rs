@@ -145,6 +145,17 @@ pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
     &crate::release1_undo_latest_author_action_artifacts::ARTIFACTS,
     &crate::release1_agent_run_artifacts::ARTIFACTS,
     &crate::release1_agent_run_control_artifacts::ARTIFACTS,
+    &crate::release1_project_export_artifacts::ARTIFACTS,
+    &crate::release1_readable_export_artifacts::ARTIFACTS,
+    &crate::release1_manuscript_tree_artifacts::ARTIFACTS,
+    &crate::release1_manuscript_statistics_artifacts::ARTIFACTS,
+    &crate::release1_proposal_artifacts::ARTIFACTS,
+    &crate::release1_refused_edit_draft_artifacts::ARTIFACTS,
+    &crate::release1_author_edit_outcome_artifacts::ARTIFACTS,
+    &crate::release1_snapshot_artifacts::ARTIFACTS,
+    &crate::release1_manuscript_search_artifacts::ARTIFACTS,
+    &crate::release1_project_export_query_artifacts::ARTIFACTS,
+    &crate::release1_readable_export_query_artifacts::ARTIFACTS,
 ];
 
 /// The request and response schemas of one operation.

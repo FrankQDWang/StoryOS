@@ -3,10 +3,51 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
 use crate::release1_readable_export_query::{
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT, GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_REQUEST_SCHEMA_ID,
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID,
     GetHumanReadableManuscriptExportResponse,
+};
+use crate::release1_wire::json_bytes;
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &GET_HUMAN_READABLE_MANUSCRIPT_EXPORT,
+        &[
+            "server_derived_project_scope",
+            "export_scope_join",
+            "export_operation_visibility",
+            "deterministic_order_profile",
+            "unavailable_content_representation_profile",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &GET_HUMAN_READABLE_MANUSCRIPT_EXPORT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &GET_HUMAN_READABLE_MANUSCRIPT_EXPORT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str = "generated/json-schema/storyos-public-release-1/human-readable-manuscript-export-request.schema.json";
@@ -149,10 +190,4 @@ fn export_fixture() -> Value {
             "expires_at": null
         }
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

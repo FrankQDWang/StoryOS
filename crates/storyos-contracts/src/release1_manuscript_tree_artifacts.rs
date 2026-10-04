@@ -9,6 +9,45 @@ use crate::release1_manuscript_tree::{
     GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID, GetManuscriptTreeResponse, ManuscriptChapterNode,
     ManuscriptVolumeNode,
 };
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
+use crate::release1_wire::json_bytes;
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::query(
+        &GET_MANUSCRIPT_TREE,
+        &[
+            "server_derived_project_scope",
+            "canonical_snapshot",
+            "tree_scope_join",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &GET_MANUSCRIPT_TREE,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &GET_MANUSCRIPT_TREE,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
+};
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/manuscript-tree-request.schema.json";
@@ -163,10 +202,4 @@ fn tree_fixture(volumes: Vec<Value>) -> Value {
         },
         "volumes": volumes
     })
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }

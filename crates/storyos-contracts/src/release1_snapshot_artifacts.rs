@@ -4,11 +4,99 @@ use ts_rs::{Config, TS};
 
 use crate::release1::{ACTIVITY_PROFILE, PUBLIC_PROTOCOL_RELEASE};
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
 use crate::release1_snapshot::{
     ACTIVITY_STREAM, ACTIVITY_STREAM_REQUEST_SCHEMA_ID, ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
     ActivityStreamRequest, CanonicalSnapshotMaps, GET_SNAPSHOT, GET_SNAPSHOT_REQUEST_SCHEMA_ID,
     GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotRequest, GetSnapshotResponse, SnapshotDescriptor,
     SnapshotKind,
+};
+use crate::release1_wire::json_bytes;
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[
+        RegisteredOperation::query(
+            &GET_SNAPSHOT,
+            &[
+                "snapshot_scope_join",
+                "snapshot_signature",
+                "snapshot_lifecycle_available",
+            ],
+        ),
+        RegisteredOperation::stream(
+            &ACTIVITY_STREAM,
+            &[
+                "server_derived_project_scope",
+                "snapshot_binding_or_last_event_id",
+                "activity_profile",
+                "replay_generation",
+                "filter_digest",
+                "reauthorize_on_connect",
+            ],
+        ),
+    ],
+    schemas: || {
+        [
+            operation_schemas(
+                &GET_SNAPSHOT,
+                (
+                    SNAPSHOT_REQUEST_SCHEMA_PATH,
+                    snapshot_request_schema_bytes(),
+                ),
+                (
+                    SNAPSHOT_RESPONSE_SCHEMA_PATH,
+                    snapshot_response_schema_bytes(),
+                ),
+            ),
+            operation_schemas(
+                &ACTIVITY_STREAM,
+                (
+                    ACTIVITY_STREAM_REQUEST_SCHEMA_PATH,
+                    activity_stream_request_schema_bytes(),
+                ),
+                (
+                    ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH,
+                    activity_stream_response_schema_bytes(),
+                ),
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    },
+    openapi: || {
+        let mut methods = path_items(snapshot_openapi());
+        methods.extend(path_items(activity_stream_openapi()));
+        methods
+    },
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        [
+            fixture_triple(
+                SNAPSHOT_FIXTURE_PATHS,
+                &GET_SNAPSHOT,
+                [
+                    |_| snapshot_fixture_bytes(),
+                    |_| snapshot_invalid_fixture_bytes(),
+                    |_| snapshot_boundary_fixture_bytes(),
+                ],
+            ),
+            fixture_triple(
+                ACTIVITY_STREAM_FIXTURE_PATHS,
+                &ACTIVITY_STREAM,
+                [
+                    |_| activity_stream_fixture_bytes(),
+                    |_| activity_stream_invalid_fixture_bytes(),
+                    |_| activity_stream_boundary_fixture_bytes(),
+                ],
+            ),
+        ]
+        .concat()
+    },
 };
 
 pub(super) const SNAPSHOT_REQUEST_SCHEMA_PATH: &str =
@@ -402,12 +490,6 @@ fn typed_schema<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value 
     schema["$id"] = json!(schema_id);
     schema["title"] = json!(title);
     schema
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("schema JSON is serializable");
-    bytes.push(b'\n');
-    bytes
 }
 
 fn operation_openapi(
