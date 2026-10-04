@@ -708,5 +708,258 @@
     "remove": null,
     "test": "keeps exact Receipt-backed refusal and conflict distinct from an infrastructure outcome",
     "id": "BS056"
+  },
+  {
+    "id": "BS057",
+    "path": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts",
+    "line": 17,
+    "test": "returns the valid append projection without a second Journal reconstruction",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Appending to existing durable input must return its exact projection without a second validation/reconstruction of old history. The wrapper counts real workspace Crypto digest calls and allows only the two hashes needed to validate the first intent; new input hashing uses the separately passed Crypto. An extra reconstruction exceeds that budget. This is a work-count invariant, not measured latency; the drift tests do not bound this work.",
+    "coverage": "apps/web/test/browser-source/local-edit-journal-append-drift.integration.test.ts:12",
+    "remove": null
+  },
+  {
+    "id": "BS058",
+    "path": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts",
+    "line": 44,
+    "test": "keeps a complete mixed intent in the immutable Journal without projecting it as manuscript truth",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A mixed Manuscript/Proposal intent must remain immutable without becoming authoritative Manuscript text. More distinctively, Copy and Discard each hold their Draft GET while the display changes Project scope: the late response must make no clipboard write or Discard record and must not populate the successor display. HTTP refusal persistence and ordinary Discard do not mount this scope-change interleaving.",
+    "coverage": "apps/web/test/browser-source/refused-edit-discard.integration.test.ts:13; apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:156",
+    "remove": null
+  },
+  {
+    "id": "BS059",
+    "path": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts",
+    "line": 156,
+    "test": "freezes one complete mixed Tiptap IME intent only after confirmation and ignores cancellation",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Mixed-owner IME must persist nothing for provisional/cancelled composition and exactly one complete ordered-source intent after confirmation, without changing either authoritative Manuscript or Proposal DOM. Ordinary adapter mixed selections do not exercise composition start/cancel/confirmation through the mounted editor.",
+    "coverage": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts:156; apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:44",
+    "remove": null
+  },
+  {
+    "id": "BS060",
+    "path": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts",
+    "line": 219,
+    "test": "keeps newer captured input visible when an earlier Author Edit settles",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "When an earlier Author Edit settles after a second input is captured, the first render with the new authoritative Revision must still contain the second input. A flushSync observation at that render catches transient clobbering as well as final loss. Background Draft refresh uses a different trigger before persistence; late Undo delivery runs a different controller.",
+    "coverage": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:290; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:200",
+    "remove": null
+  },
+  {
+    "id": "BS061",
+    "path": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts",
+    "line": 290,
+    "test": "keeps captured manuscript input during a background Draft refresh",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A background Draft refresh can reconstruct the Journal while a captured input is paused before its digest/append. The mounted editor and pending projection must keep that input during refresh, then persist it after release. Earlier-Edit settlement checks a later phase and does not hold this pre-append gap.",
+    "coverage": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:219",
+    "remove": null
+  },
+  {
+    "id": "BS062",
+    "path": "apps/web/test/browser-source/journal-gc.integration.test.ts",
+    "line": 43,
+    "test": "collects Journal payload only after settlement and a durable successor",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Collection must leave an unsettled group and complete Journal unchanged, then remove payloads only after Receipt/Snapshot-backed settlement while preserving its durable fence. A later pending input must survive repeated collection. The 2400-intent case reaches working-set retirement but does not establish this pre-settlement no-collection boundary; fenced-writer collection has a different partition disposition.",
+    "coverage": "apps/web/test/browser-source/journal-working-set.integration.test.ts:16; apps/web/test/browser-source/journal-gc-fenced.integration.test.ts:43",
+    "remove": null
+  },
+  {
+    "id": "BS063",
+    "path": "apps/web/test/browser-source/journal-gc-fenced.integration.test.ts",
+    "line": 43,
+    "test": "collects a fenced partition under its immutable old writer generation",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A committed result recovered after acknowledgement loss and Takeover must settle and collect the old read-only writer partition using the successor generation in its durable fence. A current-writer fence would permit incorrect recovery/retirement. Active-writer collection does not exercise this disposition, and the late-result test repeats this recovery without collection. Receive its stored-partition and complete validated-group assertions before collection.",
+    "coverage": "apps/web/test/browser-source/journal-gc.integration.test.ts:43; apps/web/test/browser-source/takeover-late-result.integration.test.ts:37",
+    "remove": null
+  },
+  {
+    "id": "BS064",
+    "path": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts",
+    "line": 30,
+    "test": "refuses an unsupported Block document and keeps the previous text",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Unsupported native Tiptap transactions must not replace Block identity or create duplicate-identity paragraphs via the generic splitBlock command. The adapter must leave the document unchanged. Supported key-handler split and join journeys generate valid identities and cannot detect this unsupported-transaction admission path. The changed identity is a non-UUID, so do not claim valid-UUID identity substitution coverage.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179; apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts:55",
+    "remove": null
+  },
+  {
+    "id": "BS065",
+    "path": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts",
+    "line": 55,
+    "test": "splits on Enter and keeps the starting fragment identity",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Enter in the middle of nonempty text must preserve both prefix and suffix in separate Blocks, retain the left identity and generate a new right identity. Packaged split/join presses Enter at the end before typing the second Block; it would not detect losing an existing right suffix.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": null
+  },
+  {
+    "id": "BS066",
+    "path": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts",
+    "line": 77,
+    "test": "inserts a line break in the same paragraph on Shift-Enter",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Shift+Enter must insert a soft newline inside one Block and retain its identity. Ordinary Enter creates a second Block and packaged split/join never exercises the modifier; conflating those key handlers would change the saved structure.",
+    "coverage": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts:55; apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": null
+  },
+  {
+    "id": "BS067",
+    "path": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts",
+    "line": 93,
+    "test": "deletes a nonempty selection then splits on Enter",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Enter over a nonempty selection must remove selected text before splitting, leaving the expected empty right Block and stable left identity. Collapsed-cursor Enter and the packaged end-of-Block split have no selection to remove.",
+    "coverage": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts:55; apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": null
+  },
+  {
+    "id": "BS068",
+    "path": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts",
+    "line": 110,
+    "test": "joins adjacent paragraphs on Backspace at the start of the following paragraph",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged journey executes the same Backspace-at-second-Block-start join of Hello and World, checks left identity and merged text, then checks persistence after reload. This local adapter case adds no distinct input or observable join regression.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179",
+    "remove": [
+      110,
+      127
+    ]
+  },
+  {
+    "id": "BS069",
+    "path": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts",
+    "line": 129,
+    "test": "carries the validated replacement on an accepted document transaction",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Simple suffix insertion is already captured through the real mounted editor, persisted and observed as Base!? in the retained append-projection case. Its coordinates must target the existing suffix for that behavior to succeed. Repeating the intermediate replace_block_selection tuple for Hello! adds no distinct observable regression.",
+    "coverage": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:219",
+    "remove": [
+      129,
+      154
+    ]
+  },
+  {
+    "id": "BS070",
+    "path": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts",
+    "line": 156,
+    "test": "captures a complete backward mixed selection without changing either durable projection",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Backward mixed selection across three sources must retain direction, heading kinds, source offsets and Manuscript/Proposal ownership while preventing direct document mutation. The direct transaction and trusted input paths must capture the same ordered-source unit. Mixed IME covers a forward two-source selection, not this reversal and heading mapping.",
+    "coverage": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:156",
+    "remove": null
+  },
+  {
+    "id": "BS071",
+    "path": "apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts",
+    "line": 202,
+    "test": "retains paragraph boundaries from a real multi-line mixed paste",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Mixed-owner paste must normalize CRLF and open Slice boundaries into the correct replacement paragraphs while leaving authoritative content unchanged. Cut and Enter likewise capture structured replacement rather than directly mutating it. The mixed IME case does not exercise clipboard/Slice normalization. ClipboardEvent/DataTransfer are synthesized here; no operating-system clipboard round trip is proved.",
+    "coverage": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:156; apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284",
+    "remove": null
+  },
+  {
+    "id": "BS072",
+    "path": "apps/web/test/browser-source/takeover-late-result.integration.test.ts",
+    "line": 37,
+    "test": "fences the old Journal partition before a late applied result settles",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "The read-only successor Session plus lost acknowledgement and committed Outcome sequence duplicates fenced Journal collection. Move the raw stored-partition equality and complete validated submission-group/coverage assertions into that test before payload collection, then remove this fixture. No independent race barrier exists here. The outcome proof-header/no-URL assertion also has its own retained request-boundary test.",
+    "coverage": "apps/web/test/browser-source/journal-gc-fenced.integration.test.ts:43; apps/web/test/browser-source/author-edit-outcome.integration.test.ts:14",
+    "remove": null
+  },
+  {
+    "id": "BS073",
+    "path": "apps/web/test/browser-source/local-edit-journal-append-drift.integration.test.ts",
+    "line": 12,
+    "test": "checks partition history during an append after intent_payload changes",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "An earlier durable intent can change while the next append is hashing. A digest barrier and actual IndexedDB mutation must make the append refuse without writing a new sequence, watermark, chain or group. Ordinary valid append and pre-existing corruption recovery do not force change between validation and transaction commit.",
+    "coverage": "apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:17",
+    "remove": null,
+    "case": {
+      "value": "intent_payload",
+      "source_line": 12
+    }
+  },
+  {
+    "id": "BS074",
+    "path": "apps/web/test/browser-source/local-edit-journal-append-drift.integration.test.ts",
+    "line": 12,
+    "test": "checks partition history during an append after project_allocator changes",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Another partition can advance the Project allocator while this append hashes. The append must allocate sequence 3 but retain sequence 1 as its own prior dependency; repeated freeze and reconstruction must accept the noncontiguous coverage. Intent-payload drift must refuse instead. Sequential Takeover binding recovery does not force this allocator interleaving.",
+    "coverage": "apps/web/test/browser-source/local-edit-journal-append-drift.integration.test.ts:12; apps/web/test/browser-source/activity-resync.integration.test.ts:197",
+    "remove": null,
+    "case": {
+      "value": "project_allocator",
+      "source_line": 12
+    }
+  },
+  {
+    "id": "BS075",
+    "path": "apps/web/test/browser-source/journal-working-set.integration.test.ts",
+    "line": 16,
+    "test": "continues writing after 2400 saved and collected input intents",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "After ten real batches of 240 saved/collected intents, writing must retire their working indexes while preserving durable evidence. The case also aborts schema migration, restored-prefix validation, fence checks and boundary writes and compares unchanged snapshots before successful continuation. Single-group collection never reaches this threshold or atomic migration. The v3 fixture reconstructs an older layout from current rows; it is not an archived historical database or a latency benchmark.",
+    "coverage": "apps/web/test/browser-source/journal-gc.integration.test.ts:43; apps/web/test/browser-source/journal-gc-fenced.integration.test.ts:43",
+    "remove": null
+  },
+  {
+    "id": "BS076",
+    "path": "apps/web/test/browser-source/local-recovery-panel.integration.test.ts",
+    "line": 10,
+    "test": "keeps complete multi_block recovery visible through Copy, explicit continuation and reload",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A two-Block input persisted before its first POST must survive reopen and unrecoverable Outcome as complete local recovery text, including the second Block. Copy must receive that complete text; explicit continuation must retain it through reload while retiring it from pending input and allowing new input. Candidate recovery follows a different projection owner and cannot detect truncation of the authoritative multi-Block body. Clipboard writes are mocked.",
+    "coverage": "apps/web/test/browser-source/local-recovery-panel.integration.test.ts:10; apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:44",
+    "remove": null,
+    "case": {
+      "value": "multi_block",
+      "source_line": 10
+    }
+  },
+  {
+    "id": "BS077",
+    "path": "apps/web/test/browser-source/local-recovery-panel.integration.test.ts",
+    "line": 10,
+    "test": "keeps complete candidate recovery visible through Copy, explicit continuation and reload",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A Proposal candidate persisted before its first POST must survive reopen and unrecoverable Outcome as candidate recovery text, not the Manuscript body. Explicit continuation must remove the old candidate projection while retaining copyable recovery through reload and permitting new Manuscript input. Multi-Block recovery does not exercise candidate ownership. The callback and clipboard destination are spies, not a real clipboard transfer or later server write.",
+    "coverage": "apps/web/test/browser-source/local-recovery-panel.integration.test.ts:10; apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:44",
+    "remove": null,
+    "case": {
+      "value": "candidate",
+      "source_line": 10
+    }
   }
 ]

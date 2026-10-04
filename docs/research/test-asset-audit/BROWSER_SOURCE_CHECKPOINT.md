@@ -1,6 +1,6 @@
 # Browser source checkpoint
 
-Source review is partial: 56 runtime cases in 22 test files. No mutation samples selected.
+Source review is partial: 77 runtime cases in 30 test files. No mutation samples selected.
 
 | Reviewed file | Cases | Verdict counts |
 |---|---|---|
@@ -19,11 +19,19 @@ Source review is partial: 56 runtime cases in 22 test files. No mutation samples
 | apps/web/test/browser-source/current-chapter-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/delete-historical-acknowledgement.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/browser-source/draft-undo-lifetime.integration.test.ts | 4 | {'DELETE': 1, 'KEEP': 3} |
+| apps/web/test/browser-source/journal-gc-fenced.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/browser-source/journal-gc.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/browser-source/journal-working-set.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/list-open.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/browser-source/local-edit-journal-append-drift.integration.test.ts | 2 | {'KEEP': 2} |
+| apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts | 5 | {'KEEP': 5} |
+| apps/web/test/browser-source/local-recovery-panel.integration.test.ts | 2 | {'KEEP': 2} |
+| apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts | 8 | {'KEEP': 6, 'DELETE': 2} |
 | apps/web/test/browser-source/project-entry.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/readable-export-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/refused-edit-discard.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/browser-source/rename-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/browser-source/takeover-late-result.integration.test.ts | 1 | {'MERGE': 1} |
 | apps/web/test/browser-source/undo-historical-acknowledgement.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/browser-source/update-historical-acknowledgement.integration.test.ts | 2 | {'KEEP': 2} |
 
@@ -31,19 +39,9 @@ Source review is partial: 56 runtime cases in 22 test files. No mutation samples
 
 - apps/web/test/browser-source/acknowledgement-loss.integration.test.ts
 - apps/web/test/browser-source/editor-session.integration.test.ts
-- apps/web/test/browser-source/journal-gc-fenced.integration.test.ts
-- apps/web/test/browser-source/journal-gc.integration.test.ts
-- apps/web/test/browser-source/journal-version-three.ts
-- apps/web/test/browser-source/journal-working-set.integration.test.ts
-- apps/web/test/browser-source/local-edit-journal-append-drift.integration.test.ts
-- apps/web/test/browser-source/local-edit-journal-append-fixture.ts
-- apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts
-- apps/web/test/browser-source/local-recovery-panel.integration.test.ts
 - apps/web/test/browser-source/manual-input.integration.test.ts
-- apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts
 - apps/web/test/browser-source/reload-recovery.integration.test.ts
 - apps/web/test/browser-source/scenario.ts
-- apps/web/test/browser-source/takeover-late-result.integration.test.ts
 
 ## Evidence and execution dependencies
 
@@ -72,3 +70,14 @@ Source review is partial: 56 runtime cases in 22 test files. No mutation samples
 - DELETE the Draft Undo unmount parameter in favor of workspace replacement: both invalidate the same lifetime effect while a source GET is held; replacement additionally protects a live successor. Ordinary Undo's unmount parameter separately owns timer cleanup. Keep Draft Undo schema drift and stored secret contamination because they reach distinct Journal phases/parsers.
 - Discard tests retain nonce-free freeze before Challenge, digest-time abandonment, exact public-event reconciliation, monotone settled observation despite stale unresolved observations, and Receipt-backed refusal/conflict settlement. Database Discard tests cannot observe these browser Journal decisions.
 - Current browser-source total: 56 cases / 22 files; 47 KEEP, five DELETE, three MERGE, one MOVE; 188 immediate candidate lines. All declaration lines and parameter multiplicities checked. No runtime execution, mutation, product/test/generated changes or active process.
+
+## Journal append, retirement and mounted input
+
+- BS057-BS077 add 21 cases in eight files. Two more support files have dispositions in SUPPORT.md. The digest budget wraps workspace validation Crypto, not the separate Crypto parameter used for new input hashes; it proves bounded validation work, not measured latency.
+- Keep the digest-time changed-history refusal and Project allocator advancement separately. The latter must link sequence 3 to this partition's sequence 1 and freeze noncontiguous coverage correctly.
+- Keep mixed Draft Copy/Discard scope changes, mixed IME cancellation/confirmation, the first render after earlier Edit settlement, and background refresh while a new append is still hashing. Each has a different captured-input or component-lifetime gap.
+- Keep active and fenced partition collection plus the 2400-intent retirement/migration case. The latter checks actual working-index retirement and atomic aborts, not merely a long happy path. The v3 helper builds an older layout from current records.
+- MERGE takeover-late-result:37 into journal-gc-fenced:43 before collection, transferring raw partition and full validated group/coverage assertions. Both use the same acknowledgement-loss/new-writer Outcome sequence; no separate race barrier distinguishes them.
+- DELETE adapter Backspace join in favor of the packaged split/join journey and simple captured suffix insertion in favor of mounted append projection. Keep middle split, selected-text split, Shift+Enter, unsupported transactions, backward mixed heading selection and open-Slice/CRLF paste. Packaged end-of-text split cannot detect losing an existing right suffix.
+- Keep both local recovery panel parameters: authoritative two-Block text and Proposal candidate text have different projection owners. Copy is a mocked destination; explicit continuation and reopened IndexedDB state are observed. No later server write is claimed.
+- Current browser-source total: 77 cases / 30 files; 65 KEEP, seven DELETE, four MERGE, one MOVE; 232 immediate candidate lines. All declaration lines and parameter multiplicities checked. No runtime execution, mutation or product/test/generated change.
