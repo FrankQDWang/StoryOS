@@ -108,6 +108,6 @@ REPORT.md will start with conclusions, directory savings and the top 20 files, t
 - Server source directory complete: 59 tests in 11 files; {'MOVE': 2, 'DELETE': 26, 'KEEP': 27, 'MERGE': 4}; 677 candidate source lines. Nine module-link files have dispositions. Origin, Cookie and payload comparisons now distinguish input differences from shared helper coverage. See SERVER_CHECKPOINT.md.
 - Current cumulative source review: 451 cases in 116 files; {'DELETE': 258, 'KEEP': 180, 'MERGE': 10, 'MOVE': 3}; 10047 candidate source lines. Random mutation self-check remains 0/30. No product or test changes and no active processes.
 
-- Contracts directory complete: 62 tests in 14 files; {'KEEP': 16, 'DELETE': 46}; 1521 candidate source lines, including three exclusive adjacent expected-JSON helpers. Eleven module-link files have dispositions. No product/test/generated changes.
+- Contracts directory complete: 62 tests in 14 files; {'KEEP': 16, 'DELETE': 46}; 1521 candidate source lines, including three exclusive adjacent expected-JSON helpers. Ten module-link files have dispositions. No product/test/generated changes.
 - All Rust inventory pairs now match verdicts: 482 tests in 122 test files. Remaining Web source review and support-file disposition are pending.
 - Current cumulative source review: 513 cases in 130 files; {'DELETE': 304, 'KEEP': 196, 'MERGE': 10, 'MOVE': 3}; 11568 unioned candidate source lines. Random self-check remains 0/30. No samples selected, temporary mutations or active processes.
