@@ -40,7 +40,7 @@ reason_codes!(CreateVolumeRefusal {
     InvalidTitle => "invalid_title",
 });
 
-/// Classify one Create Volume against exact Scope presence, lifecycle, expected tree revision, and title.
+/// Classify one Create Volume against lifecycle, expected tree revision, and title.
 pub fn create_volume(command: &CreateVolume) -> CreateVolumeResult {
     if command.title.is_empty() || command.title.len() > 1024 {
         return CreateVolumeResult::Refused(CreateVolumeRefusal::InvalidTitle);

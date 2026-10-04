@@ -8,10 +8,12 @@ use storyos_application::{
     StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput, UpdateChapterSettlement,
     UpdateVolumeInput, UpdateVolumeSettlement, issue_project_command_challenge,
 };
+use storyos_application::{ChapterId, IssueProjectCommandChallenge, VolumeId};
 use storyos_core::{
-    TransitionOutcome, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
+    CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome, UpdateVolumeApplied,
 };
 use tokio_postgres::{Client, NoTls};
+use uuid::Uuid;
 
 use super::{
     Classified, CommandSpec, LockedProject, StructureCommand, StructureWrite,
@@ -24,6 +26,7 @@ use crate::update_volume_tests::{
 };
 
 /// One admitted command envelope and its typed Manuscript Structure input.
+#[derive(Clone)]
 pub(crate) struct CommandCall<I> {
     pub(crate) envelope: ProjectCommandEnvelope,
     pub(crate) input: I,
@@ -194,76 +197,306 @@ async fn settlement_rows(admin: &Client, receipt_id: &str) -> [i64; 5] {
     [0, 1, 2, 3, 4].map(|index| row.get(index))
 }
 
+/// The public route identity of one structural command kind.
+struct Route {
+    kind: &'static str,
+    method: &'static str,
+    path: &'static str,
+    schema: &'static str,
+}
+
+const CREATE_VOLUME: Route = Route {
+    kind: "createVolume",
+    method: storyos_contracts::CREATE_VOLUME_METHOD,
+    path: storyos_contracts::CREATE_VOLUME_PATH,
+    schema: storyos_contracts::CREATE_VOLUME_REQUEST_SCHEMA_ID,
+};
+const UPDATE_VOLUME: Route = Route {
+    kind: "updateVolume",
+    method: storyos_contracts::UPDATE_VOLUME_METHOD,
+    path: storyos_contracts::UPDATE_VOLUME_PATH,
+    schema: storyos_contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
+};
+const DELETE_VOLUME: Route = Route {
+    kind: "deleteVolume",
+    method: storyos_contracts::DELETE_VOLUME_METHOD,
+    path: storyos_contracts::DELETE_VOLUME_PATH,
+    schema: storyos_contracts::DELETE_VOLUME_REQUEST_SCHEMA_ID,
+};
+const CREATE_CHAPTER: Route = Route {
+    kind: "createChapter",
+    method: storyos_contracts::CREATE_CHAPTER_METHOD,
+    path: storyos_contracts::CREATE_CHAPTER_PATH,
+    schema: storyos_contracts::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
+};
+const UPDATE_CHAPTER: Route = Route {
+    kind: "updateChapter",
+    method: storyos_contracts::UPDATE_CHAPTER_METHOD,
+    path: storyos_contracts::UPDATE_CHAPTER_PATH,
+    schema: storyos_contracts::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
+};
+const DELETE_CHAPTER: Route = Route {
+    kind: "deleteChapter",
+    method: storyos_contracts::DELETE_CHAPTER_METHOD,
+    path: storyos_contracts::DELETE_CHAPTER_PATH,
+    schema: storyos_contracts::DELETE_CHAPTER_REQUEST_SCHEMA_ID,
+};
+
+/// Issues one Command Challenge for `route` and binds `input` to it.
+async fn issued<I>(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: u16,
+    route: &Route,
+    input: I,
+) -> CommandCall<I> {
+    let suffix = format!("{suffix:04x}");
+    let issue = IssueProjectCommandChallenge {
+        binding: ProjectCommandChallengeBinding {
+            project_scope: scope.clone(),
+            client_session_binding_digest: "sha256:session-a".to_owned(),
+            client_session_generation: 1,
+            client_contract_revision: "storyos.web-client.release-1.v3".to_owned(),
+            security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
+            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
+            challenge_rate_policy_revision:
+                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
+            method: route.method.to_owned(),
+            route_template: route.path.to_owned(),
+            command_schema: route.schema.to_owned(),
+            command_kind: route.kind.to_owned(),
+            canonical_command_digest: format!("sha256:{}:{suffix}", route.kind),
+            idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
+        },
+        nonce: format!("opaque-nonce-{suffix}"),
+        nonce_digest: format!("sha256:nonce-{suffix}"),
+    };
+    issue_project_command_challenge(store, &issue)
+        .await
+        .unwrap();
+    command_call(issue.binding, &issue.nonce_digest, &suffix, b"{}", input)
+}
+
+/// Settles one call, replays it with new request identities, and requires an equal settlement.
+///
+/// Returns the Receipt result kind and the authority rows of the first settlement.
+async fn replayed_outcome<I: Clone, A, N, C, R>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<I>,
+    settle: impl AsyncFn(
+        &PostgresProjectReader,
+        &CommandCall<I>,
+    ) -> Result<StructureSettlement<A, N, C, R>, ProjectCommandError>,
+) -> (ReceiptResult, [i64; 5])
+where
+    A: Debug + PartialEq,
+    N: ReasonCode + Debug + PartialEq,
+    C: ReasonCode + Debug + PartialEq,
+    R: ReasonCode + Debug + PartialEq,
+{
+    let first = settle(store, call).await.unwrap();
+    let mut retry = call.clone();
+    retry.envelope.ids = AuthorCommandAdmissionIds {
+        command_id: Uuid::now_v7().to_string(),
+        author_command_admission_id: Uuid::now_v7().to_string(),
+        receipt_id: Uuid::now_v7().to_string(),
+    };
+    assert_eq!(settle(store, &retry).await.unwrap(), first);
+    (
+        first.outcome.receipt_result(),
+        settlement_rows(admin, &first.ids.receipt_id).await,
+    )
+}
+
+async fn new_volume(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: u16,
+    expected_tree_revision: u64,
+) -> VolumeId {
+    let input = CreateVolumeInput {
+        title: format!("Volume {suffix:04x}"),
+        expected_tree_revision,
+    };
+    let call = issued(store, scope, suffix, &CREATE_VOLUME, input).await;
+    VolumeId::new(
+        applied(&create_volume(store, &call).await.unwrap())
+            .0
+            .volume_id,
+    )
+}
+
+async fn new_chapter(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: u16,
+    volume_id: &VolumeId,
+    expected_tree_revision: u64,
+) -> ChapterId {
+    let input = CreateChapterInput {
+        volume_id: volume_id.as_ref().to_owned(),
+        title: format!("Chapter {suffix:04x}"),
+        placement: CreateChapterPlacement::Append,
+        expected_tree_revision,
+    };
+    let call = issued(store, scope, suffix, &CREATE_CHAPTER, input).await;
+    ChapterId::new(
+        applied(&create_chapter(store, &call).await.unwrap())
+            .0
+            .chapter_id,
+    )
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn every_outcome_replays_its_first_settlement_and_writes_authority_only_when_applied() {
+async fn every_structural_outcome_replays_its_first_settlement_and_writes_authority_only_when_applied()
+ {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, volume_a) = two_volumes(&store, 0x5c00).await;
-    let cases = [
-        ("5c03", &volume_a[..], 3),
-        ("5c05", &volume_a[..], 4),
-        ("5c07", &volume_a[..], 3),
-        ("5c09", MISSING_VOLUME, 4),
-    ];
-    let mut outcomes = Vec::new();
-    for (suffix, volume_id, expected_tree_revision) in cases {
-        let issue = update_issue(&scope, suffix, DIGEST);
-        issue_project_command_challenge(&store, &issue)
-            .await
-            .unwrap();
-        let fixture = || UpdateFixture {
-            volume_id,
-            title: "Volume B",
-            order: 2,
+    let missing_volume = VolumeId::new(MISSING_VOLUME);
+    let missing_chapter = ChapterId::new(MISSING_VOLUME);
+    let mut observed = Vec::new();
+
+    let scope = seed_project(&store, "5d00").await;
+    for (suffix, title, expected_tree_revision) in [
+        (0x5d01, "Volume", 1),
+        (0x5d02, "Volume", 1),
+        (0x5d03, "", 2),
+    ] {
+        let input = CreateVolumeInput {
+            title: title.to_owned(),
             expected_tree_revision,
-            bytes: BYTES,
         };
-        let first = update_volume(
-            &store,
-            &update_command(
-                issue.binding.clone(),
-                &issue.nonce_digest,
-                suffix,
-                fixture(),
-            ),
-        )
-        .await
-        .unwrap();
-        let replay_suffix = format!("{:04x}", u16::from_str_radix(suffix, 16).unwrap() + 1);
-        let replay = update_volume(
-            &store,
-            &update_command(
-                issue.binding,
-                &issue.nonce_digest,
-                &replay_suffix,
-                fixture(),
-            ),
-        )
-        .await
-        .unwrap();
-        assert_eq!(replay, first);
-        let rows = settlement_rows(&admin, &first.ids.receipt_id).await;
-        outcomes.push((first.outcome.map_applied(|_| ()), rows));
+        let call = issued(&store, &scope, suffix, &CREATE_VOLUME, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, create_volume).await;
+        observed.push((CREATE_VOLUME.kind, outcome));
     }
+
+    let scope = seed_project(&store, "5d10").await;
+    let volume = new_volume(&store, &scope, 0x5d11, 1).await;
+    for (suffix, volume_id, expected_tree_revision) in [
+        (0x5d12, &volume, 2),
+        (0x5d13, &volume, 3),
+        (0x5d14, &volume, 2),
+        (0x5d15, &missing_volume, 3),
+    ] {
+        let input = UpdateVolumeInput {
+            volume_id: volume_id.clone(),
+            title: "Renamed".to_owned(),
+            order: 1,
+            expected_tree_revision,
+        };
+        let call = issued(&store, &scope, suffix, &UPDATE_VOLUME, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, update_volume).await;
+        observed.push((UPDATE_VOLUME.kind, outcome));
+    }
+
+    let scope = seed_project(&store, "5d20").await;
+    let volume = new_volume(&store, &scope, 0x5d21, 1).await;
+    for (suffix, volume_id, expected_tree_revision) in [
+        (0x5d22, &volume, 2),
+        (0x5d23, &volume, 3),
+        (0x5d24, &volume, 2),
+        (0x5d25, &missing_volume, 3),
+    ] {
+        let input = DeleteVolumeInput {
+            volume_id: volume_id.clone(),
+            expected_tree_revision,
+        };
+        let call = issued(&store, &scope, suffix, &DELETE_VOLUME, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, delete_volume).await;
+        observed.push((DELETE_VOLUME.kind, outcome));
+    }
+
+    let scope = seed_project(&store, "5d30").await;
+    let volume = new_volume(&store, &scope, 0x5d31, 1).await;
+    for (suffix, volume_id, expected_tree_revision) in [
+        (0x5d32, &volume, 2),
+        (0x5d33, &volume, 2),
+        (0x5d34, &missing_volume, 3),
+    ] {
+        let input = CreateChapterInput {
+            volume_id: volume_id.as_ref().to_owned(),
+            title: "Chapter".to_owned(),
+            placement: CreateChapterPlacement::Append,
+            expected_tree_revision,
+        };
+        let call = issued(&store, &scope, suffix, &CREATE_CHAPTER, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, create_chapter).await;
+        observed.push((CREATE_CHAPTER.kind, outcome));
+    }
+
+    let scope = seed_project(&store, "5d40").await;
+    let volume = new_volume(&store, &scope, 0x5d41, 1).await;
+    let chapter = new_chapter(&store, &scope, 0x5d42, &volume, 2).await;
+    for (suffix, chapter_id, expected_tree_revision) in [
+        (0x5d43, &chapter, 3),
+        (0x5d44, &chapter, 4),
+        (0x5d45, &chapter, 3),
+        (0x5d46, &missing_chapter, 4),
+    ] {
+        let input = UpdateChapterInput {
+            chapter_id: chapter_id.clone(),
+            title: "Renamed".to_owned(),
+            order: 1,
+            expected_tree_revision,
+        };
+        let call = issued(&store, &scope, suffix, &UPDATE_CHAPTER, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, update_chapter).await;
+        observed.push((UPDATE_CHAPTER.kind, outcome));
+    }
+
+    let scope = seed_project(&store, "5d50").await;
+    let volume = new_volume(&store, &scope, 0x5d51, 1).await;
+    new_chapter(&store, &scope, 0x5d52, &volume, 2).await;
+    let chapter = new_chapter(&store, &scope, 0x5d53, &volume, 3).await;
+    for (suffix, chapter_id, expected_tree_revision) in [
+        (0x5d54, &chapter, 4),
+        (0x5d55, &chapter, 5),
+        (0x5d56, &chapter, 4),
+        (0x5d57, &missing_chapter, 5),
+    ] {
+        let input = DeleteChapterInput {
+            chapter_id: chapter_id.clone(),
+            expected_tree_revision,
+        };
+        let call = issued(&store, &scope, suffix, &DELETE_CHAPTER, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, delete_chapter).await;
+        observed.push((DELETE_CHAPTER.kind, outcome));
+    }
+
+    let applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 1, 1]);
+    let no_effect = (ReceiptResult::NoEffect, [1, 0, 0, 0, 0]);
+    let conflicted = (ReceiptResult::Conflicted, [1, 0, 0, 0, 0]);
+    let refused = (ReceiptResult::Refused, [1, 0, 0, 0, 0]);
     assert_eq!(
-        outcomes,
+        observed,
         vec![
-            (TransitionOutcome::Applied(()), [1, 1, 1, 1, 1]),
-            (
-                TransitionOutcome::NoEffect(UpdateVolumeNoEffect::Unchanged),
-                [1, 0, 0, 0, 0]
-            ),
-            (
-                TransitionOutcome::Conflicted(UpdateVolumeConflict::StaleTreeRevision),
-                [1, 0, 0, 0, 0]
-            ),
-            (
-                TransitionOutcome::Refused(UpdateVolumeRefusal::InvalidVolumeJoin),
-                [1, 0, 0, 0, 0]
-            ),
+            ("createVolume", applied),
+            ("createVolume", conflicted),
+            ("createVolume", refused),
+            ("updateVolume", applied),
+            ("updateVolume", no_effect),
+            ("updateVolume", conflicted),
+            ("updateVolume", refused),
+            ("deleteVolume", applied),
+            ("deleteVolume", no_effect),
+            ("deleteVolume", conflicted),
+            ("deleteVolume", refused),
+            ("createChapter", applied),
+            ("createChapter", conflicted),
+            ("createChapter", refused),
+            ("updateChapter", applied),
+            ("updateChapter", no_effect),
+            ("updateChapter", conflicted),
+            ("updateChapter", refused),
+            ("deleteChapter", applied),
+            ("deleteChapter", no_effect),
+            ("deleteChapter", conflicted),
+            ("deleteChapter", refused),
         ]
     );
 }
@@ -338,7 +571,7 @@ impl StructureCommand for Failing {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<(Classified<Self>, Self::Plan), ProjectCommandError> {
+    ) -> Result<Classified<Self>, ProjectCommandError> {
         let classified = self.input.classify(client, envelope, project).await?;
         match self.at {
             FailurePoint::Classify => Err(unavailable("injected classify failure")),
@@ -409,12 +642,15 @@ async fn a_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused() {
         );
         let (effect, authority) = applied(&update_volume(&store, &call).await.unwrap());
         assert_eq!(
+            (effect, authority.prior_manuscript_tree_revision),
             (
-                effect.title,
-                effect.order,
-                authority.prior_manuscript_tree_revision
-            ),
-            ("Volume A Renamed".to_owned(), 2, 3)
+                UpdateVolumeApplied {
+                    title: "Volume A Renamed".to_owned(),
+                    order: 2,
+                    tree_revision: 4,
+                },
+                3
+            )
         );
     }
 }

@@ -37,14 +37,6 @@ pub(crate) struct StructureCommitBinding<'a> {
     pub identity: StructureAffectedIdentity<'a>,
 }
 
-/// The Domain Receipt payload of a zero-authority outcome, or the empty payload of an applied one.
-pub(crate) fn receipt_reason_payload(reason_code: Option<&'static str>) -> String {
-    match reason_code {
-        Some(code) => serde_json::json!({ "reason": code }).to_string(),
-        None => "{}".to_owned(),
-    }
-}
-
 pub(crate) async fn allocate_structure_transition_sequences(
     client: &Client,
     scope: &ProjectScope,

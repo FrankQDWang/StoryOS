@@ -46,38 +46,27 @@ pub(super) async fn update_volume(
         .map_err(|error| UPDATE_VOLUME.problem(error))?;
     admitted.hold_first_acknowledgement().await;
     let mut authority = None;
-    let (result, effect) = match settlement.outcome {
+    let result = settlement.outcome.receipt_result();
+    let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
             authority = applied.authority.into_settled();
-            (
-                contracts::DomainReceiptResult::AuthoritativeApplied,
-                contracts::UpdateVolumeEffect::AuthoritativeApplied {
-                    volume_id,
-                    title: applied.effect.title,
-                    tree_revision: applied.effect.tree_revision.to_string(),
-                    order: applied.effect.order.to_string(),
-                    project_activity_position: applied.project_activity_position.to_string(),
-                },
-            )
+            contracts::UpdateVolumeEffect::AuthoritativeApplied {
+                volume_id,
+                title: applied.effect.title,
+                tree_revision: applied.effect.tree_revision.to_string(),
+                order: applied.effect.order.to_string(),
+                project_activity_position: applied.project_activity_position.to_string(),
+            }
         }
-        TransitionOutcome::NoEffect(reason) => (
-            contracts::DomainReceiptResult::NoEffect,
-            contracts::UpdateVolumeEffect::NoEffect {
-                reason: contract_reason(&reason)?,
-            },
-        ),
-        TransitionOutcome::Conflicted(reason) => (
-            contracts::DomainReceiptResult::Conflicted,
-            contracts::UpdateVolumeEffect::Conflicted {
-                reason: contract_reason(&reason)?,
-            },
-        ),
-        TransitionOutcome::Refused(reason) => (
-            contracts::DomainReceiptResult::Refused,
-            contracts::UpdateVolumeEffect::Refused {
-                reason: contract_reason(&reason)?,
-            },
-        ),
+        TransitionOutcome::NoEffect(reason) => contracts::UpdateVolumeEffect::NoEffect {
+            reason: contract_reason(&reason)?,
+        },
+        TransitionOutcome::Conflicted(reason) => contracts::UpdateVolumeEffect::Conflicted {
+            reason: contract_reason(&reason)?,
+        },
+        TransitionOutcome::Refused(reason) => contracts::UpdateVolumeEffect::Refused {
+            reason: contract_reason(&reason)?,
+        },
     };
     let ack = admitted.acknowledgement(
         &UPDATE_VOLUME,

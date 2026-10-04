@@ -44,7 +44,8 @@ pub(super) async fn create_volume(
         .map_err(|error| CREATE_VOLUME.problem(error))?;
     admitted.hold_first_acknowledgement().await;
     let mut authority = None;
-    let (result, effect) = match settlement.outcome {
+    let result = settlement.outcome.receipt_result();
+    let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
             let order = match applied.effect.order {
                 CreateVolumePublicOrder::CanonicalSiblingOrder(rank) => {
@@ -53,30 +54,21 @@ pub(super) async fn create_volume(
                 }
                 CreateVolumePublicOrder::HistoricalCreateVolumeAck => "1".to_owned(),
             };
-            (
-                contracts::DomainReceiptResult::AuthoritativeApplied,
-                contracts::CreateVolumeEffect::AuthoritativeApplied {
-                    volume_id: applied.effect.volume_id,
-                    title: admitted.input.title.clone(),
-                    tree_revision: applied.effect.tree_revision.to_string(),
-                    order,
-                    project_activity_position: applied.project_activity_position.to_string(),
-                },
-            )
+            contracts::CreateVolumeEffect::AuthoritativeApplied {
+                volume_id: applied.effect.volume_id,
+                title: admitted.input.title.clone(),
+                tree_revision: applied.effect.tree_revision.to_string(),
+                order,
+                project_activity_position: applied.project_activity_position.to_string(),
+            }
         }
         TransitionOutcome::NoEffect(reason) => match reason {},
-        TransitionOutcome::Conflicted(reason) => (
-            contracts::DomainReceiptResult::Conflicted,
-            contracts::CreateVolumeEffect::Conflicted {
-                reason: contract_reason(&reason)?,
-            },
-        ),
-        TransitionOutcome::Refused(reason) => (
-            contracts::DomainReceiptResult::Refused,
-            contracts::CreateVolumeEffect::Refused {
-                reason: contract_reason(&reason)?,
-            },
-        ),
+        TransitionOutcome::Conflicted(reason) => contracts::CreateVolumeEffect::Conflicted {
+            reason: contract_reason(&reason)?,
+        },
+        TransitionOutcome::Refused(reason) => contracts::CreateVolumeEffect::Refused {
+            reason: contract_reason(&reason)?,
+        },
     };
     let ack = admitted.acknowledgement(
         &CREATE_VOLUME,

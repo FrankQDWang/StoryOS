@@ -4,7 +4,7 @@ status: accepted
 
 # Own the Project Command Sequence in One Adapter Module
 
-On 2026-10-03 the author accepted this decision. One module in `storyos-adapter-postgres` owns the fixed sequence of Author Command Admission, Core Transition, and Command Acknowledgement for each project command that it serves. StoryOS Core owns the Core Transition Outcome of each command: the outcome kind, the Domain Receipt result kind, the reason codes, and the rule that selects which outcomes allocate Structural Authority Settlement records. Each command supplies only a small command adapter: its kind and isolation level, its fact load, its effect rows, and its replay decoder. The first scope is the six Manuscript Structure Transition commands: `createVolume`, `updateVolume`, `deleteVolume`, `createChapter`, `updateChapter`, and `deleteChapter`.
+On 2026-10-03 the author accepted this decision. One module in `storyos-adapter-postgres` owns the fixed sequence of Author Command Admission, Core Transition, and Command Acknowledgement for each project command that it serves. StoryOS Core owns the Core Transition Outcome of each command: the outcome kind, the Domain Receipt result kind of each outcome, and the reason codes. The adapter sequence allocates Structural Authority Settlement records for an `Applied` outcome only, as the outcome contract states. Each command supplies only a small command adapter: its kind and isolation level, its fact load, its effect rows, and its replay decoder. The first scope is the six Manuscript Structure Transition commands: `createVolume`, `updateVolume`, `deleteVolume`, `createChapter`, `updateChapter`, and `deleteChapter`.
 
 ## Context
 
@@ -16,13 +16,13 @@ At `main` `ffcafb94`, each project command writes the same sequence by hand in t
 - One replay query serves every command in scope. Each command decodes only its applied effect. A pre-capture record gives `historical_acknowledgement_unavailable` ([ADR 0032](0032-accept-historical-acknowledgement-unavailable.md)). Damaged new-format evidence is a store fault.
 - Each Core reason enum owns one stable code for each reason. The adapter writes and reads this code in SQL. The Server maps the same code to the contracts enum. The code is equal to the existing SQL text and to the existing wire text, so the persisted format and the public schema do not change.
 - The order of SQL statements inside one transaction can change. Rows, migrations, persisted formats, isolation levels, and transaction boundaries do not change. For example, a create command now inserts its manuscript object after the Domain Receipt.
-- The Author Action disposition is data of the command adapter result. The first scope uses only Forward. A later Author Undo compensation adapter can give Compensation through the same module.
+- In this scope the sequence records a Forward Author Action for every applied outcome. A disposition field arrives with the first Compensation command, which adds it to the command adapter result.
 - The command adapter interface is private to the crate. The public interface is one method for each command. The application crate keeps only the shared command envelope, the shared error, and the generic settlement types. Its per-command modules, store traits, and binding checks are removed.
 - The Server has one generic admission sequence for these commands. It keeps each command's problem codes and messages.
 
 ## Relation to ADR 0007
 
-[ADR 0007](0007-preserve-process-separable-server-worker-boundary.md) says that Core owns authoritative transitions. Before this decision, the adapter owned both the sequence and the outcome mapping of each command. After this decision, Core owns the outcome taxonomy, the reason codes, and the authority allocation rule. The adapter owns only the storage sequence. Thus the difference from ADR 0007 becomes smaller. It does not go away: the step order stays in the adapter, because its only implementation is PostgreSQL.
+[ADR 0007](0007-preserve-process-separable-server-worker-boundary.md) says that Core owns authoritative transitions. Before this decision, the adapter owned both the sequence and the outcome mapping of each command. After this decision, Core owns the outcome taxonomy, the Domain Receipt result kind of each outcome, and the reason codes. The adapter owns the storage sequence and allocates authority records only for the `Applied` outcome. Thus the difference from ADR 0007 becomes smaller. It does not go away: the step order stays in the adapter, because its only implementation is PostgreSQL.
 
 ## Considered options
 
@@ -33,5 +33,5 @@ At `main` `ffcafb94`, each project command writes the same sequence by hand in t
 
 ## Consequences
 
-- The remaining project commands keep their current code until a later specification moves them. Author Edit, `acceptProposal`, and Author Undo need later additions to the module: an `outcome_unknown` settlement, a Pre-Admission Refusal Record, and a Compensation disposition.
+- The remaining project commands keep their current code until a later specification moves them. Author Edit, `acceptProposal`, and Author Undo need later additions to the module: an `outcome_unknown` settlement, a Pre-Admission Refusal Record, and an Author Action disposition field for Compensation.
 - A new structural command needs a Core classifier with reason codes, one command adapter, one Server route, and one contracts schema.

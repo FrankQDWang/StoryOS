@@ -43,37 +43,26 @@ pub(super) async fn delete_chapter(
         .map_err(|error| DELETE_CHAPTER.problem(error))?;
     admitted.hold_first_acknowledgement().await;
     let mut authority = None;
-    let (result, effect) = match settlement.outcome {
+    let result = settlement.outcome.receipt_result();
+    let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
             authority = applied.authority.into_settled();
-            (
-                contracts::DomainReceiptResult::AuthoritativeApplied,
-                contracts::DeleteChapterEffect::AuthoritativeApplied {
-                    chapter_id,
-                    volume_id: applied.effect.volume_id,
-                    tree_revision: applied.effect.tree_revision.to_string(),
-                    project_activity_position: applied.project_activity_position.to_string(),
-                },
-            )
+            contracts::DeleteChapterEffect::AuthoritativeApplied {
+                chapter_id,
+                volume_id: applied.effect.volume_id,
+                tree_revision: applied.effect.tree_revision.to_string(),
+                project_activity_position: applied.project_activity_position.to_string(),
+            }
         }
-        TransitionOutcome::NoEffect(reason) => (
-            contracts::DomainReceiptResult::NoEffect,
-            contracts::DeleteChapterEffect::NoEffect {
-                reason: contract_reason(&reason)?,
-            },
-        ),
-        TransitionOutcome::Conflicted(reason) => (
-            contracts::DomainReceiptResult::Conflicted,
-            contracts::DeleteChapterEffect::Conflicted {
-                reason: contract_reason(&reason)?,
-            },
-        ),
-        TransitionOutcome::Refused(reason) => (
-            contracts::DomainReceiptResult::Refused,
-            contracts::DeleteChapterEffect::Refused {
-                reason: contract_reason(&reason)?,
-            },
-        ),
+        TransitionOutcome::NoEffect(reason) => contracts::DeleteChapterEffect::NoEffect {
+            reason: contract_reason(&reason)?,
+        },
+        TransitionOutcome::Conflicted(reason) => contracts::DeleteChapterEffect::Conflicted {
+            reason: contract_reason(&reason)?,
+        },
+        TransitionOutcome::Refused(reason) => contracts::DeleteChapterEffect::Refused {
+            reason: contract_reason(&reason)?,
+        },
     };
     let ack = admitted.acknowledgement(
         &DELETE_CHAPTER,

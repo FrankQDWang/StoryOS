@@ -6,7 +6,7 @@ use storyos_application::{
 };
 use storyos_core::{
     CreateVolume as CoreCreateVolume, CreateVolumeApplied, CreateVolumeConflict,
-    CreateVolumeRefusal, create_volume as classify_create_volume,
+    CreateVolumeRefusal, TransitionOutcome, create_volume as classify_create_volume,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -51,36 +51,43 @@ impl StructureCommand for CreateVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<(Classified<Self>, NewVolumeOrder), ProjectCommandError> {
-        let live_volumes = client
-            .query_one(
-                "SELECT count(*)::text
-                   FROM storyos.manuscript_objects AS volume
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND object_kind = 'volume'
-                    AND NOT EXISTS (
-                      SELECT 1 FROM storyos.volume_removal_decisions AS removal
-                       WHERE removal.owner_user_id = volume.owner_user_id
-                         AND removal.project_id = volume.project_id
-                         AND removal.volume_id = volume.manuscript_object_id
-                    )",
-                &[
-                    &envelope.project_scope.owner_user_id.as_ref(),
-                    &envelope.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(unavailable)?
-            .get::<_, String>(0)
-            .parse::<u64>()
-            .map_err(unavailable)?;
+    ) -> Result<Classified<Self>, ProjectCommandError> {
         let classified = classify_create_volume(&CoreCreateVolume {
             expected_tree_revision: self.expected_tree_revision,
             current_tree_revision: project.tree_revision,
             current_lifecycle: project.lifecycle,
             title: self.title.clone(),
         });
-        Ok((classified, NewVolumeOrder(live_volumes + 1)))
+        Ok(match classified {
+            TransitionOutcome::Applied(applied) => {
+                let live_volumes = client
+                    .query_one(
+                        "SELECT count(*)::text
+                           FROM storyos.manuscript_objects AS volume
+                          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                            AND object_kind = 'volume'
+                            AND NOT EXISTS (
+                              SELECT 1 FROM storyos.volume_removal_decisions AS removal
+                               WHERE removal.owner_user_id = volume.owner_user_id
+                                 AND removal.project_id = volume.project_id
+                                 AND removal.volume_id = volume.manuscript_object_id
+                            )",
+                        &[
+                            &envelope.project_scope.owner_user_id.as_ref(),
+                            &envelope.project_scope.project_id.as_ref(),
+                        ],
+                    )
+                    .await
+                    .map_err(unavailable)?
+                    .get::<_, String>(0)
+                    .parse::<u64>()
+                    .map_err(unavailable)?;
+                TransitionOutcome::Applied((applied, NewVolumeOrder(live_volumes + 1)))
+            }
+            TransitionOutcome::NoEffect(reason) => match reason {},
+            TransitionOutcome::Conflicted(reason) => TransitionOutcome::Conflicted(reason),
+            TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(reason),
+        })
     }
 
     fn applied_receipt_payload(

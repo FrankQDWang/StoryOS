@@ -52,7 +52,7 @@ impl StructureCommand for CreateChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<(Classified<Self>, LiveChapters), ProjectCommandError> {
+    ) -> Result<Classified<Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let volume_join = match client
             .query_opt(
@@ -114,7 +114,7 @@ impl StructureCommand for CreateChapterInput {
             placement: self.placement.clone(),
             ordered_chapter_ids: ordered_chapter_ids.clone(),
         });
-        Ok((classified, LiveChapters(ordered_chapter_ids)))
+        Ok(classified.map_applied(|applied| (applied, LiveChapters(ordered_chapter_ids))))
     }
 
     fn applied_receipt_payload(

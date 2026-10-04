@@ -54,7 +54,7 @@ impl StructureCommand for UpdateChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<(Classified<Self>, LiveSiblings), ProjectCommandError> {
+    ) -> Result<Classified<Self>, ProjectCommandError> {
         let chapters = client
             .query(
                 "SELECT manuscript_object_id::text, title, parent_volume_id::text
@@ -122,7 +122,7 @@ impl StructureCommand for UpdateChapterInput {
             current_order: siblings.current_order,
             chapter_count: siblings.ordered_ids.len() as u64,
         });
-        Ok((classified, siblings))
+        Ok(classified.map_applied(|applied| (applied, siblings)))
     }
 
     async fn apply(

@@ -8,6 +8,7 @@ use storyos_application::{
     AuthorCommandAdmissionIds, EditorClientBinding, Project, ProjectCommandChallengeBinding,
     ProjectCommandEnvelope, ProjectCommandError, StructureAuthority,
 };
+use storyos_core::ReceiptResult;
 
 use super::editor_session::{exact_header, session_binding_ref};
 use super::project_command_challenge::{
@@ -233,7 +234,14 @@ impl<I> Admitted<I> {
                 draft_artifact_refs: Vec::new(),
                 artifact_lifecycle_event_refs: Vec::new(),
                 condition_refs: Vec::new(),
-                result: settled.result,
+                result: match settled.result {
+                    ReceiptResult::AuthoritativeApplied => {
+                        contracts::DomainReceiptResult::AuthoritativeApplied
+                    }
+                    ReceiptResult::NoEffect => contracts::DomainReceiptResult::NoEffect,
+                    ReceiptResult::Conflicted => contracts::DomainReceiptResult::Conflicted,
+                    ReceiptResult::Refused => contracts::DomainReceiptResult::Refused,
+                },
                 created_at: settled.receipt_created_at,
             },
             project: contracts::ControlledProject {
@@ -254,7 +262,7 @@ impl<I> Admitted<I> {
 pub(super) struct SettledReceipt {
     pub(super) ids: AuthorCommandAdmissionIds,
     pub(super) receipt_created_at: String,
-    pub(super) result: contracts::DomainReceiptResult,
+    pub(super) result: ReceiptResult,
     pub(super) authority: Option<StructureAuthority>,
     pub(super) project: Project,
 }

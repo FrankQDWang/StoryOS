@@ -51,7 +51,7 @@ impl StructureCommand for UpdateVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<(Classified<Self>, LiveVolumes), ProjectCommandError> {
+    ) -> Result<Classified<Self>, ProjectCommandError> {
         let volumes = client
             .query(
                 "SELECT manuscript_object_id::text, title
@@ -99,14 +99,16 @@ impl StructureCommand for UpdateVolumeInput {
             current_order,
             volume_count: ordered_ids.len() as u64,
         });
-        Ok((
-            classified,
-            LiveVolumes {
-                ordered_ids,
-                current_title,
-                current_order,
-            },
-        ))
+        Ok(classified.map_applied(|applied| {
+            (
+                applied,
+                LiveVolumes {
+                    ordered_ids,
+                    current_title,
+                    current_order,
+                },
+            )
+        }))
     }
 
     async fn apply(
@@ -150,11 +152,11 @@ impl StructureCommand for UpdateVolumeInput {
             current_chapter: CurrentChapterChange::Preserve,
             writer_base: WriterBase::Keep,
             activity: serde_json::json!({
-            "volume_id": self.volume_id.as_ref(),
-            "title": applied.title,
-            "order": applied.order.to_string(),
-            "prior_title": live.current_title,
-            "prior_order": live.current_order.to_string(),
+                "volume_id": self.volume_id.as_ref(),
+                "title": applied.title,
+                "order": applied.order.to_string(),
+                "prior_title": live.current_title,
+                "prior_order": live.current_order.to_string(),
             }),
             effect: applied,
         })

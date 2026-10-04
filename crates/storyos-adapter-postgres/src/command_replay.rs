@@ -16,7 +16,7 @@ pub(crate) struct CommandReplay {
     pub(crate) receipt_created_at: String,
     pub(crate) project_activity_position: u64,
     pub(crate) project_activity_event_id: String,
-    pub(crate) authority: Option<StructureAuthorityEvidence>,
+    pub(crate) authority: Option<ReplayedAuthority>,
     result_kind: String,
     receipt: JsonText,
     activity: JsonText,
@@ -25,7 +25,7 @@ pub(crate) struct CommandReplay {
 }
 
 /// The Structural Authority Settlement records that one applied command wrote.
-pub(crate) struct StructureAuthorityEvidence {
+pub(crate) struct ReplayedAuthority {
     pub(crate) authoritative_commit_id: String,
     pub(crate) author_action_sequence: u64,
     pub(crate) snapshot_id: String,
@@ -157,7 +157,7 @@ pub(crate) async fn read_command_replay(
             Some(snapshot_id),
             Some(prior_manuscript_tree_revision),
             Some(resulting_manuscript_tree_revision),
-        ) => Some(StructureAuthorityEvidence {
+        ) => Some(ReplayedAuthority {
             authoritative_commit_id,
             author_action_sequence: author_action_sequence.parse().map_err(unavailable)?,
             snapshot_id,

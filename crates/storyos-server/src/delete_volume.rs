@@ -41,36 +41,25 @@ pub(super) async fn delete_volume(
         .map_err(|error| DELETE_VOLUME.problem(error))?;
     admitted.hold_first_acknowledgement().await;
     let mut authority = None;
-    let (result, effect) = match settlement.outcome {
+    let result = settlement.outcome.receipt_result();
+    let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
             authority = applied.authority.into_settled();
-            (
-                contracts::DomainReceiptResult::AuthoritativeApplied,
-                contracts::DeleteVolumeEffect::AuthoritativeApplied {
-                    volume_id: applied.effect.volume_id,
-                    tree_revision: applied.effect.tree_revision.to_string(),
-                    project_activity_position: applied.project_activity_position.to_string(),
-                },
-            )
+            contracts::DeleteVolumeEffect::AuthoritativeApplied {
+                volume_id: applied.effect.volume_id,
+                tree_revision: applied.effect.tree_revision.to_string(),
+                project_activity_position: applied.project_activity_position.to_string(),
+            }
         }
-        TransitionOutcome::NoEffect(reason) => (
-            contracts::DomainReceiptResult::NoEffect,
-            contracts::DeleteVolumeEffect::NoEffect {
-                reason: contract_reason(&reason)?,
-            },
-        ),
-        TransitionOutcome::Conflicted(reason) => (
-            contracts::DomainReceiptResult::Conflicted,
-            contracts::DeleteVolumeEffect::Conflicted {
-                reason: contract_reason(&reason)?,
-            },
-        ),
-        TransitionOutcome::Refused(reason) => (
-            contracts::DomainReceiptResult::Refused,
-            contracts::DeleteVolumeEffect::Refused {
-                reason: contract_reason(&reason)?,
-            },
-        ),
+        TransitionOutcome::NoEffect(reason) => contracts::DeleteVolumeEffect::NoEffect {
+            reason: contract_reason(&reason)?,
+        },
+        TransitionOutcome::Conflicted(reason) => contracts::DeleteVolumeEffect::Conflicted {
+            reason: contract_reason(&reason)?,
+        },
+        TransitionOutcome::Refused(reason) => contracts::DeleteVolumeEffect::Refused {
+            reason: contract_reason(&reason)?,
+        },
     };
     let ack = admitted.acknowledgement(
         &DELETE_VOLUME,

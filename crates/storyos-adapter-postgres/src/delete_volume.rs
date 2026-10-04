@@ -47,7 +47,7 @@ impl StructureCommand for DeleteVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<(Classified<Self>, ()), ProjectCommandError> {
+    ) -> Result<Classified<Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let target = client
             .query_opt(
@@ -116,7 +116,7 @@ impl StructureCommand for DeleteVolumeInput {
             current_tree_revision: project.tree_revision,
             current_lifecycle: project.lifecycle,
         });
-        Ok((classified, ()))
+        Ok(classified.map_applied(|applied| (applied, ())))
     }
 
     async fn apply(

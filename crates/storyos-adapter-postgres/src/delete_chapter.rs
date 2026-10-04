@@ -50,7 +50,7 @@ impl StructureCommand for DeleteChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<(Classified<Self>, ParentVolume), ProjectCommandError> {
+    ) -> Result<Classified<Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let target = client
             .query_opt(
@@ -124,7 +124,7 @@ impl StructureCommand for DeleteChapterInput {
             current_chapter_id: project.current_chapter_id.clone(),
             ordered_active_chapter_ids,
         });
-        Ok((classified, ParentVolume(volume_id)))
+        Ok(classified.map_applied(|applied| (applied, ParentVolume(volume_id))))
     }
 
     async fn apply(
@@ -192,8 +192,7 @@ impl StructureCommand for DeleteChapterInput {
             replay.activity_optional_text("prior_current_chapter_id"),
             replay.activity_optional_text("current_chapter_id"),
         ) {
-            // A prior Current that is not the removed Chapter stayed in place.
-            // The resulting Current alone cannot name that.
+            // The resulting Current alone cannot show that a different prior Current stayed.
             (Some(prior), _) if prior != self.chapter_id.as_ref() => {
                 DeleteChapterCurrent::PreserveExisting
             }

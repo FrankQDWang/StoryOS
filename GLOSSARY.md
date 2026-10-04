@@ -236,7 +236,7 @@ The single logical atomic boundary in which StoryOS Core validates one idempoten
 _Avoid_: Partial commit, database rollback as undo, external effect as transaction truth
 
 **Core Transition Outcome**:
-The exhaustive Core classification of one admitted command as Applied, NoEffect, Conflicted, or Refused, with one stable reason code for each non-applied reason. Core owns which outcome kind a Receipt records and which outcomes allocate an Authoritative Commit and an Author Action; a pre-Admission refusal is not an Outcome.
+The exhaustive Core classification of one admitted command as Applied, NoEffect, Conflicted, or Refused, with one stable reason code for each non-applied reason. Core owns which outcome kind a Receipt records; only Applied changes Authoritative State and allocates an Authoritative Commit and an Author Action. A pre-Admission refusal is not an Outcome.
 _Avoid_: Success boolean, HTTP status, Receipt result text, adapter-chosen outcome
 
 **Command Acknowledgement**:

@@ -18,7 +18,6 @@ use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
 use crate::structural_authority_settlement::{
     StructureAffectedIdentity, StructureCommitBinding, allocate_structure_transition_sequences,
     persist_forward_author_action, persist_structure_commit, rebind_writer_base,
-    receipt_reason_payload,
 };
 use records::{ReceiptRecord, insert_admission, insert_receipt, lock_project, settle_idempotency};
 
@@ -72,8 +71,12 @@ pub(crate) struct StructureWrite<E> {
     pub(crate) activity: serde_json::Value,
 }
 
+/// A Core Transition Outcome whose applied value carries the locked facts that `apply` reuses.
 pub(crate) type Classified<C> = TransitionOutcome<
-    <C as StructureCommand>::Applied,
+    (
+        <C as StructureCommand>::Applied,
+        <C as StructureCommand>::Plan,
+    ),
     <C as StructureCommand>::NoEffect,
     <C as StructureCommand>::Conflict,
     <C as StructureCommand>::Refusal,
@@ -100,7 +103,7 @@ pub(crate) trait StructureCommand: Sync {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> impl Future<Output = Result<(Classified<Self>, Self::Plan), ProjectCommandError>> + Send;
+    ) -> impl Future<Output = Result<Classified<Self>, ProjectCommandError>> + Send;
 
     /// The Domain Receipt payload of an applied outcome.
     fn applied_receipt_payload(&self, _applied: &Self::Applied, _plan: &Self::Plan) -> String {
@@ -151,7 +154,13 @@ pub(crate) async fn settle_structure_command<C: StructureCommand>(
             read_command_replay(store, &envelope.challenge_binding, &result_reference)
                 .await
                 .and_then(|replay| replay_structure(command, &replay))
-                .map_err(replay_error)
+                .map_err(|fault| match fault {
+                    ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
+                    ReplayFault::HistoricalAcknowledgementUnavailable => {
+                        ProjectCommandError::HistoricalAcknowledgementUnavailable
+                    }
+                    ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
+                })
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
             transaction.rollback().await.map_err(challenge_error)?;
@@ -180,15 +189,18 @@ async fn first_use<C: StructureCommand>(
     let scope = &envelope.project_scope;
     let ids = &envelope.ids;
     let project = lock_project(client, envelope).await?;
-    let (classified, plan) = command.classify(client, envelope, &project).await?;
+    let classified = command.classify(client, envelope, &project).await?;
     insert_admission(client, envelope, C::SPEC.kind).await?;
     let receipt = ReceiptRecord {
         result: classified.receipt_result().code(),
-        payload: receipt_reason_payload(classified.reason_code()),
+        payload: match classified.reason_code() {
+            Some(code) => serde_json::json!({ "reason": code }).to_string(),
+            None => "{}".to_owned(),
+        },
         command_kind: C::SPEC.kind,
     };
     let (receipt_created_at, outcome) = match classified {
-        TransitionOutcome::Applied(applied) => {
+        TransitionOutcome::Applied((applied, plan)) => {
             let sequences = allocate_structure_transition_sequences(client, scope)
                 .await
                 .map_err(ProjectCommandError::Unavailable)?;
@@ -401,16 +413,6 @@ fn challenge_error(error: ProjectCommandChallengeError) -> ProjectCommandError {
         ProjectCommandChallengeError::InvalidOrExpired => ProjectCommandError::InvalidChallenge,
         ProjectCommandChallengeError::RateLimited { .. }
         | ProjectCommandChallengeError::Unavailable(_) => unavailable(error),
-    }
-}
-
-fn replay_error(fault: ReplayFault) -> ProjectCommandError {
-    match fault {
-        ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
-        ReplayFault::HistoricalAcknowledgementUnavailable => {
-            ProjectCommandError::HistoricalAcknowledgementUnavailable
-        }
-        ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
     }
 }
 

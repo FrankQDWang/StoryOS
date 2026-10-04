@@ -63,7 +63,8 @@ pub(super) async fn create_chapter(
         .map_err(|error| CREATE_CHAPTER.problem(error))?;
     admitted.hold_first_acknowledgement().await;
     let mut authority = None;
-    let (result, effect) = match settlement.outcome {
+    let result = settlement.outcome.receipt_result();
+    let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
             let order = match applied.effect.order {
                 CreateChapterPublicOrder::CanonicalSiblingOrder(rank) => {
@@ -79,32 +80,23 @@ pub(super) async fn create_chapter(
                 .ok_or_else(resource_unavailable)?
                 .as_ref()
                 .to_owned();
-            (
-                contracts::DomainReceiptResult::AuthoritativeApplied,
-                contracts::CreateChapterEffect::AuthoritativeApplied {
-                    volume_id,
-                    chapter_id: applied.effect.chapter_id,
-                    title: admitted.input.title.clone(),
-                    tree_revision: applied.effect.tree_revision.to_string(),
-                    order: order.to_string(),
-                    current_chapter_id,
-                    project_activity_position: applied.project_activity_position.to_string(),
-                },
-            )
+            contracts::CreateChapterEffect::AuthoritativeApplied {
+                volume_id,
+                chapter_id: applied.effect.chapter_id,
+                title: admitted.input.title.clone(),
+                tree_revision: applied.effect.tree_revision.to_string(),
+                order: order.to_string(),
+                current_chapter_id,
+                project_activity_position: applied.project_activity_position.to_string(),
+            }
         }
         TransitionOutcome::NoEffect(reason) => match reason {},
-        TransitionOutcome::Conflicted(reason) => (
-            contracts::DomainReceiptResult::Conflicted,
-            contracts::CreateChapterEffect::Conflicted {
-                reason: contract_reason(&reason)?,
-            },
-        ),
-        TransitionOutcome::Refused(reason) => (
-            contracts::DomainReceiptResult::Refused,
-            contracts::CreateChapterEffect::Refused {
-                reason: contract_reason(&reason)?,
-            },
-        ),
+        TransitionOutcome::Conflicted(reason) => contracts::CreateChapterEffect::Conflicted {
+            reason: contract_reason(&reason)?,
+        },
+        TransitionOutcome::Refused(reason) => contracts::CreateChapterEffect::Refused {
+            reason: contract_reason(&reason)?,
+        },
     };
     let ack = admitted.acknowledgement(
         &CREATE_CHAPTER,
