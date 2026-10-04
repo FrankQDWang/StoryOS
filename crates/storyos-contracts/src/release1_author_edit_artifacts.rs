@@ -11,6 +11,48 @@ use crate::release1_author_edit::{
     OrderedSourceSelection, RefusedEditOrigin, RefusedEditPayload, ReplacementBlock,
     SelectedEditSource, SelectionSnapshot, SourceSelectionEndpoint,
 };
+use crate::release1_operation_registry::{
+    OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas, path_items,
+};
+use crate::release1_wire::json_bytes;
+
+pub(super) const ARTIFACTS: OperationArtifacts = OperationArtifacts {
+    operations: &[RegisteredOperation::command(
+        &APPLY_AUTHOR_EDIT,
+        &[
+            "server_derived_project_scope",
+            "strict_origin",
+            "protected_client_session_binding",
+            "project_command_challenge",
+            "editor_session_writer_generation",
+            "expected_authoritative_head",
+        ],
+    )],
+    schemas: || {
+        operation_schemas(
+            &APPLY_AUTHOR_EDIT,
+            (REQUEST_SCHEMA_PATH, request_schema_bytes()),
+            (RESPONSE_SCHEMA_PATH, response_schema_bytes()),
+        )
+        .into()
+    },
+    openapi: || path_items(openapi()),
+    typescript_types: typescript_type_declarations,
+    typescript_client: typescript_client_source,
+    typescript_declarations,
+    fixtures: || {
+        fixture_triple(
+            FIXTURE_PATHS,
+            &APPLY_AUTHOR_EDIT,
+            [
+                |_| fixture_bytes(),
+                |_| invalid_fixture_bytes(),
+                |_| boundary_fixture_bytes(),
+            ],
+        )
+        .into()
+    },
+};
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/apply-author-edit-request.schema.json";
@@ -233,12 +275,6 @@ pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
         "reason": "invalid_selection"
     });
     json_bytes(&value)
-}
-
-fn json_bytes(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
-    bytes.push(b'\n');
-    bytes
 }
 
 fn schema_bytes<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Vec<u8> {

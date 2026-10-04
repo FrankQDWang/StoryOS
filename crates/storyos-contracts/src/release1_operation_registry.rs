@@ -119,6 +119,15 @@ pub(super) const RELEASE1_OPERATIONS: &[&OperationArtifacts] = &[
     &crate::release1_create_volume_artifacts::ARTIFACTS,
     &crate::release1_update_volume_artifacts::ARTIFACTS,
     &crate::release1_delete_volume_artifacts::ARTIFACTS,
+    &crate::release1_create_chapter_artifacts::ARTIFACTS,
+    &crate::release1_update_chapter_artifacts::ARTIFACTS,
+    &crate::release1_delete_chapter_artifacts::ARTIFACTS,
+    &crate::release1_set_current_chapter_artifacts::ARTIFACTS,
+    &crate::release1_author_edit_artifacts::ARTIFACTS,
+    &crate::release1_accept_proposal_artifacts::ARTIFACTS,
+    &crate::release1_reject_proposal_operations_artifacts::ARTIFACTS,
+    &crate::release1_withdraw_proposal_artifacts::ARTIFACTS,
+    &crate::release1_replan_proposal_artifacts::ARTIFACTS,
 ];
 
 /// The request and response schemas of one operation.
