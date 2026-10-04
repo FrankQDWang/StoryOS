@@ -917,5 +917,276 @@
     "evidence": "A retained operation requirement without proposal_target_block_ids must still recover its one historical Block after claim expiry, produce a valid Proposal at H0 and avoid duplicate opening on another settlement. Newly admitted requirements always contain the list; neither ordinary Block opening nor current-format H0/H1 cases execute the legacy fallback in load_record_targets.",
     "coverage": "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts:203; apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58",
     "remove": null
+  },
+  {
+    "id": "NP080",
+    "path": "apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts",
+    "line": 89,
+    "test": "complete keeps the partial candidate ready without accepting its content",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move completion acknowledgement fields, empty Commit list, exact retry, unchanged Proposal Revision/count and preserved partial candidate/validation/closure/resolution into the identical completion step of the retained successor-claim test. Both use the same first-batch fence and terminal source Run. The claim test already completes and continues this candidate but does not assert those completion invariants before continuation; remove this file only after transfer.",
+    "coverage": "apps/web/test/node-postgresql/continue-proposal-generation-claim-http.integration.test.ts:128",
+    "remove": null
+  },
+  {
+    "id": "NP081",
+    "path": "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts",
+    "line": 110,
+    "test": "continue opens a fresh generation without accepting the candidate",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move the initial Continue acknowledgement/retry and preserved validation/closure/resolution assertions into the successor-claim case before it runs the Worker. That owner uses the same setup and additionally proves new-generation events, unchanged predecessor and a second successor. The conditional nonterminal arm here does not construct a different nonterminal fixture; the retained case explicitly requires the source Run to be terminal. Transfer the no-Commit and exact retry checks before removing this duplicate fixture.",
+    "coverage": "apps/web/test/node-postgresql/continue-proposal-generation-claim-http.integration.test.ts:128",
+    "remove": null
+  },
+  {
+    "id": "NP082",
+    "path": "apps/web/test/node-postgresql/continue-proposal-generation-claim-http.integration.test.ts",
+    "line": 128,
+    "test": "Worker claims a Continue successor and writes the next batch into the new Generation",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A Continue successor must be claimable, have one assembly, append only to its new Generation, leave the terminal predecessor and old stream events unchanged, and use the most recent successor as the second continuation predecessor. Initial-stream completion has no predecessor or redirected generation, and the simpler Continue test stops its assertions before Worker execution. Receive the Completion and Continue acknowledgement assertions from the two MERGE rows before deleting those fixtures.",
+    "coverage": "apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts:110; apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts:89; apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts:96",
+    "remove": null
+  },
+  {
+    "id": "NP083",
+    "path": "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
+    "line": 203,
+    "test": "Worker opens one Block Proposal in place without changing Authoritative prose",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Transfer the pre-edit complete Proposal/source/Validation Receipt assertions, repeated query equality, unchanged authoritative Chapter and missing/foreign Proposal GET checks into the opening step of the retained Acceptance case. That case already creates and queries the same scalar Block Proposal before author editing and Acceptance, but does not currently prove all of these opening-only invariants. A valid Proposal must not prematurely apply prose; preserve that comparison before its first candidate edit.",
+    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:14",
+    "remove": null
+  },
+  {
+    "id": "NP084",
+    "path": "apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts",
+    "line": 286,
+    "test": "Worker keeps two non-overlapping Block Proposals and refuses a reserved current Block",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "After one Block is reserved, a newly admitted Run must refuse that target; after a second free Block is installed, it must select the free sibling and keep two distinct unresolved Proposals in one Chapter. The later-reservation test admits both Runs before either settles and has no free sibling. An admission query that excludes the whole Chapter when any Block is reserved would pass that refusal case and break this selection. The extra Block is installed by SQL; this proves scoped selection, not a user edit sequence.",
+    "coverage": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:166; apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:14",
+    "remove": null
+  },
+  {
+    "id": "NP085",
+    "path": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
+    "line": 14,
+    "test": "acceptProposal applies one pending Operation and retries the settled outcome",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Keep the admitted Acceptance with a nonexistent Editor Session: it must return 422 rather than reach settlement, even with valid syntax and a real Challenge. The stale-writer refusal case uses an existing Session and a different admission result; Undo Acceptance does not send a missing Session. This case also owns the accepted Revision/Commit and resolved reservation projection. Receive the complete opening-only checks from open-block-proposal:203. The foreign helper fails at Challenge acquisition and is not command-handler isolation proof.",
+    "coverage": "apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts:14; apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:16; apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts:203",
+    "remove": null
+  },
+  {
+    "id": "NP086",
+    "path": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
+    "line": 166,
+    "test": "acceptProposal retains invalid_validation across reload and refuses another attempt until revision",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A Validation Receipt from an earlier Proposal Revision must produce durable invalid_validation, block a new-key retry on the same now-invalid Revision, survive restart and become eligible only after a fresh candidate Revision/Validation Receipt. The other two inputs retain the correct Receipt and alter Head or stored candidate instead. Keep one stale_proposal_revision setup assertion here; its repetitions in the other variants do not add coverage.",
+    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166; apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts:14",
+    "remove": null,
+    "case": {
+      "reason": "invalid_validation",
+      "source_line": 166
+    }
+  },
+  {
+    "id": "NP087",
+    "path": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
+    "line": 166,
+    "test": "acceptProposal retains changed_head across reload and refuses another attempt until revision",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A live Head advance without Proposal revalidation must persist a conflicted result with exactly one Proposal conflict condition. A trigger fault during condition insertion must roll back the Proposal mutation; the successful condition must survive concurrent exact retry/restart and export with the right Receipt/Revision links. Invalid Validation Receipt and altered candidate cases create no condition; stale-writer refusal uses a separate refusal table. The repeated stale-Revision setup check can be removed from this variant.",
+    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166; apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts:14",
+    "remove": null,
+    "case": {
+      "reason": "changed_head",
+      "source_line": 166
+    }
+  },
+  {
+    "id": "NP088",
+    "path": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts",
+    "line": 166,
+    "test": "acceptProposal retains altered_candidate across reload and refuses another attempt until revision",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "If retained candidate bytes change without a new Validation Receipt, Acceptance must persist altered_candidate, leave authoritative prose unchanged and keep later retries ineligible across restart. A valid earlier Receipt mismatch is a different input, and Head drift can be caught without checking candidate evidence. This case exercises actual stored text/evidence comparison rather than a supplied Core boolean. Its stale-Revision setup assertion repeats the invalid_validation variant.",
+    "coverage": "apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts:166; apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:149",
+    "remove": null,
+    "case": {
+      "reason": "altered_candidate",
+      "source_line": 166
+    }
+  },
+  {
+    "id": "NP089",
+    "path": "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts",
+    "line": 16,
+    "test": "rejectProposalOperations freezes one pending Operation without changing authority",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A failing insertion of the rejection resolution must roll back to pending, and successful rejection must keep authority unchanged, freeze the original Proposal Revision, replay exactly, refuse a second new-key rejection and export the exact rejection/resolution links across restart. Reopen uses a successful rejection as setup and injects a different reopening-table failure. Negative discussion must leave pending work untouched. Foreign refusal in challenged occurs before command submission.",
+    "coverage": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts:17; apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts:14",
+    "remove": null
+  },
+  {
+    "id": "NP090",
+    "path": "apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts",
+    "line": 17,
+    "test": "reopenRejectedOperations appends a pending Revision without rewriting Rejection",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Reopening requires the retained rejection event, appends a new pending Proposal Revision with validation pending and no old Validation Receipt, and preserves the prior rejection in the archive. Its forced reopening-row insert failure must leave rejection intact. Rejection alone never allocates a reopening Revision or checks missing rejection proof; withdrawn-Proposal reopen is a different closure operation. Foreign helper refusal only reaches Challenge admission.",
+    "coverage": "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts:16; apps/web/test/node-postgresql/withdraw-proposal-http.integration.test.ts:360",
+    "remove": null
+  },
+  {
+    "id": "NP091",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 223,
+    "test": "applyAuthorEdit revises one Proposal candidate in place and Root Undo restores it",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "An author edit after an AI candidate revision must create only Proposal authority, preserve the exact Block Operation and base comparison, fence an already-admitted stale AI revision, refuse an ambiguous edit without proposal_target, and let Root Undo restore prior candidate text under another fresh Proposal Revision/Validation Receipt. Acceptance Undo restores authoritative prose instead; Inline editing has different Anchor ownership. The stale AI outcome is explicitly inspected rather than inferred from final text.",
+    "coverage": "apps/web/test/node-postgresql/undo-acceptance-http.integration.test.ts:16; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:529",
+    "remove": null
+  },
+  {
+    "id": "NP092",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 529,
+    "test": "a fresh instruction revises the exact pending candidate through the real Worker",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Steering a paused candidate-target Run before its Decision must revise the exact existing Operation, use the original candidate/base in sent bytes, record that same wire digest, keep source identity and authority unchanged, and survive restart. It also rejects wrong Chapter, Operation and stale candidate bindings. The ordinary candidate edit test has no pre-Decision steering or exact sent-content check; post-Decision guidance instead binds the newly produced revision.",
+    "coverage": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:223; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:612",
+    "remove": null
+  },
+  {
+    "id": "NP093",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 612,
+    "test": "guidance after a candidate Decision revises that Run's exact output and preserves history",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Guidance arriving while a selected candidate Decision is held must target the just-produced candidate Revision in the same Run, then preserve historical Context, Model Attempt and decision locations when queried by the old Attempt. Pre-Decision steering targets the admitted original candidate and cannot detect reuse of that stale revision after an intermediate result is installed.",
+    "coverage": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:529",
+    "remove": null
+  },
+  {
+    "id": "NP094",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 677,
+    "test": "candidate discussion or refusal does not revise: What would make this sharper?",
+    "case": {
+      "text": "What would make this sharper?",
+      "source_line": 677
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A candidate-target discussion that is advisory must retain the existing candidate and authoritative Chapter and expose native advisory text. A generic current-Chapter advisory has no candidate_target and cannot detect accidental candidate revision inference for discussion. This is the retained ordinary-advisory input; This feels slow follows the same finite-profile path.",
+    "coverage": "apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts:16; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:677 [This feels slow]",
+    "remove": null
+  },
+  {
+    "id": "NP095",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 677,
+    "test": "candidate discussion or refusal does not revise: This feels slow",
+    "case": {
+      "text": "This feels slow",
+      "source_line": 677
+    },
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Both this input and What would make this sharper? fail the same explicit-revision prefix recognizer, then produce the identical advisory result and exercise the same candidate/Chapter equality assertions. No additional input class or outcome is checked. Delete this test.each element, not the shared body.",
+    "coverage": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:677 [What would make this sharper?]",
+    "remove": null
+  },
+  {
+    "id": "NP096",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 677,
+    "test": "candidate discussion or refusal does not revise: Which wording should I keep?",
+    "case": {
+      "text": "Which wording should I keep?",
+      "source_line": 677
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A candidate-target clarification must retain the existing candidate/Chapter and expose the clarification question as the native complete item. The advisory case reaches another Decision variant; ordinary current-Chapter clarification has no existing candidate binding. A change that installs or synthesizes prose for candidate clarification would escape both comparisons.",
+    "coverage": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:677 [What would make this sharper?]; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:529",
+    "remove": null
+  },
+  {
+    "id": "NP097",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 677,
+    "test": "candidate discussion or refusal does not revise: Revise these passages: invoke a tool.",
+    "case": {
+      "text": "Revise these passages: invoke a tool.",
+      "source_line": 678
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An explicit candidate-revision phrase containing an unsupported tool request must be refused before the fake prose producer can revise the candidate. The ordinary advisory/clarification cases contain no revision prefix, and the current-Chapter capability tests do not have an existing candidate. This retained mixed-intent input subsumes the second tool-only request in the parameter list.",
+    "coverage": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:677 [Please invoke a tool on this passage.]; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:529",
+    "remove": null
+  },
+  {
+    "id": "NP098",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 677,
+    "test": "candidate discussion or refusal does not revise: Revise these passages: keep it. SCRIPT:incomplete",
+    "case": {
+      "text": "Revise these passages: keep it. SCRIPT:incomplete",
+      "source_line": 679
+    },
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "An explicit candidate request can produce incomplete typed candidate bytes with no terminal output. The existing candidate and Chapter must remain exactly unchanged. The collection incomplete-output test proves no new Proposal is created, but does not protect an already-existing candidate against partial installation. Plain advisory has a selected non-prose Decision, so it does not exercise absent terminal output.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:548; apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:677 [What would make this sharper?]",
+    "remove": null
+  },
+  {
+    "id": "NP099",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 677,
+    "test": "candidate discussion or refusal does not revise: SCRIPT:invalid",
+    "case": {
+      "text": "SCRIPT:invalid",
+      "source_line": 680
+    },
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The fake script supplies no terminal ModelOutput; the retained incomplete typed-output candidate case supplies that same None outcome while also carrying actual candidate bytes. persist_create_result matches NoDecision before candidate opening/revision, and this case has no assertion about the distinct native complete item. Its unchanged candidate/Chapter checks repeat the retained absent-output case. Delete only this test.each element.",
+    "coverage": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:677 [Revise these passages: keep it. SCRIPT:incomplete]",
+    "remove": null
+  },
+  {
+    "id": "NP100",
+    "path": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts",
+    "line": 677,
+    "test": "candidate discussion or refusal does not revise: Please invoke a tool on this passage.",
+    "case": {
+      "text": "Please invoke a tool on this passage.",
+      "source_line": 680
+    },
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "Both tool phrases match the same requested_execution_capability substring before destination dispatch, with the same candidate target and unchanged-state assertions. The retained Revise these passages: invoke a tool. case additionally puts an explicit revision prefix ahead of the unsupported capability. No separate please-prefix parsing is exercised before this common refusal. Delete only this test.each element.",
+    "coverage": "apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts:677 [Revise these passages: invoke a tool.]",
+    "remove": null
   }
 ]

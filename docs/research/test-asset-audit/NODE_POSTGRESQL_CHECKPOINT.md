@@ -1,25 +1,33 @@
 # Node PostgreSQL checkpoint
 
-Source review is partial: 79 runtime cases in 24 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
+Source review is partial: 100 runtime cases in 32 files have individual verdicts. Remaining files are listed below. The admitted-proposal-target file has four declarations and seven runtime cases. Its four test.each inputs are separate rows with source-line metadata; inventory declaration counts are not runtime counts.
 
 | Reviewed file | Cases | Verdict counts |
 |---|---|---|
+| apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts | 4 | {'KEEP': 4} |
 | apps/web/test/node-postgresql/acceptance-refusal-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/activity-stream-cross-table-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/activity-stream-duplicate-http.integration.test.ts | 1 | {'MERGE': 1} |
 | apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts | 7 | {'KEEP': 7} |
 | apps/web/test/node-postgresql/archive-project-http.integration.test.ts | 3 | {'MERGE': 1, 'KEEP': 2} |
+| apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts | 1 | {'MERGE': 1} |
+| apps/web/test/node-postgresql/continue-proposal-generation-claim-http.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts | 1 | {'MERGE': 1} |
 | apps/web/test/node-postgresql/create-chapter-http.integration.test.ts | 6 | {'KEEP': 5, 'DELETE': 1} |
 | apps/web/test/node-postgresql/create-project-challenge-http.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/node-postgresql/create-project-http.integration.test.ts | 2 | {'KEEP': 2} |
 | apps/web/test/node-postgresql/create-volume-http.integration.test.ts | 4 | {'KEEP': 3, 'DELETE': 1} |
 | apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts | 4 | {'KEEP': 3, 'DELETE': 1} |
 | apps/web/test/node-postgresql/delete-volume-http.integration.test.ts | 4 | {'KEEP': 3, 'DELETE': 1} |
+| apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts | 10 | {'KEEP': 7, 'DELETE': 3} |
 | apps/web/test/node-postgresql/list-projects-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/manuscript-tree-http.integration.test.ts | 2 | {'KEEP': 2} |
+| apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts | 2 | {'MERGE': 1, 'KEEP': 1} |
 | apps/web/test/node-postgresql/project-http.integration.test.ts | 8 | {'MERGE': 1, 'KEEP': 7} |
 | apps/web/test/node-postgresql/protocol-http-host.integration.test.ts | 5 | {'DELETE': 1, 'KEEP': 4} |
+| apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts | 1 | {'KEEP': 1} |
+| apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts | 5 | {'KEEP': 5} |
 | apps/web/test/node-postgresql/snapshot-replay-http.integration.test.ts | 1 | {'KEEP': 1} |
 | apps/web/test/node-postgresql/stream-proposal-generation-http.integration.test.ts | 2 | {'KEEP': 2} |
@@ -47,18 +55,12 @@ Continue Proposal, Run, context and export command families. Structural commands
 
 ## Pending files
 
-- apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts
 - apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts
 - apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts
-- apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts
 - apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts
-- apps/web/test/node-postgresql/continue-proposal-generation-claim-http.integration.test.ts
-- apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts
 - apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts
 - apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts
-- apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts
 - apps/web/test/node-postgresql/export-acknowledgement-support.ts
-- apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts
 - apps/web/test/node-postgresql/project-export-admission-http.integration.test.ts
 - apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts
 - apps/web/test/node-postgresql/readable-export-admission-http.integration.test.ts
@@ -66,8 +68,6 @@ Continue Proposal, Run, context and export command families. Structural commands
 - apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts
 - apps/web/test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts
 - apps/web/test/node-postgresql/recovery-archived-exports-http.integration.test.ts
-- apps/web/test/node-postgresql/reject-proposal-operations-http.integration.test.ts
-- apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts
 - apps/web/test/node-postgresql/replan-proposal-http.integration.test.ts
 - apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts
 - apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts
@@ -98,3 +98,16 @@ Continue Proposal, Run, context and export command families. Structural commands
 - Acceptance refusal tests an actual failing insert, deterministic lock coordination, immutable refusal across writer restoration/restart and later success, and canonical archive secret exclusion. Its logged byte sizes are not asserted size limits. Browser delivery fakes cannot cover these persistence behaviors.
 - Read-ahead only: browser-source/accept-block-proposal was read for the comparison; it has no browser verdict yet. Other Proposal/Run/export families remain pending.
 - All new covering/compared test citations point to actual declaration lines. No source mutations, targeted executions or database commands ran.
+
+## Generation and candidate-edit checkpoint
+
+- NP080-NP100 cover eight more files and 21 runtime cases. Proposal Acceptance has one plain test and three parameterized cases; candidate editing has three plain tests and seven parameterized cases. The candidate tests with explicit timeout arguments were read and entered manually.
+- MERGE complete-ready-partial:89 and continue-proposal-generation:110 into continue-proposal-generation-claim:128. Preserve each command's exact replay, Receipt fields and intermediate-state invariants before its next operation. The retained owner already runs the identical setup, proves the terminal predecessor, executes the new-generation Worker and continues a second time. The simpler Continue test's conditional nonterminal arm is not an independent nonterminal setup.
+- MERGE open-block-proposal:203 into the opening stage of accept-proposal:14. Move the exact source/Validation Receipt/projection, unchanged Chapter, repeated GET and missing/foreign GET assertions before any candidate edit. Preserve the free-sibling selection test at open-block-proposal:286.
+- Keep Acceptance's three different stored-evidence faults: an old Validation Receipt, an un-revalidated Head advance with a failing conflict-condition insert and export, and altered candidate bytes. The common stale-Proposal-Revision setup can be asserted only in the invalid_validation variant. No partial-line savings are claimed for that cleanup.
+- Keep rejection and reopening fault/rollback tests: they insert different durable event families and export different immutable lineage records. Foreign challenged helpers stop at Challenge admission, so those assertions are not command-handler scope evidence.
+- Keep candidate Author Edit/Root Undo and both steering points. Guidance before the Decision retains the original candidate target; guidance after an installed Decision must bind the new candidate Revision and preserve historical Attempt inspection.
+- Three candidate-discussion parameter elements are DELETE: This feels slow duplicates the retained advisory input; SCRIPT:invalid and incomplete typed output both reach NoDecision before candidate revision; the plain tool request duplicates the retained explicit-revision-plus-tool refusal. References include the exact retained parameter text. Their array elements share source lines with retained elements, so remove spans are null and line savings are conservatively zero. This does not mean the rows are excluded from the DELETE sample population.
+- agent_run_work.rs:203 checks requested_execution_capability before destination dispatch. Both tool inputs match the same substring; the explicit revision request is the stronger retained competing-intent input. No mutation evidence is claimed yet.
+- Reconcile earlier covering citations that select the three new MERGE tests before freezing DELETE sampling. Target transfers are requirements of the slimming plan, not implemented assertions.
+- All reviewed files' declaration-line sets match the ledger; new compared-test citation starts checked. No product/test/generated edits, process execution or database work occurred.
