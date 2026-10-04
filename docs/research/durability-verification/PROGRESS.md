@@ -92,3 +92,4 @@
   COMMIT. The lost-ack case discards a received HTTP reply then kills Server;
   it does not claim a cut inside Server response serialization.
 - Next: run round 1, minimize confirmed findings, then replay the full matrix.
+- Matrix round-1, `durable`: completed (exit 0). Evidence: `evidence/round-1/durable.json`.
