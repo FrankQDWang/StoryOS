@@ -94,3 +94,4 @@
 - Next: run round 1, minimize confirmed findings, then replay the full matrix.
 - Matrix round-1, `durable`: completed (exit 0). Evidence: `evidence/round-1/durable.json`.
 - Matrix round-1, `lost-ack`: completed (exit 0). Evidence: `evidence/round-1/lost-ack.json`.
+- Matrix round-1, `cut-admission-server`: completed (exit 0). Evidence: `evidence/round-1/cut-admission-server.json`.
