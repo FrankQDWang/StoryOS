@@ -20,13 +20,15 @@ evidence.mkdir(parents=True, exist_ok=True)
 for case in cases:
     output = target / f'{case}.json'
     command = ['scripts/dev-postgres.sh', 'run', 'node', 'prototypes/durability-verification/driver.mjs', case, str(output)]
+    if round_name == 'minimal':
+        command.append('--minimal')
     print(f'Start {round_name}/{case}', flush=True)
     with (target / f'{case}.log').open('w') as log:
         result = subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT)
     data = json.loads(output.read_text()) if output.exists() else {'scenario': case, 'events': []}
     data['exit_code'] = result.returncode
     data['driver_commit'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
-    data['command'] = ['scripts/dev-postgres.sh', 'run', 'node', 'prototypes/durability-verification/driver.mjs', case]
+    data['command'] = command[:5] + ['target/durability-repro.json'] + command[6:]
     (evidence / f'{case}.json').write_text(json.dumps(data, separators=(',', ':')) + '\n')
     errors = [e['data'] for e in data['events'] if e['name'] == 'blocked_or_probe_error']
     failed = any(e['name'] == 'verdict' and e['data'] == 'fails' for e in data['events'])

@@ -139,3 +139,12 @@
 - Matrix round-2, `takeover-server`: invariant failure (exit 1). Evidence: `evidence/round-2/takeover-server.json`.
 - Matrix round-2, `takeover-database`: invariant failure (exit 1). Evidence: `evidence/round-2/takeover-database.json`.
 - Matrix round-2, `takeover-concurrent`: invariant failure (exit 1). Evidence: `evidence/round-2/takeover-concurrent.json`.
+- Step 8: round 2 completed all 16 cases without a probe error. It found no
+  new public failure class. The same F1/F2/F3 outcomes repeated. All three
+  takeover cases completed the fresh-session takeover and subsequent edit,
+  so the observed stale base is recoverable, not a permanently unwritable Project.
+  Nine cases completed their positive or recovery oracle; seven returned the
+  expected invariant-failure exit. The Author Edit concurrency control also
+  retains F2's 503 while its D1 preservation oracle passes.
+- Next: execute six minimized cases (the failed matrix cells), write REPORT.md,
+  check the changed-path boundary, and push only the research branch.
