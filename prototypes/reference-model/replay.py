@@ -72,6 +72,17 @@ def run(http, seed, differences, coverage, selected=None):
     e.refresh()
     compare('New writer active', 'current_writer', e.session['writer']['kind'], differences)
     e.edit(units('New ' + str(seed), 0, len(e.text)), 'authoritative_applied', 'New ' + str(seed))
+    method, path, body, headers, raw = http.commands['applyAuthorEdit']
+    altered_body = deepcopy(body)
+    altered_body['author_edit_units'][0]['normalized_primitives'][0]['text'] = 'Changed request'
+    for label, payload, sent_headers in [
+        ('wrong_nonce', body, {**headers, 'X-StoryOS-Anti-Forgery': '0' * 64}),
+        ('changed_body', altered_body, headers),
+        ('new_key_old_nonce', body, {**headers, 'Idempotency-Key': http.identity()}),
+    ]:
+        refused_status, refused_result = http.request(method, path, payload, sent_headers)
+        compare(label + '/no fresh authority', True, refused_status >= 400 and 'receipt' not in refused_result, differences)
+        coverage['replay_binding:' + label + ':refused'] += int(refused_status >= 400 and 'receipt' not in refused_result)
     replay(http, old_edit, 'applyAuthorEdit', differences, coverage)
     _, chapter = http.request('GET', f'/api/v1/projects/{e.s.project}/chapters/{e.chapter}')
     compare('Replay does not restore old prose', e.text, chapter['chapter']['current_revision']['body'], differences)

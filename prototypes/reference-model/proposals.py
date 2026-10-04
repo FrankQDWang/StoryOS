@@ -163,7 +163,7 @@ class Proposal:
 
 
 def run(http, seed, differences, coverage, selected=None):
-    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect', 'conflict_reject', 'conflict_withdraw', 'refuse_replan', 'draft', 'edit_conflicts', 'producer', 'closed', 'reversal']
+    modes = [selected] if selected else ['accept', 'withdraw', 'reject', 'edit', 'replan', 'invalid', 'stale', 'reopen_no_effect', 'conflict_reject', 'conflict_withdraw', 'refuse_replan', 'draft', 'edit_conflicts', 'producer', 'closed', 'reversal', 'duplicates']
     http.rng.shuffle(modes)
     for mode in modes:
         http.rng = random.Random(f'{seed}/proposal/{mode}')
@@ -231,6 +231,7 @@ def run(http, seed, differences, coverage, selected=None):
             p.command('rejectProposalOperations', 'refused')
             p.rejections = [http.identity()]
             p.command('reopenRejectedOperations', 'refused')
+            p.command('replanProposal', 'refused')
 
         elif mode == 'reversal':
             prior = p.editor.text
@@ -245,3 +246,9 @@ def run(http, seed, differences, coverage, selected=None):
             compare(p.label + '/reversal has no Commit', [], response['receipt']['authoritative_commit_ids'], differences)
             e.refresh()
             compare(p.label + '/reversal leaves authority', before, e.session['base_snapshot']['materialized_revision']['body'], differences)
+
+        elif mode == 'duplicates':
+            p.command('acceptProposal', 'refused', mutation={'selected_operation_ids': [p.p['operation_id']] * 2})
+            p.command('rejectProposalOperations', 'refused', mutation={'selected_pending_operation_ids': [p.p['operation_id']] * 2})
+            p.rejections = [http.identity()]
+            p.command('reopenRejectedOperations', 'refused')

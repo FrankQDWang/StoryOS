@@ -119,3 +119,9 @@ A-007: section 10.1 names typed Proposal edit, rejection, and withdrawal handler
 Next: verify Acceptance reversal, then collect bounded 20-seed batches.
 
 Step 10 follow-up: the empty fixture frontier is an omitted optional property, not explicit null. Corrected the harness lookup. Seed 220 reached unsupported-intent refusal with zero differences before that lookup stopped the run; evidence is retained as `edits-empty-frontier-probe.json.gz`.
+
+## Step 11: Direct Author Edit count threshold
+
+Seeds 220-239 completed with zero differences. The run reached 20 content-unchanged results, 20 invalid-selection refusals, 20 unsupported-intent refusals, 20 stale-Head conflicts, 80 applied edits, 20 frontier conflicts, 40 wrong-Head conflicts, 20 direct compensations, and 20 no-frontier results. Evidence: `edits-220-239.json.gz`; managed run `5d22458b0d2045ed88d4d92cf81905c1` completed in 125 seconds. All 361 exact Challenge retries and 341 immediate command retries were stable.
+
+A parallel launch was refused by the repository resource budget before database startup. Keep subsequent managed runs serial. Next: verify the remaining Proposal-derived edit and Undo outcomes and then collect their 20-hit counts.
