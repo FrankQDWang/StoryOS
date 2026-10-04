@@ -353,5 +353,395 @@
     "evidence": "The archiveProject-specific replay loader must return historical-unavailable for absent evidence and store-unavailable for malformed evidence, preserving lifecycle and the one archival decision. UpdateProject shares the decoder but not Archive's SQL projection, error conversion or extra archival decision family; its negative cannot prove this branch.",
     "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:575; apps/web/test/node-postgresql/archive-project-http.integration.test.ts:308",
     "remove": null
+  },
+  {
+    "id": "NP033",
+    "path": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts",
+    "line": 148,
+    "test": "createVolume creates one named Volume, replays, and fails closed",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A valid admitted Create Volume on an archived Project must settle Refused/archived_project, and a stale tree must settle Conflict without adding a Volume. Browser creation only sends current active input; frozen replay tests do not first-admit these states. The Changed Retry subcase uses a new unissued key, so it proves invalid proof rejection, not changed-body rejection for an existing key.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-07-create-volume.integration.test.ts:35; apps/web/test/node-postgresql/create-volume-http.integration.test.ts:597",
+    "remove": null
+  },
+  {
+    "id": "NP034",
+    "path": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts",
+    "line": 392,
+    "test": "createVolume reports Canonical Sibling Order through removal, replay, and historical acks",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "After a middle Volume is removed, a new Volume must use canonical order 3 rather than its storage rank, and Receipt/Activity/replay must preserve that original order after later moves. An old empty receipt payload must use the documented legacy fallback. Browser reorder does not modify persisted receipt history or inspect public creation Activity.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts:65; apps/web/test/node-postgresql/create-volume-http.integration.test.ts:148",
+    "remove": null
+  },
+  {
+    "id": "NP035",
+    "path": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts",
+    "line": 597,
+    "test": "createVolume freezes the acknowledgement after later title and Current Chapter changes",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The six Volume/Chapter commands share structure_command::replay_structure, CommandReplay::response_project and StructureRoute::problem. The retained Delete Chapter case covers a frozen empty Project projection after a later Chapter/title and restart; Delete Volume covers all four outcome classes and repeat counts. Creation-specific identity/order replay is already checked by the canonical-order scenario. These additional Project-field and generic authority-count assertions do not exercise a separate implementation.",
+    "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:571; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/node-postgresql/create-volume-http.integration.test.ts:392",
+    "remove": [
+      597,
+      758
+    ]
+  },
+  {
+    "id": "NP036",
+    "path": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts",
+    "line": 760,
+    "test": "createVolume distinguishes historical absence from damaged new-format evidence",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Keep this as the one shared structural replay owner for absent acknowledgement_format/response_project (409 historical) versus malformed bound payload (503), with no new Project/Receipt/Volume effect. Update/Archive Project have separate loaders; other Volume/Chapter copies execute this same reader and error converter.",
+    "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:575; apps/web/test/node-postgresql/archive-project-http.integration.test.ts:431; apps/web/test/node-postgresql/update-volume-http.integration.test.ts:694",
+    "remove": null
+  },
+  {
+    "id": "NP037",
+    "path": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts",
+    "line": 196,
+    "test": "updateVolume renames and reorders one Volume, replays, and fails closed",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A valid admitted reorder beyond the live sibling count or against a missing Volume must settle the correct refusal with no authority; archived input must also refuse. Browser reorder only offers valid positions, while the retained rank tests concern SQL write scope and batching rather than the public malformed command. Ordinary rename/reorder and retry assertions can be trimmed around these distinct refusals.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts:65; crates/storyos-adapter-postgres/src/update_volume_rank_batch_tests.rs:66",
+    "remove": null
+  },
+  {
+    "id": "NP038",
+    "path": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts",
+    "line": 496,
+    "test": "updateVolume freezes applied, no-effect, and conflict acknowledgements after later title and Current Chapter changes",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The six Volume/Chapter commands share structure_command::replay_structure, CommandReplay::response_project and StructureRoute::problem. Its three Project-projection outcomes after later title/Chapter and restart are covered by the retained Delete Chapter empty-to-current case and Delete Volume four-outcome case. The Volume itself is not changed after the original rename, so this does not establish an additional historical Volume-payload invariant. Actual rename/reorder and immediate replay remain in the same-file ordinary case.",
+    "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:571; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196",
+    "remove": [
+      496,
+      692
+    ]
+  },
+  {
+    "id": "NP039",
+    "path": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts",
+    "line": 694,
+    "test": "updateVolume distinguishes historical absence from damaged new-format evidence",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The six Volume/Chapter commands share structure_command::replay_structure, CommandReplay::response_project and StructureRoute::problem. Both injected acknowledgement states and resulting HTTP errors are identical to the retained Create Volume matrix. This test changes no command-specific Activity/Receipt effect field, so Volume update decoding is not a distinct negative input here.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760",
+    "remove": [
+      694,
+      798
+    ]
+  },
+  {
+    "id": "NP040",
+    "path": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts",
+    "line": 204,
+    "test": "createChapter places a new Chapter atomically beside its exact live anchor",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Before/after placement must use the exact live Chapter in the requested Volume, preserve existing Chapter content/current selection, and reject missing/wrong-kind/other-Volume anchors without tree changes. The browser sends valid menu-derived anchors; append-order and legacy-replay tests do not submit these wrong anchor identities.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:767",
+    "remove": null
+  },
+  {
+    "id": "NP041",
+    "path": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts",
+    "line": 262,
+    "test": "Editor Sessions capture nonzero Activity and preserve legacy Snapshot evidence",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A new Editor Session after structural writes must capture Activity position 3 while old persisted position-0 Snapshot evidence remains unchanged. The test corrupts only the old stamp and checks old/new session retries plus both retained rows/counters. Ordinary session admission and Snapshot replay never combine a legacy old stamp with a freshly captured nonzero position.",
+    "coverage": "apps/web/test/node-postgresql/project-http.integration.test.ts:253; apps/web/test/node-postgresql/snapshot-replay-http.integration.test.ts:92",
+    "remove": null
+  },
+  {
+    "id": "NP042",
+    "path": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts",
+    "line": 361,
+    "test": "createChapter creates three named Chapters, keeps the first current, and fails closed",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Expire the actual Chapter query Snapshot and require snapshot_expired, then restore it; separately reject a missing parent Volume and archived Project during new Chapter admission with no authority. Browser valid Chapter creation cannot prove these refusal/query-expiry paths, and getSnapshot expiry is another query. Its Changed Retry uses a new unissued key and is not a discriminating digest-binding test.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43; apps/web/test/node-postgresql/snapshot-replay-http.integration.test.ts:92",
+    "remove": null
+  },
+  {
+    "id": "NP043",
+    "path": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts",
+    "line": 767,
+    "test": "createChapter reports Canonical Sibling Order through removal, replay, and historical acks",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Chapter creation must publish canonical sibling order across deletion/reorder in both Receipt and Activity, retain it on exact retry, and decode legacy empty receipt payload using the Chapter-specific historical Activity order. Volume legacy fallback differs; browser ordering does not erase receipt payloads or inspect retained creation events.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:392; apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts:91",
+    "remove": null
+  },
+  {
+    "id": "NP044",
+    "path": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts",
+    "line": 1002,
+    "test": "createChapter freezes the acknowledgement after later title and Current Chapter changes",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Keep the shared structural replay case where the captured Project contains Chapter A but live Current Chapter later becomes B before retry and restart. The retained Delete Volume matrix leaves its Current Chapter unchanged, and Delete Chapter starts from an empty captured projection. This case detects replacement of a captured nonempty identity with the current one.",
+    "coverage": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:571",
+    "remove": null
+  },
+  {
+    "id": "NP045",
+    "path": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts",
+    "line": 1239,
+    "test": "createChapter distinguishes historical absence from damaged new-format evidence",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The six Volume/Chapter commands share structure_command::replay_structure, CommandReplay::response_project and StructureRoute::problem. The same missing/malformed response_project fields reach the same shared loader and public problem converter as Create Volume. Chapter-specific creation payload decoding is still exercised by its canonical-order/legacy test; this negative alters none of those fields.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:767",
+    "remove": [
+      1239,
+      1349
+    ]
+  },
+  {
+    "id": "NP046",
+    "path": "apps/web/test/node-postgresql/update-chapter-http.integration.test.ts",
+    "line": 252,
+    "test": "updateChapter renames and reorders one Chapter, replays, and fails closed",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "The public update must refuse order beyond the live Chapter sibling count and preserve Current Chapter identity during actual reorder, while successful rename remains prose-neutral. Browser reorder sends menu-valid positions; direct rank batching tests do not exercise public request parsing/response mapping. Receive the earlier Adapter MERGE case comparing exact Head identities before and after, since empty body equality alone does not prove that.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts:91; crates/storyos-adapter-postgres/src/update_chapter_tests.rs:252",
+    "remove": null
+  },
+  {
+    "id": "NP047",
+    "path": "apps/web/test/node-postgresql/update-chapter-http.integration.test.ts",
+    "line": 470,
+    "test": "updateChapter refuses a missing Chapter join and an archived Project",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A missing Chapter join and an archived owning Project must settle the correct refusal through Update Chapter's fact loader/classifier without creating authority. The ordinary case has a live Chapter in an active Project; browser controls prevent these submissions. Delete Chapter and Create Chapter load different domain facts.",
+    "coverage": "apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252; apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts:91",
+    "remove": null
+  },
+  {
+    "id": "NP048",
+    "path": "apps/web/test/node-postgresql/update-chapter-http.integration.test.ts",
+    "line": 632,
+    "test": "updateChapter freezes applied, no-effect, and conflict acknowledgements after later title and Current Chapter changes",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The six Volume/Chapter commands share structure_command::replay_structure, CommandReplay::response_project and StructureRoute::problem. Nonempty captured Current Chapter A versus later B is retained in Create Chapter, and the shared outcome/restart matrix is retained in Delete Volume. This case does not change the renamed Chapter's own content/title again after capture; ordinary Update Chapter/replay remains in the same-file first case.",
+    "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:1002; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252",
+    "remove": [
+      632,
+      899
+    ]
+  },
+  {
+    "id": "NP049",
+    "path": "apps/web/test/node-postgresql/update-chapter-http.integration.test.ts",
+    "line": 901,
+    "test": "updateChapter distinguishes historical absence from damaged new-format evidence",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The six Volume/Chapter commands share structure_command::replay_structure, CommandReplay::response_project and StructureRoute::problem. It injects only the common historical/malformed Project projection fields. The retained Create Volume matrix exercises the identical shared SQL positions, decoder and error mapping; no Update Chapter effect field is damaged here.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760",
+    "remove": [
+      901,
+      1022
+    ]
+  },
+  {
+    "id": "NP050",
+    "path": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts",
+    "line": 238,
+    "test": "deleteVolume removes an empty Volume, refuses a nonempty Volume, and honors deletion",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "After Volume deletion, a new Chapter must not revive that tombstoned parent; remaining Volumes must have canonical order and refusal of a nonempty Volume must leave tree/authority unchanged. The frozen acknowledgement case never attempts child creation in the removed parent, and browser removal does not directly submit that request.",
+    "coverage": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts:66",
+    "remove": null
+  },
+  {
+    "id": "NP051",
+    "path": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts",
+    "line": 384,
+    "test": "deleteVolume refuses an archived Project",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Delete Volume must refuse an otherwise valid empty Volume after its Project is archived, with no Commit or Author Action. The nonempty refusal case and browser disabled archived UI do not execute that active-to-archived deletion input.",
+    "coverage": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:238; apps/web/test/browser-exact-dist/s2-05-archive-project.integration.test.ts:47",
+    "remove": null
+  },
+  {
+    "id": "NP052",
+    "path": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts",
+    "line": 517,
+    "test": "deleteVolume freezes applied, no-effect, conflict, and refusal acknowledgements after later title and Current Chapter changes",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Keep one shared structural acknowledgement matrix for Applied/NoEffect/Conflicted/Refused, exact bytes after a later Project rename and Server restart, and no repeated settlement. The Delete Chapter matrix omits Refused. Despite this test name, Current Chapter stays B throughout; it does not cover switching a captured Chapter identity.",
+    "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:571; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:1002",
+    "remove": null
+  },
+  {
+    "id": "NP053",
+    "path": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts",
+    "line": 742,
+    "test": "deleteVolume distinguishes historical absence from damaged new-format evidence",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The six Volume/Chapter commands share structure_command::replay_structure, CommandReplay::response_project and StructureRoute::problem. The common read-only replay failure cannot enter the command-specific deletion write path. Create Volume covers the same absent/malformed projection errors and lack of new settlement. The extra removal-decision count is another observation of that same non-entry, not a separate defect path.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760",
+    "remove": [
+      742,
+      850
+    ]
+  },
+  {
+    "id": "NP054",
+    "path": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts",
+    "line": 246,
+    "test": "deleteChapter removes a Chapter, honors deletion, and selects next then previous then empty",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Deleting a noncurrent Chapter must preserve Current Chapter; deleting current then the last remaining Chapter must select next then empty, and a fresh stale-revision deletion of an already removed identity must conflict rather than return NoEffect. Browser removal covers next/empty display but not this latter precedence. The name claims previous-sibling selection, but the body never exercises it; retain the separate Core previous-sibling case.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts:181; apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:571",
+    "remove": null
+  },
+  {
+    "id": "NP055",
+    "path": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts",
+    "line": 417,
+    "test": "deleteChapter refuses a missing Chapter join and an archived Project",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A never-present Chapter and an archived Project must refuse at the actual Delete Chapter public boundary. An already-removed Chapter instead yields NoEffect; the ordinary deletion test therefore does not cover the missing-join distinction. Browser controls do not submit these invalid identities.",
+    "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:246; apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts:181",
+    "remove": null
+  },
+  {
+    "id": "NP056",
+    "path": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts",
+    "line": 571,
+    "test": "deleteChapter freezes applied empty Current Chapter, no-effect, and conflict acknowledgements after later title and Current Chapter changes",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Keep the shared structural replay case with a captured empty Project after deleting its last Chapter, followed by a new live Current Chapter and title before retry/restart. A captured empty projection must not be treated as missing and rebuilt from current state. The nonempty Create Chapter and Delete Volume matrices cannot detect that fallback.",
+    "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:1002; apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517",
+    "remove": null
+  },
+  {
+    "id": "NP057",
+    "path": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts",
+    "line": 765,
+    "test": "deleteChapter distinguishes historical absence from damaged new-format evidence",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The six Volume/Chapter commands share structure_command::replay_structure, CommandReplay::response_project and StructureRoute::problem. This test changes only common acknowledgement fields and observes the same errors as Create Volume. The replay read path is shared and cannot execute a Chapter removal on either error; the extra removal-count assertion adds no independent input.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760",
+    "remove": [
+      765,
+      884
+    ]
+  },
+  {
+    "id": "NP058",
+    "path": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts",
+    "line": 313,
+    "test": "setCurrentChapter switches the current Chapter, replays, and fails closed",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A valid navigation must advance the Author Action, create no Commit and move the Editor Session base to the selected Head. A stale expected Current Chapter, wrong target Head and already-current request must produce different non-authoritative outcomes. The browser selects a valid Chapter only; the Adapter switch example repeats these inputs and reads. The foreign helper refusal happens during Challenge acquisition and is not additional command-handler isolation proof.",
+    "coverage": "apps/web/test/browser-source/chapter-navigation.integration.test.ts:38; crates/storyos-adapter-postgres/src/set_current_chapter_tests.rs:229",
+    "remove": null
+  },
+  {
+    "id": "NP059",
+    "path": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts",
+    "line": 542,
+    "test": "setCurrentChapter refuses a missing Chapter join and an archived Project",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A valid Challenge targeting a missing Chapter join or an archived Project must return the appropriate Refused result without selection authority. The successful navigation and browser cases cannot detect removal of either live-fact guard. Structural commands load different facts; their missing/archived cases do not execute this navigation loader.",
+    "coverage": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313; apps/web/test/browser-source/chapter-navigation.integration.test.ts:38",
+    "remove": null
+  },
+  {
+    "id": "NP060",
+    "path": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts",
+    "line": 805,
+    "test": "setCurrentChapter freezes the selected chapter and title",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "After selection B, a later selection A and Project rename must not replace B or the old title in the original acknowledgement, including after restart. Set Current Chapter owns its captured Project write and replay query (set_current_chapter.rs:387 and :547), separate from the generic structural command sequence. Ordinary retry at :313 leaves live selection unchanged; the first-ack race at :930 has no restart or later title change.",
+    "coverage": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:313; apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:930; apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:1002",
+    "remove": null
+  },
+  {
+    "id": "NP061",
+    "path": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts",
+    "line": 930,
+    "test": "setCurrentChapter first acknowledgement excludes a later selection",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "A second selection can commit while the first acknowledgement is held. The first response must still identify its own selected Chapter B, and its retry must match it. Sequential replay at :805 never changes live state before the first response is built. The rename race executes a different Server response function; it cannot catch a live Project reread inserted in set_current_chapter_response.",
+    "coverage": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:805; apps/web/test/node-postgresql/update-project-http.integration.test.ts:498",
+    "remove": null
+  },
+  {
+    "id": "NP062",
+    "path": "apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts",
+    "line": 1043,
+    "test": "setCurrentChapter distinguishes historical absence from damaged new-format evidence",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Set Current Chapter has its own replay SELECT/column offsets, error conversion and Server error match. Missing historical projection must yield the named 409 while damaged current-format projection yields 503, with no new settlement. The structural family uses a common loader and StructureRoute problem match; its owner cannot catch a change confined to set_current_chapter.rs:661 or the navigation HTTP error conversion.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760; apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:805",
+    "remove": null
+  },
+  {
+    "id": "NP063",
+    "path": "apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts",
+    "line": 335,
+    "test": "undoLatestAuthorAction freezes compensation and conflict acknowledgements after later title and Current Chapter changes",
+    "verdict": "KEEP",
+    "reason": "K1",
+    "evidence": "Compensated and conflicted Undo acknowledgements must keep their original title and restored Current Chapter after later rename/navigation and restart; exact retry must not add a Compensation. Undo has its own retained Receipt/frontier reconstruction and captured Project reader. Ordinary browser Undo and Adapter structural compensation tests do not mutate both live projection fields before replay or restart that replay reader.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69; apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:805",
+    "remove": null
+  },
+  {
+    "id": "NP064",
+    "path": "apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts",
+    "line": 603,
+    "test": "undoLatestAuthorAction distinguishes historical absence from damaged new-format evidence",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Undo owns a separate replay SELECT, response_project column offsets and Undo-specific 409/503 translation (undo_latest_author_action.rs:1019 and Server :444). A damaged retained Undo acknowledgement must not be treated as absent history or create a second Compensation. Generic structural and navigation error tests execute other readers and error enum matches, so they cannot catch this command-specific regression.",
+    "coverage": "apps/web/test/node-postgresql/create-volume-http.integration.test.ts:760; apps/web/test/node-postgresql/set-current-chapter-http.integration.test.ts:1043",
+    "remove": null
+  },
+  {
+    "id": "NP065",
+    "path": "apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts",
+    "line": 768,
+    "test": "undoLatestAuthorAction Challenges use the author_edit Challenge Rate Class, not the shared budget",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The retained fixed-clock Adapter case exhausts the shared budget, admits 120 alternating Author Edit/Undo Challenges, rejects the next Undo, permits exact retry and checks another Project. Both its Undo request helper and the HTTP dispatcher call the same ChallengeRateClass::for_command_kind; there is no separate HTTP Undo rate classifier. The ordinary Undo HTTP case exercises route-to-command selection. This 21-request case adds a weaker elapsed-time assumption (at most two rate windows), not a distinct budget behavior.",
+    "coverage": "crates/storyos-adapter-postgres/src/project_command_challenge_tests.rs:282; apps/web/test/node-postgresql/undo-latest-author-action-http.integration.test.ts:335",
+    "remove": [
+      766,
+      825
+    ]
   }
 ]
