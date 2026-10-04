@@ -124,3 +124,4 @@
   omits follow-up controls for the F1/F2 reproducers. No product input changes.
   Next: replay the complete 16-case matrix with these fixed probe inputs.
 - Matrix round-2, `durable`: completed (exit 0). Evidence: `evidence/round-2/durable.json`.
+- Matrix round-2, `lost-ack`: completed (exit 0). Evidence: `evidence/round-2/lost-ack.json`.
