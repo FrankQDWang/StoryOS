@@ -14,9 +14,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    Classification, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    MissingAdmission, ProjectCommand, ProjectResponse, Structural, StructureIdentity,
-    StructureWrite, WriterBase, settle_project_command, unavailable,
+    AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 
@@ -37,6 +37,7 @@ pub(crate) struct NewVolumeOrder(u64);
 impl ProjectCommand for CreateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createVolume",
+        applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         activity_kind: "volume_created",

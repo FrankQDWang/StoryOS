@@ -12,9 +12,9 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    Admission, ChapterSelection, ChapterSelectionWrite, Classification, CommandIsolation,
-    CommandSpec, EditorAdmission, LockedProject, MissingAdmission, ProjectCommand, ProjectResponse,
-    ReceiptHeads, settle_project_command, unavailable,
+    Admission, AppliedResult, ChapterSelection, ChapterSelectionWrite, Classification,
+    CommandIsolation, CommandSpec, EditorAdmission, LockedProject, MissingAdmission,
+    ProjectCommand, ProjectResponse, ReceiptHeads, settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::CurrentChapterSequences;
 
@@ -35,6 +35,7 @@ pub(crate) struct ChapterHead(String);
 impl ProjectCommand for SetCurrentChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "setCurrentChapter",
+        applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         activity_kind: "current_chapter_set",

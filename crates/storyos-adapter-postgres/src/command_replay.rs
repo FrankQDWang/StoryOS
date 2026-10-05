@@ -74,12 +74,17 @@ impl JsonText {
 }
 
 impl CommandReplay {
-    /// The recorded outcome. `Applied` carries no value; the command decodes its applied effect.
+    /// The recorded outcome; `applied_result` is the result kind of the command's applied outcome.
+    ///
+    /// `Applied` carries no value; the command decodes its applied effect.
     pub(crate) fn outcome<N: ReasonCode, C: ReasonCode, R: ReasonCode>(
         &self,
+        applied_result: &str,
     ) -> Result<TransitionOutcome<(), N, C, R>, ReplayFault> {
         match (self.result_kind.as_str(), self.receipt.text("reason")) {
-            ("authoritative_applied", None) => Ok(TransitionOutcome::Applied(())),
+            (result_kind, None) if result_kind == applied_result => {
+                Ok(TransitionOutcome::Applied(()))
+            }
             (result_kind, Some(reason)) => {
                 TransitionOutcome::from_zero_authority_codes(result_kind, reason)
                     .ok_or(ReplayFault::BindingConflict)

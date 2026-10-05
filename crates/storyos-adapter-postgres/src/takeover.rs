@@ -14,9 +14,10 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivityOnly, ActivitySequences, ActivityWrite, Admission, Classification, CommandIsolation,
-    CommandSpec, LockedProject, MissingAdmission, NoResponse, ProjectCommand, ReceiptHeads,
-    TakeoverAdmission, ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
+    ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedResult, Classification,
+    CommandIsolation, CommandSpec, LockedProject, MissingAdmission, NoResponse, ProjectCommand,
+    ReceiptHeads, TakeoverAdmission, ZeroAuthorityWrite, ZeroOutcome, settle_project_command,
+    unavailable,
 };
 
 impl PostgresProjectReader {
@@ -82,6 +83,7 @@ async fn load_takeover_facts(
 impl ProjectCommand for TakeOverProjectWriterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "takeOverProjectWriter",
+        applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::BindingConflict,
         activity_kind: "writer_takeover_applied",

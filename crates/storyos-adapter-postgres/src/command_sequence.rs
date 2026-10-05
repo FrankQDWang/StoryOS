@@ -67,8 +67,22 @@ pub(crate) enum MissingAdmission {
     BindingConflict,
 }
 
+/// The Domain Receipt result kind that an applied outcome of the command records.
+pub(crate) enum AppliedResult {
+    AuthoritativeApplied,
+}
+
+impl AppliedResult {
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Self::AuthoritativeApplied => "authoritative_applied",
+        }
+    }
+}
+
 pub(crate) struct CommandSpec {
     pub(crate) kind: &'static str,
+    pub(crate) applied_result: AppliedResult,
     pub(crate) isolation: CommandIsolation,
     pub(crate) missing_admission: MissingAdmission,
     pub(crate) activity_kind: &'static str,
@@ -308,7 +322,12 @@ async fn first_use<C: ProjectCommand>(
     } = command.classify(client, envelope, &project).await?;
     insert_admission(client, envelope, &C::SPEC, &admission).await?;
     let receipt = ReceiptRecord {
-        result: classified.receipt_result().code(),
+        result: match &classified {
+            TransitionOutcome::Applied(_) => C::SPEC.applied_result.code(),
+            TransitionOutcome::NoEffect(_)
+            | TransitionOutcome::Conflicted(_)
+            | TransitionOutcome::Refused(_) => classified.receipt_result().code(),
+        },
         payload: match classified.reason_code() {
             Some(code) => serde_json::json!({ "reason": code }).to_string(),
             None => "{}".to_owned(),
@@ -398,7 +417,9 @@ fn replay_command<C: ProjectCommand>(
     replay: &CommandReplay,
 ) -> Result<SettledCommand<C>, ReplayFault> {
     let mut zero_authority_effect = None;
-    let outcome = match replay.outcome::<C::NoEffect, C::Conflict, C::Refusal>()? {
+    let outcome = match replay
+        .outcome::<C::NoEffect, C::Conflict, C::Refusal>(C::SPEC.applied_result.code())?
+    {
         TransitionOutcome::Applied(()) => {
             TransitionOutcome::Applied(C::Profile::replay(command.decode(replay)?, replay)?)
         }

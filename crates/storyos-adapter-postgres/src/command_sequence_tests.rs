@@ -515,7 +515,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     }
 
     let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
-        two_chapter_writer(&store, 0x5d80).await;
+        two_chapter_writer(&store, /*base*/ 0x5d80).await;
     for (suffix, chapter_id, expected_current_chapter_id) in [
         (0x5d89, &chapter_b, &chapter_a),
         (0x5d8a, &chapter_b, &chapter_b),
@@ -568,7 +568,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((UPDATE_PROJECT_ASSISTANCE.kind, outcome));
     }
 
-    let call = take_over_project_writer_call(&store, 0x5da0).await;
+    let call = take_over_project_writer_call(&store, /*base*/ 0x5da0).await;
     let outcome = replayed_outcome(&store, &admin, &call, take_over_project_writer).await;
     observed.push((TAKE_OVER_PROJECT_WRITER.kind, outcome));
 
@@ -856,30 +856,70 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         .await;
     let (store, admin) = stores().await;
     let observed = vec![
-        in_progress_retry(&store, &admin, &create_volume_call(&store, 0x5e00).await).await,
-        in_progress_retry(&store, &admin, &update_volume_call(&store, 0x5e10).await).await,
-        in_progress_retry(&store, &admin, &delete_volume_call(&store, 0x5e20).await).await,
-        in_progress_retry(&store, &admin, &create_chapter_call(&store, 0x5e30).await).await,
-        in_progress_retry(&store, &admin, &update_chapter_call(&store, 0x5e40).await).await,
-        in_progress_retry(&store, &admin, &delete_chapter_call(&store, 0x5e50).await).await,
-        in_progress_retry(&store, &admin, &update_project_call(&store, 0x5e60).await).await,
-        in_progress_retry(&store, &admin, &archive_project_call(&store, 0x5e70).await).await,
         in_progress_retry(
             &store,
             &admin,
-            &set_current_chapter_call(&store, 0x5e80).await,
+            &create_volume_call(&store, /*base*/ 0x5e00).await,
         )
         .await,
         in_progress_retry(
             &store,
             &admin,
-            &update_project_assistance_call(&store, 0x5e90).await,
+            &update_volume_call(&store, /*base*/ 0x5e10).await,
         )
         .await,
         in_progress_retry(
             &store,
             &admin,
-            &take_over_project_writer_call(&store, 0x5ea0).await,
+            &delete_volume_call(&store, /*base*/ 0x5e20).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0x5e30).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &update_chapter_call(&store, /*base*/ 0x5e40).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &delete_chapter_call(&store, /*base*/ 0x5e50).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &update_project_call(&store, /*base*/ 0x5e60).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &archive_project_call(&store, /*base*/ 0x5e70).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &set_current_chapter_call(&store, /*base*/ 0x5e80).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &update_project_assistance_call(&store, /*base*/ 0x5e90).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &take_over_project_writer_call(&store, /*base*/ 0x5ea0).await,
         )
         .await,
     ];
@@ -1003,30 +1043,70 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         .await;
     let (store, admin) = stores().await;
     let observed = vec![
-        failed_then_settled(&store, &admin, &create_volume_call(&store, 0x5f00).await).await,
-        failed_then_settled(&store, &admin, &update_volume_call(&store, 0x5f10).await).await,
-        failed_then_settled(&store, &admin, &delete_volume_call(&store, 0x5f20).await).await,
-        failed_then_settled(&store, &admin, &create_chapter_call(&store, 0x5f30).await).await,
-        failed_then_settled(&store, &admin, &update_chapter_call(&store, 0x5f40).await).await,
-        failed_then_settled(&store, &admin, &delete_chapter_call(&store, 0x5f50).await).await,
-        failed_then_settled(&store, &admin, &update_project_call(&store, 0x5f60).await).await,
-        failed_then_settled(&store, &admin, &archive_project_call(&store, 0x5f70).await).await,
         failed_then_settled(
             &store,
             &admin,
-            &set_current_chapter_call(&store, 0x5f80).await,
+            &create_volume_call(&store, /*base*/ 0x5f00).await,
         )
         .await,
         failed_then_settled(
             &store,
             &admin,
-            &update_project_assistance_call(&store, 0x5f90).await,
+            &update_volume_call(&store, /*base*/ 0x5f10).await,
         )
         .await,
         failed_then_settled(
             &store,
             &admin,
-            &take_over_project_writer_call(&store, 0x5fa0).await,
+            &delete_volume_call(&store, /*base*/ 0x5f20).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0x5f30).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &update_chapter_call(&store, /*base*/ 0x5f40).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &delete_chapter_call(&store, /*base*/ 0x5f50).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &update_project_call(&store, /*base*/ 0x5f60).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &archive_project_call(&store, /*base*/ 0x5f70).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &set_current_chapter_call(&store, /*base*/ 0x5f80).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &update_project_assistance_call(&store, /*base*/ 0x5f90).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &take_over_project_writer_call(&store, /*base*/ 0x5fa0).await,
         )
         .await,
     ];
@@ -1095,24 +1175,64 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         .await;
     let (store, admin) = stores().await;
     let observed = vec![
-        evidence_replays(&store, &admin, &create_volume_call(&store, 0x6a00).await).await,
-        evidence_replays(&store, &admin, &update_volume_call(&store, 0x6a10).await).await,
-        evidence_replays(&store, &admin, &delete_volume_call(&store, 0x6a20).await).await,
-        evidence_replays(&store, &admin, &create_chapter_call(&store, 0x6a30).await).await,
-        evidence_replays(&store, &admin, &update_chapter_call(&store, 0x6a40).await).await,
-        evidence_replays(&store, &admin, &delete_chapter_call(&store, 0x6a50).await).await,
-        evidence_replays(&store, &admin, &update_project_call(&store, 0x6a60).await).await,
-        evidence_replays(&store, &admin, &archive_project_call(&store, 0x6a70).await).await,
         evidence_replays(
             &store,
             &admin,
-            &set_current_chapter_call(&store, 0x6a80).await,
+            &create_volume_call(&store, /*base*/ 0x6a00).await,
         )
         .await,
         evidence_replays(
             &store,
             &admin,
-            &update_project_assistance_call(&store, 0x6a90).await,
+            &update_volume_call(&store, /*base*/ 0x6a10).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &delete_volume_call(&store, /*base*/ 0x6a20).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0x6a30).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &update_chapter_call(&store, /*base*/ 0x6a40).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &delete_chapter_call(&store, /*base*/ 0x6a50).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &update_project_call(&store, /*base*/ 0x6a60).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &archive_project_call(&store, /*base*/ 0x6a70).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &set_current_chapter_call(&store, /*base*/ 0x6a80).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &update_project_assistance_call(&store, /*base*/ 0x6a90).await,
         )
         .await,
     ];
