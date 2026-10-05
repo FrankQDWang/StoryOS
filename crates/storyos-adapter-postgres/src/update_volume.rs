@@ -9,11 +9,12 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 impl PostgresProjectReader {
     /// Settles one Update Volume (rename and reorder) as a Manuscript Structure Transition.
@@ -22,7 +23,7 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &UpdateVolumeInput,
     ) -> Result<UpdateVolumeSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
@@ -33,12 +34,17 @@ pub(crate) struct LiveVolumes {
     current_order: u64,
 }
 
-impl StructureCommand for UpdateVolumeInput {
+impl ProjectCommand for UpdateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "updateVolume",
+        applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
+        missing_admission: MissingAdmission::InvalidChallenge,
         activity_kind: "volume_updated",
     };
+    type Profile = Structural;
+    type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = UpdateVolumeApplied;
     type Plan = LiveVolumes;
     type Effect = UpdateVolumeApplied;
@@ -51,7 +57,7 @@ impl StructureCommand for UpdateVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let volumes = client
             .query(
                 "SELECT manuscript_object_id::text, title
@@ -99,16 +105,18 @@ impl StructureCommand for UpdateVolumeInput {
             current_order,
             volume_count: ordered_ids.len() as u64,
         });
-        Ok(classified.map_applied(|applied| {
-            (
-                applied,
-                LiveVolumes {
-                    ordered_ids,
-                    current_title,
-                    current_order,
-                },
-            )
-        }))
+        Ok(Classification::project_command(classified.map_applied(
+            |applied| {
+                (
+                    applied,
+                    LiveVolumes {
+                        ordered_ids,
+                        current_title,
+                        current_order,
+                    },
+                )
+            },
+        )))
     }
 
     async fn apply(
@@ -116,6 +124,7 @@ impl StructureCommand for UpdateVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         live: LiveVolumes,
         applied: UpdateVolumeApplied,
     ) -> Result<StructureWrite<UpdateVolumeApplied>, ProjectCommandError> {

@@ -3,11 +3,13 @@ use std::fmt::Debug;
 use serde::de::DeserializeOwned;
 use storyos_contracts as contracts;
 use storyos_core::{
-    CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict, CreateVolumeRefusal,
-    DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal, DeleteVolumeConflict,
-    DeleteVolumeNoEffect, DeleteVolumeRefusal, ReasonCode, UpdateChapterConflict,
-    UpdateChapterNoEffect, UpdateChapterRefusal, UpdateVolumeConflict, UpdateVolumeNoEffect,
-    UpdateVolumeRefusal,
+    ArchiveProjectConflict, ArchiveProjectNoEffect, CreateChapterConflict, CreateChapterRefusal,
+    CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
+    DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
+    ReasonCode, SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
+    UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
+    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
+    UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
 };
 
 use super::contract_reason;
@@ -155,6 +157,66 @@ fn every_chapter_reason_maps_to_its_public_reason() {
         (
             DeleteChapterRefusal::InvalidChapterJoin,
             contracts::DeleteChapterRefusalReason::InvalidChapterJoin,
+        ),
+    ]);
+}
+
+#[test]
+fn every_project_setting_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        UpdateProjectNoEffect::TitleUnchanged,
+        contracts::UpdateProjectNoEffectReason::TitleUnchanged,
+    )]);
+    assert_maps(vec![(
+        UpdateProjectConflict::StaleProjectRevision,
+        contracts::UpdateProjectConflictReason::StaleProjectRevision,
+    )]);
+    assert_maps(vec![(
+        ArchiveProjectNoEffect::AlreadyArchived,
+        contracts::ArchiveProjectNoEffectReason::AlreadyArchived,
+    )]);
+    assert_maps(vec![(
+        ArchiveProjectConflict::StaleProjectRevision,
+        contracts::ArchiveProjectConflictReason::StaleProjectRevision,
+    )]);
+    assert_maps(vec![(
+        UpdateProjectAssistanceNoEffect::AvailabilityUnchanged,
+        contracts::UpdateProjectAssistanceNoEffectReason::AvailabilityUnchanged,
+    )]);
+    assert_maps(vec![(
+        UpdateProjectAssistanceConflict::StaleAssistanceRevision,
+        contracts::UpdateProjectAssistanceConflictReason::StaleAssistanceRevision,
+    )]);
+}
+
+#[test]
+fn every_current_chapter_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        SetCurrentChapterNoEffect::AlreadyCurrent,
+        contracts::SetCurrentChapterNoEffectReason::AlreadyCurrent,
+    )]);
+    assert_maps(vec![
+        (
+            SetCurrentChapterConflict::StaleCurrentChapter,
+            contracts::SetCurrentChapterConflictReason::StaleCurrentChapter,
+        ),
+        (
+            SetCurrentChapterConflict::WrongTargetHead,
+            contracts::SetCurrentChapterConflictReason::WrongTargetHead,
+        ),
+    ]);
+    assert_maps(vec![
+        (
+            SetCurrentChapterRefusal::ArchivedProject,
+            contracts::SetCurrentChapterRefusalReason::ArchivedProject,
+        ),
+        (
+            SetCurrentChapterRefusal::InvalidChapterJoin,
+            contracts::SetCurrentChapterRefusalReason::InvalidChapterJoin,
+        ),
+        (
+            SetCurrentChapterRefusal::EmptyProject,
+            contracts::SetCurrentChapterRefusalReason::EmptyProject,
         ),
     ]);
 }

@@ -1,8 +1,8 @@
 use super::*;
-use crate::delete_chapter_tests::apply_delete;
-use crate::structure_command::tests::{
+use crate::command_sequence::tests::{
     CommandCall, applied, command_call, create_volume, update_chapter,
 };
+use crate::delete_chapter_tests::apply_delete;
 use crate::update_chapter_tests::{
     USER_B, UpdateFixture, apply_chapter, apply_volume, named_issue, seed_project, update_command,
     update_issue,

@@ -54,14 +54,31 @@ impl std::error::Error for ProjectCommandError {
     }
 }
 
-/// The settled outcome of one Manuscript Structure Transition command, equal on first delivery and replay.
+/// The settled outcome of one project command, equal on first delivery and replay.
+///
+/// `A` is the applied record of the command's settlement profile (ADR 0043). `P` is the
+/// acknowledgement record that the command keeps for an exact retry. `Z` is the effect of a
+/// zero-authority outcome that writes effect rows.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StructureSettlement<A, N, C, R> {
+pub struct ProjectCommandSettlement<A, N, C, R, P = Project, Z = ()> {
     pub ids: AuthorCommandAdmissionIds,
     pub receipt_created_at: String,
-    pub outcome: TransitionOutcome<StructureApplied<A>, N, C, R>,
-    pub response_project: Project,
+    pub outcome: TransitionOutcome<A, N, C, R>,
+    pub response: P,
+    /// Present only for a zero-authority outcome that wrote effect rows.
+    pub zero_authority_effect: Option<Z>,
 }
+
+/// The applied value of an `ActivityOnly` command: its effect and its one Activity record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActivityApplied<A> {
+    pub effect: A,
+    pub project_activity_position: u64,
+    pub project_activity_event_id: String,
+}
+
+/// The settled outcome of one Manuscript Structure Transition command.
+pub type StructureSettlement<A, N, C, R> = ProjectCommandSettlement<StructureApplied<A>, N, C, R>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StructureApplied<A> {
@@ -71,22 +88,25 @@ pub struct StructureApplied<A> {
     pub authority: StructureAuthorityEvidence,
 }
 
+/// The authority records of one applied command, or their absence before the Authority History Floor.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum StructureAuthorityEvidence {
-    Settled(StructureAuthority),
-    /// The transition precedes the Authority History Floor and has no Commit or Author Action.
+pub enum AuthorityEvidence<T> {
+    Settled(T),
+    /// The transition precedes the Authority History Floor and has no Author Action.
     BeforeAuthorityHistoryFloor,
 }
 
-impl StructureAuthorityEvidence {
+impl<T> AuthorityEvidence<T> {
     /// The settled authority, or `None` before the Authority History Floor.
-    pub fn into_settled(self) -> Option<StructureAuthority> {
+    pub fn into_settled(self) -> Option<T> {
         match self {
             Self::Settled(authority) => Some(authority),
             Self::BeforeAuthorityHistoryFloor => None,
         }
     }
 }
+
+pub type StructureAuthorityEvidence = AuthorityEvidence<StructureAuthority>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StructureAuthority {
@@ -97,4 +117,21 @@ pub struct StructureAuthority {
     pub resulting_manuscript_tree_revision: u64,
     /// The Authoritative Revision that the Commit binds, when it binds one.
     pub resulting_revision_id: Option<String>,
+}
+
+/// The applied record of a Current Chapter change (`ChapterSelection` settlement profile).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChapterSelectionApplied<A> {
+    pub effect: A,
+    pub project_activity_position: u64,
+    pub project_activity_event_id: String,
+    pub authority: AuthorityEvidence<ChapterSelectionAuthority>,
+}
+
+/// The Author Action and canonical Snapshot of a Current Chapter change, which has no Commit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChapterSelectionAuthority {
+    pub author_action_sequence: u64,
+    pub snapshot_id: String,
+    pub manuscript_tree_revision: u64,
 }

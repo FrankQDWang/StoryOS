@@ -1,11 +1,10 @@
 use super::{
-    ProjectPresence, UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect,
+    UpdateProject, UpdateProjectApplied, UpdateProjectConflict, UpdateProjectNoEffect,
     UpdateProjectRefusal, UpdateProjectResult, update_project,
 };
 
 fn command() -> UpdateProject {
     UpdateProject {
-        presence: ProjectPresence::Present,
         expected_revision: 1,
         current_revision: 1,
         title: "Renamed Novel".to_owned(),
@@ -17,10 +16,10 @@ fn command() -> UpdateProject {
 fn a_matching_revision_and_new_title_classifies_as_applied() {
     assert_eq!(
         update_project(&command()),
-        UpdateProjectResult::Applied {
+        UpdateProjectResult::Applied(UpdateProjectApplied {
             title: "Renamed Novel".to_owned(),
             revision: 2,
-        }
+        })
     );
 }
 
@@ -31,9 +30,7 @@ fn a_stale_revision_classifies_as_conflicted_with_zero_title_effect() {
     stale.current_revision = 2;
     assert_eq!(
         update_project(&stale),
-        UpdateProjectResult::Conflicted {
-            reason: UpdateProjectConflict::StaleProjectRevision,
-        }
+        UpdateProjectResult::Conflicted(UpdateProjectConflict::StaleProjectRevision)
     );
 }
 
@@ -43,9 +40,7 @@ fn an_unchanged_title_classifies_as_no_effect() {
     unchanged.title = unchanged.current_title.clone();
     assert_eq!(
         update_project(&unchanged),
-        UpdateProjectResult::NoEffect {
-            reason: UpdateProjectNoEffect::TitleUnchanged,
-        }
+        UpdateProjectResult::NoEffect(UpdateProjectNoEffect::TitleUnchanged)
     );
 }
 
@@ -55,28 +50,12 @@ fn an_invalid_title_classifies_as_refused_with_zero_title_effect() {
     empty.title.clear();
     assert_eq!(
         update_project(&empty),
-        UpdateProjectResult::Refused {
-            reason: UpdateProjectRefusal::InvalidTitle,
-        }
+        UpdateProjectResult::Refused(UpdateProjectRefusal::InvalidTitle)
     );
     let mut too_long = command();
     too_long.title = "n".repeat(1025);
     assert_eq!(
         update_project(&too_long),
-        UpdateProjectResult::Refused {
-            reason: UpdateProjectRefusal::InvalidTitle,
-        }
-    );
-}
-
-#[test]
-fn a_missing_project_classifies_as_refused_with_zero_title_effect() {
-    let mut missing = command();
-    missing.presence = ProjectPresence::Absent;
-    assert_eq!(
-        update_project(&missing),
-        UpdateProjectResult::Refused {
-            reason: UpdateProjectRefusal::MissingProject,
-        }
+        UpdateProjectResult::Refused(UpdateProjectRefusal::InvalidTitle)
     );
 }

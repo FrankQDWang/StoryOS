@@ -1,24 +1,31 @@
 use std::fmt::Debug;
 
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateChapterInput, CreateChapterSettlement, CreateVolumeInput,
-    CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput,
-    DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectScope, StructureAuthority,
-    StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput, UpdateChapterSettlement,
+    ArchiveProjectInput, AuthorCommandAdmissionIds, CreateChapterInput, CreateChapterSettlement,
+    CreateVolumeInput, CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement,
+    DeleteVolumeInput, DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
+    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
+    SetCurrentChapterInput, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+    UpdateChapterInput, UpdateChapterSettlement, UpdateProjectAssistanceInput, UpdateProjectInput,
     UpdateVolumeInput, UpdateVolumeSettlement, issue_project_command_challenge,
 };
-use storyos_application::{ChapterId, IssueProjectCommandChallenge, VolumeId};
-use storyos_core::{CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome};
+use storyos_application::{
+    ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
+};
+use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
+use storyos_core::{
+    AssistanceAvailability, CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome,
+};
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
 use super::{
-    Classified, CommandSpec, LockedProject, StructureCommand, StructureWrite,
-    settle_structure_command, unavailable,
+    ActivitySequences, Classification, CommandSpec, LockedProject, ProfileSequences, ProfileWrite,
+    ProjectCommand, ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::set_current_chapter_authority_tests::{open_session, seed_two_chapters};
 use crate::update_volume_tests::seed_project;
 
 /// One admitted command envelope and its typed Manuscript Structure input.
@@ -103,6 +110,15 @@ pub(crate) async fn delete_chapter(
     store.delete_chapter(&call.envelope, &call.input).await
 }
 
+async fn take_over_project_writer(
+    store: &PostgresProjectReader,
+    call: &CommandCall<TakeOverProjectWriterInput>,
+) -> Result<TakeOverProjectWriterSettlement, ProjectCommandError> {
+    store
+        .take_over_project_writer(&call.envelope, &call.input)
+        .await
+}
+
 /// The applied effect and settled authority of one structure command; panics on any other outcome.
 pub(crate) fn applied<A: Clone + Debug, N: Debug, C: Debug, R: Debug>(
     settlement: &StructureSettlement<A, N, C, R>,
@@ -157,7 +173,7 @@ async fn settlement_rows(admin: &Client, receipt_id: &str) -> [i64; 5] {
     [0, 1, 2, 3, 4].map(|index| row.get(index))
 }
 
-/// The public route identity of one structural command kind.
+/// The public route identity of one project command kind.
 struct Route {
     kind: &'static str,
     method: &'static str,
@@ -195,11 +211,41 @@ const UPDATE_CHAPTER: Route = Route {
     path: storyos_contracts::UPDATE_CHAPTER_PATH,
     schema: storyos_contracts::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
 };
+const UPDATE_PROJECT_ASSISTANCE: Route = Route {
+    kind: "updateProjectAssistance",
+    method: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_METHOD,
+    path: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_PATH,
+    schema: storyos_contracts::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
+};
+const TAKE_OVER_PROJECT_WRITER: Route = Route {
+    kind: "takeOverProjectWriter",
+    method: storyos_contracts::TAKE_OVER_PROJECT_WRITER_METHOD,
+    path: storyos_contracts::TAKE_OVER_PROJECT_WRITER_PATH,
+    schema: storyos_contracts::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
+};
+const SET_CURRENT_CHAPTER: Route = Route {
+    kind: "setCurrentChapter",
+    method: storyos_contracts::SET_CURRENT_CHAPTER_METHOD,
+    path: storyos_contracts::SET_CURRENT_CHAPTER_PATH,
+    schema: storyos_contracts::SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID,
+};
 const DELETE_CHAPTER: Route = Route {
     kind: "deleteChapter",
     method: storyos_contracts::DELETE_CHAPTER_METHOD,
     path: storyos_contracts::DELETE_CHAPTER_PATH,
     schema: storyos_contracts::DELETE_CHAPTER_REQUEST_SCHEMA_ID,
+};
+const UPDATE_PROJECT: Route = Route {
+    kind: "updateProject",
+    method: storyos_contracts::UPDATE_PROJECT_METHOD,
+    path: storyos_contracts::UPDATE_PROJECT_PATH,
+    schema: storyos_contracts::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
+};
+const ARCHIVE_PROJECT: Route = Route {
+    kind: "archiveProject",
+    method: storyos_contracts::ARCHIVE_PROJECT_METHOD,
+    path: storyos_contracts::ARCHIVE_PROJECT_PATH,
+    schema: storyos_contracts::ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
 };
 
 /// Issues one Command Challenge for `route` and binds `input` to it.
@@ -240,20 +286,22 @@ async fn issued<I>(
 /// Settles one call, replays it with new request identities, and requires an equal settlement.
 ///
 /// Returns the Receipt result kind and the authority rows of the first settlement.
-async fn replayed_outcome<I: Clone, A, N, C, R>(
+async fn replayed_outcome<I: Clone, A, N, C, R, P, Z>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<I>,
     settle: impl AsyncFn(
         &PostgresProjectReader,
         &CommandCall<I>,
-    ) -> Result<StructureSettlement<A, N, C, R>, ProjectCommandError>,
+    ) -> Result<ProjectCommandSettlement<A, N, C, R, P, Z>, ProjectCommandError>,
 ) -> (ReceiptResult, [i64; 5])
 where
     A: Debug + PartialEq,
     N: ReasonCode + Debug + PartialEq,
     C: ReasonCode + Debug + PartialEq,
     R: ReasonCode + Debug + PartialEq,
+    P: Debug + PartialEq,
+    Z: Debug + PartialEq,
 {
     let first = settle(store, call).await.unwrap();
     let mut retry = call.clone();
@@ -310,8 +358,7 @@ async fn new_chapter(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn every_structural_outcome_replays_its_first_settlement_and_writes_authority_only_when_applied()
- {
+async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_records() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -428,37 +475,226 @@ async fn every_structural_outcome_replays_its_first_settlement_and_writes_author
         observed.push((DELETE_CHAPTER.kind, outcome));
     }
 
-    let applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 1, 1]);
+    let scope = seed_project(&store, "5d60").await;
+    for (suffix, title, expected_revision) in [
+        (0x5d61, "Renamed", 1),
+        (0x5d62, "Renamed", 2),
+        (0x5d63, "Other", 1),
+    ] {
+        let input = UpdateProjectInput {
+            title: title.to_owned(),
+            expected_revision,
+        };
+        let call = issued(&store, &scope, suffix, &UPDATE_PROJECT, input).await;
+        let outcome = replayed_outcome(
+            &store,
+            &admin,
+            &call,
+            async |store: &PostgresProjectReader, call: &CommandCall<UpdateProjectInput>| {
+                store.update_project(&call.envelope, &call.input).await
+            },
+        )
+        .await;
+        observed.push((UPDATE_PROJECT.kind, outcome));
+    }
+
+    let scope = seed_project(&store, "5d70").await;
+    for (suffix, expected_revision) in [(0x5d71, 2), (0x5d72, 1), (0x5d73, 2)] {
+        let input = ArchiveProjectInput { expected_revision };
+        let call = issued(&store, &scope, suffix, &ARCHIVE_PROJECT, input).await;
+        let outcome = replayed_outcome(
+            &store,
+            &admin,
+            &call,
+            async |store: &PostgresProjectReader, call: &CommandCall<ArchiveProjectInput>| {
+                store.archive_project(&call.envelope, &call.input).await
+            },
+        )
+        .await;
+        observed.push((ARCHIVE_PROJECT.kind, outcome));
+    }
+
+    let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(&store, /*base*/ 0x5d80).await;
+    for (suffix, chapter_id, expected_current_chapter_id) in [
+        (0x5d89, &chapter_b, &chapter_a),
+        (0x5d8a, &chapter_b, &chapter_b),
+        (0x5d8b, &chapter_a, &chapter_a),
+        (0x5d8c, &MISSING_VOLUME.to_owned(), &chapter_b),
+    ] {
+        let input = SetCurrentChapterInput {
+            editor_session_id: EditorSessionId::new(editor_session_id.clone()),
+            chapter_id: chapter_id.clone(),
+            expected_current_chapter_id: expected_current_chapter_id.clone(),
+            expected_target_revision_id: revision_b.clone(),
+        };
+        let call = issued(&store, &scope, suffix, &SET_CURRENT_CHAPTER, input).await;
+        let outcome = replayed_outcome(
+            &store,
+            &admin,
+            &call,
+            async |store: &PostgresProjectReader, call: &CommandCall<SetCurrentChapterInput>| {
+                store.set_current_chapter(&call.envelope, &call.input).await
+            },
+        )
+        .await;
+        observed.push((SET_CURRENT_CHAPTER.kind, outcome));
+    }
+
+    let scope = seed_project(&store, "5d90").await;
+    for (suffix, availability, expected_revision) in [
+        (0x5d91, AssistanceAvailability::Available, 0),
+        (0x5d92, AssistanceAvailability::Available, 1),
+        (0x5d93, AssistanceAvailability::Unavailable, 0),
+        (0x5d94, AssistanceAvailability::Unavailable, 1),
+    ] {
+        let input = UpdateProjectAssistanceInput {
+            availability,
+            expected_revision,
+        };
+        let call = issued(&store, &scope, suffix, &UPDATE_PROJECT_ASSISTANCE, input).await;
+        let outcome = replayed_outcome(
+            &store,
+            &admin,
+            &call,
+            async |store: &PostgresProjectReader,
+                   call: &CommandCall<UpdateProjectAssistanceInput>| {
+                store
+                    .update_project_assistance(&call.envelope, &call.input)
+                    .await
+            },
+        )
+        .await;
+        observed.push((UPDATE_PROJECT_ASSISTANCE.kind, outcome));
+    }
+
+    let call = take_over_project_writer_call(&store, /*base*/ 0x5da0).await;
+    let outcome = replayed_outcome(&store, &admin, &call, take_over_project_writer).await;
+    observed.push((TAKE_OVER_PROJECT_WRITER.kind, outcome));
+
+    // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
+    let structural_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 1, 1]);
+    let chapter_selection_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 0, 1]);
+    let activity_applied = (ReceiptResult::AuthoritativeApplied, [1, 0, 1, 0, 0]);
     let no_effect = (ReceiptResult::NoEffect, [1, 0, 0, 0, 0]);
+    let writer_takeover = (ReceiptResult::NoEffect, [1, 0, 1, 0, 1]);
     let conflicted = (ReceiptResult::Conflicted, [1, 0, 0, 0, 0]);
     let refused = (ReceiptResult::Refused, [1, 0, 0, 0, 0]);
     assert_eq!(
         observed,
         vec![
-            ("createVolume", applied),
+            ("createVolume", structural_applied),
             ("createVolume", conflicted),
             ("createVolume", refused),
-            ("updateVolume", applied),
+            ("updateVolume", structural_applied),
             ("updateVolume", no_effect),
             ("updateVolume", conflicted),
             ("updateVolume", refused),
-            ("deleteVolume", applied),
+            ("deleteVolume", structural_applied),
             ("deleteVolume", no_effect),
             ("deleteVolume", conflicted),
             ("deleteVolume", refused),
-            ("createChapter", applied),
+            ("createChapter", structural_applied),
             ("createChapter", conflicted),
             ("createChapter", refused),
-            ("updateChapter", applied),
+            ("updateChapter", structural_applied),
             ("updateChapter", no_effect),
             ("updateChapter", conflicted),
             ("updateChapter", refused),
-            ("deleteChapter", applied),
+            ("deleteChapter", structural_applied),
             ("deleteChapter", no_effect),
             ("deleteChapter", conflicted),
             ("deleteChapter", refused),
+            ("updateProject", activity_applied),
+            ("updateProject", no_effect),
+            ("updateProject", conflicted),
+            ("archiveProject", conflicted),
+            ("archiveProject", activity_applied),
+            ("archiveProject", no_effect),
+            ("setCurrentChapter", chapter_selection_applied),
+            ("setCurrentChapter", no_effect),
+            ("setCurrentChapter", conflicted),
+            ("setCurrentChapter", refused),
+            ("updateProjectAssistance", activity_applied),
+            ("updateProjectAssistance", no_effect),
+            ("updateProjectAssistance", conflicted),
+            ("updateProjectAssistance", activity_applied),
+            ("takeOverProjectWriter", writer_takeover),
         ]
     );
+}
+
+/// A new Project with Chapters A and B, Chapter A current, and one writer Editor Session.
+///
+/// Returns the Scope, both Chapters, the head of Chapter B, and the Editor Session.
+async fn two_chapter_writer(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> (ProjectScope, String, String, String, String) {
+    let suffix = |offset: u16| format!("{:04x}", base + offset);
+    let (scope, _volume_id, chapter_a, chapter_b) = seed_two_chapters(
+        store,
+        "018f0000-0000-7001-8000-000000000001",
+        &suffix(/*offset*/ 0),
+        &suffix(/*offset*/ 1),
+        &suffix(/*offset*/ 2),
+        &suffix(/*offset*/ 3),
+    )
+    .await;
+    let editor_session_id = open_session(store, &scope, &suffix(/*offset*/ 4)).await;
+    let OpenChapter::Found(opened) =
+        open_chapter(store, &scope, &ChapterId::new(chapter_b.clone()))
+            .await
+            .unwrap()
+    else {
+        panic!("Chapter B must open");
+    };
+    let revision_b = opened.chapter.revision_id.as_ref().to_owned();
+    (scope, chapter_a, chapter_b, revision_b, editor_session_id)
+}
+
+/// One applicable writer takeover by a second Editor Session in a new Project.
+async fn take_over_project_writer_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<TakeOverProjectWriterInput> {
+    let (scope, ..) = two_chapter_writer(store, base).await;
+    let observer = open_session(store, &scope, &format!("{:04x}", base + 5)).await;
+    let input = TakeOverProjectWriterInput {
+        editor_session_id: EditorSessionId::new(observer),
+        observed_writer_generation: 1,
+        editor_contract_revision: storyos_contracts::EDITOR_CONTRACT_REVISION.to_owned(),
+    };
+    issued(store, &scope, base + 9, &TAKE_OVER_PROJECT_WRITER, input).await
+}
+
+/// One applicable first Update Project Assistance in a new Project.
+async fn update_project_assistance_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<UpdateProjectAssistanceInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let input = UpdateProjectAssistanceInput {
+        availability: AssistanceAvailability::Available,
+        expected_revision: 0,
+    };
+    issued(store, &scope, base + 9, &UPDATE_PROJECT_ASSISTANCE, input).await
+}
+
+/// One applicable Set Current Chapter from Chapter A to Chapter B in a new Project.
+async fn set_current_chapter_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<SetCurrentChapterInput> {
+    let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let input = SetCurrentChapterInput {
+        editor_session_id: EditorSessionId::new(editor_session_id),
+        chapter_id: chapter_b,
+        expected_current_chapter_id: chapter_a,
+        expected_target_revision_id: revision_b,
+    };
+    issued(store, &scope, base + 9, &SET_CURRENT_CHAPTER, input).await
 }
 
 /// One applicable Create Volume in a new Project.
@@ -552,6 +788,31 @@ async fn delete_chapter_call(
     issued(store, &scope, base + 9, &DELETE_CHAPTER, input).await
 }
 
+/// One applicable Update Project in a new Project.
+async fn update_project_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<UpdateProjectInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let input = UpdateProjectInput {
+        title: "Renamed".to_owned(),
+        expected_revision: 1,
+    };
+    issued(store, &scope, base + 9, &UPDATE_PROJECT, input).await
+}
+
+/// One applicable Archive Project in a new Project.
+async fn archive_project_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<ArchiveProjectInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let input = ArchiveProjectInput {
+        expected_revision: 1,
+    };
+    issued(store, &scope, base + 9, &ARCHIVE_PROJECT, input).await
+}
+
 fn with_new_request_ids<I: Clone>(call: &CommandCall<I>) -> CommandCall<I> {
     let mut retry = call.clone();
     retry.envelope.ids = AuthorCommandAdmissionIds {
@@ -565,7 +826,7 @@ fn with_new_request_ids<I: Clone>(call: &CommandCall<I>) -> CommandCall<I> {
 /// Marks the Command Challenge consumed and the Command Idempotency Fence in progress, then retries.
 ///
 /// Returns whether the retry is a binding conflict and the rows of the retry Receipt.
-async fn in_progress_retry<C: StructureCommand>(
+async fn in_progress_retry<C: ProjectCommand>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
@@ -580,7 +841,7 @@ async fn in_progress_retry<C: StructureCommand>(
         ))
         .await
         .unwrap();
-    let retry = settle_structure_command(store, &call.envelope, &call.input).await;
+    let retry = settle_project_command(store, &call.envelope, &call.input).await;
     (
         matches!(retry, Err(ProjectCommandError::BindingConflict)),
         settlement_rows(admin, &call.envelope.ids.receipt_id).await,
@@ -589,20 +850,80 @@ async fn in_progress_retry<C: StructureCommand>(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn every_structural_in_progress_exact_retry_conflicts_and_writes_no_row() {
+async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     let observed = vec![
-        in_progress_retry(&store, &admin, &create_volume_call(&store, 0x5e00).await).await,
-        in_progress_retry(&store, &admin, &update_volume_call(&store, 0x5e10).await).await,
-        in_progress_retry(&store, &admin, &delete_volume_call(&store, 0x5e20).await).await,
-        in_progress_retry(&store, &admin, &create_chapter_call(&store, 0x5e30).await).await,
-        in_progress_retry(&store, &admin, &update_chapter_call(&store, 0x5e40).await).await,
-        in_progress_retry(&store, &admin, &delete_chapter_call(&store, 0x5e50).await).await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &create_volume_call(&store, /*base*/ 0x5e00).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &update_volume_call(&store, /*base*/ 0x5e10).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &delete_volume_call(&store, /*base*/ 0x5e20).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0x5e30).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &update_chapter_call(&store, /*base*/ 0x5e40).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &delete_chapter_call(&store, /*base*/ 0x5e50).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &update_project_call(&store, /*base*/ 0x5e60).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &archive_project_call(&store, /*base*/ 0x5e70).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &set_current_chapter_call(&store, /*base*/ 0x5e80).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &update_project_assistance_call(&store, /*base*/ 0x5e90).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &take_over_project_writer_call(&store, /*base*/ 0x5ea0).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 6]);
+    assert_eq!(observed, vec![(true, [0; 5]); 11]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -611,14 +932,17 @@ enum FailurePoint {
     Apply,
 }
 
-/// A structural command that fails after one step has written its rows.
+/// A project command that fails after one step has written its rows.
 struct Failing<C> {
     command: C,
     at: FailurePoint,
 }
 
-impl<C: StructureCommand> StructureCommand for Failing<C> {
+impl<C: ProjectCommand> ProjectCommand for Failing<C> {
     const SPEC: CommandSpec = C::SPEC;
+    type Profile = C::Profile;
+    type Response = C::Response;
+    type ZeroEffect = C::ZeroEffect;
     type Applied = C::Applied;
     type Plan = C::Plan;
     type Effect = C::Effect;
@@ -631,11 +955,15 @@ impl<C: StructureCommand> StructureCommand for Failing<C> {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let classified = self.command.classify(client, envelope, project).await?;
         match self.at {
             FailurePoint::Classify => Err(unavailable("injected classify failure")),
-            FailurePoint::Apply => Ok(classified),
+            FailurePoint::Apply => Ok(Classification {
+                outcome: classified.outcome,
+                admission: classified.admission,
+                heads: classified.heads,
+            }),
         }
     }
 
@@ -644,11 +972,12 @@ impl<C: StructureCommand> StructureCommand for Failing<C> {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
+        sequences: &ProfileSequences<Self>,
         plan: Self::Plan,
         applied: Self::Applied,
-    ) -> Result<StructureWrite<Self::Effect>, ProjectCommandError> {
+    ) -> Result<ProfileWrite<Self>, ProjectCommandError> {
         self.command
-            .apply(client, envelope, project, plan, applied)
+            .apply(client, envelope, project, sequences, plan, applied)
             .await?;
         Err(unavailable("injected apply failure"))
     }
@@ -656,13 +985,34 @@ impl<C: StructureCommand> StructureCommand for Failing<C> {
     fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault> {
         self.command.decode(replay)
     }
+
+    fn writes_zero_authority_effect(&self, outcome: &ZeroOutcome<'_, Self>) -> bool {
+        self.command.writes_zero_authority_effect(&match outcome {
+            ZeroOutcome::NoEffect(reason) => ZeroOutcome::NoEffect(*reason),
+            ZeroOutcome::Conflicted(reason) => ZeroOutcome::Conflicted(*reason),
+            ZeroOutcome::Refused(reason) => ZeroOutcome::Refused(*reason),
+        })
+    }
+
+    async fn write_zero_authority_effect(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+        activity: &ActivitySequences,
+    ) -> Result<ZeroAuthorityWrite<Self::ZeroEffect>, ProjectCommandError> {
+        self.command
+            .write_zero_authority_effect(client, envelope, project, activity)
+            .await?;
+        Err(unavailable("injected zero-authority write failure"))
+    }
 }
 
 /// Fails the call in classify and then in apply, and then settles it for real.
 ///
 /// Returns, for each failure, whether it is a store fault and the rows of its Receipt, then the
 /// Receipt result kind of the real settlement.
-async fn failed_then_settled<C: StructureCommand + Clone>(
+async fn failed_then_settled<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
@@ -673,13 +1023,13 @@ async fn failed_then_settled<C: StructureCommand + Clone>(
             command: call.input.clone(),
             at,
         };
-        let failed = settle_structure_command(store, &call.envelope, &failing).await;
+        let failed = settle_project_command(store, &call.envelope, &failing).await;
         failures.push((
             matches!(failed, Err(ProjectCommandError::Unavailable(_))),
             settlement_rows(admin, &call.envelope.ids.receipt_id).await,
         ));
     }
-    let Ok(settled) = settle_structure_command(store, &call.envelope, &call.input).await else {
+    let Ok(settled) = settle_project_command(store, &call.envelope, &call.input).await else {
         panic!("the unused Command Challenge must still settle");
     };
     (failures, settled.outcome.receipt_result())
@@ -687,24 +1037,83 @@ async fn failed_then_settled<C: StructureCommand + Clone>(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn every_structural_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused() {
+async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     let observed = vec![
-        failed_then_settled(&store, &admin, &create_volume_call(&store, 0x5f00).await).await,
-        failed_then_settled(&store, &admin, &update_volume_call(&store, 0x5f10).await).await,
-        failed_then_settled(&store, &admin, &delete_volume_call(&store, 0x5f20).await).await,
-        failed_then_settled(&store, &admin, &create_chapter_call(&store, 0x5f30).await).await,
-        failed_then_settled(&store, &admin, &update_chapter_call(&store, 0x5f40).await).await,
-        failed_then_settled(&store, &admin, &delete_chapter_call(&store, 0x5f50).await).await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &create_volume_call(&store, /*base*/ 0x5f00).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &update_volume_call(&store, /*base*/ 0x5f10).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &delete_volume_call(&store, /*base*/ 0x5f20).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0x5f30).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &update_chapter_call(&store, /*base*/ 0x5f40).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &delete_chapter_call(&store, /*base*/ 0x5f50).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &update_project_call(&store, /*base*/ 0x5f60).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &archive_project_call(&store, /*base*/ 0x5f70).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &set_current_chapter_call(&store, /*base*/ 0x5f80).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &update_project_assistance_call(&store, /*base*/ 0x5f90).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &take_over_project_writer_call(&store, /*base*/ 0x5fa0).await,
+        )
+        .await,
     ];
-    let rolled_back = (
-        vec![(true, [0; 5]), (true, [0; 5])],
-        ReceiptResult::AuthoritativeApplied,
-    );
-    assert_eq!(observed, vec![rolled_back; 6]);
+    let rolled_back = |result| (vec![(true, [0; 5]), (true, [0; 5])], result);
+    let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
+    expected.push(rolled_back(ReceiptResult::NoEffect));
+    assert_eq!(observed, expected);
 }
 
 /// The replay error of one exact retry.
@@ -718,20 +1127,20 @@ enum ReplayError {
 }
 
 /// Settles the call, then replays it with pre-capture and then with damaged acknowledgement evidence.
-async fn evidence_replays<C: StructureCommand + Clone>(
+async fn evidence_replays<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
 ) -> (ReceiptResult, [ReplayError; 2]) {
-    let Ok(settled) = settle_structure_command(store, &call.envelope, &call.input).await else {
-        panic!("the structural command must settle");
+    let Ok(settled) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the project command must settle");
     };
     let key = &call.envelope.challenge_binding.idempotency_key;
     let mut errors = Vec::new();
     for evidence in [
-        "acknowledgement_format = NULL, response_project = NULL",
+        "acknowledgement_format = NULL, response_project = NULL, response_assistance = NULL",
         "acknowledgement_format = 'command_response_project.v1',
-         response_project = '{\"broken\":true}'::jsonb",
+         response_project = '{\"broken\":true}'::jsonb, response_assistance = NULL",
     ] {
         admin
             .batch_execute(&format!(
@@ -741,8 +1150,7 @@ async fn evidence_replays<C: StructureCommand + Clone>(
             .await
             .unwrap();
         let retry = with_new_request_ids(call);
-        let Err(error) = settle_structure_command(store, &retry.envelope, &retry.input).await
-        else {
+        let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
             panic!("a replay without complete evidence must fail");
         };
         errors.push(match error {
@@ -761,18 +1169,72 @@ async fn evidence_replays<C: StructureCommand + Clone>(
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn every_structural_replay_separates_pre_capture_from_damaged_evidence() {
+async fn every_replay_separates_pre_capture_from_damaged_evidence() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
     let observed = vec![
-        evidence_replays(&store, &admin, &create_volume_call(&store, 0x6a00).await).await,
-        evidence_replays(&store, &admin, &update_volume_call(&store, 0x6a10).await).await,
-        evidence_replays(&store, &admin, &delete_volume_call(&store, 0x6a20).await).await,
-        evidence_replays(&store, &admin, &create_chapter_call(&store, 0x6a30).await).await,
-        evidence_replays(&store, &admin, &update_chapter_call(&store, 0x6a40).await).await,
-        evidence_replays(&store, &admin, &delete_chapter_call(&store, 0x6a50).await).await,
+        evidence_replays(
+            &store,
+            &admin,
+            &create_volume_call(&store, /*base*/ 0x6a00).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &update_volume_call(&store, /*base*/ 0x6a10).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &delete_volume_call(&store, /*base*/ 0x6a20).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0x6a30).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &update_chapter_call(&store, /*base*/ 0x6a40).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &delete_chapter_call(&store, /*base*/ 0x6a50).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &update_project_call(&store, /*base*/ 0x6a60).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &archive_project_call(&store, /*base*/ 0x6a70).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &set_current_chapter_call(&store, /*base*/ 0x6a80).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &update_project_assistance_call(&store, /*base*/ 0x6a90).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -781,5 +1243,148 @@ async fn every_structural_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 6]);
+    assert_eq!(observed, vec![separated; 10]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_command_without_a_response_record_replays_without_it_and_damaged_activity_is_a_fault() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = take_over_project_writer_call(&store, /*base*/ 0x6aa0).await;
+    let first = take_over_project_writer(&store, &call).await.unwrap();
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET acknowledgement_format = NULL, response_project = NULL
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let pre_capture = take_over_project_writer(&store, &with_new_request_ids(&call)).await;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.project_activity_event_payloads
+                SET payload = jsonb_set(payload, '{{prior_writer_generation}}', '\"damaged\"')
+              WHERE receipt_id = '{}'",
+            first.ids.receipt_id
+        ))
+        .await
+        .unwrap();
+    let damaged = take_over_project_writer(&store, &with_new_request_ids(&call)).await;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET canonical_command_digest = 'sha256:takeOverProjectWriter:damaged'
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let other_digest = take_over_project_writer(&store, &with_new_request_ids(&call)).await;
+    assert_eq!(pre_capture.unwrap(), first);
+    assert!(matches!(damaged, Err(ProjectCommandError::Unavailable(_))));
+    assert!(matches!(
+        other_digest,
+        Err(ProjectCommandError::BindingConflict)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_assistance_replay_separates_a_project_only_record_from_damaged_assistance() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = update_project_assistance_call(&store, /*base*/ 0x6ab0).await;
+    store
+        .update_project_assistance(&call.envelope, &call.input)
+        .await
+        .unwrap();
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    let mut errors = Vec::new();
+    for evidence in [
+        "acknowledgement_format = 'command_response_project.v1', response_assistance = NULL",
+        "acknowledgement_format = 'command_response_project_assistance.v1',
+         response_assistance = '{}'::jsonb",
+    ] {
+        admin
+            .batch_execute(&format!(
+                "UPDATE storyos.command_idempotency SET {evidence}
+                  WHERE idempotency_key = '{key}'"
+            ))
+            .await
+            .unwrap();
+        let retry = with_new_request_ids(&call);
+        errors.push(
+            match store
+                .update_project_assistance(&retry.envelope, &retry.input)
+                .await
+            {
+                Err(ProjectCommandError::HistoricalAcknowledgementUnavailable) => {
+                    ReplayError::HistoricalAcknowledgementUnavailable
+                }
+                Err(ProjectCommandError::Unavailable(_)) => ReplayError::Unavailable,
+                other => panic!("the replay must fail on assistance evidence, got {other:?}"),
+            },
+        );
+    }
+    assert_eq!(
+        errors,
+        vec![
+            ReplayError::HistoricalAcknowledgementUnavailable,
+            ReplayError::Unavailable,
+        ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_exact_retry_ignores_a_later_canonical_snapshot_at_the_same_position() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, _admin) = stores().await;
+    let switch = set_current_chapter_call(&store, /*base*/ 0x6ac0).await;
+    let scope = switch.envelope.project_scope.clone();
+    let switched = store
+        .set_current_chapter(&switch.envelope, &switch.input)
+        .await
+        .unwrap();
+    open_session(&store, &scope, "6acb").await;
+    let rename_input = UpdateProjectInput {
+        title: "Renamed".to_owned(),
+        expected_revision: 1,
+    };
+    let rename = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x6acc,
+        &UPDATE_PROJECT,
+        rename_input,
+    )
+    .await;
+    let renamed = store
+        .update_project(&rename.envelope, &rename.input)
+        .await
+        .unwrap();
+    open_session(&store, &scope, "6acd").await;
+    let switch_retry = with_new_request_ids(&switch);
+    let rename_retry = with_new_request_ids(&rename);
+    assert_eq!(
+        (
+            store
+                .set_current_chapter(&switch_retry.envelope, &switch_retry.input)
+                .await
+                .unwrap(),
+            store
+                .update_project(&rename_retry.envelope, &rename_retry.input)
+                .await
+                .unwrap(),
+        ),
+        (switched, renamed)
+    );
 }

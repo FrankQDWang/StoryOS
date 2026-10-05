@@ -47,6 +47,7 @@ mod replan_proposal;
 mod revision_comparison;
 mod set_current_chapter;
 mod statistics_profile;
+mod take_over_project_writer;
 mod transition_outcome;
 mod undo_latest_author_action;
 mod update_chapter;
@@ -74,7 +75,7 @@ pub use archive_path::{
     ArchivePathRefusal, admit_archive_path,
 };
 pub use archive_project::{
-    ArchiveProject, ArchiveProjectConflict, ArchiveProjectNoEffect, ArchiveProjectRefusal,
+    ArchiveProject, ArchiveProjectApplied, ArchiveProjectConflict, ArchiveProjectNoEffect,
     ArchiveProjectResult, ProjectLifecycle, archive_project,
 };
 pub use assemble_context::{
@@ -208,6 +209,10 @@ pub use set_current_chapter::{
 pub use statistics_profile::{
     STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
 };
+pub use take_over_project_writer::{
+    CurrentWriter, StaleWriterObservation, TakeOverProjectWriter, TakeOverProjectWriterNoEffect,
+    TakeOverProjectWriterResult, take_over_project_writer,
+};
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{
     AuthorUndoFrontier, AuthorUndoFrontierKind, UndoLatestAuthorAction,
@@ -225,13 +230,13 @@ pub use update_chapter::{
     UpdateChapterRefusal, UpdateChapterResult, update_chapter,
 };
 pub use update_project::{
-    UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
-    UpdateProjectResult, update_project,
+    UpdateProject, UpdateProjectApplied, UpdateProjectConflict, UpdateProjectNoEffect,
+    UpdateProjectRefusal, UpdateProjectResult, update_project,
 };
 pub use update_project_assistance::{
     AssistanceAvailability, AssistanceBindingPresence, UpdateProjectAssistance,
-    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
-    UpdateProjectAssistanceRefusal, UpdateProjectAssistanceResult, update_project_assistance,
+    UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
+    UpdateProjectAssistanceNoEffect, UpdateProjectAssistanceResult, update_project_assistance,
 };
 pub use update_volume::{
     UpdateVolume, UpdateVolumeApplied, UpdateVolumeConflict, UpdateVolumeNoEffect,

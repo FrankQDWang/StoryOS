@@ -1,12 +1,16 @@
 use super::*;
 use crate::update_project_assistance::HOST_FAKE_MODEL_REGISTRATION_REVISION;
 use storyos_application::{
-    AuthorCommandAdmissionIds, EditorClientBinding, IssueProjectCommandChallenge,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UpdateProjectAssistanceCommand,
-    UpdateProjectAssistanceError, UpdateProjectAssistanceSettlementEffect, UserId,
-    issue_project_command_challenge, open_project_assistance, update_project_assistance,
+    IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectCommandError, ProjectId,
+    ProjectScope, UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement, UserId,
+    issue_project_command_challenge, open_project_assistance,
 };
-use storyos_core::AssistanceAvailability;
+use storyos_core::{
+    AssistanceAvailability, TransitionOutcome, UpdateProjectAssistanceApplied,
+    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
+};
+
+use crate::command_sequence::tests::{CommandCall, command_call};
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -60,26 +64,33 @@ fn command(
     expected_revision: u64,
     availability: AssistanceAvailability,
     bytes: &[u8],
-) -> UpdateProjectAssistanceCommand {
-    UpdateProjectAssistanceCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<UpdateProjectAssistanceInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        bytes,
+        UpdateProjectAssistanceInput {
+            availability,
+            expected_revision,
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        availability,
-        expected_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
+    )
+}
+
+async fn update_project_assistance(
+    store: &PostgresProjectReader,
+    call: &CommandCall<UpdateProjectAssistanceInput>,
+) -> Result<UpdateProjectAssistanceSettlement, ProjectCommandError> {
+    store
+        .update_project_assistance(&call.envelope, &call.input)
+        .await
+}
+
+/// The applied assistance change of one settlement. Any other outcome panics.
+fn applied(settlement: &UpdateProjectAssistanceSettlement) -> UpdateProjectAssistanceApplied {
+    match &settlement.outcome {
+        TransitionOutcome::Applied(applied) => applied.effect,
+        other => panic!("the assistance change must apply, got {other:?}"),
     }
 }
 
@@ -134,7 +145,7 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     )
     .await
     .unwrap();
-    assert_eq!(absent.assistance, None);
+    assert_eq!(absent.response.assistance, None);
 
     let first_issue = issue_request("0a01", AVAILABLE_BYTES);
     issue_project_command_challenge(&store, &first_issue)
@@ -154,13 +165,17 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        first.effect,
-        UpdateProjectAssistanceSettlementEffect::Initialized {
+        applied(&first),
+        UpdateProjectAssistanceApplied::Initialized {
             availability: AssistanceAvailability::Available,
             revision: 1,
         }
     );
-    let first_binding = first.assistance.clone().expect("initialized binding");
+    let first_binding = first
+        .response
+        .assistance
+        .clone()
+        .expect("initialized binding");
     assert_eq!(
         first_binding.model_registration_revision,
         HOST_FAKE_MODEL_REGISTRATION_REVISION
@@ -169,21 +184,6 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
         open_project_assistance(&store, &scope).await.unwrap(),
         Some(first_binding.clone())
     );
-
-    let replay = update_project_assistance(
-        &store,
-        &command(
-            first_issue.binding.clone(),
-            &first_issue.nonce_digest,
-            "0a99",
-            0,
-            AssistanceAvailability::Available,
-            AVAILABLE_BYTES,
-        ),
-    )
-    .await
-    .unwrap();
-    assert_eq!(replay, first);
 
     let same_issue = issue_request("0a03", AVAILABLE_BYTES);
     issue_project_command_challenge(&store, &same_issue)
@@ -203,12 +203,10 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        same.effect,
-        UpdateProjectAssistanceSettlementEffect::NoEffect {
-            reason: storyos_core::UpdateProjectAssistanceNoEffect::AvailabilityUnchanged,
-        }
+        same.outcome,
+        TransitionOutcome::NoEffect(UpdateProjectAssistanceNoEffect::AvailabilityUnchanged)
     );
-    assert_eq!(same.assistance.as_ref(), Some(&first_binding));
+    assert_eq!(same.response.assistance.as_ref(), Some(&first_binding));
 
     let stale_issue = issue_request("0a05", UNAVAILABLE_BYTES);
     issue_project_command_challenge(&store, &stale_issue)
@@ -228,12 +226,10 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        stale.effect,
-        UpdateProjectAssistanceSettlementEffect::Conflicted {
-            reason: storyos_core::UpdateProjectAssistanceConflict::StaleAssistanceRevision,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(UpdateProjectAssistanceConflict::StaleAssistanceRevision)
     );
-    assert_eq!(stale.assistance.as_ref(), Some(&first_binding));
+    assert_eq!(stale.response.assistance.as_ref(), Some(&first_binding));
 
     let toggle_issue = issue_request("0a07", UNAVAILABLE_BYTES);
     issue_project_command_challenge(&store, &toggle_issue)
@@ -253,13 +249,13 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     .await
     .unwrap();
     assert_eq!(
-        toggle.effect,
-        UpdateProjectAssistanceSettlementEffect::Applied {
+        applied(&toggle),
+        UpdateProjectAssistanceApplied::Changed {
             availability: AssistanceAvailability::Unavailable,
             revision: 2,
         }
     );
-    let toggled = toggle.assistance.expect("toggled binding");
+    let toggled = toggle.response.assistance.expect("toggled binding");
     assert_eq!(
         (
             toggled.availability,
@@ -280,52 +276,6 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
             first_binding.external_compatibility_decision.as_str(),
         )
     );
-
-    for (original, issued, expected_revision, availability, bytes) in [
-        (
-            &absent,
-            &absent_issue,
-            1,
-            AssistanceAvailability::Unavailable,
-            UNAVAILABLE_BYTES,
-        ),
-        (
-            &first,
-            &first_issue,
-            0,
-            AssistanceAvailability::Available,
-            AVAILABLE_BYTES,
-        ),
-        (
-            &same,
-            &same_issue,
-            1,
-            AssistanceAvailability::Available,
-            AVAILABLE_BYTES,
-        ),
-        (
-            &stale,
-            &stale_issue,
-            0,
-            AssistanceAvailability::Unavailable,
-            UNAVAILABLE_BYTES,
-        ),
-    ] {
-        let replay = update_project_assistance(
-            &store,
-            &command(
-                issued.binding.clone(),
-                &issued.nonce_digest,
-                "0a99",
-                expected_revision,
-                availability,
-                bytes,
-            ),
-        )
-        .await
-        .unwrap();
-        assert_eq!(&replay, original);
-    }
 
     let other_scope = ProjectScope::new(UserId::new(USER_A), ProjectId::new(OTHER_PROJECT));
     assert_eq!(
@@ -357,50 +307,6 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
         ),
         (1, 1, 1, 2)
     );
-
-    admin
-        .execute(
-            "UPDATE storyos.command_idempotency
-                SET acknowledgement_format = 'command_response_project.v1',
-                    response_assistance = NULL
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'updateProjectAssistance'
-                AND idempotency_key = $3::text::uuid",
-            &[&USER_A, &PROJECT, &same_issue.binding.idempotency_key],
-        )
-        .await
-        .unwrap();
-    let historical_retry = || async {
-        let command = command(
-            same_issue.binding.clone(),
-            &same_issue.nonce_digest,
-            "0a99",
-            1,
-            AssistanceAvailability::Available,
-            AVAILABLE_BYTES,
-        );
-        update_project_assistance(&store, &command).await
-    };
-    assert!(matches!(
-        historical_retry().await,
-        Err(UpdateProjectAssistanceError::HistoricalAcknowledgementUnavailable)
-    ));
-    admin
-        .execute(
-            "UPDATE storyos.command_idempotency
-                SET acknowledgement_format = 'command_response_project_assistance.v1',
-                    response_assistance = '{}'::jsonb
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'updateProjectAssistance'
-                AND idempotency_key = $3::text::uuid",
-            &[&USER_A, &PROJECT, &same_issue.binding.idempotency_key],
-        )
-        .await
-        .unwrap();
-    assert!(matches!(
-        historical_retry().await,
-        Err(UpdateProjectAssistanceError::Unavailable(_))
-    ));
 
     let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
     tokio::spawn(async move {

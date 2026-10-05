@@ -9,11 +9,12 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 pub(crate) mod sibling_order;
 
@@ -24,7 +25,7 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &UpdateChapterInput,
     ) -> Result<UpdateChapterSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
@@ -36,12 +37,17 @@ pub(crate) struct LiveSiblings {
     current_order: u64,
 }
 
-impl StructureCommand for UpdateChapterInput {
+impl ProjectCommand for UpdateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "updateChapter",
+        applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
+        missing_admission: MissingAdmission::InvalidChallenge,
         activity_kind: "chapter_updated",
     };
+    type Profile = Structural;
+    type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = UpdateChapterApplied;
     type Plan = LiveSiblings;
     type Effect = UpdateChapterApplied;
@@ -54,7 +60,7 @@ impl StructureCommand for UpdateChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let chapters = client
             .query(
                 "SELECT manuscript_object_id::text, title, parent_volume_id::text
@@ -122,7 +128,9 @@ impl StructureCommand for UpdateChapterInput {
             current_order: siblings.current_order,
             chapter_count: siblings.ordered_ids.len() as u64,
         });
-        Ok(classified.map_applied(|applied| (applied, siblings)))
+        Ok(Classification::project_command(
+            classified.map_applied(|applied| (applied, siblings)),
+        ))
     }
 
     async fn apply(
@@ -130,6 +138,7 @@ impl StructureCommand for UpdateChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         siblings: LiveSiblings,
         applied: UpdateChapterApplied,
     ) -> Result<StructureWrite<UpdateChapterApplied>, ProjectCommandError> {

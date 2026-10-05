@@ -14,11 +14,12 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 impl PostgresProjectReader {
     /// Settles one Create Chapter as a Manuscript Structure Transition.
@@ -27,19 +28,24 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &CreateChapterInput,
     ) -> Result<CreateChapterSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
 /// The live Chapter order of the target Volume, locked by `classify`.
 pub(crate) struct LiveChapters(Vec<String>);
 
-impl StructureCommand for CreateChapterInput {
+impl ProjectCommand for CreateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createChapter",
+        applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
+        missing_admission: MissingAdmission::InvalidChallenge,
         activity_kind: "chapter_created",
     };
+    type Profile = Structural;
+    type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = CreateChapterApplied;
     type Plan = LiveChapters;
     type Effect = ChapterCreated;
@@ -52,7 +58,7 @@ impl StructureCommand for CreateChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let volume_join = match client
             .query_opt(
@@ -114,7 +120,9 @@ impl StructureCommand for CreateChapterInput {
             placement: self.placement.clone(),
             ordered_chapter_ids: ordered_chapter_ids.clone(),
         });
-        Ok(classified.map_applied(|applied| (applied, LiveChapters(ordered_chapter_ids))))
+        Ok(Classification::project_command(classified.map_applied(
+            |applied| (applied, LiveChapters(ordered_chapter_ids)),
+        )))
     }
 
     fn applied_receipt_payload(
@@ -130,6 +138,7 @@ impl StructureCommand for CreateChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         LiveChapters(mut ordered_chapter_ids): LiveChapters,
         applied: CreateChapterApplied,
     ) -> Result<StructureWrite<ChapterCreated>, ProjectCommandError> {

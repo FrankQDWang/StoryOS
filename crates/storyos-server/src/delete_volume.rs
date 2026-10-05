@@ -1,11 +1,14 @@
 use storyos_application::{DeleteVolumeInput, VolumeId};
 use storyos_core::TransitionOutcome;
 
+use super::command_admission::{
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    SettledReceipt, admit, controlled_project, positive,
+};
 use super::contract_reason::contract_reason;
-use super::structure_admission::{SettledReceipt, StructureRoute, admit, positive};
 use super::*;
 
-const DELETE_VOLUME: StructureRoute = StructureRoute {
+const DELETE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Delete Volume",
     command_kind: "deleteVolume",
     method: contracts::DELETE_VOLUME_METHOD,
@@ -13,6 +16,10 @@ const DELETE_VOLUME: StructureRoute = StructureRoute {
     schema_id: contracts::DELETE_VOLUME_REQUEST_SCHEMA_ID,
     digest_profile: contracts::DELETE_VOLUME_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::DeleteVolume,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn delete_volume(
@@ -44,7 +51,7 @@ pub(super) async fn delete_volume(
     let result = settlement.outcome.receipt_result();
     let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
-            authority = applied.authority.into_settled();
+            authority = applied.authority.into_settled().map(Into::into);
             contracts::DeleteVolumeEffect::AuthoritativeApplied {
                 volume_id: applied.effect.volume_id,
                 tree_revision: applied.effect.tree_revision.to_string(),
@@ -68,7 +75,7 @@ pub(super) async fn delete_volume(
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
-            project: settlement.response_project,
+            heads: Vec::new(),
         },
     );
     Ok(Json(contracts::DeleteVolumeResponse {
@@ -78,7 +85,7 @@ pub(super) async fn delete_volume(
         command_id: ack.command_id,
         author_command_admission_id: ack.author_command_admission_id,
         receipt: ack.receipt,
-        project: ack.project,
+        project: controlled_project(settlement.response),
         effect,
     }))
 }

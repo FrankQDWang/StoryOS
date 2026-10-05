@@ -1,13 +1,14 @@
 use storyos_application::{CreateChapterInput, CreateChapterPublicOrder};
 use storyos_core::TransitionOutcome;
 
-use super::contract_reason::contract_reason;
-use super::structure_admission::{
-    SettledReceipt, StructureRoute, admit, positive, structure_title,
+use super::command_admission::{
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    SettledReceipt, admit, controlled_project, positive, structure_title,
 };
+use super::contract_reason::contract_reason;
 use super::*;
 
-const CREATE_CHAPTER: StructureRoute = StructureRoute {
+const CREATE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Create Chapter",
     command_kind: "createChapter",
     method: contracts::CREATE_CHAPTER_METHOD,
@@ -15,6 +16,10 @@ const CREATE_CHAPTER: StructureRoute = StructureRoute {
     schema_id: contracts::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
     digest_profile: contracts::CREATE_CHAPTER_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::CreateChapter,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn create_chapter(
@@ -68,13 +73,13 @@ pub(super) async fn create_chapter(
         TransitionOutcome::Applied(applied) => {
             let order = match applied.effect.order {
                 CreateChapterPublicOrder::CanonicalSiblingOrder(rank) => {
-                    authority = applied.authority.into_settled();
+                    authority = applied.authority.into_settled().map(Into::into);
                     rank
                 }
                 CreateChapterPublicOrder::HistoricalCreateChapterAck(storage_key) => storage_key,
             };
             let current_chapter_id = settlement
-                .response_project
+                .response
                 .current_chapter_id
                 .as_ref()
                 .ok_or_else(resource_unavailable)?
@@ -105,7 +110,7 @@ pub(super) async fn create_chapter(
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
-            project: settlement.response_project,
+            heads: Vec::new(),
         },
     );
     Ok(Json(contracts::CreateChapterResponse {
@@ -115,7 +120,7 @@ pub(super) async fn create_chapter(
         command_id: ack.command_id,
         author_command_admission_id: ack.author_command_admission_id,
         receipt: ack.receipt,
-        project: ack.project,
+        project: controlled_project(settlement.response),
         effect,
     }))
 }

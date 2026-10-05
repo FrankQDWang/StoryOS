@@ -1,12 +1,19 @@
-//! One replay read for the settled acknowledgement of a structural project command.
+//! One replay read for the settled acknowledgement of a project command.
 
 use std::collections::BTreeMap;
 
-use storyos_application::{AuthorCommandAdmissionIds, Project, ProjectCommandChallengeBinding};
+use storyos_application::{
+    AuthorCommandAdmissionIds, Project, ProjectAssistanceAcknowledgement,
+    ProjectCommandChallengeBinding,
+};
 use storyos_core::{ReasonCode, TransitionOutcome};
 
+use crate::command_response_assistance::{
+    COMMAND_RESPONSE_ASSISTANCE_FORMAT, CommandResponseAssistanceEvidence,
+    read_command_response_assistance,
+};
 use crate::command_response_project::{
-    CommandResponseProjectEvidence, read_command_response_project,
+    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence, read_command_response_project,
 };
 use crate::{PostgresProjectReader, set_challenge_scope_on_client};
 
@@ -17,11 +24,24 @@ pub(crate) struct CommandReplay {
     pub(crate) project_activity_position: u64,
     pub(crate) project_activity_event_id: String,
     pub(crate) authority: Option<ReplayedAuthority>,
+    /// The Author Action sequence text of the Receipt, also when the transition has no Commit.
+    /// Only a profile that needs it parses it.
+    pub(crate) author_action_sequence: Option<String>,
+    /// The canonical Snapshot at the Activity position of the Receipt.
+    pub(crate) snapshot_id: Option<String>,
+    /// The latest Manuscript Tree Revision text that an Activity payload records at or before the
+    /// Receipt. Only a profile that needs it parses it.
+    pub(crate) manuscript_tree_revision: Option<String>,
+    /// The resulting head array of the Domain Receipt.
+    pub(crate) resulting_heads: Vec<String>,
+    /// Whether the Command Idempotency Fence keeps the command digest of the Receipt.
+    pub(crate) fence_digest_matches: bool,
     result_kind: String,
     receipt: JsonText,
     activity: JsonText,
     acknowledgement_format: Option<String>,
     response_project: Option<String>,
+    response_assistance: Option<String>,
 }
 
 /// The Structural Authority Settlement records that one applied command wrote.
@@ -57,12 +77,17 @@ impl JsonText {
 }
 
 impl CommandReplay {
-    /// The recorded outcome. `Applied` carries no value; the command decodes its applied effect.
+    /// The recorded outcome. `applied_result` is the result kind of the command's applied outcome.
+    ///
+    /// `Applied` carries no value. The command decodes its applied effect.
     pub(crate) fn outcome<N: ReasonCode, C: ReasonCode, R: ReasonCode>(
         &self,
+        applied_result: &str,
     ) -> Result<TransitionOutcome<(), N, C, R>, ReplayFault> {
         match (self.result_kind.as_str(), self.receipt.text("reason")) {
-            ("authoritative_applied", None) => Ok(TransitionOutcome::Applied(())),
+            (result_kind, None) if result_kind == applied_result => {
+                Ok(TransitionOutcome::Applied(()))
+            }
             (result_kind, Some(reason)) => {
                 TransitionOutcome::from_zero_authority_codes(result_kind, reason)
                     .ok_or(ReplayFault::BindingConflict)
@@ -103,6 +128,43 @@ impl CommandReplay {
                 "command acknowledgement evidence is damaged",
             ))),
         }
+    }
+
+    /// The Command-response Project and the assistance record of an assistance acknowledgement.
+    pub(crate) fn response_project_assistance(
+        &self,
+    ) -> Result<ProjectAssistanceAcknowledgement, ReplayFault> {
+        let damaged = || {
+            unavailable(std::io::Error::other(
+                "command acknowledgement evidence is damaged",
+            ))
+        };
+        let project_format = match self.acknowledgement_format.as_deref() {
+            Some(COMMAND_RESPONSE_ASSISTANCE_FORMAT) => Some(COMMAND_RESPONSE_PROJECT_FORMAT),
+            other => other,
+        };
+        let project =
+            match read_command_response_project(project_format, self.response_project.as_deref()) {
+                Ok(CommandResponseProjectEvidence::Captured(project)) => project,
+                Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                    return Err(ReplayFault::HistoricalAcknowledgementUnavailable);
+                }
+                Err(()) => return Err(damaged()),
+            };
+        let assistance = match read_command_response_assistance(
+            self.acknowledgement_format.as_deref(),
+            self.response_assistance.as_deref(),
+        ) {
+            Ok(CommandResponseAssistanceEvidence::Captured(assistance)) => assistance,
+            Ok(CommandResponseAssistanceEvidence::HistoricalUnavailable) => {
+                return Err(ReplayFault::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => return Err(damaged()),
+        };
+        Ok(ProjectAssistanceAcknowledgement {
+            project,
+            assistance,
+        })
     }
 }
 
@@ -172,6 +234,9 @@ pub(crate) async fn read_command_replay(
         _ => None,
     };
     Ok(CommandReplay {
+        author_action_sequence: row.get(/*idx*/ 10),
+        snapshot_id: row.get(/*idx*/ 11),
+        manuscript_tree_revision: row.get(/*idx*/ 17),
         ids: AuthorCommandAdmissionIds {
             command_id: row.get(0),
             author_command_admission_id: row.get(1),
@@ -190,6 +255,9 @@ pub(crate) async fn read_command_replay(
         authority,
         acknowledgement_format: row.get(15),
         response_project: row.get(16),
+        response_assistance: row.get(/*idx*/ 18),
+        resulting_heads: row.get(/*idx*/ 19),
+        fence_digest_matches: row.get(/*idx*/ 20),
     })
 }
 
@@ -213,7 +281,19 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
         authoritative_commit.resulting_manuscript_tree_revision::text,
         authoritative_commit.resulting_revision_id::text,
         idempotency.acknowledgement_format,
-        idempotency.response_project::text
+        idempotency.response_project::text,
+        (SELECT structure.payload->>'tree_revision'
+           FROM storyos.project_activity_event_payloads AS structure
+          WHERE (structure.owner_user_id, structure.project_id) =
+                (receipt.owner_user_id, receipt.project_id)
+            AND jsonb_typeof(structure.payload->'tree_revision') = 'string'
+            AND (payload.project_activity_position IS NULL
+                 OR structure.project_activity_position <= payload.project_activity_position)
+          ORDER BY structure.project_activity_position DESC
+          LIMIT 1),
+        idempotency.response_assistance::text,
+        receipt.resulting_heads::text[],
+        idempotency.canonical_command_digest = receipt.command_digest
    FROM storyos.domain_receipts AS receipt
    JOIN storyos.author_command_admission_settlements AS settlement
      ON (settlement.owner_user_id, settlement.project_id,
@@ -236,10 +316,16 @@ LEFT JOIN storyos.authoritative_commits AS authoritative_commit
 LEFT JOIN storyos.author_action_entries AS action
      ON (action.owner_user_id, action.project_id, action.receipt_id) =
         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-LEFT JOIN storyos.project_snapshots AS snapshot
-     ON (snapshot.owner_user_id, snapshot.project_id, snapshot.project_activity_position) =
-        (payload.owner_user_id, payload.project_id, payload.project_activity_position)
-    AND snapshot.snapshot_kind = 'canonical'
+LEFT JOIN LATERAL (
+         SELECT canonical.snapshot_id
+           FROM storyos.project_snapshots AS canonical
+          WHERE (canonical.owner_user_id, canonical.project_id,
+                 canonical.project_activity_position) =
+                (payload.owner_user_id, payload.project_id, payload.project_activity_position)
+            AND canonical.snapshot_kind = 'canonical'
+          ORDER BY canonical.created_at, canonical.snapshot_id
+          LIMIT 1
+       ) AS snapshot ON true
   WHERE receipt.owner_user_id = $1::text::uuid
     AND receipt.project_id = $2::text::uuid
     AND receipt.receipt_id = $3::text::uuid

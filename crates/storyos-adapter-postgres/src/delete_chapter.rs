@@ -12,11 +12,12 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, Structural,
+    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 impl PostgresProjectReader {
     /// Settles one author-initiated Chapter removal as a Manuscript Structure Transition.
@@ -25,19 +26,24 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &DeleteChapterInput,
     ) -> Result<DeleteChapterSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
 /// The parent Volume of the target Chapter.
 pub(crate) struct ParentVolume(String);
 
-impl StructureCommand for DeleteChapterInput {
+impl ProjectCommand for DeleteChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "deleteChapter",
+        applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
+        missing_admission: MissingAdmission::InvalidChallenge,
         activity_kind: "chapter_deleted",
     };
+    type Profile = Structural;
+    type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = DeleteChapterApplied;
     type Plan = ParentVolume;
     type Effect = ChapterDeleted;
@@ -50,7 +56,7 @@ impl StructureCommand for DeleteChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let target = client
             .query_opt(
@@ -124,7 +130,9 @@ impl StructureCommand for DeleteChapterInput {
             current_chapter_id: project.current_chapter_id.clone(),
             ordered_active_chapter_ids,
         });
-        Ok(classified.map_applied(|applied| (applied, ParentVolume(volume_id))))
+        Ok(Classification::project_command(
+            classified.map_applied(|applied| (applied, ParentVolume(volume_id))),
+        ))
     }
 
     async fn apply(
@@ -132,6 +140,7 @@ impl StructureCommand for DeleteChapterInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         ParentVolume(volume_id): ParentVolume,
         applied: DeleteChapterApplied,
     ) -> Result<StructureWrite<ChapterDeleted>, ProjectCommandError> {

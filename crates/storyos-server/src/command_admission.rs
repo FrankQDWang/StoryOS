@@ -1,12 +1,13 @@
-//! One admission and acknowledgement sequence for the Manuscript Structure Transition routes.
+//! One admission and acknowledgement sequence for the project command routes.
 
 use axum::body::to_bytes;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, EditorClientBinding, Project, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectCommandError, StructureAuthority,
+    AuthorCommandAdmissionIds, ChallengeRateClass, EditorClientBinding, Project,
+    ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectCommandError,
+    StructureAuthority,
 };
 use storyos_core::ReceiptResult;
 
@@ -16,8 +17,8 @@ use super::project_command_challenge::{
 };
 use super::*;
 
-/// The fixed public identity of one structural command route.
-pub(super) struct StructureRoute {
+/// The fixed public identity and admission options of one project command route.
+pub(super) struct ProjectCommandRoute {
     pub(super) display_name: &'static str,
     pub(super) command_kind: &'static str,
     pub(super) method: &'static str,
@@ -25,19 +26,53 @@ pub(super) struct StructureRoute {
     pub(super) schema_id: &'static str,
     pub(super) digest_profile: &'static str,
     pub(super) receipt_kind: contracts::DomainReceiptCommandKind,
+    pub(super) revision_mismatch: RevisionMismatch,
+    pub(super) schema_mismatch: SchemaMismatch,
+    pub(super) body_validation: BodyValidation,
+    pub(super) problem_mapping: ProblemMapping,
 }
 
-/// The admission fields that every structural command body carries.
-pub(super) trait StructureRequest: DeserializeOwned + Serialize {
+/// The problem of a client contract or security policy revision that differs from the session.
+pub(super) enum RevisionMismatch {
+    InvalidRequest,
+    AuthenticationRequired,
+}
+
+/// When the command-specific body fields are validated, relative to the revision check.
+pub(super) enum BodyValidation {
+    AfterRevisionCheck,
+    BeforeRevisionCheck,
+}
+
+/// The problem of a command schema that differs from the route schema.
+pub(super) enum SchemaMismatch {
+    InvalidRequest,
+    CommandTargetRefused,
+}
+
+/// The problems that a route returns for a `ProjectCommandError`.
+pub(super) enum ProblemMapping {
+    /// The four shared problems, with messages that name the route display name.
+    Standard,
+    Route(fn(ProjectCommandError) -> ApiError),
+}
+
+/// The admission fields that every project command body carries.
+pub(super) trait ProjectCommandRequest: DeserializeOwned + Serialize {
     fn command_schema(&self) -> &str;
     fn client_contract_revision(&self) -> &str;
     fn security_policy_revision(&self) -> &str;
     fn correlation_id(&self) -> &str;
+
+    /// Whether the body targets the route command. A route can also require its editor contract.
+    fn targets_route(&self, schema_id: &str) -> bool {
+        self.command_schema() == schema_id
+    }
 }
 
-macro_rules! structure_request {
-    ($request:ty, $input:ident) => {
-        impl StructureRequest for $request {
+macro_rules! project_command_request {
+    ($request:ty, nested $input:ident) => {
+        impl ProjectCommandRequest for $request {
             fn command_schema(&self) -> &str {
                 &self.command_schema
             }
@@ -57,14 +92,44 @@ macro_rules! structure_request {
     };
 }
 
-structure_request!(contracts::CreateVolumeRequest, create_volume_input);
-structure_request!(contracts::UpdateVolumeRequest, update_volume_input);
-structure_request!(contracts::DeleteVolumeRequest, delete_volume_input);
-structure_request!(contracts::CreateChapterRequest, create_chapter_input);
-structure_request!(contracts::UpdateChapterRequest, update_chapter_input);
-structure_request!(contracts::DeleteChapterRequest, delete_chapter_input);
+project_command_request!(contracts::CreateVolumeRequest, nested create_volume_input);
+project_command_request!(contracts::UpdateVolumeRequest, nested update_volume_input);
+project_command_request!(contracts::DeleteVolumeRequest, nested delete_volume_input);
+project_command_request!(contracts::CreateChapterRequest, nested create_chapter_input);
+project_command_request!(contracts::UpdateChapterRequest, nested update_chapter_input);
+project_command_request!(contracts::DeleteChapterRequest, nested delete_chapter_input);
+project_command_request!(contracts::UpdateProjectRequest, nested update_project_input);
+project_command_request!(contracts::ArchiveProjectRequest, nested archive_project_input);
+project_command_request!(contracts::SetCurrentChapterRequest, nested set_current_chapter_input);
+project_command_request!(
+    contracts::UpdateProjectAssistanceRequest,
+    nested update_project_assistance_input
+);
 
-/// One admitted structural command, ready for its Core Transition.
+impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
+    fn command_schema(&self) -> &str {
+        &self.command_schema
+    }
+
+    fn client_contract_revision(&self) -> &str {
+        &self.client_contract_revision
+    }
+
+    fn security_policy_revision(&self) -> &str {
+        &self.security_policy_revision
+    }
+
+    fn correlation_id(&self) -> &str {
+        &self.correlation_id
+    }
+
+    fn targets_route(&self, schema_id: &str) -> bool {
+        self.command_schema == schema_id
+            && self.editor_contract_revision == contracts::EDITOR_CONTRACT_REVISION
+    }
+}
+
+/// One admitted project command, ready for its Core Transition.
 pub(super) struct Admitted<I> {
     pub(super) store: PostgresProjectReader,
     pub(super) envelope: ProjectCommandEnvelope,
@@ -72,27 +137,26 @@ pub(super) struct Admitted<I> {
     digest_hex: String,
 }
 
-/// The acknowledgement fields that every structural command response carries.
+/// The acknowledgement fields that every project command response carries.
 pub(super) struct Acknowledgement {
     pub(super) correlation_id: String,
     pub(super) project_scope: contracts::ProjectScope,
     pub(super) command_id: String,
     pub(super) author_command_admission_id: String,
     pub(super) receipt: contracts::DomainReceipt,
-    pub(super) project: contracts::ControlledProject,
 }
 
-/// Authenticates one structural command request and binds it to its Command Challenge.
+/// Authenticates one project command request and binds it to its Command Challenge.
 ///
 /// `targets` are the path identities after the Project. `input` validates and parses the
 /// command-specific body fields.
-pub(super) async fn admit<R: StructureRequest, I>(
+pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I, ApiError>>(
     state: &ServerState,
     project_id: &str,
     targets: &[&str],
     request: Request,
-    route: &StructureRoute,
-    input: impl FnOnce(&R) -> Result<I, ApiError>,
+    route: &ProjectCommandRoute,
+    input: F,
 ) -> Result<Admitted<I>, ApiError> {
     let (parts, body_stream) = request.into_parts();
     let headers = parts.headers;
@@ -114,14 +178,39 @@ pub(super) async fn admit<R: StructureRequest, I>(
     let session = state
         .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
-    if body.command_schema() != route.schema_id
-        || body.client_contract_revision() != session.client_contract_revision
-        || body.security_policy_revision() != session.security_policy_revision
-    {
-        return Err(invalid_request());
+    if !body.targets_route(route.schema_id) {
+        return Err(match route.schema_mismatch {
+            SchemaMismatch::InvalidRequest => invalid_request(),
+            SchemaMismatch::CommandTargetRefused => command_target_refused(),
+        });
     }
-    let input = input(&body)?;
-    valid_uuid(body.correlation_id())?;
+    let check_revision = || {
+        if body.client_contract_revision() != session.client_contract_revision
+            || body.security_policy_revision() != session.security_policy_revision
+        {
+            return Err(match route.revision_mismatch {
+                RevisionMismatch::InvalidRequest => invalid_request(),
+                RevisionMismatch::AuthenticationRequired => authentication_required(),
+            });
+        }
+        Ok(())
+    };
+    let validate_body = |input: F| {
+        let input = input(&body)?;
+        valid_uuid(body.correlation_id())?;
+        Ok::<I, ApiError>(input)
+    };
+    let input = match route.body_validation {
+        BodyValidation::AfterRevisionCheck => {
+            check_revision()?;
+            validate_body(input)?
+        }
+        BodyValidation::BeforeRevisionCheck => {
+            let input = validate_body(input)?;
+            check_revision()?;
+            input
+        }
+    };
     let idempotency_key = exact_header(&headers, "idempotency-key")?;
     let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
     if !valid_uuid_v7(idempotency_key)
@@ -159,8 +248,11 @@ pub(super) async fn admit<R: StructureRequest, I>(
             client_contract_revision: session.client_contract_revision.clone(),
             security_policy_revision: session.security_policy_revision.clone(),
             limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-            challenge_rate_policy_revision:
-                storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
+            challenge_rate_policy_revision: ChallengeRateClass::for_command_kind(
+                route.command_kind,
+            )
+            .policy_revision()
+            .to_owned(),
             method: route.method.to_owned(),
             route_template: route.path.to_owned(),
             command_schema: body.command_schema().to_owned(),
@@ -193,16 +285,16 @@ impl<I> Admitted<I> {
         .await;
     }
 
-    /// The Domain Receipt and Command-response Project of one settlement.
+    /// The Domain Receipt and request identities of one settlement.
     pub(super) fn acknowledgement(
         &self,
-        route: &StructureRoute,
+        route: &ProjectCommandRoute,
         settled: SettledReceipt,
     ) -> Acknowledgement {
         let project_scope = contract_scope(&self.envelope.project_scope);
         let (commit_ids, action_sequence) = match settled.authority {
             Some(authority) => (
-                vec![authority.authoritative_commit_id],
+                authority.authoritative_commit_ids,
                 Some(authority.author_action_sequence.to_string()),
             ),
             None => (Vec::new(), None),
@@ -224,9 +316,9 @@ impl<I> Admitted<I> {
                 idempotency_key: self.envelope.challenge_binding.idempotency_key.clone(),
                 producer_cause: contracts::DomainReceiptProducerCause::AuthorCommandAdmission,
                 author_command_admission_id: settled.ids.author_command_admission_id,
-                expected_heads: Vec::new(),
-                prior_heads: Vec::new(),
-                resulting_heads: Vec::new(),
+                expected_heads: settled.heads.clone(),
+                prior_heads: settled.heads.clone(),
+                resulting_heads: settled.heads,
                 authoritative_revision_ids: Vec::new(),
                 proposal_revision_ids: Vec::new(),
                 authoritative_commit_ids: commit_ids,
@@ -244,32 +336,55 @@ impl<I> Admitted<I> {
                 },
                 created_at: settled.receipt_created_at,
             },
-            project: contracts::ControlledProject {
-                project_id: settled.project.project_id.as_ref().to_owned(),
-                title: settled.project.title,
-                open: match settled.project.current_chapter_id {
-                    Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {
-                        current_chapter_id: chapter_id.as_ref().to_owned(),
-                    },
-                    None => contracts::ProjectOpenState::Empty,
-                },
-            },
         }
     }
 }
 
-/// The settlement facts that the Domain Receipt and Command-response Project show.
+/// The public form of one Command-response Project.
+pub(super) fn controlled_project(project: Project) -> contracts::ControlledProject {
+    contracts::ControlledProject {
+        project_id: project.project_id.as_ref().to_owned(),
+        title: project.title,
+        open: match project.current_chapter_id {
+            Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {
+                current_chapter_id: chapter_id.as_ref().to_owned(),
+            },
+            None => contracts::ProjectOpenState::Empty,
+        },
+    }
+}
+
+/// The settlement facts that the Domain Receipt shows.
 pub(super) struct SettledReceipt {
     pub(super) ids: AuthorCommandAdmissionIds,
     pub(super) receipt_created_at: String,
     pub(super) result: ReceiptResult,
-    pub(super) authority: Option<StructureAuthority>,
-    pub(super) project: Project,
+    pub(super) authority: Option<ReceiptAuthority>,
+    /// The one head that the expected, prior, and resulting head arrays show. It can be empty.
+    pub(super) heads: Vec<String>,
 }
 
-impl StructureRoute {
+/// The Authoritative Commit identities and Author Action that an applied Receipt shows.
+pub(super) struct ReceiptAuthority {
+    pub(super) authoritative_commit_ids: Vec<String>,
+    pub(super) author_action_sequence: u64,
+}
+
+impl From<StructureAuthority> for ReceiptAuthority {
+    fn from(authority: StructureAuthority) -> Self {
+        Self {
+            authoritative_commit_ids: vec![authority.authoritative_commit_id],
+            author_action_sequence: authority.author_action_sequence,
+        }
+    }
+}
+
+impl ProjectCommandRoute {
     pub(super) fn problem(&self, error: ProjectCommandError) -> ApiError {
-        let name = self.display_name;
+        let name = match self.problem_mapping {
+            ProblemMapping::Standard => self.display_name,
+            ProblemMapping::Route(route_problem) => return route_problem(error),
+        };
         match error {
             ProjectCommandError::BindingConflict => problem(
                 StatusCode::CONFLICT,
@@ -307,7 +422,7 @@ pub(super) fn positive(value: &str) -> Result<u64, ApiError> {
         .ok_or_else(invalid_request)
 }
 
-/// Accepts a Volume or Chapter title of 1 to 1024 bytes.
+/// Accepts a Project, Volume, or Chapter title of 1 to 1024 bytes.
 pub(super) fn structure_title(title: &str) -> Result<String, ApiError> {
     if title.is_empty() || title.len() > 1024 {
         return Err(invalid_request());

@@ -1,13 +1,14 @@
 use storyos_application::{UpdateVolumeInput, VolumeId};
 use storyos_core::TransitionOutcome;
 
-use super::contract_reason::contract_reason;
-use super::structure_admission::{
-    SettledReceipt, StructureRoute, admit, positive, structure_title,
+use super::command_admission::{
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    SettledReceipt, admit, controlled_project, positive, structure_title,
 };
+use super::contract_reason::contract_reason;
 use super::*;
 
-const UPDATE_VOLUME: StructureRoute = StructureRoute {
+const UPDATE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Update Volume",
     command_kind: "updateVolume",
     method: contracts::UPDATE_VOLUME_METHOD,
@@ -15,6 +16,10 @@ const UPDATE_VOLUME: StructureRoute = StructureRoute {
     schema_id: contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
     digest_profile: contracts::UPDATE_VOLUME_DIGEST_PROFILE,
     receipt_kind: contracts::DomainReceiptCommandKind::UpdateVolume,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn update_volume(
@@ -49,7 +54,7 @@ pub(super) async fn update_volume(
     let result = settlement.outcome.receipt_result();
     let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
-            authority = applied.authority.into_settled();
+            authority = applied.authority.into_settled().map(Into::into);
             contracts::UpdateVolumeEffect::AuthoritativeApplied {
                 volume_id,
                 title: applied.effect.title,
@@ -75,7 +80,7 @@ pub(super) async fn update_volume(
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
-            project: settlement.response_project,
+            heads: Vec::new(),
         },
     );
     Ok(Json(contracts::UpdateVolumeResponse {
@@ -85,7 +90,7 @@ pub(super) async fn update_volume(
         command_id: ack.command_id,
         author_command_admission_id: ack.author_command_admission_id,
         receipt: ack.receipt,
-        project: ack.project,
+        project: controlled_project(settlement.response),
         effect,
     }))
 }
