@@ -6,7 +6,8 @@ use storyos_core::{
     ArchiveProjectConflict, ArchiveProjectNoEffect, CloseEditorFlowDraftConflict,
     CloseEditorFlowDraftRefusal, CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict,
     CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal,
-    DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal, ReasonCode,
+    DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
+    ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal, ReasonCode,
     RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
     ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
     ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
@@ -412,6 +413,33 @@ fn every_draft_discard_reason_maps_to_its_public_or_persisted_reason() {
         (
             CloseEditorFlowDraftRefusal::SourceUnavailable,
             contracts::DraftCloseRefusal::SourceUnavailable,
+        ),
+    ]);
+}
+
+#[test]
+fn every_draft_expansion_reason_maps_to_its_public_or_persisted_reason() {
+    // The conflict has no public reason. Its code is the persisted Receipt reason text.
+    assert_maps(vec![(
+        ExpandRefusedEditDraftConflict::SourceOrTargetChanged,
+        "source_or_target_changed".to_owned(),
+    )]);
+    assert_maps(vec![
+        (
+            ExpandRefusedEditDraftRefusal::SourceDraftNotOpen,
+            "source_draft_not_open".to_owned(),
+        ),
+        (
+            ExpandRefusedEditDraftRefusal::SourceUnavailable,
+            "source_unavailable".to_owned(),
+        ),
+        (
+            ExpandRefusedEditDraftRefusal::UnsupportedPayload,
+            "unsupported_payload".to_owned(),
+        ),
+        (
+            ExpandRefusedEditDraftRefusal::TargetUnavailable,
+            "target_unavailable".to_owned(),
         ),
     ]);
 }

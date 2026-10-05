@@ -4,23 +4,25 @@ use storyos_application::{
     ArchiveProjectInput, AuthorCommandAdmissionIds, CloseEditorFlowDraftInput,
     CloseEditorFlowDraftSettlement, CreateChapterInput, CreateChapterSettlement, CreateVolumeInput,
     CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput,
-    DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
-    RejectProposalOperationsInput, RejectProposalOperationsSettlement, RejectionNote,
-    ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
-    ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement, ReplanProposalInput,
-    ReplanProposalSettlement, SetCurrentChapterInput, StructureAuthority,
-    StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput, UpdateChapterSettlement,
-    UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput, UpdateVolumeSettlement,
-    WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
-    issue_project_command_challenge,
+    DeleteVolumeSettlement, EditorClientBinding, ExpandRefusedEditDraftSettlement,
+    ExpandRefusedEditDraftToProposalInput, ProjectCommandChallengeBinding, ProjectCommandEnvelope,
+    ProjectCommandError, ProjectCommandSettlement, ProjectScope, RejectProposalOperationsInput,
+    RejectProposalOperationsSettlement, RejectionNote, ReopenRejectedOperationsInput,
+    ReopenRejectedOperationsSettlement, ReopenWithdrawnProposalInput,
+    ReopenWithdrawnProposalSettlement, ReplanProposalInput, ReplanProposalSettlement,
+    SetCurrentChapterInput, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+    UpdateChapterInput, UpdateChapterSettlement, UpdateProjectAssistanceInput, UpdateProjectInput,
+    UpdateVolumeInput, UpdateVolumeSettlement, WithdrawProposalInput, WithdrawProposalSettlement,
+    WithdrawalNote, issue_project_command_challenge,
 };
 use storyos_application::{
     ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
 };
 use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
 use storyos_core::{
-    AssistanceAvailability, CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome,
+    AssistanceAvailability, CreateChapterPlacement, EXCLUSIVE_AUTHORITATIVE_EDGES_V1,
+    OpenInlineProposalAnchor, PROSEMIRROR_TOKEN_UTF16_V1, ReasonCode, ReceiptResult,
+    TransitionOutcome, proposal_anchor_base_slice_digest,
 };
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
@@ -289,6 +291,13 @@ const CLOSE_EDITOR_FLOW_DRAFT: Route = Route {
     method: "POST",
     path: storyos_contracts::CLOSE_EDITOR_FLOW_DRAFT_PATH,
     schema: storyos_contracts::CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID,
+};
+
+const EXPAND_REFUSED_EDIT_DRAFT: Route = Route {
+    kind: "expandRefusedEditDraftToProposal",
+    method: "POST",
+    path: storyos_contracts::EXPAND_REFUSED_EDIT_DRAFT_PATH,
+    schema: storyos_contracts::EXPAND_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID,
 };
 
 /// Issues one Command Challenge for `route` and binds `input` to it.
@@ -807,6 +816,34 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         let outcome = replayed_outcome(&store, &admin, &call, close_editor_flow_draft).await;
         observed.push((CLOSE_EDITOR_FLOW_DRAFT.kind, outcome));
     }
+    let (scope, open) = refused_edit_expansion(&store, &admin, /*base*/ 0x8e00, "retained").await;
+    let changed = ExpandRefusedEditDraftToProposalInput {
+        source_current_draft_revision_id: Uuid::now_v7().to_string(),
+        ..open.clone()
+    };
+    let missing_target_ref = Uuid::now_v7().to_string();
+    let missing_target = ExpandRefusedEditDraftToProposalInput {
+        target_ref: missing_target_ref.clone(),
+        anchor: OpenInlineProposalAnchor {
+            manuscript_block_id: missing_target_ref,
+            ..open.anchor.clone()
+        },
+        ..open.clone()
+    };
+    let (archived_scope, archived) =
+        refused_edit_expansion(&store, &admin, /*base*/ 0x8e10, "archived").await;
+    let mut expansion_records = Vec::new();
+    for (scope, suffix, input) in [
+        (&scope, 0x8e09, open.clone()),
+        (&scope, 0x8e0a, changed),
+        (&scope, 0x8e0b, missing_target),
+        (&archived_scope, 0x8e19, archived),
+    ] {
+        let call = expansion_call(&store, scope, suffix, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, expand_refused_edit_draft).await;
+        observed.push((EXPAND_REFUSED_EDIT_DRAFT.kind, outcome));
+        expansion_records.push(expansion_records_of(&admin, &call).await);
+    }
 
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
@@ -816,6 +853,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let proposal_closure_changed = ("proposal_closure_changed", [1, 1, 0, 0, 0]);
     let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
     let draft_closure_changed = ("draft_closure_changed", [1, 1, 0, 0, 0]);
+    let proposal_created_from_draft = ("proposal_created_from_draft", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
     let writer_takeover = ("no_effect", [1, 0, 1, 0, 1]);
     let conflicted = ("conflicted", [1, 0, 0, 0, 0]);
@@ -885,10 +923,18 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("closeEditorFlowDraft", refused),
             ("closeEditorFlowDraft", conflicted),
             ("closeEditorFlowDraft", refused),
+            (
+                "expandRefusedEditDraftToProposal",
+                proposal_created_from_draft
+            ),
+            ("expandRefusedEditDraftToProposal", conflicted),
+            ("expandRefusedEditDraftToProposal", refused),
+            ("expandRefusedEditDraftToProposal", refused),
         ]
     );
     assert_eq!(rejection_records, vec![1; 4]);
     assert_eq!(withdrawal_records, vec![1, 0, 0, 0]);
+    assert_eq!(expansion_records, vec![[1, 1, 1], [0; 3], [0; 3], [0; 3]]);
 }
 
 /// A new Project with Chapters A and B, Chapter A current, and one writer Editor Session.
@@ -1478,6 +1524,188 @@ async fn close_editor_flow_draft_call(
     discard_call(store, &scope, base + 9, input).await
 }
 
+async fn expand_refused_edit_draft(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ExpandRefusedEditDraftToProposalInput>,
+) -> Result<ExpandRefusedEditDraftSettlement, ProjectCommandError> {
+    store
+        .expand_refused_edit_draft(&call.envelope, &call.input)
+        .await
+}
+
+/// A new Project with a writer Editor Session, one text Block in Chapter B, and one open
+/// Refused Edit Draft in `retention` that replaces a slice of that Block.
+///
+/// Returns the Scope and the input that expands the Draft. The fixture skips the creation
+/// Receipt and lifecycle event of the Draft and the Block history of the Chapter.
+async fn refused_edit_expansion(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+    retention: &str,
+) -> (ProjectScope, ExpandRefusedEditDraftToProposalInput) {
+    let (scope, _chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let block_id = Uuid::now_v7().to_string();
+    let block_text = "Guard the narrator voice in this passage.";
+    let manuscript = serde_json::json!({
+        "format": "storyos.manuscript-payload.v1",
+        "schema_version": 1,
+        "coordinate_version": 1,
+        "blocks": [{"manuscript_block_id": block_id, "block_kind": "paragraph", "text": block_text}],
+    });
+    let payload = serde_json::json!({
+        "schema_revision": "storyos.refused-edit-payload.v1",
+        "chapter_id": chapter_b,
+        "expected_authoritative_revision_id": revision_b,
+        "expected_proposal_head_revision_ids": [],
+        "target_refs": [block_id],
+        "author_edit_units": [{
+            "normalized_primitives": [{
+                "kind": "replace_structured_selection",
+                "replacement": [{"block_kind": "paragraph", "text": "A steadier voice."}],
+            }],
+            "selection_snapshot": {
+                "coordinate_profile": PROSEMIRROR_TOKEN_UTF16_V1,
+                "from": 10,
+                "to": 24,
+            },
+        }],
+        "undo_group_id": Uuid::now_v7().to_string(),
+        "completed_intent_record_id": Uuid::now_v7().to_string(),
+        "local_intent_sequence": "1",
+    });
+    let input = ExpandRefusedEditDraftToProposalInput {
+        editor_session_id: EditorSessionId::new(editor_session_id),
+        writer_generation: 1,
+        draft_id: Uuid::now_v7().to_string(),
+        source_current_draft_revision_id: Uuid::now_v7().to_string(),
+        source_draft_payload_digest: storyos_core::hex_sha256(
+            storyos_core::canonical_json(&payload).as_bytes(),
+        ),
+        source_reopen_event_id: None,
+        chapter_id: chapter_b.clone(),
+        target_ref: block_id.clone(),
+        expected_target_revision_id: revision_b.clone(),
+        anchor: OpenInlineProposalAnchor {
+            manuscript_block_id: block_id.clone(),
+            base_authoritative_revision_id: revision_b.clone(),
+            manuscript_schema_version: 1,
+            coordinate_profile: PROSEMIRROR_TOKEN_UTF16_V1.to_owned(),
+            from: 10,
+            to: 24,
+            boundary_profile: EXCLUSIVE_AUTHORITATIVE_EDGES_V1.to_owned(),
+            base_slice_digest: proposal_anchor_base_slice_digest(
+                &block_id,
+                "paragraph",
+                /*manuscript_schema_version*/ 1,
+                PROSEMIRROR_TOKEN_UTF16_V1,
+                /*from*/ 10,
+                /*to*/ 24,
+                &block_text[10..24],
+            ),
+        },
+    };
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.manuscript_blocks
+               (owner_user_id, project_id, manuscript_block_id, manuscript_object_id, block_kind)
+             VALUES ('{owner}', '{project}', '{block}', '{chapter}', 'paragraph');
+             DELETE FROM storyos.manuscript_revision_members
+              WHERE owner_user_id = '{owner}' AND project_id = '{project}'
+                AND manuscript_object_id = '{chapter}' AND revision_id = '{head}';
+             INSERT INTO storyos.manuscript_revision_members
+               (owner_user_id, project_id, manuscript_object_id, revision_id,
+                manuscript_block_id, block_order)
+             VALUES ('{owner}', '{project}', '{chapter}', '{head}', '{block}', 1);
+             UPDATE storyos.authoritative_payloads AS payload
+                SET canonical_bytes = convert_to('{manuscript}', 'UTF8')
+               FROM storyos.authoritative_revisions AS revision
+              WHERE (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+                     revision.revision_id) = ('{owner}', '{project}', '{chapter}', '{head}')
+                AND (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                    (revision.owner_user_id, revision.project_id, revision.payload_id);
+             INSERT INTO storyos.draft_artifact_revisions
+               (owner_user_id, project_id, draft_id, revision_id, payload, payload_digest)
+             VALUES ('{owner}', '{project}', '{draft}', '{revision}', '{payload}'::jsonb,
+                     '{digest}');
+             INSERT INTO storyos.draft_artifacts
+               (owner_user_id, project_id, draft_id, current_revision_id, retention_state)
+             VALUES ('{owner}', '{project}', '{draft}', '{revision}', '{retention}')",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            block = block_id,
+            chapter = chapter_b,
+            head = revision_b,
+            draft = input.draft_id,
+            revision = input.source_current_draft_revision_id,
+            digest = input.source_draft_payload_digest,
+        ),
+    )
+    .await;
+    (scope, input)
+}
+
+/// Issues one Draft expansion call whose canonical bytes carry the source Draft binding of `input`.
+async fn expansion_call(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: u16,
+    input: ExpandRefusedEditDraftToProposalInput,
+) -> CommandCall<ExpandRefusedEditDraftToProposalInput> {
+    let body = serde_json::json!({
+        "expand_refused_edit_draft_to_proposal_input": {
+            "draft_id": input.draft_id,
+            "source_current_draft_revision_id": input.source_current_draft_revision_id,
+            "source_draft_payload_digest": input.source_draft_payload_digest,
+            "chapter_id": input.chapter_id,
+            "target_refs": [input.target_ref],
+            "expected_target_revisions": [input.expected_target_revision_id],
+            "editor_session_id": input.editor_session_id.as_ref(),
+            "writer_generation": input.writer_generation.to_string(),
+        }
+    });
+    let mut call = issued(store, scope, suffix, &EXPAND_REFUSED_EDIT_DRAFT, input).await;
+    call.envelope.canonical_command_bytes = body.to_string().into_bytes();
+    call
+}
+
+/// One applicable Draft expansion in a new Project.
+async fn expand_refused_edit_draft_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<ExpandRefusedEditDraftToProposalInput> {
+    let (scope, input) = refused_edit_expansion(store, admin, base, "retained").await;
+    expansion_call(store, &scope, base + 9, input).await
+}
+
+/// The Proposals, superseding close events, and closed source Drafts of the Receipt of one call.
+async fn expansion_records_of(
+    admin: &Client,
+    call: &CommandCall<ExpandRefusedEditDraftToProposalInput>,
+) -> [i64; 3] {
+    let row = admin
+        .query_one(
+            "SELECT (SELECT count(*) FROM storyos.proposals AS proposal
+                       JOIN storyos.domain_receipts AS receipt
+                         ON receipt.result_payload->>'proposal_id' = proposal.proposal_id::text
+                      WHERE receipt.receipt_id = $1::text::uuid
+                        AND proposal.source_draft_id = $2::text::uuid),
+                    (SELECT count(*) FROM storyos.draft_close_events
+                      WHERE receipt_id = $1::text::uuid AND close_reason = 'superseded'),
+                    (SELECT count(*) FROM storyos.draft_artifacts AS draft
+                       JOIN storyos.draft_close_events AS event
+                         ON event.event_id = draft.close_event_id
+                      WHERE event.receipt_id = $1::text::uuid AND draft.closure = 'closed')",
+            &[&call.envelope.ids.receipt_id, &call.input.draft_id],
+        )
+        .await
+        .unwrap();
+    [0, 1, 2].map(|index| row.get(index))
+}
+
 /// One applicable Create Volume in a new Project.
 async fn create_volume_call(
     store: &PostgresProjectReader,
@@ -1739,8 +1967,14 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d20).await,
         )
         .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e20).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 17]);
+    assert_eq!(observed, vec![(true, [0; 5]); 18]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1988,6 +2222,12 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d30).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e30).await,
+        )
+        .await,
     ];
     let rolled_back = |result| (vec![(true, [0; 5]), (true, [0; 5])], result);
     let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
@@ -1996,6 +2236,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::Refused));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 3]);
+    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);
 }
@@ -2557,6 +2798,127 @@ async fn a_draft_discard_refuses_before_admission_and_requires_the_client_writer
     }
     let open_call = discard_call(&store, &scope, /*suffix*/ 0x7d5b, open).await;
     let settled = close_editor_flow_draft(&store, &open_call).await.unwrap();
+    assert_eq!(
+        (observed, settled.outcome.receipt_result()),
+        (
+            vec![
+                (ReplayError::WriterIneligible, [0; 5]),
+                (ReplayError::MissingProject, [0; 5]),
+                (ReplayError::BindingConflict, [0; 5]),
+            ],
+            ReceiptResult::AuthoritativeApplied,
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_expansion_replays_from_its_proposal_revision_and_damaged_effect_rows_are_faults() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e40).await;
+    let first = expand_refused_edit_draft(&store, &call).await.unwrap();
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    let receipt_id = &first.ids.receipt_id;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET acknowledgement_format = NULL, response_project = NULL
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let pre_capture = expand_refused_edit_draft(&store, &with_new_request_ids(&call)).await;
+    let mut damaged = Vec::new();
+    for statement in [
+        format!(
+            "UPDATE storyos.draft_close_events
+                SET author_action_sequence = author_action_sequence + 1000
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+        format!(
+            "DELETE FROM storyos.proposal_revisions AS revision
+               USING storyos.domain_receipts AS receipt
+              WHERE receipt.receipt_id = '{receipt_id}'
+                AND revision.revision_id = receipt.proposal_revision_ids[1]"
+        ),
+        format!("DELETE FROM storyos.author_action_entries WHERE receipt_id = '{receipt_id}'"),
+        format!("DELETE FROM storyos.draft_close_events WHERE receipt_id = '{receipt_id}'"),
+    ] {
+        run_without_foreign_keys(&admin, &statement).await;
+        let replayed = expand_refused_edit_draft(&store, &with_new_request_ids(&call)).await;
+        damaged.push(match replayed {
+            Err(error) => ReplayError::from(error),
+            Ok(settled) => panic!("a damaged expansion must not replay, got {settled:?}"),
+        });
+    }
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET canonical_command_digest = 'sha256:expandRefusedEditDraftToProposal:damaged'
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let other_digest = expand_refused_edit_draft(&store, &with_new_request_ids(&call)).await;
+    assert_eq!(pre_capture.unwrap(), first);
+    assert_eq!(damaged, vec![ReplayError::Unavailable; 4]);
+    assert!(matches!(
+        other_digest,
+        Err(ProjectCommandError::BindingConflict)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_expansion_refuses_before_admission_and_requires_the_client_writer_generation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, open) = refused_edit_expansion(&store, &admin, /*base*/ 0x8e50, "retained").await;
+    let stale_writer = ExpandRefusedEditDraftToProposalInput {
+        writer_generation: 2,
+        ..open.clone()
+    };
+    let missing = ExpandRefusedEditDraftToProposalInput {
+        draft_id: Uuid::now_v7().to_string(),
+        ..open.clone()
+    };
+    let (damaged_scope, damaged) =
+        refused_edit_expansion(&store, &admin, /*base*/ 0x8e60, "retained").await;
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "UPDATE storyos.draft_artifact_revisions
+                SET payload = jsonb_set(payload, '{{local_intent_sequence}}', '\"2\"')
+              WHERE draft_id = '{}'",
+            damaged.draft_id
+        ),
+    )
+    .await;
+    let mut observed = Vec::new();
+    for (scope, suffix, input) in [
+        (&scope, 0x8e59, stale_writer),
+        (&scope, 0x8e5a, missing),
+        (&damaged_scope, 0x8e69, damaged),
+    ] {
+        let call = expansion_call(&store, scope, suffix, input).await;
+        let refused = expand_refused_edit_draft(&store, &call).await;
+        observed.push((
+            match refused {
+                Err(error) => ReplayError::from(error),
+                Ok(settled) => {
+                    panic!("the expansion must refuse before Admission, got {settled:?}")
+                }
+            },
+            settlement_rows(&admin, &call.envelope.ids.receipt_id).await,
+        ));
+    }
+    let open_call = expansion_call(&store, &scope, /*suffix*/ 0x8e5b, open).await;
+    let settled = expand_refused_edit_draft(&store, &open_call).await.unwrap();
     assert_eq!(
         (observed, settled.outcome.receipt_result()),
         (

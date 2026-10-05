@@ -550,6 +550,6 @@ pub use close_editor_flow_draft::{
     CloseEditorFlowDraftInput, CloseEditorFlowDraftSettlement, DraftCloseObservation, DraftClosed,
 };
 pub use expand_refused_edit_draft::{
-    DraftCloseError, DraftExpansionSettlement, ExpandRefusedEditDraftCommand,
-    ExpandRefusedEditDraftStore, expand_refused_edit_draft,
+    DraftExpanded, DraftExpansionObservation, ExpandRefusedEditDraftSettlement,
+    ExpandRefusedEditDraftToProposalInput,
 };
