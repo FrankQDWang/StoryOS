@@ -199,10 +199,10 @@ impl ProjectCommand for DeleteChapterInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<ChapterDeleted, ReplayFault> {
         let tree_revision = replay.activity_u64("tree_revision")?;
-        let volume_id = replay.activity_text("volume_id")?;
+        let volume_id = replay.activity_uuid("volume_id")?;
         let current = match (
-            replay.activity_optional_text("prior_current_chapter_id")?,
-            replay.activity_optional_text("current_chapter_id")?,
+            replay.activity_nullable_uuid("prior_current_chapter_id")?,
+            replay.activity_nullable_uuid("current_chapter_id")?,
         ) {
             // The resulting Current alone cannot show that a different prior Current stayed.
             (Some(prior), _) if prior != self.chapter_id.as_ref() => {

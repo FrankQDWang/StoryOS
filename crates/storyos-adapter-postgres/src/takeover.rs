@@ -279,27 +279,18 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         if !replay.fence_digest_matches {
             return Err(ReplayFault::BindingConflict);
         }
-        let text = |key: &str| {
-            replay.activity_optional_text(key)?.ok_or_else(|| {
-                ReplayFault::Unavailable(format!("the takeover Activity has no {key}").into())
-            })
-        };
-        let number = |key: &str| -> Result<u64, ReplayFault> {
-            text(key)?
-                .parse()
-                .map_err(|error| ReplayFault::Unavailable(Box::new(error)))
-        };
         let [resulting_head] =
             <[String; 1]>::try_from(replay.resulting_heads.clone()).map_err(|_| {
                 ReplayFault::Unavailable("the takeover Receipt has no single head".into())
             })?;
         Ok(Some(WriterTakeover {
-            prior_editor_session_id: text("prior_editor_session_id")?,
-            prior_writer_generation: number("prior_writer_generation")?,
-            resulting_editor_session_id: text("resulting_editor_session_id")?,
-            resulting_writer_generation: number("resulting_writer_generation")?,
-            resulting_snapshot_id: text("resulting_snapshot_id")?,
-            resulting_snapshot_activity_position: number("resulting_snapshot_activity_position")?,
+            prior_editor_session_id: replay.activity_uuid("prior_editor_session_id")?,
+            prior_writer_generation: replay.activity_u64("prior_writer_generation")?,
+            resulting_editor_session_id: replay.activity_uuid("resulting_editor_session_id")?,
+            resulting_writer_generation: replay.activity_u64("resulting_writer_generation")?,
+            resulting_snapshot_id: replay.activity_uuid("resulting_snapshot_id")?,
+            resulting_snapshot_activity_position: replay
+                .activity_u64("resulting_snapshot_activity_position")?,
             resulting_head,
         }))
     }

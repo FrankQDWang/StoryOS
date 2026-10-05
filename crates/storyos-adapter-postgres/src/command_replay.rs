@@ -31,9 +31,9 @@ pub(crate) struct CommandReplay {
     pub(crate) author_action_disposition: Option<String>,
     /// The canonical Snapshot at the Activity position of the Receipt.
     pub(crate) snapshot_id: Option<String>,
-    /// The latest Manuscript Tree Revision text that an Activity payload records at or before the
-    /// Receipt. Only a profile that needs it parses it.
-    pub(crate) manuscript_tree_revision: Option<String>,
+    /// The JSON text of the `tree_revision` value of the newest Activity payload that records one
+    /// at or before the Receipt. Only a profile that needs it reads it.
+    manuscript_tree_revision: Option<String>,
     /// The resulting head array of the Domain Receipt.
     pub(crate) resulting_heads: Vec<String>,
     /// Whether the Command Idempotency Fence keeps the command digest of the Receipt.
@@ -115,12 +115,13 @@ impl JsonFields {
         }
     }
 
-    /// The string value of `key`, or `None` when it is absent or null. Another JSON type is
-    /// damaged evidence.
-    fn text(&self, key: &str) -> Result<Option<&str>, ReplayFault> {
+    /// The field of `key` when it is absent, null, or a string. Another JSON type is damaged
+    /// evidence.
+    fn field(&self, key: &str) -> Result<Field<'_>, ReplayFault> {
         match self.0.get(key) {
-            None | Some(serde_json::Value::Null) => Ok(None),
-            Some(serde_json::Value::String(text)) => Ok(Some(text)),
+            None => Ok(Field::Absent),
+            Some(serde_json::Value::Null) => Ok(Field::Null),
+            Some(serde_json::Value::String(text)) => Ok(Field::Text(text)),
             Some(
                 serde_json::Value::Bool(_)
                 | serde_json::Value::Number(_)
@@ -131,6 +132,49 @@ impl JsonFields {
             ))),
         }
     }
+
+    /// The string of `key`. An absent or null field is damaged evidence.
+    fn required(&self, key: &str) -> Result<&str, ReplayFault> {
+        match self.field(key)? {
+            Field::Text(text) => Ok(text),
+            Field::Absent | Field::Null => {
+                Err(unavailable(format!("the stored field {key} is missing")))
+            }
+        }
+    }
+
+    /// The string of `key`, or `None` when it is null. An absent field is damaged evidence.
+    fn nullable(&self, key: &str) -> Result<Option<&str>, ReplayFault> {
+        match self.field(key)? {
+            Field::Text(text) => Ok(Some(text)),
+            Field::Null => Ok(None),
+            Field::Absent => Err(unavailable(format!("the stored field {key} is missing"))),
+        }
+    }
+}
+
+/// One top-level field of a stored JSON object whose JSON type replay accepts.
+enum Field<'a> {
+    Absent,
+    Null,
+    Text(&'a str),
+}
+
+/// The canonical UUID text of the stored field `key`. Another text is damaged evidence.
+fn canonical_uuid(key: &str, text: &str) -> Result<String, ReplayFault> {
+    Uuid::parse_str(text)
+        .ok()
+        .map(|id| id.to_string())
+        .filter(|canonical| canonical == text)
+        .ok_or_else(|| unavailable(format!("the stored field {key} is not a UUID")))
+}
+
+/// The unsigned decimal value of the stored field `key`. Another text is damaged evidence.
+fn decimal(key: &str, text: &str) -> Result<u64, ReplayFault> {
+    text.parse::<u64>()
+        .ok()
+        .filter(|value| value.to_string() == text)
+        .ok_or_else(|| unavailable(format!("the stored field {key} is not a decimal")))
 }
 
 impl CommandReplay {
@@ -145,41 +189,52 @@ impl CommandReplay {
         if self.result_kind == applied_result {
             return Ok(TransitionOutcome::Applied(()));
         }
-        self.receipt
-            .text("reason")?
-            .and_then(|reason| {
+        // A missing or unknown reason is a binding conflict (ADR 0043).
+        match self.receipt.field("reason")? {
+            Field::Text(reason) => {
                 TransitionOutcome::from_zero_authority_codes(&self.result_kind, reason)
-            })
-            .ok_or(ReplayFault::BindingConflict)
-    }
-
-    /// One string field of the Receipt payload, or `None` when it is absent or null.
-    pub(crate) fn receipt_text(&self, key: &str) -> Result<Option<&str>, ReplayFault> {
-        self.receipt.text(key)
-    }
-
-    /// The canonical UUID text of one Receipt payload field, or `None` when it is null. An absent
-    /// field or another value is damaged evidence.
-    pub(crate) fn receipt_nullable_uuid(&self, key: &str) -> Result<Option<String>, ReplayFault> {
-        if !self.receipt.0.contains_key(key) {
-            return Err(unavailable(format!("the Receipt payload has no {key}")));
+            }
+            Field::Absent | Field::Null => None,
         }
+        .ok_or(ReplayFault::BindingConflict)
+    }
+
+    /// One required string field of the Receipt payload.
+    pub(crate) fn receipt_text(&self, key: &str) -> Result<&str, ReplayFault> {
+        self.receipt.required(key)
+    }
+
+    /// One Receipt payload field that a historical format leaves out. It is `None` only when it
+    /// is absent.
+    pub(crate) fn receipt_historical_decimal(&self, key: &str) -> Result<Option<u64>, ReplayFault> {
+        match self.receipt.field(key)? {
+            Field::Absent => Ok(None),
+            Field::Text(text) => decimal(key, text).map(Some),
+            Field::Null => Err(unavailable(format!("the stored field {key} is null"))),
+        }
+    }
+
+    /// The canonical UUID text of one Receipt payload field, or `None` when it is null.
+    pub(crate) fn receipt_nullable_uuid(&self, key: &str) -> Result<Option<String>, ReplayFault> {
         self.receipt
-            .text(key)?
-            .map(|text| {
-                Uuid::parse_str(text)
-                    .ok()
-                    .map(|id| id.to_string())
-                    .filter(|canonical| canonical == text)
-                    .ok_or_else(|| unavailable(format!("the Receipt payload {key} is not a UUID")))
-            })
+            .nullable(key)?
+            .map(|text| canonical_uuid(key, text))
             .transpose()
     }
 
-    /// The canonical UUID text of one Receipt payload field. Another value is damaged evidence.
+    /// The canonical UUID text of one required Receipt payload field.
     pub(crate) fn receipt_uuid(&self, key: &str) -> Result<String, ReplayFault> {
-        self.receipt_nullable_uuid(key)?
-            .ok_or_else(|| unavailable(format!("the Receipt payload {key} is null")))
+        canonical_uuid(key, self.receipt.required(key)?)
+    }
+
+    /// Requires the Receipt payload field `key` to be present and null.
+    pub(crate) fn require_receipt_null(&self, key: &str) -> Result<(), ReplayFault> {
+        match self.receipt.field(key)? {
+            Field::Null => Ok(()),
+            Field::Absent | Field::Text(_) => {
+                Err(unavailable(format!("the stored field {key} is not null")))
+            }
+        }
     }
 
     /// Requires `expected` as the Receipt payload value of `key`. Another value is damaged evidence.
@@ -188,7 +243,7 @@ impl CommandReplay {
         key: &str,
         expected: &str,
     ) -> Result<(), ReplayFault> {
-        if self.receipt.text(key)? == Some(expected) {
+        if self.receipt.required(key)? == expected {
             return Ok(());
         }
         Err(unavailable(format!(
@@ -196,24 +251,56 @@ impl CommandReplay {
         )))
     }
 
+    /// One required string field of the Activity payload.
     pub(crate) fn activity_text(&self, key: &str) -> Result<String, ReplayFault> {
+        self.activity.required(key).map(str::to_owned)
+    }
+
+    /// The canonical UUID text of one required Activity payload field.
+    pub(crate) fn activity_uuid(&self, key: &str) -> Result<String, ReplayFault> {
+        canonical_uuid(key, self.activity.required(key)?)
+    }
+
+    /// The canonical UUID text of one Activity payload field, or `None` when it is null.
+    pub(crate) fn activity_nullable_uuid(&self, key: &str) -> Result<Option<String>, ReplayFault> {
         self.activity
-            .text(key)?
-            .map(str::to_owned)
-            .ok_or(ReplayFault::BindingConflict)
+            .nullable(key)?
+            .map(|text| canonical_uuid(key, text))
+            .transpose()
     }
 
-    pub(crate) fn activity_optional_text(&self, key: &str) -> Result<Option<String>, ReplayFault> {
-        Ok(self.activity.text(key)?.map(str::to_owned))
-    }
-
-    /// One string field of the effect row that the command's `ReplayEffect` query reads.
-    pub(crate) fn effect_text(&self, key: &str) -> Result<Option<String>, ReplayFault> {
-        Ok(self.effect.text(key)?.map(str::to_owned))
-    }
-
+    /// The unsigned decimal value of one required Activity payload field.
     pub(crate) fn activity_u64(&self, key: &str) -> Result<u64, ReplayFault> {
-        self.activity_text(key)?.parse().map_err(unavailable)
+        decimal(key, self.activity.required(key)?)
+    }
+
+    /// One string field of the effect row that the command's `ReplayEffect` query reads, or
+    /// `None` when the row or its column is absent.
+    pub(crate) fn effect_text(&self, key: &str) -> Result<Option<String>, ReplayFault> {
+        Ok(match self.effect.field(key)? {
+            Field::Text(text) => Some(text.to_owned()),
+            Field::Absent | Field::Null => None,
+        })
+    }
+
+    /// The Manuscript Tree Revision of the newest Activity payload that records one at or before
+    /// the Receipt, or `None` when no payload records one.
+    pub(crate) fn manuscript_tree_revision(&self) -> Result<Option<u64>, ReplayFault> {
+        self.manuscript_tree_revision
+            .as_deref()
+            .map(
+                |json| match serde_json::from_str(json).map_err(unavailable)? {
+                    serde_json::Value::String(text) => decimal("tree_revision", &text),
+                    serde_json::Value::Null
+                    | serde_json::Value::Bool(_)
+                    | serde_json::Value::Number(_)
+                    | serde_json::Value::Array(_)
+                    | serde_json::Value::Object(_) => Err(unavailable(
+                        "the stored field tree_revision is not a string",
+                    )),
+                },
+            )
+            .transpose()
     }
 
     pub(crate) fn response_project(&self) -> Result<Project, ReplayFault> {
@@ -402,11 +489,11 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
         authoritative_commit.resulting_revision_id::text,
         idempotency.acknowledgement_format,
         idempotency.response_project::text,
-        (SELECT structure.payload->>'tree_revision'
+        (SELECT (structure.payload->'tree_revision')::text
            FROM storyos.project_activity_event_payloads AS structure
           WHERE (structure.owner_user_id, structure.project_id) =
                 (receipt.owner_user_id, receipt.project_id)
-            AND jsonb_typeof(structure.payload->'tree_revision') = 'string'
+            AND structure.payload ? 'tree_revision'
             AND (payload.project_activity_position IS NULL
                  OR structure.project_activity_position <= payload.project_activity_position)
           ORDER BY structure.project_activity_position DESC

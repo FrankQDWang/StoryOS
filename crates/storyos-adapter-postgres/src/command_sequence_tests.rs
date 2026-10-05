@@ -3793,3 +3793,199 @@ async fn a_draft_replay_refuses_a_receipt_field_of_the_wrong_type_or_shape() {
     }
     assert_eq!(observed, vec![ReplayError::Unavailable; 15]);
 }
+
+/// Settles the call and replays it once with its Activity payload set to `changed`, an SQL
+/// expression over `payload`.
+async fn replay_with_activity_payload<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    changed: &str,
+) -> ReplayError {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the project command must settle");
+    };
+    let receipt_id = &call.envelope.ids.receipt_id;
+    let payload: String = admin
+        .query_one(
+            "SELECT payload::text FROM storyos.project_activity_event_payloads
+              WHERE receipt_id = $1::text::uuid",
+            &[receipt_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    replay_past_checks(
+        admin,
+        store,
+        call,
+        "project_activity_event_payloads",
+        "payload",
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads SET payload = {changed}
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads SET payload = '{payload}'::jsonb
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+    )
+    .await
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_activity_replay_refuses_a_missing_null_or_malformed_required_field() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        // A required field that is null or absent.
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &update_project_call(&store, /*base*/ 0xa100).await,
+            "jsonb_set(payload, '{title}', 'null'::jsonb)",
+        )
+        .await,
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &create_volume_call(&store, /*base*/ 0xa110).await,
+            "payload - 'volume_id'",
+        )
+        .await,
+        // An identity that is not canonical UUID text.
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0xa120).await,
+            "jsonb_set(payload, '{chapter_id}', '\"not a chapter\"'::jsonb)",
+        )
+        .await,
+        // A number that is not unsigned decimal text.
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &update_volume_call(&store, /*base*/ 0xa130).await,
+            "jsonb_set(payload, '{order}', '\"01\"'::jsonb)",
+        )
+        .await,
+        // A nullable field that is absent.
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &delete_chapter_call(&store, /*base*/ 0xa140).await,
+            "payload - 'current_chapter_id'",
+        )
+        .await,
+    ];
+    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_receipt_replay_refuses_a_null_or_zero_historical_order_and_a_zero_shape_value() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut observed = vec![
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &create_volume_call(&store, /*base*/ 0xa200).await,
+            "jsonb_set(result_payload, '{order}', 'null'::jsonb)",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0xa210).await,
+            "jsonb_set(result_payload, '{order}', '\"0\"'::jsonb)",
+        )
+        .await,
+    ];
+    for (base, changed) in [
+        (
+            0xa220,
+            format!(
+                "jsonb_set(result_payload, '{{event_id}}', '\"{}\"'::jsonb)",
+                Uuid::now_v7()
+            ),
+        ),
+        (0xa230, "result_payload - 'event_id'".to_owned()),
+    ] {
+        let (scope, tombstoned) = refused_edit_draft(&store, &admin, base, "tombstoned").await;
+        let refused = discard_call(&store, &scope, base + 9, tombstoned).await;
+        observed.push(replay_with_receipt_payload(&store, &admin, &refused, &changed).await);
+    }
+    let (scope, tombstoned) =
+        refused_edit_expansion(&store, &admin, /*base*/ 0xa240, "tombstoned").await;
+    let refused = expansion_call(&store, &scope, /*suffix*/ 0xa249, tombstoned).await;
+    observed.push(
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &refused,
+            "jsonb_set(result_payload, '{proposal_id}', '7'::jsonb)",
+        )
+        .await,
+    );
+    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_current_chapter_replay_refuses_a_damaged_newest_tree_revision() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = set_current_chapter_call(&store, /*base*/ 0xa300).await;
+    let Ok(_) = settle_project_command(&store, &call.envelope, &call.input).await else {
+        panic!("the Current Chapter selection must settle");
+    };
+    let newest = admin
+        .query_one(
+            "SELECT payload.project_activity_position::text,
+                    (payload.payload->'tree_revision')::text
+               FROM storyos.project_activity_event_payloads AS payload
+               JOIN storyos.domain_receipts AS receipt
+                 ON (receipt.owner_user_id, receipt.project_id) =
+                    (payload.owner_user_id, payload.project_id)
+              WHERE receipt.receipt_id = $1::text::uuid AND payload.payload ? 'tree_revision'
+              ORDER BY payload.project_activity_position DESC
+              LIMIT 1",
+            &[&call.envelope.ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    let (position, tree_revision): (String, String) =
+        (newest.get(/*idx*/ 0), newest.get(/*idx*/ 1));
+    let at_newest = format!(
+        "WHERE (owner_user_id, project_id, project_activity_position) =
+               ('{}', '{}', {position})",
+        call.envelope.project_scope.owner_user_id.as_ref(),
+        call.envelope.project_scope.project_id.as_ref()
+    );
+    let observed = replay_past_checks(
+        &admin,
+        &store,
+        &call,
+        "project_activity_event_payloads",
+        "tree_revision",
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads
+                SET payload = jsonb_set(payload, '{{tree_revision}}', '3'::jsonb) {at_newest}"
+        ),
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads
+                SET payload = jsonb_set(payload, '{{tree_revision}}', '{tree_revision}'::jsonb)
+                {at_newest}"
+        ),
+    )
+    .await;
+    assert_eq!(observed, ReplayError::Unavailable);
+}

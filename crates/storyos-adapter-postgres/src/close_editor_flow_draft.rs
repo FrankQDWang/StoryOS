@@ -62,15 +62,22 @@ fn observation_fields(
     ])
 }
 
-/// The Draft facts that the Receipt payload of a Draft Discard or expansion records.
+/// The Draft facts that the Receipt payload of a Draft Discard or expansion of `draft_id`
+/// records, after the replay binding checks.
 pub(crate) fn replayed_draft_observation(
+    draft_id: &str,
     replay: &CommandReplay,
 ) -> Result<DraftCloseObservation, ReplayFault> {
+    if !replay.fence_digest_matches
+        || !replay.admission_matches
+        || replay.draft_artifact_refs != [draft_id]
+    {
+        return Err(ReplayFault::BindingConflict);
+    }
     let damaged = |key: &str| {
         ReplayFault::Unavailable(format!("the Draft Receipt has no valid {key}").into())
     };
-    let payload_digest = replay
-        .receipt_text("payload_digest")?
+    let payload_digest = Some(replay.receipt_text("payload_digest")?)
         .filter(|digest| {
             digest.len() == 64
                 && digest
@@ -78,8 +85,7 @@ pub(crate) fn replayed_draft_observation(
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         })
         .ok_or_else(|| damaged("payload_digest"))?;
-    let observed_closure = replay
-        .receipt_text("observed_closure")?
+    let observed_closure = Some(replay.receipt_text("observed_closure")?)
         .filter(|closure| matches!(*closure, "open" | "closed"))
         .ok_or_else(|| damaged("observed_closure"))?;
     Ok(DraftCloseObservation {
@@ -286,9 +292,7 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<DraftClosed, ReplayFault> {
-        let observation = self
-            .decode_zero_authority_effect(replay)?
-            .ok_or(ReplayFault::BindingConflict)?;
+        let observation = replayed_draft_observation(&self.draft_id, replay)?;
         let damaged = || ReplayFault::Unavailable("the Draft close event does not match".into());
         let event_id = replay.receipt_uuid("event_id")?;
         replay.require_receipt_text("reason", "abandoned")?;
@@ -308,12 +312,8 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
         &self,
         replay: &CommandReplay,
     ) -> Result<Option<DraftCloseObservation>, ReplayFault> {
-        if !replay.fence_digest_matches
-            || !replay.admission_matches
-            || replay.draft_artifact_refs != [self.draft_id.as_str()]
-        {
-            return Err(ReplayFault::BindingConflict);
-        }
-        replayed_draft_observation(replay).map(Some)
+        let observation = replayed_draft_observation(&self.draft_id, replay)?;
+        replay.require_receipt_null("event_id")?;
+        Ok(Some(observation))
     }
 }

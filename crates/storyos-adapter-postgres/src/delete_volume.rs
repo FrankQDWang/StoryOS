@@ -174,7 +174,7 @@ impl ProjectCommand for DeleteVolumeInput {
     fn decode(&self, replay: &CommandReplay) -> Result<VolumeDeleted, ReplayFault> {
         let tree_revision = replay.activity_u64("tree_revision")?;
         Ok(VolumeDeleted {
-            volume_id: replay.activity_text("volume_id")?,
+            volume_id: replay.activity_uuid("volume_id")?,
             tree_revision,
         })
     }

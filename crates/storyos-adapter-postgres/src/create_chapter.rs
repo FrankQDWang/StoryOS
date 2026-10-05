@@ -257,15 +257,16 @@ impl ProjectCommand for CreateChapterInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<ChapterCreated, ReplayFault> {
         let tree_revision = replay.activity_u64("tree_revision")?;
-        let chapter_id = replay.activity_text("chapter_id")?;
-        let resulting_current = replay.activity_text("current_chapter_id")?;
+        let chapter_id = replay.activity_uuid("chapter_id")?;
+        let resulting_current = replay.activity_uuid("current_chapter_id")?;
         let activity_order = replay.activity_u64("order")?;
-        let order = match replay.receipt_text("order")? {
-            Some(order) => match order.parse::<u64>() {
-                Ok(0) => return Err(ReplayFault::BindingConflict),
-                Ok(rank) => CreateChapterPublicOrder::CanonicalSiblingOrder(rank),
-                Err(error) => return Err(ReplayFault::Unavailable(Box::new(error))),
-            },
+        let order = match replay.receipt_historical_decimal("order")? {
+            Some(0) => {
+                return Err(ReplayFault::Unavailable(
+                    "the stored sibling order is zero".into(),
+                ));
+            }
+            Some(rank) => CreateChapterPublicOrder::CanonicalSiblingOrder(rank),
             None => CreateChapterPublicOrder::HistoricalCreateChapterAck(activity_order),
         };
         Ok(ChapterCreated {

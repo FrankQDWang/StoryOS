@@ -170,8 +170,8 @@ impl ProjectCommand for SetCurrentChapterInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<CurrentChapterSelected, ReplayFault> {
         Ok(CurrentChapterSelected {
-            current_chapter_id: replay.activity_text("current_chapter_id")?,
-            base_snapshot_id: replay.activity_text("base_snapshot_id")?,
+            current_chapter_id: replay.activity_uuid("current_chapter_id")?,
+            base_snapshot_id: replay.activity_uuid("base_snapshot_id")?,
         })
     }
 }

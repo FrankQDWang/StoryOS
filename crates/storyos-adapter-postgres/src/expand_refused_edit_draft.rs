@@ -472,9 +472,11 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<DraftExpanded, ReplayFault> {
-        let observation = self
-            .decode_zero_authority_effect(replay)?
-            .ok_or(ReplayFault::BindingConflict)?;
+        let observation = DraftExpansionObservation {
+            draft: replayed_draft_observation(&self.draft_id, replay)?,
+            current_target_revision_id: replay
+                .receipt_nullable_uuid("current_target_revision_id")?,
+        };
         let damaged =
             || ReplayFault::Unavailable("the Draft expansion effect does not match".into());
         if observation.current_target_revision_id.is_none() {
@@ -514,16 +516,14 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
         &self,
         replay: &CommandReplay,
     ) -> Result<Option<DraftExpansionObservation>, ReplayFault> {
-        if !replay.fence_digest_matches
-            || !replay.admission_matches
-            || replay.draft_artifact_refs != [self.draft_id.as_str()]
-        {
-            return Err(ReplayFault::BindingConflict);
-        }
-        Ok(Some(DraftExpansionObservation {
-            draft: replayed_draft_observation(replay)?,
+        let observation = DraftExpansionObservation {
+            draft: replayed_draft_observation(&self.draft_id, replay)?,
             current_target_revision_id: replay
                 .receipt_nullable_uuid("current_target_revision_id")?,
-        }))
+        };
+        for key in ["event_id", "proposal_id", "proposal_revision_id"] {
+            replay.require_receipt_null(key)?;
+        }
+        Ok(Some(observation))
     }
 }
