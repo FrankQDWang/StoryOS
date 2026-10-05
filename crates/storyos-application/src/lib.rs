@@ -204,10 +204,9 @@ pub use project_settings::{
     ArchiveProjectInput, ArchiveProjectSettlement, UpdateProjectInput, UpdateProjectSettlement,
 };
 pub use proposal_generation_decision::{
-    CompleteReadyPartialProposalCommand, CompleteReadyPartialProposalEffect,
-    ContinueProposalGenerationCommand, ContinueProposalGenerationEffect,
-    ProposalGenerationDecisionError, ProposalGenerationDecisionStore, ProposalGenerationSettlement,
-    complete_ready_partial_proposal, continue_proposal_generation,
+    CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
+    ContinueProposalGenerationInput, ContinueProposalGenerationSettlement,
+    ProposalGenerationCompleted, ProposalGenerationStarted,
 };
 pub use readable_export::{
     ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptAdmissionEffect,

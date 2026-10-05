@@ -18,6 +18,10 @@ use storyos_application::{
 use storyos_application::{
     ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
 };
+use storyos_application::{
+    CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
+    ContinueProposalGenerationInput, ContinueProposalGenerationSettlement,
+};
 use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
 use storyos_core::{
     AssistanceAvailability, CreateChapterPlacement, EXCLUSIVE_AUTHORITATIVE_EDGES_V1,
@@ -298,6 +302,18 @@ const EXPAND_REFUSED_EDIT_DRAFT: Route = Route {
     method: "POST",
     path: storyos_contracts::EXPAND_REFUSED_EDIT_DRAFT_PATH,
     schema: storyos_contracts::EXPAND_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID,
+};
+const COMPLETE_READY_PARTIAL_PROPOSAL: Route = Route {
+    kind: "completeReadyPartialProposal",
+    method: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_METHOD,
+    path: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_PATH,
+    schema: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
+};
+const CONTINUE_PROPOSAL_GENERATION: Route = Route {
+    kind: "continueProposalGeneration",
+    method: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_METHOD,
+    path: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_PATH,
+    schema: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,
 };
 
 /// Issues one Command Challenge for `route` and binds `input` to it.
@@ -845,6 +861,55 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         expansion_records.push(expansion_records_of(&admin, &call).await);
     }
 
+    let (scope, generation) = ready_partial_proposal(&store, &admin, /*base*/ 0x7500).await;
+    for (suffix, expected_authoritative_revision_id) in [
+        (0x750a, &generation.other_chapter_revision_id),
+        (
+            0x750b,
+            &generation.complete.expected_authoritative_revision_id,
+        ),
+        (
+            0x750c,
+            &generation.complete.expected_authoritative_revision_id,
+        ),
+    ] {
+        let input = CompleteReadyPartialProposalInput {
+            expected_authoritative_revision_id: expected_authoritative_revision_id.clone(),
+            ..generation.complete.clone()
+        };
+        let call = issued(
+            &store,
+            &scope,
+            suffix,
+            &COMPLETE_READY_PARTIAL_PROPOSAL,
+            input,
+        )
+        .await;
+        let outcome =
+            replayed_outcome(&store, &admin, &call, complete_ready_partial_proposal).await;
+        observed.push((COMPLETE_READY_PARTIAL_PROPOSAL.kind, outcome));
+    }
+    for (suffix, expected_authoritative_revision_id) in [
+        (0x750d, &generation.other_chapter_revision_id),
+        (
+            0x750e,
+            &generation.complete.expected_authoritative_revision_id,
+        ),
+        (
+            0x750f,
+            &generation.complete.expected_authoritative_revision_id,
+        ),
+    ] {
+        let input = ContinueProposalGenerationInput {
+            expected_generation_state: "ready".to_owned(),
+            expected_authoritative_revision_id: expected_authoritative_revision_id.clone(),
+            ..generation.continuation.clone()
+        };
+        let call = issued(&store, &scope, suffix, &CONTINUE_PROPOSAL_GENERATION, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, continue_proposal_generation).await;
+        observed.push((CONTINUE_PROPOSAL_GENERATION.kind, outcome));
+    }
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
@@ -852,6 +917,8 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let proposal_revised = ("proposal_revised", [1, 1, 0, 0, 0]);
     let proposal_closure_changed = ("proposal_closure_changed", [1, 1, 0, 0, 0]);
     let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
+    let generation_completed = ("proposal_generation_completed", [1, 1, 0, 0, 0]);
+    let generation_started = ("proposal_generation_started", [1, 1, 0, 0, 0]);
     let draft_closure_changed = ("draft_closure_changed", [1, 1, 0, 0, 0]);
     let proposal_created_from_draft = ("proposal_created_from_draft", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
@@ -930,6 +997,12 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("expandRefusedEditDraftToProposal", conflicted),
             ("expandRefusedEditDraftToProposal", refused),
             ("expandRefusedEditDraftToProposal", refused),
+            ("completeReadyPartialProposal", conflicted),
+            ("completeReadyPartialProposal", generation_completed),
+            ("completeReadyPartialProposal", refused),
+            ("continueProposalGeneration", conflicted),
+            ("continueProposalGeneration", generation_started),
+            ("continueProposalGeneration", refused),
         ]
     );
     assert_eq!(rejection_records, vec![1; 4]);
@@ -1706,6 +1779,175 @@ async fn expansion_records_of(
     [0, 1, 2].map(|index| row.get(index))
 }
 
+async fn complete_ready_partial_proposal(
+    store: &PostgresProjectReader,
+    call: &CommandCall<CompleteReadyPartialProposalInput>,
+) -> Result<CompleteReadyPartialProposalSettlement, ProjectCommandError> {
+    store
+        .complete_ready_partial_proposal(&call.envelope, &call.input)
+        .await
+}
+
+async fn continue_proposal_generation(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ContinueProposalGenerationInput>,
+) -> Result<ContinueProposalGenerationSettlement, ProjectCommandError> {
+    store
+        .continue_proposal_generation(&call.envelope, &call.input)
+        .await
+}
+
+/// The applicable completion and continuation of one ready-partial Proposal Generation.
+struct GenerationFixture {
+    complete: CompleteReadyPartialProposalInput,
+    continuation: ContinueProposalGenerationInput,
+    /// The head of Chapter A, which is not the head of the Proposal Chapter B.
+    other_chapter_revision_id: String,
+}
+
+/// A new Project with a writer Editor Session and one open ready-partial Proposal on Chapter B.
+///
+/// The Proposal Generation belongs to a paused AgentRun. The fixture skips the foreign keys of
+/// the AgentRun, the Manuscript Block, and the AgentRun Receipt.
+async fn ready_partial_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, GenerationFixture) {
+    let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let candidate_text = "Candidate";
+    let proposal_id = Uuid::now_v7().to_string();
+    let revision_id = Uuid::now_v7().to_string();
+    let generation_id = Uuid::now_v7().to_string();
+    let operation_id = Uuid::now_v7().to_string();
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             INSERT INTO storyos.agent_runs
+               (owner_user_id, project_id, run_id, project_agent_id, conversation_id,
+                memory_settings_revision, grant_id, project_model_use_binding_revision,
+                chapter_id, author_message, status, receipt_id)
+             VALUES ('{owner}', '{project}', '{run}', '{agent}', '{conversation}',
+                     '{memory}', '{grant}', '{binding}', '{chapter}', 'Continue',
+                     'paused', '{run_receipt}');
+             INSERT INTO storyos.proposals
+               (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
+                source_run_id, source_decision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', 'block_edit', '{chapter}',
+                     '{block}', '{run}', '{decision}');
+             INSERT INTO storyos.proposal_revisions
+               (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
+                closure, candidate_text, base_authoritative_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', 'ready_partial',
+                     'valid', 'open', '{candidate_text}', '{base_revision}');
+             INSERT INTO storyos.proposal_heads
+               (owner_user_id, project_id, proposal_id, current_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}');
+             INSERT INTO storyos.proposal_operations
+               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                resolution, reservation_state, candidate_text)
+             VALUES ('{owner}', '{project}', '{proposal}', '{operation}', '{block}',
+                     'pending', 'resolved', '{candidate_text}');
+             INSERT INTO storyos.proposal_generations
+               (owner_user_id, project_id, generation_id, proposal_id, last_applied_stream_seq,
+                run_id)
+             VALUES ('{owner}', '{project}', '{generation}', '{proposal}', 3, '{run}');
+             INSERT INTO storyos.proposal_generation_heads
+               (owner_user_id, project_id, proposal_id, generation_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{generation}');
+             COMMIT;",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            run = Uuid::now_v7(),
+            agent = Uuid::now_v7(),
+            conversation = Uuid::now_v7(),
+            memory = Uuid::now_v7(),
+            grant = Uuid::now_v7(),
+            binding = Uuid::now_v7(),
+            chapter = chapter_b,
+            run_receipt = Uuid::now_v7(),
+            proposal = proposal_id,
+            block = Uuid::now_v7(),
+            decision = Uuid::now_v7(),
+            revision = revision_id,
+            base_revision = revision_b,
+            operation = operation_id,
+            generation = generation_id,
+        ))
+        .await
+        .unwrap();
+    let other_chapter_revision_id = admin
+        .query_one(
+            "SELECT current_revision_id::text FROM storyos.authoritative_heads
+              WHERE manuscript_object_id = $1::text::uuid",
+            &[&chapter_a],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let editor_session_id = EditorSessionId::new(editor_session_id);
+    let expected_candidate_digest = storyos_core::hex_sha256(candidate_text.as_bytes());
+    let fixture = GenerationFixture {
+        complete: CompleteReadyPartialProposalInput {
+            editor_session_id: editor_session_id.clone(),
+            proposal_id: proposal_id.clone(),
+            proposal_revision_id: revision_id.clone(),
+            generation_id: generation_id.clone(),
+            expected_candidate_digest: expected_candidate_digest.clone(),
+            last_applied_stream_seq: 3,
+            expected_authoritative_revision_id: revision_b.clone(),
+        },
+        continuation: ContinueProposalGenerationInput {
+            editor_session_id,
+            proposal_id,
+            proposal_revision_id: revision_id,
+            prior_generation_id: generation_id,
+            expected_generation_state: "ready_partial".to_owned(),
+            expected_candidate_digest,
+            selected_pending_operation_ids: vec![operation_id],
+            expected_authoritative_revision_id: revision_b,
+        },
+        other_chapter_revision_id,
+    };
+    (scope, fixture)
+}
+
+/// One applicable Complete Ready Partial Proposal in a new Project.
+async fn complete_ready_partial_proposal_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<CompleteReadyPartialProposalInput> {
+    let (scope, fixture) = ready_partial_proposal(store, admin, base).await;
+    issued(
+        store,
+        &scope,
+        base + 9,
+        &COMPLETE_READY_PARTIAL_PROPOSAL,
+        fixture.complete,
+    )
+    .await
+}
+
+/// One applicable Continue Proposal Generation in a new Project.
+async fn continue_proposal_generation_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<ContinueProposalGenerationInput> {
+    let (scope, fixture) = ready_partial_proposal(store, admin, base).await;
+    issued(
+        store,
+        &scope,
+        base + 9,
+        &CONTINUE_PROPOSAL_GENERATION,
+        fixture.continuation,
+    )
+    .await
+}
+
 /// One applicable Create Volume in a new Project.
 async fn create_volume_call(
     store: &PostgresProjectReader,
@@ -1970,11 +2212,23 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7510).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7520).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
             &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e20).await,
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 18]);
+    assert_eq!(observed, vec![(true, [0; 5]); 20]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2225,6 +2479,18 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7530).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7540).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
             &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e30).await,
         )
         .await,
@@ -2237,6 +2503,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.push(rolled_back(ReceiptResult::Refused));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 3]);
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);
 }
@@ -2445,6 +2712,18 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &withdraw_proposal_call(&store, &admin, /*base*/ 0x7490).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7550).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7560).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -2453,7 +2732,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 15]);
+    assert_eq!(observed, vec![separated; 17]);
 }
 
 #[tokio::test]
@@ -2529,6 +2808,57 @@ async fn every_proposal_decision_replay_separates_pre_capture_from_damaged_effec
         ReplayError::Unavailable,
     ];
     assert_eq!(observed, vec![separated; 5]);
+}
+
+/// Settles the call, deletes its Proposal Generation transition record, and replays it.
+async fn replay_without_transition_record<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+) -> ReplayError {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the generation decision must settle");
+    };
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "DELETE FROM storyos.proposal_generation_transitions WHERE receipt_id = '{}'",
+            call.envelope.ids.receipt_id
+        ),
+    )
+    .await;
+    let retry = with_new_request_ids(call);
+    let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
+        panic!("a replay without its transition record must fail");
+    };
+    error.into()
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_generation_decision_without_its_transition_record_is_damaged_evidence() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = [
+        replay_without_transition_record(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7570).await,
+        )
+        .await,
+        replay_without_transition_record(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7580).await,
+        )
+        .await,
+    ];
+    assert_eq!(
+        observed,
+        [ReplayError::Unavailable, ReplayError::Unavailable]
+    );
 }
 
 #[tokio::test]

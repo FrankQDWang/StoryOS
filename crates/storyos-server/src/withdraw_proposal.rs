@@ -7,8 +7,8 @@ use storyos_core::{
 };
 
 use super::command_admission::{
-    Admitted, AntiForgery, BodyValidation, HeaderCheck, ProblemMapping, ProjectCommandRoute,
-    RevisionMismatch, SchemaMismatch, TargetValidation, admit_body, controlled_project, read_body,
+    Admitted, AntiForgery, BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch,
+    SchemaMismatch, TargetValidation, admit_body, controlled_project, read_body,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -45,7 +45,6 @@ pub(super) async fn withdraw_proposal(
         &[&proposal_id],
         request,
         &WITHDRAW_PROPOSAL,
-        HeaderCheck::AfterBodyParse,
     )
     .await?;
     // The form fields are validated before the schema and revision checks, as on main.

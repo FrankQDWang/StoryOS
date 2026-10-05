@@ -5,8 +5,8 @@ use storyos_application::{
 use storyos_core::{OpenInlineProposalAnchor, TransitionOutcome};
 
 use super::command_admission::{
-    AntiForgery, BodyValidation, HeaderCheck, ProblemMapping, ProjectCommandRoute,
-    RevisionMismatch, SchemaMismatch, TargetValidation, admit_body, read_body,
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    TargetValidation, admit,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -20,7 +20,8 @@ const EXPAND_REFUSED_EDIT_DRAFT: ProjectCommandRoute = ProjectCommandRoute {
     digest_profile: contracts::EXPAND_REFUSED_EDIT_DRAFT_DIGEST_PROFILE,
     revision_mismatch: RevisionMismatch::InvalidRequest,
     schema_mismatch: SchemaMismatch::InvalidRequest,
-    body_validation: BodyValidation::AfterRevisionCheck,
+    // The session and challenge headers are checked before the body parse, as on main.
+    body_validation: BodyValidation::AfterChallengeHeaders,
     target_validation: TargetValidation::AfterContentType,
     problem_mapping: ProblemMapping::Route(expansion_problem),
 };
@@ -61,21 +62,12 @@ pub(super) async fn expand_refused_edit_draft(
     Path((project_id, draft_id)): Path<(String, String)>,
     request: Request,
 ) -> Result<Json<contracts::ExpandRefusedEditDraftResponse>, ApiError> {
-    // This route checks the session and command headers before the body parse, as on main.
-    let read = read_body::<contracts::ExpandRefusedEditDraftRequest>(
+    let admitted = admit(
         &state,
         &project_id,
         &[&draft_id],
         request,
         &EXPAND_REFUSED_EDIT_DRAFT,
-        HeaderCheck::BeforeBodyParse,
-    )
-    .await?;
-    let admitted = admit_body(
-        &state,
-        read,
-        &EXPAND_REFUSED_EDIT_DRAFT,
-        AntiForgery::Required,
         |body: &contracts::ExpandRefusedEditDraftRequest| {
             let input = &body.expand_refused_edit_draft_to_proposal_input;
             let writer_generation = input
