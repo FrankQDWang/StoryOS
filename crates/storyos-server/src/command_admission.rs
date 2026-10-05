@@ -25,10 +25,10 @@ pub(super) struct ProjectCommandRoute {
     pub(super) path: &'static str,
     pub(super) schema_id: &'static str,
     pub(super) digest_profile: &'static str,
-    pub(super) receipt_kind: contracts::DomainReceiptCommandKind,
     pub(super) revision_mismatch: RevisionMismatch,
     pub(super) schema_mismatch: SchemaMismatch,
     pub(super) body_validation: BodyValidation,
+    pub(super) target_validation: TargetValidation,
     pub(super) problem_mapping: ProblemMapping,
 }
 
@@ -42,6 +42,12 @@ pub(super) enum RevisionMismatch {
 pub(super) enum BodyValidation {
     AfterRevisionCheck,
     BeforeRevisionCheck,
+}
+
+/// When the path identities after the Project are validated, relative to the content type.
+pub(super) enum TargetValidation {
+    BeforeContentType,
+    AfterContentType,
 }
 
 /// The problem of a command schema that differs from the route schema.
@@ -105,6 +111,10 @@ project_command_request!(
     contracts::UpdateProjectAssistanceRequest,
     nested update_project_assistance_input
 );
+project_command_request!(
+    contracts::ReopenWithdrawnProposalRequest,
+    nested reopen_withdrawn_proposal_input
+);
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
     fn command_schema(&self) -> &str {
@@ -134,7 +144,7 @@ pub(super) struct Admitted<I> {
     pub(super) store: PostgresProjectReader,
     pub(super) envelope: ProjectCommandEnvelope,
     pub(super) input: I,
-    digest_hex: String,
+    pub(super) digest_hex: String,
 }
 
 /// The acknowledgement fields that every project command response carries.
@@ -166,10 +176,17 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
         project_id,
         RequestOriginPolicy::StateChanging,
     )?;
-    for target in targets {
-        valid_uuid(target)?;
+    let validate_targets = || targets.iter().try_for_each(|target| valid_uuid(target));
+    match route.target_validation {
+        TargetValidation::BeforeContentType => {
+            validate_targets()?;
+            validate_json_content_type(&headers)?;
+        }
+        TargetValidation::AfterContentType => {
+            validate_json_content_type(&headers)?;
+            validate_targets()?;
+        }
     }
-    validate_json_content_type(&headers)?;
     let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
         .await
         .map_err(|_| payload_too_large())?;
@@ -289,6 +306,7 @@ impl<I> Admitted<I> {
     pub(super) fn acknowledgement(
         &self,
         route: &ProjectCommandRoute,
+        receipt_kind: contracts::DomainReceiptCommandKind,
         settled: SettledReceipt,
     ) -> Acknowledgement {
         let project_scope = contract_scope(&self.envelope.project_scope);
@@ -307,7 +325,7 @@ impl<I> Admitted<I> {
             receipt: contracts::DomainReceipt {
                 receipt_id: settled.ids.receipt_id,
                 project_scope,
-                command_kind: route.receipt_kind.clone(),
+                command_kind: receipt_kind,
                 command_digest: contracts::DigestValue {
                     algorithm: contracts::DigestAlgorithm::Sha256,
                     profile: route.digest_profile.to_owned(),

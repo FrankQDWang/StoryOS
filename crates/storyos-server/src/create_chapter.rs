@@ -3,7 +3,7 @@ use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
     BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    SettledReceipt, admit, controlled_project, positive, structure_title,
+    SettledReceipt, TargetValidation, admit, controlled_project, positive, structure_title,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -15,9 +15,9 @@ const CREATE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::CREATE_CHAPTER_PATH,
     schema_id: contracts::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
     digest_profile: contracts::CREATE_CHAPTER_DIGEST_PROFILE,
-    receipt_kind: contracts::DomainReceiptCommandKind::CreateChapter,
     revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
+    target_validation: TargetValidation::BeforeContentType,
     schema_mismatch: SchemaMismatch::InvalidRequest,
     problem_mapping: ProblemMapping::Standard,
 };
@@ -105,6 +105,7 @@ pub(super) async fn create_chapter(
     };
     let ack = admitted.acknowledgement(
         &CREATE_CHAPTER,
+        contracts::DomainReceiptCommandKind::CreateChapter,
         SettledReceipt {
             ids: settlement.ids,
             receipt_created_at: settlement.receipt_created_at,
