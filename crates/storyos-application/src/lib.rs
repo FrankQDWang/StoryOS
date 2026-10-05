@@ -230,9 +230,7 @@ pub use reject_proposal_operations::{
     RejectProposalOperationsStore, RejectionNote, reject_proposal_operations,
 };
 pub use reopen_rejected_operations::{
-    ReopenRejectedOperationsCommand, ReopenRejectedOperationsError,
-    ReopenRejectedOperationsSettlement, ReopenRejectedOperationsSettlementEffect,
-    ReopenRejectedOperationsStore, reopen_rejected_operations,
+    RejectedOperationsReopened, ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
 };
 pub use reopen_withdrawn_proposal::{
     ProposalReopened, ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,

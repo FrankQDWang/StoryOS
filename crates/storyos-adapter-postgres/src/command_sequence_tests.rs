@@ -5,6 +5,7 @@ use storyos_application::{
     CreateVolumeInput, CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement,
     DeleteVolumeInput, DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
     ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
+    ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
     ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement, ReplanProposalInput,
     ReplanProposalSettlement, SetCurrentChapterInput, StructureAuthority,
     StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput, UpdateChapterSettlement,
@@ -260,6 +261,12 @@ const REPLAN_PROPOSAL: Route = Route {
     method: storyos_contracts::REPLAN_PROPOSAL_METHOD,
     path: storyos_contracts::REPLAN_PROPOSAL_PATH,
     schema: storyos_contracts::REPLAN_PROPOSAL_REQUEST_SCHEMA_ID,
+};
+const REOPEN_REJECTED_OPERATIONS: Route = Route {
+    kind: "reopenRejectedOperations",
+    method: storyos_contracts::REOPEN_REJECTED_OPERATIONS_METHOD,
+    path: storyos_contracts::REOPEN_REJECTED_OPERATIONS_PATH,
+    schema: storyos_contracts::REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
 };
 
 /// Issues one Command Challenge for `route` and binds `input` to it.
@@ -679,6 +686,32 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     .await;
     let outcome = replayed_outcome(&store, &admin, &call, replan_proposal).await;
     observed.push((REPLAN_PROPOSAL.kind, outcome));
+    let (scope, rejected) = rejected_operation(&store, &admin, /*base*/ 0x7220).await;
+    for suffix in [0x7229, 0x722a] {
+        let call = issued(
+            &store,
+            &scope,
+            suffix,
+            &REOPEN_REJECTED_OPERATIONS,
+            rejected.clone(),
+        )
+        .await;
+        let outcome = replayed_outcome(&store, &admin, &call, reopen_rejected_operations).await;
+        observed.push((REOPEN_REJECTED_OPERATIONS.kind, outcome));
+    }
+    let (scope, rejected) = rejected_operation(&store, &admin, /*base*/ 0x7230).await;
+    move_chapter_head(&admin, &scope, &rejected.expected_authoritative_revision_id).await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x7239,
+        &REOPEN_REJECTED_OPERATIONS,
+        rejected,
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, reopen_rejected_operations).await;
+    observed.push((REOPEN_REJECTED_OPERATIONS.kind, outcome));
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
@@ -738,6 +771,9 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("replanProposal", proposal_revised),
             ("replanProposal", refused),
             ("replanProposal", conflicted),
+            ("reopenRejectedOperations", proposal_revised),
+            ("reopenRejectedOperations", refused),
+            ("reopenRejectedOperations", conflicted),
         ]
     );
 }
@@ -905,6 +941,15 @@ async fn replan_proposal(
     store.replan_proposal(&call.envelope, &call.input).await
 }
 
+async fn reopen_rejected_operations(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ReopenRejectedOperationsInput>,
+) -> Result<ReopenRejectedOperationsSettlement, ProjectCommandError> {
+    store
+        .reopen_rejected_operations(&call.envelope, &call.input)
+        .await
+}
+
 /// The identities of one open Proposal on Chapter B with one Proposal Operation.
 struct OpenProposal {
     editor_session_id: String,
@@ -1017,6 +1062,43 @@ async fn conflicted_proposal(
     (scope, input)
 }
 
+/// An open Proposal with one rejected Proposal Operation and the input that reopens it.
+async fn rejected_operation(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, ReopenRejectedOperationsInput) {
+    let (scope, proposal) = open_proposal(store, admin, base, "valid", "rejected").await;
+    let rejection_event_id = Uuid::now_v7().to_string();
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.proposal_operation_resolutions
+               (owner_user_id, project_id, resolution_event_id, proposal_id,
+                proposal_revision_id, operation_id, prior_resolution, resulting_resolution,
+                rejection_receipt_id, author_action_sequence)
+             VALUES ('{owner}', '{project}', '{rejection_event_id}', '{proposal}',
+                     '{revision}', '{operation}', 'pending', 'rejected', '{receipt}', 1)",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            proposal = proposal.proposal_id,
+            revision = proposal.revision_id,
+            operation = proposal.operation_id,
+            receipt = Uuid::now_v7(),
+        ),
+    )
+    .await;
+    let input = ReopenRejectedOperationsInput {
+        editor_session_id: EditorSessionId::new(proposal.editor_session_id),
+        proposal_id: proposal.proposal_id,
+        proposal_revision_id: proposal.revision_id,
+        selected_rejected_operation_id: proposal.operation_id,
+        rejection_event_id,
+        expected_authoritative_revision_id: proposal.chapter_head,
+    };
+    (scope, input)
+}
+
 /// Moves the Chapter head away from `revision` to the head of the other Chapter.
 async fn move_chapter_head(admin: &Client, scope: &ProjectScope, revision: &str) {
     run_without_foreign_keys(
@@ -1043,6 +1125,16 @@ async fn replan_proposal_call(
 ) -> CommandCall<ReplanProposalInput> {
     let (scope, input) = conflicted_proposal(store, admin, base).await;
     issued(store, &scope, base + 9, &REPLAN_PROPOSAL, input).await
+}
+
+/// One applicable Reopen Rejected Operations in a new Project.
+async fn reopen_rejected_operations_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<ReopenRejectedOperationsInput> {
+    let (scope, input) = rejected_operation(store, admin, base).await;
+    issued(store, &scope, base + 9, &REOPEN_REJECTED_OPERATIONS, input).await
 }
 
 /// One applicable Create Volume in a new Project.
@@ -1282,8 +1374,14 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &replan_proposal_call(&store, &admin, /*base*/ 0x7240).await,
         )
         .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7250).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 13]);
+    assert_eq!(observed, vec![(true, [0; 5]); 14]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1481,11 +1579,17 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &replan_proposal_call(&store, &admin, /*base*/ 0x7260).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7270).await,
+        )
+        .await,
     ];
     let rolled_back = |result| (vec![(true, [0; 5]), (true, [0; 5])], result);
     let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
     expected.push(rolled_back(ReceiptResult::NoEffect));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 3]);
     assert_eq!(observed, expected);
 }
 
@@ -1620,6 +1724,12 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &replan_proposal_call(&store, &admin, /*base*/ 0x7280).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7290).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -1628,7 +1738,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 12]);
+    assert_eq!(observed, vec![separated; 13]);
 }
 
 #[tokio::test]
