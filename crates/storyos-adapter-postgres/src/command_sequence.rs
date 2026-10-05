@@ -20,7 +20,7 @@ mod records;
 mod response;
 mod structural;
 use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
-pub(crate) use action_only::ActionOnly;
+pub(crate) use action_only::{ActionOnly, ActionSequence};
 pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};

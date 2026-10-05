@@ -6,7 +6,8 @@ use storyos_core::{
     ArchiveProjectConflict, ArchiveProjectNoEffect, CreateChapterConflict, CreateChapterRefusal,
     CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
     DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    ReasonCode, ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
+    ReasonCode, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
+    ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
     ReopenWithdrawnProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
     SetCurrentChapterRefusal, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
@@ -254,6 +255,48 @@ fn every_proposal_decision_reason_maps_to_its_public_reason() {
         (
             ReopenWithdrawnProposalNoEffect::WithdrawalEventMismatch,
             contracts::ReopenWithdrawnProposalNoEffectReason::WithdrawalEventMismatch,
+        ),
+    ]);
+}
+
+#[test]
+fn every_rejection_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        RejectProposalOperationsConflict::ChangedHead,
+        contracts::RejectProposalOperationsConflictReason::ChangedHead,
+    )]);
+    assert_maps(vec![
+        (
+            RejectProposalOperationsRefusal::WrongScope,
+            contracts::RejectProposalOperationsRefusalReason::WrongScope,
+        ),
+        (
+            RejectProposalOperationsRefusal::WrongAdmission,
+            contracts::RejectProposalOperationsRefusalReason::WrongAdmission,
+        ),
+        (
+            RejectProposalOperationsRefusal::StaleProposalRevision,
+            contracts::RejectProposalOperationsRefusalReason::StaleProposalRevision,
+        ),
+        (
+            RejectProposalOperationsRefusal::NotEligible,
+            contracts::RejectProposalOperationsRefusalReason::NotEligible,
+        ),
+        (
+            RejectProposalOperationsRefusal::OperationNotPending,
+            contracts::RejectProposalOperationsRefusalReason::OperationNotPending,
+        ),
+        (
+            RejectProposalOperationsRefusal::DuplicateIdentities,
+            contracts::RejectProposalOperationsRefusalReason::DuplicateIdentities,
+        ),
+        (
+            RejectProposalOperationsRefusal::MissingRequiredDependencies,
+            contracts::RejectProposalOperationsRefusalReason::MissingRequiredDependencies,
+        ),
+        (
+            RejectProposalOperationsRefusal::IncompleteBundleClosure,
+            contracts::RejectProposalOperationsRefusalReason::IncompleteBundleClosure,
         ),
     ]);
 }
