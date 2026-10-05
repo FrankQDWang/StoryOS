@@ -69,8 +69,7 @@ pub(super) struct LoadedProposal {
     generation: String,
     closure: String,
     chapter_id: String,
-    operation_id: String,
-    operation_resolution: String,
+    operation_resolution: Option<String>,
     candidate_text: String,
     base_authoritative_revision_id: String,
     current_head_revision_id: Option<String>,
@@ -91,8 +90,7 @@ async fn persist_reopen(
         admission_valid: true,
         proposal_revision_current: loaded.current_revision_id == command.proposal_revision_id,
         closure_open: loaded.closure == "open",
-        selected_operations_rejected: loaded.operation_id == command.selected_rejected_operation_id
-            && loaded.operation_resolution == "rejected",
+        selected_operations_rejected: loaded.operation_resolution.as_deref() == Some("rejected"),
         rejection_event_matches: loaded.rejection_event_matches,
         reservation_available: loaded.reservation_available,
         expected_target_matches_head: loaded.current_head_revision_id.as_deref()
@@ -132,8 +130,7 @@ async fn load_proposal(
     let row = client
         .query_opt(
             "SELECT head.current_revision_id::text, revision.generation, revision.closure,
-                    proposal.chapter_id::text, operation.operation_id::text,
-                    operation.resolution, revision.candidate_text,
+                    proposal.chapter_id::text, operation.resolution, revision.candidate_text,
                     revision.base_authoritative_revision_id::text,
                     chapter_head.current_revision_id::text,
                     EXISTS (
@@ -171,9 +168,10 @@ async fn load_proposal(
                      revision.revision_id) =
                     (head.owner_user_id, head.project_id, head.proposal_id,
                      head.current_revision_id)
-               JOIN storyos.proposal_operations AS operation
+               LEFT JOIN storyos.proposal_operations AS operation
                  ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
                     (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+                AND operation.operation_id = $5::text::uuid
                LEFT JOIN storyos.authoritative_heads AS chapter_head
                  ON (chapter_head.owner_user_id, chapter_head.project_id,
                      chapter_head.manuscript_object_id) =
@@ -192,17 +190,16 @@ async fn load_proposal(
         .await
         .map_err(reopen_database_error)?;
     Ok(row.map(|row| LoadedProposal {
-        current_revision_id: row.get(0),
-        generation: row.get(1),
-        closure: row.get(2),
-        chapter_id: row.get(3),
-        operation_id: row.get(4),
-        operation_resolution: row.get(5),
-        candidate_text: row.get(6),
-        base_authoritative_revision_id: row.get(7),
-        current_head_revision_id: row.get(8),
-        rejection_event_matches: row.get(9),
-        reservation_available: row.get(10),
+        current_revision_id: row.get(/*idx*/ 0),
+        generation: row.get(/*idx*/ 1),
+        closure: row.get(/*idx*/ 2),
+        chapter_id: row.get(/*idx*/ 3),
+        operation_resolution: row.get(/*idx*/ 4),
+        candidate_text: row.get(/*idx*/ 5),
+        base_authoritative_revision_id: row.get(/*idx*/ 6),
+        current_head_revision_id: row.get(/*idx*/ 7),
+        rejection_event_matches: row.get(/*idx*/ 8),
+        reservation_available: row.get(/*idx*/ 9),
     }))
 }
 

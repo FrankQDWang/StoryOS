@@ -573,9 +573,15 @@ async fn load_generation(
                  ON (generation.owner_user_id, generation.project_id, generation.generation_id) =
                     (generation_head.owner_user_id, generation_head.project_id,
                      generation_head.generation_id)
-               JOIN storyos.proposal_operations AS operation
-                 ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
-                    (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+               JOIN LATERAL (
+                 SELECT first_operation.resolution
+                   FROM storyos.proposal_operations AS first_operation
+                  WHERE (first_operation.owner_user_id, first_operation.project_id,
+                         first_operation.proposal_id) =
+                        (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+                  ORDER BY first_operation.operation_id
+                  LIMIT 1
+               ) AS operation ON true
                JOIN storyos.agent_runs AS run
                  ON (run.owner_user_id, run.project_id, run.run_id) =
                     (proposal.owner_user_id, proposal.project_id,
