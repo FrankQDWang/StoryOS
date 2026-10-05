@@ -69,6 +69,12 @@ and Project Scope and has one Scope-bound `observation_id`. A one-based
 `observation_sequence` orders rows within one Admission and has the closed
 range `1..=18446744073709551615`.
 
+Since [ADR 0044](../adr/0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md),
+no product path appends to this table. `outcome_unknown` is the derived state
+of a committed Admission that has no terminal settlement. The table and the
+database rules below stay until a separate decision removes them with a
+migration.
+
 The append input contains only Project Scope, `author_command_admission_id`,
 `observation_id`, `last_provable_boundary`, and `reason`. PostgreSQL reads the
 exact Admission and copies its `command_id`, `command_kind`, idempotency key,

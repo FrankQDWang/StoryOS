@@ -304,7 +304,7 @@ The two complementary deterministic gates for an Author Edit. Browser integratio
 _Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor event as command truth
 
 **Author Command Admission**:
-The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; post-admission uncertainty remains nonterminal `outcome_unknown`, recovery may invoke only the same unexpired fully matching direct edit, and an explicit, expired, changed, or unrecoverable command requires author reconfirmation. Missing response never proves non-commit.
+The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; post-admission uncertainty remains `outcome_unknown`, the nonterminal state of a committed Admission without terminal settlement, recovery may invoke only the same unexpired fully matching direct edit, and an explicit, expired, changed, or unrecoverable command requires author reconfirmation. Missing response never proves non-commit.
 _Avoid_: Physical-human attestation, client-supplied actor, session role as authority, Approval, reusable authorization token, missing response as failure
 
 **Editor Recovery Creator**:
@@ -1478,6 +1478,10 @@ _Avoid_: Maximum Author Action Sequence, compensation of a compensation, redo cu
 **Author Undo Order**:
 A single newest-first order over uncompensated Forward author-owned actions, regardless of whether they changed Authoritative State or editable Proposal content. The Author Undo Frontier is its exact current candidate; an unsafe Frontier stops undo and requires its explicit reversal or unavailable disposition, and StoryOS never skips it to undo older work.
 _Avoid_: Independent undo stacks, editor-first undo, silent history skip
+
+**Author Undo Disposition**:
+The declared Author Undo result of one Forward author-owned command kind and applied result: an exact Compensation of its effect, or a Barrier. A Barrier Frontier stops Author Undo with no Compensation, and Author Undo never skips it, so earlier Forward actions also stay uncompensated. Every Forward command kind declares its disposition, and Author Undo selects it by the Forward command kind, never by the shape of the stored records.
+_Avoid_: Undo support flag, best-effort inverse, compensation selected by Receipt shape
 
 **Author Undo**:
 An explicit-editor-command Author Command Admission that requests reversal of the exact Author Undo Frontier through its registered typed Core handler and records one immutable routing Receipt. A successful compensation appends its own Author Action Sequence entry naming that source, but is never a later undo target. Author Undo never skips a Barrier, applies a generic inverse patch, depends on editor history as truth, or creates a durable generic redo.

@@ -137,10 +137,12 @@ outcome_unknown -> RequiresReconfirmation
 `pending` means issuance committed and no terminal settlement exists.
 `outcome_unknown` is a durable, author-visible, nonterminal recovery condition
 used only when StoryOS cannot yet prove whether the admitted Core transition
-committed. It records the last provable boundary, reason, observation time, and
-`reconciliation_required` disposition. It is never success, refusal, or
-permission to invoke, and it may remain visible until authoritative storage
-can be validated.
+committed. It is the derived state of a committed admission that has no
+terminal settlement ([ADR 0044](../adr/0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md)).
+The durable admission row holds it, and the settlement Query reports the last
+provable boundary and the `reconciliation_required` disposition. It is never
+success, refusal, or permission to invoke, and it may remain visible until
+authoritative storage can be validated.
 
 Reconciliation appends evidence to the same admission. It first reads the exact
 idempotency record and typed Receipt under the bound Project Scope; it never
@@ -279,7 +281,7 @@ committed domain outcome.
   acknowledgement and Receipt without another Core invocation.
 - **OutcomeUnknown.** A timeout, inaccessible authoritative store, process
   death, or missing acknowledgement cannot prove failure or effect absence.
-  StoryOS records `outcome_unknown`, blocks blind invocation, and reconciles
+  StoryOS reports `outcome_unknown`, blocks blind invocation, and reconciles
   only from ordinary authoritative evidence.
 - **Reconciliation.** Receipt found settles `ReceiptSettled`; validated storage
   plus no Receipt follows the direct-versus-explicit rules in section 5.
