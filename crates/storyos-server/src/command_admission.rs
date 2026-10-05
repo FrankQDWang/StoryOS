@@ -123,6 +123,11 @@ project_command_request!(
     contracts::CloseEditorFlowDraftRequest,
     nested close_editor_flow_draft_input
 );
+project_command_request!(contracts::ReplanProposalRequest, nested replan_proposal_input);
+project_command_request!(
+    contracts::ReopenRejectedOperationsRequest,
+    nested reopen_rejected_operations_input
+);
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
     fn command_schema(&self) -> &str {
