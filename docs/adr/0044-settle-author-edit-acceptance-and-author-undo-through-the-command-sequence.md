@@ -37,7 +37,7 @@ At `main` `5470896d`, the three commands use hand-written transactions:
   1. **Admit.** This is the admit-only first use that ADR 0043 gives the exports. It consumes the Command Challenge, commits the Admission, and leaves the fence `in_progress`.
   2. **Settle the admitted command.** It locks the Project row and the command facts. It checks again that the Admission is not expired and that its writer generation is current. It classifies through Core, writes the Domain Receipt and the profile records, settles the Admission, and settles the fence.
 - `applyAuthorEdit` runs step 1 and then step 2 in one request. The outcome query runs step 2 for an Admission that has no settlement, or settles it as `RequiresReconfirmation` when the recovery rules require that. The recovery rules of the [Author Command Admission contract](../foundation/author-command-admission.md#5-first-invocation-and-recovery-rules) do not change.
-- `outcome_unknown` is the derived state of an Admission that is committed and has no terminal settlement. The Admission row makes this state durable. The sequence writes no `outcome_unknown` row.
+- An Admission that is committed and has no terminal settlement is `pending`. When the outcome query cannot yet settle a `pending` Admission, it reports `outcome_unknown`. The Admission row makes this condition durable. The sequence writes no `outcome_unknown` row.
 - The transaction that pauses Proposal generation before an Author Edit stays before step 1. It is not part of the sequence.
 - The `outcome_unknown` observation store and its tests are removed. The table `author_command_admission_outcome_unknown_observations` stays, with no writer. Removing the table needs a separate decision with a migration.
 
@@ -71,7 +71,7 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 | `completeReadyPartialProposal`, `continueProposalGeneration` | Barrier. |
 | `undoLatestAuthorAction`, `reversal_required` | Barrier. |
 
-- Each compensation keeps the bindings that the current compensation of its family checks. When a binding moved, the Forward action is a Barrier, as today.
+- Each existing compensation keeps the binding checks and the outcomes of its family. A moved binding gives the same Barrier, conflict, unavailable, or reversal-required outcome as on `main`. For the three new compensations, a Proposal head that moved after the Forward action makes the Forward action a Barrier.
 - The compensations of `replanProposal`, `reopenRejectedOperations`, and `reopenWithdrawnProposal` are the only behavior changes of Author Undo in this decision. The `proposal_replans` and `proposal_operation_reopenings` rows stay, because they are history.
 - A Barrier stops Author Undo, and Author Undo never skips it. Thus a Barrier frontier also stops Author Undo of all earlier Forward actions. A later decision can change a Barrier to a Compensation.
 
@@ -79,7 +79,7 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 
 - ADR 0041 and ADR 0043 stay in force. ADR 0043 says that Author Edit, `acceptProposal`, and Author Undo need sequence capabilities that a later decision records. This decision records them, and these three commands now settle through the sequence. After this decision, every implemented project command settles through the sequence, except the three operations that ADR 0043 excludes.
 - ADR 0043 says that every command inserts its Admission after classification. `applyAuthorEdit` is an exception: it inserts its Admission in the admit step, before classification. `acceptProposal` and `undoLatestAuthorAction` insert their Admission after classification.
-- The [Author Command Admission contract](../foundation/author-command-admission.md#4-lifecycle-and-terminal-settlement) now states that `outcome_unknown` is a derived state. The [PostgreSQL storage contract](../foundation/postgresql-project-storage-isolation-and-migration-contract.md) states that the observation table has no writer. The lifecycle and the recovery rules do not change.
+- The [Author Command Admission contract](../foundation/author-command-admission.md#4-lifecycle-and-terminal-settlement) now states that the outcome query reports `outcome_unknown` and that no row records it. The [PostgreSQL storage contract](../foundation/postgresql-project-storage-isolation-and-migration-contract.md) states that the observation table has no writer. The lifecycle and the recovery rules do not change.
 - ADR 0013 stays in force. The refusal record, its transaction, and its fields do not change.
 - [ADR 0029](0029-own-structural-authority-settlement-beside-author-edit.md) and ADR 0030 stay in force. A compensation adapter is next to its forward command, and the inverse public command is not invoked.
 - [ADR 0038](0038-separate-author-edit-challenge-admission-from-shared-command-admission.md) stays in force. `applyAuthorEdit` and `undoLatestAuthorAction` stay in the `author_edit` Challenge Rate Class.

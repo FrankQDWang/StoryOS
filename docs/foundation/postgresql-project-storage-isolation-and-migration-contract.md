@@ -70,10 +70,10 @@ and Project Scope and has one Scope-bound `observation_id`. A one-based
 range `1..=18446744073709551615`.
 
 Since [ADR 0044](../adr/0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md),
-no product path appends to this table. `outcome_unknown` is the derived state
-of a committed Admission that has no terminal settlement. The table and the
-database rules below stay until a separate decision removes them with a
-migration.
+no product path appends to this table. The `getApplyAuthorEditOutcome` Query
+reports `outcome_unknown` for a `pending` Admission that it cannot yet settle,
+and no row records that report. The table and the database rules below stay
+until a separate decision removes them with a migration.
 
 The append input contains only Project Scope, `author_command_admission_id`,
 `observation_id`, `last_provable_boundary`, and `reason`. PostgreSQL reads the
@@ -108,13 +108,13 @@ immutable and inspectable after settlement.
 The current lifecycle projection is exact:
 
 ```text
-no terminal + zero observations     -> pending
-no terminal + one or more rows       -> outcome_unknown
+no terminal settlement               -> pending
 ReceiptSettled terminal exists       -> ReceiptSettled
 ```
 
-Terminal settlement has precedence. Earlier `outcome_unknown` rows then remain
-historical evidence only. The table has forced Project Scope RLS. The runtime
+No product path writes an observation row, so an observation never changes
+this projection. Terminal settlement has precedence over an existing row,
+which remains historical evidence only. The table has forced Project Scope RLS. The runtime
 role has only `SELECT` and `INSERT`. It has no `UPDATE` or `DELETE` grant.
 Appending or reading a row cannot update idempotency, consume a challenge,
 invoke Core, create a Receipt or settlement, create Activity or authority,

@@ -304,7 +304,7 @@ The two complementary deterministic gates for an Author Edit. Browser integratio
 _Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor event as command truth
 
 **Author Command Admission**:
-The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; post-admission uncertainty remains `outcome_unknown`, the nonterminal state of a committed Admission without terminal settlement, recovery may invoke only the same unexpired fully matching direct edit, and an explicit, expired, changed, or unrecoverable command requires author reconfirmation. Missing response never proves non-commit.
+The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; post-admission uncertainty remains nonterminal `outcome_unknown`, recovery may invoke only the same unexpired fully matching direct edit, and an explicit, expired, changed, or unrecoverable command requires author reconfirmation. `outcome_unknown` is a reported condition of a committed Admission without terminal settlement; no separate record stores it. Missing response never proves non-commit.
 _Avoid_: Physical-human attestation, client-supplied actor, session role as authority, Approval, reusable authorization token, missing response as failure
 
 **Editor Recovery Creator**:
@@ -1480,7 +1480,7 @@ A single newest-first order over uncompensated Forward author-owned actions, reg
 _Avoid_: Independent undo stacks, editor-first undo, silent history skip
 
 **Author Undo Disposition**:
-The declared Author Undo result of one Forward author-owned command kind and applied result: an exact Compensation of its effect, or a Barrier. A Barrier Frontier stops Author Undo with no Compensation, and Author Undo never skips it, so earlier Forward actions also stay uncompensated. Every Forward command kind declares its disposition, and Author Undo selects it by the Forward command kind, never by the shape of the stored records.
+The declared Author Undo result of one Forward author-owned command kind and applied result: an exact Compensation of its effect, or a Barrier. A Barrier Frontier stops Author Undo with no Compensation, and Author Undo never skips it, so earlier Forward actions also stay uncompensated. Every Forward command kind declares its disposition.
 _Avoid_: Undo support flag, best-effort inverse, compensation selected by Receipt shape
 
 **Author Undo**:

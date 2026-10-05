@@ -137,10 +137,12 @@ outcome_unknown -> RequiresReconfirmation
 `pending` means issuance committed and no terminal settlement exists.
 `outcome_unknown` is a durable, author-visible, nonterminal recovery condition
 used only when StoryOS cannot yet prove whether the admitted Core transition
-committed. It is the derived state of a committed admission that has no
-terminal settlement ([ADR 0044](../adr/0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md)).
-The durable admission row holds it, and the settlement Query reports the last
-provable boundary and the `reconciliation_required` disposition. It is never
+committed. The settlement Query reports it for a `pending` admission that it
+cannot yet settle. No separate row records it
+([ADR 0044](../adr/0044-settle-author-edit-acceptance-and-author-undo-through-the-command-sequence.md)):
+the durable admission row without terminal settlement holds the condition. The
+Query reports the last provable boundary and the `reconciliation_required`
+disposition. It is never
 success, refusal, or permission to invoke, and it may remain visible until
 authoritative storage can be validated.
 
