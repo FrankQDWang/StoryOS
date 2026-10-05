@@ -67,6 +67,12 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
   - For the six Manuscript Structure Transition commands and `setCurrentChapter`, a later canonical Snapshot at the same Activity position no longer breaks an exact retry. Replay reads the earliest canonical Snapshot at that position, which is the one that the command wrote. Before this decision, such a retry gave `503 project_store_unavailable`.
 - Each specification that moves commands lists every other observable difference in its behavior-equivalence review. An unlisted difference is a defect.
 
+### Defect fixes in moved commands
+
+A specification that moves commands can also fix a defect of those commands. Each fix is listed here with its observable change:
+
+- For `reopenRejectedOperations`, `completeReadyPartialProposal`, and `continueProposalGeneration`, a Proposal with more than one Proposal Operation no longer gives `503 project_store_unavailable`. `reopenRejectedOperations` reads only the selected Proposal Operation, and an unknown one gives `operation_not_rejected`. The two generation decisions read the first Proposal Operation by identity, as `reopenWithdrawnProposal` does.
+
 ## Relation to ADR 0041 and the glossary
 
 ADR 0041 stays in force. ADR 0041 lets the sequence allocate authority records for an `Applied` outcome only in the `Structural` shape. This decision replaces that statement: the settlement profile now fixes the authority records of an `Applied` outcome. The glossary term Core Transition Outcome changes in the same way. Only Applied changes the target of the command, and its settlement profile fixes which authority records it allocates.
