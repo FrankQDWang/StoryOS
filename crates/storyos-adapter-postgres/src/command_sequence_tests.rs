@@ -1282,6 +1282,7 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
                 outcome: classified.outcome,
                 admission: classified.admission,
                 heads: classified.heads,
+                zero_receipt: classified.zero_receipt,
             }),
         }
     }
@@ -1482,6 +1483,7 @@ enum ReplayError {
     HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
+    WriterIneligible,
     Unavailable,
 }
 
@@ -1519,6 +1521,7 @@ async fn evidence_replays<C: ProjectCommand + Clone>(
             }
             ProjectCommandError::InvalidChallenge => ReplayError::InvalidChallenge,
             ProjectCommandError::MissingProject => ReplayError::MissingProject,
+            ProjectCommandError::WriterIneligible => ReplayError::WriterIneligible,
             ProjectCommandError::Unavailable(_) => ReplayError::Unavailable,
         });
     }

@@ -53,6 +53,15 @@ pub(crate) struct EditorAdmission {
     pub(crate) editor_session_id: String,
     pub(crate) chapter_object_id: Option<String>,
     pub(crate) expected_authoritative_revision_id: Option<String>,
+    pub(crate) writer: EditorWriter,
+}
+
+/// The writer generation that an editor Admission insert requires of the Editor Session.
+pub(crate) enum EditorWriter {
+    /// The session holds the current writer generation.
+    Current,
+    /// The session holds the current writer generation, and it is equal to the client value.
+    ClientGeneration(u64),
 }
 
 /// The head arrays that the Domain Receipt of every outcome records.
@@ -77,6 +86,8 @@ pub(crate) struct ReceiptRefs {
 pub(crate) enum MissingAdmission {
     InvalidChallenge,
     BindingConflict,
+    /// The Editor Session does not hold the writer generation that the Admission requires.
+    InvalidWriter,
 }
 
 /// The error of a Command Challenge that the rate limit refuses.
@@ -174,6 +185,7 @@ pub(crate) struct Classification<C: ProjectCommand + ?Sized> {
     pub(crate) outcome: Classified<C>,
     pub(crate) admission: Admission,
     pub(crate) heads: ReceiptHeads,
+    pub(crate) zero_receipt: ZeroReceipt<C::ZeroEffect>,
 }
 
 impl<C: ProjectCommand + ?Sized> Classification<C> {
@@ -183,8 +195,23 @@ impl<C: ProjectCommand + ?Sized> Classification<C> {
             outcome,
             admission: Admission::ExplicitProjectCommand,
             heads: ReceiptHeads::default(),
+            zero_receipt: ZeroReceipt::Reason,
         }
     }
+}
+
+/// The Domain Receipt payload and references of a zero-authority outcome.
+pub(crate) enum ZeroReceipt<Z> {
+    /// The payload `{"reason": code}` and no references.
+    Reason,
+    /// The payload fields that the command observed, which the sequence completes with `reason`.
+    ///
+    /// The settlement returns `effect`, unless the outcome writes effect rows, which give it.
+    Observed {
+        fields: serde_json::Map<String, serde_json::Value>,
+        refs: ReceiptRefs,
+        effect: Z,
+    },
 }
 
 /// The scope sequences that one command's settlement profile allocates.
@@ -381,8 +408,17 @@ async fn first_use<C: ProjectCommand>(
         outcome: classified,
         admission,
         heads,
+        zero_receipt,
     } = command.classify(client, envelope, &project).await?;
     insert_admission(client, envelope, &C::SPEC, &admission).await?;
+    let (mut zero_fields, zero_refs, observed_effect) = match zero_receipt {
+        ZeroReceipt::Reason => (serde_json::Map::new(), ReceiptRefs::default(), None),
+        ZeroReceipt::Observed {
+            fields,
+            refs,
+            effect,
+        } => (fields, refs, Some(effect)),
+    };
     let receipt = ReceiptRecord {
         result: match &classified {
             TransitionOutcome::Applied(_) => C::SPEC.applied_result.code(),
@@ -391,12 +427,15 @@ async fn first_use<C: ProjectCommand>(
             | TransitionOutcome::Refused(_) => classified.receipt_result().code(),
         },
         payload: match classified.reason_code() {
-            Some(code) => serde_json::json!({ "reason": code }).to_string(),
+            Some(code) => {
+                zero_fields.insert("reason".to_owned(), code.into());
+                serde_json::Value::Object(zero_fields).to_string()
+            }
             None => "{}".to_owned(),
         },
         command_kind: C::SPEC.kind,
         heads,
-        refs: ReceiptRefs::default(),
+        refs: zero_refs,
     };
     let (receipt_created_at, outcome) = match classified {
         TransitionOutcome::Applied((applied, plan)) => {
@@ -442,7 +481,7 @@ async fn first_use<C: ProjectCommand>(
     let zero_authority_effect = match zero_outcome {
         None => None,
         Some(zero_outcome) => match command.zero_authority_rows(&zero_outcome) {
-            ZeroAuthorityRows::None => None,
+            ZeroAuthorityRows::None => observed_effect,
             ZeroAuthorityRows::Effect => Some(
                 command
                     .write_zero_authority_effect(client, envelope, &zero_outcome)
