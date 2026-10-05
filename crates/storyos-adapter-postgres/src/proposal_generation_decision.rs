@@ -18,9 +18,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionOnly, Admission, AppliedResult, Classification, CommandIsolation, CommandSpec,
-    EditorAdmission, LockedProject, MissingAdmission, ProfileSequences, ProjectCommand,
-    ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, settle_project_command,
-    unavailable,
+    EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProfileSequences,
+    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt,
+    settle_project_command, unavailable,
 };
 
 #[path = "proposal_generation_decision_write.rs"]
@@ -415,12 +415,14 @@ fn editor_classification<C: ProjectCommand<Applied = (), Plan = LoadedGeneration
             editor_session_id: editor_session_id.as_ref().to_owned(),
             chapter_object_id: Some(loaded.chapter_id.clone()),
             expected_authoritative_revision_id: Some(expected_authoritative_revision_id.to_owned()),
+            writer: EditorWriter::Current,
         }),
         heads: ReceiptHeads {
             expected: head.clone(),
             prior: head.clone(),
             resulting: head,
         },
+        zero_receipt: ZeroReceipt::Reason,
         outcome: outcome.map_applied(|()| ((), loaded)),
     }
 }

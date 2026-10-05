@@ -16,9 +16,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionOnly, ActionSequence, Admission, AppliedResult, Classification, CommandIsolation,
-    CommandSpec, EditorAdmission, LockedProject, MissingAdmission, ProjectCommand, ProjectResponse,
-    RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroAuthorityRows, ZeroOutcome,
-    settle_project_command, unavailable,
+    CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProjectCommand,
+    ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroAuthorityRows,
+    ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -226,12 +226,14 @@ impl ProjectCommand for RejectProposalOperationsInput {
                 expected_authoritative_revision_id: Some(
                     self.expected_authoritative_revision_id.clone(),
                 ),
+                writer: EditorWriter::Current,
             }),
             heads: ReceiptHeads {
                 expected: head.clone(),
                 prior: head.clone(),
                 resulting: head,
             },
+            zero_receipt: ZeroReceipt::Reason,
         })
     }
 

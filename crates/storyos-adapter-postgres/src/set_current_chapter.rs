@@ -13,8 +13,8 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, AppliedResult, ChapterSelection, ChapterSelectionWrite, Classification,
-    CommandIsolation, CommandSpec, EditorAdmission, LockedProject, MissingAdmission,
-    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect,
+    CommandIsolation, CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission,
+    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt,
     settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::CurrentChapterSequences;
@@ -135,12 +135,14 @@ impl ProjectCommand for SetCurrentChapterInput {
                 editor_session_id: self.editor_session_id.as_ref().to_owned(),
                 chapter_object_id,
                 expected_authoritative_revision_id,
+                writer: EditorWriter::Current,
             }),
             heads: ReceiptHeads {
                 expected: vec![self.expected_target_revision_id.clone()],
                 prior: vec![resulting_head.clone()],
                 resulting: vec![resulting_head],
             },
+            zero_receipt: ZeroReceipt::Reason,
         })
     }
 

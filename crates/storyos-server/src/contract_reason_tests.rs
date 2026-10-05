@@ -3,10 +3,11 @@ use std::fmt::Debug;
 use serde::de::DeserializeOwned;
 use storyos_contracts as contracts;
 use storyos_core::{
-    ArchiveProjectConflict, ArchiveProjectNoEffect, CreateChapterConflict, CreateChapterRefusal,
-    CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
-    DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    ReasonCode, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
+    ArchiveProjectConflict, ArchiveProjectNoEffect, CloseEditorFlowDraftConflict,
+    CloseEditorFlowDraftRefusal, CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict,
+    CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal,
+    DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal, ReasonCode,
+    RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
     ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
     ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
     ReopenWithdrawnProposalRefusal, ReplanProposalConflict, ReplanProposalRefusal,
@@ -397,6 +398,25 @@ fn every_withdrawal_reason_maps_to_its_public_reason() {
         (
             WithdrawProposalNoEffect::ClosureNotOpen,
             contracts::WithdrawProposalNoEffectReason::ClosureNotOpen,
+        ),
+    ]);
+}
+
+#[test]
+fn every_draft_discard_reason_maps_to_its_public_or_persisted_reason() {
+    // The conflict has no public reason. Its code is the persisted Receipt reason text.
+    assert_maps(vec![(
+        CloseEditorFlowDraftConflict::SourceBindingChanged,
+        "source_binding_changed".to_owned(),
+    )]);
+    assert_maps(vec![
+        (
+            CloseEditorFlowDraftRefusal::SourceDraftNotOpen,
+            contracts::DraftCloseRefusal::SourceDraftNotOpen,
+        ),
+        (
+            CloseEditorFlowDraftRefusal::SourceUnavailable,
+            contracts::DraftCloseRefusal::SourceUnavailable,
         ),
     ]);
 }

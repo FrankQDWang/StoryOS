@@ -122,6 +122,10 @@ project_command_request!(
     contracts::RejectProposalOperationsRequest,
     nested reject_proposal_operations_input
 );
+project_command_request!(
+    contracts::CloseEditorFlowDraftRequest,
+    nested close_editor_flow_draft_input
+);
 project_command_request!(contracts::ReplanProposalRequest, nested replan_proposal_input);
 project_command_request!(
     contracts::ReopenRejectedOperationsRequest,
@@ -552,11 +556,14 @@ impl ProjectCommandRoute {
             ProblemMapping::Route(route_problem) => return route_problem(error),
         };
         match error {
-            ProjectCommandError::BindingConflict => problem(
-                StatusCode::CONFLICT,
-                "idempotency_binding_conflict",
-                &format!("The {name} binding conflicts."),
-            ),
+            // A command that requires a writer generation declares its own problem mapping.
+            ProjectCommandError::BindingConflict | ProjectCommandError::WriterIneligible => {
+                problem(
+                    StatusCode::CONFLICT,
+                    "idempotency_binding_conflict",
+                    &format!("The {name} binding conflicts."),
+                )
+            }
             ProjectCommandError::HistoricalAcknowledgementUnavailable => problem(
                 StatusCode::CONFLICT,
                 "historical_acknowledgement_unavailable",

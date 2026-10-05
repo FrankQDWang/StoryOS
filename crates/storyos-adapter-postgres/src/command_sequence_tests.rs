@@ -1,9 +1,10 @@
 use std::fmt::Debug;
 
 use storyos_application::{
-    ArchiveProjectInput, AuthorCommandAdmissionIds, CreateChapterInput, CreateChapterSettlement,
-    CreateVolumeInput, CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement,
-    DeleteVolumeInput, DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
+    ArchiveProjectInput, AuthorCommandAdmissionIds, CloseEditorFlowDraftInput,
+    CloseEditorFlowDraftSettlement, CreateChapterInput, CreateChapterSettlement, CreateVolumeInput,
+    CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput,
+    DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
     ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
     RejectProposalOperationsInput, RejectProposalOperationsSettlement, RejectionNote,
     ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
@@ -286,6 +287,12 @@ const WITHDRAW_PROPOSAL: Route = Route {
     method: storyos_contracts::WITHDRAW_PROPOSAL_METHOD,
     path: storyos_contracts::WITHDRAW_PROPOSAL_PATH,
     schema: storyos_contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
+};
+const CLOSE_EDITOR_FLOW_DRAFT: Route = Route {
+    kind: "closeEditorFlowDraft",
+    method: "POST",
+    path: storyos_contracts::CLOSE_EDITOR_FLOW_DRAFT_PATH,
+    schema: storyos_contracts::CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID,
 };
 
 const COMPLETE_READY_PARTIAL_PROPOSAL: Route = Route {
@@ -800,6 +807,23 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             .get(/*idx*/ 0);
         withdrawal_records.push(records);
     }
+    let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7d00, "retained").await;
+    let changed = CloseEditorFlowDraftInput {
+        source_current_draft_revision_id: Uuid::now_v7().to_string(),
+        ..open.clone()
+    };
+    let (archived_scope, archived) =
+        refused_edit_draft(&store, &admin, /*base*/ 0x7d10, "archived").await;
+    for (scope, suffix, input) in [
+        (&scope, 0x7d09, open.clone()),
+        (&scope, 0x7d0a, open),
+        (&scope, 0x7d0b, changed),
+        (&archived_scope, 0x7d19, archived),
+    ] {
+        let call = discard_call(&store, scope, suffix, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, close_editor_flow_draft).await;
+        observed.push((CLOSE_EDITOR_FLOW_DRAFT.kind, outcome));
+    }
 
     let (scope, generation) = ready_partial_proposal(&store, &admin, /*base*/ 0x7500).await;
     for (suffix, expected_authoritative_revision_id) in [
@@ -859,6 +883,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
     let generation_completed = ("proposal_generation_completed", [1, 1, 0, 0, 0]);
     let generation_started = ("proposal_generation_started", [1, 1, 0, 0, 0]);
+    let draft_closure_changed = ("draft_closure_changed", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
     let writer_takeover = ("no_effect", [1, 0, 1, 0, 1]);
     let conflicted = ("conflicted", [1, 0, 0, 0, 0]);
@@ -924,6 +949,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("withdrawProposal", no_effect),
             ("withdrawProposal", refused),
             ("withdrawProposal", conflicted),
+            ("closeEditorFlowDraft", draft_closure_changed),
+            ("closeEditorFlowDraft", refused),
+            ("closeEditorFlowDraft", conflicted),
+            ("closeEditorFlowDraft", refused),
             ("completeReadyPartialProposal", conflicted),
             ("completeReadyPartialProposal", generation_completed),
             ("completeReadyPartialProposal", refused),
@@ -1423,6 +1452,106 @@ async fn withdraw_proposal_call(
     issued(store, &scope, base + 9, &WITHDRAW_PROPOSAL, input).await
 }
 
+async fn close_editor_flow_draft(
+    store: &PostgresProjectReader,
+    call: &CommandCall<CloseEditorFlowDraftInput>,
+) -> Result<CloseEditorFlowDraftSettlement, ProjectCommandError> {
+    store
+        .close_editor_flow_draft(&call.envelope, &call.input)
+        .await
+}
+
+/// A new Project with a writer Editor Session and one open Refused Edit Draft in `retention`.
+///
+/// Returns the Scope and the input that discards the Draft. The fixture skips the creation
+/// Receipt and lifecycle event of the Draft.
+async fn refused_edit_draft(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+    retention: &str,
+) -> (ProjectScope, CloseEditorFlowDraftInput) {
+    let (scope, _chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let payload = serde_json::json!({
+        "schema_revision": "storyos.refused-edit-payload.v1",
+        "chapter_id": chapter_b,
+        "expected_authoritative_revision_id": revision_b,
+        "expected_proposal_head_revision_ids": [],
+        "target_refs": [],
+        "author_edit_units": [],
+        "undo_group_id": Uuid::now_v7().to_string(),
+        "completed_intent_record_id": Uuid::now_v7().to_string(),
+        "local_intent_sequence": "1",
+    });
+    let input = CloseEditorFlowDraftInput {
+        editor_session_id: EditorSessionId::new(editor_session_id),
+        writer_generation: 1,
+        draft_id: Uuid::now_v7().to_string(),
+        source_current_draft_revision_id: Uuid::now_v7().to_string(),
+        source_draft_payload_digest: storyos_core::hex_sha256(
+            storyos_core::canonical_json(&payload).as_bytes(),
+        ),
+        source_reopen_event_id: None,
+    };
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             INSERT INTO storyos.draft_artifact_revisions
+               (owner_user_id, project_id, draft_id, revision_id, payload, payload_digest)
+             VALUES ('{owner}', '{project}', '{draft}', '{revision}', '{payload}'::jsonb,
+                     '{digest}');
+             INSERT INTO storyos.draft_artifacts
+               (owner_user_id, project_id, draft_id, current_revision_id, retention_state)
+             VALUES ('{owner}', '{project}', '{draft}', '{revision}', '{retention}');
+             COMMIT;",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            draft = input.draft_id,
+            revision = input.source_current_draft_revision_id,
+            digest = input.source_draft_payload_digest,
+            payload = payload,
+        ))
+        .await
+        .unwrap();
+    (scope, input)
+}
+
+/// Issues one Draft Discard call whose canonical bytes are the command body of `input`.
+async fn discard_call(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: u16,
+    input: CloseEditorFlowDraftInput,
+) -> CommandCall<CloseEditorFlowDraftInput> {
+    let body = serde_json::json!({
+        "close_editor_flow_draft_input": {
+            "draft_id": input.draft_id,
+            "draft_kind": "refused_edit",
+            "source_current_draft_revision_id": input.source_current_draft_revision_id,
+            "source_draft_payload_digest": input.source_draft_payload_digest,
+            "expected_closure": "open",
+            "close_reason": "abandoned",
+            "editor_session_id": input.editor_session_id.as_ref(),
+            "writer_generation": input.writer_generation.to_string(),
+        }
+    });
+    let mut call = issued(store, scope, suffix, &CLOSE_EDITOR_FLOW_DRAFT, input).await;
+    call.envelope.canonical_command_bytes = body.to_string().into_bytes();
+    call
+}
+
+/// One applicable Draft Discard in a new Project.
+async fn close_editor_flow_draft_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<CloseEditorFlowDraftInput> {
+    let (scope, input) = refused_edit_draft(store, admin, base, "retained").await;
+    discard_call(store, &scope, base + 9, input).await
+}
+
 async fn complete_ready_partial_proposal(
     store: &PostgresProjectReader,
     call: &CommandCall<CompleteReadyPartialProposalInput>,
@@ -1850,6 +1979,12 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
+            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d20).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
             &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7510).await,
         )
         .await,
@@ -1860,7 +1995,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 18]);
+    assert_eq!(observed, vec![(true, [0; 5]); 19]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1900,6 +2035,7 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
                 outcome: classified.outcome,
                 admission: classified.admission,
                 heads: classified.heads,
+                zero_receipt: classified.zero_receipt,
             }),
         }
     }
@@ -2104,6 +2240,12 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
+            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d30).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
             &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7530).await,
         )
         .await,
@@ -2120,7 +2262,9 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::Refused));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 5]);
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 3]);
+    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     assert_eq!(observed, expected);
 }
 
@@ -2131,6 +2275,7 @@ enum ReplayError {
     HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
+    WriterIneligible,
     Unavailable,
 }
 
@@ -2176,6 +2321,7 @@ impl From<ProjectCommandError> for ReplayError {
             }
             ProjectCommandError::InvalidChallenge => Self::InvalidChallenge,
             ProjectCommandError::MissingProject => Self::MissingProject,
+            ProjectCommandError::WriterIneligible => Self::WriterIneligible,
             ProjectCommandError::Unavailable(_) => Self::Unavailable,
         }
     }
@@ -2643,5 +2789,114 @@ async fn an_exact_retry_ignores_a_later_canonical_snapshot_at_the_same_position(
                 .unwrap(),
         ),
         (switched, renamed)
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_discard_replays_without_a_response_record_and_a_damaged_close_event_is_a_fault() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d40).await;
+    let first = close_editor_flow_draft(&store, &call).await.unwrap();
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET acknowledgement_format = NULL, response_project = NULL
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let pre_capture = close_editor_flow_draft(&store, &with_new_request_ids(&call)).await;
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             UPDATE storyos.draft_close_events
+                SET author_action_sequence = author_action_sequence + 1000
+              WHERE receipt_id = '{}';
+             COMMIT;",
+            first.ids.receipt_id
+        ))
+        .await
+        .unwrap();
+    let damaged = close_editor_flow_draft(&store, &with_new_request_ids(&call)).await;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET canonical_command_digest = 'sha256:closeEditorFlowDraft:damaged'
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let other_digest = close_editor_flow_draft(&store, &with_new_request_ids(&call)).await;
+    assert_eq!(pre_capture.unwrap(), first);
+    assert!(matches!(damaged, Err(ProjectCommandError::Unavailable(_))));
+    assert!(matches!(
+        other_digest,
+        Err(ProjectCommandError::BindingConflict)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_discard_refuses_before_admission_and_requires_the_client_writer_generation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7d50, "retained").await;
+    let stale_writer = CloseEditorFlowDraftInput {
+        writer_generation: 2,
+        ..open.clone()
+    };
+    let missing = CloseEditorFlowDraftInput {
+        draft_id: Uuid::now_v7().to_string(),
+        ..open.clone()
+    };
+    let (damaged_scope, damaged) =
+        refused_edit_draft(&store, &admin, /*base*/ 0x7d60, "retained").await;
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             UPDATE storyos.draft_artifact_revisions SET payload_digest = repeat('0', 64)
+              WHERE draft_id = '{}';
+             COMMIT;",
+            damaged.draft_id
+        ))
+        .await
+        .unwrap();
+    let mut observed = Vec::new();
+    for (scope, suffix, input) in [
+        (&scope, 0x7d59, stale_writer),
+        (&scope, 0x7d5a, missing),
+        (&damaged_scope, 0x7d69, damaged),
+    ] {
+        let call = discard_call(&store, scope, suffix, input).await;
+        let refused = close_editor_flow_draft(&store, &call).await;
+        observed.push((
+            match refused {
+                Err(error) => ReplayError::from(error),
+                Ok(settled) => panic!("the Discard must refuse before Admission, got {settled:?}"),
+            },
+            settlement_rows(&admin, &call.envelope.ids.receipt_id).await,
+        ));
+    }
+    let open_call = discard_call(&store, &scope, /*suffix*/ 0x7d5b, open).await;
+    let settled = close_editor_flow_draft(&store, &open_call).await.unwrap();
+    assert_eq!(
+        (observed, settled.outcome.receipt_result()),
+        (
+            vec![
+                (ReplayError::WriterIneligible, [0; 5]),
+                (ReplayError::MissingProject, [0; 5]),
+                (ReplayError::BindingConflict, [0; 5]),
+            ],
+            ReceiptResult::AuthoritativeApplied,
+        )
     );
 }

@@ -103,7 +103,8 @@ fn takeover_problem(error: ProjectCommandError) -> ApiError {
     match error {
         ProjectCommandError::BindingConflict
         | ProjectCommandError::HistoricalAcknowledgementUnavailable
-        | ProjectCommandError::MissingProject => problem(
+        | ProjectCommandError::MissingProject
+        | ProjectCommandError::WriterIneligible => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The writer takeover binding conflicts.",

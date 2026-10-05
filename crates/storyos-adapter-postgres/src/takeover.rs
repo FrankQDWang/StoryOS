@@ -17,7 +17,7 @@ use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedResult, Classification,
     CommandIsolation, CommandSpec, LockedProject, MissingAdmission, NoResponse, ProjectCommand,
     RateLimitedChallenge, ReceiptHeads, ReplayEffect, TakeoverAdmission, ZeroAuthorityRows,
-    ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
+    ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -133,6 +133,7 @@ impl ProjectCommand for TakeOverProjectWriterInput {
                 prior: vec![head.clone()],
                 resulting: vec![head],
             },
+            zero_receipt: ZeroReceipt::Reason,
         })
     }
 
