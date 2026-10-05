@@ -790,18 +790,18 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             .get(/*idx*/ 0);
         withdrawal_records.push(records);
     }
-    let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7c00, "retained").await;
+    let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7d00, "retained").await;
     let changed = CloseEditorFlowDraftInput {
         source_current_draft_revision_id: Uuid::now_v7().to_string(),
         ..open.clone()
     };
     let (archived_scope, archived) =
-        refused_edit_draft(&store, &admin, /*base*/ 0x7c10, "archived").await;
+        refused_edit_draft(&store, &admin, /*base*/ 0x7d10, "archived").await;
     for (scope, suffix, input) in [
-        (&scope, 0x7c09, open.clone()),
-        (&scope, 0x7c0a, open),
-        (&scope, 0x7c0b, changed),
-        (&archived_scope, 0x7c19, archived),
+        (&scope, 0x7d09, open.clone()),
+        (&scope, 0x7d0a, open),
+        (&scope, 0x7d0b, changed),
+        (&archived_scope, 0x7d19, archived),
     ] {
         let call = discard_call(&store, scope, suffix, input).await;
         let outcome = replayed_outcome(&store, &admin, &call, close_editor_flow_draft).await;
@@ -1736,7 +1736,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
-            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7c20).await,
+            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d20).await,
         )
         .await,
     ];
@@ -1985,7 +1985,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
-            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7c30).await,
+            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d30).await,
         )
         .await,
     ];
@@ -2468,7 +2468,7 @@ async fn a_draft_discard_replays_without_a_response_record_and_a_damaged_close_e
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let call = close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7c40).await;
+    let call = close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d40).await;
     let first = close_editor_flow_draft(&store, &call).await.unwrap();
     let key = &call.envelope.challenge_binding.idempotency_key;
     admin
@@ -2517,7 +2517,7 @@ async fn a_draft_discard_refuses_before_admission_and_requires_the_client_writer
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7c50, "retained").await;
+    let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7d50, "retained").await;
     let stale_writer = CloseEditorFlowDraftInput {
         writer_generation: 2,
         ..open.clone()
@@ -2527,7 +2527,7 @@ async fn a_draft_discard_refuses_before_admission_and_requires_the_client_writer
         ..open.clone()
     };
     let (damaged_scope, damaged) =
-        refused_edit_draft(&store, &admin, /*base*/ 0x7c60, "retained").await;
+        refused_edit_draft(&store, &admin, /*base*/ 0x7d60, "retained").await;
     admin
         .batch_execute(&format!(
             "BEGIN;
@@ -2541,9 +2541,9 @@ async fn a_draft_discard_refuses_before_admission_and_requires_the_client_writer
         .unwrap();
     let mut observed = Vec::new();
     for (scope, suffix, input) in [
-        (&scope, 0x7c59, stale_writer),
-        (&scope, 0x7c5a, missing),
-        (&damaged_scope, 0x7c69, damaged),
+        (&scope, 0x7d59, stale_writer),
+        (&scope, 0x7d5a, missing),
+        (&damaged_scope, 0x7d69, damaged),
     ] {
         let call = discard_call(&store, scope, suffix, input).await;
         let refused = close_editor_flow_draft(&store, &call).await;
@@ -2555,7 +2555,7 @@ async fn a_draft_discard_refuses_before_admission_and_requires_the_client_writer
             settlement_rows(&admin, &call.envelope.ids.receipt_id).await,
         ));
     }
-    let open_call = discard_call(&store, &scope, /*suffix*/ 0x7c5b, open).await;
+    let open_call = discard_call(&store, &scope, /*suffix*/ 0x7d5b, open).await;
     let settled = close_editor_flow_draft(&store, &open_call).await.unwrap();
     assert_eq!(
         (observed, settled.outcome.receipt_result()),
