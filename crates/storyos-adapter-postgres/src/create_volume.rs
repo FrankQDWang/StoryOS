@@ -157,7 +157,7 @@ impl ProjectCommand for CreateVolumeInput {
     fn decode(&self, replay: &CommandReplay) -> Result<VolumeCreated, ReplayFault> {
         let tree_revision = replay.activity_u64("tree_revision")?;
         let volume_id = replay.activity_text("volume_id")?;
-        let order = match replay.receipt_text("order") {
+        let order = match replay.receipt_text("order")? {
             Some(order) => match order.parse::<u64>() {
                 Ok(0) => return Err(ReplayFault::BindingConflict),
                 Ok(rank) => CreateVolumePublicOrder::CanonicalSiblingOrder(rank),

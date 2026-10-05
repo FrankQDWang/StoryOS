@@ -304,10 +304,10 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
     fn decode(&self, replay: &CommandReplay) -> Result<RejectedOperationsReopened, ReplayFault> {
         replay.require_receipt_text("transition", "reopen_rejected")?;
         match (
-            replay.effect_text("state_event_id"),
-            replay.effect_text("resulting_proposal_revision_id"),
-            replay.effect_text("preserved_generation"),
-            replay.effect_text("preserved_closure"),
+            replay.effect_text("state_event_id")?,
+            replay.effect_text("resulting_proposal_revision_id")?,
+            replay.effect_text("preserved_generation")?,
+            replay.effect_text("preserved_closure")?,
         ) {
             (
                 Some(state_event_id),

@@ -14,6 +14,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
+use crate::close_editor_flow_draft::replayed_draft_observation;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionOnly, ActionSequence, Admission, AppliedResult, Classification, CommandIsolation,
@@ -476,28 +477,30 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
             .ok_or(ReplayFault::BindingConflict)?;
         let damaged =
             || ReplayFault::Unavailable("the Draft expansion effect does not match".into());
-        let receipt_text = |key: &str| {
-            replay
-                .receipt_text(key)
-                .map(str::to_owned)
-                .ok_or_else(damaged)
-        };
-        let event_id = receipt_text("event_id")?;
-        let proposal_id = receipt_text("proposal_id")?;
-        let proposal_revision_id = receipt_text("proposal_revision_id")?;
+        if observation.current_target_revision_id.is_none() {
+            return Err(ReplayFault::Unavailable(
+                "the applied Draft expansion Receipt has no target Revision".into(),
+            ));
+        }
+        let event_id = replay.receipt_uuid("event_id")?;
+        let proposal_id = replay.receipt_uuid("proposal_id")?;
+        let proposal_revision_id = replay.receipt_uuid("proposal_revision_id")?;
         replay.require_receipt_text("reason", "superseded")?;
-        if replay.effect_text("event_id").as_ref() != Some(&event_id)
-            || replay.effect_text("draft_id").as_ref() != Some(&self.draft_id)
-            || replay.effect_text("author_action_sequence") != replay.author_action_sequence
-            || replay.effect_text("close_reason").as_deref() != Some("superseded")
-            || replay.effect_text("proposal_id").as_ref() != Some(&proposal_id)
-            || replay.effect_text("proposal_revision_id").as_ref() != Some(&proposal_revision_id)
+        if replay.effect_text("event_id")?.as_ref() != Some(&event_id)
+            || replay.effect_text("draft_id")?.as_ref() != Some(&self.draft_id)
+            || replay.effect_text("author_action_sequence")? != replay.author_action_sequence
+            || replay.effect_text("close_reason")?.as_deref() != Some("superseded")
+            || replay.effect_text("proposal_id")?.as_ref() != Some(&proposal_id)
+            || replay.effect_text("proposal_revision_id")?.as_ref() != Some(&proposal_revision_id)
         {
             return Err(damaged());
         }
-        let candidate_blocks =
-            serde_json::from_str(&replay.effect_text("candidate_blocks").ok_or_else(damaged)?)
-                .map_err(|error| ReplayFault::Unavailable(Box::new(error)))?;
+        let candidate_blocks = serde_json::from_str(
+            &replay
+                .effect_text("candidate_blocks")?
+                .ok_or_else(damaged)?,
+        )
+        .map_err(|error| ReplayFault::Unavailable(Box::new(error)))?;
         Ok(DraftExpanded {
             observation,
             event_id,
@@ -517,20 +520,10 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
         {
             return Err(ReplayFault::BindingConflict);
         }
-        let text = |key: &str| {
-            replay.receipt_text(key).map(str::to_owned).ok_or_else(|| {
-                ReplayFault::Unavailable(format!("the Draft expansion Receipt has no {key}").into())
-            })
-        };
         Ok(Some(DraftExpansionObservation {
-            draft: DraftCloseObservation {
-                draft_revision_id: text("draft_revision_id")?,
-                payload_digest: text("payload_digest")?,
-                observed_closure: text("observed_closure")?,
-            },
+            draft: replayed_draft_observation(replay)?,
             current_target_revision_id: replay
-                .receipt_text("current_target_revision_id")
-                .map(str::to_owned),
+                .receipt_nullable_uuid("current_target_revision_id")?,
         }))
     }
 }

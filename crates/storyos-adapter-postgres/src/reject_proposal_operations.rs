@@ -314,10 +314,10 @@ impl ProjectCommand for RejectProposalOperationsInput {
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalOperationsRejected, ReplayFault> {
         replay.require_receipt_text("rejection_reason", "author_declined")?;
         match (
-            replay.effect_text("resolution_event_id"),
-            replay.effect_text("preserved_generation"),
-            replay.effect_text("preserved_validation"),
-            replay.effect_text("preserved_closure"),
+            replay.effect_text("resolution_event_id")?,
+            replay.effect_text("preserved_generation")?,
+            replay.effect_text("preserved_validation")?,
+            replay.effect_text("preserved_closure")?,
         ) {
             (
                 Some(resolution_event_id),

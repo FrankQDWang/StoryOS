@@ -3464,7 +3464,12 @@ async fn replay_past_checks<C: ProjectCommand + Clone>(
         .await
         .unwrap()
         .iter()
-        .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)))
+        .map(|row| {
+            (
+                row.get::<_, String>(/*idx*/ 0),
+                row.get::<_, String>(/*idx*/ 1),
+            )
+        })
         .collect::<Vec<_>>();
     let dropped = checks
         .iter()
@@ -3484,12 +3489,13 @@ async fn replay_past_checks<C: ProjectCommand + Clone>(
     error.into()
 }
 
-/// Settles the call and replays it once with `field` removed from its applied Receipt payload.
-async fn replay_without_receipt_payload_field<C: ProjectCommand + Clone>(
+/// Settles the call and replays it once with its Receipt payload set to `changed`, an SQL
+/// expression over `result_payload`.
+async fn replay_with_receipt_payload<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
-    field: &str,
+    changed: &str,
 ) -> ReplayError {
     let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
         panic!("the project command must settle");
@@ -3511,7 +3517,7 @@ async fn replay_without_receipt_payload_field<C: ProjectCommand + Clone>(
         "domain_receipts",
         "result_payload",
         &format!(
-            "UPDATE storyos.domain_receipts SET result_payload = result_payload - '{field}'
+            "UPDATE storyos.domain_receipts SET result_payload = {changed}
               WHERE receipt_id = '{receipt_id}'"
         ),
         &format!(
@@ -3567,67 +3573,67 @@ async fn an_applied_replay_requires_the_payload_field_of_its_receipt() {
         .await;
     let (store, admin) = stores().await;
     let observed = vec![
-        replay_without_receipt_payload_field(
+        replay_with_receipt_payload(
             &store,
             &admin,
             &reject_proposal_operations_call(&store, &admin, /*base*/ 0x9c00).await,
-            "rejection_reason",
+            "result_payload - 'rejection_reason'",
         )
         .await,
-        replay_without_receipt_payload_field(
+        replay_with_receipt_payload(
             &store,
             &admin,
             &withdraw_proposal_call(&store, &admin, /*base*/ 0x9c10).await,
-            "transition",
+            "result_payload - 'transition'",
         )
         .await,
-        replay_without_receipt_payload_field(
+        replay_with_receipt_payload(
             &store,
             &admin,
             &replan_proposal_call(&store, &admin, /*base*/ 0x9c20).await,
-            "transition",
+            "result_payload - 'transition'",
         )
         .await,
-        replay_without_receipt_payload_field(
+        replay_with_receipt_payload(
             &store,
             &admin,
             &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x9c30).await,
-            "transition",
+            "result_payload - 'transition'",
         )
         .await,
-        replay_without_receipt_payload_field(
+        replay_with_receipt_payload(
             &store,
             &admin,
             &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x9c40).await,
-            "transition",
+            "result_payload - 'transition'",
         )
         .await,
-        replay_without_receipt_payload_field(
+        replay_with_receipt_payload(
             &store,
             &admin,
             &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x9c50).await,
-            "transition",
+            "result_payload - 'transition'",
         )
         .await,
-        replay_without_receipt_payload_field(
+        replay_with_receipt_payload(
             &store,
             &admin,
             &continue_proposal_generation_call(&store, &admin, /*base*/ 0x9c60).await,
-            "transition",
+            "result_payload - 'transition'",
         )
         .await,
-        replay_without_receipt_payload_field(
+        replay_with_receipt_payload(
             &store,
             &admin,
             &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x9c70).await,
-            "reason",
+            "result_payload - 'reason'",
         )
         .await,
-        replay_without_receipt_payload_field(
+        replay_with_receipt_payload(
             &store,
             &admin,
             &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x9c80).await,
-            "reason",
+            "result_payload - 'reason'",
         )
         .await,
     ];
@@ -3707,4 +3713,83 @@ async fn an_applied_replay_refuses_an_unknown_preserved_proposal_state() {
         .await,
     ];
     assert_eq!(observed, vec![ReplayError::Unavailable; 7]);
+}
+
+/// Sets one Receipt payload field of `call` to the JSON text `value`, replays the call, and
+/// returns the replay error.
+async fn replay_with_receipt_field<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    field: &str,
+    value: &str,
+) -> ReplayError {
+    replay_with_receipt_payload(
+        store,
+        admin,
+        call,
+        &format!("jsonb_set(result_payload, '{{{field}}}', '{value}'::jsonb)"),
+    )
+    .await
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_replay_refuses_a_receipt_field_of_the_wrong_type_or_shape() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut observed = Vec::new();
+    for (base, field, value) in [
+        (0x9e00, "draft_revision_id", "123"),
+        (0x9e10, "draft_revision_id", "\"not a revision\""),
+        (0x9e20, "payload_digest", "{}"),
+        (0x9e30, "payload_digest", "\"damaged\""),
+        (0x9e40, "observed_closure", "\"damaged\""),
+        (0x9e50, "event_id", "7"),
+    ] {
+        observed.push(
+            replay_with_receipt_field(
+                &store,
+                &admin,
+                &close_editor_flow_draft_call(&store, &admin, base).await,
+                field,
+                value,
+            )
+            .await,
+        );
+        observed.push(
+            replay_with_receipt_field(
+                &store,
+                &admin,
+                &expand_refused_edit_draft_call(&store, &admin, base + 0x100).await,
+                field,
+                value,
+            )
+            .await,
+        );
+    }
+    for (base, changed) in [
+        (0xa000, "result_payload - 'current_target_revision_id'"),
+        (
+            0xa010,
+            "jsonb_set(result_payload, '{current_target_revision_id}', 'null'::jsonb)",
+        ),
+        (
+            0xa020,
+            "jsonb_set(result_payload, '{current_target_revision_id}', '9'::jsonb)",
+        ),
+    ] {
+        observed.push(
+            replay_with_receipt_payload(
+                &store,
+                &admin,
+                &expand_refused_edit_draft_call(&store, &admin, base).await,
+                changed,
+            )
+            .await,
+        );
+    }
+    assert_eq!(observed, vec![ReplayError::Unavailable; 15]);
 }

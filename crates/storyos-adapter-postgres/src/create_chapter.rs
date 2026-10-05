@@ -260,7 +260,7 @@ impl ProjectCommand for CreateChapterInput {
         let chapter_id = replay.activity_text("chapter_id")?;
         let resulting_current = replay.activity_text("current_chapter_id")?;
         let activity_order = replay.activity_u64("order")?;
-        let order = match replay.receipt_text("order") {
+        let order = match replay.receipt_text("order")? {
             Some(order) => match order.parse::<u64>() {
                 Ok(0) => return Err(ReplayFault::BindingConflict),
                 Ok(rank) => CreateChapterPublicOrder::CanonicalSiblingOrder(rank),

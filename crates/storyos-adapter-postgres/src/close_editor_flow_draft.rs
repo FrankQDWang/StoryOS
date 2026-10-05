@@ -62,6 +62,33 @@ fn observation_fields(
     ])
 }
 
+/// The Draft facts that the Receipt payload of a Draft Discard or expansion records.
+pub(crate) fn replayed_draft_observation(
+    replay: &CommandReplay,
+) -> Result<DraftCloseObservation, ReplayFault> {
+    let damaged = |key: &str| {
+        ReplayFault::Unavailable(format!("the Draft Receipt has no valid {key}").into())
+    };
+    let payload_digest = replay
+        .receipt_text("payload_digest")?
+        .filter(|digest| {
+            digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+        .ok_or_else(|| damaged("payload_digest"))?;
+    let observed_closure = replay
+        .receipt_text("observed_closure")?
+        .filter(|closure| matches!(*closure, "open" | "closed"))
+        .ok_or_else(|| damaged("observed_closure"))?;
+    Ok(DraftCloseObservation {
+        draft_revision_id: replay.receipt_uuid("draft_revision_id")?,
+        payload_digest: payload_digest.to_owned(),
+        observed_closure: observed_closure.to_owned(),
+    })
+}
+
 impl ProjectCommand for CloseEditorFlowDraftInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "closeEditorFlowDraft",
@@ -263,14 +290,11 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
             .decode_zero_authority_effect(replay)?
             .ok_or(ReplayFault::BindingConflict)?;
         let damaged = || ReplayFault::Unavailable("the Draft close event does not match".into());
-        let event_id = replay
-            .receipt_text("event_id")
-            .map(str::to_owned)
-            .ok_or_else(damaged)?;
+        let event_id = replay.receipt_uuid("event_id")?;
         replay.require_receipt_text("reason", "abandoned")?;
-        if replay.effect_text("event_id").as_ref() != Some(&event_id)
-            || replay.effect_text("draft_id").as_ref() != Some(&self.draft_id)
-            || replay.effect_text("author_action_sequence") != replay.author_action_sequence
+        if replay.effect_text("event_id")?.as_ref() != Some(&event_id)
+            || replay.effect_text("draft_id")?.as_ref() != Some(&self.draft_id)
+            || replay.effect_text("author_action_sequence")? != replay.author_action_sequence
         {
             return Err(damaged());
         }
@@ -290,15 +314,6 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
         {
             return Err(ReplayFault::BindingConflict);
         }
-        let text = |key: &str| {
-            replay.receipt_text(key).map(str::to_owned).ok_or_else(|| {
-                ReplayFault::Unavailable(format!("the Draft Discard Receipt has no {key}").into())
-            })
-        };
-        Ok(Some(DraftCloseObservation {
-            draft_revision_id: text("draft_revision_id")?,
-            payload_digest: text("payload_digest")?,
-            observed_closure: text("observed_closure")?,
-        }))
+        replayed_draft_observation(replay).map(Some)
     }
 }

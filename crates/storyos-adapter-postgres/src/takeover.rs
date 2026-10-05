@@ -280,7 +280,7 @@ impl ProjectCommand for TakeOverProjectWriterInput {
             return Err(ReplayFault::BindingConflict);
         }
         let text = |key: &str| {
-            replay.activity_optional_text(key).ok_or_else(|| {
+            replay.activity_optional_text(key)?.ok_or_else(|| {
                 ReplayFault::Unavailable(format!("the takeover Activity has no {key}").into())
             })
         };

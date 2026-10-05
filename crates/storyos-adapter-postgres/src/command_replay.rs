@@ -1,7 +1,5 @@
 //! One replay read for the settled acknowledgement of a project command.
 
-use std::collections::BTreeMap;
-
 use storyos_application::{
     AuthorCommandAdmissionIds, Project, ProjectAssistanceAcknowledgement,
     ProjectCommandChallengeBinding,
@@ -17,6 +15,7 @@ use crate::command_response_project::{
 };
 use crate::command_sequence::ReplayEffect;
 use crate::{PostgresProjectReader, set_challenge_scope_on_client};
+use uuid::Uuid;
 
 /// The stored evidence of one settled command, read for an exact retry.
 pub(crate) struct CommandReplay {
@@ -45,9 +44,9 @@ pub(crate) struct CommandReplay {
     /// The Draft references of the Domain Receipt.
     pub(crate) draft_artifact_refs: Vec<String>,
     result_kind: String,
-    receipt: JsonText,
-    activity: JsonText,
-    effect: JsonText,
+    receipt: JsonFields,
+    activity: JsonFields,
+    effect: JsonFields,
     acknowledgement_format: Option<String>,
     response_project: Option<String>,
     response_assistance: Option<String>,
@@ -96,19 +95,41 @@ impl StateAxis {
     }
 }
 
-/// The top-level fields of one stored JSON object, each as PostgreSQL `->>` text.
-struct JsonText(BTreeMap<String, Option<String>>);
+/// The top-level fields of one stored JSON object, with their JSON types.
+struct JsonFields(serde_json::Map<String, serde_json::Value>);
 
-impl JsonText {
+impl JsonFields {
     fn parse(text: Option<String>) -> Result<Self, ReplayFault> {
-        match text {
-            Some(text) => serde_json::from_str(&text).map(Self).map_err(unavailable),
-            None => Ok(Self(BTreeMap::new())),
+        let Some(text) = text else {
+            return Ok(Self(serde_json::Map::new()));
+        };
+        match serde_json::from_str(&text).map_err(unavailable)? {
+            serde_json::Value::Object(fields) => Ok(Self(fields)),
+            serde_json::Value::Null
+            | serde_json::Value::Bool(_)
+            | serde_json::Value::Number(_)
+            | serde_json::Value::String(_)
+            | serde_json::Value::Array(_) => {
+                Err(unavailable("the stored payload is not a JSON object"))
+            }
         }
     }
 
-    fn text(&self, key: &str) -> Option<&str> {
-        self.0.get(key).and_then(Option::as_deref)
+    /// The string value of `key`, or `None` when it is absent or null. Another JSON type is
+    /// damaged evidence.
+    fn text(&self, key: &str) -> Result<Option<&str>, ReplayFault> {
+        match self.0.get(key) {
+            None | Some(serde_json::Value::Null) => Ok(None),
+            Some(serde_json::Value::String(text)) => Ok(Some(text)),
+            Some(
+                serde_json::Value::Bool(_)
+                | serde_json::Value::Number(_)
+                | serde_json::Value::Array(_)
+                | serde_json::Value::Object(_),
+            ) => Err(unavailable(format!(
+                "the stored field {key} is not a string"
+            ))),
+        }
     }
 }
 
@@ -125,15 +146,40 @@ impl CommandReplay {
             return Ok(TransitionOutcome::Applied(()));
         }
         self.receipt
-            .text("reason")
+            .text("reason")?
             .and_then(|reason| {
                 TransitionOutcome::from_zero_authority_codes(&self.result_kind, reason)
             })
             .ok_or(ReplayFault::BindingConflict)
     }
 
-    pub(crate) fn receipt_text(&self, key: &str) -> Option<&str> {
+    /// One string field of the Receipt payload, or `None` when it is absent or null.
+    pub(crate) fn receipt_text(&self, key: &str) -> Result<Option<&str>, ReplayFault> {
         self.receipt.text(key)
+    }
+
+    /// The canonical UUID text of one Receipt payload field, or `None` when it is null. An absent
+    /// field or another value is damaged evidence.
+    pub(crate) fn receipt_nullable_uuid(&self, key: &str) -> Result<Option<String>, ReplayFault> {
+        if !self.receipt.0.contains_key(key) {
+            return Err(unavailable(format!("the Receipt payload has no {key}")));
+        }
+        self.receipt
+            .text(key)?
+            .map(|text| {
+                Uuid::parse_str(text)
+                    .ok()
+                    .map(|id| id.to_string())
+                    .filter(|canonical| canonical == text)
+                    .ok_or_else(|| unavailable(format!("the Receipt payload {key} is not a UUID")))
+            })
+            .transpose()
+    }
+
+    /// The canonical UUID text of one Receipt payload field. Another value is damaged evidence.
+    pub(crate) fn receipt_uuid(&self, key: &str) -> Result<String, ReplayFault> {
+        self.receipt_nullable_uuid(key)?
+            .ok_or_else(|| unavailable(format!("the Receipt payload {key} is null")))
     }
 
     /// Requires `expected` as the Receipt payload value of `key`. Another value is damaged evidence.
@@ -142,7 +188,7 @@ impl CommandReplay {
         key: &str,
         expected: &str,
     ) -> Result<(), ReplayFault> {
-        if self.receipt.text(key) == Some(expected) {
+        if self.receipt.text(key)? == Some(expected) {
             return Ok(());
         }
         Err(unavailable(format!(
@@ -152,18 +198,18 @@ impl CommandReplay {
 
     pub(crate) fn activity_text(&self, key: &str) -> Result<String, ReplayFault> {
         self.activity
-            .text(key)
+            .text(key)?
             .map(str::to_owned)
             .ok_or(ReplayFault::BindingConflict)
     }
 
-    pub(crate) fn activity_optional_text(&self, key: &str) -> Option<String> {
-        self.activity.text(key).map(str::to_owned)
+    pub(crate) fn activity_optional_text(&self, key: &str) -> Result<Option<String>, ReplayFault> {
+        Ok(self.activity.text(key)?.map(str::to_owned))
     }
 
-    /// One field of the effect row that the command's `ReplayEffect` query reads.
-    pub(crate) fn effect_text(&self, key: &str) -> Option<String> {
-        self.effect.text(key).map(str::to_owned)
+    /// One string field of the effect row that the command's `ReplayEffect` query reads.
+    pub(crate) fn effect_text(&self, key: &str) -> Result<Option<String>, ReplayFault> {
+        Ok(self.effect.text(key)?.map(str::to_owned))
     }
 
     pub(crate) fn activity_u64(&self, key: &str) -> Result<u64, ReplayFault> {
@@ -314,9 +360,9 @@ pub(crate) async fn read_command_replay(
         },
         receipt_created_at: row.get(3),
         result_kind: row.get(4),
-        receipt: JsonText::parse(row.get(5))?,
-        activity: JsonText::parse(row.get(6))?,
-        effect: JsonText::parse(effect)?,
+        receipt: JsonFields::parse(row.get(/*idx*/ 5))?,
+        activity: JsonFields::parse(row.get(/*idx*/ 6))?,
+        effect: JsonFields::parse(effect)?,
         project_activity_position: row
             .get::<_, Option<String>>(7)
             .unwrap_or_else(|| "0".to_owned())
@@ -344,8 +390,8 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
         receipt.receipt_id::text,
         to_char(receipt.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
         receipt.result_kind,
-        (SELECT jsonb_object_agg(key, value) FROM jsonb_each_text(receipt.result_payload))::text,
-        (SELECT jsonb_object_agg(key, value) FROM jsonb_each_text(payload.payload))::text,
+        receipt.result_payload::text,
+        payload.payload::text,
         payload.project_activity_position::text,
         payload.project_activity_event_id::text,
         authoritative_commit.authoritative_commit_id::text,

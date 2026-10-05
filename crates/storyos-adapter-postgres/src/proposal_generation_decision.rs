@@ -194,7 +194,7 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
         replay.require_receipt_text("transition", "generation_completed")?;
         // The transition record has no nullable stored value, so it has no pre-capture form.
         let field = |key| {
-            replay.effect_text(key).ok_or_else(|| {
+            replay.effect_text(key)?.ok_or_else(|| {
                 ReplayFault::Unavailable("the applied transition record is missing".into())
             })
         };
@@ -388,7 +388,7 @@ impl ProjectCommand for ContinueProposalGenerationInput {
         replay.require_receipt_text("transition", "generation_started")?;
         // The transition record has no nullable stored value, so it has no pre-capture form.
         let field = |key| {
-            replay.effect_text(key).ok_or_else(|| {
+            replay.effect_text(key)?.ok_or_else(|| {
                 ReplayFault::Unavailable("the applied transition record is missing".into())
             })
         };
