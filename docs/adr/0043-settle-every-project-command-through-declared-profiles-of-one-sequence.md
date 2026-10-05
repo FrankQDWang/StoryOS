@@ -52,6 +52,7 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
 
 - The step order of ADR 0041 applies to every command in scope. Every command locks the Project row first. Commands that did not lock the Project row before now lock it. Every command inserts its Admission after classification.
   - For `expandRefusedEditDraftToProposal`, the target read and the decode of the retained Draft payload now come before the Admission insert. When the writer is stale and the target read or the payload decode fails, the command gives `503 project_store_unavailable` instead of `409 draft_expansion_binding_conflict`.
+- A first use that fails rolls back its transaction, and a rollback that fails gives a store fault. Before, `createVolume`, `updateVolume`, `deleteVolume`, `createChapter`, `updateChapter`, `deleteChapter`, `updateProject`, `archiveProject`, `updateProjectAssistance`, `setCurrentChapter`, and `takeOverProjectWriter` ignored a failed rollback and returned the first error.
 - Every Core classifier in scope returns a Core Transition Outcome. Each reason enum implements `ReasonCode`, and each code is equal to the existing SQL text and the existing wire text.
 - The Server has one admission sequence for these commands. Each route declares its canonical body form, whether it holds the first acknowledgement, and its problem codes and messages. The persisted canonical command digests do not change.
 

@@ -409,7 +409,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
                     Ok(settlement)
                 }
                 Err(error) => {
-                    let _rollback = transaction.rollback().await;
+                    transaction.rollback().await.map_err(challenge_error)?;
                     Err(error)
                 }
             }
