@@ -8,7 +8,7 @@ use storyos_application::{
 use tokio_postgres::Client;
 
 use super::records::insert_applied_activity;
-use super::{LockedProject, SettlementProfile, unavailable};
+use super::{CommandSpec, LockedProject, SettlementProfile, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structural_authority_settlement::{
     CurrentChapterSequences, allocate_current_chapter_sequences,
@@ -52,7 +52,7 @@ impl SettlementProfile for ChapterSelection {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-        activity_kind: &'static str,
+        spec: &CommandSpec,
         sequences: CurrentChapterSequences,
         write: ChapterSelectionWrite<E>,
     ) -> Result<ChapterSelectionApplied<E>, ProjectCommandError> {
@@ -124,7 +124,7 @@ impl SettlementProfile for ChapterSelection {
         insert_applied_activity(
             client,
             envelope,
-            activity_kind,
+            spec.activity_kind,
             sequences.project_activity_position,
             &sequences.project_activity_event_id,
             serde_json::json!({

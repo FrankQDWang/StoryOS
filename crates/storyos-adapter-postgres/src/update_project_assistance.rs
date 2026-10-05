@@ -16,7 +16,7 @@ use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, AppliedResult, Classification,
     CommandIsolation, CommandSpec, LockedProject, MissingAdmission, ProjectAssistanceResponse,
-    ProjectCommand, settle_project_command, unavailable,
+    ProjectCommand, RateLimitedChallenge, ReplayEffect, settle_project_command, unavailable,
 };
 use crate::{PostgresProjectReader, read_error};
 
@@ -40,7 +40,9 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
         applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "project_assistance_updated",
+        replay_effect: ReplayEffect::NoQuery,
     };
     type Profile = ActivityOnly;
     type Response = ProjectAssistanceResponse;

@@ -182,9 +182,10 @@ pub use pinned_export_source::{
     render_readable_manuscript_from_pinned_source,
 };
 pub use project_command::{
-    ActivityApplied, AuthorityEvidence, ChapterSelectionApplied, ChapterSelectionAuthority,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, StructureApplied,
-    StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+    ActionApplied, ActivityApplied, AuthorityEvidence, ChapterSelectionApplied,
+    ChapterSelectionAuthority, ProjectCommandEnvelope, ProjectCommandError,
+    ProjectCommandSettlement, StructureApplied, StructureAuthority, StructureAuthorityEvidence,
+    StructureSettlement,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,

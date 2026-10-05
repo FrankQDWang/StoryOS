@@ -15,6 +15,7 @@ use crate::command_response_assistance::{
 use crate::command_response_project::{
     COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence, read_command_response_project,
 };
+use crate::command_sequence::ReplayEffect;
 use crate::{PostgresProjectReader, set_challenge_scope_on_client};
 
 /// The stored evidence of one settled command, read for an exact retry.
@@ -39,6 +40,7 @@ pub(crate) struct CommandReplay {
     result_kind: String,
     receipt: JsonText,
     activity: JsonText,
+    effect: JsonText,
     acknowledgement_format: Option<String>,
     response_project: Option<String>,
     response_assistance: Option<String>,
@@ -77,23 +79,23 @@ impl JsonText {
 }
 
 impl CommandReplay {
-    /// The recorded outcome. `applied_result` is the result kind of the command's applied outcome.
+    /// The recorded outcome, classified from the stored Receipt result kind. `applied_result`
+    /// is the result kind of the command's applied outcome.
     ///
     /// `Applied` carries no value. The command decodes its applied effect.
     pub(crate) fn outcome<N: ReasonCode, C: ReasonCode, R: ReasonCode>(
         &self,
         applied_result: &str,
     ) -> Result<TransitionOutcome<(), N, C, R>, ReplayFault> {
-        match (self.result_kind.as_str(), self.receipt.text("reason")) {
-            (result_kind, None) if result_kind == applied_result => {
-                Ok(TransitionOutcome::Applied(()))
-            }
-            (result_kind, Some(reason)) => {
-                TransitionOutcome::from_zero_authority_codes(result_kind, reason)
-                    .ok_or(ReplayFault::BindingConflict)
-            }
-            _ => Err(ReplayFault::BindingConflict),
+        if self.result_kind == applied_result {
+            return Ok(TransitionOutcome::Applied(()));
         }
+        self.receipt
+            .text("reason")
+            .and_then(|reason| {
+                TransitionOutcome::from_zero_authority_codes(&self.result_kind, reason)
+            })
+            .ok_or(ReplayFault::BindingConflict)
     }
 
     pub(crate) fn receipt_text(&self, key: &str) -> Option<&str> {
@@ -109,6 +111,11 @@ impl CommandReplay {
 
     pub(crate) fn activity_optional_text(&self, key: &str) -> Option<String> {
         self.activity.text(key).map(str::to_owned)
+    }
+
+    /// One field of the effect row that the command's `ReplayEffect` query reads.
+    pub(crate) fn effect_text(&self, key: &str) -> Option<String> {
+        self.effect.text(key).map(str::to_owned)
     }
 
     pub(crate) fn activity_u64(&self, key: &str) -> Result<u64, ReplayFault> {
@@ -173,22 +180,25 @@ pub(crate) async fn read_command_replay(
     store: &PostgresProjectReader,
     binding: &ProjectCommandChallengeBinding,
     receipt_id: &str,
+    effect: &ReplayEffect,
 ) -> Result<CommandReplay, ReplayFault> {
     let client = store.connect_challenge().await.map_err(unavailable)?;
     client
         .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .await
         .map_err(unavailable)?;
-    let row = async {
+    let rows = async {
         set_challenge_scope_on_client(&client, &binding.project_scope)
             .await
             .map_err(unavailable)?;
-        client
+        let owner_user_id = binding.project_scope.owner_user_id.as_ref();
+        let project_id = binding.project_scope.project_id.as_ref();
+        let row = client
             .query_opt(
                 REPLAY_SQL,
                 &[
-                    &binding.project_scope.owner_user_id.as_ref(),
-                    &binding.project_scope.project_id.as_ref(),
+                    &owner_user_id,
+                    &project_id,
                     &receipt_id,
                     &binding.command_kind,
                     &binding.canonical_command_digest,
@@ -196,16 +206,26 @@ pub(crate) async fn read_command_replay(
                 ],
             )
             .await
-            .map_err(unavailable)
+            .map_err(unavailable)?;
+        let effect = match effect {
+            ReplayEffect::NoQuery => None,
+            ReplayEffect::Query(sql) => client
+                .query_opt(*sql, &[&owner_user_id, &project_id, &receipt_id])
+                .await
+                .map_err(unavailable)?
+                .and_then(|effect| effect.get::<_, Option<String>>(/*idx*/ 0)),
+        };
+        Ok((row, effect))
     }
     .await;
-    match &row {
+    match &rows {
         Ok(_) => client.batch_execute("COMMIT").await.map_err(unavailable)?,
         Err(_) => {
             let _rollback = client.batch_execute("ROLLBACK").await;
         }
     }
-    let row = row?.ok_or(ReplayFault::BindingConflict)?;
+    let (row, effect) = rows?;
+    let row = row.ok_or(ReplayFault::BindingConflict)?;
     let authority = match (
         row.get::<_, Option<String>>(9),
         row.get::<_, Option<String>>(10),
@@ -246,6 +266,7 @@ pub(crate) async fn read_command_replay(
         result_kind: row.get(4),
         receipt: JsonText::parse(row.get(5))?,
         activity: JsonText::parse(row.get(6))?,
+        effect: JsonText::parse(effect)?,
         project_activity_position: row
             .get::<_, Option<String>>(7)
             .unwrap_or_else(|| "0".to_owned())

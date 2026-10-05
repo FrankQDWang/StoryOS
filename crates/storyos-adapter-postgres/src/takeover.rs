@@ -16,8 +16,8 @@ use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedResult, Classification,
     CommandIsolation, CommandSpec, LockedProject, MissingAdmission, NoResponse, ProjectCommand,
-    ReceiptHeads, TakeoverAdmission, ZeroAuthorityWrite, ZeroOutcome, settle_project_command,
-    unavailable,
+    RateLimitedChallenge, ReceiptHeads, ReplayEffect, TakeoverAdmission, ZeroAuthorityWrite,
+    ZeroOutcome, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -86,7 +86,9 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::BindingConflict,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "writer_takeover_applied",
+        replay_effect: ReplayEffect::NoQuery,
     };
     type Profile = ActivityOnly;
     type Response = NoResponse;

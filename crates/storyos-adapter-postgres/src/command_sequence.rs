@@ -12,6 +12,7 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 
+mod action_only;
 mod activity_only;
 mod admission;
 mod chapter_selection;
@@ -19,6 +20,7 @@ mod records;
 mod response;
 mod structural;
 use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
+pub(crate) use action_only::ActionOnly;
 pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
@@ -61,23 +63,50 @@ pub(crate) struct ReceiptHeads {
     pub(crate) resulting: Vec<String>,
 }
 
+/// The Proposal Revision, Draft, and lifecycle references that one Domain Receipt records.
+#[derive(Default)]
+pub(crate) struct ReceiptRefs {
+    pub(crate) proposal_revision_ids: Vec<String>,
+    pub(crate) draft_artifact_refs: Vec<String>,
+    pub(crate) artifact_lifecycle_event_refs: Vec<String>,
+    /// The JSON text of the source Draft disposition, when the Receipt records one.
+    pub(crate) source_draft_disposition: Option<String>,
+}
+
 /// The error of an Admission insert that inserts no row.
 pub(crate) enum MissingAdmission {
     InvalidChallenge,
     BindingConflict,
 }
 
+/// The error of a Command Challenge that the rate limit refuses.
+#[derive(Clone, Copy)]
+pub(crate) enum RateLimitedChallenge {
+    InvalidChallenge,
+    Unavailable,
+}
+
 /// The Domain Receipt result kind that an applied outcome of the command records.
 pub(crate) enum AppliedResult {
     AuthoritativeApplied,
+    ProposalRevised,
 }
 
 impl AppliedResult {
     pub(crate) fn code(&self) -> &'static str {
         match self {
             Self::AuthoritativeApplied => "authoritative_applied",
+            Self::ProposalRevised => "proposal_revised",
         }
     }
+}
+
+/// The effect rows of the command that an exact retry reads in the replay transaction.
+pub(crate) enum ReplayEffect {
+    NoQuery,
+    /// One query that takes the owner, Project, and Receipt identities as `$1`, `$2`, and `$3`.
+    /// Its optional row holds one JSON object text.
+    Query(&'static str),
 }
 
 pub(crate) struct CommandSpec {
@@ -85,7 +114,9 @@ pub(crate) struct CommandSpec {
     pub(crate) applied_result: AppliedResult,
     pub(crate) isolation: CommandIsolation,
     pub(crate) missing_admission: MissingAdmission,
+    pub(crate) rate_limited: RateLimitedChallenge,
     pub(crate) activity_kind: &'static str,
+    pub(crate) replay_effect: ReplayEffect,
 }
 
 /// The Project row that the sequence locks before a command loads its own facts.
@@ -120,7 +151,7 @@ pub(crate) trait SettlementProfile {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-        activity_kind: &'static str,
+        spec: &CommandSpec,
         sequences: Self::Sequences,
         write: Self::Write<E>,
     ) -> impl Future<Output = Result<Self::Applied<E>, ProjectCommandError>> + Send;
@@ -208,6 +239,11 @@ pub(crate) trait ProjectCommand: Sync {
         "{}".to_owned()
     }
 
+    /// The Domain Receipt references of an applied outcome.
+    fn applied_receipt_refs(&self, _applied: &Self::Applied, _plan: &Self::Plan) -> ReceiptRefs {
+        ReceiptRefs::default()
+    }
+
     /// Writes the effect rows of an applied outcome after its profile sequences are allocated.
     fn apply(
         &self,
@@ -264,6 +300,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     envelope: &ProjectCommandEnvelope,
     command: &C,
 ) -> Result<SettledCommand<C>, ProjectCommandError> {
+    let challenge_error = |error| challenge_problem(C::SPEC.rate_limited, error);
     let mut transaction = match C::SPEC.isolation {
         CommandIsolation::Serializable => {
             store
@@ -279,16 +316,21 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     match challenge_use {
         ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
             transaction.rollback().await.map_err(challenge_error)?;
-            read_command_replay(store, &envelope.challenge_binding, &result_reference)
-                .await
-                .and_then(|replay| replay_command(command, &replay))
-                .map_err(|fault| match fault {
-                    ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
-                    ReplayFault::HistoricalAcknowledgementUnavailable => {
-                        ProjectCommandError::HistoricalAcknowledgementUnavailable
-                    }
-                    ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
-                })
+            read_command_replay(
+                store,
+                &envelope.challenge_binding,
+                &result_reference,
+                &C::SPEC.replay_effect,
+            )
+            .await
+            .and_then(|replay| replay_command(command, &replay))
+            .map_err(|fault| match fault {
+                ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
+                ReplayFault::HistoricalAcknowledgementUnavailable => {
+                    ProjectCommandError::HistoricalAcknowledgementUnavailable
+                }
+                ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
+            })
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
             transaction.rollback().await.map_err(challenge_error)?;
@@ -334,12 +376,14 @@ async fn first_use<C: ProjectCommand>(
         },
         command_kind: C::SPEC.kind,
         heads,
+        refs: ReceiptRefs::default(),
     };
     let (receipt_created_at, outcome) = match classified {
         TransitionOutcome::Applied((applied, plan)) => {
             let sequences = C::Profile::allocate(client, &envelope.project_scope).await?;
             let receipt = ReceiptRecord {
                 payload: command.applied_receipt_payload(&applied, &plan),
+                refs: command.applied_receipt_refs(&applied, &plan),
                 ..receipt
             };
             let receipt_created_at = insert_receipt(
@@ -352,15 +396,8 @@ async fn first_use<C: ProjectCommand>(
             let write = command
                 .apply(client, envelope, &project, &sequences, plan, applied)
                 .await?;
-            let applied = C::Profile::persist(
-                client,
-                envelope,
-                &project,
-                C::SPEC.activity_kind,
-                sequences,
-                write,
-            )
-            .await?;
+            let applied =
+                C::Profile::persist(client, envelope, &project, &C::SPEC, sequences, write).await?;
             (receipt_created_at, TransitionOutcome::Applied(applied))
         }
         TransitionOutcome::NoEffect(reason) => (
@@ -451,12 +488,18 @@ pub(crate) fn unavailable(
     ProjectCommandError::Unavailable(error.into())
 }
 
-fn challenge_error(error: ProjectCommandChallengeError) -> ProjectCommandError {
+fn challenge_problem(
+    rate_limited: RateLimitedChallenge,
+    error: ProjectCommandChallengeError,
+) -> ProjectCommandError {
     match error {
         ProjectCommandChallengeError::BindingConflict => ProjectCommandError::BindingConflict,
         ProjectCommandChallengeError::InvalidOrExpired => ProjectCommandError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
-        | ProjectCommandChallengeError::Unavailable(_) => unavailable(error),
+        ProjectCommandChallengeError::RateLimited { .. } => match rate_limited {
+            RateLimitedChallenge::InvalidChallenge => ProjectCommandError::InvalidChallenge,
+            RateLimitedChallenge::Unavailable => unavailable(error),
+        },
+        ProjectCommandChallengeError::Unavailable(_) => unavailable(error),
     }
 }
 

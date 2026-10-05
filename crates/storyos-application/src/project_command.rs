@@ -77,6 +77,13 @@ pub struct ActivityApplied<A> {
     pub project_activity_event_id: String,
 }
 
+/// The applied value of an `ActionOnly` command: its effect and its one Forward Author Action.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActionApplied<A> {
+    pub effect: A,
+    pub author_action_sequence: u64,
+}
+
 /// The settled outcome of one Manuscript Structure Transition command.
 pub type StructureSettlement<A, N, C, R> = ProjectCommandSettlement<StructureApplied<A>, N, C, R>;
 

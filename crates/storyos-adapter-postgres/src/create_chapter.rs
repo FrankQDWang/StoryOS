@@ -16,8 +16,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
-    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, Structural,
-    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, RateLimitedChallenge,
+    ReplayEffect, Structural, StructureIdentity, StructureWrite, WriterBase,
+    settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 
@@ -41,7 +42,9 @@ impl ProjectCommand for CreateChapterInput {
         applied_result: AppliedResult::AuthoritativeApplied,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "chapter_created",
+        replay_effect: ReplayEffect::NoQuery,
     };
     type Profile = Structural;
     type Response = ProjectResponse;
