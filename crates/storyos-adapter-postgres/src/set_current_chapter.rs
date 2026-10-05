@@ -96,7 +96,8 @@ impl ProjectCommand for SetCurrentChapterInput {
         } else {
             ChapterJoin::Invalid
         };
-        let current_target_revision_id = row.get::<_, Option<String>>(1).unwrap_or_default();
+        let current_target_revision_id =
+            row.get::<_, Option<String>>(/*idx*/ 1).unwrap_or_default();
         let expected_revision_exists = row.get::<_, bool>(/*idx*/ 2);
         let outcome = classify_set_current_chapter(&CoreSetCurrentChapter {
             chapter_join: chapter_join.clone(),

@@ -151,7 +151,7 @@ async fn read_response_project(
     Ok(Project {
         project_id: scope.project_id.clone(),
         title: row.get(/*idx*/ 0),
-        current_chapter_id: row.get::<_, Option<String>>(1).map(ChapterId::new),
+        current_chapter_id: row.get::<_, Option<String>>(/*idx*/ 1).map(ChapterId::new),
     })
 }
 

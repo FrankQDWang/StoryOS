@@ -34,7 +34,11 @@ pub enum TakeOverProjectWriterNoEffect {
 
 reason_codes!(TakeOverProjectWriterNoEffect { WriterTakeoverApplied => "writer_takeover_applied" });
 
-/// A takeover whose observed writer is not the current writer. It records no Receipt.
+/// A takeover that cannot proceed, and that records no Receipt.
+///
+/// The observed writer generation is not the current one, the requesting Editor Session is
+/// already the writer, the Project has no writer or is archived, or the Current Chapter has no
+/// head.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaleWriterObservation;
 

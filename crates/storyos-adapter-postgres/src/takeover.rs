@@ -70,7 +70,7 @@ async fn load_takeover_facts(
         .map_err(unavailable)?;
     Ok(TakeoverFacts {
         writer_generation: row
-            .get::<_, Option<String>>(0)
+            .get::<_, Option<String>>(/*idx*/ 0)
             .map(|generation| generation.parse())
             .transpose()
             .map_err(unavailable)?,

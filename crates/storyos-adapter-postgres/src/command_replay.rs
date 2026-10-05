@@ -234,7 +234,7 @@ pub(crate) async fn read_command_replay(
     };
     Ok(CommandReplay {
         author_action_sequence: row
-            .get::<_, Option<String>>(10)
+            .get::<_, Option<String>>(/*idx*/ 10)
             .map(|value| value.parse::<u64>())
             .transpose()
             .map_err(unavailable)?,
