@@ -41,7 +41,7 @@ pub(crate) struct WithdrawnRevision {
 impl ProjectCommand for ReopenWithdrawnProposalInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "reopenWithdrawnProposal",
-        applied_result: AppliedResult::ProposalRevised,
+        applied_result: AppliedResult::command("proposal_revised"),
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,

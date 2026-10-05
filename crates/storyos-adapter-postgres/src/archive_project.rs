@@ -32,7 +32,7 @@ impl PostgresProjectReader {
 impl ProjectCommand for ArchiveProjectInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "archiveProject",
-        applied_result: AppliedResult::AuthoritativeApplied,
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

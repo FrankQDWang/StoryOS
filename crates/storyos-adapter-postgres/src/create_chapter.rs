@@ -39,7 +39,7 @@ pub(crate) struct LiveChapters(Vec<String>);
 impl ProjectCommand for CreateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createChapter",
-        applied_result: AppliedResult::AuthoritativeApplied,
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

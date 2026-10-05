@@ -83,7 +83,7 @@ async fn load_takeover_facts(
 impl ProjectCommand for TakeOverProjectWriterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "takeOverProjectWriter",
-        applied_result: AppliedResult::AuthoritativeApplied,
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::BindingConflict,
         rate_limited: RateLimitedChallenge::Unavailable,

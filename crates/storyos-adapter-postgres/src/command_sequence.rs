@@ -87,17 +87,19 @@ pub(crate) enum RateLimitedChallenge {
 }
 
 /// The Domain Receipt result kind that an applied outcome of the command records.
-pub(crate) enum AppliedResult {
-    AuthoritativeApplied,
-    ProposalRevised,
-}
+pub(crate) struct AppliedResult(&'static str);
 
 impl AppliedResult {
+    /// The result kind of a change to Authoritative State or Project state.
+    pub(crate) const AUTHORITATIVE_APPLIED: Self = Self("authoritative_applied");
+
+    /// A result kind that the command declares for itself, for example `proposal_revised`.
+    pub(crate) const fn command(code: &'static str) -> Self {
+        Self(code)
+    }
+
     pub(crate) fn code(&self) -> &'static str {
-        match self {
-            Self::AuthoritativeApplied => "authoritative_applied",
-            Self::ProposalRevised => "proposal_revised",
-        }
+        self.0
     }
 }
 

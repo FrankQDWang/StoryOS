@@ -38,7 +38,7 @@ pub(crate) struct NewVolumeOrder(u64);
 impl ProjectCommand for CreateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createVolume",
-        applied_result: AppliedResult::AuthoritativeApplied,
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,
