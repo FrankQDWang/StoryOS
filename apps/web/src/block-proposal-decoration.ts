@@ -1,5 +1,6 @@
 import { Node as TiptapNode, type Editor } from "@tiptap/core";
-import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Fragment, Mark, type Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Transaction } from "@tiptap/pm/state";
 
 import { projectInlineCandidate, restoreInlineSource } from "./inline-proposal-decoration.ts";
 import { contiguousUtf16Replace } from "./manuscript-doc.ts";
@@ -165,20 +166,33 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
     }
   });
   const doc = editor.state.doc;
-  if (next.length === doc.childCount && next.every((node, index) => node.eq(doc.child(index)))) return;
+  const wanted = doc.copy(Fragment.fromArray(next));
+  if (wanted.eq(doc)) return;
   const transaction = editor.state.tr;
-  if (next.length === doc.childCount && next.every((node, index) =>
-    node.type === doc.child(index).type && node.content.eq(doc.child(index).content))) {
-    // A whole-document replacement moves the caret to the end; an attribute change must not move it.
-    let position = 0;
-    next.forEach((node, index) => {
-      if (!node.eq(doc.child(index))) transaction.setNodeMarkup(position, undefined, node.attrs, node.marks);
-      position += node.nodeSize;
-    });
-  } else transaction.replaceWith(0, doc.content.size, Fragment.fromArray(next));
+  // A whole-document replacement moves the caret to the end. An attribute change must not move it.
+  if (sameShape(doc, wanted)) changeMarkup(transaction, doc, wanted, -1);
+  else transaction.replaceWith(0, doc.content.size, wanted.content);
   transaction.setMeta("storyos.hydrate", true);
   transaction.setMeta("addToHistory", false);
   editor.view.dispatch(transaction);
+}
+
+function sameShape(current: ProseMirrorNode, wanted: ProseMirrorNode): boolean {
+  if (current.type !== wanted.type || !Mark.sameSet(current.marks, wanted.marks)) return false;
+  if (current.isText) return current.text === wanted.text;
+  return current.childCount === wanted.childCount
+    && Array.from({ length: current.childCount }, (_, index) => index)
+      .every((index) => sameShape(current.child(index), wanted.child(index)));
+}
+
+function changeMarkup(transaction: Transaction, current: ProseMirrorNode, wanted: ProseMirrorNode,
+  position: number): void {
+  if (position >= 0 && !current.isText && !current.hasMarkup(wanted.type, wanted.attrs, wanted.marks)) {
+    transaction.setNodeMarkup(position, undefined, wanted.attrs, wanted.marks);
+  }
+  current.forEach((child, offset, index) => {
+    changeMarkup(transaction, child, wanted.child(index), position + 1 + offset);
+  });
 }
 
 export const blockProposalDecoration = TiptapNode.create({
