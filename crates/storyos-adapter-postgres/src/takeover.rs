@@ -16,8 +16,8 @@ use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedResult, Classification,
     CommandIsolation, CommandSpec, LockedProject, MissingAdmission, NoResponse, ProjectCommand,
-    RateLimitedChallenge, ReceiptHeads, ReplayEffect, TakeoverAdmission, ZeroAuthorityWrite,
-    ZeroOutcome, settle_project_command, unavailable,
+    RateLimitedChallenge, ReceiptHeads, ReplayEffect, TakeoverAdmission, ZeroAuthorityRows,
+    ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -152,15 +152,17 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         Err(ReplayFault::BindingConflict)
     }
 
-    fn writes_zero_authority_effect(&self, outcome: &ZeroOutcome<'_, Self>) -> bool {
+    fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
         match outcome {
-            ZeroOutcome::NoEffect(TakeOverProjectWriterNoEffect::WriterTakeoverApplied) => true,
+            ZeroOutcome::NoEffect(TakeOverProjectWriterNoEffect::WriterTakeoverApplied) => {
+                ZeroAuthorityRows::EffectWithActivity
+            }
             ZeroOutcome::Conflicted(reason) => match **reason {},
             ZeroOutcome::Refused(reason) => match **reason {},
         }
     }
 
-    async fn write_zero_authority_effect(
+    async fn write_zero_authority_activity(
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,

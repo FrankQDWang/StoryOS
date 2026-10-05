@@ -119,6 +119,15 @@ project_command_request!(
     nested reopen_withdrawn_proposal_input
 );
 project_command_request!(
+    contracts::RejectProposalOperationsRequest,
+    nested reject_proposal_operations_input
+);
+project_command_request!(contracts::ReplanProposalRequest, nested replan_proposal_input);
+project_command_request!(
+    contracts::ReopenRejectedOperationsRequest,
+    nested reopen_rejected_operations_input
+);
+project_command_request!(
     contracts::CompleteReadyPartialProposalRequest,
     nested complete_ready_partial_proposal_input
 );

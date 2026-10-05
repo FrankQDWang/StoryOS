@@ -224,22 +224,16 @@ pub use readable_export_work::{
     ReadableExportWorkStore, claim_next_readable_export, complete_readable_export,
 };
 pub use reject_proposal_operations::{
-    RejectProposalOperationsCommand, RejectProposalOperationsError,
-    RejectProposalOperationsSettlement, RejectProposalOperationsSettlementEffect,
-    RejectProposalOperationsStore, RejectionNote, reject_proposal_operations,
+    ProposalOperationsRejected, RejectProposalOperationsInput, RejectProposalOperationsSettlement,
+    RejectionNote,
 };
 pub use reopen_rejected_operations::{
-    ReopenRejectedOperationsCommand, ReopenRejectedOperationsError,
-    ReopenRejectedOperationsSettlement, ReopenRejectedOperationsSettlementEffect,
-    ReopenRejectedOperationsStore, reopen_rejected_operations,
+    RejectedOperationsReopened, ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
 };
 pub use reopen_withdrawn_proposal::{
     ProposalReopened, ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
-pub use replan_proposal::{
-    ReplanProposalCommand, ReplanProposalError, ReplanProposalSettlement,
-    ReplanProposalSettlementEffect, ReplanProposalStore, replan_proposal,
-};
+pub use replan_proposal::{ProposalReplanned, ReplanProposalInput, ReplanProposalSettlement};
 pub use set_current_chapter::{
     CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };
