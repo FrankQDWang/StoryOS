@@ -172,6 +172,7 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
                 expected_authoritative_revision_id: Some(
                     self.expected_authoritative_revision_id.clone(),
                 ),
+                target_refs: Vec::new(),
                 writer: EditorWriter::Current,
             }),
             heads: ReceiptHeads {

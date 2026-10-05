@@ -71,6 +71,7 @@ pub(super) async fn insert_admission(
             editor_session_id,
             chapter_object_id,
             expected_authoritative_revision_id,
+            target_refs,
             writer,
         }) => {
             let client_writer_generation = match writer {
@@ -95,7 +96,7 @@ pub(super) async fn insert_admission(
                     session.client_contract_revision, session.security_policy_revision,
                     'explicit_editor_command', $7, $8, $9, $19,
                     $10, $11::text::uuid, challenge.consumed_at, challenge.expires_at,
-                    $12::text::uuid, $13::text::uuid, $14::text::uuid, '{}'::uuid[], '{}'::text[],
+                    $12::text::uuid, $13::text::uuid, $14::text::uuid, '{}'::uuid[], $21::text[],
                     NULL, session.client_contract_revision, NULL, NULL, NULL,
                     convert_from($15::bytea, 'UTF8')::jsonb
                FROM storyos.editor_sessions AS session
@@ -143,6 +144,7 @@ pub(super) async fn insert_admission(
                         &binding.security_policy_revision,
                         &spec.kind,
                         &client_writer_generation,
+                        target_refs,
                     ],
                 )
                 .await

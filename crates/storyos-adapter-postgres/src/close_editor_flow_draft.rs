@@ -172,6 +172,7 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
                 editor_session_id: self.editor_session_id.as_ref().to_owned(),
                 chapter_object_id: None,
                 expected_authoritative_revision_id: None,
+                target_refs: Vec::new(),
                 writer: EditorWriter::ClientGeneration(self.writer_generation),
             }),
             heads: ReceiptHeads::default(),

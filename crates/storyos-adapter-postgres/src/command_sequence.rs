@@ -53,6 +53,8 @@ pub(crate) struct EditorAdmission {
     pub(crate) editor_session_id: String,
     pub(crate) chapter_object_id: Option<String>,
     pub(crate) expected_authoritative_revision_id: Option<String>,
+    /// The Manuscript Block references that the command targets, in command order.
+    pub(crate) target_refs: Vec<String>,
     pub(crate) writer: EditorWriter,
 }
 

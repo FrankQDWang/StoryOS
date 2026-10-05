@@ -135,6 +135,7 @@ impl ProjectCommand for SetCurrentChapterInput {
                 editor_session_id: self.editor_session_id.as_ref().to_owned(),
                 chapter_object_id,
                 expected_authoritative_revision_id,
+                target_refs: Vec::new(),
                 writer: EditorWriter::Current,
             }),
             heads: ReceiptHeads {
