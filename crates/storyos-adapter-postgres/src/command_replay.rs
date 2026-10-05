@@ -24,8 +24,9 @@ pub(crate) struct CommandReplay {
     pub(crate) project_activity_position: u64,
     pub(crate) project_activity_event_id: String,
     pub(crate) authority: Option<ReplayedAuthority>,
-    /// The Author Action of the Receipt, also when the transition has no Commit.
-    pub(crate) author_action_sequence: Option<u64>,
+    /// The Author Action sequence text of the Receipt, also when the transition has no Commit.
+    /// Only a profile that needs it parses it.
+    pub(crate) author_action_sequence: Option<String>,
     /// The canonical Snapshot at the Activity position of the Receipt.
     pub(crate) snapshot_id: Option<String>,
     /// The latest Manuscript Tree Revision text that an Activity payload records at or before the
@@ -233,11 +234,7 @@ pub(crate) async fn read_command_replay(
         _ => None,
     };
     Ok(CommandReplay {
-        author_action_sequence: row
-            .get::<_, Option<String>>(/*idx*/ 10)
-            .map(|value| value.parse::<u64>())
-            .transpose()
-            .map_err(unavailable)?,
+        author_action_sequence: row.get(/*idx*/ 10),
         snapshot_id: row.get(/*idx*/ 11),
         manuscript_tree_revision: row.get(/*idx*/ 17),
         ids: AuthorCommandAdmissionIds {

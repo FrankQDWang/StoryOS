@@ -36,9 +36,9 @@ reason_codes!(TakeOverProjectWriterNoEffect { WriterTakeoverApplied => "writer_t
 
 /// A takeover that cannot proceed, and that records no Receipt.
 ///
-/// The observed writer generation is not the current one, the requesting Editor Session is
-/// already the writer, the Project has no writer or is archived, or the Current Chapter has no
-/// head.
+/// Either the observed writer generation is not the current one, or the requesting Editor
+/// Session is already the writer. The Project can also have no writer or be archived. The
+/// Current Chapter can also have no head.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaleWriterObservation;
 

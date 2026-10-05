@@ -25,7 +25,7 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
 - A project command in this decision is a command that consumes one Project Command Challenge and settles one Author Command Admission. Each one settles through the sequence.
 - These operations are not project commands in this sense, and they stay outside the sequence:
   - `createEditorSession`. It is a Challenge-fenced creation of an Editor Session without an Admission or a Receipt, at the default isolation level.
-  - The current-producer form of `withdrawProposal`. It is an Agent Run decision without a Command Challenge or an Admission. The author form of `withdrawProposal` is in scope.
+  - The current-producer form of `withdrawProposal`. It is an AgentRun decision without a Command Challenge or an Admission. The author form of `withdrawProposal` is in scope.
   - The Worker settlement of an admitted export. It is a fenced Worker transaction. The admission of each export is in scope.
 - Author Edit, `acceptProposal`, and Author Undo need sequence capabilities that a later decision records. These are an `outcome_unknown` settlement with admission recovery, the Pre-Admission Refusal Record (ADR 0013), and the Compensation disposition.
 
