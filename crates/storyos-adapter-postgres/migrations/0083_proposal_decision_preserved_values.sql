@@ -8,6 +8,8 @@ ALTER TABLE storyos.proposal_rejection_receipts
   ADD CHECK ((preserved_generation IS NULL AND preserved_validation IS NULL
               AND preserved_closure IS NULL)
     OR (result = 'proposal_operations_resolved'
+        AND preserved_generation IS NOT NULL AND preserved_validation IS NOT NULL
+        AND preserved_closure IS NOT NULL
         AND preserved_generation IN ('generating', 'ready_partial', 'ready')
         AND preserved_validation IN ('pending', 'valid', 'invalid', 'conflicted')
         AND preserved_closure IN ('open', 'withdrawn', 'superseded')));
@@ -17,7 +19,8 @@ ALTER TABLE storyos.proposal_withdrawals
   ADD COLUMN preserved_validation text;
 ALTER TABLE storyos.proposal_withdrawals
   ADD CHECK ((preserved_generation IS NULL AND preserved_validation IS NULL)
-    OR (preserved_generation IN ('generating', 'ready_partial', 'ready')
+    OR (preserved_generation IS NOT NULL AND preserved_validation IS NOT NULL
+        AND preserved_generation IN ('generating', 'ready_partial', 'ready')
         AND preserved_validation IN ('pending', 'valid', 'invalid', 'conflicted')));
 
 ALTER TABLE storyos.proposal_replans
@@ -25,7 +28,8 @@ ALTER TABLE storyos.proposal_replans
   ADD COLUMN preserved_closure text;
 ALTER TABLE storyos.proposal_replans
   ADD CHECK ((preserved_generation IS NULL AND preserved_closure IS NULL)
-    OR (preserved_generation IN ('generating', 'ready_partial', 'ready')
+    OR (preserved_generation IS NOT NULL AND preserved_closure IS NOT NULL
+        AND preserved_generation IN ('generating', 'ready_partial', 'ready')
         AND preserved_closure IN ('open', 'withdrawn', 'superseded')));
 
 ALTER TABLE storyos.proposal_operation_reopenings
@@ -33,7 +37,8 @@ ALTER TABLE storyos.proposal_operation_reopenings
   ADD COLUMN preserved_closure text;
 ALTER TABLE storyos.proposal_operation_reopenings
   ADD CHECK ((preserved_generation IS NULL AND preserved_closure IS NULL)
-    OR (preserved_generation IN ('generating', 'ready_partial', 'ready')
+    OR (preserved_generation IS NOT NULL AND preserved_closure IS NOT NULL
+        AND preserved_generation IN ('generating', 'ready_partial', 'ready')
         AND preserved_closure IN ('open', 'withdrawn', 'superseded')));
 
 CREATE TABLE storyos.proposal_withdrawal_reopenings (
@@ -53,7 +58,8 @@ CREATE TABLE storyos.proposal_withdrawal_reopenings (
   UNIQUE (owner_user_id, project_id, withdrawal_event_id),
   UNIQUE (owner_user_id, project_id, reopen_receipt_id),
   CHECK ((preserved_generation IS NULL AND preserved_operation_resolution IS NULL)
-    OR (preserved_generation IN ('generating', 'ready_partial', 'ready')
+    OR (preserved_generation IS NOT NULL AND preserved_operation_resolution IS NOT NULL
+        AND preserved_generation IN ('generating', 'ready_partial', 'ready')
         AND preserved_operation_resolution IN ('pending', 'applied', 'rejected'))),
   FOREIGN KEY (owner_user_id, project_id, withdrawal_event_id)
     REFERENCES storyos.proposal_withdrawals

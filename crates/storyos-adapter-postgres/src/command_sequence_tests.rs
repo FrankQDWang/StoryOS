@@ -28,6 +28,7 @@ use storyos_core::{
     OpenInlineProposalAnchor, PROSEMIRROR_TOKEN_UTF16_V1, ReasonCode, ReceiptResult,
     TransitionOutcome, proposal_anchor_base_slice_digest,
 };
+use tokio_postgres::error::SqlState;
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
@@ -2574,14 +2575,14 @@ struct PreservedEffect {
     preserved_columns: &'static [&'static str],
 }
 
-/// Settles the call, then replays it once without its preserved values and once without its
-/// effect row.
+/// Settles the call and clears one preserved value, which the all-or-none check refuses. Then
+/// replays the call once without its preserved values and once without its effect row.
 async fn effect_replays<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
     effect: PreservedEffect,
-) -> [ReplayError; 2] {
+) -> (Option<SqlState>, [ReplayError; 2]) {
     let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
         panic!("the Proposal decision must settle");
     };
@@ -2599,6 +2600,14 @@ async fn effect_replays<C: ProjectCommand + Clone>(
         .map(|column| format!("{column} = NULL"))
         .collect::<Vec<_>>()
         .join(", ");
+    let partial = admin
+        .batch_execute(&format!(
+            "UPDATE storyos.{table} SET {} = NULL {filter}",
+            preserved_columns[0]
+        ))
+        .await
+        .err()
+        .and_then(|error| error.code().cloned());
     let mut errors = Vec::new();
     for statement in [
         format!("UPDATE storyos.{table} SET {cleared} {filter}"),
@@ -2611,7 +2620,7 @@ async fn effect_replays<C: ProjectCommand + Clone>(
         };
         errors.push(error.into());
     }
-    errors.try_into().unwrap()
+    (partial, errors.try_into().unwrap())
 }
 
 #[tokio::test]
@@ -2803,10 +2812,13 @@ async fn every_proposal_decision_replay_separates_pre_capture_from_damaged_effec
         )
         .await,
     ];
-    let separated = [
-        ReplayError::HistoricalAcknowledgementUnavailable,
-        ReplayError::Unavailable,
-    ];
+    let separated = (
+        Some(SqlState::CHECK_VIOLATION),
+        [
+            ReplayError::HistoricalAcknowledgementUnavailable,
+            ReplayError::Unavailable,
+        ],
+    );
     assert_eq!(observed, vec![separated; 5]);
 }
 
