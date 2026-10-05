@@ -134,7 +134,9 @@ outcome_unknown -> ReceiptSettled
 outcome_unknown -> RequiresReconfirmation
 ```
 
-`pending` means issuance committed and no terminal settlement exists.
+`pending` means issuance committed and no terminal settlement exists. The
+`outcome_unknown` transitions are reported conditions; storage appends only
+the terminal settlement.
 `outcome_unknown` is a durable, author-visible, nonterminal recovery condition
 used only when StoryOS cannot yet prove whether the admitted Core transition
 committed. The settlement Query reports it for a `pending` admission that it
@@ -146,11 +148,12 @@ disposition. It is never
 success, refusal, or permission to invoke, and it may remain visible until
 authoritative storage can be validated.
 
-Reconciliation appends evidence to the same admission. It first reads the exact
-idempotency record and typed Receipt under the bound Project Scope; it never
-uses browser, process, network, timestamp, missing-response, or cache state as
-an oracle. Reconciliation may append repeated read-only observations, but it
-cannot create another admission or Author Action.
+Reconciliation reads the evidence of the same admission. It first reads the
+exact idempotency record and typed Receipt under the bound Project Scope; it
+never uses browser, process, network, timestamp, missing-response, or cache
+state as an oracle. Reconciliation can report the same observation many times
+and writes no observation. It appends only the terminal settlement. It cannot
+create another admission or Author Action.
 
 Exactly one terminal settlement may be appended:
 
