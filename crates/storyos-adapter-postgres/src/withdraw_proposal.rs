@@ -222,6 +222,7 @@ impl ProjectCommand for WithdrawProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalWithdrawn, ReplayFault> {
+        replay.require_receipt_text("transition", "withdraw")?;
         match (
             replay.effect_text("withdrawal_event_id"),
             replay.effect_text("preserved_generation"),

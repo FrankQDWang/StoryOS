@@ -191,6 +191,7 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalGenerationCompleted, ReplayFault> {
+        replay.require_receipt_text("transition", "generation_completed")?;
         // The transition record has no nullable stored value, so it has no pre-capture form.
         let field = |key| {
             replay.effect_text(key).ok_or_else(|| {
@@ -382,6 +383,7 @@ impl ProjectCommand for ContinueProposalGenerationInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalGenerationStarted, ReplayFault> {
+        replay.require_receipt_text("transition", "generation_started")?;
         // The transition record has no nullable stored value, so it has no pre-capture form.
         let field = |key| {
             replay.effect_text(key).ok_or_else(|| {

@@ -290,6 +290,7 @@ impl ProjectCommand for ReplanProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalReplanned, ReplayFault> {
+        replay.require_receipt_text("transition", "replan")?;
         match (
             replay.effect_text("state_event_id"),
             replay.effect_text("resulting_proposal_revision_id"),

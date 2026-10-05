@@ -267,8 +267,8 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
             .receipt_text("event_id")
             .map(str::to_owned)
             .ok_or_else(damaged)?;
-        if replay.receipt_text("reason") != Some("abandoned")
-            || replay.effect_text("event_id").as_ref() != Some(&event_id)
+        replay.require_receipt_text("reason", "abandoned")?;
+        if replay.effect_text("event_id").as_ref() != Some(&event_id)
             || replay.effect_text("draft_id").as_ref() != Some(&self.draft_id)
             || replay.effect_text("author_action_sequence") != replay.author_action_sequence
         {

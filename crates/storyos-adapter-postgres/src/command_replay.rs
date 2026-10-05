@@ -109,6 +109,20 @@ impl CommandReplay {
         self.receipt.text(key)
     }
 
+    /// Requires `expected` as the Receipt payload value of `key`. Another value is damaged evidence.
+    pub(crate) fn require_receipt_text(
+        &self,
+        key: &str,
+        expected: &str,
+    ) -> Result<(), ReplayFault> {
+        if self.receipt.text(key) == Some(expected) {
+            return Ok(());
+        }
+        Err(unavailable(format!(
+            "the applied Receipt payload has no {key} {expected}"
+        )))
+    }
+
     pub(crate) fn activity_text(&self, key: &str) -> Result<String, ReplayFault> {
         self.activity
             .text(key)

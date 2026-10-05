@@ -262,6 +262,7 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalReopened, ReplayFault> {
+        replay.require_receipt_text("transition", "reopen_withdrawn")?;
         match (
             replay.effect_text("resulting_proposal_revision_id"),
             replay.effect_text("preserved_generation"),
