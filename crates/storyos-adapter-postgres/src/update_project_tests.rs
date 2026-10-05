@@ -115,7 +115,13 @@ async fn update_project_renames_only_its_scope_and_replays_the_captured_project(
         .unwrap();
     let first = update_project(
         &store,
-        &command(&first_issue, "0502", 1, TITLE, COMMAND_BYTES),
+        &command(
+            &first_issue,
+            "0502",
+            /*expected_revision*/ 1,
+            TITLE,
+            COMMAND_BYTES,
+        ),
     )
     .await;
     assert_eq!(
@@ -132,7 +138,13 @@ async fn update_project_renames_only_its_scope_and_replays_the_captured_project(
         .unwrap();
     let stale = update_project(
         &store,
-        &command(&stale_issue, "0504", 1, TITLE, COMMAND_BYTES),
+        &command(
+            &stale_issue,
+            "0504",
+            /*expected_revision*/ 1,
+            TITLE,
+            COMMAND_BYTES,
+        ),
     )
     .await;
     assert_eq!(
@@ -158,7 +170,13 @@ async fn update_project_renames_only_its_scope_and_replays_the_captured_project(
         .unwrap();
     let later = update_project(
         &store,
-        &command(&later_issue, "0506", 2, LATER_TITLE, LATER_COMMAND_BYTES),
+        &command(
+            &later_issue,
+            "0506",
+            /*expected_revision*/ 2,
+            LATER_TITLE,
+            LATER_COMMAND_BYTES,
+        ),
     )
     .await;
     assert_eq!(
@@ -170,7 +188,13 @@ async fn update_project_renames_only_its_scope_and_replays_the_captured_project(
     );
     let frozen = update_project(
         &store,
-        &command(&first_issue, "0598", 1, TITLE, COMMAND_BYTES),
+        &command(
+            &first_issue,
+            "0598",
+            /*expected_revision*/ 1,
+            TITLE,
+            COMMAND_BYTES,
+        ),
     )
     .await;
     assert_eq!(frozen, first);

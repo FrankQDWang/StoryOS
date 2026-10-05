@@ -123,7 +123,16 @@ async fn archive_project_archives_only_its_scope_once_and_replays_the_captured_p
     issue_project_command_challenge(&store, &first_issue)
         .await
         .unwrap();
-    let first = archive_project(&store, &command(&first_issue, "0602", 1, COMMAND_BYTES)).await;
+    let first = archive_project(
+        &store,
+        &command(
+            &first_issue,
+            "0602",
+            /*expected_revision*/ 1,
+            COMMAND_BYTES,
+        ),
+    )
+    .await;
     let TransitionOutcome::Applied(applied) = &first.outcome else {
         panic!("the archival must apply, got {:?}", first.outcome);
     };
@@ -133,7 +142,16 @@ async fn archive_project_archives_only_its_scope_once_and_replays_the_captured_p
     issue_project_command_challenge(&store, &stale_issue)
         .await
         .unwrap();
-    let stale = archive_project(&store, &command(&stale_issue, "0604", 1, COMMAND_BYTES)).await;
+    let stale = archive_project(
+        &store,
+        &command(
+            &stale_issue,
+            "0604",
+            /*expected_revision*/ 1,
+            COMMAND_BYTES,
+        ),
+    )
+    .await;
     assert_eq!(
         stale.outcome,
         TransitionOutcome::Conflicted(ArchiveProjectConflict::StaleProjectRevision)
@@ -145,7 +163,12 @@ async fn archive_project_archives_only_its_scope_once_and_replays_the_captured_p
         .unwrap();
     let already = archive_project(
         &store,
-        &command(&later_issue, "0606", 2, LATER_COMMAND_BYTES),
+        &command(
+            &later_issue,
+            "0606",
+            /*expected_revision*/ 2,
+            LATER_COMMAND_BYTES,
+        ),
     )
     .await;
     assert_eq!(
@@ -173,7 +196,16 @@ async fn archive_project_archives_only_its_scope_once_and_replays_the_captured_p
         ("archived".to_owned(), "2".to_owned(), 1)
     );
 
-    let frozen = archive_project(&store, &command(&first_issue, "0698", 1, COMMAND_BYTES)).await;
+    let frozen = archive_project(
+        &store,
+        &command(
+            &first_issue,
+            "0698",
+            /*expected_revision*/ 1,
+            COMMAND_BYTES,
+        ),
+    )
+    .await;
     assert_eq!(frozen, first);
 
     let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
