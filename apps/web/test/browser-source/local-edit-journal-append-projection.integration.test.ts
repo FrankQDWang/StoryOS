@@ -450,3 +450,43 @@ it("keeps captured manuscript input during a background Draft refresh", async ()
   } finally { paused.release(); await act(async () => { root.unmount(); }); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
+
+
+it("keeps author input when a Journal projection read before that input installs after it", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const { ManuscriptEditor } = await import("../../src/manuscript-editor.tsx");
+  const { applyTrustedInput } = await import("../support/browser-command-client.ts");
+  const host = document.createElement("div"); document.body.append(host);
+  const root = createRoot(host);
+  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
+  let failure: unknown, installs = 0;
+  function View() {
+    const [projection, setProjection] = useState(test.workspace.pending);
+    // The submission stays unsettled, so the Journal keeps the input as local work.
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true,
+      persistWorkspace: test.workspace, baseUrl: location.origin, fetchImpl: () => new Promise<Response>(() => {}),
+      cryptoImpl: crypto, controllerRef: controller, onFailure: (error) => { failure = error; },
+      onProjection: (next) => { installs += 1; test.workspace.pending = next; flushSync(() => { setProjection(next); }); } });
+  }
+  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  try {
+    await act(async () => { root.render(createElement(View)); });
+    const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
+    // A background reader, for example the Draft refresh after a settlement, reads the Journal before the input.
+    const earlier = await rebuildPendingProjection(test.workspace);
+    surface.focus();
+    const text = surface.querySelector("p")!.firstChild!;
+    window.getSelection()!.setBaseAndExtent(text, 4, text, 4);
+    await applyTrustedInput({ operation: "insert_text", text: "!" });
+    await act(async () => { await controller.current!.whenIdle(); });
+    const installed = installs;
+    await act(async () => { controller.current!.installProjection(earlier); });
+    await expect.poll(() => installs).toBe(installed + 1);
+    const journal = await rebuildPendingProjection(test.workspace);
+    expect({ text: surface.querySelector("p")!.textContent, installed: test.workspace.pending, failure })
+      .toEqual({ text: "Base!", installed: journal, failure: undefined });
+    expect(journal.save_state).toBe("saving");
+  } finally { await act(async () => { root.unmount(); }); host.remove(); await test.close();
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
+});

@@ -491,8 +491,21 @@ export function ManuscriptEditor({
       onFailure: (error) => { onFailureRef.current(error); },
     });
     idleRef.current = idle;
+    // A projection that another reader read from the Journal can be older than input that persisted after that read.
+    const installJournalProjection = (projection: PendingEditProjection): void => {
+      const rendered = readManuscriptParagraphs(editor.state.doc);
+      if (rendered === undefined || paragraphsEqual(rendered, projection.blocks) || idle.hasQueuedInput()) {
+        installProjection(projection);
+        return;
+      }
+      const captured = idle.capturedInputCount();
+      void rebuildPendingProjection(persistWorkspace).then((current) => {
+        // Input captured during this read installs its own newer projection.
+        if (idleRef.current === idle && idle.capturedInputCount() === captured) installProjection(current);
+      }, (error: unknown) => { if (idleRef.current === idle) onFailureRef.current(error); });
+    };
     const controller: ManualInputController = {
-      installProjection,
+      installProjection: installJournalProjection,
       flush: () => idle.flush(),
       whenIdle: () => idle.whenIdle(),
       hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing,
