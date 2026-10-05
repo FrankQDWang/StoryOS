@@ -6,6 +6,7 @@ import type {
   BlockProposalInspect, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-editor.tsx";
+import type { EditorReadyState } from "./editor-types.ts";
 import { RefusedEditDraftDisplay } from "./refused-edit-draft-display.tsx";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { candidateProjectionFromJournal } from "./local-edit-journal.ts";
@@ -87,7 +88,10 @@ export function BlockProposalDisplay({
   }>>({});
   const [accepting, setAccepting] = useState<string>();
   const [pendingAcceptances, setPendingAcceptances] = useState<string[]>([]);
-  const [acceptanceChecked, setAcceptanceChecked] = useState(false);
+  const [decisionGeneration, setDecisionGeneration] = useState(0);
+  const [acceptanceCheck, setAcceptanceCheck] = useState<{
+    workspace: EditorReadyState | undefined; proposalIds: string; generation: number;
+  }>();
   const [recoveredProposalIds, setRecoveredProposalIds] = useState<string[]>([]);
   const [journalPendingIds, setJournalPendingIds] = useState<string[]>([]);
   const [pendingRejections, setPendingRejections] = useState<string[]>([]);
@@ -97,7 +101,7 @@ export function BlockProposalDisplay({
   const [settledRejections, setSettledRejections] = useState<Record<string,
     "resolved" | "conflicted" | "refused">>({});
   const [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
-  const [recoveryChecked, setRecoveryChecked] = useState(false);
+  const [recoveryCheck, setRecoveryCheck] = useState<{ workspace: EditorReadyState; generation: number }>();
   const refreshedAcceptance = useRef(new Set<string>());
   const acceptingRef = useRef(false);
   const effectiveLocators = [...locators, ...recoveredProposalIds.filter((id) =>
@@ -105,15 +109,27 @@ export function BlockProposalDisplay({
     ({ proposalId, runId: "", decisionId: "" }))];
   const locatorKey = effectiveLocators.map((item) =>
     `${item.proposalId}:${item.runId}:${item.decisionId}`).join("|");
+  const proposalIdsKey = (items: readonly { proposalId: string }[]) =>
+    [...new Set(items.map((item) => item.proposalId))].sort().join("|");
+  // A re-check keeps the last result. After a new workspace, a new Proposal, or a completed decision, a new check is necessary.
+  const recoveryChecked = editorProps.persistWorkspace === undefined
+    || (recoveryCheck?.workspace === editorProps.persistWorkspace
+      && recoveryCheck.generation === decisionGeneration);
+  const acceptanceChecked = acceptanceCheck !== undefined
+    && acceptanceCheck.workspace === editorProps.persistWorkspace
+    && acceptanceCheck.proposalIds === proposalIdsKey(effectiveLocators)
+    && acceptanceCheck.generation === decisionGeneration;
+  const finishDecision = () => {
+    acceptingRef.current = false;
+    setAccepting(undefined);
+    setDecisionGeneration((value) => value + 1);
+  };
 
   useEffect(() => {
     let active = true;
     const workspace = editorProps.persistWorkspace;
-    if (workspace === undefined) {
-      setRecoveryChecked(true);
-      return () => { active = false; };
-    }
-    setRecoveryChecked(false);
+    if (workspace === undefined) return () => { active = false; };
+    const generation = decisionGeneration;
     void Promise.all([acceptanceJournalProposals(workspace), rejectionJournalState(workspace),
       readExpansionJournal(workspace), pendingReplanIds(workspace), pendingWithdrawIds(workspace)])
       .then(async ([acceptance, rejection, expansions, replans, withdrawals]) => {
@@ -136,10 +152,10 @@ export function BlockProposalDisplay({
     }).catch(() => {
       if (active) setRecoveryUnavailable(true);
     }).finally(() => {
-      if (active) setRecoveryChecked(true);
+      if (active) setRecoveryCheck({ workspace, generation });
     });
     return () => { active = false; };
-  }, [editorProps.persistWorkspace, settlementRefresh]);
+  }, [editorProps.persistWorkspace, settlementRefresh, decisionGeneration]);
 
   useEffect(() => {
     let active = true;
@@ -170,7 +186,7 @@ export function BlockProposalDisplay({
         return { locator };
       }
     })).then((result) => {
-      // Navigation can reorder the same locators; a new value starts an Acceptance check that locks the editor.
+      // Navigation can reorder the same locators. If the result does not change, no new Acceptance check is necessary.
       const unordered = (items: readonly ProposalRead[]) => canonical([...items].sort((left, right) =>
         left.locator.proposalId.localeCompare(right.locator.proposalId)));
       if (active) setReads((current) => unordered(current) === unordered(result) ? current : result);
@@ -203,19 +219,21 @@ export function BlockProposalDisplay({
       if (active) setCandidateTexts(Object.fromEntries(values.filter((item) => item !== undefined)));
     }).catch(editorProps.onFailure);
     return () => { active = false; };
-  }, [reads, chapterId, editorProps.persistWorkspace, editorProps.onFailure]);
+  }, [reads, chapterId, editorProps.persistWorkspace, editorProps.persistWorkspace?.pending.unsettled_intent_count,
+    editorProps.onFailure]);
 
   useEffect(() => {
     let active = true;
-    setAcceptanceChecked(false);
     if (!recoveryChecked || reads.length !== effectiveLocators.length) {
       return () => { active = false; };
     }
     const workspace = editorProps.persistWorkspace;
+    const checked = { workspace, proposalIds: proposalIdsKey(reads.map(({ locator }) => locator)),
+      generation: decisionGeneration };
     if (workspace === undefined) {
       setPendingAcceptances([]);
       setSessionBlockedIds([]);
-      setAcceptanceChecked(true);
+      setAcceptanceCheck(checked);
       return () => { active = false; };
     }
     const blockedIds: string[] = [];
@@ -262,11 +280,11 @@ export function BlockProposalDisplay({
     }).catch(() => {
       if (active) setPendingAcceptances(reads.map(({ locator }) => locator.proposalId));
     }).finally(() => {
-      if (active) setAcceptanceChecked(true);
+      if (active) setAcceptanceCheck(checked);
     });
     return () => { active = false; };
-  }, [reads, editorProps.persistWorkspace, recoveryChecked, journalPendingIds.join("|"),
-    pendingRejections.join("|")]);
+  }, [reads, editorProps.persistWorkspace, recoveryChecked, decisionGeneration,
+    journalPendingIds.join("|"), pendingRejections.join("|")]);
 
   const blockCounts = new Map<string, number>();
   for (const block of editorProps.blocks) {
@@ -475,8 +493,7 @@ export function BlockProposalDisplay({
         setSettlementRefresh((value) => value + 1);
         try { await onAccepted(); } catch { /* The frozen command remains available. */ }
       } finally {
-        acceptingRef.current = false;
-        setAccepting(undefined);
+        finishDecision();
       }
     })();
   };
@@ -510,8 +527,7 @@ export function BlockProposalDisplay({
         setSettlementRefresh((value) => value + 1);
         try { await onAccepted(); } catch { /* The frozen command remains available. */ }
       } finally {
-        acceptingRef.current = false;
-        setAccepting(undefined);
+        finishDecision();
       }
     })();
   };
@@ -590,8 +606,7 @@ export function BlockProposalDisplay({
         setSettlementRefresh((value) => value + 1);
         try { await onAccepted(); } catch { /* The frozen command remains available. */ }
       } finally {
-        acceptingRef.current = false;
-        setAccepting(undefined);
+        finishDecision();
       }
     })();
   };
@@ -624,8 +639,7 @@ export function BlockProposalDisplay({
           [proposalId]: "拒绝结果暂不可确认。请重试同一操作。" }));
         setSettlementRefresh((value) => value + 1);
       } finally {
-        acceptingRef.current = false;
-        setAccepting(undefined);
+        finishDecision();
       }
     })();
   };
@@ -689,8 +703,7 @@ export function BlockProposalDisplay({
             ? error.message : "重新规划结果尚未确认。请重试同一操作。" }));
         setSettlementRefresh((value) => value + 1);
       } finally {
-        acceptingRef.current = false;
-        setAccepting(undefined);
+        finishDecision();
       }
     })();
   };
@@ -718,8 +731,7 @@ export function BlockProposalDisplay({
             ? error.message : "重新规划结果尚未确认。请重试同一操作。" }));
         setSettlementRefresh((value) => value + 1);
       } finally {
-        acceptingRef.current = false;
-        setAccepting(undefined);
+        finishDecision();
       }
     })();
   };
@@ -729,7 +741,7 @@ export function BlockProposalDisplay({
     cryptoImpl: editorProps.cryptoImpl, workspace: editorProps.persistWorkspace,
     authoritativeRevisionId,
     markBusy: (proposalId: string) => { acceptingRef.current = true; setAccepting(proposalId); },
-    markIdle: () => { acceptingRef.current = false; setAccepting(undefined); },
+    markIdle: finishDecision,
     report: (proposalId: string, message: string) => setDecisionMessages((current) =>
       ({ ...current, [proposalId]: message })),
     refresh: () => setSettlementRefresh((value) => value + 1),

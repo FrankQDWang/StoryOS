@@ -983,14 +983,10 @@ export async function candidateProjectionFromJournal(
 ): Promise<string | undefined> {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const retained = retainedRecoverySequences(snapshot);
+  // A settled revision of this target stays local until the display shows the new Proposal Revision (#943).
   const unresolved = snapshot.records.filter((record) =>
     !retained.has(record.local_intent_sequence)
-    && JSON.stringify(record.proposal_target) === JSON.stringify(target)
-    && !snapshot.groups.some((group) => group.settlement.kind
-      === "zero_authority_receipt_settled"
-      && group.settlement.effect.kind === "proposal_revised"
-      && group.ordered_coverage.some((item) => item.local_intent_sequence
-        === record.local_intent_sequence)));
+    && JSON.stringify(record.proposal_target) === JSON.stringify(target));
   const latest = unresolved.at(-1);
   return latest === undefined ? undefined : snapshot.bodyBySequence.get(latest.local_intent_sequence);
 }
