@@ -5,10 +5,11 @@ use storyos_application::{
     CreateVolumeInput, CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement,
     DeleteVolumeInput, DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
     ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
-    ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement, SetCurrentChapterInput,
-    StructureAuthority, StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput,
-    UpdateChapterSettlement, UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput,
-    UpdateVolumeSettlement, issue_project_command_challenge,
+    ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement, ReplanProposalInput,
+    ReplanProposalSettlement, SetCurrentChapterInput, StructureAuthority,
+    StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput, UpdateChapterSettlement,
+    UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput, UpdateVolumeSettlement,
+    issue_project_command_challenge,
 };
 use storyos_application::{
     ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
@@ -253,6 +254,12 @@ const REOPEN_WITHDRAWN_PROPOSAL: Route = Route {
     method: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_METHOD,
     path: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_PATH,
     schema: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
+};
+const REPLAN_PROPOSAL: Route = Route {
+    kind: "replanProposal",
+    method: storyos_contracts::REPLAN_PROPOSAL_METHOD,
+    path: storyos_contracts::REPLAN_PROPOSAL_PATH,
+    schema: storyos_contracts::REPLAN_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 
 /// Issues one Command Challenge for `route` and binds `input` to it.
@@ -648,6 +655,30 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let outcome = replayed_outcome(&store, &admin, &call, reopen_withdrawn_proposal).await;
     observed.push((REOPEN_WITHDRAWN_PROPOSAL.kind, outcome));
 
+    // The second exact call names a Proposal Revision that the first call superseded.
+    let (scope, conflicted) = conflicted_proposal(&store, &admin, /*base*/ 0x7200).await;
+    for suffix in [0x7209, 0x720a] {
+        let call = issued(&store, &scope, suffix, &REPLAN_PROPOSAL, conflicted.clone()).await;
+        let outcome = replayed_outcome(&store, &admin, &call, replan_proposal).await;
+        observed.push((REPLAN_PROPOSAL.kind, outcome));
+    }
+    let (scope, conflicted) = conflicted_proposal(&store, &admin, /*base*/ 0x7210).await;
+    move_chapter_head(
+        &admin,
+        &scope,
+        &conflicted.expected_authoritative_revision_id,
+    )
+    .await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x7219,
+        &REPLAN_PROPOSAL,
+        conflicted,
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, replan_proposal).await;
+    observed.push((REPLAN_PROPOSAL.kind, outcome));
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
@@ -704,6 +735,9 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("reopenWithdrawnProposal", no_effect),
             ("reopenWithdrawnProposal", refused),
             ("reopenWithdrawnProposal", conflicted),
+            ("replanProposal", proposal_revised),
+            ("replanProposal", refused),
+            ("replanProposal", conflicted),
         ]
     );
 }
@@ -862,6 +896,153 @@ async fn reopen_withdrawn_proposal_call(
 ) -> CommandCall<ReopenWithdrawnProposalInput> {
     let (scope, input) = withdrawn_proposal(store, admin, base).await;
     issued(store, &scope, base + 9, &REOPEN_WITHDRAWN_PROPOSAL, input).await
+}
+
+async fn replan_proposal(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ReplanProposalInput>,
+) -> Result<ReplanProposalSettlement, ProjectCommandError> {
+    store.replan_proposal(&call.envelope, &call.input).await
+}
+
+/// The identities of one open Proposal on Chapter B with one Proposal Operation.
+struct OpenProposal {
+    editor_session_id: String,
+    proposal_id: String,
+    revision_id: String,
+    operation_id: String,
+    chapter_head: String,
+}
+
+/// A new Project with a writer Editor Session and one open Proposal on Chapter B.
+///
+/// The fixture skips the foreign keys of the AgentRun and the Manuscript Block.
+async fn open_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+    validation: &str,
+    resolution: &str,
+) -> (ProjectScope, OpenProposal) {
+    let (scope, _chapter_a, chapter_b, chapter_head, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let proposal = OpenProposal {
+        editor_session_id,
+        proposal_id: Uuid::now_v7().to_string(),
+        revision_id: Uuid::now_v7().to_string(),
+        operation_id: Uuid::now_v7().to_string(),
+        chapter_head,
+    };
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.proposals
+               (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
+                source_run_id, source_decision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', 'block_edit', '{chapter_b}',
+                     '{block}', '{run}', '{decision}');
+             INSERT INTO storyos.proposal_revisions
+               (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
+                closure, candidate_text, base_authoritative_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', 'ready', '{validation}',
+                     'open', 'Candidate', '{chapter_head}');
+             INSERT INTO storyos.proposal_heads
+               (owner_user_id, project_id, proposal_id, current_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}');
+             INSERT INTO storyos.proposal_operations
+               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                resolution, reservation_state, candidate_text)
+             VALUES ('{owner}', '{project}', '{proposal}', '{operation}', '{block}',
+                     '{resolution}', 'resolved', 'Candidate')",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            proposal = proposal.proposal_id,
+            block = Uuid::now_v7(),
+            run = Uuid::now_v7(),
+            decision = Uuid::now_v7(),
+            revision = proposal.revision_id,
+            operation = proposal.operation_id,
+            chapter_head = proposal.chapter_head,
+        ),
+    )
+    .await;
+    (scope, proposal)
+}
+
+/// Runs fixture statements in one transaction without their foreign keys.
+async fn run_without_foreign_keys(admin: &Client, statements: &str) {
+    admin
+        .batch_execute(&format!(
+            "BEGIN; SET LOCAL session_replication_role = replica; {statements}; COMMIT;"
+        ))
+        .await
+        .unwrap();
+}
+
+/// A conflicted open Proposal and the input that replans it.
+async fn conflicted_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, ReplanProposalInput) {
+    let (scope, proposal) = open_proposal(store, admin, base, "conflicted", "pending").await;
+    let conflict_id = Uuid::now_v7().to_string();
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.proposal_validation_conditions
+               (owner_user_id, project_id, proposal_id, proposal_revision_id,
+                acceptance_receipt_id, validation, conflict_id, condition_kind)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', '{receipt}',
+                     'conflicted', '{conflict_id}', 'proposal_conflict')",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            proposal = proposal.proposal_id,
+            revision = proposal.revision_id,
+            receipt = Uuid::now_v7(),
+        ),
+    )
+    .await;
+    let input = ReplanProposalInput {
+        editor_session_id: EditorSessionId::new(proposal.editor_session_id),
+        proposal_id: proposal.proposal_id,
+        conflicted_proposal_revision_id: proposal.revision_id.clone(),
+        expected_current_proposal_head: proposal.revision_id,
+        expected_authoritative_revision_id: proposal.chapter_head,
+        replacement_operation_id: proposal.operation_id,
+        source_condition: storyos_contracts::ReplanSourceCondition::ProposalConflict {
+            proposal_conflict_ref: conflict_id,
+        },
+    };
+    (scope, input)
+}
+
+/// Moves the Chapter head away from `revision` to the head of the other Chapter.
+async fn move_chapter_head(admin: &Client, scope: &ProjectScope, revision: &str) {
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "UPDATE storyos.authoritative_heads AS head
+                SET current_revision_id = other.current_revision_id
+               FROM storyos.authoritative_heads AS other
+              WHERE (head.owner_user_id, head.project_id) = (other.owner_user_id, other.project_id)
+                AND head.current_revision_id = '{revision}'
+                AND other.current_revision_id <> '{revision}'
+                AND head.project_id = '{project}'",
+            project = scope.project_id.as_ref(),
+        ),
+    )
+    .await;
+}
+
+/// One applicable Replan Proposal in a new Project.
+async fn replan_proposal_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<ReplanProposalInput> {
+    let (scope, input) = conflicted_proposal(store, admin, base).await;
+    issued(store, &scope, base + 9, &REPLAN_PROPOSAL, input).await
 }
 
 /// One applicable Create Volume in a new Project.
@@ -1095,8 +1276,14 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x5eb0).await,
         )
         .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x7240).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 12]);
+    assert_eq!(observed, vec![(true, [0; 5]); 13]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1288,11 +1475,17 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x5fb0).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x7260).await,
+        )
+        .await,
     ];
     let rolled_back = |result| (vec![(true, [0; 5]), (true, [0; 5])], result);
     let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
     expected.push(rolled_back(ReceiptResult::NoEffect));
-    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     assert_eq!(observed, expected);
 }
 
@@ -1421,6 +1614,12 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x6ad0).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x7280).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -1429,7 +1628,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 11]);
+    assert_eq!(observed, vec![separated; 12]);
 }
 
 #[tokio::test]

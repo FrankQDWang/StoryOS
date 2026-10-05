@@ -115,6 +115,7 @@ project_command_request!(
     contracts::ReopenWithdrawnProposalRequest,
     nested reopen_withdrawn_proposal_input
 );
+project_command_request!(contracts::ReplanProposalRequest, nested replan_proposal_input);
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
     fn command_schema(&self) -> &str {
