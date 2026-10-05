@@ -16,8 +16,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
-    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, Structural,
-    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, RateLimitedChallenge,
+    ReplayEffect, Structural, StructureIdentity, StructureWrite, WriterBase,
+    settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 
@@ -38,10 +39,12 @@ pub(crate) struct LiveChapters(Vec<String>);
 impl ProjectCommand for CreateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createChapter",
-        applied_result: AppliedResult::AuthoritativeApplied,
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "chapter_created",
+        replay_effect: ReplayEffect::NoQuery,
     };
     type Profile = Structural;
     type Response = ProjectResponse;
@@ -254,15 +257,16 @@ impl ProjectCommand for CreateChapterInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<ChapterCreated, ReplayFault> {
         let tree_revision = replay.activity_u64("tree_revision")?;
-        let chapter_id = replay.activity_text("chapter_id")?;
-        let resulting_current = replay.activity_text("current_chapter_id")?;
+        let chapter_id = replay.activity_uuid("chapter_id")?;
+        let resulting_current = replay.activity_uuid("current_chapter_id")?;
         let activity_order = replay.activity_u64("order")?;
-        let order = match replay.receipt_text("order") {
-            Some(order) => match order.parse::<u64>() {
-                Ok(0) => return Err(ReplayFault::BindingConflict),
-                Ok(rank) => CreateChapterPublicOrder::CanonicalSiblingOrder(rank),
-                Err(error) => return Err(ReplayFault::Unavailable(Box::new(error))),
-            },
+        let order = match replay.receipt_historical_decimal("order")? {
+            Some(0) => {
+                return Err(ReplayFault::Unavailable(
+                    "the stored sibling order is zero".into(),
+                ));
+            }
+            Some(rank) => CreateChapterPublicOrder::CanonicalSiblingOrder(rank),
             None => CreateChapterPublicOrder::HistoricalCreateChapterAck(activity_order),
         };
         Ok(ChapterCreated {

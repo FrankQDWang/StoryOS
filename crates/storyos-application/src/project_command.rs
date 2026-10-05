@@ -25,6 +25,8 @@ pub enum ProjectCommandError {
     HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
+    /// The Editor Session does not hold the writer generation that the command requires.
+    WriterIneligible,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -37,6 +39,9 @@ impl std::fmt::Display for ProjectCommandError {
             }
             Self::InvalidChallenge => formatter.write_str("The command challenge is invalid"),
             Self::MissingProject => formatter.write_str("The Project is not in exact Scope"),
+            Self::WriterIneligible => {
+                formatter.write_str("The Editor Session is not the required writer")
+            }
             Self::Unavailable(_) => formatter.write_str("The Project store is unavailable"),
         }
     }
@@ -49,7 +54,8 @@ impl std::error::Error for ProjectCommandError {
             Self::BindingConflict
             | Self::HistoricalAcknowledgementUnavailable
             | Self::InvalidChallenge
-            | Self::MissingProject => None,
+            | Self::MissingProject
+            | Self::WriterIneligible => None,
         }
     }
 }
@@ -75,6 +81,13 @@ pub struct ActivityApplied<A> {
     pub effect: A,
     pub project_activity_position: u64,
     pub project_activity_event_id: String,
+}
+
+/// The applied value of an `ActionOnly` command: its effect and its one Forward Author Action.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActionApplied<A> {
+    pub effect: A,
+    pub author_action_sequence: u64,
 }
 
 /// The settled outcome of one Manuscript Structure Transition command.

@@ -1,399 +1,533 @@
+use std::convert::Infallible;
+
 use storyos_application::{
-    DraftCloseError, DraftExpansionSettlement, ExpandRefusedEditDraftCommand,
-    ExpandRefusedEditDraftStore, ProjectCommandChallengeError, ProjectCommandChallengeTransaction,
-    ProjectCommandChallengeUse,
+    DraftCloseObservation, DraftExpanded, DraftExpansionObservation,
+    ExpandRefusedEditDraftSettlement, ExpandRefusedEditDraftToProposalInput,
+    ProjectCommandEnvelope, ProjectCommandError,
 };
-use storyos_core::{DraftCloseSource, ExpandRefusedEditDraftResult, OpenInlineProposal};
+use storyos_core::{
+    DraftCloseSource, ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal,
+    InlineTargetBlock, ManuscriptBlockKind, OpenInlineProposal, PROSEMIRROR_TOKEN_UTF16_V1,
+    ProjectLifecycle, canonical_json, expand_refused_edit_draft, hex_sha256,
+};
+use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
+use crate::close_editor_flow_draft::{check_draft_replay_binding, replayed_draft_observation};
+use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_sequence::{
+    ActionOnly, ActionSequence, Admission, AppliedResult, Classification, CommandIsolation,
+    CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission, NoResponse,
+    ProjectCommand, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, ZeroReceipt,
+    settle_project_command, unavailable,
+};
 
-impl ExpandRefusedEditDraftStore for PostgresProjectReader {
-    async fn expand_refused_edit_draft(
+impl PostgresProjectReader {
+    /// Settles one author expansion of a Refused Edit Draft to an inline edit Proposal.
+    pub async fn expand_refused_edit_draft(
         &self,
-        command: &ExpandRefusedEditDraftCommand,
-    ) -> Result<DraftExpansionSettlement, DraftCloseError> {
-        let mut transaction = self
-            .begin_serializable_project_command_transaction(&command.project_scope)
-            .await
-            .map_err(challenge_error)?;
-        let usage = transaction
-            .consume(&command.challenge_binding, &command.nonce_digest)
-            .await
-            .map_err(challenge_error)?;
-        let result = match usage {
-            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-                read_settlement(&transaction.client, command, &result_reference).await
-            }
-            ProjectCommandChallengeUse::ExactRetryInProgress => {
-                Err(DraftCloseError::BindingConflict)
-            }
-            ProjectCommandChallengeUse::FirstUse => persist(&transaction.client, command).await,
-        };
-        match result {
-            Ok(result) => {
-                transaction.commit().await.map_err(challenge_error)?;
-                Ok(result)
-            }
-            Err(error) => {
-                transaction.rollback().await.map_err(challenge_error)?;
-                Err(error)
-            }
-        }
+        envelope: &ProjectCommandEnvelope,
+        input: &ExpandRefusedEditDraftToProposalInput,
+    ) -> Result<ExpandRefusedEditDraftSettlement, ProjectCommandError> {
+        settle_project_command(self, envelope, input).await
     }
 }
 
-async fn persist(
-    client: &tokio_postgres::Client,
-    command: &ExpandRefusedEditDraftCommand,
-) -> Result<DraftExpansionSettlement, DraftCloseError> {
-    let owner = command.project_scope.owner_user_id.as_ref();
-    let project = command.project_scope.project_id.as_ref();
-    let input = &command.input;
-    let source = client.query_opt("SELECT draft.current_revision_id::text, revision.payload_digest,
-        draft.closure, draft.retention_state, draft.reopen_event_id::text,
-        CASE WHEN draft.retention_state='retained' THEN revision.payload::text END
-        FROM storyos.draft_artifacts AS draft JOIN storyos.projects AS project USING(owner_user_id,project_id)
-        JOIN storyos.draft_artifact_revisions AS revision ON
-        (revision.owner_user_id,revision.project_id,revision.draft_id,revision.revision_id)=
-        (draft.owner_user_id,draft.project_id,draft.draft_id,draft.current_revision_id)
-        WHERE draft.owner_user_id=$1::text::uuid AND draft.project_id=$2::text::uuid
-        AND draft.draft_id=$3::text::uuid AND project.lifecycle_state='active' FOR UPDATE OF project,draft",
-        &[&owner,&project,&command.draft_id]).await.map_err(unavailable)?.ok_or(DraftCloseError::MissingDraft)?;
-    let revision: String = source.get(0);
-    let digest: String = source.get(1);
-    let closure: String = source.get(2);
-    let reopen: Option<String> = source.get(4);
-    insert_admission(client, command).await?;
-    let target = client.query_opt("SELECT head.current_revision_id::text, convert_from(payload.canonical_bytes,'UTF8'),
-        ARRAY(SELECT member.manuscript_block_id::text FROM storyos.manuscript_revision_members AS member
-          WHERE (member.owner_user_id,member.project_id,member.manuscript_object_id,member.revision_id)=
-          (head.owner_user_id,head.project_id,head.manuscript_object_id,head.current_revision_id) ORDER BY member.block_order),
-        EXISTS(SELECT 1 FROM storyos.proposal_operations AS operation WHERE operation.owner_user_id=head.owner_user_id
-          AND operation.project_id=head.project_id AND operation.manuscript_block_id=$4::text::uuid AND operation.reservation_state='unresolved')
-        FROM storyos.authoritative_heads AS head JOIN storyos.authoritative_revisions AS revision ON
-        (revision.owner_user_id,revision.project_id,revision.manuscript_object_id,revision.revision_id)=
-        (head.owner_user_id,head.project_id,head.manuscript_object_id,head.current_revision_id)
-        JOIN storyos.authoritative_payloads AS payload ON
-        (payload.owner_user_id,payload.project_id,payload.payload_id)=(revision.owner_user_id,revision.project_id,revision.payload_id)
-        WHERE head.owner_user_id=$1::text::uuid AND head.project_id=$2::text::uuid AND head.manuscript_object_id=$3::text::uuid
-        AND NOT EXISTS(SELECT 1 FROM storyos.chapter_removal_decisions AS removed WHERE
-          (removed.owner_user_id,removed.project_id,removed.chapter_id)=(head.owner_user_id,head.project_id,head.manuscript_object_id)) FOR UPDATE OF head",
-        &[&owner,&project,&input.chapter_id,&input.target_refs[0]]).await.map_err(unavailable)?;
-    let head = target.as_ref().map(|row| row.get::<_, String>(0));
-    let blocks = target
-        .as_ref()
-        .map(|row| {
-            crate::manuscript_block::blocks_from_stored_payload(
-                &row.get::<_, String>(1),
-                &row.get::<_, Vec<String>>(2),
-            )
-        })
-        .unwrap_or_default();
-    let target = OpenInlineProposal {
-        scope_matches: true,
-        target_block_present: blocks
-            .iter()
-            .any(|block| block.manuscript_block_id == input.target_refs[0]),
-        expected_base_revision_id: input.expected_target_revisions[0].clone(),
-        current_base_revision_id: head.clone(),
-        conflicting_reservation: target.is_some_and(|row| row.get(3)),
-        current_schema_version: 1,
-        current_coordinate_profile: storyos_core::PROSEMIRROR_TOKEN_UTF16_V1.to_owned(),
-        blocks: blocks
-            .into_iter()
-            .map(|block| storyos_core::InlineTargetBlock {
-                manuscript_block_id: block.manuscript_block_id,
-                block_kind: match block.block_kind {
-                    storyos_core::ManuscriptBlockKind::Paragraph => "paragraph",
-                    storyos_core::ManuscriptBlockKind::Heading => "heading",
-                }
-                .to_owned(),
-                text: block.text,
-            })
-            .collect(),
-        anchors: input
-            .anchors
-            .iter()
-            .map(|anchor| storyos_core::OpenInlineProposalAnchor {
-                manuscript_block_id: anchor.manuscript_block_id.clone(),
-                base_authoritative_revision_id: anchor.base_authoritative_revision_id.clone(),
-                manuscript_schema_version: anchor.manuscript_schema_version,
-                coordinate_profile: anchor.coordinate_profile.clone(),
-                from: anchor.from,
-                to: anchor.to,
-                boundary_profile: anchor.boundary_profile.clone(),
-                base_slice_digest: anchor.base_slice_digest.clone(),
-            })
-            .collect(),
-    };
-    let expected = DraftCloseSource {
-        revision: &input.source_current_draft_revision_id,
-        digest: &input.source_draft_payload_digest,
-        reopen_event_id: input.source_reopen_event_id.as_deref(),
-    };
-    let current = DraftCloseSource {
-        revision: &revision,
-        digest: &digest,
-        reopen_event_id: reopen.as_deref(),
-    };
-    let result = match storyos_core::close_editor_flow_draft(
-        &expected,
-        &current,
-        &closure,
-        &source.get::<_, String>(3),
-    ) {
-        storyos_core::CloseEditorFlowDraftResult::Conflicted => {
-            ExpandRefusedEditDraftResult::Conflicted
-        }
-        storyos_core::CloseEditorFlowDraftResult::SourceDraftNotOpen => {
-            ExpandRefusedEditDraftResult::SourceDraftNotOpen
-        }
-        storyos_core::CloseEditorFlowDraftResult::SourceUnavailable => {
-            ExpandRefusedEditDraftResult::SourceUnavailable
-        }
-        storyos_core::CloseEditorFlowDraftResult::DraftClosureChanged => {
-            let payload: serde_json::Value =
-                serde_json::from_str(&source.get::<_, String>(5)).map_err(unavailable)?;
-            if storyos_core::hex_sha256(storyos_core::canonical_json(&payload).as_bytes()) != digest
-            {
-                return Err(DraftCloseError::BindingConflict);
-            }
-            storyos_core::expand_refused_edit_draft(
-                &expected,
-                &current,
-                &closure,
-                "retained",
-                &serde_json::from_value(payload).map_err(unavailable)?,
-                &target,
-            )
-        }
-    };
-    let proposal_id = Uuid::now_v7().to_string();
-    let proposal_revision_id = Uuid::now_v7().to_string();
-    let event_id = Uuid::now_v7().to_string();
-    let (result_kind, reason, replacement) = match &result {
-        ExpandRefusedEditDraftResult::ProposalCreated { replacement } => (
-            "proposal_created_from_draft",
-            "superseded",
-            Some(replacement),
+/// The Receipt payload fields of one expansion outcome, without `reason`.
+///
+/// The Proposal and close event fields are null until an applied outcome sets them.
+fn observation_fields(
+    observation: &DraftExpansionObservation,
+) -> serde_json::Map<String, serde_json::Value> {
+    let draft = &observation.draft;
+    serde_json::Map::from_iter([
+        (
+            "draft_revision_id".to_owned(),
+            draft.draft_revision_id.clone().into(),
         ),
-        ExpandRefusedEditDraftResult::Conflicted => {
-            ("conflicted", "source_or_target_changed", None)
-        }
-        ExpandRefusedEditDraftResult::SourceDraftNotOpen => {
-            ("refused", "source_draft_not_open", None)
-        }
-        ExpandRefusedEditDraftResult::SourceUnavailable => ("refused", "source_unavailable", None),
-        ExpandRefusedEditDraftResult::UnsupportedPayload => {
-            ("refused", "unsupported_payload", None)
-        }
-        ExpandRefusedEditDraftResult::TargetUnavailable => ("refused", "target_unavailable", None),
+        (
+            "payload_digest".to_owned(),
+            draft.payload_digest.clone().into(),
+        ),
+        (
+            "observed_closure".to_owned(),
+            draft.observed_closure.clone().into(),
+        ),
+        (
+            "current_target_revision_id".to_owned(),
+            observation.current_target_revision_id.clone().into(),
+        ),
+        ("event_id".to_owned(), serde_json::Value::Null),
+        ("proposal_id".to_owned(), serde_json::Value::Null),
+        ("proposal_revision_id".to_owned(), serde_json::Value::Null),
+    ])
+}
+
+impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
+    const SPEC: CommandSpec = CommandSpec {
+        kind: "expandRefusedEditDraftToProposal",
+        applied_result: AppliedResult::command("proposal_created_from_draft"),
+        isolation: CommandIsolation::Serializable,
+        missing_admission: MissingAdmission::InvalidWriter,
+        rate_limited: RateLimitedChallenge::InvalidChallenge,
+        // The ActionOnly profile writes no Activity record.
+        activity_kind: "",
+        replay_effect: ReplayEffect::Query(
+            "SELECT jsonb_build_object(
+                      'event_id', event.event_id::text,
+                      'draft_id', event.draft_id::text,
+                      'author_action_sequence', event.author_action_sequence::text,
+                      'close_reason', event.close_reason,
+                      'proposal_id', revision.proposal_id::text,
+                      'proposal_revision_id', revision.revision_id::text,
+                      'candidate_blocks', revision.candidate_blocks::text)::text
+               FROM storyos.draft_close_events AS event
+               JOIN storyos.domain_receipts AS receipt
+                 USING (owner_user_id, project_id, receipt_id)
+          LEFT JOIN storyos.proposal_revisions AS revision
+                 ON (revision.owner_user_id, revision.project_id, revision.proposal_id::text,
+                     revision.revision_id::text) =
+                    (receipt.owner_user_id, receipt.project_id,
+                     receipt.result_payload->>'proposal_id',
+                     receipt.result_payload->>'proposal_revision_id')
+              WHERE event.owner_user_id = $1::text::uuid
+                AND event.project_id = $2::text::uuid
+                AND event.receipt_id = $3::text::uuid",
+        ),
     };
-    let effect = serde_json::json!({"draft_revision_id":revision,"payload_digest":digest,"observed_closure":closure,
-        "current_target_revision_id":head,"reason":reason,"event_id":replacement.map(|_| &event_id),
-        "proposal_id":replacement.map(|_| &proposal_id),"proposal_revision_id":replacement.map(|_| &proposal_revision_id)});
-    persist_effect(client, command, result_kind, &effect, replacement).await?;
-    read_settlement(client, command, &command.ids.receipt_id).await
-}
+    type Profile = ActionOnly;
+    type Response = NoResponse;
+    type ZeroEffect = DraftExpansionObservation;
+    type Applied = ();
+    /// The new Proposal and close event identities and the observation that they settle.
+    type Plan = DraftExpanded;
+    type Effect = DraftExpanded;
+    type NoEffect = Infallible;
+    type Conflict = ExpandRefusedEditDraftConflict;
+    type Refusal = ExpandRefusedEditDraftRefusal;
 
-async fn insert_admission(
-    client: &tokio_postgres::Client,
-    command: &ExpandRefusedEditDraftCommand,
-) -> Result<(), DraftCloseError> {
-    let binding = &command.client_binding;
-    let count = client.execute("WITH command AS (SELECT convert_from($10::bytea,'UTF8')::jsonb AS payload)
-        INSERT INTO storyos.author_command_admissions(owner_user_id,project_id,author_command_admission_id,command_id,
-          editor_session_id,writer_generation,client_session_binding_ref,client_session_generation,client_contract_revision,
-          security_policy_revision,action_class,method,route_template,command_schema,command_kind,canonical_command_digest,
-          idempotency_key,challenge_consumed_at,challenge_expires_at,correlation_id,chapter_object_id,
-          expected_authoritative_revision_id,expected_proposal_head_revision_ids,target_refs,editor_contract_revision,command_payload)
-        SELECT $1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,session.editor_session_id,writer.writer_generation,
-          session.client_session_binding_ref,session.client_session_generation,session.client_contract_revision,session.security_policy_revision,
-          'explicit_editor_command','POST','/api/v1/projects/{project_id}/drafts/{draft_id}/proposal-expansions',
-          command.payload->>'command_schema','expandRefusedEditDraftToProposal',$11,$9::text::uuid,
-          challenge.consumed_at,challenge.expires_at,(input->>'correlation_id')::uuid,(input->>'chapter_id')::uuid,
-          (input->'expected_target_revisions'->>0)::uuid,'{}',ARRAY(SELECT jsonb_array_elements_text(input->'target_refs')),
-          session.client_contract_revision,command.payload
-        FROM command CROSS JOIN LATERAL (SELECT payload->'expand_refused_edit_draft_to_proposal_input' AS input) AS request
-        JOIN storyos.editor_sessions AS session ON session.editor_session_id=(input->>'editor_session_id')::uuid
-        JOIN storyos.project_writer_generations AS writer ON
-          (writer.owner_user_id,writer.project_id,writer.current_editor_session_id)=(session.owner_user_id,session.project_id,session.editor_session_id)
-          AND writer.writer_generation=(input->>'writer_generation')::numeric
-          AND writer.writer_generation=(SELECT max(w.writer_generation) FROM storyos.project_writer_generations AS w
-            WHERE (w.owner_user_id,w.project_id)=(session.owner_user_id,session.project_id))
-        JOIN storyos.project_command_challenges AS challenge ON
-          (challenge.owner_user_id,challenge.project_id,challenge.idempotency_key,challenge.command_kind)=
-          (session.owner_user_id,session.project_id,$9::text::uuid,'expandRefusedEditDraftToProposal')
-        WHERE session.owner_user_id=$1::text::uuid AND session.project_id=$2::text::uuid
-          AND session.client_session_binding_ref=$5 AND session.client_session_generation=$6::text::numeric
-          AND session.client_contract_revision=$7 AND session.security_policy_revision=$8
-          AND challenge.consumed_at IS NOT NULL AND challenge.canonical_command_digest=$11",
-        &[&command.project_scope.owner_user_id.as_ref(),&command.project_scope.project_id.as_ref(),
-          &command.ids.author_command_admission_id,&command.ids.command_id,&binding.binding_ref,
-          &binding.session_generation.to_string(),&binding.client_contract_revision,&binding.security_policy_revision,
-          &command.challenge_binding.idempotency_key,&command.canonical_command_bytes,
-          &command.challenge_binding.canonical_command_digest]).await.map_err(unavailable)?;
-    if count != 1 {
-        return Err(DraftCloseError::InvalidWriter);
-    }
-    Ok(())
-}
-
-async fn persist_effect(
-    client: &tokio_postgres::Client,
-    command: &ExpandRefusedEditDraftCommand,
-    result_kind: &str,
-    effect: &serde_json::Value,
-    replacement: Option<&Vec<storyos_core::ReplacementBlock>>,
-) -> Result<(), DraftCloseError> {
-    let context = serde_json::json!({"owner":command.project_scope.owner_user_id.as_ref(),
-        "project":command.project_scope.project_id.as_ref(),"receipt":command.ids.receipt_id,
-        "admission":command.ids.author_command_admission_id,"command":command.ids.command_id,
-        "digest":command.challenge_binding.canonical_command_digest,"key":command.challenge_binding.idempotency_key,
-        "draft":command.draft_id,"input":command.input,"effect":effect,"result":result_kind,
-        "blocks":replacement,"candidate":replacement.map(|blocks| blocks.iter().map(|block| block.text.as_str()).collect::<Vec<_>>().join("\n")),
-        "operation":Uuid::now_v7().to_string()}).to_string();
-    client.execute("WITH context AS (SELECT $1::text::jsonb AS c), ids AS (
-        SELECT c,(c->>'owner')::uuid AS owner,(c->>'project')::uuid AS project,(c->>'receipt')::uuid AS receipt,
-          (c->'effect'->>'proposal_id')::uuid AS proposal,(c->'effect'->>'proposal_revision_id')::uuid AS revision,
-          (c->'effect'->>'event_id')::uuid AS event,(c->>'draft')::uuid AS draft,(c->>'operation')::uuid AS operation FROM context),
-        counter AS (UPDATE storyos.scope_counters SET author_action_sequence=author_action_sequence+1
-          FROM ids WHERE owner_user_id=ids.owner AND project_id=ids.project AND c->>'result'='proposal_created_from_draft'
-          RETURNING author_action_sequence),
-        proposal AS (INSERT INTO storyos.proposals(owner_user_id,project_id,proposal_id,kind,chapter_id,manuscript_block_id,
-          source_draft_id,source_draft_revision_id,source_draft_payload_digest)
-          SELECT owner,project,proposal,'inline_edit',(c->'input'->>'chapter_id')::uuid,(c->'input'->'target_refs'->>0)::uuid,
-          draft,(c->'effect'->>'draft_revision_id')::uuid,c->'effect'->>'payload_digest' FROM ids WHERE proposal IS NOT NULL),
-        revision AS (INSERT INTO storyos.proposal_revisions(owner_user_id,project_id,proposal_id,revision_id,generation,validation,
-          closure,candidate_text,candidate_blocks,base_authoritative_revision_id)
-          SELECT owner,project,proposal,revision,'ready','pending','open',c->>'candidate',c->'blocks',
-          (c->'effect'->>'current_target_revision_id')::uuid FROM ids WHERE proposal IS NOT NULL),
-        head AS (INSERT INTO storyos.proposal_heads SELECT owner,project,proposal,revision FROM ids WHERE proposal IS NOT NULL),
-        operation AS (INSERT INTO storyos.proposal_operations(owner_user_id,project_id,proposal_id,operation_id,
-          manuscript_block_id,resolution,reservation_state,candidate_text,candidate_blocks)
-          SELECT owner,project,proposal,operation,(c->'input'->'target_refs'->>0)::uuid,'pending','unresolved',c->>'candidate',c->'blocks'
-          FROM ids WHERE proposal IS NOT NULL),
-        anchor AS (INSERT INTO storyos.proposal_anchors(owner_user_id,project_id,proposal_id,operation_id,anchor_order,
-          manuscript_block_id,base_authoritative_revision_id,manuscript_schema_version,coordinate_profile,range_from,range_to,boundary_profile,base_slice_digest)
-          SELECT owner,project,proposal,operation,1,(a->>'manuscript_block_id')::uuid,(a->>'base_authoritative_revision_id')::uuid,
-          (a->>'manuscript_schema_version')::integer,a->>'coordinate_profile',(a->>'from')::integer,(a->>'to')::integer,
-          a->>'boundary_profile',a->>'base_slice_digest' FROM ids CROSS JOIN LATERAL
-          (SELECT c->'input'->'anchors'->0 AS a) AS source WHERE proposal IS NOT NULL),
-        receipt AS (INSERT INTO storyos.domain_receipts(owner_user_id,project_id,receipt_id,author_command_admission_id,command_id,
-          command_kind,command_digest,idempotency_key,producer_cause,expected_heads,prior_heads,resulting_heads,
-          authoritative_revision_ids,proposal_revision_ids,authoritative_commit_ids,draft_artifact_refs,artifact_lifecycle_event_refs,
-          condition_refs,result_kind,result_payload,source_draft_disposition)
-          SELECT owner,project,receipt,(c->>'admission')::uuid,(c->>'command')::uuid,'expandRefusedEditDraftToProposal',c->>'digest',
-          (c->>'key')::uuid,'author_command_admission',ARRAY(SELECT jsonb_array_elements_text(c->'input'->'expected_target_revisions'))::uuid[],
-          CASE WHEN c->'effect'->>'current_target_revision_id' IS NULL THEN '{}'::uuid[] ELSE ARRAY[(c->'effect'->>'current_target_revision_id')::uuid] END,
-          CASE WHEN c->'effect'->>'current_target_revision_id' IS NULL THEN '{}'::uuid[] ELSE ARRAY[(c->'effect'->>'current_target_revision_id')::uuid] END,
-          '{}',CASE WHEN revision IS NULL THEN '{}'::uuid[] ELSE ARRAY[revision] END,'{}',ARRAY[draft::text],
-          CASE WHEN event IS NULL THEN '{}'::text[] ELSE ARRAY[event::text] END,'{}',c->>'result',c->'effect',
-          CASE WHEN event IS NULL THEN NULL ELSE jsonb_build_object('kind','closed_superseded','source_draft_kind','refused_edit',
-          'source_draft_id',draft::text,'source_draft_revision_id',c->'effect'->>'draft_revision_id',
-          'source_draft_payload_digest',c->'effect'->>'payload_digest','prior_closure','open','resulting_closure','closed',
-          'close_reason','superseded','closure_event_ref',event::text) END FROM ids RETURNING created_at),
-        action AS (INSERT INTO storyos.author_action_entries(owner_user_id,project_id,author_action_sequence,disposition,receipt_id,receipt_result_kind)
-          SELECT owner,project,author_action_sequence,'forward',ids.receipt,'proposal_created_from_draft' FROM ids CROSS JOIN counter),
-        closed AS (INSERT INTO storyos.draft_close_events(owner_user_id,project_id,event_id,draft_id,revision_id,payload_digest,
-          receipt_id,receipt_result_kind,author_action_sequence,created_at,close_reason)
-          SELECT owner,project,event,draft,(c->'effect'->>'draft_revision_id')::uuid,c->'effect'->>'payload_digest',ids.receipt,
-          'proposal_created_from_draft',author_action_sequence,created_at,'superseded' FROM ids CROSS JOIN counter CROSS JOIN receipt),
-        draft AS (UPDATE storyos.draft_artifacts SET closure='closed',close_event_id=event,reopen_event_id=NULL FROM ids
-          WHERE owner_user_id=owner AND project_id=project AND draft_id=draft AND event IS NOT NULL),
-        settled AS (INSERT INTO storyos.author_command_admission_settlements(owner_user_id,project_id,author_command_admission_id,settlement_kind,receipt_id)
-          SELECT owner,project,(c->>'admission')::uuid,'receipt_settled',receipt FROM ids)
-        UPDATE storyos.command_idempotency SET outcome_kind='settled',result_reference=receipt::text FROM ids
-          WHERE owner_user_id=owner AND project_id=project AND command_kind='expandRefusedEditDraftToProposal'
-          AND idempotency_key=(c->>'key')::uuid", &[&context]).await.map_err(unavailable)?;
-    Ok(())
-}
-
-fn challenge_error(error: ProjectCommandChallengeError) -> DraftCloseError {
-    match error {
-        ProjectCommandChallengeError::BindingConflict => DraftCloseError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired
-        | ProjectCommandChallengeError::RateLimited { .. } => DraftCloseError::InvalidChallenge,
-        ProjectCommandChallengeError::Unavailable(error) => DraftCloseError::Unavailable(error),
-    }
-}
-
-async fn read_settlement(
-    client: &tokio_postgres::Client,
-    command: &ExpandRefusedEditDraftCommand,
-    receipt_id: &str,
-) -> Result<DraftExpansionSettlement, DraftCloseError> {
-    let row = client.query_opt("SELECT receipt.command_id::text,receipt.author_command_admission_id::text,
-        admission.correlation_id::text,receipt.result_kind,receipt.result_payload::text,action.author_action_sequence::text,
-        to_char(receipt.created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),revision.candidate_blocks::text
-        FROM storyos.domain_receipts AS receipt JOIN storyos.author_command_admissions AS admission
-          USING(owner_user_id,project_id,author_command_admission_id,command_id)
-        JOIN storyos.author_command_admission_settlements AS settled USING(owner_user_id,project_id,author_command_admission_id,receipt_id)
-        LEFT JOIN storyos.author_action_entries AS action USING(owner_user_id,project_id,receipt_id)
-        LEFT JOIN storyos.proposal_revisions AS revision ON
-          (revision.owner_user_id,revision.project_id,revision.proposal_id::text,revision.revision_id::text)=
-          (receipt.owner_user_id,receipt.project_id,receipt.result_payload->>'proposal_id',receipt.result_payload->>'proposal_revision_id')
-        WHERE receipt.owner_user_id=$1::text::uuid AND receipt.project_id=$2::text::uuid AND receipt.receipt_id=$3::text::uuid
-          AND receipt.command_kind='expandRefusedEditDraftToProposal' AND receipt.command_digest=$4 AND receipt.idempotency_key=$5::text::uuid
-          AND admission.command_payload=$6::text::jsonb AND admission.command_kind=receipt.command_kind
-          AND admission.canonical_command_digest=receipt.command_digest AND admission.idempotency_key=receipt.idempotency_key
-          AND settled.settlement_kind='receipt_settled' AND receipt.draft_artifact_refs=ARRAY[$7::text]
-          AND ((receipt.result_kind='proposal_created_from_draft' AND action.disposition='forward' AND revision.revision_id IS NOT NULL
-            AND EXISTS(SELECT 1 FROM storyos.draft_close_events AS event WHERE
-              (event.owner_user_id,event.project_id,event.receipt_id,event.author_action_sequence)=
-              (receipt.owner_user_id,receipt.project_id,receipt.receipt_id,action.author_action_sequence)
-              AND event.event_id::text=receipt.result_payload->>'event_id' AND event.draft_id::text=$7 AND event.close_reason='superseded'))
-            OR (receipt.result_kind IN ('refused','conflicted') AND action.receipt_id IS NULL))",
-        &[&command.project_scope.owner_user_id.as_ref(),&command.project_scope.project_id.as_ref(),&receipt_id,
-          &command.challenge_binding.canonical_command_digest,&command.challenge_binding.idempotency_key,
-          &String::from_utf8_lossy(&command.canonical_command_bytes).as_ref(),&command.draft_id])
-        .await.map_err(unavailable)?.ok_or(DraftCloseError::BindingConflict)?;
-    let payload: serde_json::Value =
-        serde_json::from_str(&row.get::<_, String>(4)).map_err(unavailable)?;
-    let text = |field: &str| payload[field].as_str().map(str::to_owned);
-    let result = match (row.get::<_, String>(3).as_str(), payload["reason"].as_str()) {
-        ("proposal_created_from_draft", Some("superseded")) => {
-            ExpandRefusedEditDraftResult::ProposalCreated {
-                replacement: serde_json::from_str(
-                    &row.get::<_, Option<String>>(7)
-                        .ok_or(DraftCloseError::BindingConflict)?,
+    async fn classify(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+    ) -> Result<Classification<Self>, ProjectCommandError> {
+        match project.lifecycle {
+            ProjectLifecycle::Active => {}
+            ProjectLifecycle::Archived => return Err(ProjectCommandError::MissingProject),
+        }
+        let scope = &envelope.project_scope;
+        let owner_user_id = scope.owner_user_id.as_ref();
+        let project_id = scope.project_id.as_ref();
+        let source = client
+            .query_opt(
+                "SELECT draft.current_revision_id::text, revision.payload_digest, draft.closure,
+                        draft.retention_state,
+                        CASE WHEN draft.retention_state = 'retained'
+                             THEN revision.payload::text END,
+                        draft.reopen_event_id::text
+                   FROM storyos.draft_artifacts AS draft
+                   JOIN storyos.draft_artifact_revisions AS revision
+                     ON (revision.owner_user_id, revision.project_id, revision.draft_id,
+                         revision.revision_id) =
+                        (draft.owner_user_id, draft.project_id, draft.draft_id,
+                         draft.current_revision_id)
+                  WHERE draft.owner_user_id = $1::text::uuid
+                    AND draft.project_id = $2::text::uuid
+                    AND draft.draft_id = $3::text::uuid
+                    FOR UPDATE OF draft",
+                &[&owner_user_id, &project_id, &self.draft_id],
+            )
+            .await
+            .map_err(unavailable)?
+            .ok_or(ProjectCommandError::MissingProject)?;
+        let draft = DraftCloseObservation {
+            draft_revision_id: source.get(/*idx*/ 0),
+            payload_digest: source.get(/*idx*/ 1),
+            observed_closure: source.get(/*idx*/ 2),
+        };
+        let retention: String = source.get(/*idx*/ 3);
+        let reopen_event_id: Option<String> = source.get(/*idx*/ 5);
+        let target = client
+            .query_opt(
+                "SELECT head.current_revision_id::text,
+                        convert_from(payload.canonical_bytes, 'UTF8'),
+                        ARRAY(SELECT member.manuscript_block_id::text
+                                FROM storyos.manuscript_revision_members AS member
+                               WHERE (member.owner_user_id, member.project_id,
+                                      member.manuscript_object_id, member.revision_id) =
+                                     (head.owner_user_id, head.project_id,
+                                      head.manuscript_object_id, head.current_revision_id)
+                               ORDER BY member.block_order),
+                        EXISTS(SELECT 1 FROM storyos.proposal_operations AS operation
+                                WHERE operation.owner_user_id = head.owner_user_id
+                                  AND operation.project_id = head.project_id
+                                  AND operation.manuscript_block_id = $4::text::uuid
+                                  AND operation.reservation_state = 'unresolved')
+                   FROM storyos.authoritative_heads AS head
+                   JOIN storyos.authoritative_revisions AS revision
+                     ON (revision.owner_user_id, revision.project_id,
+                         revision.manuscript_object_id, revision.revision_id) =
+                        (head.owner_user_id, head.project_id, head.manuscript_object_id,
+                         head.current_revision_id)
+                   JOIN storyos.authoritative_payloads AS payload
+                     ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                        (revision.owner_user_id, revision.project_id, revision.payload_id)
+                  WHERE head.owner_user_id = $1::text::uuid
+                    AND head.project_id = $2::text::uuid
+                    AND head.manuscript_object_id = $3::text::uuid
+                    AND NOT EXISTS(
+                      SELECT 1 FROM storyos.chapter_removal_decisions AS removed
+                       WHERE (removed.owner_user_id, removed.project_id, removed.chapter_id) =
+                             (head.owner_user_id, head.project_id, head.manuscript_object_id))
+                    FOR UPDATE OF head",
+                &[
+                    &owner_user_id,
+                    &project_id,
+                    &self.chapter_id,
+                    &self.target_ref,
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        let current_target_revision_id =
+            target.as_ref().map(|row| row.get::<_, String>(/*idx*/ 0));
+        let blocks = target
+            .as_ref()
+            .map(|row| {
+                crate::manuscript_block::blocks_from_stored_payload(
+                    &row.get::<_, String>(/*idx*/ 1),
+                    &row.get::<_, Vec<String>>(/*idx*/ 2),
                 )
-                .map_err(unavailable)?,
-            }
+            })
+            .unwrap_or_default();
+        let inline = OpenInlineProposal {
+            scope_matches: true,
+            target_block_present: blocks
+                .iter()
+                .any(|block| block.manuscript_block_id == self.target_ref),
+            expected_base_revision_id: self.expected_target_revision_id.clone(),
+            current_base_revision_id: current_target_revision_id.clone(),
+            conflicting_reservation: target.is_some_and(|row| row.get(/*idx*/ 3)),
+            current_schema_version: 1,
+            current_coordinate_profile: PROSEMIRROR_TOKEN_UTF16_V1.to_owned(),
+            blocks: blocks
+                .into_iter()
+                .map(|block| InlineTargetBlock {
+                    manuscript_block_id: block.manuscript_block_id,
+                    block_kind: match block.block_kind {
+                        ManuscriptBlockKind::Paragraph => "paragraph",
+                        ManuscriptBlockKind::Heading => "heading",
+                    }
+                    .to_owned(),
+                    text: block.text,
+                })
+                .collect(),
+            anchors: vec![self.anchor.clone()],
+        };
+        let outcome = expand_refused_edit_draft(
+            &DraftCloseSource {
+                revision: &self.source_current_draft_revision_id,
+                digest: &self.source_draft_payload_digest,
+                reopen_event_id: self.source_reopen_event_id.as_deref(),
+            },
+            &DraftCloseSource {
+                revision: &draft.draft_revision_id,
+                digest: &draft.payload_digest,
+                reopen_event_id: reopen_event_id.as_deref(),
+            },
+            &draft.observed_closure,
+            &retention,
+            || {
+                let payload: serde_json::Value = serde_json::from_str(
+                    &source
+                        .get::<_, Option<String>>(/*idx*/ 4)
+                        .ok_or_else(|| unavailable("the retained Draft has no payload"))?,
+                )
+                .map_err(unavailable)?;
+                if hex_sha256(canonical_json(&payload).as_bytes()) != draft.payload_digest {
+                    return Err(ProjectCommandError::BindingConflict);
+                }
+                serde_json::from_value(payload).map_err(unavailable)
+            },
+            &inline,
+        )?;
+        // The Draft settlement records need the canonical text of the Draft identity.
+        if Uuid::parse_str(&self.draft_id)
+            .map_err(unavailable)?
+            .to_string()
+            != self.draft_id
+        {
+            return Err(ProjectCommandError::BindingConflict);
         }
-        ("conflicted", Some("source_or_target_changed")) => {
-            ExpandRefusedEditDraftResult::Conflicted
+        let observation = DraftExpansionObservation {
+            draft,
+            current_target_revision_id,
+        };
+        let heads = observation
+            .current_target_revision_id
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        Ok(Classification {
+            zero_receipt: ZeroReceipt::Observed {
+                fields: observation_fields(&observation),
+                refs: ReceiptRefs {
+                    draft_artifact_refs: vec![self.draft_id.clone()],
+                    ..ReceiptRefs::default()
+                },
+                effect: observation.clone(),
+            },
+            outcome: outcome.map_applied(|candidate_blocks| {
+                (
+                    (),
+                    DraftExpanded {
+                        observation,
+                        event_id: Uuid::now_v7().to_string(),
+                        proposal_id: Uuid::now_v7().to_string(),
+                        proposal_revision_id: Uuid::now_v7().to_string(),
+                        candidate_blocks,
+                    },
+                )
+            }),
+            admission: Admission::ExplicitEditorCommand(EditorAdmission {
+                editor_session_id: self.editor_session_id.as_ref().to_owned(),
+                chapter_object_id: Some(self.chapter_id.clone()),
+                expected_authoritative_revision_id: Some(self.expected_target_revision_id.clone()),
+                target_refs: vec![self.target_ref.clone()],
+                writer: EditorWriter::ClientGeneration(self.writer_generation),
+            }),
+            heads: ReceiptHeads {
+                expected: vec![self.expected_target_revision_id.clone()],
+                prior: heads.clone(),
+                resulting: heads,
+            },
+        })
+    }
+
+    fn applied_receipt_payload(&self, _applied: &(), expanded: &DraftExpanded) -> String {
+        let mut fields = observation_fields(&expanded.observation);
+        fields.insert("reason".to_owned(), "superseded".into());
+        fields.insert("event_id".to_owned(), expanded.event_id.clone().into());
+        fields.insert(
+            "proposal_id".to_owned(),
+            expanded.proposal_id.clone().into(),
+        );
+        fields.insert(
+            "proposal_revision_id".to_owned(),
+            expanded.proposal_revision_id.clone().into(),
+        );
+        serde_json::Value::Object(fields).to_string()
+    }
+
+    fn applied_receipt_refs(&self, _applied: &(), expanded: &DraftExpanded) -> ReceiptRefs {
+        let draft = &expanded.observation.draft;
+        ReceiptRefs {
+            proposal_revision_ids: vec![expanded.proposal_revision_id.clone()],
+            draft_artifact_refs: vec![self.draft_id.clone()],
+            artifact_lifecycle_event_refs: vec![expanded.event_id.clone()],
+            source_draft_disposition: Some(
+                serde_json::json!({
+                    "kind": "closed_superseded",
+                    "source_draft_kind": "refused_edit",
+                    "source_draft_id": self.draft_id,
+                    "source_draft_revision_id": draft.draft_revision_id,
+                    "source_draft_payload_digest": draft.payload_digest,
+                    "prior_closure": "open",
+                    "resulting_closure": "closed",
+                    "close_reason": "superseded",
+                    "closure_event_ref": expanded.event_id,
+                })
+                .to_string(),
+            ),
         }
-        ("refused", Some("source_draft_not_open")) => {
-            ExpandRefusedEditDraftResult::SourceDraftNotOpen
+    }
+
+    async fn apply(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        _project: &LockedProject,
+        ActionSequence(sequence): &ActionSequence,
+        expanded: DraftExpanded,
+        _applied: (),
+    ) -> Result<DraftExpanded, ProjectCommandError> {
+        let scope = &envelope.project_scope;
+        let owner_user_id = scope.owner_user_id.as_ref();
+        let project_id = scope.project_id.as_ref();
+        let draft = &expanded.observation.draft;
+        let candidate_text = expanded
+            .candidate_blocks
+            .iter()
+            .map(|block| block.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let candidate_blocks =
+            serde_json::to_string(&expanded.candidate_blocks).map_err(unavailable)?;
+        let anchor = &self.anchor;
+        client
+            .execute(
+                "WITH proposal AS (
+                   INSERT INTO storyos.proposals
+                     (owner_user_id, project_id, proposal_id, kind, chapter_id,
+                      manuscript_block_id, source_draft_id, source_draft_revision_id,
+                      source_draft_payload_digest)
+                   VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'inline_edit',
+                           $6::text::uuid, $7::text::uuid, $8::text::uuid, $9::text::uuid, $10)
+                 ), revision AS (
+                   INSERT INTO storyos.proposal_revisions
+                     (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
+                      closure, candidate_text, candidate_blocks, base_authoritative_revision_id)
+                   VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                           'ready', 'pending', 'open', $11, $12::text::jsonb, $13::text::uuid)
+                 ), head AS (
+                   INSERT INTO storyos.proposal_heads
+                     (owner_user_id, project_id, proposal_id, current_revision_id)
+                   VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)
+                 ), operation AS (
+                   INSERT INTO storyos.proposal_operations
+                     (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                      resolution, reservation_state, candidate_text, candidate_blocks)
+                   VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $5::text::uuid,
+                           $7::text::uuid, 'pending', 'unresolved', $11, $12::text::jsonb)
+                 )
+                 INSERT INTO storyos.proposal_anchors
+                   (owner_user_id, project_id, proposal_id, operation_id, anchor_order,
+                    manuscript_block_id, base_authoritative_revision_id,
+                    manuscript_schema_version, coordinate_profile, range_from, range_to,
+                    boundary_profile, base_slice_digest)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $5::text::uuid, 1,
+                         $14::text::uuid, $15::text::uuid, $16::text::integer, $17,
+                         $18::text::integer, $19::text::integer, $20, $21)",
+                &[
+                    &owner_user_id,
+                    &project_id,
+                    &expanded.proposal_id,
+                    &expanded.proposal_revision_id,
+                    &Uuid::now_v7().to_string(),
+                    &self.chapter_id,
+                    &self.target_ref,
+                    &self.draft_id,
+                    &draft.draft_revision_id,
+                    &draft.payload_digest,
+                    &candidate_text,
+                    &candidate_blocks,
+                    &expanded.observation.current_target_revision_id,
+                    &anchor.manuscript_block_id,
+                    &anchor.base_authoritative_revision_id,
+                    &anchor.manuscript_schema_version.to_string(),
+                    &anchor.coordinate_profile,
+                    &anchor.from.to_string(),
+                    &anchor.to.to_string(),
+                    &anchor.boundary_profile,
+                    &anchor.base_slice_digest,
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        client
+            .execute(
+                "INSERT INTO storyos.draft_close_events
+                   (owner_user_id, project_id, event_id, draft_id, revision_id, payload_digest,
+                    receipt_id, receipt_result_kind, author_action_sequence, created_at,
+                    close_reason)
+                 SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                        $5::text::uuid, $6, receipt.receipt_id, receipt.result_kind,
+                        $8::text::numeric, receipt.created_at, 'superseded'
+                   FROM storyos.domain_receipts AS receipt
+                  WHERE receipt.owner_user_id = $1::text::uuid
+                    AND receipt.project_id = $2::text::uuid
+                    AND receipt.receipt_id = $7::text::uuid",
+                &[
+                    &owner_user_id,
+                    &project_id,
+                    &expanded.event_id,
+                    &self.draft_id,
+                    &draft.draft_revision_id,
+                    &draft.payload_digest,
+                    &envelope.ids.receipt_id,
+                    &sequence.to_string(),
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        client
+            .execute(
+                "UPDATE storyos.draft_artifacts
+                    SET closure = 'closed', close_event_id = $4::text::uuid,
+                        reopen_event_id = NULL
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND draft_id = $3::text::uuid",
+                &[
+                    &owner_user_id,
+                    &project_id,
+                    &self.draft_id,
+                    &expanded.event_id,
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
+        Ok(expanded)
+    }
+
+    fn check_replay_binding(&self, replay: &CommandReplay) -> Result<(), ReplayFault> {
+        check_draft_replay_binding(&self.draft_id, replay)
+    }
+
+    fn decode(&self, replay: &CommandReplay) -> Result<DraftExpanded, ReplayFault> {
+        let observation = DraftExpansionObservation {
+            draft: replayed_draft_observation(replay)?,
+            current_target_revision_id: replay
+                .receipt_nullable_uuid("current_target_revision_id")?,
+        };
+        let damaged =
+            || ReplayFault::Unavailable("the Draft expansion effect does not match".into());
+        if observation.current_target_revision_id.is_none() {
+            return Err(ReplayFault::Unavailable(
+                "the applied Draft expansion Receipt has no target Revision".into(),
+            ));
         }
-        ("refused", Some("source_unavailable")) => ExpandRefusedEditDraftResult::SourceUnavailable,
-        ("refused", Some("unsupported_payload")) => {
-            ExpandRefusedEditDraftResult::UnsupportedPayload
+        let event_id = replay.receipt_uuid("event_id")?;
+        let proposal_id = replay.receipt_uuid("proposal_id")?;
+        let proposal_revision_id = replay.receipt_uuid("proposal_revision_id")?;
+        replay.require_receipt_text("reason", "superseded")?;
+        if replay.effect_text("event_id")?.as_ref() != Some(&event_id)
+            || replay.effect_text("draft_id")?.as_ref() != Some(&self.draft_id)
+            || replay.effect_text("author_action_sequence")? != replay.author_action_sequence
+            || replay.effect_text("close_reason")?.as_deref() != Some("superseded")
+            || replay.effect_text("proposal_id")?.as_ref() != Some(&proposal_id)
+            || replay.effect_text("proposal_revision_id")?.as_ref() != Some(&proposal_revision_id)
+        {
+            return Err(damaged());
         }
-        ("refused", Some("target_unavailable")) => ExpandRefusedEditDraftResult::TargetUnavailable,
-        _ => return Err(DraftCloseError::BindingConflict),
-    };
-    Ok(DraftExpansionSettlement {
-        ids: storyos_application::AuthorCommandAdmissionIds {
-            command_id: row.get(0),
-            author_command_admission_id: row.get(1),
-            receipt_id: receipt_id.to_owned(),
-        },
-        correlation_id: row.get(2),
-        draft_revision_id: text("draft_revision_id").ok_or(DraftCloseError::BindingConflict)?,
-        payload_digest: text("payload_digest").ok_or(DraftCloseError::BindingConflict)?,
-        observed_closure: text("observed_closure").ok_or(DraftCloseError::BindingConflict)?,
-        event_id: text("event_id"),
-        author_action_sequence: row.get(5),
-        created_at: row.get(6),
-        result,
-        proposal_id: text("proposal_id"),
-        proposal_revision_id: text("proposal_revision_id"),
-        current_target_revision_id: text("current_target_revision_id"),
-    })
-}
-fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> DraftCloseError {
-    DraftCloseError::Unavailable(Box::new(error))
+        let candidate_blocks = serde_json::from_str(
+            &replay
+                .effect_text("candidate_blocks")?
+                .ok_or_else(damaged)?,
+        )
+        .map_err(|error| ReplayFault::Unavailable(Box::new(error)))?;
+        Ok(DraftExpanded {
+            observation,
+            event_id,
+            proposal_id,
+            proposal_revision_id,
+            candidate_blocks,
+        })
+    }
+
+    fn decode_zero_authority_effect(
+        &self,
+        replay: &CommandReplay,
+    ) -> Result<Option<DraftExpansionObservation>, ReplayFault> {
+        let observation = DraftExpansionObservation {
+            draft: replayed_draft_observation(replay)?,
+            current_target_revision_id: replay
+                .receipt_nullable_uuid("current_target_revision_id")?,
+        };
+        for key in ["event_id", "proposal_id", "proposal_revision_id"] {
+            replay.require_receipt_null(key)?;
+        }
+        Ok(Some(observation))
+    }
 }

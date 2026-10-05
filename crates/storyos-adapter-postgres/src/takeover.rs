@@ -16,8 +16,8 @@ use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedResult, Classification,
     CommandIsolation, CommandSpec, LockedProject, MissingAdmission, NoResponse, ProjectCommand,
-    ReceiptHeads, TakeoverAdmission, ZeroAuthorityWrite, ZeroOutcome, settle_project_command,
-    unavailable,
+    RateLimitedChallenge, ReceiptHeads, ReplayEffect, TakeoverAdmission, ZeroAuthorityRows,
+    ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
 
 impl PostgresProjectReader {
@@ -83,10 +83,12 @@ async fn load_takeover_facts(
 impl ProjectCommand for TakeOverProjectWriterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "takeOverProjectWriter",
-        applied_result: AppliedResult::AuthoritativeApplied,
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::BindingConflict,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "writer_takeover_applied",
+        replay_effect: ReplayEffect::NoQuery,
     };
     type Profile = ActivityOnly;
     type Response = NoResponse;
@@ -131,6 +133,7 @@ impl ProjectCommand for TakeOverProjectWriterInput {
                 prior: vec![head.clone()],
                 resulting: vec![head],
             },
+            zero_receipt: ZeroReceipt::Reason,
         })
     }
 
@@ -146,19 +149,28 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         match applied {}
     }
 
+    fn check_replay_binding(&self, replay: &CommandReplay) -> Result<(), ReplayFault> {
+        if !replay.fence_digest_matches {
+            return Err(ReplayFault::BindingConflict);
+        }
+        Ok(())
+    }
+
     fn decode(&self, _replay: &CommandReplay) -> Result<Infallible, ReplayFault> {
         Err(ReplayFault::BindingConflict)
     }
 
-    fn writes_zero_authority_effect(&self, outcome: &ZeroOutcome<'_, Self>) -> bool {
+    fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
         match outcome {
-            ZeroOutcome::NoEffect(TakeOverProjectWriterNoEffect::WriterTakeoverApplied) => true,
+            ZeroOutcome::NoEffect(TakeOverProjectWriterNoEffect::WriterTakeoverApplied) => {
+                ZeroAuthorityRows::EffectWithActivity
+            }
             ZeroOutcome::Conflicted(reason) => match **reason {},
             ZeroOutcome::Refused(reason) => match **reason {},
         }
     }
 
-    async fn write_zero_authority_effect(
+    async fn write_zero_authority_activity(
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
@@ -271,30 +283,18 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         &self,
         replay: &CommandReplay,
     ) -> Result<Option<WriterTakeover>, ReplayFault> {
-        if !replay.fence_digest_matches {
-            return Err(ReplayFault::BindingConflict);
-        }
-        let text = |key: &str| {
-            replay.activity_optional_text(key).ok_or_else(|| {
-                ReplayFault::Unavailable(format!("the takeover Activity has no {key}").into())
-            })
-        };
-        let number = |key: &str| -> Result<u64, ReplayFault> {
-            text(key)?
-                .parse()
-                .map_err(|error| ReplayFault::Unavailable(Box::new(error)))
-        };
         let [resulting_head] =
             <[String; 1]>::try_from(replay.resulting_heads.clone()).map_err(|_| {
                 ReplayFault::Unavailable("the takeover Receipt has no single head".into())
             })?;
         Ok(Some(WriterTakeover {
-            prior_editor_session_id: text("prior_editor_session_id")?,
-            prior_writer_generation: number("prior_writer_generation")?,
-            resulting_editor_session_id: text("resulting_editor_session_id")?,
-            resulting_writer_generation: number("resulting_writer_generation")?,
-            resulting_snapshot_id: text("resulting_snapshot_id")?,
-            resulting_snapshot_activity_position: number("resulting_snapshot_activity_position")?,
+            prior_editor_session_id: replay.activity_uuid("prior_editor_session_id")?,
+            prior_writer_generation: replay.activity_u64("prior_writer_generation")?,
+            resulting_editor_session_id: replay.activity_uuid("resulting_editor_session_id")?,
+            resulting_writer_generation: replay.activity_u64("resulting_writer_generation")?,
+            resulting_snapshot_id: replay.activity_uuid("resulting_snapshot_id")?,
+            resulting_snapshot_activity_position: replay
+                .activity_u64("resulting_snapshot_activity_position")?,
             resulting_head,
         }))
     }

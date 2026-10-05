@@ -1,5 +1,10 @@
 //! Classify one explicit Rejection without changing Authoritative State.
 
+use std::convert::Infallible;
+
+use super::TransitionOutcome;
+use crate::transition_outcome::reason_codes;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RejectProposalOperations {
     pub scope_matches: bool,
@@ -13,16 +18,12 @@ pub struct RejectProposalOperations {
     pub expected_target_matches_head: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum RejectProposalOperationsResult {
-    Resolved,
-    Conflicted {
-        reason: RejectProposalOperationsConflict,
-    },
-    Refused {
-        reason: RejectProposalOperationsRefusal,
-    },
-}
+pub type RejectProposalOperationsResult = TransitionOutcome<
+    (),
+    Infallible,
+    RejectProposalOperationsConflict,
+    RejectProposalOperationsRefusal,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RejectProposalOperationsRefusal {
@@ -41,56 +42,54 @@ pub enum RejectProposalOperationsConflict {
     ChangedHead,
 }
 
+reason_codes!(RejectProposalOperationsConflict { ChangedHead => "changed_head" });
+reason_codes!(RejectProposalOperationsRefusal {
+    WrongScope => "wrong_scope",
+    WrongAdmission => "wrong_admission",
+    StaleProposalRevision => "stale_proposal_revision",
+    NotEligible => "not_eligible",
+    OperationNotPending => "operation_not_pending",
+    DuplicateIdentities => "duplicate_identities",
+    MissingRequiredDependencies => "missing_required_dependencies",
+    IncompleteBundleClosure => "incomplete_bundle_closure",
+});
+
 /// Classify one explicit Rejection against Scope, Admission, current Revision, and Head.
 pub fn reject_proposal_operations(
     command: &RejectProposalOperations,
 ) -> RejectProposalOperationsResult {
     if !command.scope_matches {
-        return RejectProposalOperationsResult::Refused {
-            reason: RejectProposalOperationsRefusal::WrongScope,
-        };
+        return TransitionOutcome::Refused(RejectProposalOperationsRefusal::WrongScope);
     }
     if !command.admission_valid {
-        return RejectProposalOperationsResult::Refused {
-            reason: RejectProposalOperationsRefusal::WrongAdmission,
-        };
+        return TransitionOutcome::Refused(RejectProposalOperationsRefusal::WrongAdmission);
     }
     if !command.proposal_revision_current {
-        return RejectProposalOperationsResult::Refused {
-            reason: RejectProposalOperationsRefusal::StaleProposalRevision,
-        };
+        return TransitionOutcome::Refused(RejectProposalOperationsRefusal::StaleProposalRevision);
     }
     if !command.closure_open {
-        return RejectProposalOperationsResult::Refused {
-            reason: RejectProposalOperationsRefusal::NotEligible,
-        };
+        return TransitionOutcome::Refused(RejectProposalOperationsRefusal::NotEligible);
     }
     if !command.selection_duplicate_free {
-        return RejectProposalOperationsResult::Refused {
-            reason: RejectProposalOperationsRefusal::DuplicateIdentities,
-        };
+        return TransitionOutcome::Refused(RejectProposalOperationsRefusal::DuplicateIdentities);
     }
     if !command.selected_operations_pending {
-        return RejectProposalOperationsResult::Refused {
-            reason: RejectProposalOperationsRefusal::OperationNotPending,
-        };
+        return TransitionOutcome::Refused(RejectProposalOperationsRefusal::OperationNotPending);
     }
     if !command.required_dependencies_met {
-        return RejectProposalOperationsResult::Refused {
-            reason: RejectProposalOperationsRefusal::MissingRequiredDependencies,
-        };
+        return TransitionOutcome::Refused(
+            RejectProposalOperationsRefusal::MissingRequiredDependencies,
+        );
     }
     if !command.bundle_closure_complete {
-        return RejectProposalOperationsResult::Refused {
-            reason: RejectProposalOperationsRefusal::IncompleteBundleClosure,
-        };
+        return TransitionOutcome::Refused(
+            RejectProposalOperationsRefusal::IncompleteBundleClosure,
+        );
     }
     if !command.expected_target_matches_head {
-        return RejectProposalOperationsResult::Conflicted {
-            reason: RejectProposalOperationsConflict::ChangedHead,
-        };
+        return TransitionOutcome::Conflicted(RejectProposalOperationsConflict::ChangedHead);
     }
-    RejectProposalOperationsResult::Resolved
+    TransitionOutcome::Applied(())
 }
 
 #[cfg(test)]

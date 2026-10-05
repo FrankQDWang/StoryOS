@@ -8,7 +8,7 @@ use storyos_application::{
 use tokio_postgres::Client;
 
 use super::records::insert_applied_activity;
-use super::{LockedProject, SettlementProfile, unavailable};
+use super::{CommandSpec, LockedProject, SettlementProfile, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structural_authority_settlement::{
     CurrentChapterSequences, allocate_current_chapter_sequences,
@@ -52,7 +52,7 @@ impl SettlementProfile for ChapterSelection {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-        activity_kind: &'static str,
+        spec: &CommandSpec,
         sequences: CurrentChapterSequences,
         write: ChapterSelectionWrite<E>,
     ) -> Result<ChapterSelectionApplied<E>, ProjectCommandError> {
@@ -124,7 +124,7 @@ impl SettlementProfile for ChapterSelection {
         insert_applied_activity(
             client,
             envelope,
-            activity_kind,
+            spec.activity_kind,
             sequences.project_activity_position,
             &sequences.project_activity_event_id,
             serde_json::json!({
@@ -155,13 +155,13 @@ impl SettlementProfile for ChapterSelection {
     }
 
     fn replay<E: Send>(
-        effect: E,
+        decode: impl FnOnce() -> Result<E, ReplayFault>,
         replay: &CommandReplay,
     ) -> Result<ChapterSelectionApplied<E>, ReplayFault> {
         let authority = match (
             &replay.author_action_sequence,
             &replay.snapshot_id,
-            &replay.manuscript_tree_revision,
+            replay.manuscript_tree_revision()?,
         ) {
             (Some(author_action_sequence), Some(snapshot_id), Some(manuscript_tree_revision)) => {
                 AuthorityEvidence::Settled(ChapterSelectionAuthority {
@@ -169,9 +169,7 @@ impl SettlementProfile for ChapterSelection {
                         .parse()
                         .map_err(|error| ReplayFault::Unavailable(Box::new(error)))?,
                     snapshot_id: snapshot_id.clone(),
-                    manuscript_tree_revision: manuscript_tree_revision
-                        .parse()
-                        .map_err(|error| ReplayFault::Unavailable(Box::new(error)))?,
+                    manuscript_tree_revision,
                 })
             }
             (None, None, _) => AuthorityEvidence::BeforeAuthorityHistoryFloor,
@@ -182,7 +180,7 @@ impl SettlementProfile for ChapterSelection {
             }
         };
         Ok(ChapterSelectionApplied {
-            effect,
+            effect: decode()?,
             project_activity_position: replay.project_activity_position,
             project_activity_event_id: replay.project_activity_event_id.clone(),
             authority,

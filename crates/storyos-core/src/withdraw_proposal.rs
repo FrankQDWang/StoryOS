@@ -1,5 +1,8 @@
 //! Classify one explicit Withdrawal of an open Proposal.
 
+use super::TransitionOutcome;
+use crate::transition_outcome::reason_codes;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WithdrawalCause {
     Author,
@@ -18,19 +21,12 @@ pub struct WithdrawProposal {
     pub expected_target_matches_head: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum WithdrawalAllocation {
-    AuthorForward,
-    CurrentProducerOwned,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum WithdrawProposalResult {
-    Resolved { allocation: WithdrawalAllocation },
-    Conflicted { reason: WithdrawProposalConflict },
-    Refused { reason: WithdrawProposalRefusal },
-    NoEffect { reason: WithdrawProposalNoEffect },
-}
+pub type WithdrawProposalResult = TransitionOutcome<
+    (),
+    WithdrawProposalNoEffect,
+    WithdrawProposalConflict,
+    WithdrawProposalRefusal,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WithdrawProposalConflict {
@@ -51,51 +47,45 @@ pub enum WithdrawProposalNoEffect {
     ClosureNotOpen,
 }
 
-/// Classify one Withdrawal. Author success allocates one forward action. Producer success allocates none.
+reason_codes!(WithdrawProposalConflict { ChangedHead => "changed_head" });
+reason_codes!(WithdrawProposalRefusal {
+    WrongScope => "wrong_scope",
+    WrongAdmission => "wrong_admission",
+    StaleProposalRevision => "stale_proposal_revision",
+});
+reason_codes!(WithdrawProposalNoEffect {
+    UnsupportedCause => "unsupported_cause",
+    TerminalSupersession => "terminal_supersession",
+    ClosureNotOpen => "closure_not_open",
+});
+
+/// Classify one Withdrawal by the author or by the current producer.
 pub fn withdraw_proposal(command: &WithdrawProposal) -> WithdrawProposalResult {
     if !command.scope_matches {
-        return WithdrawProposalResult::Refused {
-            reason: WithdrawProposalRefusal::WrongScope,
-        };
+        return TransitionOutcome::Refused(WithdrawProposalRefusal::WrongScope);
     }
     if command.terminal_supersession {
-        return WithdrawProposalResult::NoEffect {
-            reason: WithdrawProposalNoEffect::TerminalSupersession,
-        };
+        return TransitionOutcome::NoEffect(WithdrawProposalNoEffect::TerminalSupersession);
     }
     if !command.proposal_revision_current {
-        return WithdrawProposalResult::Refused {
-            reason: WithdrawProposalRefusal::StaleProposalRevision,
-        };
+        return TransitionOutcome::Refused(WithdrawProposalRefusal::StaleProposalRevision);
     }
     match command.cause {
         WithdrawalCause::Author if !command.admission_valid => {
-            return WithdrawProposalResult::Refused {
-                reason: WithdrawProposalRefusal::WrongAdmission,
-            };
+            return TransitionOutcome::Refused(WithdrawProposalRefusal::WrongAdmission);
         }
         WithdrawalCause::CurrentProducer if !command.producer_matches => {
-            return WithdrawProposalResult::NoEffect {
-                reason: WithdrawProposalNoEffect::UnsupportedCause,
-            };
+            return TransitionOutcome::NoEffect(WithdrawProposalNoEffect::UnsupportedCause);
         }
         WithdrawalCause::Author | WithdrawalCause::CurrentProducer => {}
     }
     if !command.closure_open {
-        return WithdrawProposalResult::NoEffect {
-            reason: WithdrawProposalNoEffect::ClosureNotOpen,
-        };
+        return TransitionOutcome::NoEffect(WithdrawProposalNoEffect::ClosureNotOpen);
     }
     if !command.expected_target_matches_head {
-        return WithdrawProposalResult::Conflicted {
-            reason: WithdrawProposalConflict::ChangedHead,
-        };
+        return TransitionOutcome::Conflicted(WithdrawProposalConflict::ChangedHead);
     }
-    let allocation = match command.cause {
-        WithdrawalCause::Author => WithdrawalAllocation::AuthorForward,
-        WithdrawalCause::CurrentProducer => WithdrawalAllocation::CurrentProducerOwned,
-    };
-    WithdrawProposalResult::Resolved { allocation }
+    TransitionOutcome::Applied(())
 }
 
 #[cfg(test)]

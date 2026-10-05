@@ -3,7 +3,7 @@ use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
     BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    SettledReceipt, admit,
+    SettledReceipt, TargetValidation, admit,
 };
 use super::*;
 
@@ -14,9 +14,9 @@ const TAKE_OVER_PROJECT_WRITER: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::TAKE_OVER_PROJECT_WRITER_PATH,
     schema_id: contracts::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
     digest_profile: "storyos.command.takeOverProjectWriter.jcs.v1",
-    receipt_kind: contracts::DomainReceiptCommandKind::TakeOverProjectWriter,
     revision_mismatch: RevisionMismatch::AuthenticationRequired,
     body_validation: BodyValidation::BeforeRevisionCheck,
+    target_validation: TargetValidation::BeforeContentType,
     schema_mismatch: SchemaMismatch::CommandTargetRefused,
     problem_mapping: ProblemMapping::Route(takeover_problem),
 };
@@ -69,6 +69,7 @@ pub(super) async fn take_over_project_writer(
     let heads = vec![takeover.resulting_head.clone()];
     let ack = admitted.acknowledgement(
         &TAKE_OVER_PROJECT_WRITER,
+        contracts::DomainReceiptCommandKind::TakeOverProjectWriter,
         SettledReceipt {
             ids: settlement.ids,
             receipt_created_at: settlement.receipt_created_at,
@@ -102,7 +103,8 @@ fn takeover_problem(error: ProjectCommandError) -> ApiError {
     match error {
         ProjectCommandError::BindingConflict
         | ProjectCommandError::HistoricalAcknowledgementUnavailable
-        | ProjectCommandError::MissingProject => problem(
+        | ProjectCommandError::MissingProject
+        | ProjectCommandError::WriterIneligible => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The writer takeover binding conflicts.",

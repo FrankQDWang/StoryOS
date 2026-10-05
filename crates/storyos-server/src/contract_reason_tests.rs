@@ -3,13 +3,25 @@ use std::fmt::Debug;
 use serde::de::DeserializeOwned;
 use storyos_contracts as contracts;
 use storyos_core::{
-    ArchiveProjectConflict, ArchiveProjectNoEffect, CreateChapterConflict, CreateChapterRefusal,
-    CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
-    DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    ReasonCode, SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
+    ArchiveProjectConflict, ArchiveProjectNoEffect, CloseEditorFlowDraftConflict,
+    CloseEditorFlowDraftRefusal, CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict,
+    CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal,
+    DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
+    ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal, ReasonCode,
+    RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
+    ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
+    ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
+    ReopenWithdrawnProposalRefusal, ReplanProposalConflict, ReplanProposalRefusal,
+    SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
     UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
     UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
+    WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
+};
+
+use storyos_core::{
+    CompleteReadyPartialProposalRefusal, ContinueProposalGenerationRefusal,
+    ProposalGenerationConflict,
 };
 
 use super::contract_reason;
@@ -217,6 +229,282 @@ fn every_current_chapter_reason_maps_to_its_public_reason() {
         (
             SetCurrentChapterRefusal::EmptyProject,
             contracts::SetCurrentChapterRefusalReason::EmptyProject,
+        ),
+    ]);
+}
+
+#[test]
+fn every_proposal_decision_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        ReopenWithdrawnProposalConflict::ChangedHead,
+        contracts::ReopenWithdrawnProposalConflictReason::ChangedHead,
+    )]);
+    assert_maps(vec![
+        (
+            ReopenWithdrawnProposalRefusal::WrongScope,
+            contracts::ReopenWithdrawnProposalRefusalReason::WrongScope,
+        ),
+        (
+            ReopenWithdrawnProposalRefusal::WrongAdmission,
+            contracts::ReopenWithdrawnProposalRefusalReason::WrongAdmission,
+        ),
+        (
+            ReopenWithdrawnProposalRefusal::StaleProposalRevision,
+            contracts::ReopenWithdrawnProposalRefusalReason::StaleProposalRevision,
+        ),
+    ]);
+    assert_maps(vec![
+        (
+            ReopenWithdrawnProposalNoEffect::TerminalSupersession,
+            contracts::ReopenWithdrawnProposalNoEffectReason::TerminalSupersession,
+        ),
+        (
+            ReopenWithdrawnProposalNoEffect::ClosureNotWithdrawn,
+            contracts::ReopenWithdrawnProposalNoEffectReason::ClosureNotWithdrawn,
+        ),
+        (
+            ReopenWithdrawnProposalNoEffect::WithdrawalEventMismatch,
+            contracts::ReopenWithdrawnProposalNoEffectReason::WithdrawalEventMismatch,
+        ),
+    ]);
+    assert_maps(vec![(
+        ReplanProposalConflict::ChangedHead,
+        contracts::ReplanProposalConflictReason::ChangedHead,
+    )]);
+    assert_maps(vec![
+        (
+            ReplanProposalRefusal::WrongScope,
+            contracts::ReplanProposalRefusalReason::WrongScope,
+        ),
+        (
+            ReplanProposalRefusal::WrongAdmission,
+            contracts::ReplanProposalRefusalReason::WrongAdmission,
+        ),
+        (
+            ReplanProposalRefusal::StaleProposalRevision,
+            contracts::ReplanProposalRefusalReason::StaleProposalRevision,
+        ),
+        (
+            ReplanProposalRefusal::NotEligible,
+            contracts::ReplanProposalRefusalReason::NotEligible,
+        ),
+        (
+            ReplanProposalRefusal::UnavailableProof,
+            contracts::ReplanProposalRefusalReason::UnavailableProof,
+        ),
+    ]);
+    assert_maps(vec![(
+        ReopenRejectedOperationsConflict::ChangedHead,
+        contracts::ReopenRejectedOperationsConflictReason::ChangedHead,
+    )]);
+    assert_maps(vec![
+        (
+            ReopenRejectedOperationsRefusal::WrongScope,
+            contracts::ReopenRejectedOperationsRefusalReason::WrongScope,
+        ),
+        (
+            ReopenRejectedOperationsRefusal::WrongAdmission,
+            contracts::ReopenRejectedOperationsRefusalReason::WrongAdmission,
+        ),
+        (
+            ReopenRejectedOperationsRefusal::StaleProposalRevision,
+            contracts::ReopenRejectedOperationsRefusalReason::StaleProposalRevision,
+        ),
+        (
+            ReopenRejectedOperationsRefusal::NotEligible,
+            contracts::ReopenRejectedOperationsRefusalReason::NotEligible,
+        ),
+        (
+            ReopenRejectedOperationsRefusal::OperationNotRejected,
+            contracts::ReopenRejectedOperationsRefusalReason::OperationNotRejected,
+        ),
+        (
+            ReopenRejectedOperationsRefusal::UnavailableProof,
+            contracts::ReopenRejectedOperationsRefusalReason::UnavailableProof,
+        ),
+    ]);
+}
+
+#[test]
+fn every_rejection_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        RejectProposalOperationsConflict::ChangedHead,
+        contracts::RejectProposalOperationsConflictReason::ChangedHead,
+    )]);
+    assert_maps(vec![
+        (
+            RejectProposalOperationsRefusal::WrongScope,
+            contracts::RejectProposalOperationsRefusalReason::WrongScope,
+        ),
+        (
+            RejectProposalOperationsRefusal::WrongAdmission,
+            contracts::RejectProposalOperationsRefusalReason::WrongAdmission,
+        ),
+        (
+            RejectProposalOperationsRefusal::StaleProposalRevision,
+            contracts::RejectProposalOperationsRefusalReason::StaleProposalRevision,
+        ),
+        (
+            RejectProposalOperationsRefusal::NotEligible,
+            contracts::RejectProposalOperationsRefusalReason::NotEligible,
+        ),
+        (
+            RejectProposalOperationsRefusal::OperationNotPending,
+            contracts::RejectProposalOperationsRefusalReason::OperationNotPending,
+        ),
+        (
+            RejectProposalOperationsRefusal::DuplicateIdentities,
+            contracts::RejectProposalOperationsRefusalReason::DuplicateIdentities,
+        ),
+        (
+            RejectProposalOperationsRefusal::MissingRequiredDependencies,
+            contracts::RejectProposalOperationsRefusalReason::MissingRequiredDependencies,
+        ),
+        (
+            RejectProposalOperationsRefusal::IncompleteBundleClosure,
+            contracts::RejectProposalOperationsRefusalReason::IncompleteBundleClosure,
+        ),
+    ]);
+}
+
+#[test]
+fn every_withdrawal_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        WithdrawProposalConflict::ChangedHead,
+        contracts::WithdrawProposalConflictReason::ChangedHead,
+    )]);
+    assert_maps(vec![
+        (
+            WithdrawProposalRefusal::WrongScope,
+            contracts::WithdrawProposalRefusalReason::WrongScope,
+        ),
+        (
+            WithdrawProposalRefusal::WrongAdmission,
+            contracts::WithdrawProposalRefusalReason::WrongAdmission,
+        ),
+        (
+            WithdrawProposalRefusal::StaleProposalRevision,
+            contracts::WithdrawProposalRefusalReason::StaleProposalRevision,
+        ),
+    ]);
+    assert_maps(vec![
+        (
+            WithdrawProposalNoEffect::UnsupportedCause,
+            contracts::WithdrawProposalNoEffectReason::UnsupportedCause,
+        ),
+        (
+            WithdrawProposalNoEffect::TerminalSupersession,
+            contracts::WithdrawProposalNoEffectReason::TerminalSupersession,
+        ),
+        (
+            WithdrawProposalNoEffect::ClosureNotOpen,
+            contracts::WithdrawProposalNoEffectReason::ClosureNotOpen,
+        ),
+    ]);
+}
+
+#[test]
+fn every_draft_discard_reason_maps_to_its_public_or_persisted_reason() {
+    // The conflict has no public reason. Its code is the persisted Receipt reason text.
+    assert_maps(vec![(
+        CloseEditorFlowDraftConflict::SourceBindingChanged,
+        "source_binding_changed".to_owned(),
+    )]);
+    assert_maps(vec![
+        (
+            CloseEditorFlowDraftRefusal::SourceDraftNotOpen,
+            contracts::DraftCloseRefusal::SourceDraftNotOpen,
+        ),
+        (
+            CloseEditorFlowDraftRefusal::SourceUnavailable,
+            contracts::DraftCloseRefusal::SourceUnavailable,
+        ),
+    ]);
+}
+
+#[test]
+fn every_proposal_generation_decision_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        ProposalGenerationConflict::ChangedHead,
+        contracts::ProposalGenerationConflictReason::ChangedHead,
+    )]);
+    assert_maps(vec![
+        (
+            CompleteReadyPartialProposalRefusal::StaleProposalRevision,
+            contracts::CompleteReadyPartialProposalRefusalReason::StaleProposalRevision,
+        ),
+        (
+            CompleteReadyPartialProposalRefusal::NotEligible,
+            contracts::CompleteReadyPartialProposalRefusalReason::NotEligible,
+        ),
+        (
+            CompleteReadyPartialProposalRefusal::NotReadyPartial,
+            contracts::CompleteReadyPartialProposalRefusalReason::NotReadyPartial,
+        ),
+        (
+            CompleteReadyPartialProposalRefusal::StaleGeneration,
+            contracts::CompleteReadyPartialProposalRefusalReason::StaleGeneration,
+        ),
+        (
+            CompleteReadyPartialProposalRefusal::StaleCandidate,
+            contracts::CompleteReadyPartialProposalRefusalReason::StaleCandidate,
+        ),
+    ]);
+    assert_maps(vec![
+        (
+            ContinueProposalGenerationRefusal::StaleProposalRevision,
+            contracts::ContinueProposalGenerationRefusalReason::StaleProposalRevision,
+        ),
+        (
+            ContinueProposalGenerationRefusal::NotEligible,
+            contracts::ContinueProposalGenerationRefusalReason::NotEligible,
+        ),
+        (
+            ContinueProposalGenerationRefusal::NotContinuable,
+            contracts::ContinueProposalGenerationRefusalReason::NotContinuable,
+        ),
+        (
+            ContinueProposalGenerationRefusal::StaleGeneration,
+            contracts::ContinueProposalGenerationRefusalReason::StaleGeneration,
+        ),
+        (
+            ContinueProposalGenerationRefusal::StaleCandidate,
+            contracts::ContinueProposalGenerationRefusalReason::StaleCandidate,
+        ),
+        (
+            ContinueProposalGenerationRefusal::OperationNotPending,
+            contracts::ContinueProposalGenerationRefusalReason::OperationNotPending,
+        ),
+        (
+            ContinueProposalGenerationRefusal::DuplicateIdentities,
+            contracts::ContinueProposalGenerationRefusalReason::DuplicateIdentities,
+        ),
+    ]);
+}
+
+#[test]
+fn every_draft_expansion_reason_maps_to_its_public_or_persisted_reason() {
+    // The conflict has no public reason. Its code is the persisted Receipt reason text.
+    assert_maps(vec![(
+        ExpandRefusedEditDraftConflict::SourceOrTargetChanged,
+        "source_or_target_changed".to_owned(),
+    )]);
+    assert_maps(vec![
+        (
+            ExpandRefusedEditDraftRefusal::SourceDraftNotOpen,
+            "source_draft_not_open".to_owned(),
+        ),
+        (
+            ExpandRefusedEditDraftRefusal::SourceUnavailable,
+            "source_unavailable".to_owned(),
+        ),
+        (
+            ExpandRefusedEditDraftRefusal::UnsupportedPayload,
+            "unsupported_payload".to_owned(),
+        ),
+        (
+            ExpandRefusedEditDraftRefusal::TargetUnavailable,
+            "target_unavailable".to_owned(),
         ),
     ]);
 }

@@ -317,6 +317,9 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       result: "proposal_operations_resolved",
       rejection_reason: "author_declined",
       rejection_note: null,
+      preserved_generation: rejected.effect.preserved_generation,
+      preserved_validation: rejected.effect.preserved_validation,
+      preserved_closure: rejected.effect.preserved_closure,
     });
     const resolutions = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_operation_resolutions.json")));
     assert.deepEqual(resolutions, [{

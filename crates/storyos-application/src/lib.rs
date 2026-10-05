@@ -182,9 +182,10 @@ pub use pinned_export_source::{
     render_readable_manuscript_from_pinned_source,
 };
 pub use project_command::{
-    ActivityApplied, AuthorityEvidence, ChapterSelectionApplied, ChapterSelectionAuthority,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, StructureApplied,
-    StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+    ActionApplied, ActivityApplied, AuthorityEvidence, ChapterSelectionApplied,
+    ChapterSelectionAuthority, ProjectCommandEnvelope, ProjectCommandError,
+    ProjectCommandSettlement, StructureApplied, StructureAuthority, StructureAuthorityEvidence,
+    StructureSettlement,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,
@@ -203,10 +204,9 @@ pub use project_settings::{
     ArchiveProjectInput, ArchiveProjectSettlement, UpdateProjectInput, UpdateProjectSettlement,
 };
 pub use proposal_generation_decision::{
-    CompleteReadyPartialProposalCommand, CompleteReadyPartialProposalEffect,
-    ContinueProposalGenerationCommand, ContinueProposalGenerationEffect,
-    ProposalGenerationDecisionError, ProposalGenerationDecisionStore, ProposalGenerationSettlement,
-    complete_ready_partial_proposal, continue_proposal_generation,
+    CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
+    ContinueProposalGenerationInput, ContinueProposalGenerationSettlement,
+    ProposalGenerationCompleted, ProposalGenerationStarted,
 };
 pub use readable_export::{
     ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptAdmissionEffect,
@@ -224,24 +224,16 @@ pub use readable_export_work::{
     ReadableExportWorkStore, claim_next_readable_export, complete_readable_export,
 };
 pub use reject_proposal_operations::{
-    RejectProposalOperationsCommand, RejectProposalOperationsError,
-    RejectProposalOperationsSettlement, RejectProposalOperationsSettlementEffect,
-    RejectProposalOperationsStore, RejectionNote, reject_proposal_operations,
+    ProposalOperationsRejected, RejectProposalOperationsInput, RejectProposalOperationsSettlement,
+    RejectionNote,
 };
 pub use reopen_rejected_operations::{
-    ReopenRejectedOperationsCommand, ReopenRejectedOperationsError,
-    ReopenRejectedOperationsSettlement, ReopenRejectedOperationsSettlementEffect,
-    ReopenRejectedOperationsStore, reopen_rejected_operations,
+    RejectedOperationsReopened, ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
 };
 pub use reopen_withdrawn_proposal::{
-    ReopenWithdrawnProposalCommand, ReopenWithdrawnProposalError,
-    ReopenWithdrawnProposalSettlement, ReopenWithdrawnProposalSettlementEffect,
-    ReopenWithdrawnProposalStore, reopen_withdrawn_proposal,
+    ProposalReopened, ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
-pub use replan_proposal::{
-    ReplanProposalCommand, ReplanProposalError, ReplanProposalSettlement,
-    ReplanProposalSettlementEffect, ReplanProposalStore, replan_proposal,
-};
+pub use replan_proposal::{ProposalReplanned, ReplanProposalInput, ReplanProposalSettlement};
 pub use set_current_chapter::{
     CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };
@@ -254,9 +246,8 @@ pub use update_project_assistance::{
     UpdateProjectAssistanceSettlement,
 };
 pub use withdraw_proposal::{
-    ResolvedWithdrawal, WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,
-    WithdrawProposalSettlementEffect, WithdrawProposalStore, WithdrawalActor, WithdrawalNote,
-    withdraw_proposal,
+    CurrentProducerWithdrawal, CurrentProducerWithdrawalSettlement, ProposalWithdrawn,
+    WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
 };
 
 pub use editor_session::{
@@ -555,10 +546,9 @@ mod tests;
 mod close_editor_flow_draft;
 mod expand_refused_edit_draft;
 pub use close_editor_flow_draft::{
-    CloseEditorFlowDraftCommand, CloseEditorFlowDraftStore, DraftCloseError, DraftCloseSettlement,
-    close_editor_flow_draft,
+    CloseEditorFlowDraftInput, CloseEditorFlowDraftSettlement, DraftCloseObservation, DraftClosed,
 };
 pub use expand_refused_edit_draft::{
-    DraftExpansionSettlement, ExpandRefusedEditDraftCommand, ExpandRefusedEditDraftStore,
-    expand_refused_edit_draft,
+    DraftExpanded, DraftExpansionObservation, ExpandRefusedEditDraftSettlement,
+    ExpandRefusedEditDraftToProposalInput,
 };

@@ -14,8 +14,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
-    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, Structural,
-    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, RateLimitedChallenge,
+    ReplayEffect, Structural, StructureIdentity, StructureWrite, WriterBase,
+    settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 
@@ -36,10 +37,12 @@ pub(crate) struct ParentVolume(String);
 impl ProjectCommand for DeleteChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "deleteChapter",
-        applied_result: AppliedResult::AuthoritativeApplied,
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "chapter_deleted",
+        replay_effect: ReplayEffect::NoQuery,
     };
     type Profile = Structural;
     type Response = ProjectResponse;
@@ -196,10 +199,10 @@ impl ProjectCommand for DeleteChapterInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<ChapterDeleted, ReplayFault> {
         let tree_revision = replay.activity_u64("tree_revision")?;
-        let volume_id = replay.activity_text("volume_id")?;
+        let volume_id = replay.activity_uuid("volume_id")?;
         let current = match (
-            replay.activity_optional_text("prior_current_chapter_id"),
-            replay.activity_optional_text("current_chapter_id"),
+            replay.activity_historical_uuid("prior_current_chapter_id")?,
+            replay.activity_nullable_uuid("current_chapter_id")?,
         ) {
             // The resulting Current alone cannot show that a different prior Current stayed.
             (Some(prior), _) if prior != self.chapter_id.as_ref() => {

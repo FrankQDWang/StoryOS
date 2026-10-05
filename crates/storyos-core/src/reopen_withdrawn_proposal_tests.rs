@@ -1,6 +1,6 @@
 use super::{
     ReopenWithdrawnProposal, ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
-    ReopenWithdrawnProposalRefusal, ReopenWithdrawnProposalResult, reopen_withdrawn_proposal,
+    ReopenWithdrawnProposalRefusal, TransitionOutcome, reopen_withdrawn_proposal,
 };
 
 fn ready() -> ReopenWithdrawnProposal {
@@ -19,7 +19,7 @@ fn ready() -> ReopenWithdrawnProposal {
 fn a_matching_withdrawn_proposal_reopens() {
     assert_eq!(
         reopen_withdrawn_proposal(&ready()),
-        ReopenWithdrawnProposalResult::Resolved
+        TransitionOutcome::Applied(())
     );
 }
 
@@ -30,25 +30,19 @@ fn terminal_supersession_and_a_mismatched_event_have_no_effect() {
     superseded.closure_withdrawn = false;
     assert_eq!(
         reopen_withdrawn_proposal(&superseded),
-        ReopenWithdrawnProposalResult::NoEffect {
-            reason: ReopenWithdrawnProposalNoEffect::TerminalSupersession,
-        }
+        TransitionOutcome::NoEffect(ReopenWithdrawnProposalNoEffect::TerminalSupersession)
     );
     let mut unmatched = ready();
     unmatched.withdrawal_event_matches = false;
     assert_eq!(
         reopen_withdrawn_proposal(&unmatched),
-        ReopenWithdrawnProposalResult::NoEffect {
-            reason: ReopenWithdrawnProposalNoEffect::WithdrawalEventMismatch,
-        }
+        TransitionOutcome::NoEffect(ReopenWithdrawnProposalNoEffect::WithdrawalEventMismatch)
     );
     let mut open = ready();
     open.closure_withdrawn = false;
     assert_eq!(
         reopen_withdrawn_proposal(&open),
-        ReopenWithdrawnProposalResult::NoEffect {
-            reason: ReopenWithdrawnProposalNoEffect::ClosureNotWithdrawn,
-        }
+        TransitionOutcome::NoEffect(ReopenWithdrawnProposalNoEffect::ClosureNotWithdrawn)
     );
 }
 
@@ -58,32 +52,24 @@ fn reopen_refuses_scope_admission_and_a_stale_revision_and_conflicts_on_the_head
     wrong_scope.scope_matches = false;
     assert_eq!(
         reopen_withdrawn_proposal(&wrong_scope),
-        ReopenWithdrawnProposalResult::Refused {
-            reason: ReopenWithdrawnProposalRefusal::WrongScope,
-        }
+        TransitionOutcome::Refused(ReopenWithdrawnProposalRefusal::WrongScope)
     );
     let mut stale = ready();
     stale.proposal_revision_current = false;
     assert_eq!(
         reopen_withdrawn_proposal(&stale),
-        ReopenWithdrawnProposalResult::Refused {
-            reason: ReopenWithdrawnProposalRefusal::StaleProposalRevision,
-        }
+        TransitionOutcome::Refused(ReopenWithdrawnProposalRefusal::StaleProposalRevision)
     );
     let mut admission = ready();
     admission.admission_valid = false;
     assert_eq!(
         reopen_withdrawn_proposal(&admission),
-        ReopenWithdrawnProposalResult::Refused {
-            reason: ReopenWithdrawnProposalRefusal::WrongAdmission,
-        }
+        TransitionOutcome::Refused(ReopenWithdrawnProposalRefusal::WrongAdmission)
     );
     let mut head = ready();
     head.expected_target_matches_head = false;
     assert_eq!(
         reopen_withdrawn_proposal(&head),
-        ReopenWithdrawnProposalResult::Conflicted {
-            reason: ReopenWithdrawnProposalConflict::ChangedHead,
-        }
+        TransitionOutcome::Conflicted(ReopenWithdrawnProposalConflict::ChangedHead)
     );
 }

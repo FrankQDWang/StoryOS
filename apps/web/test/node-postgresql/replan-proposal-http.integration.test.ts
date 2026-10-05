@@ -378,6 +378,8 @@ test("replanProposal appends a pending Revision bound to the current Head", asyn
       source_condition_ref: conflictRef,
       replan_receipt_id: replanned.receipt.receipt_id,
       author_action_sequence: Number(replanned.effect.author_action_sequence),
+      preserved_generation: replanned.effect.preserved_generation,
+      preserved_closure: replanned.effect.preserved_closure,
     }]);
     await stopRealServer(started.server);
     started = await startRealServer();
