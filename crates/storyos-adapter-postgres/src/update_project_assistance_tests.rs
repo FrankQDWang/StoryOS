@@ -86,7 +86,7 @@ async fn update_project_assistance(
         .await
 }
 
-/// The applied assistance change of one settlement; panics on any other outcome.
+/// The applied assistance change of one settlement. Any other outcome panics.
 fn applied(settlement: &UpdateProjectAssistanceSettlement) -> UpdateProjectAssistanceApplied {
     match &settlement.outcome {
         TransitionOutcome::Applied(applied) => applied.effect,

@@ -496,7 +496,7 @@ async fn wait_for_generation_insert_gate(
 ) -> Result<(), String> {
     let waited = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
-            // The first Takeover waits for the gate; the second waits for the first Project lock.
+            // The first Takeover waits for the gate. The second waits for the first Project lock.
             let row = admin
                 .query_one(
                     "SELECT count(DISTINCT activity.pid),
@@ -510,7 +510,7 @@ async fn wait_for_generation_insert_gate(
                 )
                 .await
                 .map_err(|error| error.to_string())?;
-            let (waiting, gated): (i64, i64) = (row.get(0), row.get(1));
+            let (waiting, gated): (i64, i64) = (row.get(/*idx*/ 0), row.get(/*idx*/ 1));
             if waiting == application_names.len() as i64 && gated >= 1 {
                 return Ok(());
             }

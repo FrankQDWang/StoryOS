@@ -38,14 +38,14 @@ pub(crate) enum WriterBase {
     RebindToCurrentChapter,
 }
 
-/// The applied writes that one structural command returns; the profile writes every authority record.
+/// The applied writes that one structural command returns. The profile writes every authority record.
 pub(crate) struct StructureWrite<E> {
     pub(crate) effect: E,
     pub(crate) resulting_tree_revision: u64,
     pub(crate) identity: StructureIdentity,
     pub(crate) current_chapter: CurrentChapterChange,
     pub(crate) writer_base: WriterBase,
-    /// The command fields of the Activity payload; the profile adds `kind` and `tree_revision`.
+    /// The command fields of the Activity payload. The profile adds `kind` and `tree_revision`.
     pub(crate) activity: serde_json::Value,
 }
 

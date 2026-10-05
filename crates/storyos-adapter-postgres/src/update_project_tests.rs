@@ -160,7 +160,10 @@ async fn update_project_renames_only_its_scope_and_replays_the_captured_project(
         .await
         .unwrap();
     assert_eq!(
-        (row.get::<_, String>(0), row.get::<_, String>(1)),
+        (
+            row.get::<_, String>(/*idx*/ 0),
+            row.get::<_, String>(/*idx*/ 1)
+        ),
         (TITLE.to_owned(), "2".to_owned())
     );
 

@@ -29,10 +29,12 @@ pub(crate) struct CommandReplay {
     /// The canonical Snapshot at the Activity position of the Receipt.
     pub(crate) snapshot_id: Option<String>,
     /// The latest Manuscript Tree Revision text that an Activity payload records at or before the
-    /// Receipt; only a profile that needs it parses it.
+    /// Receipt. Only a profile that needs it parses it.
     pub(crate) manuscript_tree_revision: Option<String>,
     /// The resulting head array of the Domain Receipt.
     pub(crate) resulting_heads: Vec<String>,
+    /// Whether the Command Idempotency Fence keeps the command digest of the Receipt.
+    pub(crate) fence_digest_matches: bool,
     result_kind: String,
     receipt: JsonText,
     activity: JsonText,
@@ -74,9 +76,9 @@ impl JsonText {
 }
 
 impl CommandReplay {
-    /// The recorded outcome; `applied_result` is the result kind of the command's applied outcome.
+    /// The recorded outcome. `applied_result` is the result kind of the command's applied outcome.
     ///
-    /// `Applied` carries no value; the command decodes its applied effect.
+    /// `Applied` carries no value. The command decodes its applied effect.
     pub(crate) fn outcome<N: ReasonCode, C: ReasonCode, R: ReasonCode>(
         &self,
         applied_result: &str,
@@ -236,8 +238,8 @@ pub(crate) async fn read_command_replay(
             .map(|value| value.parse::<u64>())
             .transpose()
             .map_err(unavailable)?,
-        snapshot_id: row.get(11),
-        manuscript_tree_revision: row.get(17),
+        snapshot_id: row.get(/*idx*/ 11),
+        manuscript_tree_revision: row.get(/*idx*/ 17),
         ids: AuthorCommandAdmissionIds {
             command_id: row.get(0),
             author_command_admission_id: row.get(1),
@@ -256,8 +258,9 @@ pub(crate) async fn read_command_replay(
         authority,
         acknowledgement_format: row.get(15),
         response_project: row.get(16),
-        response_assistance: row.get(18),
-        resulting_heads: row.get(19),
+        response_assistance: row.get(/*idx*/ 18),
+        resulting_heads: row.get(/*idx*/ 19),
+        fence_digest_matches: row.get(/*idx*/ 20),
     })
 }
 
@@ -292,7 +295,8 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
           ORDER BY structure.project_activity_position DESC
           LIMIT 1),
         idempotency.response_assistance::text,
-        receipt.resulting_heads::text[]
+        receipt.resulting_heads::text[],
+        idempotency.canonical_command_digest = receipt.command_digest
    FROM storyos.domain_receipts AS receipt
    JOIN storyos.author_command_admission_settlements AS settlement
      ON (settlement.owner_user_id, settlement.project_id,
@@ -315,10 +319,16 @@ LEFT JOIN storyos.authoritative_commits AS authoritative_commit
 LEFT JOIN storyos.author_action_entries AS action
      ON (action.owner_user_id, action.project_id, action.receipt_id) =
         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-LEFT JOIN storyos.project_snapshots AS snapshot
-     ON (snapshot.owner_user_id, snapshot.project_id, snapshot.project_activity_position) =
-        (payload.owner_user_id, payload.project_id, payload.project_activity_position)
-    AND snapshot.snapshot_kind = 'canonical'
+LEFT JOIN LATERAL (
+         SELECT canonical.snapshot_id
+           FROM storyos.project_snapshots AS canonical
+          WHERE (canonical.owner_user_id, canonical.project_id,
+                 canonical.project_activity_position) =
+                (payload.owner_user_id, payload.project_id, payload.project_activity_position)
+            AND canonical.snapshot_kind = 'canonical'
+          ORDER BY canonical.created_at, canonical.snapshot_id
+          LIMIT 1
+       ) AS snapshot ON true
   WHERE receipt.owner_user_id = $1::text::uuid
     AND receipt.project_id = $2::text::uuid
     AND receipt.receipt_id = $3::text::uuid

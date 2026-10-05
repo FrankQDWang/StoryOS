@@ -27,7 +27,7 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
   - `createEditorSession`. It is a Challenge-fenced creation of an Editor Session without an Admission or a Receipt, at the default isolation level.
   - The current-producer form of `withdrawProposal`. It is an Agent Run decision without a Command Challenge or an Admission. The author form of `withdrawProposal` is in scope.
   - The Worker settlement of an admitted export. It is a fenced Worker transaction. The admission of each export is in scope.
-- Author Edit, `acceptProposal`, and Author Undo need sequence capabilities that a later decision records: an `outcome_unknown` settlement with admission recovery, the Pre-Admission Refusal Record (ADR 0013), and the Compensation disposition.
+- Author Edit, `acceptProposal`, and Author Undo need sequence capabilities that a later decision records. These are an `outcome_unknown` settlement with admission recovery, the Pre-Admission Refusal Record (ADR 0013), and the Compensation disposition.
 
 ### What a command adapter declares
 
@@ -41,7 +41,10 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
 - **Effects of a zero-authority outcome.** A command can write effect rows for a `no_effect`, `conflicted`, or `refused` outcome. It can also write an Activity record where its schema requires one. Such an outcome never allocates an Authoritative Commit or an Author Action.
 - **Receipt shape.** The command supplies the head arrays, the Revision and Proposal Revision references, the draft and lifecycle references, and the payload of each outcome. The sequence inserts the Receipt.
 - **Activity record.** The command supplies the event kind and the payload fields. The sequence adds `tree_revision` only for the `Structural` profile.
-- **Response record.** One of: the Command-response Project; the Command-response Project with the Project assistance record; or no response record. A command without a response record decodes its whole acknowledgement from the stored Receipt and effect rows.
+- **Response record.** One of these three:
+  - the Command-response Project.
+  - the Command-response Project with the Project assistance record.
+  - no response record. Such a command decodes its whole acknowledgement from the stored Receipt and effect rows.
 - **Admit-only first use.** For the two exports only, the first use commits the Admission, the work rows, and the Command-response Project. It leaves the Command Idempotency Fence `in_progress`. An exact retry of an admitted export replays the admitted operation. The Worker settles the fence later.
 - **Refusal before Admission.** The fact load can refuse with a reason of the command, for example an archived Project or a missing AgentRun. This writes no row, and the Server keeps its problem code. It is not a Pre-Admission Refusal Record.
 

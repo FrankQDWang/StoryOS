@@ -74,9 +74,9 @@ async fn load_takeover_facts(
             .map(|generation| generation.parse())
             .transpose()
             .map_err(unavailable)?,
-        writer_session_id: row.get(1),
-        current_chapter_id: row.get(2),
-        current_head: row.get(3),
+        writer_session_id: row.get(/*idx*/ 1),
+        current_chapter_id: row.get(/*idx*/ 2),
+        current_head: row.get(/*idx*/ 3),
     })
 }
 
@@ -271,6 +271,9 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         &self,
         replay: &CommandReplay,
     ) -> Result<Option<WriterTakeover>, ReplayFault> {
+        if !replay.fence_digest_matches {
+            return Err(ReplayFault::BindingConflict);
+        }
         let text = |key: &str| {
             replay.activity_optional_text(key).ok_or_else(|| {
                 ReplayFault::Unavailable(format!("the takeover Activity has no {key}").into())

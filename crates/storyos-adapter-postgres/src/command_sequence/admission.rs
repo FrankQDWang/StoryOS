@@ -7,7 +7,7 @@ use super::{
     Admission, CommandSpec, EditorAdmission, MissingAdmission, TakeoverAdmission, unavailable,
 };
 
-/// Inserts the Admission after the consumed Command Challenge; no inserted row is the command's error.
+/// Inserts the Admission after the consumed Command Challenge. An insert without a row gives the command's error.
 pub(super) async fn insert_admission(
     client: &Client,
     envelope: &ProjectCommandEnvelope,

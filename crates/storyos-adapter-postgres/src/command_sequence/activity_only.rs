@@ -14,7 +14,7 @@ use crate::command_replay::{CommandReplay, ReplayFault};
 /// The applied writes that one `ActivityOnly` command returns.
 pub(crate) struct ActivityWrite<E> {
     pub(crate) effect: E,
-    /// The command fields of the Activity payload; the profile adds `kind`.
+    /// The command fields of the Activity payload. The profile adds `kind`.
     pub(crate) activity: serde_json::Value,
 }
 
@@ -48,7 +48,7 @@ impl SettlementProfile for ActivityOnly {
             )
             .await
             .map_err(unavailable)?
-            .get::<_, String>(0);
+            .get::<_, String>(/*idx*/ 0);
         Ok(ActivitySequences {
             project_activity_position: position.parse().map_err(unavailable)?,
             project_activity_event_id: Uuid::now_v7().to_string(),

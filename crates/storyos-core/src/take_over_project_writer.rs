@@ -34,7 +34,7 @@ pub enum TakeOverProjectWriterNoEffect {
 
 reason_codes!(TakeOverProjectWriterNoEffect { WriterTakeoverApplied => "writer_takeover_applied" });
 
-/// A takeover whose observed writer is not the current writer; it records no Receipt.
+/// A takeover whose observed writer is not the current writer. It records no Receipt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaleWriterObservation;
 

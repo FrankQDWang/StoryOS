@@ -27,7 +27,7 @@ pub struct UpdateProjectAssistance {
     pub requested: AssistanceAvailability,
 }
 
-/// The applied assistance change; both kinds record an `authoritative_applied` Receipt.
+/// The applied assistance change. Both kinds record an `authoritative_applied` Receipt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UpdateProjectAssistanceApplied {
     /// The first assistance setting of the Project, which also creates its binding.

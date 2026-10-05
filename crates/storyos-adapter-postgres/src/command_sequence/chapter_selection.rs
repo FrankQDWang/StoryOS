@@ -15,7 +15,7 @@ use crate::structural_authority_settlement::{
     persist_current_chapter_forward_author_action,
 };
 
-/// The applied writes of one Current Chapter change; the profile writes every authority record.
+/// The applied writes of one Current Chapter change. The profile writes every authority record.
 pub(crate) struct ChapterSelectionWrite<E> {
     pub(crate) effect: E,
     /// The writer Editor Session whose base Snapshot moves to the selected Chapter.

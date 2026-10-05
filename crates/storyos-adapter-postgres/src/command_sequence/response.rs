@@ -20,7 +20,7 @@ use crate::update_project_assistance::read_assistance_record;
 
 /// The acknowledgement record of one command kind (ADR 0043).
 ///
-/// The sequence calls `settle` after every write of a first use; it reads the response and
+/// The sequence calls `settle` after every write of a first use. It reads the response and
 /// settles the Command Idempotency Fence. On an exact retry it calls `replay` instead.
 pub(crate) trait ResponseRecord {
     type Response: Send;
@@ -150,7 +150,7 @@ async fn read_response_project(
         .map_err(unavailable)?;
     Ok(Project {
         project_id: scope.project_id.clone(),
-        title: row.get(0),
+        title: row.get(/*idx*/ 0),
         current_chapter_id: row.get::<_, Option<String>>(1).map(ChapterId::new),
     })
 }

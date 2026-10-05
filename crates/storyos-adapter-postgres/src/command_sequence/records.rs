@@ -54,7 +54,7 @@ pub(super) async fn insert_receipt(
         )
         .await
         .map_err(unavailable)?
-        .get::<_, String>(0);
+        .get::<_, String>(/*idx*/ 0);
     client
         .execute(
             "INSERT INTO storyos.author_command_admission_settlements
@@ -75,7 +75,7 @@ pub(super) async fn insert_receipt(
 
 /// Inserts the applied Activity record of the Receipt.
 ///
-/// `activity` holds the command fields; the record adds `kind` and the profile fields.
+/// `activity` holds the command fields. The record adds `kind` and the profile fields.
 pub(super) async fn insert_applied_activity(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
@@ -156,7 +156,7 @@ pub(super) async fn lock_project(
         .await
         .map_err(unavailable)?
         .ok_or(ProjectCommandError::MissingProject)?;
-    let lifecycle = match row.get::<_, String>(0).as_str() {
+    let lifecycle = match row.get::<_, String>(/*idx*/ 0).as_str() {
         "active" => ProjectLifecycle::Active,
         "archived" => ProjectLifecycle::Archived,
         other => {
@@ -167,7 +167,10 @@ pub(super) async fn lock_project(
     };
     Ok(LockedProject {
         lifecycle,
-        tree_revision: row.get::<_, String>(1).parse().map_err(unavailable)?,
-        current_chapter_id: row.get(2),
+        tree_revision: row
+            .get::<_, String>(/*idx*/ 1)
+            .parse()
+            .map_err(unavailable)?,
+        current_chapter_id: row.get(/*idx*/ 2),
     })
 }

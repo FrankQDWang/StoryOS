@@ -64,7 +64,7 @@ pub(super) trait ProjectCommandRequest: DeserializeOwned + Serialize {
     fn security_policy_revision(&self) -> &str;
     fn correlation_id(&self) -> &str;
 
-    /// Whether the body targets the route command; a route can also require its editor contract.
+    /// Whether the body targets the route command. A route can also require its editor contract.
     fn targets_route(&self, schema_id: &str) -> bool {
         self.command_schema() == schema_id
     }
@@ -360,7 +360,7 @@ pub(super) struct SettledReceipt {
     pub(super) receipt_created_at: String,
     pub(super) result: ReceiptResult,
     pub(super) authority: Option<ReceiptAuthority>,
-    /// The one head that the expected, prior, and resulting head arrays show; empty without one.
+    /// The one head that the expected, prior, and resulting head arrays show. It can be empty.
     pub(super) heads: Vec<String>,
 }
 

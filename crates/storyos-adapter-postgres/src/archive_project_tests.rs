@@ -191,7 +191,7 @@ async fn archive_project_archives_only_its_scope_once_and_replays_the_captured_p
         (
             row.get::<_, String>(0),
             row.get::<_, String>(1),
-            row.get::<_, i64>(2)
+            row.get::<_, i64>(/*idx*/ 2)
         ),
         ("archived".to_owned(), "2".to_owned(), 1)
     );

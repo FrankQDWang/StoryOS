@@ -35,9 +35,9 @@ pub(crate) enum CommandIsolation {
 /// The action class and Editor Session binding that the Author Command Admission records.
 pub(crate) enum Admission {
     ExplicitProjectCommand,
-    /// A command of the current writer Editor Session; the insert requires its writer generation.
+    /// A command of the current writer Editor Session. The insert requires its writer generation.
     ExplicitEditorCommand(EditorAdmission),
-    /// A writer takeover; the insert requires the observed writer generation of another session.
+    /// A writer takeover. The insert requires the observed writer generation of another session.
     WriterTakeover(TakeoverAdmission),
 }
 
@@ -98,7 +98,7 @@ pub(crate) struct LockedProject {
 /// The authority records that an applied project command allocates and writes (ADR 0043).
 ///
 /// A command names one profile. The sequence calls `allocate` before the Domain Receipt and
-/// `persist` after the command effect rows; on an exact retry it calls `replay` instead.
+/// `persist` after the command effect rows. On an exact retry, it calls `replay` instead.
 /// Implementations never run transaction control and never write the Admission, Receipt,
 /// settlement link, or idempotency rows.
 pub(crate) trait SettlementProfile {
@@ -168,7 +168,7 @@ pub(crate) enum ZeroOutcome<'a, C: ProjectCommand + ?Sized> {
 /// The effect and the whole Activity payload of a zero-authority outcome that writes effect rows.
 pub(crate) struct ZeroAuthorityWrite<Z> {
     pub(crate) effect: Z,
-    /// The complete payload, including its `kind`; the event kind is the command Activity kind.
+    /// The complete payload, including its `kind`. The event kind is the command Activity kind.
     pub(crate) activity: serde_json::Value,
 }
 
@@ -186,7 +186,7 @@ pub(crate) trait ProjectCommand: Sync {
     const SPEC: CommandSpec;
     type Profile: SettlementProfile;
     type Response: ResponseRecord;
-    /// The effect of a zero-authority outcome that writes effect rows; `()` for other commands.
+    /// The effect of a zero-authority outcome that writes effect rows. Other commands use `()`.
     type ZeroEffect: Send;
     type Applied: Send;
     type Plan: Send;

@@ -69,9 +69,12 @@ impl ProjectCommand for UpdateProjectInput {
             .map_err(unavailable)?;
         let classified = classify_update_project(&CoreUpdateProject {
             expected_revision: self.expected_revision,
-            current_revision: row.get::<_, String>(1).parse().map_err(unavailable)?,
+            current_revision: row
+                .get::<_, String>(/*idx*/ 1)
+                .parse()
+                .map_err(unavailable)?,
             title: self.title.clone(),
-            current_title: row.get(0),
+            current_title: row.get(/*idx*/ 0),
         });
         let outcome = match classified {
             TransitionOutcome::Applied(applied) => TransitionOutcome::Applied((applied, ())),

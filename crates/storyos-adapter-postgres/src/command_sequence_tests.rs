@@ -1275,8 +1275,21 @@ async fn a_command_without_a_response_record_replays_without_it_and_damaged_acti
         .await
         .unwrap();
     let damaged = take_over_project_writer(&store, &with_new_request_ids(&call)).await;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET canonical_command_digest = 'sha256:takeOverProjectWriter:damaged'
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let other_digest = take_over_project_writer(&store, &with_new_request_ids(&call)).await;
     assert_eq!(pre_capture.unwrap(), first);
     assert!(matches!(damaged, Err(ProjectCommandError::Unavailable(_))));
+    assert!(matches!(
+        other_digest,
+        Err(ProjectCommandError::BindingConflict)
+    ));
 }
 
 #[tokio::test]
@@ -1325,5 +1338,53 @@ async fn an_assistance_replay_separates_a_project_only_record_from_damaged_assis
             ReplayError::HistoricalAcknowledgementUnavailable,
             ReplayError::Unavailable,
         ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_exact_retry_ignores_a_later_canonical_snapshot_at_the_same_position() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, _admin) = stores().await;
+    let switch = set_current_chapter_call(&store, /*base*/ 0x6ac0).await;
+    let scope = switch.envelope.project_scope.clone();
+    let switched = store
+        .set_current_chapter(&switch.envelope, &switch.input)
+        .await
+        .unwrap();
+    open_session(&store, &scope, "6acb").await;
+    let rename_input = UpdateProjectInput {
+        title: "Renamed".to_owned(),
+        expected_revision: 1,
+    };
+    let rename = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x6acc,
+        &UPDATE_PROJECT,
+        rename_input,
+    )
+    .await;
+    let renamed = store
+        .update_project(&rename.envelope, &rename.input)
+        .await
+        .unwrap();
+    open_session(&store, &scope, "6acd").await;
+    let switch_retry = with_new_request_ids(&switch);
+    let rename_retry = with_new_request_ids(&rename);
+    assert_eq!(
+        (
+            store
+                .set_current_chapter(&switch_retry.envelope, &switch_retry.input)
+                .await
+                .unwrap(),
+            store
+                .update_project(&rename_retry.envelope, &rename_retry.input)
+                .await
+                .unwrap(),
+        ),
+        (switched, renamed)
     );
 }

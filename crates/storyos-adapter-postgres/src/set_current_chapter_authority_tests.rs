@@ -304,7 +304,7 @@ async fn switch_current(
         .unwrap()
 }
 
-/// The Author Action and Snapshot of an applied switch; `None` for a zero-authority outcome.
+/// The Author Action and Snapshot of an applied switch. A zero-authority outcome gives `None`.
 fn switch_authority(settlement: &SetCurrentChapterSettlement) -> Option<ChapterSelectionAuthority> {
     match &settlement.outcome {
         TransitionOutcome::Applied(applied) => applied.authority.clone().into_settled(),

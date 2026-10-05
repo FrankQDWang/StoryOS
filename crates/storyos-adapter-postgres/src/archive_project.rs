@@ -64,7 +64,7 @@ impl ProjectCommand for ArchiveProjectInput {
             )
             .await
             .map_err(unavailable)?
-            .get::<_, String>(0)
+            .get::<_, String>(/*idx*/ 0)
             .parse()
             .map_err(unavailable)?;
         Ok(Classification::project_command(

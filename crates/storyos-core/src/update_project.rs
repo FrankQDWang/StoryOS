@@ -34,7 +34,7 @@ pub enum UpdateProjectConflict {
     StaleProjectRevision,
 }
 
-/// A refusal that the adapter returns before Admission; no Receipt records it.
+/// A refusal that the adapter returns before Admission. No Receipt records it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateProjectRefusal {
     InvalidTitle,
