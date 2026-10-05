@@ -14,7 +14,9 @@ use storyos_core::{
     UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
     UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
+    WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
 };
+
 use storyos_core::{
     CompleteReadyPartialProposalRefusal, ContinueProposalGenerationRefusal,
     ProposalGenerationConflict,
@@ -359,6 +361,42 @@ fn every_rejection_reason_maps_to_its_public_reason() {
         (
             RejectProposalOperationsRefusal::IncompleteBundleClosure,
             contracts::RejectProposalOperationsRefusalReason::IncompleteBundleClosure,
+        ),
+    ]);
+}
+
+#[test]
+fn every_withdrawal_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        WithdrawProposalConflict::ChangedHead,
+        contracts::WithdrawProposalConflictReason::ChangedHead,
+    )]);
+    assert_maps(vec![
+        (
+            WithdrawProposalRefusal::WrongScope,
+            contracts::WithdrawProposalRefusalReason::WrongScope,
+        ),
+        (
+            WithdrawProposalRefusal::WrongAdmission,
+            contracts::WithdrawProposalRefusalReason::WrongAdmission,
+        ),
+        (
+            WithdrawProposalRefusal::StaleProposalRevision,
+            contracts::WithdrawProposalRefusalReason::StaleProposalRevision,
+        ),
+    ]);
+    assert_maps(vec![
+        (
+            WithdrawProposalNoEffect::UnsupportedCause,
+            contracts::WithdrawProposalNoEffectReason::UnsupportedCause,
+        ),
+        (
+            WithdrawProposalNoEffect::TerminalSupersession,
+            contracts::WithdrawProposalNoEffectReason::TerminalSupersession,
+        ),
+        (
+            WithdrawProposalNoEffect::ClosureNotOpen,
+            contracts::WithdrawProposalNoEffectReason::ClosureNotOpen,
         ),
     ]);
 }

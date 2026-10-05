@@ -11,6 +11,7 @@ use storyos_application::{
     ReplanProposalSettlement, SetCurrentChapterInput, StructureAuthority,
     StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput, UpdateChapterSettlement,
     UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput, UpdateVolumeSettlement,
+    WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
     issue_project_command_challenge,
 };
 use storyos_application::{
@@ -279,6 +280,12 @@ const REOPEN_REJECTED_OPERATIONS: Route = Route {
     method: storyos_contracts::REOPEN_REJECTED_OPERATIONS_METHOD,
     path: storyos_contracts::REOPEN_REJECTED_OPERATIONS_PATH,
     schema: storyos_contracts::REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
+};
+const WITHDRAW_PROPOSAL: Route = Route {
+    kind: "withdrawProposal",
+    method: storyos_contracts::WITHDRAW_PROPOSAL_METHOD,
+    path: storyos_contracts::WITHDRAW_PROPOSAL_PATH,
+    schema: storyos_contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 
 const COMPLETE_READY_PARTIAL_PROPOSAL: Route = Route {
@@ -751,6 +758,49 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let outcome = replayed_outcome(&store, &admin, &call, reopen_rejected_operations).await;
     observed.push((REOPEN_REJECTED_OPERATIONS.kind, outcome));
 
+    let (scope, open) = withdrawable_proposal(&store, &admin, /*base*/ 0x7440).await;
+    let mut withdrawal_receipts = Vec::new();
+    for (suffix, proposal_revision_id) in [
+        (0x7449, open.proposal_revision_id.clone()),
+        (0x744a, open.proposal_revision_id.clone()),
+        (0x744b, Uuid::now_v7().to_string()),
+    ] {
+        let input = WithdrawProposalInput {
+            proposal_revision_id,
+            ..open.clone()
+        };
+        let call = issued(&store, &scope, suffix, &WITHDRAW_PROPOSAL, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, withdraw_proposal).await;
+        observed.push((WITHDRAW_PROPOSAL.kind, outcome));
+        withdrawal_receipts.push(call.envelope.ids.receipt_id);
+    }
+    let (scope, open) = withdrawable_proposal(&store, &admin, /*base*/ 0x7450).await;
+    move_head_away(&admin, &scope, &open.expected_authoritative_revision_id).await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x7459,
+        &WITHDRAW_PROPOSAL,
+        open,
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, withdraw_proposal).await;
+    observed.push((WITHDRAW_PROPOSAL.kind, outcome));
+    withdrawal_receipts.push(call.envelope.ids.receipt_id);
+    let mut withdrawal_records = Vec::new();
+    for receipt_id in &withdrawal_receipts {
+        let records: i64 = admin
+            .query_one(
+                "SELECT count(*) FROM storyos.proposal_withdrawals
+                  WHERE withdrawal_receipt_id = $1::text::uuid",
+                &[receipt_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        withdrawal_records.push(records);
+    }
+
     let (scope, generation) = ready_partial_proposal(&store, &admin, /*base*/ 0x7500).await;
     for (suffix, expected_authoritative_revision_id) in [
         (0x750a, &generation.other_chapter_revision_id),
@@ -805,6 +855,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
     let activity_applied = ("authoritative_applied", [1, 0, 1, 0, 0]);
     let proposal_revised = ("proposal_revised", [1, 1, 0, 0, 0]);
+    let proposal_closure_changed = ("proposal_closure_changed", [1, 1, 0, 0, 0]);
     let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
     let generation_completed = ("proposal_generation_completed", [1, 1, 0, 0, 0]);
     let generation_started = ("proposal_generation_started", [1, 1, 0, 0, 0]);
@@ -869,6 +920,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("reopenRejectedOperations", proposal_revised),
             ("reopenRejectedOperations", refused),
             ("reopenRejectedOperations", conflicted),
+            ("withdrawProposal", proposal_closure_changed),
+            ("withdrawProposal", no_effect),
+            ("withdrawProposal", refused),
+            ("withdrawProposal", conflicted),
             ("completeReadyPartialProposal", conflicted),
             ("completeReadyPartialProposal", generation_completed),
             ("completeReadyPartialProposal", refused),
@@ -878,6 +933,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         ]
     );
     assert_eq!(rejection_records, vec![1; 4]);
+    assert_eq!(withdrawal_records, vec![1, 0, 0, 0]);
 }
 
 /// A new Project with Chapters A and B, Chapter A current, and one writer Editor Session.
@@ -1331,6 +1387,42 @@ async fn reopen_rejected_operations_call(
     issued(store, &scope, base + 9, &REOPEN_REJECTED_OPERATIONS, input).await
 }
 
+async fn withdraw_proposal(
+    store: &PostgresProjectReader,
+    call: &CommandCall<WithdrawProposalInput>,
+) -> Result<WithdrawProposalSettlement, ProjectCommandError> {
+    store.withdraw_proposal(&call.envelope, &call.input).await
+}
+
+/// A new Project with one open Proposal and the input that withdraws it.
+async fn withdrawable_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, WithdrawProposalInput) {
+    let (scope, proposal) = open_proposal(store, admin, base, "valid", "pending").await;
+    let input = WithdrawProposalInput {
+        editor_session_id: EditorSessionId::new(proposal.editor_session_id),
+        proposal_id: proposal.proposal_id,
+        proposal_revision_id: proposal.revision_id,
+        expected_authoritative_revision_id: proposal.chapter_head,
+        withdrawal_note: WithdrawalNote::Present {
+            text: "Not this one".to_owned(),
+        },
+    };
+    (scope, input)
+}
+
+/// One applicable author Withdrawal in a new Project.
+async fn withdraw_proposal_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<WithdrawProposalInput> {
+    let (scope, input) = withdrawable_proposal(store, admin, base).await;
+    issued(store, &scope, base + 9, &WITHDRAW_PROPOSAL, input).await
+}
+
 async fn complete_ready_partial_proposal(
     store: &PostgresProjectReader,
     call: &CommandCall<CompleteReadyPartialProposalInput>,
@@ -1752,6 +1844,12 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7470).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
             &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7510).await,
         )
         .await,
@@ -1762,7 +1860,7 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 17]);
+    assert_eq!(observed, vec![(true, [0; 5]); 18]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2000,6 +2098,12 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7480).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
             &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7530).await,
         )
         .await,
@@ -2016,7 +2120,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::Refused));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 4]);
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 5]);
     assert_eq!(observed, expected);
 }
 
@@ -2057,18 +2161,71 @@ async fn evidence_replays<C: ProjectCommand + Clone>(
         let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
             panic!("a replay without complete evidence must fail");
         };
-        errors.push(match error {
-            ProjectCommandError::BindingConflict => ReplayError::BindingConflict,
-            ProjectCommandError::HistoricalAcknowledgementUnavailable => {
-                ReplayError::HistoricalAcknowledgementUnavailable
-            }
-            ProjectCommandError::InvalidChallenge => ReplayError::InvalidChallenge,
-            ProjectCommandError::MissingProject => ReplayError::MissingProject,
-            ProjectCommandError::Unavailable(_) => ReplayError::Unavailable,
-        });
+        errors.push(error.into());
     }
     let errors: [ReplayError; 2] = errors.try_into().unwrap();
     (settled.outcome.receipt_result(), errors)
+}
+
+impl From<ProjectCommandError> for ReplayError {
+    fn from(error: ProjectCommandError) -> Self {
+        match error {
+            ProjectCommandError::BindingConflict => Self::BindingConflict,
+            ProjectCommandError::HistoricalAcknowledgementUnavailable => {
+                Self::HistoricalAcknowledgementUnavailable
+            }
+            ProjectCommandError::InvalidChallenge => Self::InvalidChallenge,
+            ProjectCommandError::MissingProject => Self::MissingProject,
+            ProjectCommandError::Unavailable(_) => Self::Unavailable,
+        }
+    }
+}
+
+/// The effect row of one applied Proposal decision and its preserved Proposal State Axes.
+struct PreservedEffect {
+    table: &'static str,
+    receipt_column: &'static str,
+    preserved_columns: &'static [&'static str],
+}
+
+/// Settles the call, then replays it once without its preserved values and once without its
+/// effect row.
+async fn effect_replays<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    effect: PreservedEffect,
+) -> [ReplayError; 2] {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the Proposal decision must settle");
+    };
+    let PreservedEffect {
+        table,
+        receipt_column,
+        preserved_columns,
+    } = effect;
+    let filter = format!(
+        "WHERE {receipt_column} = '{}'",
+        call.envelope.ids.receipt_id
+    );
+    let cleared = preserved_columns
+        .iter()
+        .map(|column| format!("{column} = NULL"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut errors = Vec::new();
+    for statement in [
+        format!("UPDATE storyos.{table} SET {cleared} {filter}"),
+        format!("DELETE FROM storyos.{table} {filter}"),
+    ] {
+        run_without_foreign_keys(admin, &statement).await;
+        let retry = with_new_request_ids(call);
+        let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
+            panic!("a replay without its preserved values must fail");
+        };
+        errors.push(error.into());
+    }
+    errors.try_into().unwrap()
 }
 
 #[tokio::test]
@@ -2166,6 +2323,12 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         evidence_replays(
             &store,
             &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7490).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
             &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7550).await,
         )
         .await,
@@ -2183,7 +2346,110 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 16]);
+    assert_eq!(observed, vec![separated; 17]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn every_proposal_decision_replay_separates_pre_capture_from_damaged_effect_rows() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        effect_replays(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7c00).await,
+            PreservedEffect {
+                table: "proposal_rejection_receipts",
+                receipt_column: "rejection_receipt_id",
+                preserved_columns: &[
+                    "preserved_generation",
+                    "preserved_validation",
+                    "preserved_closure",
+                ],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7c10).await,
+            PreservedEffect {
+                table: "proposal_withdrawals",
+                receipt_column: "withdrawal_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_validation"],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x7c20).await,
+            PreservedEffect {
+                table: "proposal_replans",
+                receipt_column: "replan_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_closure"],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x7c30).await,
+            PreservedEffect {
+                table: "proposal_withdrawal_reopenings",
+                receipt_column: "reopen_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_operation_resolution"],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7c40).await,
+            PreservedEffect {
+                table: "proposal_operation_reopenings",
+                receipt_column: "reopen_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_closure"],
+            },
+        )
+        .await,
+    ];
+    let separated = [
+        ReplayError::HistoricalAcknowledgementUnavailable,
+        ReplayError::Unavailable,
+    ];
+    assert_eq!(observed, vec![separated; 5]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_multi_operation_rejection_replays_the_resolution_of_its_first_selected_operation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut call = reject_proposal_operations_call(&store, &admin, /*base*/ 0x7c50).await;
+    let first_operation = call.input.selected_pending_operation_ids[0].clone();
+    let later_operation = Uuid::now_v7().to_string();
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "INSERT INTO storyos.proposal_operations
+               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                resolution, reservation_state, candidate_text)
+             SELECT owner_user_id, project_id, proposal_id, '{later_operation}',
+                    gen_random_uuid(), resolution, reservation_state, candidate_text
+               FROM storyos.proposal_operations WHERE operation_id = '{first_operation}'"
+        ),
+    )
+    .await;
+    call.input.selected_pending_operation_ids = vec![later_operation, first_operation];
+    let (result_kind, _rows) =
+        replayed_outcome(&store, &admin, &call, reject_proposal_operations).await;
+    assert_eq!(result_kind, "proposal_operations_resolved");
 }
 
 #[tokio::test]

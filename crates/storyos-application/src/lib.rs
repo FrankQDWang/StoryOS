@@ -246,9 +246,8 @@ pub use update_project_assistance::{
     UpdateProjectAssistanceSettlement,
 };
 pub use withdraw_proposal::{
-    ResolvedWithdrawal, WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,
-    WithdrawProposalSettlementEffect, WithdrawProposalStore, WithdrawalActor, WithdrawalNote,
-    withdraw_proposal,
+    CurrentProducerWithdrawal, CurrentProducerWithdrawalSettlement, ProposalWithdrawn,
+    WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
 };
 
 pub use editor_session::{

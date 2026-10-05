@@ -75,10 +75,9 @@ impl SettlementProfile for ActionOnly {
     }
 
     fn replay<E: Send>(effect: E, replay: &CommandReplay) -> Result<ActionApplied<E>, ReplayFault> {
-        let sequence = replay
-            .author_action_sequence
-            .as_deref()
-            .ok_or(ReplayFault::HistoricalAcknowledgementUnavailable)?;
+        let sequence = replay.author_action_sequence.as_deref().ok_or_else(|| {
+            ReplayFault::Unavailable("the applied Receipt has no Forward Author Action".into())
+        })?;
         Ok(ActionApplied {
             effect,
             author_action_sequence: sequence
