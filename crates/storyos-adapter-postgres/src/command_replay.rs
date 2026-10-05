@@ -290,7 +290,7 @@ pub(crate) async fn read_command_replay(
         fence_digest_matches: row.get(/*idx*/ 20),
         author_action_disposition: row.get(/*idx*/ 21),
         draft_artifact_refs: row.get(/*idx*/ 22),
-        admission_matches: row.get::<_, Option<bool>>(/*idx*/ 23).unwrap_or(false),
+        admission_matches: row.get::<_, Option<bool>>(/*idx*/ 23).unwrap_or_default(),
     })
 }
 
