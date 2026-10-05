@@ -100,52 +100,54 @@ pub(super) async fn expand_refused_edit_draft(
             {
                 valid_uuid(value)?;
             }
-            let ([target_ref], [expected_target_revision_id], [anchor]) = (
-                input.target_refs.as_slice(),
-                input.expected_target_revisions.as_slice(),
-                input.anchors.as_slice(),
-            ) else {
-                return Err(binding_conflict());
-            };
-            if input.expected_source_draft_closure != "open"
-                || input.proposal_kind != "inline_edit"
-                || anchor.manuscript_block_id != *target_ref
-                || anchor.base_authoritative_revision_id != *expected_target_revision_id
-            {
-                return Err(binding_conflict());
-            }
-            Ok(ExpandRefusedEditDraftToProposalInput {
-                editor_session_id: EditorSessionId::new(input.editor_session_id.clone()),
-                writer_generation,
-                draft_id: draft_id.clone(),
-                source_current_draft_revision_id: input.source_current_draft_revision_id.clone(),
-                source_draft_payload_digest: input.source_draft_payload_digest.clone(),
-                source_reopen_event_id: input.source_reopen_event_id.clone(),
-                chapter_id: input.chapter_id.clone(),
-                target_ref: target_ref.clone(),
-                expected_target_revision_id: expected_target_revision_id.clone(),
-                anchor: OpenInlineProposalAnchor {
-                    manuscript_block_id: anchor.manuscript_block_id.clone(),
-                    base_authoritative_revision_id: anchor.base_authoritative_revision_id.clone(),
-                    manuscript_schema_version: anchor.manuscript_schema_version,
-                    coordinate_profile: anchor.coordinate_profile.clone(),
-                    from: anchor.from,
-                    to: anchor.to,
-                    boundary_profile: anchor.boundary_profile.clone(),
-                    base_slice_digest: anchor.base_slice_digest.clone(),
-                },
-            })
+            Ok((writer_generation, input.clone()))
         },
     )
     .await?;
+    // The store check comes before the Draft binding check.
+    let (writer_generation, request) = &admitted.input;
+    let ([target_ref], [expected_target_revision_id], [anchor]) = (
+        request.target_refs.as_slice(),
+        request.expected_target_revisions.as_slice(),
+        request.anchors.as_slice(),
+    ) else {
+        return Err(binding_conflict());
+    };
+    if request.expected_source_draft_closure != "open"
+        || request.proposal_kind != "inline_edit"
+        || anchor.manuscript_block_id != *target_ref
+        || anchor.base_authoritative_revision_id != *expected_target_revision_id
+    {
+        return Err(binding_conflict());
+    }
+    let input = ExpandRefusedEditDraftToProposalInput {
+        editor_session_id: EditorSessionId::new(request.editor_session_id.clone()),
+        writer_generation: *writer_generation,
+        draft_id: draft_id.clone(),
+        source_current_draft_revision_id: request.source_current_draft_revision_id.clone(),
+        source_draft_payload_digest: request.source_draft_payload_digest.clone(),
+        source_reopen_event_id: request.source_reopen_event_id.clone(),
+        chapter_id: request.chapter_id.clone(),
+        target_ref: target_ref.clone(),
+        expected_target_revision_id: expected_target_revision_id.clone(),
+        anchor: OpenInlineProposalAnchor {
+            manuscript_block_id: anchor.manuscript_block_id.clone(),
+            base_authoritative_revision_id: anchor.base_authoritative_revision_id.clone(),
+            manuscript_schema_version: anchor.manuscript_schema_version,
+            coordinate_profile: anchor.coordinate_profile.clone(),
+            from: anchor.from,
+            to: anchor.to,
+            boundary_profile: anchor.boundary_profile.clone(),
+            base_slice_digest: anchor.base_slice_digest.clone(),
+        },
+    };
     let settlement = admitted
         .store
-        .expand_refused_edit_draft(&admitted.envelope, &admitted.input)
+        .expand_refused_edit_draft(&admitted.envelope, &input)
         .await
         .map_err(|error| EXPAND_REFUSED_EDIT_DRAFT.problem(error))?;
     admitted.hold_first_acknowledgement().await;
     let envelope = &admitted.envelope;
-    let input = &admitted.input;
     let observed =
         |observation: Option<DraftExpansionObservation>| observation.ok_or_else(store_unavailable);
     let (result, author_action_sequence, created, observation, effect) = match settlement.outcome {
