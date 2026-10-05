@@ -49,23 +49,12 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
         activity_kind: "",
         replay_effect: ReplayEffect::Query(
             "SELECT jsonb_build_object(
-                      'resulting_proposal_revision_id', revision.revision_id::text,
-                      'preserved_generation', revision.generation,
-                      'preserved_operation_resolution', (
-                        SELECT operation.resolution
-                          FROM storyos.proposal_operations AS operation
-                         WHERE (operation.owner_user_id, operation.project_id,
-                                operation.proposal_id) =
-                               (revision.owner_user_id, revision.project_id, revision.proposal_id)
-                         ORDER BY operation.operation_id
-                         LIMIT 1))::text
-               FROM storyos.domain_receipts AS receipt
-               JOIN storyos.proposal_revisions AS revision
-                 ON (revision.owner_user_id, revision.project_id, revision.revision_id) =
-                    (receipt.owner_user_id, receipt.project_id, receipt.proposal_revision_ids[1])
-              WHERE receipt.owner_user_id = $1::text::uuid
-                AND receipt.project_id = $2::text::uuid
-                AND receipt.receipt_id = $3::text::uuid",
+                      'resulting_proposal_revision_id', resulting_proposal_revision_id::text,
+                      'preserved_generation', preserved_generation,
+                      'preserved_operation_resolution', preserved_operation_resolution)::text
+               FROM storyos.proposal_withdrawal_reopenings
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND reopen_receipt_id = $3::text::uuid",
         ),
     };
     type Profile = ActionOnly;
@@ -192,7 +181,7 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
-        _sequence: &ProfileSequences<Self>,
+        sequence: &ProfileSequences<Self>,
         withdrawn: WithdrawnRevision,
         resulting_proposal_revision_id: String,
     ) -> Result<ProposalReopened, ProjectCommandError> {
@@ -236,6 +225,32 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
         if head_updates != 1 {
             return Err(ProjectCommandError::BindingConflict);
         }
+        client
+            .execute(
+                "INSERT INTO storyos.proposal_withdrawal_reopenings
+                   (owner_user_id, project_id, reopen_event_id, proposal_id,
+                    source_proposal_revision_id, resulting_proposal_revision_id,
+                    withdrawal_event_id, preserved_generation, preserved_operation_resolution,
+                    reopen_receipt_id, author_action_sequence)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                         $5::text::uuid, $6::text::uuid, $7::text::uuid, $8, $9,
+                         $10::text::uuid, $11::text::numeric)",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &Uuid::now_v7().to_string(),
+                    &self.proposal_id,
+                    &withdrawn.revision_id,
+                    &resulting_proposal_revision_id,
+                    &self.withdrawal_event_id,
+                    &withdrawn.generation,
+                    &withdrawn.operation_resolution,
+                    &envelope.ids.receipt_id,
+                    &sequence.0.to_string(),
+                ],
+            )
+            .await
+            .map_err(unavailable)?;
         Ok(ProposalReopened {
             resulting_proposal_revision_id,
             preserved_generation: withdrawn.generation,
@@ -258,7 +273,10 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
                 preserved_generation,
                 preserved_operation_resolution,
             }),
-            _ => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
+            (Some(_), None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
+            _ => Err(ReplayFault::Unavailable(
+                "the applied reopening record is missing or damaged".into(),
+            )),
         }
     }
 }

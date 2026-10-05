@@ -65,20 +65,13 @@ impl ProjectCommand for ReplanProposalInput {
         activity_kind: "",
         replay_effect: ReplayEffect::Query(
             "SELECT jsonb_build_object(
-                      'state_event_id', replan.replan_event_id::text,
-                      'resulting_proposal_revision_id',
-                      replan.resulting_proposal_revision_id::text,
-                      'preserved_generation', revision.generation,
-                      'preserved_closure', revision.closure)::text
-               FROM storyos.proposal_replans AS replan
-               JOIN storyos.proposal_revisions AS revision
-                 ON (revision.owner_user_id, revision.project_id, revision.proposal_id,
-                     revision.revision_id) =
-                    (replan.owner_user_id, replan.project_id, replan.proposal_id,
-                     replan.resulting_proposal_revision_id)
-              WHERE replan.owner_user_id = $1::text::uuid
-                AND replan.project_id = $2::text::uuid
-                AND replan.replan_receipt_id = $3::text::uuid",
+                      'state_event_id', replan_event_id::text,
+                      'resulting_proposal_revision_id', resulting_proposal_revision_id::text,
+                      'preserved_generation', preserved_generation,
+                      'preserved_closure', preserved_closure)::text
+               FROM storyos.proposal_replans
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND replan_receipt_id = $3::text::uuid",
         ),
     };
     type Profile = ActionOnly;
@@ -264,10 +257,10 @@ impl ProjectCommand for ReplanProposalInput {
                    (owner_user_id, project_id, replan_event_id, proposal_id,
                     source_proposal_revision_id, resulting_proposal_revision_id,
                     source_condition_kind, source_condition_ref, replan_receipt_id,
-                    author_action_sequence)
+                    author_action_sequence, preserved_generation, preserved_closure)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                          $5::text::uuid, $6::text::uuid, $7, $8::text::uuid, $9::text::uuid,
-                         $10::text::numeric)",
+                         $10::text::numeric, $11, $12)",
                 &[
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
@@ -279,6 +272,8 @@ impl ProjectCommand for ReplanProposalInput {
                     &condition_ref,
                     &envelope.ids.receipt_id,
                     &sequence.0.to_string(),
+                    &conflicted.generation,
+                    &conflicted.closure,
                 ],
             )
             .await
@@ -293,23 +288,28 @@ impl ProjectCommand for ReplanProposalInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalReplanned, ReplayFault> {
         match (
+            replay.effect_text("state_event_id"),
             replay.effect_text("resulting_proposal_revision_id"),
             replay.effect_text("preserved_generation"),
             replay.effect_text("preserved_closure"),
-            replay.effect_text("state_event_id"),
         ) {
             (
+                Some(state_event_id),
                 Some(resulting_proposal_revision_id),
                 Some(preserved_generation),
                 Some(preserved_closure),
-                Some(state_event_id),
             ) => Ok(ProposalReplanned {
                 resulting_proposal_revision_id,
                 preserved_generation,
                 preserved_closure,
                 state_event_id,
             }),
-            _ => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
+            (Some(_), Some(_), None, None) => {
+                Err(ReplayFault::HistoricalAcknowledgementUnavailable)
+            }
+            _ => Err(ReplayFault::Unavailable(
+                "the applied replan record is missing or damaged".into(),
+            )),
         }
     }
 }
