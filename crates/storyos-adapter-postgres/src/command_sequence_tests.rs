@@ -3474,7 +3474,12 @@ async fn replay_without_receipt_payload_field<C: ProjectCommand + Clone>(
         .await
         .unwrap()
         .iter()
-        .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)))
+        .map(|row| {
+            (
+                row.get::<_, String>(/*idx*/ 0),
+                row.get::<_, String>(/*idx*/ 1),
+            )
+        })
         .collect::<Vec<_>>();
     let dropped = checks
         .iter()
