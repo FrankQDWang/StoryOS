@@ -1,6 +1,6 @@
 use super::{
-    WithdrawProposal, WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
-    WithdrawProposalResult, WithdrawalAllocation, WithdrawalCause, withdraw_proposal,
+    TransitionOutcome, WithdrawProposal, WithdrawProposalConflict, WithdrawProposalNoEffect,
+    WithdrawProposalRefusal, WithdrawalCause, withdraw_proposal,
 };
 
 fn author_withdraw() -> WithdrawProposal {
@@ -26,22 +26,18 @@ fn producer_withdraw() -> WithdrawProposal {
 }
 
 #[test]
-fn author_withdrawal_allocates_one_forward_action() {
+fn an_author_withdrawal_of_an_open_current_revision_applies() {
     assert_eq!(
         withdraw_proposal(&author_withdraw()),
-        WithdrawProposalResult::Resolved {
-            allocation: WithdrawalAllocation::AuthorForward,
-        }
+        TransitionOutcome::Applied(())
     );
 }
 
 #[test]
-fn current_producer_withdrawal_allocates_no_author_action() {
+fn a_matching_current_producer_withdrawal_applies() {
     assert_eq!(
         withdraw_proposal(&producer_withdraw()),
-        WithdrawProposalResult::Resolved {
-            allocation: WithdrawalAllocation::CurrentProducerOwned,
-        }
+        TransitionOutcome::Applied(())
     );
 }
 
@@ -51,26 +47,20 @@ fn unsupported_cause_and_terminal_supersession_have_no_effect() {
     unmatched.producer_matches = false;
     assert_eq!(
         withdraw_proposal(&unmatched),
-        WithdrawProposalResult::NoEffect {
-            reason: WithdrawProposalNoEffect::UnsupportedCause,
-        }
+        TransitionOutcome::NoEffect(WithdrawProposalNoEffect::UnsupportedCause)
     );
     let mut superseded = author_withdraw();
     superseded.terminal_supersession = true;
     superseded.closure_open = false;
     assert_eq!(
         withdraw_proposal(&superseded),
-        WithdrawProposalResult::NoEffect {
-            reason: WithdrawProposalNoEffect::TerminalSupersession,
-        }
+        TransitionOutcome::NoEffect(WithdrawProposalNoEffect::TerminalSupersession)
     );
     let mut closed = author_withdraw();
     closed.closure_open = false;
     assert_eq!(
         withdraw_proposal(&closed),
-        WithdrawProposalResult::NoEffect {
-            reason: WithdrawProposalNoEffect::ClosureNotOpen,
-        }
+        TransitionOutcome::NoEffect(WithdrawProposalNoEffect::ClosureNotOpen)
     );
 }
 
@@ -80,32 +70,24 @@ fn withdraw_refuses_scope_admission_and_stale_revision_and_conflicts_on_head() {
     wrong_scope.scope_matches = false;
     assert_eq!(
         withdraw_proposal(&wrong_scope),
-        WithdrawProposalResult::Refused {
-            reason: WithdrawProposalRefusal::WrongScope,
-        }
+        TransitionOutcome::Refused(WithdrawProposalRefusal::WrongScope)
     );
     let mut wrong_admission = author_withdraw();
     wrong_admission.admission_valid = false;
     assert_eq!(
         withdraw_proposal(&wrong_admission),
-        WithdrawProposalResult::Refused {
-            reason: WithdrawProposalRefusal::WrongAdmission,
-        }
+        TransitionOutcome::Refused(WithdrawProposalRefusal::WrongAdmission)
     );
     let mut stale = author_withdraw();
     stale.proposal_revision_current = false;
     assert_eq!(
         withdraw_proposal(&stale),
-        WithdrawProposalResult::Refused {
-            reason: WithdrawProposalRefusal::StaleProposalRevision,
-        }
+        TransitionOutcome::Refused(WithdrawProposalRefusal::StaleProposalRevision)
     );
     let mut changed = author_withdraw();
     changed.expected_target_matches_head = false;
     assert_eq!(
         withdraw_proposal(&changed),
-        WithdrawProposalResult::Conflicted {
-            reason: WithdrawProposalConflict::ChangedHead,
-        }
+        TransitionOutcome::Conflicted(WithdrawProposalConflict::ChangedHead)
     );
 }

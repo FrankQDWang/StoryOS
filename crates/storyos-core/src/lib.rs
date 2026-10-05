@@ -244,7 +244,7 @@ pub use update_volume::{
 };
 pub use withdraw_proposal::{
     WithdrawProposal, WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
-    WithdrawProposalResult, WithdrawalAllocation, WithdrawalCause, withdraw_proposal,
+    WithdrawProposalResult, WithdrawalCause, withdraw_proposal,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

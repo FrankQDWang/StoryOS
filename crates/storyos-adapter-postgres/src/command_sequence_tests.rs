@@ -12,6 +12,7 @@ use storyos_application::{
     ReplanProposalSettlement, SetCurrentChapterInput, StructureAuthority,
     StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput, UpdateChapterSettlement,
     UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput, UpdateVolumeSettlement,
+    WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
     issue_project_command_challenge,
 };
 use storyos_application::{
@@ -276,6 +277,12 @@ const REOPEN_REJECTED_OPERATIONS: Route = Route {
     method: storyos_contracts::REOPEN_REJECTED_OPERATIONS_METHOD,
     path: storyos_contracts::REOPEN_REJECTED_OPERATIONS_PATH,
     schema: storyos_contracts::REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
+};
+const WITHDRAW_PROPOSAL: Route = Route {
+    kind: "withdrawProposal",
+    method: storyos_contracts::WITHDRAW_PROPOSAL_METHOD,
+    path: storyos_contracts::WITHDRAW_PROPOSAL_PATH,
+    schema: storyos_contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 const CLOSE_EDITOR_FLOW_DRAFT: Route = Route {
     kind: "closeEditorFlowDraft",
@@ -741,6 +748,48 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let outcome = replayed_outcome(&store, &admin, &call, reopen_rejected_operations).await;
     observed.push((REOPEN_REJECTED_OPERATIONS.kind, outcome));
 
+    let (scope, open) = withdrawable_proposal(&store, &admin, /*base*/ 0x7440).await;
+    let mut withdrawal_receipts = Vec::new();
+    for (suffix, proposal_revision_id) in [
+        (0x7449, open.proposal_revision_id.clone()),
+        (0x744a, open.proposal_revision_id.clone()),
+        (0x744b, Uuid::now_v7().to_string()),
+    ] {
+        let input = WithdrawProposalInput {
+            proposal_revision_id,
+            ..open.clone()
+        };
+        let call = issued(&store, &scope, suffix, &WITHDRAW_PROPOSAL, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, withdraw_proposal).await;
+        observed.push((WITHDRAW_PROPOSAL.kind, outcome));
+        withdrawal_receipts.push(call.envelope.ids.receipt_id);
+    }
+    let (scope, open) = withdrawable_proposal(&store, &admin, /*base*/ 0x7450).await;
+    move_head_away(&admin, &scope, &open.expected_authoritative_revision_id).await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x7459,
+        &WITHDRAW_PROPOSAL,
+        open,
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, withdraw_proposal).await;
+    observed.push((WITHDRAW_PROPOSAL.kind, outcome));
+    withdrawal_receipts.push(call.envelope.ids.receipt_id);
+    let mut withdrawal_records = Vec::new();
+    for receipt_id in &withdrawal_receipts {
+        let records: i64 = admin
+            .query_one(
+                "SELECT count(*) FROM storyos.proposal_withdrawals
+                  WHERE withdrawal_receipt_id = $1::text::uuid",
+                &[receipt_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        withdrawal_records.push(records);
+    }
     let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7c00, "retained").await;
     let changed = CloseEditorFlowDraftInput {
         source_current_draft_revision_id: Uuid::now_v7().to_string(),
@@ -764,6 +813,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
     let activity_applied = ("authoritative_applied", [1, 0, 1, 0, 0]);
     let proposal_revised = ("proposal_revised", [1, 1, 0, 0, 0]);
+    let proposal_closure_changed = ("proposal_closure_changed", [1, 1, 0, 0, 0]);
     let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
     let draft_closure_changed = ("draft_closure_changed", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
@@ -827,6 +877,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("reopenRejectedOperations", proposal_revised),
             ("reopenRejectedOperations", refused),
             ("reopenRejectedOperations", conflicted),
+            ("withdrawProposal", proposal_closure_changed),
+            ("withdrawProposal", no_effect),
+            ("withdrawProposal", refused),
+            ("withdrawProposal", conflicted),
             ("closeEditorFlowDraft", draft_closure_changed),
             ("closeEditorFlowDraft", refused),
             ("closeEditorFlowDraft", conflicted),
@@ -834,6 +888,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         ]
     );
     assert_eq!(rejection_records, vec![1; 4]);
+    assert_eq!(withdrawal_records, vec![1, 0, 0, 0]);
 }
 
 /// A new Project with Chapters A and B, Chapter A current, and one writer Editor Session.
@@ -1287,6 +1342,42 @@ async fn reopen_rejected_operations_call(
     issued(store, &scope, base + 9, &REOPEN_REJECTED_OPERATIONS, input).await
 }
 
+async fn withdraw_proposal(
+    store: &PostgresProjectReader,
+    call: &CommandCall<WithdrawProposalInput>,
+) -> Result<WithdrawProposalSettlement, ProjectCommandError> {
+    store.withdraw_proposal(&call.envelope, &call.input).await
+}
+
+/// A new Project with one open Proposal and the input that withdraws it.
+async fn withdrawable_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, WithdrawProposalInput) {
+    let (scope, proposal) = open_proposal(store, admin, base, "valid", "pending").await;
+    let input = WithdrawProposalInput {
+        editor_session_id: EditorSessionId::new(proposal.editor_session_id),
+        proposal_id: proposal.proposal_id,
+        proposal_revision_id: proposal.revision_id,
+        expected_authoritative_revision_id: proposal.chapter_head,
+        withdrawal_note: WithdrawalNote::Present {
+            text: "Not this one".to_owned(),
+        },
+    };
+    (scope, input)
+}
+
+/// One applicable author Withdrawal in a new Project.
+async fn withdraw_proposal_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<WithdrawProposalInput> {
+    let (scope, input) = withdrawable_proposal(store, admin, base).await;
+    issued(store, &scope, base + 9, &WITHDRAW_PROPOSAL, input).await
+}
+
 async fn close_editor_flow_draft(
     store: &PostgresProjectReader,
     call: &CommandCall<CloseEditorFlowDraftInput>,
@@ -1639,11 +1730,17 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7470).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
             &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7c20).await,
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 16]);
+    assert_eq!(observed, vec![(true, [0; 5]); 17]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1882,6 +1979,12 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         failed_then_settled(
             &store,
             &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7480).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
             &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7c30).await,
         )
         .await,
@@ -1892,7 +1995,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::Refused));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 3]);
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);
 }
@@ -2042,6 +2145,12 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7290).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7490).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -2050,7 +2159,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 14]);
+    assert_eq!(observed, vec![separated; 15]);
 }
 
 #[tokio::test]

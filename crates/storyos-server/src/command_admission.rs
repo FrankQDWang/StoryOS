@@ -152,6 +152,61 @@ impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
     }
 }
 
+impl ProjectCommandRequest for contracts::WithdrawProposalRequest {
+    fn command_schema(&self) -> &str {
+        &self.command_schema
+    }
+
+    fn client_contract_revision(&self) -> &str {
+        match &self.withdraw_proposal_input {
+            contracts::WithdrawProposalInput::Author {
+                client_contract_revision,
+                ..
+            }
+            | contracts::WithdrawProposalInput::CurrentProducer {
+                client_contract_revision,
+                ..
+            } => client_contract_revision,
+        }
+    }
+
+    fn security_policy_revision(&self) -> &str {
+        match &self.withdraw_proposal_input {
+            contracts::WithdrawProposalInput::Author {
+                security_policy_revision,
+                ..
+            }
+            | contracts::WithdrawProposalInput::CurrentProducer {
+                security_policy_revision,
+                ..
+            } => security_policy_revision,
+        }
+    }
+
+    fn correlation_id(&self) -> &str {
+        match &self.withdraw_proposal_input {
+            contracts::WithdrawProposalInput::Author { correlation_id, .. }
+            | contracts::WithdrawProposalInput::CurrentProducer { correlation_id, .. } => {
+                correlation_id
+            }
+        }
+    }
+}
+
+/// Whether a request carries the anti-forgery nonce of a Command Challenge.
+pub(super) enum AntiForgery {
+    Required,
+    /// The request consumes no Command Challenge, as the current-producer Withdrawal (ADR 0043).
+    Absent,
+}
+
+/// One authenticated project command request and its parsed body.
+pub(super) struct ProjectCommandBody<R> {
+    pub(super) body: R,
+    scope: ApplicationScope,
+    headers: HeaderMap,
+}
+
 /// One admitted project command, ready for its Core Transition.
 pub(super) struct Admitted<I> {
     pub(super) store: PostgresProjectReader,
@@ -181,6 +236,20 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
     route: &ProjectCommandRoute,
     input: F,
 ) -> Result<Admitted<I>, ApiError> {
+    let read = read_body(state, project_id, targets, request, route).await?;
+    admit_body(state, read, route, AntiForgery::Required, input).await
+}
+
+/// Authenticates one project command request and parses its body.
+///
+/// `targets` are the path identities after the Project.
+pub(super) async fn read_body<R: DeserializeOwned>(
+    state: &ServerState,
+    project_id: &str,
+    targets: &[&str],
+    request: Request,
+    route: &ProjectCommandRoute,
+) -> Result<ProjectCommandBody<R>, ApiError> {
     let (parts, body_stream) = request.into_parts();
     let headers = parts.headers;
     let scope = authenticate_scope(
@@ -204,6 +273,31 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
         .await
         .map_err(|_| payload_too_large())?;
     let body = serde_json::from_slice::<R>(&bytes).map_err(|_| invalid_request_shape())?;
+    Ok(ProjectCommandBody {
+        body,
+        scope,
+        headers,
+    })
+}
+
+/// Binds one parsed project command body to its Command Challenge.
+///
+/// `input` validates and parses the command-specific body fields.
+pub(super) async fn admit_body<
+    R: ProjectCommandRequest,
+    I,
+    F: FnOnce(&R) -> Result<I, ApiError>,
+>(
+    state: &ServerState,
+    ProjectCommandBody {
+        body,
+        scope,
+        headers,
+    }: ProjectCommandBody<R>,
+    route: &ProjectCommandRoute,
+    anti_forgery: AntiForgery,
+    input: F,
+) -> Result<Admitted<I>, ApiError> {
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session = state
         .client_session_binding(session_handle)
@@ -242,13 +336,21 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
         }
     };
     let idempotency_key = exact_header(&headers, "idempotency-key")?;
-    let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
-    if !valid_uuid_v7(idempotency_key)
-        || nonce.len() != 64
-        || !nonce
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
+    let nonce = match anti_forgery {
+        AntiForgery::Required => {
+            let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
+            if nonce.len() != 64
+                || !nonce
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            {
+                return Err(invalid_request());
+            }
+            nonce
+        }
+        AntiForgery::Absent => "",
+    };
+    if !valid_uuid_v7(idempotency_key) {
         return Err(invalid_request());
     }
     let secret = state
