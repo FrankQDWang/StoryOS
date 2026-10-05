@@ -483,7 +483,8 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
         let event_id = receipt_text("event_id")?;
         let proposal_id = receipt_text("proposal_id")?;
         let proposal_revision_id = receipt_text("proposal_revision_id")?;
-        if replay.effect_text("event_id").as_ref() != Some(&event_id)
+        if replay.receipt_text("reason") != Some("superseded")
+            || replay.effect_text("event_id").as_ref() != Some(&event_id)
             || replay.effect_text("draft_id").as_ref() != Some(&self.draft_id)
             || replay.effect_text("author_action_sequence") != replay.author_action_sequence
             || replay.effect_text("close_reason").as_deref() != Some("superseded")
@@ -508,7 +509,10 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
         &self,
         replay: &CommandReplay,
     ) -> Result<Option<DraftExpansionObservation>, ReplayFault> {
-        if !replay.fence_digest_matches {
+        if !replay.fence_digest_matches
+            || !replay.admission_matches
+            || replay.draft_artifact_refs != [self.draft_id.as_str()]
+        {
             return Err(ReplayFault::BindingConflict);
         }
         let text = |key: &str| {

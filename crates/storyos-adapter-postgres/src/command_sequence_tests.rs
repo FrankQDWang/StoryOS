@@ -2822,28 +2822,27 @@ async fn every_proposal_decision_replay_separates_pre_capture_from_damaged_effec
     assert_eq!(observed, vec![separated; 5]);
 }
 
-/// Settles the call, deletes its Proposal Generation transition record, and replays it.
-async fn replay_without_transition_record<C: ProjectCommand + Clone>(
+/// Settles the call, damages its records with `damage` that takes the Receipt identity, and
+/// replays it.
+async fn damaged_replay<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
+    damage: fn(&str) -> String,
 ) -> ReplayError {
     let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
-        panic!("the generation decision must settle");
+        panic!("the project command must settle");
     };
-    run_without_foreign_keys(
-        admin,
-        &format!(
-            "DELETE FROM storyos.proposal_generation_transitions WHERE receipt_id = '{}'",
-            call.envelope.ids.receipt_id
-        ),
-    )
-    .await;
+    run_without_foreign_keys(admin, &damage(&call.envelope.ids.receipt_id)).await;
     let retry = with_new_request_ids(call);
     let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
-        panic!("a replay without its transition record must fail");
+        panic!("a replay with damaged records must fail");
     };
     error.into()
+}
+
+fn without_transition_record(receipt_id: &str) -> String {
+    format!("DELETE FROM storyos.proposal_generation_transitions WHERE receipt_id = '{receipt_id}'")
 }
 
 #[tokio::test]
@@ -2854,16 +2853,18 @@ async fn a_generation_decision_without_its_transition_record_is_damaged_evidence
         .await;
     let (store, admin) = stores().await;
     let observed = [
-        replay_without_transition_record(
+        damaged_replay(
             &store,
             &admin,
             &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7570).await,
+            without_transition_record,
         )
         .await,
-        replay_without_transition_record(
+        damaged_replay(
             &store,
             &admin,
             &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7580).await,
+            without_transition_record,
         )
         .await,
     ];
@@ -3271,5 +3272,96 @@ async fn a_draft_expansion_refuses_before_admission_and_requires_the_client_writ
             ],
             ReceiptResult::AuthoritativeApplied,
         )
+    );
+}
+
+fn changed_admission_payload(receipt_id: &str) -> String {
+    format!(
+        "UPDATE storyos.author_command_admissions AS admission
+            SET command_payload = admission.command_payload || '{{\"damaged\": true}}'::jsonb
+           FROM storyos.domain_receipts AS receipt
+          WHERE receipt.receipt_id = '{receipt_id}'
+            AND admission.author_command_admission_id = receipt.author_command_admission_id"
+    )
+}
+
+fn changed_draft_reference(receipt_id: &str) -> String {
+    format!(
+        "UPDATE storyos.domain_receipts SET draft_artifact_refs = ARRAY['{}']
+          WHERE receipt_id = '{receipt_id}'",
+        Uuid::now_v7()
+    )
+}
+
+fn compensation_action(receipt_id: &str) -> String {
+    format!(
+        "UPDATE storyos.author_action_entries
+            SET disposition = 'compensation', compensated_source_sequence = author_action_sequence
+          WHERE receipt_id = '{receipt_id}'"
+    )
+}
+
+fn zero_authority_action(receipt_id: &str) -> String {
+    format!(
+        "INSERT INTO storyos.author_action_entries
+           (owner_user_id, project_id, author_action_sequence, disposition, receipt_id,
+            receipt_result_kind)
+         SELECT owner_user_id, project_id, 1000, 'forward', receipt_id, 'draft_closure_changed'
+           FROM storyos.domain_receipts WHERE receipt_id = '{receipt_id}'"
+    )
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_replay_binds_its_admission_and_draft_and_requires_its_author_action_shape() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut observed = Vec::new();
+    for (base, damage) in [
+        (0x9a00, changed_admission_payload as fn(&str) -> String),
+        (0x9a10, changed_draft_reference),
+        (0x9a20, compensation_action),
+    ] {
+        observed.push(
+            damaged_replay(
+                &store,
+                &admin,
+                &close_editor_flow_draft_call(&store, &admin, base).await,
+                damage,
+            )
+            .await,
+        );
+        observed.push(
+            damaged_replay(
+                &store,
+                &admin,
+                &expand_refused_edit_draft_call(&store, &admin, base + 0x100).await,
+                damage,
+            )
+            .await,
+        );
+    }
+    let (scope, tombstoned) =
+        refused_edit_draft(&store, &admin, /*base*/ 0x9a30, "tombstoned").await;
+    let refused_discard = discard_call(&store, &scope, /*suffix*/ 0x9a39, tombstoned).await;
+    observed.push(damaged_replay(&store, &admin, &refused_discard, zero_authority_action).await);
+    let (scope, tombstoned) =
+        refused_edit_expansion(&store, &admin, /*base*/ 0x9b30, "tombstoned").await;
+    let refused_expansion = expansion_call(&store, &scope, /*suffix*/ 0x9b39, tombstoned).await;
+    observed.push(damaged_replay(&store, &admin, &refused_expansion, zero_authority_action).await);
+    assert_eq!(
+        observed,
+        vec![
+            ReplayError::BindingConflict,
+            ReplayError::BindingConflict,
+            ReplayError::BindingConflict,
+            ReplayError::BindingConflict,
+            ReplayError::Unavailable,
+            ReplayError::Unavailable,
+            ReplayError::Unavailable,
+            ReplayError::Unavailable,
+        ]
     );
 }

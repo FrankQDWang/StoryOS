@@ -28,6 +28,8 @@ pub(crate) struct CommandReplay {
     /// The Author Action sequence text of the Receipt, also when the transition has no Commit.
     /// Only a profile that needs it parses it.
     pub(crate) author_action_sequence: Option<String>,
+    /// The disposition of the Author Action of the Receipt.
+    pub(crate) author_action_disposition: Option<String>,
     /// The canonical Snapshot at the Activity position of the Receipt.
     pub(crate) snapshot_id: Option<String>,
     /// The latest Manuscript Tree Revision text that an Activity payload records at or before the
@@ -37,6 +39,11 @@ pub(crate) struct CommandReplay {
     pub(crate) resulting_heads: Vec<String>,
     /// Whether the Command Idempotency Fence keeps the command digest of the Receipt.
     pub(crate) fence_digest_matches: bool,
+    /// Whether the Admission has the command kind, digest, and idempotency key of the Receipt and
+    /// the canonical command payload of the request.
+    pub(crate) admission_matches: bool,
+    /// The Draft references of the Domain Receipt.
+    pub(crate) draft_artifact_refs: Vec<String>,
     result_kind: String,
     receipt: JsonText,
     activity: JsonText,
@@ -180,6 +187,7 @@ pub(crate) async fn read_command_replay(
     store: &PostgresProjectReader,
     binding: &ProjectCommandChallengeBinding,
     receipt_id: &str,
+    canonical_command_bytes: &[u8],
     effect: &ReplayEffect,
 ) -> Result<CommandReplay, ReplayFault> {
     let client = store.connect_challenge().await.map_err(unavailable)?;
@@ -203,6 +211,7 @@ pub(crate) async fn read_command_replay(
                     &binding.command_kind,
                     &binding.canonical_command_digest,
                     &binding.idempotency_key,
+                    &canonical_command_bytes,
                 ],
             )
             .await
@@ -279,6 +288,9 @@ pub(crate) async fn read_command_replay(
         response_assistance: row.get(/*idx*/ 18),
         resulting_heads: row.get(/*idx*/ 19),
         fence_digest_matches: row.get(/*idx*/ 20),
+        author_action_disposition: row.get(/*idx*/ 21),
+        draft_artifact_refs: row.get(/*idx*/ 22),
+        admission_matches: row.get::<_, Option<bool>>(/*idx*/ 23).unwrap_or(false),
     })
 }
 
@@ -314,7 +326,13 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
           LIMIT 1),
         idempotency.response_assistance::text,
         receipt.resulting_heads::text[],
-        idempotency.canonical_command_digest = receipt.command_digest
+        idempotency.canonical_command_digest = receipt.command_digest,
+        action.disposition,
+        receipt.draft_artifact_refs,
+        (admission.command_kind, admission.canonical_command_digest, admission.idempotency_key,
+         admission.command_payload) =
+        (receipt.command_kind, receipt.command_digest, receipt.idempotency_key,
+         convert_from($7::bytea, 'UTF8')::jsonb)
    FROM storyos.domain_receipts AS receipt
    JOIN storyos.author_command_admission_settlements AS settlement
      ON (settlement.owner_user_id, settlement.project_id,
@@ -327,6 +345,11 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
          idempotency.result_reference) =
         (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
          receipt.idempotency_key, receipt.receipt_id::text)
+LEFT JOIN storyos.author_command_admissions AS admission
+     ON (admission.owner_user_id, admission.project_id,
+         admission.author_command_admission_id, admission.command_id) =
+        (receipt.owner_user_id, receipt.project_id,
+         receipt.author_command_admission_id, receipt.command_id)
 LEFT JOIN storyos.project_activity_event_payloads AS payload
      ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)

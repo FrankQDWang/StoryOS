@@ -385,6 +385,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
                 store,
                 &envelope.challenge_binding,
                 &result_reference,
+                &envelope.canonical_command_bytes,
                 &C::SPEC.replay_effect,
             )
             .await
@@ -541,25 +542,28 @@ fn replay_command<C: ProjectCommand>(
     command: &C,
     replay: &CommandReplay,
 ) -> Result<SettledCommand<C>, ReplayFault> {
-    let mut zero_authority_effect = None;
-    let outcome = match replay
-        .outcome::<C::NoEffect, C::Conflict, C::Refusal>(C::SPEC.applied_result.code())?
-    {
+    let outcome =
+        replay.outcome::<C::NoEffect, C::Conflict, C::Refusal>(C::SPEC.applied_result.code())?;
+    let zero_authority_effect = match &outcome {
+        TransitionOutcome::Applied(()) => None,
+        TransitionOutcome::NoEffect(_)
+        | TransitionOutcome::Conflicted(_)
+        | TransitionOutcome::Refused(_) => {
+            if replay.author_action_sequence.is_some() {
+                return Err(ReplayFault::Unavailable(
+                    "a zero-authority Receipt has an Author Action".into(),
+                ));
+            }
+            command.decode_zero_authority_effect(replay)?
+        }
+    };
+    let outcome = match outcome {
         TransitionOutcome::Applied(()) => {
             TransitionOutcome::Applied(C::Profile::replay(command.decode(replay)?, replay)?)
         }
-        TransitionOutcome::NoEffect(reason) => {
-            zero_authority_effect = command.decode_zero_authority_effect(replay)?;
-            TransitionOutcome::NoEffect(reason)
-        }
-        TransitionOutcome::Conflicted(reason) => {
-            zero_authority_effect = command.decode_zero_authority_effect(replay)?;
-            TransitionOutcome::Conflicted(reason)
-        }
-        TransitionOutcome::Refused(reason) => {
-            zero_authority_effect = command.decode_zero_authority_effect(replay)?;
-            TransitionOutcome::Refused(reason)
-        }
+        TransitionOutcome::NoEffect(reason) => TransitionOutcome::NoEffect(reason),
+        TransitionOutcome::Conflicted(reason) => TransitionOutcome::Conflicted(reason),
+        TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(reason),
     };
     Ok(ProjectCommandSettlement {
         zero_authority_effect,

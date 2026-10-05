@@ -259,7 +259,8 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
             .receipt_text("event_id")
             .map(str::to_owned)
             .ok_or_else(damaged)?;
-        if replay.effect_text("event_id").as_ref() != Some(&event_id)
+        if replay.receipt_text("reason") != Some("abandoned")
+            || replay.effect_text("event_id").as_ref() != Some(&event_id)
             || replay.effect_text("draft_id").as_ref() != Some(&self.draft_id)
             || replay.effect_text("author_action_sequence") != replay.author_action_sequence
         {
@@ -275,7 +276,10 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
         &self,
         replay: &CommandReplay,
     ) -> Result<Option<DraftCloseObservation>, ReplayFault> {
-        if !replay.fence_digest_matches {
+        if !replay.fence_digest_matches
+            || !replay.admission_matches
+            || replay.draft_artifact_refs != [self.draft_id.as_str()]
+        {
             return Err(ReplayFault::BindingConflict);
         }
         let text = |key: &str| {
