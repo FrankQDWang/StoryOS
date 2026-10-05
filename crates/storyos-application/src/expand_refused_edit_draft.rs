@@ -1,10 +1,18 @@
 use std::future::Future;
 
 use crate::{
-    AuthorCommandAdmissionIds, DraftCloseError, EditorClientBinding,
-    ProjectCommandChallengeBinding, ProjectScope,
+    AuthorCommandAdmissionIds, EditorClientBinding, ProjectCommandChallengeBinding, ProjectScope,
 };
 use storyos_contracts::ExpandRefusedEditDraftInput;
+
+#[derive(Debug)]
+pub enum DraftCloseError {
+    BindingConflict,
+    InvalidChallenge,
+    InvalidWriter,
+    MissingDraft,
+    Unavailable(Box<dyn std::error::Error + Send + Sync>),
+}
 
 #[derive(Clone, Debug)]
 pub struct ExpandRefusedEditDraftCommand {

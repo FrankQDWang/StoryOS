@@ -1,7 +1,7 @@
 use crate::{
-    AuthorEditPrimitive, CloseEditorFlowDraftResult, DraftCloseSource, OpenInlineProposal,
-    OpenInlineProposalResult, RefusedEditPayload, ReplacementBlock, close_editor_flow_draft,
-    open_inline_proposal,
+    AuthorEditPrimitive, CloseEditorFlowDraftRefusal, DraftCloseSource, OpenInlineProposal,
+    OpenInlineProposalResult, RefusedEditPayload, ReplacementBlock, TransitionOutcome,
+    close_editor_flow_draft, open_inline_proposal,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -25,10 +25,15 @@ pub fn expand_refused_edit_draft(
 ) -> ExpandRefusedEditDraftResult {
     use ExpandRefusedEditDraftResult as Result;
     match close_editor_flow_draft(expected, current, closure, retention) {
-        CloseEditorFlowDraftResult::Conflicted => return Result::Conflicted,
-        CloseEditorFlowDraftResult::SourceDraftNotOpen => return Result::SourceDraftNotOpen,
-        CloseEditorFlowDraftResult::SourceUnavailable => return Result::SourceUnavailable,
-        CloseEditorFlowDraftResult::DraftClosureChanged => {}
+        TransitionOutcome::NoEffect(reason) => match reason {},
+        TransitionOutcome::Conflicted(_) => return Result::Conflicted,
+        TransitionOutcome::Refused(CloseEditorFlowDraftRefusal::SourceDraftNotOpen) => {
+            return Result::SourceDraftNotOpen;
+        }
+        TransitionOutcome::Refused(CloseEditorFlowDraftRefusal::SourceUnavailable) => {
+            return Result::SourceUnavailable;
+        }
+        TransitionOutcome::Applied(()) => {}
     }
     let [unit] = payload.author_edit_units.as_slice() else {
         return Result::UnsupportedPayload;

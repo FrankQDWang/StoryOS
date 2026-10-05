@@ -3,10 +3,11 @@ use std::fmt::Debug;
 use serde::de::DeserializeOwned;
 use storyos_contracts as contracts;
 use storyos_core::{
-    ArchiveProjectConflict, ArchiveProjectNoEffect, CreateChapterConflict, CreateChapterRefusal,
-    CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
-    DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    ReasonCode, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
+    ArchiveProjectConflict, ArchiveProjectNoEffect, CloseEditorFlowDraftConflict,
+    CloseEditorFlowDraftRefusal, CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict,
+    CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal,
+    DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal, ReasonCode,
+    RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
     ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
     ReopenWithdrawnProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
     SetCurrentChapterRefusal, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
@@ -297,6 +298,25 @@ fn every_rejection_reason_maps_to_its_public_reason() {
         (
             RejectProposalOperationsRefusal::IncompleteBundleClosure,
             contracts::RejectProposalOperationsRefusalReason::IncompleteBundleClosure,
+        ),
+    ]);
+}
+
+#[test]
+fn every_draft_discard_reason_maps_to_its_public_or_persisted_reason() {
+    // The conflict has no public reason. Its code is the persisted Receipt reason text.
+    assert_maps(vec![(
+        CloseEditorFlowDraftConflict::SourceBindingChanged,
+        "source_binding_changed".to_owned(),
+    )]);
+    assert_maps(vec![
+        (
+            CloseEditorFlowDraftRefusal::SourceDraftNotOpen,
+            contracts::DraftCloseRefusal::SourceDraftNotOpen,
+        ),
+        (
+            CloseEditorFlowDraftRefusal::SourceUnavailable,
+            contracts::DraftCloseRefusal::SourceUnavailable,
         ),
     ]);
 }

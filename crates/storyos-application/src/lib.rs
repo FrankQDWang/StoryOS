@@ -553,10 +553,9 @@ mod tests;
 mod close_editor_flow_draft;
 mod expand_refused_edit_draft;
 pub use close_editor_flow_draft::{
-    CloseEditorFlowDraftCommand, CloseEditorFlowDraftStore, DraftCloseError, DraftCloseSettlement,
-    close_editor_flow_draft,
+    CloseEditorFlowDraftInput, CloseEditorFlowDraftSettlement, DraftCloseObservation, DraftClosed,
 };
 pub use expand_refused_edit_draft::{
-    DraftExpansionSettlement, ExpandRefusedEditDraftCommand, ExpandRefusedEditDraftStore,
-    expand_refused_edit_draft,
+    DraftCloseError, DraftExpansionSettlement, ExpandRefusedEditDraftCommand,
+    ExpandRefusedEditDraftStore, expand_refused_edit_draft,
 };

@@ -3,7 +3,10 @@ use storyos_application::{
     ExpandRefusedEditDraftStore, ProjectCommandChallengeError, ProjectCommandChallengeTransaction,
     ProjectCommandChallengeUse,
 };
-use storyos_core::{DraftCloseSource, ExpandRefusedEditDraftResult, OpenInlineProposal};
+use storyos_core::{
+    CloseEditorFlowDraftRefusal, DraftCloseSource, ExpandRefusedEditDraftResult,
+    OpenInlineProposal, TransitionOutcome,
+};
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
@@ -143,16 +146,15 @@ async fn persist(
         &closure,
         &source.get::<_, String>(3),
     ) {
-        storyos_core::CloseEditorFlowDraftResult::Conflicted => {
-            ExpandRefusedEditDraftResult::Conflicted
-        }
-        storyos_core::CloseEditorFlowDraftResult::SourceDraftNotOpen => {
+        TransitionOutcome::NoEffect(reason) => match reason {},
+        TransitionOutcome::Conflicted(_) => ExpandRefusedEditDraftResult::Conflicted,
+        TransitionOutcome::Refused(CloseEditorFlowDraftRefusal::SourceDraftNotOpen) => {
             ExpandRefusedEditDraftResult::SourceDraftNotOpen
         }
-        storyos_core::CloseEditorFlowDraftResult::SourceUnavailable => {
+        TransitionOutcome::Refused(CloseEditorFlowDraftRefusal::SourceUnavailable) => {
             ExpandRefusedEditDraftResult::SourceUnavailable
         }
-        storyos_core::CloseEditorFlowDraftResult::DraftClosureChanged => {
+        TransitionOutcome::Applied(()) => {
             let payload: serde_json::Value =
                 serde_json::from_str(&source.get::<_, String>(5)).map_err(unavailable)?;
             if storyos_core::hex_sha256(storyos_core::canonical_json(&payload).as_bytes()) != digest

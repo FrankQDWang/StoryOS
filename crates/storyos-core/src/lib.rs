@@ -628,7 +628,8 @@ mod undo_latest_author_action_tests;
 
 mod close_editor_flow_draft;
 pub use close_editor_flow_draft::{
-    CloseEditorFlowDraftResult, DraftCloseSource, close_editor_flow_draft,
+    CloseEditorFlowDraftConflict, CloseEditorFlowDraftRefusal, CloseEditorFlowDraftResult,
+    DraftCloseSource, close_editor_flow_draft,
 };
 
 mod prose_change_locations;
