@@ -2038,19 +2038,72 @@ async fn evidence_replays<C: ProjectCommand + Clone>(
         let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
             panic!("a replay without complete evidence must fail");
         };
-        errors.push(match error {
-            ProjectCommandError::BindingConflict => ReplayError::BindingConflict,
-            ProjectCommandError::HistoricalAcknowledgementUnavailable => {
-                ReplayError::HistoricalAcknowledgementUnavailable
-            }
-            ProjectCommandError::InvalidChallenge => ReplayError::InvalidChallenge,
-            ProjectCommandError::MissingProject => ReplayError::MissingProject,
-            ProjectCommandError::WriterIneligible => ReplayError::WriterIneligible,
-            ProjectCommandError::Unavailable(_) => ReplayError::Unavailable,
-        });
+        errors.push(error.into());
     }
     let errors: [ReplayError; 2] = errors.try_into().unwrap();
     (settled.outcome.receipt_result(), errors)
+}
+
+impl From<ProjectCommandError> for ReplayError {
+    fn from(error: ProjectCommandError) -> Self {
+        match error {
+            ProjectCommandError::BindingConflict => Self::BindingConflict,
+            ProjectCommandError::HistoricalAcknowledgementUnavailable => {
+                Self::HistoricalAcknowledgementUnavailable
+            }
+            ProjectCommandError::InvalidChallenge => Self::InvalidChallenge,
+            ProjectCommandError::MissingProject => Self::MissingProject,
+            ProjectCommandError::WriterIneligible => Self::WriterIneligible,
+            ProjectCommandError::Unavailable(_) => Self::Unavailable,
+        }
+    }
+}
+
+/// The effect row of one applied Proposal decision and its preserved Proposal State Axes.
+struct PreservedEffect {
+    table: &'static str,
+    receipt_column: &'static str,
+    preserved_columns: &'static [&'static str],
+}
+
+/// Settles the call, then replays it once without its preserved values and once without its
+/// effect row.
+async fn effect_replays<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    effect: PreservedEffect,
+) -> [ReplayError; 2] {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the Proposal decision must settle");
+    };
+    let PreservedEffect {
+        table,
+        receipt_column,
+        preserved_columns,
+    } = effect;
+    let filter = format!(
+        "WHERE {receipt_column} = '{}'",
+        call.envelope.ids.receipt_id
+    );
+    let cleared = preserved_columns
+        .iter()
+        .map(|column| format!("{column} = NULL"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut errors = Vec::new();
+    for statement in [
+        format!("UPDATE storyos.{table} SET {cleared} {filter}"),
+        format!("DELETE FROM storyos.{table} {filter}"),
+    ] {
+        run_without_foreign_keys(admin, &statement).await;
+        let retry = with_new_request_ids(call);
+        let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
+            panic!("a replay without its preserved values must fail");
+        };
+        errors.push(error.into());
+    }
+    errors.try_into().unwrap()
 }
 
 #[tokio::test]
@@ -2160,6 +2213,109 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         ],
     );
     assert_eq!(observed, vec![separated; 15]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn every_proposal_decision_replay_separates_pre_capture_from_damaged_effect_rows() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        effect_replays(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7c00).await,
+            PreservedEffect {
+                table: "proposal_rejection_receipts",
+                receipt_column: "rejection_receipt_id",
+                preserved_columns: &[
+                    "preserved_generation",
+                    "preserved_validation",
+                    "preserved_closure",
+                ],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7c10).await,
+            PreservedEffect {
+                table: "proposal_withdrawals",
+                receipt_column: "withdrawal_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_validation"],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x7c20).await,
+            PreservedEffect {
+                table: "proposal_replans",
+                receipt_column: "replan_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_closure"],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x7c30).await,
+            PreservedEffect {
+                table: "proposal_withdrawal_reopenings",
+                receipt_column: "reopen_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_operation_resolution"],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7c40).await,
+            PreservedEffect {
+                table: "proposal_operation_reopenings",
+                receipt_column: "reopen_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_closure"],
+            },
+        )
+        .await,
+    ];
+    let separated = [
+        ReplayError::HistoricalAcknowledgementUnavailable,
+        ReplayError::Unavailable,
+    ];
+    assert_eq!(observed, vec![separated; 5]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_multi_operation_rejection_replays_the_resolution_of_its_first_selected_operation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut call = reject_proposal_operations_call(&store, &admin, /*base*/ 0x7c50).await;
+    let first_operation = call.input.selected_pending_operation_ids[0].clone();
+    let later_operation = Uuid::now_v7().to_string();
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "INSERT INTO storyos.proposal_operations
+               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                resolution, reservation_state, candidate_text)
+             SELECT owner_user_id, project_id, proposal_id, '{later_operation}',
+                    gen_random_uuid(), resolution, reservation_state, candidate_text
+               FROM storyos.proposal_operations WHERE operation_id = '{first_operation}'"
+        ),
+    )
+    .await;
+    call.input.selected_pending_operation_ids = vec![later_operation, first_operation];
+    let (result_kind, _rows) =
+        replayed_outcome(&store, &admin, &call, reject_proposal_operations).await;
+    assert_eq!(result_kind, "proposal_operations_resolved");
 }
 
 #[tokio::test]
@@ -2393,10 +2549,8 @@ async fn a_draft_discard_refuses_before_admission_and_requires_the_client_writer
         let refused = close_editor_flow_draft(&store, &call).await;
         observed.push((
             match refused {
-                Err(ProjectCommandError::WriterIneligible) => ReplayError::WriterIneligible,
-                Err(ProjectCommandError::MissingProject) => ReplayError::MissingProject,
-                Err(ProjectCommandError::BindingConflict) => ReplayError::BindingConflict,
-                other => panic!("the Discard must refuse before Admission, got {other:?}"),
+                Err(error) => ReplayError::from(error),
+                Ok(settled) => panic!("the Discard must refuse before Admission, got {settled:?}"),
             },
             settlement_rows(&admin, &call.envelope.ids.receipt_id).await,
         ));

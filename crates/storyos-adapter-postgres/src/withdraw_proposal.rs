@@ -46,18 +46,12 @@ impl ProjectCommand for WithdrawProposalInput {
         activity_kind: "",
         replay_effect: ReplayEffect::Query(
             "SELECT jsonb_build_object(
-                      'withdrawal_event_id', withdrawal.withdrawal_event_id::text,
-                      'preserved_generation', revision.generation,
-                      'preserved_validation', revision.validation)::text
-               FROM storyos.proposal_withdrawals AS withdrawal
-               JOIN storyos.proposal_revisions AS revision
-                 ON (revision.owner_user_id, revision.project_id, revision.proposal_id,
-                     revision.revision_id) =
-                    (withdrawal.owner_user_id, withdrawal.project_id, withdrawal.proposal_id,
-                     withdrawal.proposal_revision_id)
-              WHERE withdrawal.owner_user_id = $1::text::uuid
-                AND withdrawal.project_id = $2::text::uuid
-                AND withdrawal.withdrawal_receipt_id = $3::text::uuid",
+                      'withdrawal_event_id', withdrawal_event_id::text,
+                      'preserved_generation', preserved_generation,
+                      'preserved_validation', preserved_validation)::text
+               FROM storyos.proposal_withdrawals
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND withdrawal_receipt_id = $3::text::uuid",
         ),
     };
     type Profile = ActionOnly;
@@ -203,10 +197,11 @@ impl ProjectCommand for WithdrawProposalInput {
                 "INSERT INTO storyos.proposal_withdrawals
                    (owner_user_id, project_id, withdrawal_event_id, proposal_id,
                     proposal_revision_id, withdrawal_reason, author_note,
-                    withdrawal_receipt_id, author_action_sequence)
+                    withdrawal_receipt_id, author_action_sequence, preserved_generation,
+                    preserved_validation)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                          $5::text::uuid, 'author_withdrew', $6, $7::text::uuid,
-                         $8::text::numeric)",
+                         $8::text::numeric, $9, $10)",
                 &[
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
@@ -216,6 +211,8 @@ impl ProjectCommand for WithdrawProposalInput {
                     &note,
                     &envelope.ids.receipt_id,
                     &applied.author_action_sequence.to_string(),
+                    &applied.effect.preserved_generation,
+                    &applied.effect.preserved_validation,
                 ],
             )
             .await
@@ -225,18 +222,21 @@ impl ProjectCommand for WithdrawProposalInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalWithdrawn, ReplayFault> {
         match (
+            replay.effect_text("withdrawal_event_id"),
             replay.effect_text("preserved_generation"),
             replay.effect_text("preserved_validation"),
-            replay.effect_text("withdrawal_event_id"),
         ) {
-            (Some(preserved_generation), Some(preserved_validation), Some(withdrawal_event_id)) => {
+            (Some(withdrawal_event_id), Some(preserved_generation), Some(preserved_validation)) => {
                 Ok(ProposalWithdrawn {
                     preserved_generation,
                     preserved_validation,
                     withdrawal_event_id,
                 })
             }
-            _ => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
+            (Some(_), None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
+            _ => Err(ReplayFault::Unavailable(
+                "the applied Withdrawal record is missing or damaged".into(),
+            )),
         }
     }
 }

@@ -51,20 +51,13 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
         activity_kind: "",
         replay_effect: ReplayEffect::Query(
             "SELECT jsonb_build_object(
-                      'state_event_id', reopening.reopen_event_id::text,
-                      'resulting_proposal_revision_id',
-                      reopening.resulting_proposal_revision_id::text,
-                      'preserved_generation', revision.generation,
-                      'preserved_closure', revision.closure)::text
-               FROM storyos.proposal_operation_reopenings AS reopening
-               JOIN storyos.proposal_revisions AS revision
-                 ON (revision.owner_user_id, revision.project_id, revision.proposal_id,
-                     revision.revision_id) =
-                    (reopening.owner_user_id, reopening.project_id, reopening.proposal_id,
-                     reopening.resulting_proposal_revision_id)
-              WHERE reopening.owner_user_id = $1::text::uuid
-                AND reopening.project_id = $2::text::uuid
-                AND reopening.reopen_receipt_id = $3::text::uuid",
+                      'state_event_id', reopen_event_id::text,
+                      'resulting_proposal_revision_id', resulting_proposal_revision_id::text,
+                      'preserved_generation', preserved_generation,
+                      'preserved_closure', preserved_closure)::text
+               FROM storyos.proposal_operation_reopenings
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND reopen_receipt_id = $3::text::uuid",
         ),
     };
     type Profile = ActionOnly;
@@ -277,10 +270,11 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
                    (owner_user_id, project_id, reopen_event_id, proposal_id,
                     source_proposal_revision_id, resulting_proposal_revision_id, operation_id,
                     rejection_event_id, prior_resolution, resulting_resolution,
-                    reopen_receipt_id, author_action_sequence)
+                    reopen_receipt_id, author_action_sequence, preserved_generation,
+                    preserved_closure)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                          $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                         'rejected', 'pending', $9::text::uuid, $10::text::numeric)",
+                         'rejected', 'pending', $9::text::uuid, $10::text::numeric, $11, $12)",
                 &[
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
@@ -292,6 +286,8 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
                     &self.rejection_event_id,
                     &envelope.ids.receipt_id,
                     &sequence.0.to_string(),
+                    &rejected.generation,
+                    &rejected.closure,
                 ],
             )
             .await
@@ -306,23 +302,28 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<RejectedOperationsReopened, ReplayFault> {
         match (
+            replay.effect_text("state_event_id"),
             replay.effect_text("resulting_proposal_revision_id"),
             replay.effect_text("preserved_generation"),
             replay.effect_text("preserved_closure"),
-            replay.effect_text("state_event_id"),
         ) {
             (
+                Some(state_event_id),
                 Some(resulting_proposal_revision_id),
                 Some(preserved_generation),
                 Some(preserved_closure),
-                Some(state_event_id),
             ) => Ok(RejectedOperationsReopened {
                 resulting_proposal_revision_id,
                 preserved_generation,
                 preserved_closure,
                 state_event_id,
             }),
-            _ => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
+            (Some(_), Some(_), None, None) => {
+                Err(ReplayFault::HistoricalAcknowledgementUnavailable)
+            }
+            _ => Err(ReplayFault::Unavailable(
+                "the applied reopening record is missing or damaged".into(),
+            )),
         }
     }
 }

@@ -73,6 +73,11 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
 A specification that moves commands can also fix a defect of those commands. Each fix is listed here with its observable change:
 
 - For `reopenRejectedOperations`, `completeReadyPartialProposal`, and `continueProposalGeneration`, a Proposal with more than one Proposal Operation no longer gives `503 project_store_unavailable`. `reopenRejectedOperations` reads only the selected Proposal Operation, and an unknown one gives `operation_not_rejected`. The two generation decisions read the first Proposal Operation by identity, as `reopenWithdrawnProposal` does.
+- For `rejectProposalOperations`, `withdrawProposal`, `replanProposal`, `reopenWithdrawnProposal`, and `reopenRejectedOperations`, an exact retry returns the Proposal State Axes values of the first delivery. Before, the retry read current Proposal Revision and Proposal Operation rows, which a later command can change in place.
+  - Migration 0083 adds typed `preserved_*` columns with checks to the rejection, Proposal Withdrawal, replan, and reopening records. It adds the `proposal_withdrawal_reopenings` event table for `reopenWithdrawnProposal`. The Project archive export contains the new columns and the new table.
+  - Each of the five commands writes these values in the transaction of its Receipt, and replay reads only these values. The current-producer form of `withdrawProposal` writes no preserved values. The migration has no backfill, because no production data exists.
+  - An exact retry of a multi-operation rejection returns the resolution event of the first selected Proposal Operation, as the first delivery does. Before, the retry returned the event of the lowest Proposal Operation identity.
+  - A settled effect row whose `preserved_*` columns are NULL is a pre-capture record and gives `409 historical_acknowledgement_unavailable`. An applied Receipt without its effect row or its Forward Author Action is damaged evidence and gives `503 project_store_unavailable`. Before, a missing effect row gave `409 historical_acknowledgement_unavailable` for four of the five commands, and a missing Forward Author Action gave it for all five.
 
 ## Relation to ADR 0041 and the glossary
 

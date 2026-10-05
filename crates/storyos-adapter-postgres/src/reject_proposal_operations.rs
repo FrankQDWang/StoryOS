@@ -39,20 +39,33 @@ pub(crate) struct RejectedRevision {
     closure: String,
 }
 
+/// The outcome that one rejection record keeps.
+enum RejectionRecord<'a> {
+    /// An applied rejection and the Proposal State Axes that its acknowledgement preserves.
+    Applied(&'a RejectedRevision),
+    Zero(ReceiptResult),
+}
+
 /// Inserts the rejection record that every outcome writes with its Receipt.
 async fn insert_rejection_record(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
     input: &RejectProposalOperationsInput,
-    result: &str,
+    record: RejectionRecord<'_>,
 ) -> Result<(), ProjectCommandError> {
     let scope = &envelope.project_scope;
     let selected_operation_id = input
         .selected_pending_operation_ids
         .first()
         .ok_or(ProjectCommandError::BindingConflict)?;
-    let rejection_reason = (result == RejectProposalOperationsInput::SPEC.applied_result.code())
-        .then_some("author_declined");
+    let (result, rejection_reason, preserved) = match record {
+        RejectionRecord::Applied(rejected) => (
+            RejectProposalOperationsInput::SPEC.applied_result.code(),
+            Some("author_declined"),
+            Some(rejected),
+        ),
+        RejectionRecord::Zero(result) => (result.code(), None, None),
+    };
     let rejection_note = match &input.rejection_note {
         RejectionNote::Omitted => None,
         RejectionNote::Present { text } => Some(text.as_str()),
@@ -62,9 +75,9 @@ async fn insert_rejection_record(
             "INSERT INTO storyos.proposal_rejection_receipts
                (owner_user_id, project_id, rejection_receipt_id, proposal_id,
                 proposal_revision_id, selected_operation_id, result, rejection_reason,
-                rejection_note)
+                rejection_note, preserved_generation, preserved_validation, preserved_closure)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7, $8, $9)",
+                     $5::text::uuid, $6::text::uuid, $7, $8, $9, $10, $11, $12)",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -75,6 +88,9 @@ async fn insert_rejection_record(
                 &result,
                 &rejection_reason,
                 &rejection_note,
+                &preserved.map(|rejected| rejected.generation.as_str()),
+                &preserved.map(|rejected| rejected.validation.as_str()),
+                &preserved.map(|rejected| rejected.closure.as_str()),
             ],
         )
         .await
@@ -94,20 +110,18 @@ impl ProjectCommand for RejectProposalOperationsInput {
         replay_effect: ReplayEffect::Query(
             "SELECT jsonb_build_object(
                       'resolution_event_id', resolution.resolution_event_id::text,
-                      'preserved_generation', revision.generation,
-                      'preserved_validation', revision.validation,
-                      'preserved_closure', revision.closure)::text
-               FROM storyos.proposal_operation_resolutions AS resolution
-               JOIN storyos.proposal_revisions AS revision
-                 ON (revision.owner_user_id, revision.project_id, revision.proposal_id,
-                     revision.revision_id) =
-                    (resolution.owner_user_id, resolution.project_id, resolution.proposal_id,
-                     resolution.proposal_revision_id)
-              WHERE resolution.owner_user_id = $1::text::uuid
-                AND resolution.project_id = $2::text::uuid
-                AND resolution.rejection_receipt_id = $3::text::uuid
-              ORDER BY resolution.operation_id
-              LIMIT 1",
+                      'preserved_generation', rejection.preserved_generation,
+                      'preserved_validation', rejection.preserved_validation,
+                      'preserved_closure', rejection.preserved_closure)::text
+               FROM storyos.proposal_rejection_receipts AS rejection
+               JOIN storyos.proposal_operation_resolutions AS resolution
+                 ON (resolution.owner_user_id, resolution.project_id,
+                     resolution.rejection_receipt_id, resolution.operation_id) =
+                    (rejection.owner_user_id, rejection.project_id,
+                     rejection.rejection_receipt_id, rejection.selected_operation_id)
+              WHERE rejection.owner_user_id = $1::text::uuid
+                AND rejection.project_id = $2::text::uuid
+                AND rejection.rejection_receipt_id = $3::text::uuid",
         ),
     };
     type Profile = ActionOnly;
@@ -257,7 +271,8 @@ impl ProjectCommand for RejectProposalOperationsInput {
         if usize::try_from(updated).ok() != Some(self.selected_pending_operation_ids.len()) {
             return Err(ProjectCommandError::BindingConflict);
         }
-        insert_rejection_record(client, envelope, self, Self::SPEC.applied_result.code()).await?;
+        insert_rejection_record(client, envelope, self, RejectionRecord::Applied(&rejected))
+            .await?;
         let mut resolution_event_id = None;
         for operation_id in &self.selected_pending_operation_ids {
             let event_id = Uuid::now_v7().to_string();
@@ -313,8 +328,9 @@ impl ProjectCommand for RejectProposalOperationsInput {
                 preserved_closure,
                 resolution_event_id,
             }),
+            (Some(_), None, None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
             _ => Err(ReplayFault::Unavailable(
-                "the applied rejection has no resolution record".into(),
+                "the applied rejection record is missing or damaged".into(),
             )),
         }
     }
@@ -337,7 +353,7 @@ impl ProjectCommand for RejectProposalOperationsInput {
             ZeroOutcome::Conflicted(_) => ReceiptResult::Conflicted,
             ZeroOutcome::Refused(_) => ReceiptResult::Refused,
         };
-        insert_rejection_record(client, envelope, self, result.code()).await
+        insert_rejection_record(client, envelope, self, RejectionRecord::Zero(result)).await
     }
 
     fn decode_zero_authority_effect(

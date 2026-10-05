@@ -339,6 +339,8 @@ test("reopenRejectedOperations appends a pending Revision without rewriting Reje
       resulting_resolution: "pending",
       reopen_receipt_id: reopened.receipt.receipt_id,
       author_action_sequence: Number(reopened.effect.author_action_sequence),
+      preserved_generation: reopened.effect.preserved_generation,
+      preserved_closure: reopened.effect.preserved_closure,
     }]);
     await stopRealServer(started.server);
     started = await startRealServer();
