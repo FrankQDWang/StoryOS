@@ -1606,8 +1606,8 @@ async fn expand_refused_edit_draft(
         .await
 }
 
-/// A new Project with a writer Editor Session, one text Block in Chapter B, and one open
-/// Refused Edit Draft in `retention` that replaces a slice of that Block.
+/// A new Project with a writer Editor Session and one text Block in Chapter B. One open Refused
+/// Edit Draft in `retention` replaces a slice of that Block.
 ///
 /// Returns the Scope and the input that expands the Draft. The fixture skips the creation
 /// Receipt and lifecycle event of the Draft and the Block history of the Chapter.
