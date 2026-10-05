@@ -221,7 +221,9 @@ pub(super) async fn expand_refused_edit_draft(
     let project_scope = contract_scope(&envelope.project_scope);
     Ok(Json(contracts::ExpandRefusedEditDraftResponse {
         schema_id: contracts::EXPAND_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID.to_owned(),
-        correlation_id: envelope.correlation_id.clone(),
+        // The response keeps the canonical lowercase form of the correlation identity.
+        correlation_id: Uuid::parse_str(&envelope.correlation_id)
+            .map_or_else(|_| envelope.correlation_id.clone(), |id| id.to_string()),
         project_scope: project_scope.clone(),
         command_id: settlement.ids.command_id,
         author_command_admission_id: settlement.ids.author_command_admission_id.clone(),

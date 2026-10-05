@@ -297,7 +297,7 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
         baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId: opened.proposal.proposal_id,
         request: rejection, fetchImpl: prepared.fetchImpl, antiForgery, idempotencyKey: id("e0fb52") }));
     const request: ExpandRefusedEditDraftRequest = { command_schema: "storyos.command.expand-refused-edit-draft-to-proposal.request.v1",
-      expand_refused_edit_draft_to_proposal_input: { ...BINDING, correlation_id: id("e0fb61"),
+      expand_refused_edit_draft_to_proposal_input: { ...BINDING, correlation_id: id("e0fb61").toUpperCase(),
         draft_id: source.draft_id, source_current_draft_revision_id: source.draft_revision_id,
         source_draft_payload_digest: source.payload_digest, expected_source_draft_closure: "open",
         selected_payload_range: { kind: "whole_draft_payload" }, proposal_kind: "inline_edit",
@@ -344,6 +344,7 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
     for (const attempt of attempts) if (attempt.status === "rejected") assert.ok([409, 503].some((status) => status === requireStoryOSProtocolError(attempt.reason).status));
     const response = responses[0]!;
     for (const observed of responses) assert.deepEqual(observed, response);
+    assert.equal(response.correlation_id, id("e0fb61"));
     if (response.effect.kind !== "proposal_created_from_draft") throw new Error("expected expanded Proposal");
     const proposal = (await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: response.effect.proposal_id, fetchImpl: prepared.fetchImpl })).proposal;
@@ -1529,7 +1530,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     const [closed, archived, tombstoned] = drafts;
     if (!closed || !archived || !tombstoned) throw new Error("expected three retained Drafts");
     const closeRequest: CloseEditorFlowDraftRequest = { command_schema: "storyos.command.close-editor-flow-draft.request.v1",
-      close_editor_flow_draft_input: { ...BINDING, correlation_id: id("e0db1"),
+      close_editor_flow_draft_input: { ...BINDING, correlation_id: id("e0db1").toUpperCase(),
         editor_session_id: writer.session.editor_session.editor_session_id, writer_generation: writer.writerGeneration,
         draft_kind: "refused_edit", draft_id: closed.draft.draft_id,
         source_current_draft_revision_id: closed.draft.draft_revision_id,
@@ -1608,6 +1609,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     const [closeResponse, concurrentReplay] = await Promise.all([sendClose(), sendClose()]);
     assert.deepEqual(closeResponse, lost);
     assert.deepEqual(concurrentReplay, closeResponse);
+    assert.equal(closeResponse.correlation_id, id("e0db1"));
     if (closeResponse.effect.kind !== "draft_closure_changed") throw new Error("expected complete Discard");
     const closeEvent = closeResponse.effect.event;
     const scope = { owner_user_id: USER_A, project_id: prepared.projectId };
