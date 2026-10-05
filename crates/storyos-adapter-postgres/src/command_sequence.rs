@@ -198,6 +198,15 @@ pub(crate) enum ZeroOutcome<'a, C: ProjectCommand + ?Sized> {
     Refused(&'a C::Refusal),
 }
 
+/// The rows that one zero-authority outcome writes besides its Admission, Receipt, and fence.
+pub(crate) enum ZeroAuthorityRows {
+    None,
+    /// Effect rows without a Project Activity record.
+    Effect,
+    /// Effect rows and one Activity record at a position that the sequence allocates.
+    EffectWithActivity,
+}
+
 /// The effect and the whole Activity payload of a zero-authority outcome that writes effect rows.
 pub(crate) struct ZeroAuthorityWrite<Z> {
     pub(crate) effect: Z,
@@ -224,9 +233,9 @@ pub(crate) trait ProjectCommand: Sync {
     type Applied: Send;
     type Plan: Send;
     type Effect: Send;
-    type NoEffect: ReasonCode + Send;
-    type Conflict: ReasonCode + Send;
-    type Refusal: ReasonCode + Send;
+    type NoEffect: ReasonCode + Send + Sync;
+    type Conflict: ReasonCode + Send + Sync;
+    type Refusal: ReasonCode + Send + Sync;
 
     /// Locks the command facts and classifies them through Core.
     fn classify(
@@ -260,15 +269,24 @@ pub(crate) trait ProjectCommand: Sync {
     /// Decodes the applied effect from the stored acknowledgement evidence.
     fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault>;
 
-    /// Whether this zero-authority outcome writes effect rows and one Activity record.
-    fn writes_zero_authority_effect(&self, _outcome: &ZeroOutcome<'_, Self>) -> bool {
-        false
+    /// The rows that this zero-authority outcome writes (ADR 0043).
+    fn zero_authority_rows(&self, _outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
+        ZeroAuthorityRows::None
     }
 
-    /// Writes the effect rows of a zero-authority outcome at its allocated Activity position.
-    ///
-    /// The sequence calls this only when `writes_zero_authority_effect` is true.
+    /// Writes the effect rows of a zero-authority outcome that declares `Effect`.
     fn write_zero_authority_effect(
+        &self,
+        _client: &Client,
+        _envelope: &ProjectCommandEnvelope,
+        _outcome: &ZeroOutcome<'_, Self>,
+    ) -> impl Future<Output = Result<Self::ZeroEffect, ProjectCommandError>> + Send {
+        async { Err(unavailable("the command writes no zero-authority effect")) }
+    }
+
+    /// Writes the effect rows of a zero-authority outcome that declares `EffectWithActivity`, at
+    /// its allocated Activity position.
+    fn write_zero_authority_activity(
         &self,
         _client: &Client,
         _envelope: &ProjectCommandEnvelope,
@@ -276,10 +294,10 @@ pub(crate) trait ProjectCommand: Sync {
         _activity: &ActivitySequences,
     ) -> impl Future<Output = Result<ZeroAuthorityWrite<Self::ZeroEffect>, ProjectCommandError>> + Send
     {
-        async { Err(unavailable("the command writes no zero-authority effect")) }
+        async { Err(unavailable("the command writes no zero-authority Activity")) }
     }
 
-    /// Decodes the effect of a zero-authority outcome from the stored Activity record.
+    /// Decodes the effect of a zero-authority outcome from the stored effect rows.
     fn decode_zero_authority_effect(
         &self,
         _replay: &CommandReplay,
@@ -421,26 +439,34 @@ async fn first_use<C: ProjectCommand>(
         TransitionOutcome::Conflicted(reason) => Some(ZeroOutcome::Conflicted(reason)),
         TransitionOutcome::Refused(reason) => Some(ZeroOutcome::Refused(reason)),
     };
-    let mut zero_authority_effect = None;
-    if let Some(zero_outcome) = zero_outcome
-        && command.writes_zero_authority_effect(&zero_outcome)
-    {
-        let activity = ActivityOnly::allocate(client, &envelope.project_scope).await?;
-        let write = command
-            .write_zero_authority_effect(client, envelope, &project, &activity)
-            .await?;
-        insert_activity_payload(
-            client,
-            envelope,
-            outcome.receipt_result().code(),
-            C::SPEC.activity_kind,
-            activity.project_activity_position,
-            &activity.project_activity_event_id,
-            write.activity,
-        )
-        .await?;
-        zero_authority_effect = Some(write.effect);
-    }
+    let zero_authority_effect = match zero_outcome {
+        None => None,
+        Some(zero_outcome) => match command.zero_authority_rows(&zero_outcome) {
+            ZeroAuthorityRows::None => None,
+            ZeroAuthorityRows::Effect => Some(
+                command
+                    .write_zero_authority_effect(client, envelope, &zero_outcome)
+                    .await?,
+            ),
+            ZeroAuthorityRows::EffectWithActivity => {
+                let activity = ActivityOnly::allocate(client, &envelope.project_scope).await?;
+                let write = command
+                    .write_zero_authority_activity(client, envelope, &project, &activity)
+                    .await?;
+                insert_activity_payload(
+                    client,
+                    envelope,
+                    outcome.receipt_result().code(),
+                    C::SPEC.activity_kind,
+                    activity.project_activity_position,
+                    &activity.project_activity_event_id,
+                    write.activity,
+                )
+                .await?;
+                Some(write.effect)
+            }
+        },
+    };
     let response = C::Response::settle(client, envelope, C::SPEC.kind).await?;
     Ok(ProjectCommandSettlement {
         ids: envelope.ids.clone(),

@@ -22,7 +22,8 @@ use uuid::Uuid;
 
 use super::{
     ActivitySequences, Classification, CommandSpec, LockedProject, ProfileSequences, ProfileWrite,
-    ProjectCommand, ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
+    ProjectCommand, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, settle_project_command,
+    unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
@@ -1159,15 +1160,23 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         self.command.decode(replay)
     }
 
-    fn writes_zero_authority_effect(&self, outcome: &ZeroOutcome<'_, Self>) -> bool {
-        self.command.writes_zero_authority_effect(&match outcome {
-            ZeroOutcome::NoEffect(reason) => ZeroOutcome::NoEffect(*reason),
-            ZeroOutcome::Conflicted(reason) => ZeroOutcome::Conflicted(*reason),
-            ZeroOutcome::Refused(reason) => ZeroOutcome::Refused(*reason),
-        })
+    fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
+        self.command.zero_authority_rows(&inner_outcome(outcome))
     }
 
     async fn write_zero_authority_effect(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        outcome: &ZeroOutcome<'_, Self>,
+    ) -> Result<Self::ZeroEffect, ProjectCommandError> {
+        self.command
+            .write_zero_authority_effect(client, envelope, &inner_outcome(outcome))
+            .await?;
+        Err(unavailable("injected zero-authority write failure"))
+    }
+
+    async fn write_zero_authority_activity(
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
@@ -1175,9 +1184,20 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         activity: &ActivitySequences,
     ) -> Result<ZeroAuthorityWrite<Self::ZeroEffect>, ProjectCommandError> {
         self.command
-            .write_zero_authority_effect(client, envelope, project, activity)
+            .write_zero_authority_activity(client, envelope, project, activity)
             .await?;
         Err(unavailable("injected zero-authority write failure"))
+    }
+}
+
+/// The zero-authority outcome of the wrapped command.
+fn inner_outcome<'a, C: ProjectCommand>(
+    outcome: &ZeroOutcome<'a, Failing<C>>,
+) -> ZeroOutcome<'a, C> {
+    match outcome {
+        ZeroOutcome::NoEffect(reason) => ZeroOutcome::NoEffect(*reason),
+        ZeroOutcome::Conflicted(reason) => ZeroOutcome::Conflicted(*reason),
+        ZeroOutcome::Refused(reason) => ZeroOutcome::Refused(*reason),
     }
 }
 
