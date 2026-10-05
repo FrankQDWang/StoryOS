@@ -209,6 +209,10 @@ pub(crate) struct ZeroAuthorityWrite<Z> {
 pub(crate) type ProfileWrite<C> =
     <<C as ProjectCommand>::Profile as SettlementProfile>::Write<<C as ProjectCommand>::Effect>;
 
+/// The applied value that one command's settlement profile returns after its authority records.
+pub(crate) type ProfileApplied<C> =
+    <<C as ProjectCommand>::Profile as SettlementProfile>::Applied<<C as ProjectCommand>::Effect>;
+
 /// One project command: its declared profiles, its locked facts, its own effect rows, and its
 /// applied effect decoder.
 ///
@@ -257,6 +261,18 @@ pub(crate) trait ProjectCommand: Sync {
         applied: Self::Applied,
     ) -> impl Future<Output = Result<ProfileWrite<Self>, ProjectCommandError>> + Send;
 
+    /// Writes the applied effect rows that refer to the authority records of the profile.
+    ///
+    /// The sequence calls this after the profile writes those records.
+    fn apply_after_authority(
+        &self,
+        _client: &Client,
+        _envelope: &ProjectCommandEnvelope,
+        _applied: &ProfileApplied<Self>,
+    ) -> impl Future<Output = Result<(), ProjectCommandError>> + Send {
+        async { Ok(()) }
+    }
+
     /// Decodes the applied effect from the stored acknowledgement evidence.
     fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault>;
 
@@ -289,7 +305,7 @@ pub(crate) trait ProjectCommand: Sync {
 }
 
 pub(crate) type SettledCommand<C> = ProjectCommandSettlement<
-    <<C as ProjectCommand>::Profile as SettlementProfile>::Applied<<C as ProjectCommand>::Effect>,
+    ProfileApplied<C>,
     <C as ProjectCommand>::NoEffect,
     <C as ProjectCommand>::Conflict,
     <C as ProjectCommand>::Refusal,
@@ -400,6 +416,9 @@ async fn first_use<C: ProjectCommand>(
                 .await?;
             let applied =
                 C::Profile::persist(client, envelope, &project, &C::SPEC, sequences, write).await?;
+            command
+                .apply_after_authority(client, envelope, &applied)
+                .await?;
             (receipt_created_at, TransitionOutcome::Applied(applied))
         }
         TransitionOutcome::NoEffect(reason) => (
