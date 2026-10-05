@@ -13,7 +13,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
-use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
     ActionOnly, ActionSequence, Admission, AppliedResult, Classification, CommandIsolation,
     CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProjectCommand,
@@ -325,9 +325,9 @@ impl ProjectCommand for RejectProposalOperationsInput {
                 Some(preserved_validation),
                 Some(preserved_closure),
             ) => Ok(ProposalOperationsRejected {
-                preserved_generation,
-                preserved_validation,
-                preserved_closure,
+                preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
+                preserved_validation: StateAxis::Validation.preserved(preserved_validation)?,
+                preserved_closure: StateAxis::Closure.preserved(preserved_closure)?,
                 resolution_event_id,
             }),
             (Some(_), None, None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),

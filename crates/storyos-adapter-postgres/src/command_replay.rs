@@ -69,6 +69,33 @@ pub(crate) enum ReplayFault {
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
 
+/// The Proposal State Axis of one preserved value that replay reads.
+#[derive(Clone, Copy)]
+pub(crate) enum StateAxis {
+    Generation,
+    Validation,
+    Closure,
+    OperationResolution,
+}
+
+impl StateAxis {
+    /// Returns `value` when this axis has it. Another value is damaged evidence.
+    pub(crate) fn preserved(self, value: String) -> Result<String, ReplayFault> {
+        let known: &[&str] = match self {
+            Self::Generation => &["generating", "ready_partial", "ready"],
+            Self::Validation => &["pending", "valid", "invalid", "conflicted"],
+            Self::Closure => &["open", "withdrawn", "superseded"],
+            Self::OperationResolution => &["pending", "applied", "rejected"],
+        };
+        if known.contains(&value.as_str()) {
+            return Ok(value);
+        }
+        Err(unavailable(format!(
+            "the preserved Proposal state {value} is unknown"
+        )))
+    }
+}
+
 /// The top-level fields of one stored JSON object, each as PostgreSQL `->>` text.
 struct JsonText(BTreeMap<String, Option<String>>);
 

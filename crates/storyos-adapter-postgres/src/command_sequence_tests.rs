@@ -3441,10 +3441,50 @@ async fn a_draft_replay_binds_its_admission_and_draft_and_requires_its_author_ac
     );
 }
 
-/// Settles the call and replays it once with `field` removed from its applied Receipt payload.
+/// Settles the call and replays it once after `damage`, which the CHECK constraints of `table`
+/// whose definition contains `checked` refuse.
 ///
-/// The Receipt payload checks refuse such a row. The helper drops them for the replay, and then
-/// restores the payload and the checks.
+/// The helper drops those constraints for the replay. Then it runs `repair` and restores them.
+async fn replay_past_checks<C: ProjectCommand + Clone>(
+    admin: &Client,
+    store: &PostgresProjectReader,
+    call: &CommandCall<C>,
+    table: &str,
+    checked: &str,
+    damage: &str,
+    repair: &str,
+) -> ReplayError {
+    let checks = admin
+        .query(
+            "SELECT conname::text, pg_get_constraintdef(oid) FROM pg_constraint
+              WHERE conrelid = $1::text::regclass AND contype = 'c'
+                AND strpos(pg_get_constraintdef(oid), $2) > 0",
+            &[&format!("storyos.{table}"), &checked],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)))
+        .collect::<Vec<_>>();
+    let dropped = checks
+        .iter()
+        .map(|(name, _)| format!("ALTER TABLE storyos.{table} DROP CONSTRAINT {name};"))
+        .collect::<String>();
+    run_without_foreign_keys(admin, &format!("{dropped} {damage}")).await;
+    let retry = with_new_request_ids(call);
+    let replayed = settle_project_command(store, &retry.envelope, &retry.input).await;
+    let restored = checks
+        .iter()
+        .map(|(name, check)| format!("ALTER TABLE storyos.{table} ADD CONSTRAINT {name} {check};"))
+        .collect::<String>();
+    run_without_foreign_keys(admin, &format!("{repair}; {restored}")).await;
+    let Err(error) = replayed else {
+        panic!("a replay with a damaged stored value must fail");
+    };
+    error.into()
+}
+
+/// Settles the call and replays it once with `field` removed from its applied Receipt payload.
 async fn replay_without_receipt_payload_field<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -3464,57 +3504,59 @@ async fn replay_without_receipt_payload_field<C: ProjectCommand + Clone>(
         .await
         .unwrap()
         .get(/*idx*/ 0);
-    let checks = admin
-        .query(
-            "SELECT conname::text, pg_get_constraintdef(oid) FROM pg_constraint
-              WHERE conrelid = 'storyos.domain_receipts'::regclass AND contype = 'c'
-                AND pg_get_constraintdef(oid) LIKE '%result_payload%'",
+    replay_past_checks(
+        admin,
+        store,
+        call,
+        "domain_receipts",
+        "result_payload",
+        &format!(
+            "UPDATE storyos.domain_receipts SET result_payload = result_payload - '{field}'
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+        &format!(
+            "UPDATE storyos.domain_receipts SET result_payload = '{payload}'::jsonb
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+    )
+    .await
+}
+
+/// Settles the call and replays it once with an unknown value in one preserved column of its
+/// effect row, which `receipt_column` binds to the Receipt.
+async fn replay_with_unknown_preserved_value<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    table: &str,
+    receipt_column: &str,
+    column: &str,
+) -> ReplayError {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the project command must settle");
+    };
+    let filter = format!(
+        "WHERE {receipt_column} = '{}'",
+        call.envelope.ids.receipt_id
+    );
+    let value: String = admin
+        .query_one(
+            &format!("SELECT {column} FROM storyos.{table} {filter}"),
             &[],
         )
         .await
         .unwrap()
-        .iter()
-        .map(|row| {
-            (
-                row.get::<_, String>(/*idx*/ 0),
-                row.get::<_, String>(/*idx*/ 1),
-            )
-        })
-        .collect::<Vec<_>>();
-    let dropped = checks
-        .iter()
-        .map(|(name, _)| format!("ALTER TABLE storyos.domain_receipts DROP CONSTRAINT {name};"))
-        .collect::<String>();
-    run_without_foreign_keys(
+        .get(/*idx*/ 0);
+    replay_past_checks(
         admin,
-        &format!(
-            "{dropped}
-             UPDATE storyos.domain_receipts SET result_payload = result_payload - '{field}'
-              WHERE receipt_id = '{receipt_id}'"
-        ),
+        store,
+        call,
+        table,
+        column,
+        &format!("UPDATE storyos.{table} SET {column} = 'damaged' {filter}"),
+        &format!("UPDATE storyos.{table} SET {column} = '{value}' {filter}"),
     )
-    .await;
-    let retry = with_new_request_ids(call);
-    let replayed = settle_project_command(store, &retry.envelope, &retry.input).await;
-    let restored = checks
-        .iter()
-        .map(|(name, check)| {
-            format!("ALTER TABLE storyos.domain_receipts ADD CONSTRAINT {name} {check};")
-        })
-        .collect::<String>();
-    run_without_foreign_keys(
-        admin,
-        &format!(
-            "UPDATE storyos.domain_receipts SET result_payload = '{payload}'::jsonb
-              WHERE receipt_id = '{receipt_id}';
-             {restored}"
-        ),
-    )
-    .await;
-    let Err(error) = replayed else {
-        panic!("a replay without its applied payload field must fail");
-    };
-    error.into()
+    .await
 }
 
 #[tokio::test]
@@ -3590,4 +3632,79 @@ async fn an_applied_replay_requires_the_payload_field_of_its_receipt() {
         .await,
     ];
     assert_eq!(observed, vec![ReplayError::Unavailable; 9]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_applied_replay_refuses_an_unknown_preserved_proposal_state() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0x9d00).await,
+            "proposal_rejection_receipts",
+            "rejection_receipt_id",
+            "preserved_closure",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x9d10).await,
+            "proposal_withdrawals",
+            "withdrawal_receipt_id",
+            "preserved_validation",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x9d20).await,
+            "proposal_replans",
+            "replan_receipt_id",
+            "preserved_generation",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x9d30).await,
+            "proposal_withdrawal_reopenings",
+            "reopen_receipt_id",
+            "preserved_operation_resolution",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x9d40).await,
+            "proposal_operation_reopenings",
+            "reopen_receipt_id",
+            "preserved_closure",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x9d50).await,
+            "proposal_generation_transitions",
+            "receipt_id",
+            "preserved_validation",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x9d60).await,
+            "proposal_generation_transitions",
+            "receipt_id",
+            "preserved_operation_resolution",
+        )
+        .await,
+    ];
+    assert_eq!(observed, vec![ReplayError::Unavailable; 7]);
 }

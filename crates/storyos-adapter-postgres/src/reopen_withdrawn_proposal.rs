@@ -10,7 +10,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
-use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
     ActionOnly, Admission, AppliedResult, Classification, CommandIsolation, CommandSpec,
     EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProfileSequences,
@@ -274,8 +274,9 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
                 Some(preserved_operation_resolution),
             ) => Ok(ProposalReopened {
                 resulting_proposal_revision_id,
-                preserved_generation,
-                preserved_operation_resolution,
+                preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
+                preserved_operation_resolution: StateAxis::OperationResolution
+                    .preserved(preserved_operation_resolution)?,
             }),
             (Some(_), None, None) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),
             _ => Err(ReplayFault::Unavailable(

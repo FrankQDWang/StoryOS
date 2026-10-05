@@ -12,7 +12,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
-use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
     ActionOnly, Admission, AppliedResult, Classification, CommandIsolation, CommandSpec,
     EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProfileSequences,
@@ -304,8 +304,8 @@ impl ProjectCommand for ReplanProposalInput {
                 Some(preserved_closure),
             ) => Ok(ProposalReplanned {
                 resulting_proposal_revision_id,
-                preserved_generation,
-                preserved_closure,
+                preserved_generation: StateAxis::Generation.preserved(preserved_generation)?,
+                preserved_closure: StateAxis::Closure.preserved(preserved_closure)?,
                 state_event_id,
             }),
             (Some(_), Some(_), None, None) => {

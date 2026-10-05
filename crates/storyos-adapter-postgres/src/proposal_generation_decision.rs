@@ -15,7 +15,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
-use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
     ActionOnly, Admission, AppliedResult, Classification, CommandIsolation, CommandSpec,
     EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProfileSequences,
@@ -200,9 +200,11 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
         };
         Ok(ProposalGenerationCompleted {
             generation_id: field("resulting_generation_id")?,
-            preserved_validation: field("preserved_validation")?,
-            preserved_closure: field("preserved_closure")?,
-            preserved_operation_resolution: field("preserved_operation_resolution")?,
+            preserved_validation: StateAxis::Validation
+                .preserved(field("preserved_validation")?)?,
+            preserved_closure: StateAxis::Closure.preserved(field("preserved_closure")?)?,
+            preserved_operation_resolution: StateAxis::OperationResolution
+                .preserved(field("preserved_operation_resolution")?)?,
             generation_event_id: field("transition_id")?,
         })
     }
@@ -393,12 +395,15 @@ impl ProjectCommand for ContinueProposalGenerationInput {
         Ok(ProposalGenerationStarted {
             prior_generation_id: field("prior_generation_id")?,
             new_generation_id: field("resulting_generation_id")?,
-            prior_generation_state: field("prior_generation_state")?,
+            prior_generation_state: StateAxis::Generation
+                .preserved(field("prior_generation_state")?)?,
             prior_run_id: field("prior_run_id")?,
             resulting_run_id: field("resulting_run_id")?,
-            preserved_validation: field("preserved_validation")?,
-            preserved_closure: field("preserved_closure")?,
-            preserved_operation_resolution: field("preserved_operation_resolution")?,
+            preserved_validation: StateAxis::Validation
+                .preserved(field("preserved_validation")?)?,
+            preserved_closure: StateAxis::Closure.preserved(field("preserved_closure")?)?,
+            preserved_operation_resolution: StateAxis::OperationResolution
+                .preserved(field("preserved_operation_resolution")?)?,
             generation_event_id: field("transition_id")?,
         })
     }
