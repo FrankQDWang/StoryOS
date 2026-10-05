@@ -182,7 +182,7 @@ impl ProjectCommand for TakeOverProjectWriterInput {
             return Err(ProjectCommandError::BindingConflict);
         };
         let resulting_writer_generation = prior_writer_generation
-            .checked_add(1)
+            .checked_add(/*rhs*/ 1)
             .ok_or(ProjectCommandError::BindingConflict)?;
         let generation_inserts = client
             .execute(

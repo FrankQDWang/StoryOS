@@ -635,13 +635,13 @@ async fn two_chapter_writer(
     let (scope, _volume_id, chapter_a, chapter_b) = seed_two_chapters(
         store,
         "018f0000-0000-7001-8000-000000000001",
-        &suffix(0),
-        &suffix(1),
-        &suffix(2),
-        &suffix(3),
+        &suffix(/*offset*/ 0),
+        &suffix(/*offset*/ 1),
+        &suffix(/*offset*/ 2),
+        &suffix(/*offset*/ 3),
     )
     .await;
-    let editor_session_id = open_session(store, &scope, &suffix(4)).await;
+    let editor_session_id = open_session(store, &scope, &suffix(/*offset*/ 4)).await;
     let OpenChapter::Found(opened) =
         open_chapter(store, &scope, &ChapterId::new(chapter_b.clone()))
             .await
