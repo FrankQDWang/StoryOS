@@ -9,8 +9,9 @@ use tokio_postgres::Client;
 use super::{CommandSpec, LockedProject, SettlementProfile, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};
 
-/// The Author Action Sequence position that one Forward Author Action uses.
-pub(crate) struct ActionSequence(u64);
+/// The Author Action Sequence position that one Forward Author Action uses. A command can
+/// record the position in its own effect rows.
+pub(crate) struct ActionSequence(pub(crate) u64);
 
 pub(crate) struct ActionOnly;
 

@@ -42,6 +42,9 @@ pub(super) enum RevisionMismatch {
 pub(super) enum BodyValidation {
     AfterRevisionCheck,
     BeforeRevisionCheck,
+    /// The body is parsed after the session, the challenge headers, and the challenge secret.
+    /// Its fields are validated after the revision check.
+    AfterChallengeHeaders,
 }
 
 /// When the path identities after the Project are validated, relative to the content type.
@@ -114,6 +117,14 @@ project_command_request!(
 project_command_request!(
     contracts::ReopenWithdrawnProposalRequest,
     nested reopen_withdrawn_proposal_input
+);
+project_command_request!(
+    contracts::CompleteReadyPartialProposalRequest,
+    nested complete_ready_partial_proposal_input
+);
+project_command_request!(
+    contracts::ContinueProposalGenerationRequest,
+    nested continue_proposal_generation_input
 );
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
@@ -190,11 +201,50 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
     let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
         .await
         .map_err(|_| payload_too_large())?;
-    let body = serde_json::from_slice::<R>(&bytes).map_err(|_| invalid_request_shape())?;
-    let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
-    let session = state
-        .client_session_binding(session_handle)
-        .ok_or_else(authentication_required)?;
+    let parse_body = || serde_json::from_slice::<R>(&bytes).map_err(|_| invalid_request_shape());
+    let bound_session = || {
+        let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
+        let session = state
+            .client_session_binding(session_handle)
+            .ok_or_else(authentication_required)?;
+        Ok::<_, ApiError>((session_handle, session))
+    };
+    let challenge_headers = || {
+        let idempotency_key = exact_header(&headers, "idempotency-key")?;
+        let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
+        if !valid_uuid_v7(idempotency_key)
+            || nonce.len() != 64
+            || !nonce
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err(invalid_request());
+        }
+        let secret = state
+            .config
+            .project_command_challenge_secret
+            .as_deref()
+            .filter(|secret| secret.len() >= 32)
+            .ok_or_else(challenge_store_unavailable)?;
+        Ok((idempotency_key, nonce, secret))
+    };
+    let (body, session_handle, session, checked_headers) = match route.body_validation {
+        BodyValidation::AfterRevisionCheck | BodyValidation::BeforeRevisionCheck => {
+            let body = parse_body()?;
+            let (session_handle, session) = bound_session()?;
+            (body, session_handle, session, None)
+        }
+        BodyValidation::AfterChallengeHeaders => {
+            let (session_handle, session) = bound_session()?;
+            let checked_headers = challenge_headers()?;
+            (
+                parse_body()?,
+                session_handle,
+                session,
+                Some(checked_headers),
+            )
+        }
+    };
     if !body.targets_route(route.schema_id) {
         return Err(match route.schema_mismatch {
             SchemaMismatch::InvalidRequest => invalid_request(),
@@ -218,7 +268,7 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
         Ok::<I, ApiError>(input)
     };
     let input = match route.body_validation {
-        BodyValidation::AfterRevisionCheck => {
+        BodyValidation::AfterRevisionCheck | BodyValidation::AfterChallengeHeaders => {
             check_revision()?;
             validate_body(input)?
         }
@@ -228,22 +278,10 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
             input
         }
     };
-    let idempotency_key = exact_header(&headers, "idempotency-key")?;
-    let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
-    if !valid_uuid_v7(idempotency_key)
-        || nonce.len() != 64
-        || !nonce
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err(invalid_request());
-    }
-    let secret = state
-        .config
-        .project_command_challenge_secret
-        .as_deref()
-        .filter(|secret| secret.len() >= 32)
-        .ok_or_else(challenge_store_unavailable)?;
+    let (idempotency_key, nonce, secret) = match checked_headers {
+        Some(checked_headers) => checked_headers,
+        None => challenge_headers()?,
+    };
     let binding_ref = session_binding_ref(secret, session_handle);
     let canonical_command_bytes = serde_json::to_value(&body)
         .and_then(|value| serde_json::to_vec(&value))
