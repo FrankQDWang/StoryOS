@@ -459,7 +459,7 @@ export function ManuscriptEditor({
       const detached: ManualInputController = {
         flush: () => Promise.resolve(),
         whenIdle: () => Promise.resolve(),
-        installProjection: (projection) => onProjectionRef.current(projection),
+        installProjection: async (projection) => { onProjectionRef.current(projection); },
         hasIncompleteSemanticIntent: () => composingRef.current,
         close() {},
         replaceBound: async () => "refused",
@@ -491,21 +491,23 @@ export function ManuscriptEditor({
       onFailure: (error) => { onFailureRef.current(error); },
     });
     idleRef.current = idle;
-    // A projection that another reader read from the Journal can be older than input that persisted after that read.
-    const installJournalProjection = (projection: PendingEditProjection): void => {
-      const rendered = readManuscriptParagraphs(editor.state.doc);
-      if (rendered === undefined || paragraphsEqual(rendered, projection.blocks) || idle.hasQueuedInput()) {
-        installProjection(projection);
-        return;
-      }
-      const captured = idle.capturedInputCount();
-      void rebuildPendingProjection(persistWorkspace).then((current) => {
-        // Input captured during this read installs its own newer projection.
-        if (idleRef.current === idle && idle.capturedInputCount() === captured) installProjection(current);
-      }, (error: unknown) => { if (idleRef.current === idle) onFailureRef.current(error); });
-    };
     const controller: ManualInputController = {
-      installProjection: installJournalProjection,
+      // A projection that another reader read from the Journal can be older than input that persisted after that read.
+      async installProjection(projection) {
+        const rendered = readManuscriptParagraphs(editor.state.doc);
+        if (rendered === undefined || paragraphsEqual(rendered, projection.blocks) || idle.hasQueuedInput()) {
+          installProjection(projection);
+          return;
+        }
+        const captured = idle.capturedInputCount();
+        try {
+          const current = await rebuildPendingProjection(persistWorkspace);
+          // Input captured during this read installs its own newer projection.
+          if (idleRef.current === idle && idle.capturedInputCount() === captured) installProjection(current);
+        } catch (error: unknown) {
+          if (idleRef.current === idle) onFailureRef.current(error);
+        }
+      },
       flush: () => idle.flush(),
       whenIdle: () => idle.whenIdle(),
       hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing,

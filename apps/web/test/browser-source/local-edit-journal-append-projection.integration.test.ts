@@ -490,3 +490,62 @@ it("keeps author input when a Journal projection read before that input installs
   } finally { await act(async () => { root.unmount(); }); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
+
+
+it("shows a changed Journal projection before its install completes", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const { ManuscriptEditor } = await import("../../src/manuscript-editor.tsx");
+  const { submitOnePendingAuthorEdit } = await import("../../src/author-edit-submission.ts");
+  const { createBrowserScenario, createAppliedAuthorEditResponse } = await import("./scenario.ts");
+  const { digestApplyAuthorEdit } = await import("../../../../generated/typescript/storyos-public-release-1/client.mjs");
+  const scenario = createBrowserScenario();
+  let canonical = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const path = String(input);
+    if (path.endsWith("/anti-forgery-challenges")) return Response.json({ nonce: "a".repeat(64),
+      expires_at: new Date(Date.now() + 60_000).toISOString(), limit_profile_revision: "storyos.foundation.absolute.v1" });
+    if (path.includes("/editor-sessions/")) return Response.json(canonical);
+    if (!path.endsWith("/manuscript/author-edits")) throw new Error(`Unexpected request ${path}`);
+    const request = JSON.parse(String(init?.body));
+    const response = createAppliedAuthorEditResponse({ request, body: "Base!",
+      commandDigest: await digestApplyAuthorEdit(request), idempotencyKey: new Headers(init?.headers).get("idempotency-key")! });
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("Base!"));
+    canonical = { ...canonical, base_snapshot: { ...canonical.base_snapshot,
+      snapshot_id: "018f0000-0000-7001-8000-000000000080", project_activity_position: "1",
+      authoritative_head_revision_id: response.effect.kind === "authoritative_applied"
+        ? response.effect.authoritative_revision.revision_id : "",
+      materialized_revision: { ...canonical.base_snapshot.materialized_revision, revision_id: "018f0000-0000-7001-8000-000000000034",
+        body: "Base!", blocks: canonical.base_snapshot.materialized_revision.blocks.map((block) => ({ ...block, text: "Base!" })) },
+      materialized_payload_digest: { ...canonical.base_snapshot.materialized_payload_digest,
+        value_hex_lowercase: [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("") } } };
+    return Response.json(response);
+  };
+  const host = document.createElement("div"); document.body.append(host);
+  const root = createRoot(host);
+  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
+  let failure: unknown;
+  function View() {
+    const [projection, setProjection] = useState(test.workspace.pending);
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true,
+      persistWorkspace: test.workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: controller,
+      onFailure: (error) => { failure = error; },
+      onProjection: (next) => { test.workspace.pending = next; flushSync(() => { setProjection(next); }); } });
+  }
+  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  try {
+    await act(async () => { root.render(createElement(View)); });
+    const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
+    // A Draft retry settles outside the editor. The Draft display keeps its hold until this install completes.
+    await persistReplaceSelection(test.workspace, FIRST_APPEND_EDIT);
+    const settled = await submitOnePendingAuthorEdit({ workspace: test.workspace, baseUrl: location.origin, fetchImpl });
+    let shown: string | null = null;
+    await act(async () => {
+      await controller.current!.installProjection(settled);
+      shown = surface.querySelector("p")!.textContent;
+    });
+    expect({ shown, installed: test.workspace.pending, failure })
+      .toEqual({ shown: "Base!", installed: settled, failure: undefined });
+  } finally { await act(async () => { root.unmount(); }); host.remove(); await test.close();
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
+});
