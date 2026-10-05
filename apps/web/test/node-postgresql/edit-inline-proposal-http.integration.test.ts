@@ -31,6 +31,11 @@ const SOURCE_SLICE = "narrator voice";
 const GOLDEN_DIGEST =
   "sha256:bc395ed925fa201c3c0ecd550ed362f89e6069001d6c23af2ce214b107d9ce40";
 
+function problemOf(error: unknown): { status: number | undefined; code: unknown } {
+  const protocol = requireStoryOSProtocolError(error);
+  return { status: protocol.status, code: JSON.parse(String(protocol.responseBody)).code };
+}
+
 function sliceDigest(manuscriptBlockId: string): string {
   return `sha256:${createHash("sha256").update(JSON.stringify({
     base_slice: SOURCE_SLICE,
@@ -317,6 +322,16 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
         ...(index === 1 ? { anchors: [{ ...request.expand_refused_edit_draft_to_proposal_input.anchors[0]!, base_authoritative_revision_id: id("e0fb899") }] } : {}) } };
       if (index === 2) await assert.rejects(() => sendExpansion(changed, id(`e0fb8${index}`)), (error) => requireStoryOSProtocolError(error).status === 409);
       else assert.equal((await sendExpansion(changed, id(`e0fb8${index}`))).effect.kind, "conflicted");
+      assert.deepEqual(await retainedState(prepared.projectId), before);
+    }
+    const uppercase = { ...request, expand_refused_edit_draft_to_proposal_input: {
+      ...request.expand_refused_edit_draft_to_proposal_input, draft_id: source.draft_id.toUpperCase() } };
+    assert.notEqual(uppercase.expand_refused_edit_draft_to_proposal_input.draft_id, source.draft_id);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await assert.rejects(() => sendExpansion(uppercase, id("e0fbc1")), (error) => {
+        assert.deepEqual(problemOf(error), { status: 409, code: "draft_expansion_binding_conflict" });
+        return true;
+      });
       assert.deepEqual(await retainedState(prepared.projectId), before);
     }
     await assert.rejects(() => sendExpansion(request, id("e0fb83"), browserFetch(started.baseUrl, "session-b")),
@@ -1573,6 +1588,21 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       WHERE project_id='${prepared.projectId}'::uuid AND idempotency_key='${id("e0db94")}'::uuid`), "0");
     closeRequest.close_editor_flow_draft_input.writer_generation = writer.writerGeneration;
     const beforeClose = await retainedState(prepared.projectId);
+    const uppercaseClose: CloseEditorFlowDraftRequest = { ...closeRequest, close_editor_flow_draft_input: {
+      ...closeRequest.close_editor_flow_draft_input, draft_id: closed.draft.draft_id.toUpperCase() } };
+    assert.notEqual(uppercaseClose.close_editor_flow_draft_input.draft_id, closed.draft.draft_id);
+    const uppercaseDigest = await digestCloseEditorFlowDraft(uppercaseClose);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await assert.rejects(() => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/drafts/{draft_id}/closures", uppercaseClose.command_schema, uppercaseDigest,
+        id("e0d9a1"), (antiForgery) => closeEditorFlowDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          draftId: uppercaseClose.close_editor_flow_draft_input.draft_id, request: uppercaseClose,
+          idempotencyKey: id("e0d9a1"), antiForgery, fetchImpl: prepared.fetchImpl })), (error) => {
+        assert.deepEqual(problemOf(error), { status: 409, code: "draft_binding_conflict" });
+        return true;
+      });
+      assert.deepEqual(await retainedState(prepared.projectId), beforeClose);
+    }
     const key = id("e0db2");
     const digest = await digestCloseEditorFlowDraft(closeRequest);
     let nonce = "";

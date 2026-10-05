@@ -33,11 +33,6 @@ impl PostgresProjectReader {
     }
 }
 
-/// The canonical text of the Draft identity, which the Receipt records as PostgreSQL `uuid` text.
-fn stored_draft_id(draft_id: &str) -> String {
-    Uuid::parse_str(draft_id).map_or_else(|_| draft_id.to_owned(), |id| id.to_string())
-}
-
 /// The Receipt payload fields of one expansion outcome, without `reason`.
 ///
 /// The Proposal and close event fields are null until an applied outcome sets them.
@@ -257,6 +252,14 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
             },
             &inline,
         )?;
+        // The Draft settlement records need the canonical text of the Draft identity.
+        if Uuid::parse_str(&self.draft_id)
+            .map_err(unavailable)?
+            .to_string()
+            != self.draft_id
+        {
+            return Err(ProjectCommandError::BindingConflict);
+        }
         let observation = DraftExpansionObservation {
             draft,
             current_target_revision_id,
@@ -270,7 +273,7 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
             zero_receipt: ZeroReceipt::Observed {
                 fields: observation_fields(&observation),
                 refs: ReceiptRefs {
-                    draft_artifact_refs: vec![stored_draft_id(&self.draft_id)],
+                    draft_artifact_refs: vec![self.draft_id.clone()],
                     ..ReceiptRefs::default()
                 },
                 effect: observation.clone(),
@@ -319,16 +322,15 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
 
     fn applied_receipt_refs(&self, _applied: &(), expanded: &DraftExpanded) -> ReceiptRefs {
         let draft = &expanded.observation.draft;
-        let draft_id = stored_draft_id(&self.draft_id);
         ReceiptRefs {
             proposal_revision_ids: vec![expanded.proposal_revision_id.clone()],
-            draft_artifact_refs: vec![draft_id.clone()],
+            draft_artifact_refs: vec![self.draft_id.clone()],
             artifact_lifecycle_event_refs: vec![expanded.event_id.clone()],
             source_draft_disposition: Some(
                 serde_json::json!({
                     "kind": "closed_superseded",
                     "source_draft_kind": "refused_edit",
-                    "source_draft_id": draft_id,
+                    "source_draft_id": self.draft_id,
                     "source_draft_revision_id": draft.draft_revision_id,
                     "source_draft_payload_digest": draft.payload_digest,
                     "prior_closure": "open",

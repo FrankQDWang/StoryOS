@@ -202,6 +202,14 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
         observation: DraftCloseObservation,
         event_id: String,
     ) -> Result<DraftClosed, ProjectCommandError> {
+        // The Draft close event needs the canonical text of the Draft identity.
+        if Uuid::parse_str(&self.draft_id)
+            .map_err(unavailable)?
+            .to_string()
+            != self.draft_id
+        {
+            return Err(ProjectCommandError::BindingConflict);
+        }
         let scope = &envelope.project_scope;
         client
             .execute(
