@@ -65,8 +65,13 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
   - For `takeOverProjectWriter`, a settled Receipt without its Activity record gives `503 author_edit_store_unavailable` instead of `409 idempotency_binding_conflict`. The Activity payload checks already prevent a payload with a missing field.
   - `closeEditorFlowDraft` and `expandRefusedEditDraftToProposal` replay in a separate read-only transaction, not in the write transaction. The response does not change.
   - For the six Manuscript Structure Transition commands and `setCurrentChapter`, a later canonical Snapshot at the same Activity position no longer breaks an exact retry. Replay reads the earliest canonical Snapshot at that position, which is the one that the command wrote. Before this decision, such a retry gave `503 project_store_unavailable`.
-  - For `reopenRejectedOperations`, `completeReadyPartialProposal`, and `continueProposalGeneration`, a Proposal with more than one Proposal Operation no longer gives `503 project_store_unavailable`. `reopenRejectedOperations` reads only the selected Proposal Operation, and an unknown one gives `operation_not_rejected`. The two generation decisions read the first Proposal Operation by identity, as `reopenWithdrawnProposal` does.
 - Each specification that moves commands lists every other observable difference in its behavior-equivalence review. An unlisted difference is a defect.
+
+### Defect fixes in moved commands
+
+A specification that moves commands can also fix a defect of those commands. Each fix is listed here with its observable change:
+
+- For `reopenRejectedOperations`, `completeReadyPartialProposal`, and `continueProposalGeneration`, a Proposal with more than one Proposal Operation no longer gives `503 project_store_unavailable`. `reopenRejectedOperations` reads only the selected Proposal Operation, and an unknown one gives `operation_not_rejected`. The two generation decisions read the first Proposal Operation by identity, as `reopenWithdrawnProposal` does.
 
 ## Relation to ADR 0041 and the glossary
 
