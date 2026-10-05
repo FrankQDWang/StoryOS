@@ -1,5 +1,10 @@
 //! Classify one explicit Replan of a conflicted Proposal.
 
+use std::convert::Infallible;
+
+use super::TransitionOutcome;
+use crate::transition_outcome::reason_codes;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReplanProposal {
     pub scope_matches: bool,
@@ -12,12 +17,8 @@ pub struct ReplanProposal {
     pub expected_target_matches_head: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ReplanProposalResult {
-    Resolved,
-    Conflicted { reason: ReplanProposalConflict },
-    Refused { reason: ReplanProposalRefusal },
-}
+pub type ReplanProposalResult =
+    TransitionOutcome<(), Infallible, ReplanProposalConflict, ReplanProposalRefusal>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReplanProposalRefusal {
@@ -33,39 +34,36 @@ pub enum ReplanProposalConflict {
     ChangedHead,
 }
 
+reason_codes!(ReplanProposalConflict { ChangedHead => "changed_head" });
+reason_codes!(ReplanProposalRefusal {
+    WrongScope => "wrong_scope",
+    WrongAdmission => "wrong_admission",
+    StaleProposalRevision => "stale_proposal_revision",
+    NotEligible => "not_eligible",
+    UnavailableProof => "unavailable_proof",
+});
+
 /// Classify one author-cause Replan against Scope, Admission, current Conflict, and Heads.
 pub fn replan_proposal(command: &ReplanProposal) -> ReplanProposalResult {
     if !command.scope_matches {
-        return ReplanProposalResult::Refused {
-            reason: ReplanProposalRefusal::WrongScope,
-        };
+        return TransitionOutcome::Refused(ReplanProposalRefusal::WrongScope);
     }
     if !command.admission_valid {
-        return ReplanProposalResult::Refused {
-            reason: ReplanProposalRefusal::WrongAdmission,
-        };
+        return TransitionOutcome::Refused(ReplanProposalRefusal::WrongAdmission);
     }
     if !command.proposal_revision_current || !command.expected_head_current {
-        return ReplanProposalResult::Refused {
-            reason: ReplanProposalRefusal::StaleProposalRevision,
-        };
+        return TransitionOutcome::Refused(ReplanProposalRefusal::StaleProposalRevision);
     }
     if !command.closure_open {
-        return ReplanProposalResult::Refused {
-            reason: ReplanProposalRefusal::NotEligible,
-        };
+        return TransitionOutcome::Refused(ReplanProposalRefusal::NotEligible);
     }
     if !command.source_condition_matches || !command.replacement_operations_preserve_identity {
-        return ReplanProposalResult::Refused {
-            reason: ReplanProposalRefusal::UnavailableProof,
-        };
+        return TransitionOutcome::Refused(ReplanProposalRefusal::UnavailableProof);
     }
     if !command.expected_target_matches_head {
-        return ReplanProposalResult::Conflicted {
-            reason: ReplanProposalConflict::ChangedHead,
-        };
+        return TransitionOutcome::Conflicted(ReplanProposalConflict::ChangedHead);
     }
-    ReplanProposalResult::Resolved
+    TransitionOutcome::Applied(())
 }
 
 #[cfg(test)]
