@@ -8,7 +8,8 @@ use storyos_application::{
     ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement, SetCurrentChapterInput,
     StructureAuthority, StructureAuthorityEvidence, StructureSettlement, UpdateChapterInput,
     UpdateChapterSettlement, UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput,
-    UpdateVolumeSettlement, issue_project_command_challenge,
+    UpdateVolumeSettlement, WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
+    issue_project_command_challenge,
 };
 use storyos_application::{
     ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
@@ -253,6 +254,12 @@ const REOPEN_WITHDRAWN_PROPOSAL: Route = Route {
     method: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_METHOD,
     path: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_PATH,
     schema: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
+};
+const WITHDRAW_PROPOSAL: Route = Route {
+    kind: "withdrawProposal",
+    method: storyos_contracts::WITHDRAW_PROPOSAL_METHOD,
+    path: storyos_contracts::WITHDRAW_PROPOSAL_PATH,
+    schema: storyos_contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
 };
 
 /// Issues one Command Challenge for `route` and binds `input` to it.
@@ -648,11 +655,59 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let outcome = replayed_outcome(&store, &admin, &call, reopen_withdrawn_proposal).await;
     observed.push((REOPEN_WITHDRAWN_PROPOSAL.kind, outcome));
 
+    let (scope, open) = open_proposal(&store, &admin, /*base*/ 0x7440).await;
+    let mut withdrawal_receipts = Vec::new();
+    for (suffix, proposal_revision_id) in [
+        (0x7449, open.proposal_revision_id.clone()),
+        (0x744a, open.proposal_revision_id.clone()),
+        (0x744b, Uuid::now_v7().to_string()),
+    ] {
+        let input = WithdrawProposalInput {
+            proposal_revision_id,
+            ..open.clone()
+        };
+        let call = issued(&store, &scope, suffix, &WITHDRAW_PROPOSAL, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, withdraw_proposal).await;
+        observed.push((WITHDRAW_PROPOSAL.kind, outcome));
+        withdrawal_receipts.push(call.envelope.ids.receipt_id);
+    }
+    let (scope, open) = open_proposal(&store, &admin, /*base*/ 0x7450).await;
+    let input = WithdrawProposalInput {
+        expected_authoritative_revision_id: Uuid::now_v7().to_string(),
+        ..open
+    };
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x7459,
+        &WITHDRAW_PROPOSAL,
+        input,
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, withdraw_proposal).await;
+    observed.push((WITHDRAW_PROPOSAL.kind, outcome));
+    withdrawal_receipts.push(call.envelope.ids.receipt_id);
+    let mut withdrawal_rows = Vec::new();
+    for receipt_id in &withdrawal_receipts {
+        let rows: i64 = admin
+            .query_one(
+                "SELECT count(*) FROM storyos.proposal_withdrawals
+                  WHERE withdrawal_receipt_id = $1::text::uuid",
+                &[receipt_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        withdrawal_rows.push(rows);
+    }
+    assert_eq!(withdrawal_rows, vec![1, 0, 0, 0]);
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
     let activity_applied = ("authoritative_applied", [1, 0, 1, 0, 0]);
     let proposal_revised = ("proposal_revised", [1, 1, 0, 0, 0]);
+    let proposal_closure_changed = ("proposal_closure_changed", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
     let writer_takeover = ("no_effect", [1, 0, 1, 0, 1]);
     let conflicted = ("conflicted", [1, 0, 0, 0, 0]);
@@ -704,6 +759,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("reopenWithdrawnProposal", no_effect),
             ("reopenWithdrawnProposal", refused),
             ("reopenWithdrawnProposal", conflicted),
+            ("withdrawProposal", proposal_closure_changed),
+            ("withdrawProposal", no_effect),
+            ("withdrawProposal", refused),
+            ("withdrawProposal", conflicted),
         ]
     );
 }
@@ -862,6 +921,76 @@ async fn reopen_withdrawn_proposal_call(
 ) -> CommandCall<ReopenWithdrawnProposalInput> {
     let (scope, input) = withdrawn_proposal(store, admin, base).await;
     issued(store, &scope, base + 9, &REOPEN_WITHDRAWN_PROPOSAL, input).await
+}
+
+async fn withdraw_proposal(
+    store: &PostgresProjectReader,
+    call: &CommandCall<WithdrawProposalInput>,
+) -> Result<WithdrawProposalSettlement, ProjectCommandError> {
+    store.withdraw_proposal(&call.envelope, &call.input).await
+}
+
+/// A new Project with a writer Editor Session and one open Proposal on Chapter B.
+///
+/// Returns the Scope and the input that withdraws the Proposal. The fixture skips the foreign
+/// keys of the AgentRun and the Manuscript Block.
+async fn open_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, WithdrawProposalInput) {
+    let (scope, _chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let input = WithdrawProposalInput {
+        editor_session_id: EditorSessionId::new(editor_session_id),
+        proposal_id: Uuid::now_v7().to_string(),
+        proposal_revision_id: Uuid::now_v7().to_string(),
+        expected_authoritative_revision_id: revision_b,
+        withdrawal_note: WithdrawalNote::Present {
+            text: "Not this one".to_owned(),
+        },
+    };
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             INSERT INTO storyos.proposals
+               (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
+                source_run_id, source_decision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', 'block_edit', '{chapter}',
+                     '{block}', '{run}', '{decision}');
+             INSERT INTO storyos.proposal_revisions
+               (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
+                closure, candidate_text, base_authoritative_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', 'ready', 'valid',
+                     'open', 'Candidate', '{base_revision}');
+             INSERT INTO storyos.proposal_heads
+               (owner_user_id, project_id, proposal_id, current_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}');
+             COMMIT;",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            proposal = input.proposal_id,
+            chapter = chapter_b,
+            block = Uuid::now_v7(),
+            run = Uuid::now_v7(),
+            decision = Uuid::now_v7(),
+            revision = input.proposal_revision_id,
+            base_revision = input.expected_authoritative_revision_id,
+        ))
+        .await
+        .unwrap();
+    (scope, input)
+}
+
+/// One applicable author Withdrawal in a new Project.
+async fn withdraw_proposal_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<WithdrawProposalInput> {
+    let (scope, input) = open_proposal(store, admin, base).await;
+    issued(store, &scope, base + 9, &WITHDRAW_PROPOSAL, input).await
 }
 
 /// One applicable Create Volume in a new Project.
@@ -1095,8 +1224,14 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x5eb0).await,
         )
         .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7470).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 12]);
+    assert_eq!(observed, vec![(true, [0; 5]); 13]);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1288,10 +1423,17 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x5fb0).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7480).await,
+        )
+        .await,
     ];
     let rolled_back = |result| (vec![(true, [0; 5]), (true, [0; 5])], result);
     let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
     expected.push(rolled_back(ReceiptResult::NoEffect));
+    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);
 }
@@ -1421,6 +1563,12 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x6ad0).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7490).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -1429,7 +1577,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 11]);
+    assert_eq!(observed, vec![separated; 12]);
 }
 
 #[tokio::test]

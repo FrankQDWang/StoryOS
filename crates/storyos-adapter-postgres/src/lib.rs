@@ -132,6 +132,7 @@ mod create_chapter;
 mod create_project;
 mod create_project_challenge;
 mod create_volume;
+mod current_producer_withdrawal;
 mod delete_chapter;
 mod delete_volume;
 mod draft_retry;
