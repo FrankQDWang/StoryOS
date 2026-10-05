@@ -2424,6 +2424,57 @@ async fn every_proposal_decision_replay_separates_pre_capture_from_damaged_effec
     assert_eq!(observed, vec![separated; 5]);
 }
 
+/// Settles the call, deletes its Proposal Generation transition record, and replays it.
+async fn replay_without_transition_record<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+) -> ReplayError {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the generation decision must settle");
+    };
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "DELETE FROM storyos.proposal_generation_transitions WHERE receipt_id = '{}'",
+            call.envelope.ids.receipt_id
+        ),
+    )
+    .await;
+    let retry = with_new_request_ids(call);
+    let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
+        panic!("a replay without its transition record must fail");
+    };
+    error.into()
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_generation_decision_without_its_transition_record_is_damaged_evidence() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = [
+        replay_without_transition_record(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7570).await,
+        )
+        .await,
+        replay_without_transition_record(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7580).await,
+        )
+        .await,
+    ];
+    assert_eq!(
+        observed,
+        [ReplayError::Unavailable, ReplayError::Unavailable]
+    );
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_multi_operation_rejection_replays_the_resolution_of_its_first_selected_operation() {

@@ -191,10 +191,11 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalGenerationCompleted, ReplayFault> {
+        // The transition record has no nullable stored value, so it has no pre-capture form.
         let field = |key| {
-            replay
-                .effect_text(key)
-                .ok_or(ReplayFault::HistoricalAcknowledgementUnavailable)
+            replay.effect_text(key).ok_or_else(|| {
+                ReplayFault::Unavailable("the applied transition record is missing".into())
+            })
         };
         Ok(ProposalGenerationCompleted {
             generation_id: field("resulting_generation_id")?,
@@ -381,10 +382,11 @@ impl ProjectCommand for ContinueProposalGenerationInput {
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<ProposalGenerationStarted, ReplayFault> {
+        // The transition record has no nullable stored value, so it has no pre-capture form.
         let field = |key| {
-            replay
-                .effect_text(key)
-                .ok_or(ReplayFault::HistoricalAcknowledgementUnavailable)
+            replay.effect_text(key).ok_or_else(|| {
+                ReplayFault::Unavailable("the applied transition record is missing".into())
+            })
         };
         Ok(ProposalGenerationStarted {
             prior_generation_id: field("prior_generation_id")?,
