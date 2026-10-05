@@ -721,7 +721,17 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         let call = issued(&store, scope, suffix, &REJECT_PROPOSAL_OPERATIONS, input).await;
         let outcome = replayed_outcome(&store, &admin, &call, reject_proposal_operations).await;
         observed.push((REJECT_PROPOSAL_OPERATIONS.kind, outcome));
-        rejection_records.push(rejection_records_of(&admin, &call).await);
+        rejection_records.push(
+            admin
+                .query_one(
+                    "SELECT count(*) FROM storyos.proposal_rejection_receipts
+                      WHERE rejection_receipt_id = $1::text::uuid",
+                    &[&call.envelope.ids.receipt_id],
+                )
+                .await
+                .unwrap()
+                .get::<_, i64>(/*idx*/ 0),
+        );
     }
 
     // The second exact call names a Proposal Revision that the first call superseded.
@@ -859,7 +869,25 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         let call = expansion_call(&store, scope, suffix, input).await;
         let outcome = replayed_outcome(&store, &admin, &call, expand_refused_edit_draft).await;
         observed.push((EXPAND_REFUSED_EDIT_DRAFT.kind, outcome));
-        expansion_records.push(expansion_records_of(&admin, &call).await);
+        // The Proposals, superseding close events, and closed source Drafts of the Receipt.
+        let row = admin
+            .query_one(
+                "SELECT (SELECT count(*) FROM storyos.proposals AS proposal
+                           JOIN storyos.domain_receipts AS receipt
+                             ON receipt.result_payload->>'proposal_id' = proposal.proposal_id::text
+                          WHERE receipt.receipt_id = $1::text::uuid
+                            AND proposal.source_draft_id = $2::text::uuid),
+                        (SELECT count(*) FROM storyos.draft_close_events
+                          WHERE receipt_id = $1::text::uuid AND close_reason = 'superseded'),
+                        (SELECT count(*) FROM storyos.draft_artifacts AS draft
+                           JOIN storyos.draft_close_events AS event
+                             ON event.event_id = draft.close_event_id
+                          WHERE event.receipt_id = $1::text::uuid AND draft.closure = 'closed')",
+                &[&call.envelope.ids.receipt_id, &call.input.draft_id],
+            )
+            .await
+            .unwrap();
+        expansion_records.push([0, 1, 2].map(|index| row.get::<_, i64>(index)));
     }
 
     let (scope, generation) = ready_partial_proposal(&store, &admin, /*base*/ 0x7500).await;
@@ -1264,19 +1292,6 @@ async fn reject_proposal_operations_call(
     issued(store, &scope, base + 9, &REJECT_PROPOSAL_OPERATIONS, input).await
 }
 
-/// The rejection records of the Receipt of one call.
-async fn rejection_records_of<I>(admin: &Client, call: &CommandCall<I>) -> i64 {
-    admin
-        .query_one(
-            "SELECT count(*) FROM storyos.proposal_rejection_receipts
-              WHERE rejection_receipt_id = $1::text::uuid",
-            &[&call.envelope.ids.receipt_id],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0)
-}
-
 async fn replan_proposal(
     store: &PostgresProjectReader,
     call: &CommandCall<ReplanProposalInput>,
@@ -1557,7 +1572,6 @@ async fn refused_edit_draft(
             draft = input.draft_id,
             revision = input.source_current_draft_revision_id,
             digest = input.source_draft_payload_digest,
-            payload = payload,
         ))
         .await
         .unwrap();
@@ -1753,31 +1767,6 @@ async fn expand_refused_edit_draft_call(
 ) -> CommandCall<ExpandRefusedEditDraftToProposalInput> {
     let (scope, input) = refused_edit_expansion(store, admin, base, "retained").await;
     expansion_call(store, &scope, base + 9, input).await
-}
-
-/// The Proposals, superseding close events, and closed source Drafts of the Receipt of one call.
-async fn expansion_records_of(
-    admin: &Client,
-    call: &CommandCall<ExpandRefusedEditDraftToProposalInput>,
-) -> [i64; 3] {
-    let row = admin
-        .query_one(
-            "SELECT (SELECT count(*) FROM storyos.proposals AS proposal
-                       JOIN storyos.domain_receipts AS receipt
-                         ON receipt.result_payload->>'proposal_id' = proposal.proposal_id::text
-                      WHERE receipt.receipt_id = $1::text::uuid
-                        AND proposal.source_draft_id = $2::text::uuid),
-                    (SELECT count(*) FROM storyos.draft_close_events
-                      WHERE receipt_id = $1::text::uuid AND close_reason = 'superseded'),
-                    (SELECT count(*) FROM storyos.draft_artifacts AS draft
-                       JOIN storyos.draft_close_events AS event
-                         ON event.event_id = draft.close_event_id
-                      WHERE event.receipt_id = $1::text::uuid AND draft.closure = 'closed')",
-            &[&call.envelope.ids.receipt_id, &call.input.draft_id],
-        )
-        .await
-        .unwrap();
-    [0, 1, 2].map(|index| row.get(index))
 }
 
 async fn complete_ready_partial_proposal(
@@ -3988,4 +3977,113 @@ async fn a_current_chapter_replay_refuses_a_damaged_newest_tree_revision() {
     )
     .await;
     assert_eq!(observed, ReplayError::Unavailable);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_exact_retry_returns_the_uppercase_client_identities_of_the_first_use() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let scope = seed_project(&store, "a400").await;
+    let volume_id = new_volume(
+        &store, &scope, /*suffix*/ 0xa401, /*expected_tree_revision*/ 1,
+    )
+    .await;
+    let deletion = DeleteVolumeInput {
+        volume_id: VolumeId::new(volume_id.as_ref().to_uppercase()),
+        expected_tree_revision: 2,
+    };
+    let deletion = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xa409,
+        &DELETE_VOLUME,
+        deletion,
+    )
+    .await;
+    let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(&store, /*base*/ 0xa410).await;
+    let selection = SetCurrentChapterInput {
+        editor_session_id: EditorSessionId::new(editor_session_id.to_uppercase()),
+        chapter_id: chapter_b.to_uppercase(),
+        expected_current_chapter_id: chapter_a,
+        expected_target_revision_id: revision_b,
+    };
+    let selection = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xa419,
+        &SET_CURRENT_CHAPTER,
+        selection,
+    )
+    .await;
+    let (scope, ..) = two_chapter_writer(&store, /*base*/ 0xa420).await;
+    let observer = open_session(&store, &scope, "a425").await;
+    let takeover = TakeOverProjectWriterInput {
+        editor_session_id: EditorSessionId::new(observer.to_uppercase()),
+        observed_writer_generation: 1,
+        editor_contract_revision: storyos_contracts::EDITOR_CONTRACT_REVISION.to_owned(),
+    };
+    let takeover = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xa429,
+        &TAKE_OVER_PROJECT_WRITER,
+        takeover,
+    )
+    .await;
+    let observed = vec![
+        replayed_outcome(&store, &admin, &deletion, delete_volume)
+            .await
+            .0,
+        replayed_outcome(
+            &store,
+            &admin,
+            &selection,
+            async |store: &PostgresProjectReader, call: &CommandCall<SetCurrentChapterInput>| {
+                store.set_current_chapter(&call.envelope, &call.input).await
+            },
+        )
+        .await
+        .0,
+        replayed_outcome(&store, &admin, &takeover, take_over_project_writer)
+            .await
+            .0,
+    ];
+    assert_eq!(
+        observed,
+        vec![
+            ReceiptResult::AuthoritativeApplied.code().to_owned(),
+            ReceiptResult::AuthoritativeApplied.code().to_owned(),
+            ReceiptResult::NoEffect.code().to_owned(),
+        ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_chapter_deletion_without_the_historical_prior_current_field_replays() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = delete_chapter_call(&store, /*base*/ 0xa500).await;
+    delete_chapter(&store, &call).await.unwrap();
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads
+                SET payload = payload - 'prior_current_chapter_id'
+              WHERE receipt_id = '{}'",
+            call.envelope.ids.receipt_id
+        ),
+    )
+    .await;
+    let replayed = delete_chapter(&store, &with_new_request_ids(&call)).await;
+    assert!(
+        replayed.is_ok(),
+        "the historical record must replay: {replayed:?}"
+    );
 }

@@ -160,13 +160,12 @@ enum Field<'a> {
     Text(&'a str),
 }
 
-/// The canonical UUID text of the stored field `key`. Another text is damaged evidence.
-fn canonical_uuid(key: &str, text: &str) -> Result<String, ReplayFault> {
+/// The stored text of the UUID field `key`, unchanged. A text that is not a UUID is damaged
+/// evidence. A command can store the client text of a UUID, which can be uppercase.
+fn uuid_text(key: &str, text: &str) -> Result<String, ReplayFault> {
     Uuid::parse_str(text)
-        .ok()
-        .map(|id| id.to_string())
-        .filter(|canonical| canonical == text)
-        .ok_or_else(|| unavailable(format!("the stored field {key} is not a UUID")))
+        .map(|_| text.to_owned())
+        .map_err(|_| unavailable(format!("the stored field {key} is not a UUID")))
 }
 
 /// The unsigned decimal value of the stored field `key`. Another text is damaged evidence.
@@ -214,17 +213,17 @@ impl CommandReplay {
         }
     }
 
-    /// The canonical UUID text of one Receipt payload field, or `None` when it is null.
+    /// The UUID text of one Receipt payload field, or `None` when it is null.
     pub(crate) fn receipt_nullable_uuid(&self, key: &str) -> Result<Option<String>, ReplayFault> {
         self.receipt
             .nullable(key)?
-            .map(|text| canonical_uuid(key, text))
+            .map(|text| uuid_text(key, text))
             .transpose()
     }
 
-    /// The canonical UUID text of one required Receipt payload field.
+    /// The UUID text of one required Receipt payload field.
     pub(crate) fn receipt_uuid(&self, key: &str) -> Result<String, ReplayFault> {
-        canonical_uuid(key, self.receipt.required(key)?)
+        uuid_text(key, self.receipt.required(key)?)
     }
 
     /// Requires the Receipt payload field `key` to be present and null.
@@ -256,17 +255,29 @@ impl CommandReplay {
         self.activity.required(key).map(str::to_owned)
     }
 
-    /// The canonical UUID text of one required Activity payload field.
+    /// The UUID text of one required Activity payload field.
     pub(crate) fn activity_uuid(&self, key: &str) -> Result<String, ReplayFault> {
-        canonical_uuid(key, self.activity.required(key)?)
+        uuid_text(key, self.activity.required(key)?)
     }
 
-    /// The canonical UUID text of one Activity payload field, or `None` when it is null.
+    /// The UUID text of one Activity payload field, or `None` when it is null.
     pub(crate) fn activity_nullable_uuid(&self, key: &str) -> Result<Option<String>, ReplayFault> {
         self.activity
             .nullable(key)?
-            .map(|text| canonical_uuid(key, text))
+            .map(|text| uuid_text(key, text))
             .transpose()
+    }
+
+    /// The UUID text of one Activity payload field, or `None` when it is null or when a
+    /// historical format leaves it out.
+    pub(crate) fn activity_historical_uuid(
+        &self,
+        key: &str,
+    ) -> Result<Option<String>, ReplayFault> {
+        match self.activity.field(key)? {
+            Field::Text(text) => uuid_text(key, text).map(Some),
+            Field::Absent | Field::Null => Ok(None),
+        }
     }
 
     /// The unsigned decimal value of one required Activity payload field.

@@ -201,7 +201,7 @@ impl ProjectCommand for DeleteChapterInput {
         let tree_revision = replay.activity_u64("tree_revision")?;
         let volume_id = replay.activity_uuid("volume_id")?;
         let current = match (
-            replay.activity_nullable_uuid("prior_current_chapter_id")?,
+            replay.activity_historical_uuid("prior_current_chapter_id")?,
             replay.activity_nullable_uuid("current_chapter_id")?,
         ) {
             // The resulting Current alone cannot show that a different prior Current stayed.
