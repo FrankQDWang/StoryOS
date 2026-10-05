@@ -33,9 +33,9 @@ use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
 use super::{
-    ActivitySequences, Classification, CommandSpec, LockedProject, ProfileSequences, ProfileWrite,
-    ProjectCommand, ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, settle_project_command,
-    unavailable,
+    ActivitySequences, Classification, CommandSpec, LockedProject, ProfileApplied,
+    ProfileSequences, ProfileWrite, ProjectCommand, ReceiptRefs, ZeroAuthorityRows,
+    ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
@@ -2236,7 +2236,20 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
 enum FailurePoint {
     Classify,
     Apply,
+    AfterAuthority,
 }
+
+/// The failure that `Failing` injects, named by its step.
+#[derive(Debug)]
+struct Injected(&'static str);
+
+impl std::fmt::Display for Injected {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "injected {} failure", self.0)
+    }
+}
+
+impl std::error::Error for Injected {}
 
 /// A project command that fails after one step has written its rows.
 struct Failing<C> {
@@ -2264,14 +2277,22 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
     ) -> Result<Classification<Self>, ProjectCommandError> {
         let classified = self.command.classify(client, envelope, project).await?;
         match self.at {
-            FailurePoint::Classify => Err(unavailable("injected classify failure")),
-            FailurePoint::Apply => Ok(Classification {
+            FailurePoint::Classify => Err(unavailable(Injected("classify"))),
+            FailurePoint::Apply | FailurePoint::AfterAuthority => Ok(Classification {
                 outcome: classified.outcome,
                 admission: classified.admission,
                 heads: classified.heads,
                 zero_receipt: classified.zero_receipt,
             }),
         }
+    }
+
+    fn applied_receipt_payload(&self, applied: &Self::Applied, plan: &Self::Plan) -> String {
+        self.command.applied_receipt_payload(applied, plan)
+    }
+
+    fn applied_receipt_refs(&self, applied: &Self::Applied, plan: &Self::Plan) -> ReceiptRefs {
+        self.command.applied_receipt_refs(applied, plan)
     }
 
     async fn apply(
@@ -2283,10 +2304,33 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         plan: Self::Plan,
         applied: Self::Applied,
     ) -> Result<ProfileWrite<Self>, ProjectCommandError> {
-        self.command
+        let write = self
+            .command
             .apply(client, envelope, project, sequences, plan, applied)
             .await?;
-        Err(unavailable("injected apply failure"))
+        match self.at {
+            FailurePoint::Apply => Err(unavailable(Injected("apply"))),
+            FailurePoint::Classify | FailurePoint::AfterAuthority => Ok(write),
+        }
+    }
+
+    fn apply_after_authority(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        applied: &ProfileApplied<Self>,
+    ) -> impl std::future::Future<Output = Result<(), ProjectCommandError>> + Send {
+        // The applied value need not be `Sync`, so only the inner future holds it.
+        let written = self
+            .command
+            .apply_after_authority(client, envelope, applied);
+        async move {
+            written.await?;
+            match self.at {
+                FailurePoint::AfterAuthority => Err(unavailable(Injected("after authority"))),
+                FailurePoint::Classify | FailurePoint::Apply => Ok(()),
+            }
+        }
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault> {
@@ -2306,7 +2350,7 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         self.command
             .write_zero_authority_effect(client, envelope, &inner_outcome(outcome))
             .await?;
-        Err(unavailable("injected zero-authority write failure"))
+        Err(unavailable(Injected("zero-authority write")))
     }
 
     async fn write_zero_authority_activity(
@@ -2319,7 +2363,14 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         self.command
             .write_zero_authority_activity(client, envelope, project, activity)
             .await?;
-        Err(unavailable("injected zero-authority write failure"))
+        Err(unavailable(Injected("zero-authority write")))
+    }
+
+    fn decode_zero_authority_effect(
+        &self,
+        replay: &CommandReplay,
+    ) -> Result<Option<Self::ZeroEffect>, ReplayFault> {
+        self.command.decode_zero_authority_effect(replay)
     }
 }
 
@@ -2334,24 +2385,40 @@ fn inner_outcome<'a, C: ProjectCommand>(
     }
 }
 
-/// Fails the call in classify and then in apply, and then settles it for real.
+/// Fails the call at each failure point, and then settles it for real.
 ///
-/// Returns, for each failure, whether it is a store fault and the rows of its Receipt, then the
-/// Receipt result kind of the real settlement.
+/// Returns, for each failure, the step of the injected failure and the rows of its Receipt, then
+/// the Receipt result kind of the real settlement.
 async fn failed_then_settled<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
-) -> (Vec<(bool, [i64; 5])>, ReceiptResult) {
+) -> (Vec<(Option<&'static str>, [i64; 5])>, ReceiptResult) {
     let mut failures = Vec::new();
-    for at in [FailurePoint::Classify, FailurePoint::Apply] {
+    for at in [
+        FailurePoint::Classify,
+        FailurePoint::Apply,
+        FailurePoint::AfterAuthority,
+    ] {
         let failing = Failing {
             command: call.input.clone(),
             at,
         };
-        let failed = settle_project_command(store, &call.envelope, &failing).await;
+        let injected = match settle_project_command(store, &call.envelope, &failing).await {
+            Err(ProjectCommandError::Unavailable(source)) => source
+                .downcast_ref::<Injected>()
+                .map(|Injected(step)| *step),
+            Err(
+                ProjectCommandError::BindingConflict
+                | ProjectCommandError::HistoricalAcknowledgementUnavailable
+                | ProjectCommandError::InvalidChallenge
+                | ProjectCommandError::MissingProject
+                | ProjectCommandError::WriterIneligible,
+            )
+            | Ok(_) => None,
+        };
         failures.push((
-            matches!(failed, Err(ProjectCommandError::Unavailable(_))),
+            injected,
             settlement_rows(admin, &call.envelope.ids.receipt_id).await,
         ));
     }
@@ -2496,16 +2563,24 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         )
         .await,
     ];
-    let rolled_back = |result| (vec![(true, [0; 5]), (true, [0; 5])], result);
+    let rolled_back = |result| {
+        let after_classify = match result {
+            ReceiptResult::AuthoritativeApplied => ["apply", "after authority"],
+            ReceiptResult::NoEffect | ReceiptResult::Conflicted | ReceiptResult::Refused => {
+                ["zero-authority write"; 2]
+            }
+        };
+        let failures = std::iter::once("classify")
+            .chain(after_classify)
+            .map(|step| (Some(step), [0; 5]))
+            .collect::<Vec<_>>();
+        (failures, result)
+    };
     let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
     expected.push(rolled_back(ReceiptResult::NoEffect));
-    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
-    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
-    expected.push(rolled_back(ReceiptResult::Refused));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 3]);
-    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
-    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
+    expected.push(rolled_back(ReceiptResult::Refused));
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 7]);
     assert_eq!(observed, expected);
 }
 
