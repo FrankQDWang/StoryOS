@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, RejectedOperationsReopened,
     ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
@@ -72,7 +74,7 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
     type Applied = String;
     type Plan = RejectedRevision;
     type Effect = RejectedOperationsReopened;
-    type NoEffect = std::convert::Infallible;
+    type NoEffect = Infallible;
     type Conflict = ReopenRejectedOperationsConflict;
     type Refusal = ReopenRejectedOperationsRefusal;
 

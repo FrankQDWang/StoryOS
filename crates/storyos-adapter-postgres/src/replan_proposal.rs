@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use storyos_application::{
     ProjectCommandEnvelope, ProjectCommandError, ProposalReplanned, ReplanProposalInput,
     ReplanProposalSettlement,
@@ -86,7 +88,7 @@ impl ProjectCommand for ReplanProposalInput {
     type Applied = String;
     type Plan = ConflictedRevision;
     type Effect = ProposalReplanned;
-    type NoEffect = std::convert::Infallible;
+    type NoEffect = Infallible;
     type Conflict = ReplanProposalConflict;
     type Refusal = ReplanProposalRefusal;
 
