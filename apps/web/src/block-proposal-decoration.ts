@@ -164,10 +164,18 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         ? schema.text(text) : undefined));
     }
   });
-  if (next.length === editor.state.doc.childCount
-    && next.every((node, index) => node.eq(editor.state.doc.child(index)))) return;
-  const transaction = editor.state.tr.replaceWith(0, editor.state.doc.content.size,
-    Fragment.fromArray(next));
+  const doc = editor.state.doc;
+  if (next.length === doc.childCount && next.every((node, index) => node.eq(doc.child(index)))) return;
+  const transaction = editor.state.tr;
+  if (next.length === doc.childCount && next.every((node, index) =>
+    node.type === doc.child(index).type && node.content.eq(doc.child(index).content))) {
+    // A whole-document replacement moves the caret to the end; an attribute change must not move it.
+    let position = 0;
+    next.forEach((node, index) => {
+      if (!node.eq(doc.child(index))) transaction.setNodeMarkup(position, undefined, node.attrs, node.marks);
+      position += node.nodeSize;
+    });
+  } else transaction.replaceWith(0, doc.content.size, Fragment.fromArray(next));
   transaction.setMeta("storyos.hydrate", true);
   transaction.setMeta("addToHistory", false);
   editor.view.dispatch(transaction);
