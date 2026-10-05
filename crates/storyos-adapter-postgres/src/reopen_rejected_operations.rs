@@ -123,7 +123,8 @@ impl ProjectCommand for ReopenRejectedOperationsInput {
                    LEFT JOIN storyos.proposal_operations AS operation
                      ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
                         (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
-                    AND operation.operation_id = $5::text::uuid
+                    -- An exact text match leaves a non-canonical selected identity unmatched.
+                    AND operation.operation_id::text = $5
                    LEFT JOIN storyos.authoritative_heads AS chapter_head
                      ON (chapter_head.owner_user_id, chapter_head.project_id,
                          chapter_head.manuscript_object_id) =

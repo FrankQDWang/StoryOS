@@ -14,7 +14,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
-use crate::close_editor_flow_draft::replayed_draft_observation;
+use crate::close_editor_flow_draft::{check_draft_replay_binding, replayed_draft_observation};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionOnly, ActionSequence, Admission, AppliedResult, Classification, CommandIsolation,
@@ -471,9 +471,13 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
         Ok(expanded)
     }
 
+    fn check_replay_binding(&self, replay: &CommandReplay) -> Result<(), ReplayFault> {
+        check_draft_replay_binding(&self.draft_id, replay)
+    }
+
     fn decode(&self, replay: &CommandReplay) -> Result<DraftExpanded, ReplayFault> {
         let observation = DraftExpansionObservation {
-            draft: replayed_draft_observation(&self.draft_id, replay)?,
+            draft: replayed_draft_observation(replay)?,
             current_target_revision_id: replay
                 .receipt_nullable_uuid("current_target_revision_id")?,
         };
@@ -517,7 +521,7 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
         replay: &CommandReplay,
     ) -> Result<Option<DraftExpansionObservation>, ReplayFault> {
         let observation = DraftExpansionObservation {
-            draft: replayed_draft_observation(&self.draft_id, replay)?,
+            draft: replayed_draft_observation(replay)?,
             current_target_revision_id: replay
                 .receipt_nullable_uuid("current_target_revision_id")?,
         };

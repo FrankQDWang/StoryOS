@@ -2322,6 +2322,10 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         }
     }
 
+    fn check_replay_binding(&self, replay: &CommandReplay) -> Result<(), ReplayFault> {
+        self.command.check_replay_binding(replay)
+    }
+
     fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault> {
         self.command.decode(replay)
     }
@@ -4086,4 +4090,46 @@ async fn a_chapter_deletion_without_the_historical_prior_current_field_replays()
         replayed.is_ok(),
         "the historical record must replay: {replayed:?}"
     );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_pre_capture_effect_row_does_not_hide_a_damaged_author_action() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        damaged_replay(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0xa600).await,
+            |receipt_id| {
+                format!(
+                    "UPDATE storyos.proposal_rejection_receipts
+                        SET preserved_generation = NULL, preserved_validation = NULL,
+                            preserved_closure = NULL
+                      WHERE rejection_receipt_id = '{receipt_id}';
+                     DELETE FROM storyos.author_action_entries WHERE receipt_id = '{receipt_id}'"
+                )
+            },
+        )
+        .await,
+        damaged_replay(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0xa610).await,
+            |receipt_id| {
+                format!(
+                    "UPDATE storyos.proposal_withdrawals
+                        SET preserved_generation = NULL, preserved_validation = NULL
+                      WHERE withdrawal_receipt_id = '{receipt_id}';
+                     {}",
+                    compensation_action(receipt_id)
+                )
+            },
+        )
+        .await,
+    ];
+    assert_eq!(observed, vec![ReplayError::Unavailable; 2]);
 }

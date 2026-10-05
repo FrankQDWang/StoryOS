@@ -149,6 +149,13 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         match applied {}
     }
 
+    fn check_replay_binding(&self, replay: &CommandReplay) -> Result<(), ReplayFault> {
+        if !replay.fence_digest_matches {
+            return Err(ReplayFault::BindingConflict);
+        }
+        Ok(())
+    }
+
     fn decode(&self, _replay: &CommandReplay) -> Result<Infallible, ReplayFault> {
         Err(ReplayFault::BindingConflict)
     }
@@ -276,9 +283,6 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         &self,
         replay: &CommandReplay,
     ) -> Result<Option<WriterTakeover>, ReplayFault> {
-        if !replay.fence_digest_matches {
-            return Err(ReplayFault::BindingConflict);
-        }
         let [resulting_head] =
             <[String; 1]>::try_from(replay.resulting_heads.clone()).map_err(|_| {
                 ReplayFault::Unavailable("the takeover Receipt has no single head".into())

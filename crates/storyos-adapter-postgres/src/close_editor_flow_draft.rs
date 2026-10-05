@@ -62,18 +62,25 @@ fn observation_fields(
     ])
 }
 
-/// The Draft facts that the Receipt payload of a Draft Discard or expansion of `draft_id`
-/// records, after the replay binding checks.
-pub(crate) fn replayed_draft_observation(
+/// Checks that the fence, the Admission, and the Receipt Draft reference of a Draft Discard or
+/// expansion bind the request of `draft_id`.
+pub(crate) fn check_draft_replay_binding(
     draft_id: &str,
     replay: &CommandReplay,
-) -> Result<DraftCloseObservation, ReplayFault> {
+) -> Result<(), ReplayFault> {
     if !replay.fence_digest_matches
         || !replay.admission_matches
         || replay.draft_artifact_refs != [draft_id]
     {
         return Err(ReplayFault::BindingConflict);
     }
+    Ok(())
+}
+
+/// The Draft facts that the Receipt payload of a Draft Discard or expansion records.
+pub(crate) fn replayed_draft_observation(
+    replay: &CommandReplay,
+) -> Result<DraftCloseObservation, ReplayFault> {
     let damaged = |key: &str| {
         ReplayFault::Unavailable(format!("the Draft Receipt has no valid {key}").into())
     };
@@ -291,8 +298,12 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
         })
     }
 
+    fn check_replay_binding(&self, replay: &CommandReplay) -> Result<(), ReplayFault> {
+        check_draft_replay_binding(&self.draft_id, replay)
+    }
+
     fn decode(&self, replay: &CommandReplay) -> Result<DraftClosed, ReplayFault> {
-        let observation = replayed_draft_observation(&self.draft_id, replay)?;
+        let observation = replayed_draft_observation(replay)?;
         let damaged = || ReplayFault::Unavailable("the Draft close event does not match".into());
         let event_id = replay.receipt_uuid("event_id")?;
         replay.require_receipt_text("reason", "abandoned")?;
@@ -312,7 +323,7 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
         &self,
         replay: &CommandReplay,
     ) -> Result<Option<DraftCloseObservation>, ReplayFault> {
-        let observation = replayed_draft_observation(&self.draft_id, replay)?;
+        let observation = replayed_draft_observation(replay)?;
         replay.require_receipt_null("event_id")?;
         Ok(Some(observation))
     }

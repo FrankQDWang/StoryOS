@@ -1141,6 +1141,11 @@ test("reopenRejectedOperations classifies one selected Operation of a two-operat
     };
     const unknown = await reopen(id(`${ns}5f`), `${ns}51`);
     assert.deepEqual(unknown.effect, { kind: "refused", reason: "operation_not_rejected" });
+    assert.notEqual(operation.operation_id.toUpperCase(), operation.operation_id);
+    const uppercase = await reopen(operation.operation_id.toUpperCase(), `${ns}53`);
+    assert.deepEqual(uppercase.effect, { kind: "refused", reason: "operation_not_rejected" });
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId, proposalId, fetchImpl })).proposal,
+      proposal);
     const reopened = await reopen(operation.operation_id, `${ns}52`);
     if (reopened.effect.kind !== "resolved") throw new Error("expected resolved reopening");
     assert.deepEqual(reopened.effect.operation_ids, [operation.operation_id]);

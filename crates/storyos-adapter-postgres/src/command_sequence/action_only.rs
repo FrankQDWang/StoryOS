@@ -74,7 +74,10 @@ impl SettlementProfile for ActionOnly {
         })
     }
 
-    fn replay<E: Send>(effect: E, replay: &CommandReplay) -> Result<ActionApplied<E>, ReplayFault> {
+    fn replay<E: Send>(
+        decode: impl FnOnce() -> Result<E, ReplayFault>,
+        replay: &CommandReplay,
+    ) -> Result<ActionApplied<E>, ReplayFault> {
         let (Some(sequence), Some("forward")) = (
             replay.author_action_sequence.as_deref(),
             replay.author_action_disposition.as_deref(),
@@ -83,11 +86,12 @@ impl SettlementProfile for ActionOnly {
                 "the applied Receipt has no Forward Author Action".into(),
             ));
         };
+        let author_action_sequence = sequence
+            .parse()
+            .map_err(|error| ReplayFault::Unavailable(Box::new(error)))?;
         Ok(ActionApplied {
-            effect,
-            author_action_sequence: sequence
-                .parse()
-                .map_err(|error| ReplayFault::Unavailable(Box::new(error)))?,
+            effect: decode()?,
+            author_action_sequence,
         })
     }
 }

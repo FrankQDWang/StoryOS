@@ -85,11 +85,11 @@ impl SettlementProfile for ActivityOnly {
     }
 
     fn replay<E: Send>(
-        effect: E,
+        decode: impl FnOnce() -> Result<E, ReplayFault>,
         replay: &CommandReplay,
     ) -> Result<ActivityApplied<E>, ReplayFault> {
         Ok(ActivityApplied {
-            effect,
+            effect: decode()?,
             project_activity_position: replay.project_activity_position,
             project_activity_event_id: replay.project_activity_event_id.clone(),
         })

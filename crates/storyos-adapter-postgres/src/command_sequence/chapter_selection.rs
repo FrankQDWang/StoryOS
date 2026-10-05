@@ -155,7 +155,7 @@ impl SettlementProfile for ChapterSelection {
     }
 
     fn replay<E: Send>(
-        effect: E,
+        decode: impl FnOnce() -> Result<E, ReplayFault>,
         replay: &CommandReplay,
     ) -> Result<ChapterSelectionApplied<E>, ReplayFault> {
         let authority = match (
@@ -180,7 +180,7 @@ impl SettlementProfile for ChapterSelection {
             }
         };
         Ok(ChapterSelectionApplied {
-            effect,
+            effect: decode()?,
             project_activity_position: replay.project_activity_position,
             project_activity_event_id: replay.project_activity_event_id.clone(),
             authority,

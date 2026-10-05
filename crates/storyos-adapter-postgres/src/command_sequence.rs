@@ -171,7 +171,12 @@ pub(crate) trait SettlementProfile {
         write: Self::Write<E>,
     ) -> impl Future<Output = Result<Self::Applied<E>, ProjectCommandError>> + Send;
 
-    fn replay<E: Send>(effect: E, replay: &CommandReplay) -> Result<Self::Applied<E>, ReplayFault>;
+    /// Checks the authority evidence of the profile, and only then runs `decode`, so a command
+    /// decode never hides damaged authority evidence.
+    fn replay<E: Send>(
+        decode: impl FnOnce() -> Result<E, ReplayFault>,
+        replay: &CommandReplay,
+    ) -> Result<Self::Applied<E>, ReplayFault>;
 }
 
 /// A Core Transition Outcome whose applied value carries the locked facts that `apply` reuses.
@@ -309,6 +314,12 @@ pub(crate) trait ProjectCommand: Sync {
         _applied: &ProfileApplied<Self>,
     ) -> impl Future<Output = Result<(), ProjectCommandError>> + Send {
         async { Ok(()) }
+    }
+
+    /// Checks the stored facts that bind the acknowledgement to this request. The sequence runs
+    /// it before every other replay check, so a binding conflict comes before damaged evidence.
+    fn check_replay_binding(&self, _replay: &CommandReplay) -> Result<(), ReplayFault> {
+        Ok(())
     }
 
     /// Decodes the applied effect from the stored acknowledgement evidence.
@@ -542,6 +553,7 @@ fn replay_command<C: ProjectCommand>(
     command: &C,
     replay: &CommandReplay,
 ) -> Result<SettledCommand<C>, ReplayFault> {
+    command.check_replay_binding(replay)?;
     let outcome =
         replay.outcome::<C::NoEffect, C::Conflict, C::Refusal>(C::SPEC.applied_result.code())?;
     let zero_authority_effect = match &outcome {
@@ -559,7 +571,7 @@ fn replay_command<C: ProjectCommand>(
     };
     let outcome = match outcome {
         TransitionOutcome::Applied(()) => {
-            TransitionOutcome::Applied(C::Profile::replay(command.decode(replay)?, replay)?)
+            TransitionOutcome::Applied(C::Profile::replay(|| command.decode(replay), replay)?)
         }
         TransitionOutcome::NoEffect(reason) => TransitionOutcome::NoEffect(reason),
         TransitionOutcome::Conflicted(reason) => TransitionOutcome::Conflicted(reason),
