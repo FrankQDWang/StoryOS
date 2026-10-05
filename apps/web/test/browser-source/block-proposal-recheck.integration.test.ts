@@ -83,8 +83,8 @@ it("keeps the editor editable and the caret in place while the Proposal checks r
     if (path.endsWith("/anti-forgery-challenges")) return jsonResponse({ nonce: "a".repeat(64),
       expires_at: new Date(Date.now() + 60_000).toISOString(), limit_profile_revision: "storyos.foundation.absolute.v1" });
     if (path.includes("/editor-sessions/")) return jsonResponse(canonical);
-    if (!path.endsWith("/manuscript/author-edits")) throw new Error(`Unexpected request ${path}`);
-    // Later input stays in the Journal. This test observes only the first settlement.
+    if (!path.endsWith("/manuscript/author-edits")) throw new Error(`No request handler: ${path}`);
+    // Subsequent input stays in the Journal. This test monitors only the first settlement.
     if ((submissions += 1) > 1) return new Promise<Response>(() => {});
     const request = JSON.parse(String(init?.body));
     const response = createAppliedAuthorEditResponse({ request, body: "Base!",
@@ -140,7 +140,7 @@ it("keeps the editor read-only after an Acceptance with an unknown result until 
     if (path.endsWith("/anti-forgery-challenges")) return jsonResponse({ nonce: "a".repeat(64),
       expires_at: new Date(Date.now() + 60_000).toISOString(), limit_profile_revision: "storyos.foundation.absolute.v1" });
     if (path.endsWith(`/proposals/${proposal.proposal_id}/acceptances`)) throw new TypeError("Failed to fetch");
-    throw new Error(`Unexpected request ${path}`);
+    throw new Error(`No request handler: ${path}`);
   };
   await withActEnvironment(async () => {
     const view = await renderCandidate(test.workspace, proposal, fetchImpl);
@@ -156,7 +156,7 @@ it("keeps the editor read-only after an Acceptance with an unknown result until 
   });
 });
 
-it("keeps a candidate locked after its own edit settles until the new Proposal Revision shows", async () => {
+it("keeps a candidate locked after its edit settles until the new Proposal Revision shows", async () => {
   const test = await openJournalAppendTestWorkspace();
   const scenario = createBrowserScenario();
   const proposal = candidateFor(test.workspace);
@@ -176,7 +176,7 @@ it("keeps a candidate locked after its own edit settles until the new Proposal R
     if (path.endsWith("/anti-forgery-challenges")) return jsonResponse({ nonce: "a".repeat(64),
       expires_at: new Date(Date.now() + 60_000).toISOString(), limit_profile_revision: "storyos.foundation.absolute.v1" });
     if (path.includes("/editor-sessions/")) return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
-    if (!path.endsWith("/manuscript/author-edits")) throw new Error(`Unexpected request ${path}`);
+    if (!path.endsWith("/manuscript/author-edits")) throw new Error(`No request handler: ${path}`);
     const request = JSON.parse(String(init?.body));
     const applied = createAppliedAuthorEditResponse({ request,
       commandDigest: await digestApplyAuthorEdit(request), idempotencyKey: new Headers(init?.headers).get("idempotency-key")! });
@@ -196,7 +196,7 @@ it("keeps a candidate locked after its own edit settles until the new Proposal R
       document.dispatchEvent(new Event("selectionchange"));
       await applyTrustedInput({ operation: "insert_text", text: "!" });
       await act(async () => { await view.controller.current!.flush(); await reread; });
-      // The display still shows the settled Revision, so new input there would conflict on the Server.
+      // The display continues to show the settled Revision, so new input there can conflict on the Server.
       await applyTrustedInput({ operation: "insert_text", text: "+" });
       expect({ candidate: candidate().getAttribute("contenteditable"), text: text().textContent,
         unsettled: test.workspace.pending.unsettled_intent_count })

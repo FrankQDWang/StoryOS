@@ -111,7 +111,7 @@ export function BlockProposalDisplay({
     `${item.proposalId}:${item.runId}:${item.decisionId}`).join("|");
   const proposalIdsKey = (items: readonly { proposalId: string }[]) =>
     [...new Set(items.map((item) => item.proposalId))].sort().join("|");
-  // A re-check keeps the last result. A new workspace, Proposal, or finished decision needs a fresh check.
+  // A re-check keeps the last result. After a new workspace, a new Proposal, or a completed decision, a new check is necessary.
   const recoveryChecked = editorProps.persistWorkspace === undefined
     || (recoveryCheck?.workspace === editorProps.persistWorkspace
       && recoveryCheck.generation === decisionGeneration);
@@ -186,7 +186,7 @@ export function BlockProposalDisplay({
         return { locator };
       }
     })).then((result) => {
-      // Navigation can reorder the same locators. An unchanged result needs no new Acceptance check.
+      // Navigation can reorder the same locators. If the result does not change, no new Acceptance check is necessary.
       const unordered = (items: readonly ProposalRead[]) => canonical([...items].sort((left, right) =>
         left.locator.proposalId.localeCompare(right.locator.proposalId)));
       if (active) setReads((current) => unordered(current) === unordered(result) ? current : result);

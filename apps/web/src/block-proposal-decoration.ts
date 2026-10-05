@@ -169,7 +169,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
   const wanted = doc.copy(Fragment.fromArray(next));
   if (wanted.eq(doc)) return;
   const transaction = editor.state.tr;
-  // A whole-document replacement moves the caret to the end. An attribute change must not move it.
+  // A replacement of the full document moves the caret to the end. An attribute change must not move it.
   if (sameShape(doc, wanted)) changeMarkup(transaction, doc, wanted, -1);
   else transaction.replaceWith(0, doc.content.size, wanted.content);
   transaction.setMeta("storyos.hydrate", true);
