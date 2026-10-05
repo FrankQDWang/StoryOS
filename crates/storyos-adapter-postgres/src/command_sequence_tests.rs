@@ -1,27 +1,41 @@
 use std::fmt::Debug;
 
 use storyos_application::{
-    ArchiveProjectInput, AuthorCommandAdmissionIds, CreateChapterInput, CreateChapterSettlement,
-    CreateVolumeInput, CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement,
-    DeleteVolumeInput, DeleteVolumeSettlement, EditorClientBinding, ProjectCommandChallengeBinding,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
+    ArchiveProjectInput, AuthorCommandAdmissionIds, CloseEditorFlowDraftInput,
+    CloseEditorFlowDraftSettlement, CreateChapterInput, CreateChapterSettlement, CreateVolumeInput,
+    CreateVolumeSettlement, DeleteChapterInput, DeleteChapterSettlement, DeleteVolumeInput,
+    DeleteVolumeSettlement, EditorClientBinding, ExpandRefusedEditDraftSettlement,
+    ExpandRefusedEditDraftToProposalInput, ProjectCommandChallengeBinding, ProjectCommandEnvelope,
+    ProjectCommandError, ProjectCommandSettlement, ProjectScope, RejectProposalOperationsInput,
+    RejectProposalOperationsSettlement, RejectionNote, ReopenRejectedOperationsInput,
+    ReopenRejectedOperationsSettlement, ReopenWithdrawnProposalInput,
+    ReopenWithdrawnProposalSettlement, ReplanProposalInput, ReplanProposalSettlement,
     SetCurrentChapterInput, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
     UpdateChapterInput, UpdateChapterSettlement, UpdateProjectAssistanceInput, UpdateProjectInput,
-    UpdateVolumeInput, UpdateVolumeSettlement, issue_project_command_challenge,
+    UpdateVolumeInput, UpdateVolumeSettlement, WithdrawProposalInput, WithdrawProposalSettlement,
+    WithdrawalNote, issue_project_command_challenge,
 };
 use storyos_application::{
     ChapterId, EditorSessionId, IssueProjectCommandChallenge, OpenChapter, VolumeId, open_chapter,
 };
+use storyos_application::{
+    CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
+    ContinueProposalGenerationInput, ContinueProposalGenerationSettlement,
+};
 use storyos_application::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement};
 use storyos_core::{
-    AssistanceAvailability, CreateChapterPlacement, ReasonCode, ReceiptResult, TransitionOutcome,
+    AssistanceAvailability, CreateChapterPlacement, EXCLUSIVE_AUTHORITATIVE_EDGES_V1,
+    OpenInlineProposalAnchor, PROSEMIRROR_TOKEN_UTF16_V1, ReasonCode, ReceiptResult,
+    TransitionOutcome, proposal_anchor_base_slice_digest,
 };
+use tokio_postgres::error::SqlState;
 use tokio_postgres::{Client, NoTls};
 use uuid::Uuid;
 
 use super::{
-    ActivitySequences, Classification, CommandSpec, LockedProject, ProfileSequences, ProfileWrite,
-    ProjectCommand, ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
+    ActivitySequences, Classification, CommandSpec, LockedProject, ProfileApplied,
+    ProfileSequences, ProfileWrite, ProjectCommand, ReceiptRefs, ZeroAuthorityRows,
+    ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
@@ -247,6 +261,61 @@ const ARCHIVE_PROJECT: Route = Route {
     path: storyos_contracts::ARCHIVE_PROJECT_PATH,
     schema: storyos_contracts::ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
 };
+const REOPEN_WITHDRAWN_PROPOSAL: Route = Route {
+    kind: "reopenWithdrawnProposal",
+    method: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_METHOD,
+    path: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_PATH,
+    schema: storyos_contracts::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
+};
+const REJECT_PROPOSAL_OPERATIONS: Route = Route {
+    kind: "rejectProposalOperations",
+    method: storyos_contracts::REJECT_PROPOSAL_OPERATIONS_METHOD,
+    path: storyos_contracts::REJECT_PROPOSAL_OPERATIONS_PATH,
+    schema: storyos_contracts::REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,
+};
+const REPLAN_PROPOSAL: Route = Route {
+    kind: "replanProposal",
+    method: storyos_contracts::REPLAN_PROPOSAL_METHOD,
+    path: storyos_contracts::REPLAN_PROPOSAL_PATH,
+    schema: storyos_contracts::REPLAN_PROPOSAL_REQUEST_SCHEMA_ID,
+};
+const REOPEN_REJECTED_OPERATIONS: Route = Route {
+    kind: "reopenRejectedOperations",
+    method: storyos_contracts::REOPEN_REJECTED_OPERATIONS_METHOD,
+    path: storyos_contracts::REOPEN_REJECTED_OPERATIONS_PATH,
+    schema: storyos_contracts::REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
+};
+const WITHDRAW_PROPOSAL: Route = Route {
+    kind: "withdrawProposal",
+    method: storyos_contracts::WITHDRAW_PROPOSAL_METHOD,
+    path: storyos_contracts::WITHDRAW_PROPOSAL_PATH,
+    schema: storyos_contracts::WITHDRAW_PROPOSAL_REQUEST_SCHEMA_ID,
+};
+const CLOSE_EDITOR_FLOW_DRAFT: Route = Route {
+    kind: "closeEditorFlowDraft",
+    method: "POST",
+    path: storyos_contracts::CLOSE_EDITOR_FLOW_DRAFT_PATH,
+    schema: storyos_contracts::CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID,
+};
+
+const EXPAND_REFUSED_EDIT_DRAFT: Route = Route {
+    kind: "expandRefusedEditDraftToProposal",
+    method: "POST",
+    path: storyos_contracts::EXPAND_REFUSED_EDIT_DRAFT_PATH,
+    schema: storyos_contracts::EXPAND_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID,
+};
+const COMPLETE_READY_PARTIAL_PROPOSAL: Route = Route {
+    kind: "completeReadyPartialProposal",
+    method: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_METHOD,
+    path: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_PATH,
+    schema: storyos_contracts::COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
+};
+const CONTINUE_PROPOSAL_GENERATION: Route = Route {
+    kind: "continueProposalGeneration",
+    method: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_METHOD,
+    path: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_PATH,
+    schema: storyos_contracts::CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,
+};
 
 /// Issues one Command Challenge for `route` and binds `input` to it.
 async fn issued<I>(
@@ -285,7 +354,7 @@ async fn issued<I>(
 
 /// Settles one call, replays it with new request identities, and requires an equal settlement.
 ///
-/// Returns the Receipt result kind and the authority rows of the first settlement.
+/// Returns the stored Receipt result kind and the authority rows of the first settlement.
 async fn replayed_outcome<I: Clone, A, N, C, R, P, Z>(
     store: &PostgresProjectReader,
     admin: &Client,
@@ -294,7 +363,7 @@ async fn replayed_outcome<I: Clone, A, N, C, R, P, Z>(
         &PostgresProjectReader,
         &CommandCall<I>,
     ) -> Result<ProjectCommandSettlement<A, N, C, R, P, Z>, ProjectCommandError>,
-) -> (ReceiptResult, [i64; 5])
+) -> (String, [i64; 5])
 where
     A: Debug + PartialEq,
     N: ReasonCode + Debug + PartialEq,
@@ -311,8 +380,16 @@ where
         receipt_id: Uuid::now_v7().to_string(),
     };
     assert_eq!(settle(store, &retry).await.unwrap(), first);
+    let result_kind = admin
+        .query_one(
+            "SELECT result_kind FROM storyos.domain_receipts WHERE receipt_id = $1::text::uuid",
+            &[&first.ids.receipt_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
     (
-        first.outcome.receipt_result(),
+        result_kind,
         settlement_rows(admin, &first.ids.receipt_id).await,
     )
 }
@@ -572,16 +649,316 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let outcome = replayed_outcome(&store, &admin, &call, take_over_project_writer).await;
     observed.push((TAKE_OVER_PROJECT_WRITER.kind, outcome));
 
+    let (scope, withdrawn) = withdrawn_proposal(&store, &admin, /*base*/ 0x5db0).await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x5db9,
+        &REOPEN_WITHDRAWN_PROPOSAL,
+        withdrawn.clone(),
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, reopen_withdrawn_proposal).await;
+    observed.push((REOPEN_WITHDRAWN_PROPOSAL.kind, outcome));
+    let reopened_revision_id: String = admin
+        .query_one(
+            "SELECT current_revision_id::text FROM storyos.proposal_heads
+              WHERE proposal_id = $1::text::uuid",
+            &[&withdrawn.proposal_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    for (suffix, proposal_revision_id) in [
+        (0x5dba, reopened_revision_id),
+        (0x5dbb, withdrawn.proposal_revision_id.clone()),
+    ] {
+        let input = ReopenWithdrawnProposalInput {
+            proposal_revision_id,
+            ..withdrawn.clone()
+        };
+        let call = issued(&store, &scope, suffix, &REOPEN_WITHDRAWN_PROPOSAL, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, reopen_withdrawn_proposal).await;
+        observed.push((REOPEN_WITHDRAWN_PROPOSAL.kind, outcome));
+    }
+    let (scope, withdrawn) = withdrawn_proposal(&store, &admin, /*base*/ 0x5dc0).await;
+    move_head_away(
+        &admin,
+        &scope,
+        &withdrawn.expected_authoritative_revision_id,
+    )
+    .await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x5dc9,
+        &REOPEN_WITHDRAWN_PROPOSAL,
+        withdrawn,
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, reopen_withdrawn_proposal).await;
+    observed.push((REOPEN_WITHDRAWN_PROPOSAL.kind, outcome));
+
+    let mut rejection_records = Vec::new();
+    let (scope, pending) = pending_proposal(&store, &admin, /*base*/ 0x7b00).await;
+    let stale = RejectProposalOperationsInput {
+        proposal_revision_id: Uuid::now_v7().to_string(),
+        ..pending.clone()
+    };
+    let (changed_scope, changed) = pending_proposal(&store, &admin, /*base*/ 0x7b10).await;
+    move_head_away(
+        &admin,
+        &changed_scope,
+        &changed.expected_authoritative_revision_id,
+    )
+    .await;
+    for (scope, suffix, input) in [
+        (&scope, 0x7b09, pending.clone()),
+        (&scope, 0x7b0a, pending),
+        (&scope, 0x7b0b, stale),
+        (&changed_scope, 0x7b19, changed),
+    ] {
+        let call = issued(&store, scope, suffix, &REJECT_PROPOSAL_OPERATIONS, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, reject_proposal_operations).await;
+        observed.push((REJECT_PROPOSAL_OPERATIONS.kind, outcome));
+        rejection_records.push(
+            admin
+                .query_one(
+                    "SELECT count(*) FROM storyos.proposal_rejection_receipts
+                      WHERE rejection_receipt_id = $1::text::uuid",
+                    &[&call.envelope.ids.receipt_id],
+                )
+                .await
+                .unwrap()
+                .get::<_, i64>(/*idx*/ 0),
+        );
+    }
+
+    // The second exact call names a Proposal Revision that the first call superseded.
+    let (scope, conflicted) = conflicted_proposal(&store, &admin, /*base*/ 0x7200).await;
+    for suffix in [0x7209, 0x720a] {
+        let call = issued(&store, &scope, suffix, &REPLAN_PROPOSAL, conflicted.clone()).await;
+        let outcome = replayed_outcome(&store, &admin, &call, replan_proposal).await;
+        observed.push((REPLAN_PROPOSAL.kind, outcome));
+    }
+    let (scope, conflicted) = conflicted_proposal(&store, &admin, /*base*/ 0x7210).await;
+    move_head_away(
+        &admin,
+        &scope,
+        &conflicted.expected_authoritative_revision_id,
+    )
+    .await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x7219,
+        &REPLAN_PROPOSAL,
+        conflicted,
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, replan_proposal).await;
+    observed.push((REPLAN_PROPOSAL.kind, outcome));
+    let (scope, rejected) = rejected_operation(&store, &admin, /*base*/ 0x7220).await;
+    for suffix in [0x7229, 0x722a] {
+        let call = issued(
+            &store,
+            &scope,
+            suffix,
+            &REOPEN_REJECTED_OPERATIONS,
+            rejected.clone(),
+        )
+        .await;
+        let outcome = replayed_outcome(&store, &admin, &call, reopen_rejected_operations).await;
+        observed.push((REOPEN_REJECTED_OPERATIONS.kind, outcome));
+    }
+    let (scope, rejected) = rejected_operation(&store, &admin, /*base*/ 0x7230).await;
+    move_head_away(&admin, &scope, &rejected.expected_authoritative_revision_id).await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x7239,
+        &REOPEN_REJECTED_OPERATIONS,
+        rejected,
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, reopen_rejected_operations).await;
+    observed.push((REOPEN_REJECTED_OPERATIONS.kind, outcome));
+
+    let (scope, open) = withdrawable_proposal(&store, &admin, /*base*/ 0x7440).await;
+    let mut withdrawal_receipts = Vec::new();
+    for (suffix, proposal_revision_id) in [
+        (0x7449, open.proposal_revision_id.clone()),
+        (0x744a, open.proposal_revision_id.clone()),
+        (0x744b, Uuid::now_v7().to_string()),
+    ] {
+        let input = WithdrawProposalInput {
+            proposal_revision_id,
+            ..open.clone()
+        };
+        let call = issued(&store, &scope, suffix, &WITHDRAW_PROPOSAL, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, withdraw_proposal).await;
+        observed.push((WITHDRAW_PROPOSAL.kind, outcome));
+        withdrawal_receipts.push(call.envelope.ids.receipt_id);
+    }
+    let (scope, open) = withdrawable_proposal(&store, &admin, /*base*/ 0x7450).await;
+    move_head_away(&admin, &scope, &open.expected_authoritative_revision_id).await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0x7459,
+        &WITHDRAW_PROPOSAL,
+        open,
+    )
+    .await;
+    let outcome = replayed_outcome(&store, &admin, &call, withdraw_proposal).await;
+    observed.push((WITHDRAW_PROPOSAL.kind, outcome));
+    withdrawal_receipts.push(call.envelope.ids.receipt_id);
+    let mut withdrawal_records = Vec::new();
+    for receipt_id in &withdrawal_receipts {
+        let records: i64 = admin
+            .query_one(
+                "SELECT count(*) FROM storyos.proposal_withdrawals
+                  WHERE withdrawal_receipt_id = $1::text::uuid",
+                &[receipt_id],
+            )
+            .await
+            .unwrap()
+            .get(/*idx*/ 0);
+        withdrawal_records.push(records);
+    }
+    let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7d00, "retained").await;
+    let changed = CloseEditorFlowDraftInput {
+        source_current_draft_revision_id: Uuid::now_v7().to_string(),
+        ..open.clone()
+    };
+    let (archived_scope, archived) =
+        refused_edit_draft(&store, &admin, /*base*/ 0x7d10, "archived").await;
+    for (scope, suffix, input) in [
+        (&scope, 0x7d09, open.clone()),
+        (&scope, 0x7d0a, open),
+        (&scope, 0x7d0b, changed),
+        (&archived_scope, 0x7d19, archived),
+    ] {
+        let call = discard_call(&store, scope, suffix, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, close_editor_flow_draft).await;
+        observed.push((CLOSE_EDITOR_FLOW_DRAFT.kind, outcome));
+    }
+    let (scope, open) = refused_edit_expansion(&store, &admin, /*base*/ 0x8e00, "retained").await;
+    let changed = ExpandRefusedEditDraftToProposalInput {
+        source_current_draft_revision_id: Uuid::now_v7().to_string(),
+        ..open.clone()
+    };
+    let missing_target_ref = Uuid::now_v7().to_string();
+    let missing_target = ExpandRefusedEditDraftToProposalInput {
+        target_ref: missing_target_ref.clone(),
+        anchor: OpenInlineProposalAnchor {
+            manuscript_block_id: missing_target_ref,
+            ..open.anchor.clone()
+        },
+        ..open.clone()
+    };
+    let (archived_scope, archived) =
+        refused_edit_expansion(&store, &admin, /*base*/ 0x8e10, "archived").await;
+    let mut expansion_records = Vec::new();
+    for (scope, suffix, input) in [
+        (&scope, 0x8e09, open.clone()),
+        (&scope, 0x8e0a, changed),
+        (&scope, 0x8e0b, missing_target),
+        (&archived_scope, 0x8e19, archived),
+    ] {
+        let call = expansion_call(&store, scope, suffix, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, expand_refused_edit_draft).await;
+        observed.push((EXPAND_REFUSED_EDIT_DRAFT.kind, outcome));
+        // The Proposals, superseding close events, and closed source Drafts of the Receipt.
+        let row = admin
+            .query_one(
+                "SELECT (SELECT count(*) FROM storyos.proposals AS proposal
+                           JOIN storyos.domain_receipts AS receipt
+                             ON receipt.result_payload->>'proposal_id' = proposal.proposal_id::text
+                          WHERE receipt.receipt_id = $1::text::uuid
+                            AND proposal.source_draft_id = $2::text::uuid),
+                        (SELECT count(*) FROM storyos.draft_close_events
+                          WHERE receipt_id = $1::text::uuid AND close_reason = 'superseded'),
+                        (SELECT count(*) FROM storyos.draft_artifacts AS draft
+                           JOIN storyos.draft_close_events AS event
+                             ON event.event_id = draft.close_event_id
+                          WHERE event.receipt_id = $1::text::uuid AND draft.closure = 'closed')",
+                &[&call.envelope.ids.receipt_id, &call.input.draft_id],
+            )
+            .await
+            .unwrap();
+        expansion_records.push([0, 1, 2].map(|index| row.get::<_, i64>(index)));
+    }
+
+    let (scope, generation) = ready_partial_proposal(&store, &admin, /*base*/ 0x7500).await;
+    for (suffix, expected_authoritative_revision_id) in [
+        (0x750a, &generation.other_chapter_revision_id),
+        (
+            0x750b,
+            &generation.complete.expected_authoritative_revision_id,
+        ),
+        (
+            0x750c,
+            &generation.complete.expected_authoritative_revision_id,
+        ),
+    ] {
+        let input = CompleteReadyPartialProposalInput {
+            expected_authoritative_revision_id: expected_authoritative_revision_id.clone(),
+            ..generation.complete.clone()
+        };
+        let call = issued(
+            &store,
+            &scope,
+            suffix,
+            &COMPLETE_READY_PARTIAL_PROPOSAL,
+            input,
+        )
+        .await;
+        let outcome =
+            replayed_outcome(&store, &admin, &call, complete_ready_partial_proposal).await;
+        observed.push((COMPLETE_READY_PARTIAL_PROPOSAL.kind, outcome));
+    }
+    for (suffix, expected_authoritative_revision_id) in [
+        (0x750d, &generation.other_chapter_revision_id),
+        (
+            0x750e,
+            &generation.complete.expected_authoritative_revision_id,
+        ),
+        (
+            0x750f,
+            &generation.complete.expected_authoritative_revision_id,
+        ),
+    ] {
+        let input = ContinueProposalGenerationInput {
+            expected_generation_state: "ready".to_owned(),
+            expected_authoritative_revision_id: expected_authoritative_revision_id.clone(),
+            ..generation.continuation.clone()
+        };
+        let call = issued(&store, &scope, suffix, &CONTINUE_PROPOSAL_GENERATION, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, continue_proposal_generation).await;
+        observed.push((CONTINUE_PROPOSAL_GENERATION.kind, outcome));
+    }
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
-    let structural_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 1, 1]);
-    let chapter_selection_applied = (ReceiptResult::AuthoritativeApplied, [1, 1, 1, 0, 1]);
-    let activity_applied = (ReceiptResult::AuthoritativeApplied, [1, 0, 1, 0, 0]);
-    let no_effect = (ReceiptResult::NoEffect, [1, 0, 0, 0, 0]);
-    let writer_takeover = (ReceiptResult::NoEffect, [1, 0, 1, 0, 1]);
-    let conflicted = (ReceiptResult::Conflicted, [1, 0, 0, 0, 0]);
-    let refused = (ReceiptResult::Refused, [1, 0, 0, 0, 0]);
+    let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
+    let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
+    let activity_applied = ("authoritative_applied", [1, 0, 1, 0, 0]);
+    let proposal_revised = ("proposal_revised", [1, 1, 0, 0, 0]);
+    let proposal_closure_changed = ("proposal_closure_changed", [1, 1, 0, 0, 0]);
+    let operations_resolved = ("proposal_operations_resolved", [1, 1, 0, 0, 0]);
+    let generation_completed = ("proposal_generation_completed", [1, 1, 0, 0, 0]);
+    let generation_started = ("proposal_generation_started", [1, 1, 0, 0, 0]);
+    let draft_closure_changed = ("draft_closure_changed", [1, 1, 0, 0, 0]);
+    let proposal_created_from_draft = ("proposal_created_from_draft", [1, 1, 0, 0, 0]);
+    let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
+    let writer_takeover = ("no_effect", [1, 0, 1, 0, 1]);
+    let conflicted = ("conflicted", [1, 0, 0, 0, 0]);
+    let refused = ("refused", [1, 0, 0, 0, 0]);
     assert_eq!(
-        observed,
+        observed
+            .iter()
+            .map(|(kind, (result_kind, rows))| (*kind, (result_kind.as_str(), *rows)))
+            .collect::<Vec<_>>(),
         vec![
             ("createVolume", structural_applied),
             ("createVolume", conflicted),
@@ -620,8 +997,46 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("updateProjectAssistance", conflicted),
             ("updateProjectAssistance", activity_applied),
             ("takeOverProjectWriter", writer_takeover),
+            ("reopenWithdrawnProposal", proposal_revised),
+            ("reopenWithdrawnProposal", no_effect),
+            ("reopenWithdrawnProposal", refused),
+            ("reopenWithdrawnProposal", conflicted),
+            ("rejectProposalOperations", operations_resolved),
+            ("rejectProposalOperations", refused),
+            ("rejectProposalOperations", refused),
+            ("rejectProposalOperations", conflicted),
+            ("replanProposal", proposal_revised),
+            ("replanProposal", refused),
+            ("replanProposal", conflicted),
+            ("reopenRejectedOperations", proposal_revised),
+            ("reopenRejectedOperations", refused),
+            ("reopenRejectedOperations", conflicted),
+            ("withdrawProposal", proposal_closure_changed),
+            ("withdrawProposal", no_effect),
+            ("withdrawProposal", refused),
+            ("withdrawProposal", conflicted),
+            ("closeEditorFlowDraft", draft_closure_changed),
+            ("closeEditorFlowDraft", refused),
+            ("closeEditorFlowDraft", conflicted),
+            ("closeEditorFlowDraft", refused),
+            (
+                "expandRefusedEditDraftToProposal",
+                proposal_created_from_draft
+            ),
+            ("expandRefusedEditDraftToProposal", conflicted),
+            ("expandRefusedEditDraftToProposal", refused),
+            ("expandRefusedEditDraftToProposal", refused),
+            ("completeReadyPartialProposal", conflicted),
+            ("completeReadyPartialProposal", generation_completed),
+            ("completeReadyPartialProposal", refused),
+            ("continueProposalGeneration", conflicted),
+            ("continueProposalGeneration", generation_started),
+            ("continueProposalGeneration", refused),
         ]
     );
+    assert_eq!(rejection_records, vec![1; 4]);
+    assert_eq!(withdrawal_records, vec![1, 0, 0, 0]);
+    assert_eq!(expansion_records, vec![[1, 1, 1], [0; 3], [0; 3], [0; 3]]);
 }
 
 /// A new Project with Chapters A and B, Chapter A current, and one writer Editor Session.
@@ -695,6 +1110,832 @@ async fn set_current_chapter_call(
         expected_target_revision_id: revision_b,
     };
     issued(store, &scope, base + 9, &SET_CURRENT_CHAPTER, input).await
+}
+
+async fn reopen_withdrawn_proposal(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ReopenWithdrawnProposalInput>,
+) -> Result<ReopenWithdrawnProposalSettlement, ProjectCommandError> {
+    store
+        .reopen_withdrawn_proposal(&call.envelope, &call.input)
+        .await
+}
+
+/// A new Project with a writer Editor Session and one withdrawn Proposal on Chapter B.
+///
+/// Returns the Scope and the input that reopens the Proposal. The fixture skips the foreign
+/// keys of the AgentRun, the Manuscript Block, and the withdrawal Receipt.
+async fn withdrawn_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, ReopenWithdrawnProposalInput) {
+    let (scope, _chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let input = ReopenWithdrawnProposalInput {
+        editor_session_id: EditorSessionId::new(editor_session_id),
+        proposal_id: Uuid::now_v7().to_string(),
+        proposal_revision_id: Uuid::now_v7().to_string(),
+        withdrawal_event_id: Uuid::now_v7().to_string(),
+        expected_authoritative_revision_id: revision_b,
+    };
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             INSERT INTO storyos.proposals
+               (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
+                source_run_id, source_decision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', 'block_edit', '{chapter}',
+                     '{block}', '{run}', '{decision}');
+             INSERT INTO storyos.proposal_revisions
+               (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
+                closure, candidate_text, base_authoritative_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', 'ready', 'valid',
+                     'withdrawn', 'Candidate', '{base_revision}');
+             INSERT INTO storyos.proposal_heads
+               (owner_user_id, project_id, proposal_id, current_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}');
+             INSERT INTO storyos.proposal_operations
+               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                resolution, reservation_state, candidate_text)
+             VALUES ('{owner}', '{project}', '{proposal}', '{operation}', '{block}',
+                     'pending', 'resolved', 'Candidate');
+             INSERT INTO storyos.proposal_withdrawals
+               (owner_user_id, project_id, withdrawal_event_id, proposal_id,
+                proposal_revision_id, withdrawal_reason, withdrawal_receipt_id)
+             VALUES ('{owner}', '{project}', '{event}', '{proposal}', '{revision}',
+                     'current_producer_withdrew', '{receipt}');
+             COMMIT;",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            proposal = input.proposal_id,
+            chapter = chapter_b,
+            block = Uuid::now_v7(),
+            run = Uuid::now_v7(),
+            decision = Uuid::now_v7(),
+            revision = input.proposal_revision_id,
+            base_revision = input.expected_authoritative_revision_id,
+            operation = Uuid::now_v7(),
+            event = input.withdrawal_event_id,
+            receipt = Uuid::now_v7(),
+        ))
+        .await
+        .unwrap();
+    (scope, input)
+}
+
+/// One applicable Reopen Withdrawn Proposal in a new Project.
+async fn reopen_withdrawn_proposal_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<ReopenWithdrawnProposalInput> {
+    let (scope, input) = withdrawn_proposal(store, admin, base).await;
+    issued(store, &scope, base + 9, &REOPEN_WITHDRAWN_PROPOSAL, input).await
+}
+
+/// Moves the Chapter head away from `revision`, so that a command that expects it conflicts.
+async fn move_head_away(admin: &Client, scope: &ProjectScope, revision: &str) {
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "UPDATE storyos.authoritative_heads AS head
+                SET current_revision_id = other.current_revision_id
+               FROM storyos.authoritative_heads AS other
+              WHERE (head.owner_user_id, head.project_id) = (other.owner_user_id, other.project_id)
+                AND head.current_revision_id = '{revision}'
+                AND other.current_revision_id <> '{revision}'
+                AND head.project_id = '{project}'",
+            project = scope.project_id.as_ref(),
+        ),
+    )
+    .await;
+}
+
+async fn reject_proposal_operations(
+    store: &PostgresProjectReader,
+    call: &CommandCall<RejectProposalOperationsInput>,
+) -> Result<RejectProposalOperationsSettlement, ProjectCommandError> {
+    store
+        .reject_proposal_operations(&call.envelope, &call.input)
+        .await
+}
+
+/// A new Project with a writer Editor Session and one open Proposal with one pending Operation.
+///
+/// Returns the Scope and the input that rejects the Operation. The fixture skips the foreign
+/// keys of the AgentRun and the Manuscript Block.
+async fn pending_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, RejectProposalOperationsInput) {
+    let (scope, _chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let input = RejectProposalOperationsInput {
+        editor_session_id: EditorSessionId::new(editor_session_id),
+        proposal_id: Uuid::now_v7().to_string(),
+        proposal_revision_id: Uuid::now_v7().to_string(),
+        selected_pending_operation_ids: vec![Uuid::now_v7().to_string()],
+        expected_authoritative_revision_id: revision_b,
+        rejection_note: RejectionNote::Present {
+            text: "Too formal".to_owned(),
+        },
+    };
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             INSERT INTO storyos.proposals
+               (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
+                source_run_id, source_decision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', 'block_edit', '{chapter}',
+                     '{block}', '{run}', '{decision}');
+             INSERT INTO storyos.proposal_revisions
+               (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
+                closure, candidate_text, base_authoritative_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', 'ready', 'valid',
+                     'open', 'Candidate', '{base_revision}');
+             INSERT INTO storyos.proposal_heads
+               (owner_user_id, project_id, proposal_id, current_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}');
+             INSERT INTO storyos.proposal_operations
+               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                resolution, reservation_state, candidate_text)
+             VALUES ('{owner}', '{project}', '{proposal}', '{operation}', '{block}',
+                     'pending', 'unresolved', 'Candidate');
+             COMMIT;",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            proposal = input.proposal_id,
+            chapter = chapter_b,
+            block = Uuid::now_v7(),
+            run = Uuid::now_v7(),
+            decision = Uuid::now_v7(),
+            revision = input.proposal_revision_id,
+            base_revision = input.expected_authoritative_revision_id,
+            operation = input.selected_pending_operation_ids[0],
+        ))
+        .await
+        .unwrap();
+    (scope, input)
+}
+
+/// One applicable Reject Proposal Operations in a new Project.
+async fn reject_proposal_operations_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<RejectProposalOperationsInput> {
+    let (scope, input) = pending_proposal(store, admin, base).await;
+    issued(store, &scope, base + 9, &REJECT_PROPOSAL_OPERATIONS, input).await
+}
+
+async fn replan_proposal(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ReplanProposalInput>,
+) -> Result<ReplanProposalSettlement, ProjectCommandError> {
+    store.replan_proposal(&call.envelope, &call.input).await
+}
+
+async fn reopen_rejected_operations(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ReopenRejectedOperationsInput>,
+) -> Result<ReopenRejectedOperationsSettlement, ProjectCommandError> {
+    store
+        .reopen_rejected_operations(&call.envelope, &call.input)
+        .await
+}
+
+/// The identities of one open Proposal on Chapter B with one Proposal Operation.
+struct OpenProposal {
+    editor_session_id: String,
+    proposal_id: String,
+    revision_id: String,
+    operation_id: String,
+    chapter_head: String,
+}
+
+/// A new Project with a writer Editor Session and one open Proposal on Chapter B.
+///
+/// The fixture skips the foreign keys of the AgentRun and the Manuscript Block.
+async fn open_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+    validation: &str,
+    resolution: &str,
+) -> (ProjectScope, OpenProposal) {
+    let (scope, _chapter_a, chapter_b, chapter_head, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let proposal = OpenProposal {
+        editor_session_id,
+        proposal_id: Uuid::now_v7().to_string(),
+        revision_id: Uuid::now_v7().to_string(),
+        operation_id: Uuid::now_v7().to_string(),
+        chapter_head,
+    };
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.proposals
+               (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
+                source_run_id, source_decision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', 'block_edit', '{chapter_b}',
+                     '{block}', '{run}', '{decision}');
+             INSERT INTO storyos.proposal_revisions
+               (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
+                closure, candidate_text, base_authoritative_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', 'ready', '{validation}',
+                     'open', 'Candidate', '{chapter_head}');
+             INSERT INTO storyos.proposal_heads
+               (owner_user_id, project_id, proposal_id, current_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}');
+             INSERT INTO storyos.proposal_operations
+               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                resolution, reservation_state, candidate_text)
+             VALUES ('{owner}', '{project}', '{proposal}', '{operation}', '{block}',
+                     '{resolution}', 'resolved', 'Candidate')",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            proposal = proposal.proposal_id,
+            block = Uuid::now_v7(),
+            run = Uuid::now_v7(),
+            decision = Uuid::now_v7(),
+            revision = proposal.revision_id,
+            operation = proposal.operation_id,
+            chapter_head = proposal.chapter_head,
+        ),
+    )
+    .await;
+    (scope, proposal)
+}
+
+/// Runs fixture statements in one transaction without their foreign keys.
+async fn run_without_foreign_keys(admin: &Client, statements: &str) {
+    admin
+        .batch_execute(&format!(
+            "BEGIN; SET LOCAL session_replication_role = replica; {statements}; COMMIT;"
+        ))
+        .await
+        .unwrap();
+}
+
+/// A conflicted open Proposal and the input that replans it.
+async fn conflicted_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, ReplanProposalInput) {
+    let (scope, proposal) = open_proposal(store, admin, base, "conflicted", "pending").await;
+    let conflict_id = Uuid::now_v7().to_string();
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.proposal_validation_conditions
+               (owner_user_id, project_id, proposal_id, proposal_revision_id,
+                acceptance_receipt_id, validation, conflict_id, condition_kind)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', '{receipt}',
+                     'conflicted', '{conflict_id}', 'proposal_conflict')",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            proposal = proposal.proposal_id,
+            revision = proposal.revision_id,
+            receipt = Uuid::now_v7(),
+        ),
+    )
+    .await;
+    let input = ReplanProposalInput {
+        editor_session_id: EditorSessionId::new(proposal.editor_session_id),
+        proposal_id: proposal.proposal_id,
+        conflicted_proposal_revision_id: proposal.revision_id.clone(),
+        expected_current_proposal_head: proposal.revision_id,
+        expected_authoritative_revision_id: proposal.chapter_head,
+        replacement_operation_id: proposal.operation_id,
+        source_condition: storyos_contracts::ReplanSourceCondition::ProposalConflict {
+            proposal_conflict_ref: conflict_id,
+        },
+    };
+    (scope, input)
+}
+
+/// An open Proposal with one rejected Proposal Operation and the input that reopens it.
+async fn rejected_operation(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, ReopenRejectedOperationsInput) {
+    let (scope, proposal) = open_proposal(store, admin, base, "valid", "rejected").await;
+    let rejection_event_id = Uuid::now_v7().to_string();
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.proposal_operation_resolutions
+               (owner_user_id, project_id, resolution_event_id, proposal_id,
+                proposal_revision_id, operation_id, prior_resolution, resulting_resolution,
+                rejection_receipt_id, author_action_sequence)
+             VALUES ('{owner}', '{project}', '{rejection_event_id}', '{proposal}',
+                     '{revision}', '{operation}', 'pending', 'rejected', '{receipt}', 1)",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            proposal = proposal.proposal_id,
+            revision = proposal.revision_id,
+            operation = proposal.operation_id,
+            receipt = Uuid::now_v7(),
+        ),
+    )
+    .await;
+    let input = ReopenRejectedOperationsInput {
+        editor_session_id: EditorSessionId::new(proposal.editor_session_id),
+        proposal_id: proposal.proposal_id,
+        proposal_revision_id: proposal.revision_id,
+        selected_rejected_operation_id: proposal.operation_id,
+        rejection_event_id,
+        expected_authoritative_revision_id: proposal.chapter_head,
+    };
+    (scope, input)
+}
+
+/// One applicable Replan Proposal in a new Project.
+async fn replan_proposal_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<ReplanProposalInput> {
+    let (scope, input) = conflicted_proposal(store, admin, base).await;
+    issued(store, &scope, base + 9, &REPLAN_PROPOSAL, input).await
+}
+
+/// One applicable Reopen Rejected Operations in a new Project.
+async fn reopen_rejected_operations_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<ReopenRejectedOperationsInput> {
+    let (scope, input) = rejected_operation(store, admin, base).await;
+    issued(store, &scope, base + 9, &REOPEN_REJECTED_OPERATIONS, input).await
+}
+
+async fn withdraw_proposal(
+    store: &PostgresProjectReader,
+    call: &CommandCall<WithdrawProposalInput>,
+) -> Result<WithdrawProposalSettlement, ProjectCommandError> {
+    store.withdraw_proposal(&call.envelope, &call.input).await
+}
+
+/// A new Project with one open Proposal and the input that withdraws it.
+async fn withdrawable_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, WithdrawProposalInput) {
+    let (scope, proposal) = open_proposal(store, admin, base, "valid", "pending").await;
+    let input = WithdrawProposalInput {
+        editor_session_id: EditorSessionId::new(proposal.editor_session_id),
+        proposal_id: proposal.proposal_id,
+        proposal_revision_id: proposal.revision_id,
+        expected_authoritative_revision_id: proposal.chapter_head,
+        withdrawal_note: WithdrawalNote::Present {
+            text: "Not this one".to_owned(),
+        },
+    };
+    (scope, input)
+}
+
+/// One applicable author Withdrawal in a new Project.
+async fn withdraw_proposal_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<WithdrawProposalInput> {
+    let (scope, input) = withdrawable_proposal(store, admin, base).await;
+    issued(store, &scope, base + 9, &WITHDRAW_PROPOSAL, input).await
+}
+
+async fn close_editor_flow_draft(
+    store: &PostgresProjectReader,
+    call: &CommandCall<CloseEditorFlowDraftInput>,
+) -> Result<CloseEditorFlowDraftSettlement, ProjectCommandError> {
+    store
+        .close_editor_flow_draft(&call.envelope, &call.input)
+        .await
+}
+
+/// A new Project with a writer Editor Session and one open Refused Edit Draft in `retention`.
+///
+/// Returns the Scope and the input that discards the Draft. The fixture skips the creation
+/// Receipt and lifecycle event of the Draft.
+async fn refused_edit_draft(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+    retention: &str,
+) -> (ProjectScope, CloseEditorFlowDraftInput) {
+    let (scope, _chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let payload = serde_json::json!({
+        "schema_revision": "storyos.refused-edit-payload.v1",
+        "chapter_id": chapter_b,
+        "expected_authoritative_revision_id": revision_b,
+        "expected_proposal_head_revision_ids": [],
+        "target_refs": [],
+        "author_edit_units": [],
+        "undo_group_id": Uuid::now_v7().to_string(),
+        "completed_intent_record_id": Uuid::now_v7().to_string(),
+        "local_intent_sequence": "1",
+    });
+    let input = CloseEditorFlowDraftInput {
+        editor_session_id: EditorSessionId::new(editor_session_id),
+        writer_generation: 1,
+        draft_id: Uuid::now_v7().to_string(),
+        source_current_draft_revision_id: Uuid::now_v7().to_string(),
+        source_draft_payload_digest: storyos_core::hex_sha256(
+            storyos_core::canonical_json(&payload).as_bytes(),
+        ),
+        source_reopen_event_id: None,
+    };
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             INSERT INTO storyos.draft_artifact_revisions
+               (owner_user_id, project_id, draft_id, revision_id, payload, payload_digest)
+             VALUES ('{owner}', '{project}', '{draft}', '{revision}', '{payload}'::jsonb,
+                     '{digest}');
+             INSERT INTO storyos.draft_artifacts
+               (owner_user_id, project_id, draft_id, current_revision_id, retention_state)
+             VALUES ('{owner}', '{project}', '{draft}', '{revision}', '{retention}');
+             COMMIT;",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            draft = input.draft_id,
+            revision = input.source_current_draft_revision_id,
+            digest = input.source_draft_payload_digest,
+        ))
+        .await
+        .unwrap();
+    (scope, input)
+}
+
+/// Issues one Draft Discard call whose canonical bytes are the command body of `input`.
+async fn discard_call(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: u16,
+    input: CloseEditorFlowDraftInput,
+) -> CommandCall<CloseEditorFlowDraftInput> {
+    let body = serde_json::json!({
+        "close_editor_flow_draft_input": {
+            "draft_id": input.draft_id,
+            "draft_kind": "refused_edit",
+            "source_current_draft_revision_id": input.source_current_draft_revision_id,
+            "source_draft_payload_digest": input.source_draft_payload_digest,
+            "expected_closure": "open",
+            "close_reason": "abandoned",
+            "editor_session_id": input.editor_session_id.as_ref(),
+            "writer_generation": input.writer_generation.to_string(),
+        }
+    });
+    let mut call = issued(store, scope, suffix, &CLOSE_EDITOR_FLOW_DRAFT, input).await;
+    call.envelope.canonical_command_bytes = body.to_string().into_bytes();
+    call
+}
+
+/// One applicable Draft Discard in a new Project.
+async fn close_editor_flow_draft_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<CloseEditorFlowDraftInput> {
+    let (scope, input) = refused_edit_draft(store, admin, base, "retained").await;
+    discard_call(store, &scope, base + 9, input).await
+}
+
+async fn expand_refused_edit_draft(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ExpandRefusedEditDraftToProposalInput>,
+) -> Result<ExpandRefusedEditDraftSettlement, ProjectCommandError> {
+    store
+        .expand_refused_edit_draft(&call.envelope, &call.input)
+        .await
+}
+
+/// A new Project with a writer Editor Session and one text Block in Chapter B. One open Refused
+/// Edit Draft in `retention` replaces a slice of that Block.
+///
+/// Returns the Scope and the input that expands the Draft. The fixture skips the creation
+/// Receipt and lifecycle event of the Draft and the Block history of the Chapter.
+async fn refused_edit_expansion(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+    retention: &str,
+) -> (ProjectScope, ExpandRefusedEditDraftToProposalInput) {
+    let (scope, _chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let block_id = Uuid::now_v7().to_string();
+    let block_text = "Guard the narrator voice in this passage.";
+    let manuscript = serde_json::json!({
+        "format": "storyos.manuscript-payload.v1",
+        "schema_version": 1,
+        "coordinate_version": 1,
+        "blocks": [{"manuscript_block_id": block_id, "block_kind": "paragraph", "text": block_text}],
+    });
+    let payload = serde_json::json!({
+        "schema_revision": "storyos.refused-edit-payload.v1",
+        "chapter_id": chapter_b,
+        "expected_authoritative_revision_id": revision_b,
+        "expected_proposal_head_revision_ids": [],
+        "target_refs": [block_id],
+        "author_edit_units": [{
+            "normalized_primitives": [{
+                "kind": "replace_structured_selection",
+                "replacement": [{"block_kind": "paragraph", "text": "A steadier voice."}],
+            }],
+            "selection_snapshot": {
+                "coordinate_profile": PROSEMIRROR_TOKEN_UTF16_V1,
+                "from": 10,
+                "to": 24,
+            },
+        }],
+        "undo_group_id": Uuid::now_v7().to_string(),
+        "completed_intent_record_id": Uuid::now_v7().to_string(),
+        "local_intent_sequence": "1",
+    });
+    let input = ExpandRefusedEditDraftToProposalInput {
+        editor_session_id: EditorSessionId::new(editor_session_id),
+        writer_generation: 1,
+        draft_id: Uuid::now_v7().to_string(),
+        source_current_draft_revision_id: Uuid::now_v7().to_string(),
+        source_draft_payload_digest: storyos_core::hex_sha256(
+            storyos_core::canonical_json(&payload).as_bytes(),
+        ),
+        source_reopen_event_id: None,
+        chapter_id: chapter_b.clone(),
+        target_ref: block_id.clone(),
+        expected_target_revision_id: revision_b.clone(),
+        anchor: OpenInlineProposalAnchor {
+            manuscript_block_id: block_id.clone(),
+            base_authoritative_revision_id: revision_b.clone(),
+            manuscript_schema_version: 1,
+            coordinate_profile: PROSEMIRROR_TOKEN_UTF16_V1.to_owned(),
+            from: 10,
+            to: 24,
+            boundary_profile: EXCLUSIVE_AUTHORITATIVE_EDGES_V1.to_owned(),
+            base_slice_digest: proposal_anchor_base_slice_digest(
+                &block_id,
+                "paragraph",
+                /*manuscript_schema_version*/ 1,
+                PROSEMIRROR_TOKEN_UTF16_V1,
+                /*from*/ 10,
+                /*to*/ 24,
+                &block_text[10..24],
+            ),
+        },
+    };
+    run_without_foreign_keys(
+        admin,
+        &format!(
+            "INSERT INTO storyos.manuscript_blocks
+               (owner_user_id, project_id, manuscript_block_id, manuscript_object_id, block_kind)
+             VALUES ('{owner}', '{project}', '{block}', '{chapter}', 'paragraph');
+             DELETE FROM storyos.manuscript_revision_members
+              WHERE owner_user_id = '{owner}' AND project_id = '{project}'
+                AND manuscript_object_id = '{chapter}' AND revision_id = '{head}';
+             INSERT INTO storyos.manuscript_revision_members
+               (owner_user_id, project_id, manuscript_object_id, revision_id,
+                manuscript_block_id, block_order)
+             VALUES ('{owner}', '{project}', '{chapter}', '{head}', '{block}', 1);
+             UPDATE storyos.authoritative_payloads AS payload
+                SET canonical_bytes = convert_to('{manuscript}', 'UTF8')
+               FROM storyos.authoritative_revisions AS revision
+              WHERE (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+                     revision.revision_id) = ('{owner}', '{project}', '{chapter}', '{head}')
+                AND (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                    (revision.owner_user_id, revision.project_id, revision.payload_id);
+             INSERT INTO storyos.draft_artifact_revisions
+               (owner_user_id, project_id, draft_id, revision_id, payload, payload_digest)
+             VALUES ('{owner}', '{project}', '{draft}', '{revision}', '{payload}'::jsonb,
+                     '{digest}');
+             INSERT INTO storyos.draft_artifacts
+               (owner_user_id, project_id, draft_id, current_revision_id, retention_state)
+             VALUES ('{owner}', '{project}', '{draft}', '{revision}', '{retention}')",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            block = block_id,
+            chapter = chapter_b,
+            head = revision_b,
+            draft = input.draft_id,
+            revision = input.source_current_draft_revision_id,
+            digest = input.source_draft_payload_digest,
+        ),
+    )
+    .await;
+    (scope, input)
+}
+
+/// Issues one Draft expansion call whose canonical bytes carry the source Draft binding of `input`.
+async fn expansion_call(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: u16,
+    input: ExpandRefusedEditDraftToProposalInput,
+) -> CommandCall<ExpandRefusedEditDraftToProposalInput> {
+    let body = serde_json::json!({
+        "expand_refused_edit_draft_to_proposal_input": {
+            "draft_id": input.draft_id,
+            "source_current_draft_revision_id": input.source_current_draft_revision_id,
+            "source_draft_payload_digest": input.source_draft_payload_digest,
+            "chapter_id": input.chapter_id,
+            "target_refs": [input.target_ref],
+            "expected_target_revisions": [input.expected_target_revision_id],
+            "editor_session_id": input.editor_session_id.as_ref(),
+            "writer_generation": input.writer_generation.to_string(),
+        }
+    });
+    let mut call = issued(store, scope, suffix, &EXPAND_REFUSED_EDIT_DRAFT, input).await;
+    call.envelope.canonical_command_bytes = body.to_string().into_bytes();
+    call
+}
+
+/// One applicable Draft expansion in a new Project.
+async fn expand_refused_edit_draft_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<ExpandRefusedEditDraftToProposalInput> {
+    let (scope, input) = refused_edit_expansion(store, admin, base, "retained").await;
+    expansion_call(store, &scope, base + 9, input).await
+}
+
+async fn complete_ready_partial_proposal(
+    store: &PostgresProjectReader,
+    call: &CommandCall<CompleteReadyPartialProposalInput>,
+) -> Result<CompleteReadyPartialProposalSettlement, ProjectCommandError> {
+    store
+        .complete_ready_partial_proposal(&call.envelope, &call.input)
+        .await
+}
+
+async fn continue_proposal_generation(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ContinueProposalGenerationInput>,
+) -> Result<ContinueProposalGenerationSettlement, ProjectCommandError> {
+    store
+        .continue_proposal_generation(&call.envelope, &call.input)
+        .await
+}
+
+/// The applicable completion and continuation of one ready-partial Proposal Generation.
+struct GenerationFixture {
+    complete: CompleteReadyPartialProposalInput,
+    continuation: ContinueProposalGenerationInput,
+    /// The head of Chapter A, which is not the head of the Proposal Chapter B.
+    other_chapter_revision_id: String,
+}
+
+/// A new Project with a writer Editor Session and one open ready-partial Proposal on Chapter B.
+///
+/// The Proposal Generation belongs to a paused AgentRun. The fixture skips the foreign keys of
+/// the AgentRun, the Manuscript Block, and the AgentRun Receipt.
+async fn ready_partial_proposal(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> (ProjectScope, GenerationFixture) {
+    let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(store, base).await;
+    let candidate_text = "Candidate";
+    let proposal_id = Uuid::now_v7().to_string();
+    let revision_id = Uuid::now_v7().to_string();
+    let generation_id = Uuid::now_v7().to_string();
+    let operation_id = Uuid::now_v7().to_string();
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             INSERT INTO storyos.agent_runs
+               (owner_user_id, project_id, run_id, project_agent_id, conversation_id,
+                memory_settings_revision, grant_id, project_model_use_binding_revision,
+                chapter_id, author_message, status, receipt_id)
+             VALUES ('{owner}', '{project}', '{run}', '{agent}', '{conversation}',
+                     '{memory}', '{grant}', '{binding}', '{chapter}', 'Continue',
+                     'paused', '{run_receipt}');
+             INSERT INTO storyos.proposals
+               (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
+                source_run_id, source_decision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', 'block_edit', '{chapter}',
+                     '{block}', '{run}', '{decision}');
+             INSERT INTO storyos.proposal_revisions
+               (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
+                closure, candidate_text, base_authoritative_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}', 'ready_partial',
+                     'valid', 'open', '{candidate_text}', '{base_revision}');
+             INSERT INTO storyos.proposal_heads
+               (owner_user_id, project_id, proposal_id, current_revision_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{revision}');
+             INSERT INTO storyos.proposal_operations
+               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                resolution, reservation_state, candidate_text)
+             VALUES ('{owner}', '{project}', '{proposal}', '{operation}', '{block}',
+                     'pending', 'resolved', '{candidate_text}');
+             INSERT INTO storyos.proposal_generations
+               (owner_user_id, project_id, generation_id, proposal_id, last_applied_stream_seq,
+                run_id)
+             VALUES ('{owner}', '{project}', '{generation}', '{proposal}', 3, '{run}');
+             INSERT INTO storyos.proposal_generation_heads
+               (owner_user_id, project_id, proposal_id, generation_id)
+             VALUES ('{owner}', '{project}', '{proposal}', '{generation}');
+             COMMIT;",
+            owner = scope.owner_user_id.as_ref(),
+            project = scope.project_id.as_ref(),
+            run = Uuid::now_v7(),
+            agent = Uuid::now_v7(),
+            conversation = Uuid::now_v7(),
+            memory = Uuid::now_v7(),
+            grant = Uuid::now_v7(),
+            binding = Uuid::now_v7(),
+            chapter = chapter_b,
+            run_receipt = Uuid::now_v7(),
+            proposal = proposal_id,
+            block = Uuid::now_v7(),
+            decision = Uuid::now_v7(),
+            revision = revision_id,
+            base_revision = revision_b,
+            operation = operation_id,
+            generation = generation_id,
+        ))
+        .await
+        .unwrap();
+    let other_chapter_revision_id = admin
+        .query_one(
+            "SELECT current_revision_id::text FROM storyos.authoritative_heads
+              WHERE manuscript_object_id = $1::text::uuid",
+            &[&chapter_a],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let editor_session_id = EditorSessionId::new(editor_session_id);
+    let expected_candidate_digest = storyos_core::hex_sha256(candidate_text.as_bytes());
+    let fixture = GenerationFixture {
+        complete: CompleteReadyPartialProposalInput {
+            editor_session_id: editor_session_id.clone(),
+            proposal_id: proposal_id.clone(),
+            proposal_revision_id: revision_id.clone(),
+            generation_id: generation_id.clone(),
+            expected_candidate_digest: expected_candidate_digest.clone(),
+            last_applied_stream_seq: 3,
+            expected_authoritative_revision_id: revision_b.clone(),
+        },
+        continuation: ContinueProposalGenerationInput {
+            editor_session_id,
+            proposal_id,
+            proposal_revision_id: revision_id,
+            prior_generation_id: generation_id,
+            expected_generation_state: "ready_partial".to_owned(),
+            expected_candidate_digest,
+            selected_pending_operation_ids: vec![operation_id],
+            expected_authoritative_revision_id: revision_b,
+        },
+        other_chapter_revision_id,
+    };
+    (scope, fixture)
+}
+
+/// One applicable Complete Ready Partial Proposal in a new Project.
+async fn complete_ready_partial_proposal_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<CompleteReadyPartialProposalInput> {
+    let (scope, fixture) = ready_partial_proposal(store, admin, base).await;
+    issued(
+        store,
+        &scope,
+        base + 9,
+        &COMPLETE_READY_PARTIAL_PROPOSAL,
+        fixture.complete,
+    )
+    .await
+}
+
+/// One applicable Continue Proposal Generation in a new Project.
+async fn continue_proposal_generation_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<ContinueProposalGenerationInput> {
+    let (scope, fixture) = ready_partial_proposal(store, admin, base).await;
+    issued(
+        store,
+        &scope,
+        base + 9,
+        &CONTINUE_PROPOSAL_GENERATION,
+        fixture.continuation,
+    )
+    .await
 }
 
 /// One applicable Create Volume in a new Project.
@@ -922,15 +2163,82 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &take_over_project_writer_call(&store, /*base*/ 0x5ea0).await,
         )
         .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x5eb0).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b20).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x7240).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7250).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7470).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d20).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7510).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7520).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e20).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 11]);
+    assert_eq!(observed, vec![(true, [0; 5]); 20]);
 }
 
 #[derive(Clone, Copy, Debug)]
 enum FailurePoint {
     Classify,
     Apply,
+    AfterAuthority,
 }
+
+/// The failure that `Failing` injects, named by its step.
+#[derive(Debug)]
+struct Injected(&'static str);
+
+impl std::fmt::Display for Injected {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "injected {} failure", self.0)
+    }
+}
+
+impl std::error::Error for Injected {}
 
 /// A project command that fails after one step has written its rows.
 struct Failing<C> {
@@ -958,13 +2266,22 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
     ) -> Result<Classification<Self>, ProjectCommandError> {
         let classified = self.command.classify(client, envelope, project).await?;
         match self.at {
-            FailurePoint::Classify => Err(unavailable("injected classify failure")),
-            FailurePoint::Apply => Ok(Classification {
+            FailurePoint::Classify => Err(unavailable(Injected("classify"))),
+            FailurePoint::Apply | FailurePoint::AfterAuthority => Ok(Classification {
                 outcome: classified.outcome,
                 admission: classified.admission,
                 heads: classified.heads,
+                zero_receipt: classified.zero_receipt,
             }),
         }
+    }
+
+    fn applied_receipt_payload(&self, applied: &Self::Applied, plan: &Self::Plan) -> String {
+        self.command.applied_receipt_payload(applied, plan)
+    }
+
+    fn applied_receipt_refs(&self, applied: &Self::Applied, plan: &Self::Plan) -> ReceiptRefs {
+        self.command.applied_receipt_refs(applied, plan)
     }
 
     async fn apply(
@@ -976,25 +2293,60 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         plan: Self::Plan,
         applied: Self::Applied,
     ) -> Result<ProfileWrite<Self>, ProjectCommandError> {
-        self.command
+        let write = self
+            .command
             .apply(client, envelope, project, sequences, plan, applied)
             .await?;
-        Err(unavailable("injected apply failure"))
+        match self.at {
+            FailurePoint::Apply => Err(unavailable(Injected("apply"))),
+            FailurePoint::Classify | FailurePoint::AfterAuthority => Ok(write),
+        }
+    }
+
+    fn apply_after_authority(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        applied: &ProfileApplied<Self>,
+    ) -> impl std::future::Future<Output = Result<(), ProjectCommandError>> + Send {
+        // The applied value need not be `Sync`, so only the inner future holds it.
+        let written = self
+            .command
+            .apply_after_authority(client, envelope, applied);
+        async move {
+            written.await?;
+            match self.at {
+                FailurePoint::AfterAuthority => Err(unavailable(Injected("after authority"))),
+                FailurePoint::Classify | FailurePoint::Apply => Ok(()),
+            }
+        }
+    }
+
+    fn check_replay_binding(&self, replay: &CommandReplay) -> Result<(), ReplayFault> {
+        self.command.check_replay_binding(replay)
     }
 
     fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault> {
         self.command.decode(replay)
     }
 
-    fn writes_zero_authority_effect(&self, outcome: &ZeroOutcome<'_, Self>) -> bool {
-        self.command.writes_zero_authority_effect(&match outcome {
-            ZeroOutcome::NoEffect(reason) => ZeroOutcome::NoEffect(*reason),
-            ZeroOutcome::Conflicted(reason) => ZeroOutcome::Conflicted(*reason),
-            ZeroOutcome::Refused(reason) => ZeroOutcome::Refused(*reason),
-        })
+    fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
+        self.command.zero_authority_rows(&inner_outcome(outcome))
     }
 
     async fn write_zero_authority_effect(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        outcome: &ZeroOutcome<'_, Self>,
+    ) -> Result<Self::ZeroEffect, ProjectCommandError> {
+        self.command
+            .write_zero_authority_effect(client, envelope, &inner_outcome(outcome))
+            .await?;
+        Err(unavailable(Injected("zero-authority write")))
+    }
+
+    async fn write_zero_authority_activity(
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
@@ -1002,30 +2354,64 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         activity: &ActivitySequences,
     ) -> Result<ZeroAuthorityWrite<Self::ZeroEffect>, ProjectCommandError> {
         self.command
-            .write_zero_authority_effect(client, envelope, project, activity)
+            .write_zero_authority_activity(client, envelope, project, activity)
             .await?;
-        Err(unavailable("injected zero-authority write failure"))
+        Err(unavailable(Injected("zero-authority write")))
+    }
+
+    fn decode_zero_authority_effect(
+        &self,
+        replay: &CommandReplay,
+    ) -> Result<Option<Self::ZeroEffect>, ReplayFault> {
+        self.command.decode_zero_authority_effect(replay)
     }
 }
 
-/// Fails the call in classify and then in apply, and then settles it for real.
+/// The zero-authority outcome of the wrapped command.
+fn inner_outcome<'a, C: ProjectCommand>(
+    outcome: &ZeroOutcome<'a, Failing<C>>,
+) -> ZeroOutcome<'a, C> {
+    match outcome {
+        ZeroOutcome::NoEffect(reason) => ZeroOutcome::NoEffect(*reason),
+        ZeroOutcome::Conflicted(reason) => ZeroOutcome::Conflicted(*reason),
+        ZeroOutcome::Refused(reason) => ZeroOutcome::Refused(*reason),
+    }
+}
+
+/// Fails the call at each failure point, and then settles it for real.
 ///
-/// Returns, for each failure, whether it is a store fault and the rows of its Receipt, then the
-/// Receipt result kind of the real settlement.
+/// Returns, for each failure, the step of the injected failure and the rows of its Receipt, then
+/// the Receipt result kind of the real settlement.
 async fn failed_then_settled<C: ProjectCommand + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
-) -> (Vec<(bool, [i64; 5])>, ReceiptResult) {
+) -> (Vec<(Option<&'static str>, [i64; 5])>, ReceiptResult) {
     let mut failures = Vec::new();
-    for at in [FailurePoint::Classify, FailurePoint::Apply] {
+    for at in [
+        FailurePoint::Classify,
+        FailurePoint::Apply,
+        FailurePoint::AfterAuthority,
+    ] {
         let failing = Failing {
             command: call.input.clone(),
             at,
         };
-        let failed = settle_project_command(store, &call.envelope, &failing).await;
+        let injected = match settle_project_command(store, &call.envelope, &failing).await {
+            Err(ProjectCommandError::Unavailable(source)) => source
+                .downcast_ref::<Injected>()
+                .map(|Injected(step)| *step),
+            Err(
+                ProjectCommandError::BindingConflict
+                | ProjectCommandError::HistoricalAcknowledgementUnavailable
+                | ProjectCommandError::InvalidChallenge
+                | ProjectCommandError::MissingProject
+                | ProjectCommandError::WriterIneligible,
+            )
+            | Ok(_) => None,
+        };
         failures.push((
-            matches!(failed, Err(ProjectCommandError::Unavailable(_))),
+            injected,
             settlement_rows(admin, &call.envelope.ids.receipt_id).await,
         ));
     }
@@ -1109,10 +2495,85 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &take_over_project_writer_call(&store, /*base*/ 0x5fa0).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x5fb0).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b30).await,
+        )
+        .await,
+        failed_then_settled(&store, &admin, &{
+            let mut stale = reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b40).await;
+            stale.input.proposal_revision_id = Uuid::now_v7().to_string();
+            stale
+        })
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x7260).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7270).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7480).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d30).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7530).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7540).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e30).await,
+        )
+        .await,
     ];
-    let rolled_back = |result| (vec![(true, [0; 5]), (true, [0; 5])], result);
+    let rolled_back = |result| {
+        let after_classify = match result {
+            ReceiptResult::AuthoritativeApplied => ["apply", "after authority"],
+            ReceiptResult::NoEffect | ReceiptResult::Conflicted | ReceiptResult::Refused => {
+                ["zero-authority write"; 2]
+            }
+        };
+        let failures = std::iter::once("classify")
+            .chain(after_classify)
+            .map(|step| (Some(step), [0; 5]))
+            .collect::<Vec<_>>();
+        (failures, result)
+    };
     let mut expected = vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10];
     expected.push(rolled_back(ReceiptResult::NoEffect));
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
+    expected.push(rolled_back(ReceiptResult::Refused));
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 7]);
     assert_eq!(observed, expected);
 }
 
@@ -1123,6 +2584,7 @@ enum ReplayError {
     HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
+    WriterIneligible,
     Unavailable,
 }
 
@@ -1153,18 +2615,80 @@ async fn evidence_replays<C: ProjectCommand + Clone>(
         let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
             panic!("a replay without complete evidence must fail");
         };
-        errors.push(match error {
-            ProjectCommandError::BindingConflict => ReplayError::BindingConflict,
-            ProjectCommandError::HistoricalAcknowledgementUnavailable => {
-                ReplayError::HistoricalAcknowledgementUnavailable
-            }
-            ProjectCommandError::InvalidChallenge => ReplayError::InvalidChallenge,
-            ProjectCommandError::MissingProject => ReplayError::MissingProject,
-            ProjectCommandError::Unavailable(_) => ReplayError::Unavailable,
-        });
+        errors.push(error.into());
     }
     let errors: [ReplayError; 2] = errors.try_into().unwrap();
     (settled.outcome.receipt_result(), errors)
+}
+
+impl From<ProjectCommandError> for ReplayError {
+    fn from(error: ProjectCommandError) -> Self {
+        match error {
+            ProjectCommandError::BindingConflict => Self::BindingConflict,
+            ProjectCommandError::HistoricalAcknowledgementUnavailable => {
+                Self::HistoricalAcknowledgementUnavailable
+            }
+            ProjectCommandError::InvalidChallenge => Self::InvalidChallenge,
+            ProjectCommandError::MissingProject => Self::MissingProject,
+            ProjectCommandError::WriterIneligible => Self::WriterIneligible,
+            ProjectCommandError::Unavailable(_) => Self::Unavailable,
+        }
+    }
+}
+
+/// The effect row of one applied Proposal decision and its preserved Proposal State Axes.
+struct PreservedEffect {
+    table: &'static str,
+    receipt_column: &'static str,
+    preserved_columns: &'static [&'static str],
+}
+
+/// Settles the call and clears one preserved value, which the all-or-none check refuses. Then
+/// replays the call once without its preserved values and once without its effect row.
+async fn effect_replays<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    effect: PreservedEffect,
+) -> (Option<SqlState>, [ReplayError; 2]) {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the Proposal decision must settle");
+    };
+    let PreservedEffect {
+        table,
+        receipt_column,
+        preserved_columns,
+    } = effect;
+    let filter = format!(
+        "WHERE {receipt_column} = '{}'",
+        call.envelope.ids.receipt_id
+    );
+    let cleared = preserved_columns
+        .iter()
+        .map(|column| format!("{column} = NULL"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let partial = admin
+        .batch_execute(&format!(
+            "UPDATE storyos.{table} SET {} = NULL {filter}",
+            preserved_columns[0]
+        ))
+        .await
+        .err()
+        .and_then(|error| error.code().cloned());
+    let mut errors = Vec::new();
+    for statement in [
+        format!("UPDATE storyos.{table} SET {cleared} {filter}"),
+        format!("DELETE FROM storyos.{table} {filter}"),
+    ] {
+        run_without_foreign_keys(admin, &statement).await;
+        let retry = with_new_request_ids(call);
+        let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
+            panic!("a replay without its preserved values must fail");
+        };
+        errors.push(error.into());
+    }
+    (partial, errors.try_into().unwrap())
 }
 
 #[tokio::test]
@@ -1235,6 +2759,48 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &update_project_assistance_call(&store, /*base*/ 0x6a90).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x6ad0).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7b50).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x7280).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7290).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7490).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7550).await,
+        )
+        .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7560).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -1243,7 +2809,165 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 10]);
+    assert_eq!(observed, vec![separated; 17]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn every_proposal_decision_replay_separates_pre_capture_from_damaged_effect_rows() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        effect_replays(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0x7c00).await,
+            PreservedEffect {
+                table: "proposal_rejection_receipts",
+                receipt_column: "rejection_receipt_id",
+                preserved_columns: &[
+                    "preserved_generation",
+                    "preserved_validation",
+                    "preserved_closure",
+                ],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x7c10).await,
+            PreservedEffect {
+                table: "proposal_withdrawals",
+                receipt_column: "withdrawal_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_validation"],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x7c20).await,
+            PreservedEffect {
+                table: "proposal_replans",
+                receipt_column: "replan_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_closure"],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x7c30).await,
+            PreservedEffect {
+                table: "proposal_withdrawal_reopenings",
+                receipt_column: "reopen_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_operation_resolution"],
+            },
+        )
+        .await,
+        effect_replays(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x7c40).await,
+            PreservedEffect {
+                table: "proposal_operation_reopenings",
+                receipt_column: "reopen_receipt_id",
+                preserved_columns: &["preserved_generation", "preserved_closure"],
+            },
+        )
+        .await,
+    ];
+    let separated = (
+        Some(SqlState::CHECK_VIOLATION),
+        [
+            ReplayError::HistoricalAcknowledgementUnavailable,
+            ReplayError::Unavailable,
+        ],
+    );
+    assert_eq!(observed, vec![separated; 5]);
+}
+
+/// Settles the call, damages its records with `damage` that takes the Receipt identity, and
+/// replays it.
+async fn damaged_replay<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    damage: fn(&str) -> String,
+) -> ReplayError {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the project command must settle");
+    };
+    run_without_foreign_keys(admin, &damage(&call.envelope.ids.receipt_id)).await;
+    let retry = with_new_request_ids(call);
+    let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
+        panic!("a replay with damaged records must fail");
+    };
+    error.into()
+}
+
+fn without_transition_record(receipt_id: &str) -> String {
+    format!("DELETE FROM storyos.proposal_generation_transitions WHERE receipt_id = '{receipt_id}'")
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_generation_decision_without_its_transition_record_is_damaged_evidence() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = [
+        damaged_replay(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x7570).await,
+            without_transition_record,
+        )
+        .await,
+        damaged_replay(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x7580).await,
+            without_transition_record,
+        )
+        .await,
+    ];
+    assert_eq!(
+        observed,
+        [ReplayError::Unavailable, ReplayError::Unavailable]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_multi_operation_rejection_replays_the_resolution_of_its_first_selected_operation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut call = reject_proposal_operations_call(&store, &admin, /*base*/ 0x7c50).await;
+    let first_operation = call.input.selected_pending_operation_ids[0].clone();
+    let later_operation = Uuid::now_v7().to_string();
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "INSERT INTO storyos.proposal_operations
+               (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+                resolution, reservation_state, candidate_text)
+             SELECT owner_user_id, project_id, proposal_id, '{later_operation}',
+                    gen_random_uuid(), resolution, reservation_state, candidate_text
+               FROM storyos.proposal_operations WHERE operation_id = '{first_operation}'"
+        ),
+    )
+    .await;
+    call.input.selected_pending_operation_ids = vec![later_operation, first_operation];
+    let (result_kind, _rows) =
+        replayed_outcome(&store, &admin, &call, reject_proposal_operations).await;
+    assert_eq!(result_kind, "proposal_operations_resolved");
 }
 
 #[tokio::test]
@@ -1387,4 +3111,1025 @@ async fn an_exact_retry_ignores_a_later_canonical_snapshot_at_the_same_position(
         ),
         (switched, renamed)
     );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_discard_replays_without_a_response_record_and_a_damaged_close_event_is_a_fault() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = close_editor_flow_draft_call(&store, &admin, /*base*/ 0x7d40).await;
+    let first = close_editor_flow_draft(&store, &call).await.unwrap();
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET acknowledgement_format = NULL, response_project = NULL
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let pre_capture = close_editor_flow_draft(&store, &with_new_request_ids(&call)).await;
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             UPDATE storyos.draft_close_events
+                SET author_action_sequence = author_action_sequence + 1000
+              WHERE receipt_id = '{}';
+             COMMIT;",
+            first.ids.receipt_id
+        ))
+        .await
+        .unwrap();
+    let damaged = close_editor_flow_draft(&store, &with_new_request_ids(&call)).await;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET canonical_command_digest = 'sha256:closeEditorFlowDraft:damaged'
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let other_digest = close_editor_flow_draft(&store, &with_new_request_ids(&call)).await;
+    assert_eq!(pre_capture.unwrap(), first);
+    assert!(matches!(damaged, Err(ProjectCommandError::Unavailable(_))));
+    assert!(matches!(
+        other_digest,
+        Err(ProjectCommandError::BindingConflict)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_discard_refuses_before_admission_and_requires_the_client_writer_generation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, open) = refused_edit_draft(&store, &admin, /*base*/ 0x7d50, "retained").await;
+    let stale_writer = CloseEditorFlowDraftInput {
+        writer_generation: 2,
+        ..open.clone()
+    };
+    let missing = CloseEditorFlowDraftInput {
+        draft_id: Uuid::now_v7().to_string(),
+        ..open.clone()
+    };
+    let (damaged_scope, damaged) =
+        refused_edit_draft(&store, &admin, /*base*/ 0x7d60, "retained").await;
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET LOCAL session_replication_role = replica;
+             UPDATE storyos.draft_artifact_revisions SET payload_digest = repeat('0', 64)
+              WHERE draft_id = '{}';
+             COMMIT;",
+            damaged.draft_id
+        ))
+        .await
+        .unwrap();
+    let mut observed = Vec::new();
+    for (scope, suffix, input) in [
+        (&scope, 0x7d59, stale_writer),
+        (&scope, 0x7d5a, missing),
+        (&damaged_scope, 0x7d69, damaged),
+    ] {
+        let call = discard_call(&store, scope, suffix, input).await;
+        let refused = close_editor_flow_draft(&store, &call).await;
+        observed.push((
+            match refused {
+                Err(error) => ReplayError::from(error),
+                Ok(settled) => panic!("the Discard must refuse before Admission, got {settled:?}"),
+            },
+            settlement_rows(&admin, &call.envelope.ids.receipt_id).await,
+        ));
+    }
+    let open_call = discard_call(&store, &scope, /*suffix*/ 0x7d5b, open).await;
+    let settled = close_editor_flow_draft(&store, &open_call).await.unwrap();
+    assert_eq!(
+        (observed, settled.outcome.receipt_result()),
+        (
+            vec![
+                (ReplayError::WriterIneligible, [0; 5]),
+                (ReplayError::MissingProject, [0; 5]),
+                (ReplayError::BindingConflict, [0; 5]),
+            ],
+            ReceiptResult::AuthoritativeApplied,
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_expansion_replays_from_its_proposal_revision_and_damaged_effect_rows_are_faults() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e40).await;
+    let first = expand_refused_edit_draft(&store, &call).await.unwrap();
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    let receipt_id = &first.ids.receipt_id;
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET acknowledgement_format = NULL, response_project = NULL
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let pre_capture = expand_refused_edit_draft(&store, &with_new_request_ids(&call)).await;
+    let mut damaged = Vec::new();
+    for statement in [
+        format!(
+            "UPDATE storyos.draft_close_events
+                SET author_action_sequence = author_action_sequence + 1000
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+        format!(
+            "DELETE FROM storyos.proposal_revisions AS revision
+               USING storyos.domain_receipts AS receipt
+              WHERE receipt.receipt_id = '{receipt_id}'
+                AND revision.revision_id = receipt.proposal_revision_ids[1]"
+        ),
+        format!("DELETE FROM storyos.author_action_entries WHERE receipt_id = '{receipt_id}'"),
+        format!("DELETE FROM storyos.draft_close_events WHERE receipt_id = '{receipt_id}'"),
+    ] {
+        run_without_foreign_keys(&admin, &statement).await;
+        let replayed = expand_refused_edit_draft(&store, &with_new_request_ids(&call)).await;
+        damaged.push(match replayed {
+            Err(error) => ReplayError::from(error),
+            Ok(settled) => panic!("a damaged expansion must not replay, got {settled:?}"),
+        });
+    }
+    admin
+        .batch_execute(&format!(
+            "UPDATE storyos.command_idempotency
+                SET canonical_command_digest = 'sha256:expandRefusedEditDraftToProposal:damaged'
+              WHERE idempotency_key = '{key}'"
+        ))
+        .await
+        .unwrap();
+    let other_digest = expand_refused_edit_draft(&store, &with_new_request_ids(&call)).await;
+    assert_eq!(pre_capture.unwrap(), first);
+    assert_eq!(damaged, vec![ReplayError::Unavailable; 4]);
+    assert!(matches!(
+        other_digest,
+        Err(ProjectCommandError::BindingConflict)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_expansion_refuses_before_admission_and_requires_the_client_writer_generation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, open) = refused_edit_expansion(&store, &admin, /*base*/ 0x8e50, "retained").await;
+    let stale_writer = ExpandRefusedEditDraftToProposalInput {
+        writer_generation: 2,
+        ..open.clone()
+    };
+    let missing = ExpandRefusedEditDraftToProposalInput {
+        draft_id: Uuid::now_v7().to_string(),
+        ..open.clone()
+    };
+    let (damaged_scope, damaged) =
+        refused_edit_expansion(&store, &admin, /*base*/ 0x8e60, "retained").await;
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "UPDATE storyos.draft_artifact_revisions
+                SET payload = jsonb_set(payload, '{{local_intent_sequence}}', '\"2\"')
+              WHERE draft_id = '{}'",
+            damaged.draft_id
+        ),
+    )
+    .await;
+    let mut observed = Vec::new();
+    for (scope, suffix, input) in [
+        (&scope, 0x8e59, stale_writer),
+        (&scope, 0x8e5a, missing),
+        (&damaged_scope, 0x8e69, damaged),
+    ] {
+        let call = expansion_call(&store, scope, suffix, input).await;
+        let refused = expand_refused_edit_draft(&store, &call).await;
+        observed.push((
+            match refused {
+                Err(error) => ReplayError::from(error),
+                Ok(settled) => {
+                    panic!("the expansion must refuse before Admission, got {settled:?}")
+                }
+            },
+            settlement_rows(&admin, &call.envelope.ids.receipt_id).await,
+        ));
+    }
+    let open_call = expansion_call(&store, &scope, /*suffix*/ 0x8e5b, open).await;
+    let settled = expand_refused_edit_draft(&store, &open_call).await.unwrap();
+    assert_eq!(
+        (observed, settled.outcome.receipt_result()),
+        (
+            vec![
+                (ReplayError::WriterIneligible, [0; 5]),
+                (ReplayError::MissingProject, [0; 5]),
+                (ReplayError::BindingConflict, [0; 5]),
+            ],
+            ReceiptResult::AuthoritativeApplied,
+        )
+    );
+}
+
+fn changed_admission_payload(receipt_id: &str) -> String {
+    format!(
+        "UPDATE storyos.author_command_admissions AS admission
+            SET command_payload = admission.command_payload || '{{\"damaged\": true}}'::jsonb
+           FROM storyos.domain_receipts AS receipt
+          WHERE receipt.receipt_id = '{receipt_id}'
+            AND admission.author_command_admission_id = receipt.author_command_admission_id"
+    )
+}
+
+fn changed_draft_reference(receipt_id: &str) -> String {
+    format!(
+        "UPDATE storyos.domain_receipts SET draft_artifact_refs = ARRAY['{}']
+          WHERE receipt_id = '{receipt_id}'",
+        Uuid::now_v7()
+    )
+}
+
+fn compensation_action(receipt_id: &str) -> String {
+    format!(
+        "UPDATE storyos.author_action_entries
+            SET disposition = 'compensation', compensated_source_sequence = author_action_sequence
+          WHERE receipt_id = '{receipt_id}'"
+    )
+}
+
+fn zero_authority_action(receipt_id: &str) -> String {
+    format!(
+        "INSERT INTO storyos.author_action_entries
+           (owner_user_id, project_id, author_action_sequence, disposition, receipt_id,
+            receipt_result_kind)
+         SELECT owner_user_id, project_id, 1000, 'forward', receipt_id, 'draft_closure_changed'
+           FROM storyos.domain_receipts WHERE receipt_id = '{receipt_id}'"
+    )
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_replay_binds_its_admission_and_draft_and_requires_its_author_action_shape() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut observed = Vec::new();
+    for (base, damage) in [
+        (0x9a00, changed_admission_payload as fn(&str) -> String),
+        (0x9a10, changed_draft_reference),
+        (0x9a20, compensation_action),
+    ] {
+        observed.push(
+            damaged_replay(
+                &store,
+                &admin,
+                &close_editor_flow_draft_call(&store, &admin, base).await,
+                damage,
+            )
+            .await,
+        );
+        observed.push(
+            damaged_replay(
+                &store,
+                &admin,
+                &expand_refused_edit_draft_call(&store, &admin, base + 0x100).await,
+                damage,
+            )
+            .await,
+        );
+    }
+    let (scope, tombstoned) =
+        refused_edit_draft(&store, &admin, /*base*/ 0x9a30, "tombstoned").await;
+    let refused_discard = discard_call(&store, &scope, /*suffix*/ 0x9a39, tombstoned).await;
+    observed.push(damaged_replay(&store, &admin, &refused_discard, zero_authority_action).await);
+    let (scope, tombstoned) =
+        refused_edit_expansion(&store, &admin, /*base*/ 0x9b30, "tombstoned").await;
+    let refused_expansion = expansion_call(&store, &scope, /*suffix*/ 0x9b39, tombstoned).await;
+    observed.push(damaged_replay(&store, &admin, &refused_expansion, zero_authority_action).await);
+    assert_eq!(
+        observed,
+        vec![
+            ReplayError::BindingConflict,
+            ReplayError::BindingConflict,
+            ReplayError::BindingConflict,
+            ReplayError::BindingConflict,
+            ReplayError::Unavailable,
+            ReplayError::Unavailable,
+            ReplayError::Unavailable,
+            ReplayError::Unavailable,
+        ]
+    );
+}
+
+/// Settles the call and replays it once after `damage`, which the CHECK constraints of `table`
+/// whose definition contains `checked` refuse.
+///
+/// The helper drops those constraints for the replay. Then it runs `repair` and restores them.
+async fn replay_past_checks<C: ProjectCommand + Clone>(
+    admin: &Client,
+    store: &PostgresProjectReader,
+    call: &CommandCall<C>,
+    table: &str,
+    checked: &str,
+    damage: &str,
+    repair: &str,
+) -> ReplayError {
+    let checks = admin
+        .query(
+            "SELECT conname::text, pg_get_constraintdef(oid) FROM pg_constraint
+              WHERE conrelid = $1::text::regclass AND contype = 'c'
+                AND strpos(pg_get_constraintdef(oid), $2) > 0",
+            &[&format!("storyos.{table}"), &checked],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| {
+            (
+                row.get::<_, String>(/*idx*/ 0),
+                row.get::<_, String>(/*idx*/ 1),
+            )
+        })
+        .collect::<Vec<_>>();
+    let dropped = checks
+        .iter()
+        .map(|(name, _)| format!("ALTER TABLE storyos.{table} DROP CONSTRAINT {name};"))
+        .collect::<String>();
+    run_without_foreign_keys(admin, &format!("{dropped} {damage}")).await;
+    let retry = with_new_request_ids(call);
+    let replayed = settle_project_command(store, &retry.envelope, &retry.input).await;
+    let restored = checks
+        .iter()
+        .map(|(name, check)| format!("ALTER TABLE storyos.{table} ADD CONSTRAINT {name} {check};"))
+        .collect::<String>();
+    run_without_foreign_keys(admin, &format!("{repair}; {restored}")).await;
+    let Err(error) = replayed else {
+        panic!("a replay with a damaged stored value must fail");
+    };
+    error.into()
+}
+
+/// Settles the call and replays it once with its Receipt payload set to `changed`, an SQL
+/// expression over `result_payload`.
+async fn replay_with_receipt_payload<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    changed: &str,
+) -> ReplayError {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the project command must settle");
+    };
+    let receipt_id = &call.envelope.ids.receipt_id;
+    let payload: String = admin
+        .query_one(
+            "SELECT result_payload::text FROM storyos.domain_receipts
+              WHERE receipt_id = $1::text::uuid",
+            &[receipt_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    replay_past_checks(
+        admin,
+        store,
+        call,
+        "domain_receipts",
+        "result_payload",
+        &format!(
+            "UPDATE storyos.domain_receipts SET result_payload = {changed}
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+        &format!(
+            "UPDATE storyos.domain_receipts SET result_payload = '{payload}'::jsonb
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+    )
+    .await
+}
+
+/// Settles the call and replays it once with an unknown value in one preserved column of its
+/// effect row, which `receipt_column` binds to the Receipt.
+async fn replay_with_unknown_preserved_value<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    table: &str,
+    receipt_column: &str,
+    column: &str,
+) -> ReplayError {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the project command must settle");
+    };
+    let filter = format!(
+        "WHERE {receipt_column} = '{}'",
+        call.envelope.ids.receipt_id
+    );
+    let value: String = admin
+        .query_one(
+            &format!("SELECT {column} FROM storyos.{table} {filter}"),
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    replay_past_checks(
+        admin,
+        store,
+        call,
+        table,
+        column,
+        &format!("UPDATE storyos.{table} SET {column} = 'damaged' {filter}"),
+        &format!("UPDATE storyos.{table} SET {column} = '{value}' {filter}"),
+    )
+    .await
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_applied_replay_requires_the_payload_field_of_its_receipt() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0x9c00).await,
+            "result_payload - 'rejection_reason'",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x9c10).await,
+            "result_payload - 'transition'",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x9c20).await,
+            "result_payload - 'transition'",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x9c30).await,
+            "result_payload - 'transition'",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x9c40).await,
+            "result_payload - 'transition'",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x9c50).await,
+            "result_payload - 'transition'",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x9c60).await,
+            "result_payload - 'transition'",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &close_editor_flow_draft_call(&store, &admin, /*base*/ 0x9c70).await,
+            "result_payload - 'reason'",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x9c80).await,
+            "result_payload - 'reason'",
+        )
+        .await,
+    ];
+    assert_eq!(observed, vec![ReplayError::Unavailable; 9]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_applied_replay_refuses_an_unknown_preserved_proposal_state() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0x9d00).await,
+            "proposal_rejection_receipts",
+            "rejection_receipt_id",
+            "preserved_closure",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0x9d10).await,
+            "proposal_withdrawals",
+            "withdrawal_receipt_id",
+            "preserved_validation",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &replan_proposal_call(&store, &admin, /*base*/ 0x9d20).await,
+            "proposal_replans",
+            "replan_receipt_id",
+            "preserved_generation",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &reopen_withdrawn_proposal_call(&store, &admin, /*base*/ 0x9d30).await,
+            "proposal_withdrawal_reopenings",
+            "reopen_receipt_id",
+            "preserved_operation_resolution",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &reopen_rejected_operations_call(&store, &admin, /*base*/ 0x9d40).await,
+            "proposal_operation_reopenings",
+            "reopen_receipt_id",
+            "preserved_closure",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &complete_ready_partial_proposal_call(&store, &admin, /*base*/ 0x9d50).await,
+            "proposal_generation_transitions",
+            "receipt_id",
+            "preserved_validation",
+        )
+        .await,
+        replay_with_unknown_preserved_value(
+            &store,
+            &admin,
+            &continue_proposal_generation_call(&store, &admin, /*base*/ 0x9d60).await,
+            "proposal_generation_transitions",
+            "receipt_id",
+            "preserved_operation_resolution",
+        )
+        .await,
+    ];
+    assert_eq!(observed, vec![ReplayError::Unavailable; 7]);
+}
+
+/// Sets one Receipt payload field of `call` to the JSON text `value`, replays the call, and
+/// returns the replay error.
+async fn replay_with_receipt_field<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    field: &str,
+    value: &str,
+) -> ReplayError {
+    replay_with_receipt_payload(
+        store,
+        admin,
+        call,
+        &format!("jsonb_set(result_payload, '{{{field}}}', '{value}'::jsonb)"),
+    )
+    .await
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_draft_replay_refuses_a_receipt_field_of_the_wrong_type_or_shape() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut observed = Vec::new();
+    for (base, field, value) in [
+        (0x9e00, "draft_revision_id", "123"),
+        (0x9e10, "draft_revision_id", "\"not a revision\""),
+        (0x9e20, "payload_digest", "{}"),
+        (0x9e30, "payload_digest", "\"damaged\""),
+        (0x9e40, "observed_closure", "\"damaged\""),
+        (0x9e50, "event_id", "7"),
+    ] {
+        observed.push(
+            replay_with_receipt_field(
+                &store,
+                &admin,
+                &close_editor_flow_draft_call(&store, &admin, base).await,
+                field,
+                value,
+            )
+            .await,
+        );
+        observed.push(
+            replay_with_receipt_field(
+                &store,
+                &admin,
+                &expand_refused_edit_draft_call(&store, &admin, base + 0x100).await,
+                field,
+                value,
+            )
+            .await,
+        );
+    }
+    for (base, changed) in [
+        (0xa000, "result_payload - 'current_target_revision_id'"),
+        (
+            0xa010,
+            "jsonb_set(result_payload, '{current_target_revision_id}', 'null'::jsonb)",
+        ),
+        (
+            0xa020,
+            "jsonb_set(result_payload, '{current_target_revision_id}', '9'::jsonb)",
+        ),
+    ] {
+        observed.push(
+            replay_with_receipt_payload(
+                &store,
+                &admin,
+                &expand_refused_edit_draft_call(&store, &admin, base).await,
+                changed,
+            )
+            .await,
+        );
+    }
+    assert_eq!(observed, vec![ReplayError::Unavailable; 15]);
+}
+
+/// Settles the call and replays it once with its Activity payload set to `changed`, an SQL
+/// expression over `payload`.
+async fn replay_with_activity_payload<C: ProjectCommand + Clone>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    call: &CommandCall<C>,
+    changed: &str,
+) -> ReplayError {
+    let Ok(_) = settle_project_command(store, &call.envelope, &call.input).await else {
+        panic!("the project command must settle");
+    };
+    let receipt_id = &call.envelope.ids.receipt_id;
+    let payload: String = admin
+        .query_one(
+            "SELECT payload::text FROM storyos.project_activity_event_payloads
+              WHERE receipt_id = $1::text::uuid",
+            &[receipt_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    replay_past_checks(
+        admin,
+        store,
+        call,
+        "project_activity_event_payloads",
+        "payload",
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads SET payload = {changed}
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads SET payload = '{payload}'::jsonb
+              WHERE receipt_id = '{receipt_id}'"
+        ),
+    )
+    .await
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_activity_replay_refuses_a_missing_null_or_malformed_required_field() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        // A required field that is null or absent.
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &update_project_call(&store, /*base*/ 0xa100).await,
+            "jsonb_set(payload, '{title}', 'null'::jsonb)",
+        )
+        .await,
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &create_volume_call(&store, /*base*/ 0xa110).await,
+            "payload - 'volume_id'",
+        )
+        .await,
+        // An identity that is not canonical UUID text.
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0xa120).await,
+            "jsonb_set(payload, '{chapter_id}', '\"not a chapter\"'::jsonb)",
+        )
+        .await,
+        // A number that is not unsigned decimal text.
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &update_volume_call(&store, /*base*/ 0xa130).await,
+            "jsonb_set(payload, '{order}', '\"01\"'::jsonb)",
+        )
+        .await,
+        // A nullable field that is absent.
+        replay_with_activity_payload(
+            &store,
+            &admin,
+            &delete_chapter_call(&store, /*base*/ 0xa140).await,
+            "payload - 'current_chapter_id'",
+        )
+        .await,
+    ];
+    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_receipt_replay_refuses_a_null_or_zero_historical_order_and_a_zero_shape_value() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut observed = vec![
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &create_volume_call(&store, /*base*/ 0xa200).await,
+            "jsonb_set(result_payload, '{order}', 'null'::jsonb)",
+        )
+        .await,
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &create_chapter_call(&store, /*base*/ 0xa210).await,
+            "jsonb_set(result_payload, '{order}', '\"0\"'::jsonb)",
+        )
+        .await,
+    ];
+    for (base, changed) in [
+        (
+            0xa220,
+            format!(
+                "jsonb_set(result_payload, '{{event_id}}', '\"{}\"'::jsonb)",
+                Uuid::now_v7()
+            ),
+        ),
+        (0xa230, "result_payload - 'event_id'".to_owned()),
+    ] {
+        let (scope, tombstoned) = refused_edit_draft(&store, &admin, base, "tombstoned").await;
+        let refused = discard_call(&store, &scope, base + 9, tombstoned).await;
+        observed.push(replay_with_receipt_payload(&store, &admin, &refused, &changed).await);
+    }
+    let (scope, tombstoned) =
+        refused_edit_expansion(&store, &admin, /*base*/ 0xa240, "tombstoned").await;
+    let refused = expansion_call(&store, &scope, /*suffix*/ 0xa249, tombstoned).await;
+    observed.push(
+        replay_with_receipt_payload(
+            &store,
+            &admin,
+            &refused,
+            "jsonb_set(result_payload, '{proposal_id}', '7'::jsonb)",
+        )
+        .await,
+    );
+    assert_eq!(observed, vec![ReplayError::Unavailable; 5]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_current_chapter_replay_refuses_a_damaged_newest_tree_revision() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = set_current_chapter_call(&store, /*base*/ 0xa300).await;
+    let Ok(_) = settle_project_command(&store, &call.envelope, &call.input).await else {
+        panic!("the Current Chapter selection must settle");
+    };
+    let newest = admin
+        .query_one(
+            "SELECT payload.project_activity_position::text,
+                    (payload.payload->'tree_revision')::text
+               FROM storyos.project_activity_event_payloads AS payload
+               JOIN storyos.domain_receipts AS receipt
+                 ON (receipt.owner_user_id, receipt.project_id) =
+                    (payload.owner_user_id, payload.project_id)
+              WHERE receipt.receipt_id = $1::text::uuid AND payload.payload ? 'tree_revision'
+              ORDER BY payload.project_activity_position DESC
+              LIMIT 1",
+            &[&call.envelope.ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    let (position, tree_revision): (String, String) =
+        (newest.get(/*idx*/ 0), newest.get(/*idx*/ 1));
+    let at_newest = format!(
+        "WHERE (owner_user_id, project_id, project_activity_position) =
+               ('{}', '{}', {position})",
+        call.envelope.project_scope.owner_user_id.as_ref(),
+        call.envelope.project_scope.project_id.as_ref()
+    );
+    let observed = replay_past_checks(
+        &admin,
+        &store,
+        &call,
+        "project_activity_event_payloads",
+        "tree_revision",
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads
+                SET payload = jsonb_set(payload, '{{tree_revision}}', '3'::jsonb) {at_newest}"
+        ),
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads
+                SET payload = jsonb_set(payload, '{{tree_revision}}', '{tree_revision}'::jsonb)
+                {at_newest}"
+        ),
+    )
+    .await;
+    assert_eq!(observed, ReplayError::Unavailable);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_exact_retry_returns_the_uppercase_client_identities_of_the_first_use() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let scope = seed_project(&store, "a400").await;
+    let volume_id = new_volume(
+        &store, &scope, /*suffix*/ 0xa401, /*expected_tree_revision*/ 1,
+    )
+    .await;
+    let deletion = DeleteVolumeInput {
+        volume_id: VolumeId::new(volume_id.as_ref().to_uppercase()),
+        expected_tree_revision: 2,
+    };
+    let deletion = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xa409,
+        &DELETE_VOLUME,
+        deletion,
+    )
+    .await;
+    let (scope, chapter_a, chapter_b, revision_b, editor_session_id) =
+        two_chapter_writer(&store, /*base*/ 0xa410).await;
+    let selection = SetCurrentChapterInput {
+        editor_session_id: EditorSessionId::new(editor_session_id.to_uppercase()),
+        chapter_id: chapter_b.to_uppercase(),
+        expected_current_chapter_id: chapter_a,
+        expected_target_revision_id: revision_b,
+    };
+    let selection = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xa419,
+        &SET_CURRENT_CHAPTER,
+        selection,
+    )
+    .await;
+    let (scope, ..) = two_chapter_writer(&store, /*base*/ 0xa420).await;
+    let observer = open_session(&store, &scope, "a425").await;
+    let takeover = TakeOverProjectWriterInput {
+        editor_session_id: EditorSessionId::new(observer.to_uppercase()),
+        observed_writer_generation: 1,
+        editor_contract_revision: storyos_contracts::EDITOR_CONTRACT_REVISION.to_owned(),
+    };
+    let takeover = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xa429,
+        &TAKE_OVER_PROJECT_WRITER,
+        takeover,
+    )
+    .await;
+    let observed = vec![
+        replayed_outcome(&store, &admin, &deletion, delete_volume)
+            .await
+            .0,
+        replayed_outcome(
+            &store,
+            &admin,
+            &selection,
+            async |store: &PostgresProjectReader, call: &CommandCall<SetCurrentChapterInput>| {
+                store.set_current_chapter(&call.envelope, &call.input).await
+            },
+        )
+        .await
+        .0,
+        replayed_outcome(&store, &admin, &takeover, take_over_project_writer)
+            .await
+            .0,
+    ];
+    assert_eq!(
+        observed,
+        vec![
+            ReceiptResult::AuthoritativeApplied.code().to_owned(),
+            ReceiptResult::AuthoritativeApplied.code().to_owned(),
+            ReceiptResult::NoEffect.code().to_owned(),
+        ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_chapter_deletion_without_the_historical_prior_current_field_replays() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let call = delete_chapter_call(&store, /*base*/ 0xa500).await;
+    delete_chapter(&store, &call).await.unwrap();
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "UPDATE storyos.project_activity_event_payloads
+                SET payload = payload - 'prior_current_chapter_id'
+              WHERE receipt_id = '{}'",
+            call.envelope.ids.receipt_id
+        ),
+    )
+    .await;
+    let replayed = delete_chapter(&store, &with_new_request_ids(&call)).await;
+    assert!(
+        replayed.is_ok(),
+        "the historical record must replay: {replayed:?}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_pre_capture_effect_row_does_not_hide_a_damaged_author_action() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        damaged_replay(
+            &store,
+            &admin,
+            &reject_proposal_operations_call(&store, &admin, /*base*/ 0xa600).await,
+            |receipt_id| {
+                format!(
+                    "UPDATE storyos.proposal_rejection_receipts
+                        SET preserved_generation = NULL, preserved_validation = NULL,
+                            preserved_closure = NULL
+                      WHERE rejection_receipt_id = '{receipt_id}';
+                     DELETE FROM storyos.author_action_entries WHERE receipt_id = '{receipt_id}'"
+                )
+            },
+        )
+        .await,
+        damaged_replay(
+            &store,
+            &admin,
+            &withdraw_proposal_call(&store, &admin, /*base*/ 0xa610).await,
+            |receipt_id| {
+                format!(
+                    "UPDATE storyos.proposal_withdrawals
+                        SET preserved_generation = NULL, preserved_validation = NULL
+                      WHERE withdrawal_receipt_id = '{receipt_id}';
+                     {}",
+                    compensation_action(receipt_id)
+                )
+            },
+        )
+        .await,
+    ];
+    assert_eq!(observed, vec![ReplayError::Unavailable; 2]);
 }

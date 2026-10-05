@@ -13,8 +13,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     Admission, AppliedResult, ChapterSelection, ChapterSelectionWrite, Classification,
-    CommandIsolation, CommandSpec, EditorAdmission, LockedProject, MissingAdmission,
-    ProjectCommand, ProjectResponse, ReceiptHeads, settle_project_command, unavailable,
+    CommandIsolation, CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission,
+    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt,
+    settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::CurrentChapterSequences;
 
@@ -35,10 +36,12 @@ pub(crate) struct ChapterHead(String);
 impl ProjectCommand for SetCurrentChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "setCurrentChapter",
-        applied_result: AppliedResult::AuthoritativeApplied,
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "current_chapter_set",
+        replay_effect: ReplayEffect::NoQuery,
     };
     type Profile = ChapterSelection;
     type Response = ProjectResponse;
@@ -132,12 +135,15 @@ impl ProjectCommand for SetCurrentChapterInput {
                 editor_session_id: self.editor_session_id.as_ref().to_owned(),
                 chapter_object_id,
                 expected_authoritative_revision_id,
+                target_refs: Vec::new(),
+                writer: EditorWriter::Current,
             }),
             heads: ReceiptHeads {
                 expected: vec![self.expected_target_revision_id.clone()],
                 prior: vec![resulting_head.clone()],
                 resulting: vec![resulting_head],
             },
+            zero_receipt: ZeroReceipt::Reason,
         })
     }
 
@@ -164,8 +170,8 @@ impl ProjectCommand for SetCurrentChapterInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<CurrentChapterSelected, ReplayFault> {
         Ok(CurrentChapterSelected {
-            current_chapter_id: replay.activity_text("current_chapter_id")?,
-            base_snapshot_id: replay.activity_text("base_snapshot_id")?,
+            current_chapter_id: replay.activity_uuid("current_chapter_id")?,
+            base_snapshot_id: replay.activity_uuid("base_snapshot_id")?,
         })
     }
 }

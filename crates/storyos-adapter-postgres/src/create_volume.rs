@@ -15,8 +15,9 @@ use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
-    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, Structural,
-    StructureIdentity, StructureWrite, WriterBase, settle_project_command, unavailable,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, RateLimitedChallenge,
+    ReplayEffect, Structural, StructureIdentity, StructureWrite, WriterBase,
+    settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
 
@@ -37,10 +38,12 @@ pub(crate) struct NewVolumeOrder(u64);
 impl ProjectCommand for CreateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createVolume",
-        applied_result: AppliedResult::AuthoritativeApplied,
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "volume_created",
+        replay_effect: ReplayEffect::NoQuery,
     };
     type Profile = Structural;
     type Response = ProjectResponse;
@@ -153,13 +156,14 @@ impl ProjectCommand for CreateVolumeInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<VolumeCreated, ReplayFault> {
         let tree_revision = replay.activity_u64("tree_revision")?;
-        let volume_id = replay.activity_text("volume_id")?;
-        let order = match replay.receipt_text("order") {
-            Some(order) => match order.parse::<u64>() {
-                Ok(0) => return Err(ReplayFault::BindingConflict),
-                Ok(rank) => CreateVolumePublicOrder::CanonicalSiblingOrder(rank),
-                Err(error) => return Err(ReplayFault::Unavailable(Box::new(error))),
-            },
+        let volume_id = replay.activity_uuid("volume_id")?;
+        let order = match replay.receipt_historical_decimal("order")? {
+            Some(0) => {
+                return Err(ReplayFault::Unavailable(
+                    "the stored sibling order is zero".into(),
+                ));
+            }
+            Some(rank) => CreateVolumePublicOrder::CanonicalSiblingOrder(rank),
             None => CreateVolumePublicOrder::HistoricalCreateVolumeAck,
         };
         Ok(VolumeCreated {

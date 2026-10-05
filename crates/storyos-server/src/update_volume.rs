@@ -3,7 +3,7 @@ use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
     BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
-    SettledReceipt, admit, controlled_project, positive, structure_title,
+    SettledReceipt, TargetValidation, admit, controlled_project, positive, structure_title,
 };
 use super::contract_reason::contract_reason;
 use super::*;
@@ -15,9 +15,9 @@ const UPDATE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     path: contracts::UPDATE_VOLUME_PATH,
     schema_id: contracts::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
     digest_profile: contracts::UPDATE_VOLUME_DIGEST_PROFILE,
-    receipt_kind: contracts::DomainReceiptCommandKind::UpdateVolume,
     revision_mismatch: RevisionMismatch::InvalidRequest,
     body_validation: BodyValidation::AfterRevisionCheck,
+    target_validation: TargetValidation::BeforeContentType,
     schema_mismatch: SchemaMismatch::InvalidRequest,
     problem_mapping: ProblemMapping::Standard,
 };
@@ -75,6 +75,7 @@ pub(super) async fn update_volume(
     };
     let ack = admitted.acknowledgement(
         &UPDATE_VOLUME,
+        contracts::DomainReceiptCommandKind::UpdateVolume,
         SettledReceipt {
             ids: settlement.ids,
             receipt_created_at: settlement.receipt_created_at,

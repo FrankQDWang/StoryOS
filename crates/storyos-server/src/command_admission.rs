@@ -25,10 +25,10 @@ pub(super) struct ProjectCommandRoute {
     pub(super) path: &'static str,
     pub(super) schema_id: &'static str,
     pub(super) digest_profile: &'static str,
-    pub(super) receipt_kind: contracts::DomainReceiptCommandKind,
     pub(super) revision_mismatch: RevisionMismatch,
     pub(super) schema_mismatch: SchemaMismatch,
     pub(super) body_validation: BodyValidation,
+    pub(super) target_validation: TargetValidation,
     pub(super) problem_mapping: ProblemMapping,
 }
 
@@ -42,6 +42,15 @@ pub(super) enum RevisionMismatch {
 pub(super) enum BodyValidation {
     AfterRevisionCheck,
     BeforeRevisionCheck,
+    /// The session, the challenge headers, and the challenge secret are checked before the body
+    /// is parsed. The body fields are validated after the revision check.
+    AfterChallengeHeaders,
+}
+
+/// When the path identities after the Project are validated, relative to the content type.
+pub(super) enum TargetValidation {
+    BeforeContentType,
+    AfterContentType,
 }
 
 /// The problem of a command schema that differs from the route schema.
@@ -105,6 +114,35 @@ project_command_request!(
     contracts::UpdateProjectAssistanceRequest,
     nested update_project_assistance_input
 );
+project_command_request!(
+    contracts::ReopenWithdrawnProposalRequest,
+    nested reopen_withdrawn_proposal_input
+);
+project_command_request!(
+    contracts::RejectProposalOperationsRequest,
+    nested reject_proposal_operations_input
+);
+project_command_request!(
+    contracts::CloseEditorFlowDraftRequest,
+    nested close_editor_flow_draft_input
+);
+project_command_request!(contracts::ReplanProposalRequest, nested replan_proposal_input);
+project_command_request!(
+    contracts::ReopenRejectedOperationsRequest,
+    nested reopen_rejected_operations_input
+);
+project_command_request!(
+    contracts::CompleteReadyPartialProposalRequest,
+    nested complete_ready_partial_proposal_input
+);
+project_command_request!(
+    contracts::ContinueProposalGenerationRequest,
+    nested continue_proposal_generation_input
+);
+project_command_request!(
+    contracts::ExpandRefusedEditDraftRequest,
+    nested expand_refused_edit_draft_to_proposal_input
+);
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
     fn command_schema(&self) -> &str {
@@ -129,12 +167,67 @@ impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
     }
 }
 
+impl ProjectCommandRequest for contracts::WithdrawProposalRequest {
+    fn command_schema(&self) -> &str {
+        &self.command_schema
+    }
+
+    fn client_contract_revision(&self) -> &str {
+        match &self.withdraw_proposal_input {
+            contracts::WithdrawProposalInput::Author {
+                client_contract_revision,
+                ..
+            }
+            | contracts::WithdrawProposalInput::CurrentProducer {
+                client_contract_revision,
+                ..
+            } => client_contract_revision,
+        }
+    }
+
+    fn security_policy_revision(&self) -> &str {
+        match &self.withdraw_proposal_input {
+            contracts::WithdrawProposalInput::Author {
+                security_policy_revision,
+                ..
+            }
+            | contracts::WithdrawProposalInput::CurrentProducer {
+                security_policy_revision,
+                ..
+            } => security_policy_revision,
+        }
+    }
+
+    fn correlation_id(&self) -> &str {
+        match &self.withdraw_proposal_input {
+            contracts::WithdrawProposalInput::Author { correlation_id, .. }
+            | contracts::WithdrawProposalInput::CurrentProducer { correlation_id, .. } => {
+                correlation_id
+            }
+        }
+    }
+}
+
+/// Whether a request carries the anti-forgery nonce of a Command Challenge.
+pub(super) enum AntiForgery {
+    Required,
+    /// The request consumes no Command Challenge, as the current-producer Withdrawal (ADR 0043).
+    Absent,
+}
+
+/// One authenticated project command request and its parsed body.
+pub(super) struct ProjectCommandBody<R> {
+    pub(super) body: R,
+    scope: ApplicationScope,
+    headers: HeaderMap,
+}
+
 /// One admitted project command, ready for its Core Transition.
 pub(super) struct Admitted<I> {
     pub(super) store: PostgresProjectReader,
     pub(super) envelope: ProjectCommandEnvelope,
     pub(super) input: I,
-    digest_hex: String,
+    pub(super) digest_hex: String,
 }
 
 /// The acknowledgement fields that every project command response carries.
@@ -158,6 +251,20 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
     route: &ProjectCommandRoute,
     input: F,
 ) -> Result<Admitted<I>, ApiError> {
+    let read = read_body(state, project_id, targets, request, route).await?;
+    admit_body(state, read, route, AntiForgery::Required, input).await
+}
+
+/// Authenticates one project command request and parses its body.
+///
+/// `targets` are the path identities after the Project.
+pub(super) async fn read_body<R: DeserializeOwned>(
+    state: &ServerState,
+    project_id: &str,
+    targets: &[&str],
+    request: Request,
+    route: &ProjectCommandRoute,
+) -> Result<ProjectCommandBody<R>, ApiError> {
     let (parts, body_stream) = request.into_parts();
     let headers = parts.headers;
     let scope = authenticate_scope(
@@ -166,18 +273,99 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
         project_id,
         RequestOriginPolicy::StateChanging,
     )?;
-    for target in targets {
-        valid_uuid(target)?;
+    let validate_targets = || targets.iter().try_for_each(|target| valid_uuid(target));
+    match route.target_validation {
+        TargetValidation::BeforeContentType => {
+            validate_targets()?;
+            validate_json_content_type(&headers)?;
+        }
+        TargetValidation::AfterContentType => {
+            validate_json_content_type(&headers)?;
+            validate_targets()?;
+        }
     }
-    validate_json_content_type(&headers)?;
     let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
         .await
         .map_err(|_| payload_too_large())?;
+    match route.body_validation {
+        BodyValidation::AfterRevisionCheck | BodyValidation::BeforeRevisionCheck => {}
+        BodyValidation::AfterChallengeHeaders => {
+            bound_session(state, &headers)?;
+            challenge_headers(state, &headers, &AntiForgery::Required)?;
+        }
+    }
     let body = serde_json::from_slice::<R>(&bytes).map_err(|_| invalid_request_shape())?;
-    let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
+    Ok(ProjectCommandBody {
+        body,
+        scope,
+        headers,
+    })
+}
+
+/// The session handle and the live Client Session Binding of the request.
+fn bound_session<'a>(
+    state: &ServerState,
+    headers: &'a HeaderMap,
+) -> Result<(&'a str, ClientSessionBinding), ApiError> {
+    let session_handle = session_cookie(headers).ok_or_else(authentication_required)?;
     let session = state
         .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
+    Ok((session_handle, session))
+}
+
+/// The idempotency key, the anti-forgery nonce, and the Command Challenge secret of the request.
+fn challenge_headers<'a>(
+    state: &'a ServerState,
+    headers: &'a HeaderMap,
+    anti_forgery: &AntiForgery,
+) -> Result<(&'a str, &'a str, &'a [u8]), ApiError> {
+    let idempotency_key = exact_header(headers, "idempotency-key")?;
+    let nonce = match anti_forgery {
+        AntiForgery::Required => {
+            let nonce = exact_header(headers, "x-storyos-anti-forgery")?;
+            if nonce.len() != 64
+                || !nonce
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            {
+                return Err(invalid_request());
+            }
+            nonce
+        }
+        AntiForgery::Absent => "",
+    };
+    if !valid_uuid_v7(idempotency_key) {
+        return Err(invalid_request());
+    }
+    let secret = state
+        .config
+        .project_command_challenge_secret
+        .as_deref()
+        .filter(|secret| secret.len() >= 32)
+        .ok_or_else(challenge_store_unavailable)?;
+    Ok((idempotency_key, nonce, secret))
+}
+
+/// Binds one parsed project command body to its Command Challenge.
+///
+/// `input` validates and parses the command-specific body fields.
+pub(super) async fn admit_body<
+    R: ProjectCommandRequest,
+    I,
+    F: FnOnce(&R) -> Result<I, ApiError>,
+>(
+    state: &ServerState,
+    ProjectCommandBody {
+        body,
+        scope,
+        headers,
+    }: ProjectCommandBody<R>,
+    route: &ProjectCommandRoute,
+    anti_forgery: AntiForgery,
+    input: F,
+) -> Result<Admitted<I>, ApiError> {
+    let (session_handle, session) = bound_session(state, &headers)?;
     if !body.targets_route(route.schema_id) {
         return Err(match route.schema_mismatch {
             SchemaMismatch::InvalidRequest => invalid_request(),
@@ -201,7 +389,7 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
         Ok::<I, ApiError>(input)
     };
     let input = match route.body_validation {
-        BodyValidation::AfterRevisionCheck => {
+        BodyValidation::AfterRevisionCheck | BodyValidation::AfterChallengeHeaders => {
             check_revision()?;
             validate_body(input)?
         }
@@ -211,22 +399,7 @@ pub(super) async fn admit<R: ProjectCommandRequest, I, F: FnOnce(&R) -> Result<I
             input
         }
     };
-    let idempotency_key = exact_header(&headers, "idempotency-key")?;
-    let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
-    if !valid_uuid_v7(idempotency_key)
-        || nonce.len() != 64
-        || !nonce
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err(invalid_request());
-    }
-    let secret = state
-        .config
-        .project_command_challenge_secret
-        .as_deref()
-        .filter(|secret| secret.len() >= 32)
-        .ok_or_else(challenge_store_unavailable)?;
+    let (idempotency_key, nonce, secret) = challenge_headers(state, &headers, &anti_forgery)?;
     let binding_ref = session_binding_ref(secret, session_handle);
     let canonical_command_bytes = serde_json::to_value(&body)
         .and_then(|value| serde_json::to_vec(&value))
@@ -289,6 +462,7 @@ impl<I> Admitted<I> {
     pub(super) fn acknowledgement(
         &self,
         route: &ProjectCommandRoute,
+        receipt_kind: contracts::DomainReceiptCommandKind,
         settled: SettledReceipt,
     ) -> Acknowledgement {
         let project_scope = contract_scope(&self.envelope.project_scope);
@@ -307,7 +481,7 @@ impl<I> Admitted<I> {
             receipt: contracts::DomainReceipt {
                 receipt_id: settled.ids.receipt_id,
                 project_scope,
-                command_kind: route.receipt_kind.clone(),
+                command_kind: receipt_kind,
                 command_digest: contracts::DigestValue {
                     algorithm: contracts::DigestAlgorithm::Sha256,
                     profile: route.digest_profile.to_owned(),
@@ -386,11 +560,14 @@ impl ProjectCommandRoute {
             ProblemMapping::Route(route_problem) => return route_problem(error),
         };
         match error {
-            ProjectCommandError::BindingConflict => problem(
-                StatusCode::CONFLICT,
-                "idempotency_binding_conflict",
-                &format!("The {name} binding conflicts."),
-            ),
+            // A command that requires a writer generation declares its own problem mapping.
+            ProjectCommandError::BindingConflict | ProjectCommandError::WriterIneligible => {
+                problem(
+                    StatusCode::CONFLICT,
+                    "idempotency_binding_conflict",
+                    &format!("The {name} binding conflicts."),
+                )
+            }
             ProjectCommandError::HistoricalAcknowledgementUnavailable => problem(
                 StatusCode::CONFLICT,
                 "historical_acknowledgement_unavailable",

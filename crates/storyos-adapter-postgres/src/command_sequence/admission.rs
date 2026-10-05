@@ -4,7 +4,8 @@ use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use tokio_postgres::Client;
 
 use super::{
-    Admission, CommandSpec, EditorAdmission, MissingAdmission, TakeoverAdmission, unavailable,
+    Admission, CommandSpec, EditorAdmission, EditorWriter, MissingAdmission, TakeoverAdmission,
+    unavailable,
 };
 
 /// Inserts the Admission after the consumed Command Challenge. An insert without a row gives the command's error.
@@ -70,7 +71,13 @@ pub(super) async fn insert_admission(
             editor_session_id,
             chapter_object_id,
             expected_authoritative_revision_id,
+            target_refs,
+            writer,
         }) => {
+            let client_writer_generation = match writer {
+                EditorWriter::Current => None,
+                EditorWriter::ClientGeneration(generation) => Some(generation.to_string()),
+            };
             client
                 .execute(
                     "INSERT INTO storyos.author_command_admissions
@@ -89,7 +96,7 @@ pub(super) async fn insert_admission(
                     session.client_contract_revision, session.security_policy_revision,
                     'explicit_editor_command', $7, $8, $9, $19,
                     $10, $11::text::uuid, challenge.consumed_at, challenge.expires_at,
-                    $12::text::uuid, $13::text::uuid, $14::text::uuid, '{}'::uuid[], '{}'::text[],
+                    $12::text::uuid, $13::text::uuid, $14::text::uuid, '{}'::uuid[], $21::text[],
                     NULL, session.client_contract_revision, NULL, NULL, NULL,
                     convert_from($15::bytea, 'UTF8')::jsonb
                FROM storyos.editor_sessions AS session
@@ -114,7 +121,8 @@ pub(super) async fn insert_admission(
                 AND session.client_session_generation = $6::text::numeric
                 AND session.client_contract_revision = $17
                 AND session.security_policy_revision = $18
-                AND challenge.consumed_at IS NOT NULL",
+                AND challenge.consumed_at IS NOT NULL
+                AND ($20::text IS NULL OR writer.writer_generation = $20::text::numeric)",
                     &[
                         &owner_user_id,
                         &project_id,
@@ -135,6 +143,8 @@ pub(super) async fn insert_admission(
                         &binding.client_contract_revision,
                         &binding.security_policy_revision,
                         &spec.kind,
+                        &client_writer_generation,
+                        target_refs,
                     ],
                 )
                 .await
@@ -219,6 +229,7 @@ pub(super) async fn insert_admission(
         return Err(match spec.missing_admission {
             MissingAdmission::InvalidChallenge => ProjectCommandError::InvalidChallenge,
             MissingAdmission::BindingConflict => ProjectCommandError::BindingConflict,
+            MissingAdmission::InvalidWriter => ProjectCommandError::WriterIneligible,
         });
     }
     Ok(())

@@ -8,7 +8,7 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use super::records::insert_applied_activity;
-use super::{LockedProject, SettlementProfile, unavailable};
+use super::{CommandSpec, LockedProject, SettlementProfile, unavailable};
 use crate::command_replay::{CommandReplay, ReplayFault};
 
 /// The applied writes that one `ActivityOnly` command returns.
@@ -63,14 +63,14 @@ impl SettlementProfile for ActivityOnly {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
-        activity_kind: &'static str,
+        spec: &CommandSpec,
         sequences: ActivitySequences,
         write: ActivityWrite<E>,
     ) -> Result<ActivityApplied<E>, ProjectCommandError> {
         insert_applied_activity(
             client,
             envelope,
-            activity_kind,
+            spec.activity_kind,
             sequences.project_activity_position,
             &sequences.project_activity_event_id,
             write.activity,
@@ -85,11 +85,11 @@ impl SettlementProfile for ActivityOnly {
     }
 
     fn replay<E: Send>(
-        effect: E,
+        decode: impl FnOnce() -> Result<E, ReplayFault>,
         replay: &CommandReplay,
     ) -> Result<ActivityApplied<E>, ReplayFault> {
         Ok(ActivityApplied {
-            effect,
+            effect: decode()?,
             project_activity_position: replay.project_activity_position,
             project_activity_event_id: replay.project_activity_event_id.clone(),
         })

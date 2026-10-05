@@ -12,6 +12,7 @@ use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
 
+mod action_only;
 mod activity_only;
 mod admission;
 mod chapter_selection;
@@ -19,6 +20,7 @@ mod records;
 mod response;
 mod structural;
 use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
+pub(crate) use action_only::{ActionOnly, ActionSequence};
 pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
@@ -51,6 +53,17 @@ pub(crate) struct EditorAdmission {
     pub(crate) editor_session_id: String,
     pub(crate) chapter_object_id: Option<String>,
     pub(crate) expected_authoritative_revision_id: Option<String>,
+    /// The Manuscript Block references that the command targets, in command order.
+    pub(crate) target_refs: Vec<String>,
+    pub(crate) writer: EditorWriter,
+}
+
+/// The writer generation that an editor Admission insert requires of the Editor Session.
+pub(crate) enum EditorWriter {
+    /// The session holds the current writer generation.
+    Current,
+    /// The session holds the current writer generation, and it is equal to the client value.
+    ClientGeneration(u64),
 }
 
 /// The head arrays that the Domain Receipt of every outcome records.
@@ -61,23 +74,54 @@ pub(crate) struct ReceiptHeads {
     pub(crate) resulting: Vec<String>,
 }
 
+/// The Proposal Revision, Draft, and lifecycle references that one Domain Receipt records.
+#[derive(Default)]
+pub(crate) struct ReceiptRefs {
+    pub(crate) proposal_revision_ids: Vec<String>,
+    pub(crate) draft_artifact_refs: Vec<String>,
+    pub(crate) artifact_lifecycle_event_refs: Vec<String>,
+    /// The JSON text of the source Draft disposition, when the Receipt records one.
+    pub(crate) source_draft_disposition: Option<String>,
+}
+
 /// The error of an Admission insert that inserts no row.
 pub(crate) enum MissingAdmission {
     InvalidChallenge,
     BindingConflict,
+    /// The Editor Session does not hold the writer generation that the Admission requires.
+    InvalidWriter,
+}
+
+/// The error of a Command Challenge that the rate limit refuses.
+#[derive(Clone, Copy)]
+pub(crate) enum RateLimitedChallenge {
+    InvalidChallenge,
+    Unavailable,
 }
 
 /// The Domain Receipt result kind that an applied outcome of the command records.
-pub(crate) enum AppliedResult {
-    AuthoritativeApplied,
-}
+pub(crate) struct AppliedResult(&'static str);
 
 impl AppliedResult {
-    pub(crate) fn code(&self) -> &'static str {
-        match self {
-            Self::AuthoritativeApplied => "authoritative_applied",
-        }
+    /// The result kind of a change to Authoritative State or Project state.
+    pub(crate) const AUTHORITATIVE_APPLIED: Self = Self("authoritative_applied");
+
+    /// A result kind that the command declares for itself, for example `proposal_revised`.
+    pub(crate) const fn command(code: &'static str) -> Self {
+        Self(code)
     }
+
+    pub(crate) fn code(&self) -> &'static str {
+        self.0
+    }
+}
+
+/// The effect rows of the command that an exact retry reads in the replay transaction.
+pub(crate) enum ReplayEffect {
+    NoQuery,
+    /// One query that takes the owner, Project, and Receipt identities as `$1`, `$2`, and `$3`.
+    /// Its optional row holds one JSON object text.
+    Query(&'static str),
 }
 
 pub(crate) struct CommandSpec {
@@ -85,7 +129,9 @@ pub(crate) struct CommandSpec {
     pub(crate) applied_result: AppliedResult,
     pub(crate) isolation: CommandIsolation,
     pub(crate) missing_admission: MissingAdmission,
+    pub(crate) rate_limited: RateLimitedChallenge,
     pub(crate) activity_kind: &'static str,
+    pub(crate) replay_effect: ReplayEffect,
 }
 
 /// The Project row that the sequence locks before a command loads its own facts.
@@ -120,12 +166,17 @@ pub(crate) trait SettlementProfile {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-        activity_kind: &'static str,
+        spec: &CommandSpec,
         sequences: Self::Sequences,
         write: Self::Write<E>,
     ) -> impl Future<Output = Result<Self::Applied<E>, ProjectCommandError>> + Send;
 
-    fn replay<E: Send>(effect: E, replay: &CommandReplay) -> Result<Self::Applied<E>, ReplayFault>;
+    /// Checks the authority evidence of the profile, and only then runs `decode`, so a command
+    /// decode never hides damaged authority evidence.
+    fn replay<E: Send>(
+        decode: impl FnOnce() -> Result<E, ReplayFault>,
+        replay: &CommandReplay,
+    ) -> Result<Self::Applied<E>, ReplayFault>;
 }
 
 /// A Core Transition Outcome whose applied value carries the locked facts that `apply` reuses.
@@ -141,6 +192,7 @@ pub(crate) struct Classification<C: ProjectCommand + ?Sized> {
     pub(crate) outcome: Classified<C>,
     pub(crate) admission: Admission,
     pub(crate) heads: ReceiptHeads,
+    pub(crate) zero_receipt: ZeroReceipt<C::ZeroEffect>,
 }
 
 impl<C: ProjectCommand + ?Sized> Classification<C> {
@@ -150,8 +202,23 @@ impl<C: ProjectCommand + ?Sized> Classification<C> {
             outcome,
             admission: Admission::ExplicitProjectCommand,
             heads: ReceiptHeads::default(),
+            zero_receipt: ZeroReceipt::Reason,
         }
     }
+}
+
+/// The Domain Receipt payload and references of a zero-authority outcome.
+pub(crate) enum ZeroReceipt<Z> {
+    /// The payload `{"reason": code}` and no references.
+    Reason,
+    /// The payload fields that the command observed, which the sequence completes with `reason`.
+    ///
+    /// The settlement returns `effect`, unless the outcome writes effect rows, which give it.
+    Observed {
+        fields: serde_json::Map<String, serde_json::Value>,
+        refs: ReceiptRefs,
+        effect: Z,
+    },
 }
 
 /// The scope sequences that one command's settlement profile allocates.
@@ -165,6 +232,15 @@ pub(crate) enum ZeroOutcome<'a, C: ProjectCommand + ?Sized> {
     Refused(&'a C::Refusal),
 }
 
+/// The rows that one zero-authority outcome writes besides its Admission, Receipt, and fence.
+pub(crate) enum ZeroAuthorityRows {
+    None,
+    /// Effect rows without a Project Activity record.
+    Effect,
+    /// Effect rows and one Activity record at a position that the sequence allocates.
+    EffectWithActivity,
+}
+
 /// The effect and the whole Activity payload of a zero-authority outcome that writes effect rows.
 pub(crate) struct ZeroAuthorityWrite<Z> {
     pub(crate) effect: Z,
@@ -175,6 +251,10 @@ pub(crate) struct ZeroAuthorityWrite<Z> {
 /// The applied writes that one command returns for its settlement profile.
 pub(crate) type ProfileWrite<C> =
     <<C as ProjectCommand>::Profile as SettlementProfile>::Write<<C as ProjectCommand>::Effect>;
+
+/// The applied value that one command's settlement profile returns after its authority records.
+pub(crate) type ProfileApplied<C> =
+    <<C as ProjectCommand>::Profile as SettlementProfile>::Applied<<C as ProjectCommand>::Effect>;
 
 /// One project command: its declared profiles, its locked facts, its own effect rows, and its
 /// applied effect decoder.
@@ -191,9 +271,9 @@ pub(crate) trait ProjectCommand: Sync {
     type Applied: Send;
     type Plan: Send;
     type Effect: Send;
-    type NoEffect: ReasonCode + Send;
-    type Conflict: ReasonCode + Send;
-    type Refusal: ReasonCode + Send;
+    type NoEffect: ReasonCode + Send + Sync;
+    type Conflict: ReasonCode + Send + Sync;
+    type Refusal: ReasonCode + Send + Sync;
 
     /// Locks the command facts and classifies them through Core.
     fn classify(
@@ -208,6 +288,11 @@ pub(crate) trait ProjectCommand: Sync {
         "{}".to_owned()
     }
 
+    /// The Domain Receipt references of an applied outcome.
+    fn applied_receipt_refs(&self, _applied: &Self::Applied, _plan: &Self::Plan) -> ReceiptRefs {
+        ReceiptRefs::default()
+    }
+
     /// Writes the effect rows of an applied outcome after its profile sequences are allocated.
     fn apply(
         &self,
@@ -219,18 +304,45 @@ pub(crate) trait ProjectCommand: Sync {
         applied: Self::Applied,
     ) -> impl Future<Output = Result<ProfileWrite<Self>, ProjectCommandError>> + Send;
 
+    /// Writes the applied effect rows that refer to the authority records of the profile.
+    ///
+    /// The sequence calls this after the profile writes those records.
+    fn apply_after_authority(
+        &self,
+        _client: &Client,
+        _envelope: &ProjectCommandEnvelope,
+        _applied: &ProfileApplied<Self>,
+    ) -> impl Future<Output = Result<(), ProjectCommandError>> + Send {
+        async { Ok(()) }
+    }
+
+    /// Checks the stored facts that bind the acknowledgement to this request. The sequence runs
+    /// it before every other replay check, so a binding conflict comes before damaged evidence.
+    fn check_replay_binding(&self, _replay: &CommandReplay) -> Result<(), ReplayFault> {
+        Ok(())
+    }
+
     /// Decodes the applied effect from the stored acknowledgement evidence.
     fn decode(&self, replay: &CommandReplay) -> Result<Self::Effect, ReplayFault>;
 
-    /// Whether this zero-authority outcome writes effect rows and one Activity record.
-    fn writes_zero_authority_effect(&self, _outcome: &ZeroOutcome<'_, Self>) -> bool {
-        false
+    /// The rows that this zero-authority outcome writes (ADR 0043).
+    fn zero_authority_rows(&self, _outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
+        ZeroAuthorityRows::None
     }
 
-    /// Writes the effect rows of a zero-authority outcome at its allocated Activity position.
-    ///
-    /// The sequence calls this only when `writes_zero_authority_effect` is true.
+    /// Writes the effect rows of a zero-authority outcome that declares `Effect`.
     fn write_zero_authority_effect(
+        &self,
+        _client: &Client,
+        _envelope: &ProjectCommandEnvelope,
+        _outcome: &ZeroOutcome<'_, Self>,
+    ) -> impl Future<Output = Result<Self::ZeroEffect, ProjectCommandError>> + Send {
+        async { Err(unavailable("the command writes no zero-authority effect")) }
+    }
+
+    /// Writes the effect rows of a zero-authority outcome that declares `EffectWithActivity`, at
+    /// its allocated Activity position.
+    fn write_zero_authority_activity(
         &self,
         _client: &Client,
         _envelope: &ProjectCommandEnvelope,
@@ -238,10 +350,10 @@ pub(crate) trait ProjectCommand: Sync {
         _activity: &ActivitySequences,
     ) -> impl Future<Output = Result<ZeroAuthorityWrite<Self::ZeroEffect>, ProjectCommandError>> + Send
     {
-        async { Err(unavailable("the command writes no zero-authority effect")) }
+        async { Err(unavailable("the command writes no zero-authority Activity")) }
     }
 
-    /// Decodes the effect of a zero-authority outcome from the stored Activity record.
+    /// Decodes the effect of a zero-authority outcome from the stored effect rows.
     fn decode_zero_authority_effect(
         &self,
         _replay: &CommandReplay,
@@ -251,7 +363,7 @@ pub(crate) trait ProjectCommand: Sync {
 }
 
 pub(crate) type SettledCommand<C> = ProjectCommandSettlement<
-    <<C as ProjectCommand>::Profile as SettlementProfile>::Applied<<C as ProjectCommand>::Effect>,
+    ProfileApplied<C>,
     <C as ProjectCommand>::NoEffect,
     <C as ProjectCommand>::Conflict,
     <C as ProjectCommand>::Refusal,
@@ -264,6 +376,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     envelope: &ProjectCommandEnvelope,
     command: &C,
 ) -> Result<SettledCommand<C>, ProjectCommandError> {
+    let challenge_error = |error| challenge_problem(C::SPEC.rate_limited, error);
     let mut transaction = match C::SPEC.isolation {
         CommandIsolation::Serializable => {
             store
@@ -279,16 +392,22 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     match challenge_use {
         ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
             transaction.rollback().await.map_err(challenge_error)?;
-            read_command_replay(store, &envelope.challenge_binding, &result_reference)
-                .await
-                .and_then(|replay| replay_command(command, &replay))
-                .map_err(|fault| match fault {
-                    ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
-                    ReplayFault::HistoricalAcknowledgementUnavailable => {
-                        ProjectCommandError::HistoricalAcknowledgementUnavailable
-                    }
-                    ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
-                })
+            read_command_replay(
+                store,
+                &envelope.challenge_binding,
+                &result_reference,
+                &envelope.canonical_command_bytes,
+                &C::SPEC.replay_effect,
+            )
+            .await
+            .and_then(|replay| replay_command(command, &replay))
+            .map_err(|fault| match fault {
+                ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
+                ReplayFault::HistoricalAcknowledgementUnavailable => {
+                    ProjectCommandError::HistoricalAcknowledgementUnavailable
+                }
+                ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
+            })
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
             transaction.rollback().await.map_err(challenge_error)?;
@@ -301,7 +420,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
                     Ok(settlement)
                 }
                 Err(error) => {
-                    let _rollback = transaction.rollback().await;
+                    transaction.rollback().await.map_err(challenge_error)?;
                     Err(error)
                 }
             }
@@ -319,8 +438,17 @@ async fn first_use<C: ProjectCommand>(
         outcome: classified,
         admission,
         heads,
+        zero_receipt,
     } = command.classify(client, envelope, &project).await?;
     insert_admission(client, envelope, &C::SPEC, &admission).await?;
+    let (mut zero_fields, zero_refs, observed_effect) = match zero_receipt {
+        ZeroReceipt::Reason => (serde_json::Map::new(), ReceiptRefs::default(), None),
+        ZeroReceipt::Observed {
+            fields,
+            refs,
+            effect,
+        } => (fields, refs, Some(effect)),
+    };
     let receipt = ReceiptRecord {
         result: match &classified {
             TransitionOutcome::Applied(_) => C::SPEC.applied_result.code(),
@@ -329,17 +457,22 @@ async fn first_use<C: ProjectCommand>(
             | TransitionOutcome::Refused(_) => classified.receipt_result().code(),
         },
         payload: match classified.reason_code() {
-            Some(code) => serde_json::json!({ "reason": code }).to_string(),
+            Some(code) => {
+                zero_fields.insert("reason".to_owned(), code.into());
+                serde_json::Value::Object(zero_fields).to_string()
+            }
             None => "{}".to_owned(),
         },
         command_kind: C::SPEC.kind,
         heads,
+        refs: zero_refs,
     };
     let (receipt_created_at, outcome) = match classified {
         TransitionOutcome::Applied((applied, plan)) => {
             let sequences = C::Profile::allocate(client, &envelope.project_scope).await?;
             let receipt = ReceiptRecord {
                 payload: command.applied_receipt_payload(&applied, &plan),
+                refs: command.applied_receipt_refs(&applied, &plan),
                 ..receipt
             };
             let receipt_created_at = insert_receipt(
@@ -352,15 +485,11 @@ async fn first_use<C: ProjectCommand>(
             let write = command
                 .apply(client, envelope, &project, &sequences, plan, applied)
                 .await?;
-            let applied = C::Profile::persist(
-                client,
-                envelope,
-                &project,
-                C::SPEC.activity_kind,
-                sequences,
-                write,
-            )
-            .await?;
+            let applied =
+                C::Profile::persist(client, envelope, &project, &C::SPEC, sequences, write).await?;
+            command
+                .apply_after_authority(client, envelope, &applied)
+                .await?;
             (receipt_created_at, TransitionOutcome::Applied(applied))
         }
         TransitionOutcome::NoEffect(reason) => (
@@ -382,26 +511,34 @@ async fn first_use<C: ProjectCommand>(
         TransitionOutcome::Conflicted(reason) => Some(ZeroOutcome::Conflicted(reason)),
         TransitionOutcome::Refused(reason) => Some(ZeroOutcome::Refused(reason)),
     };
-    let mut zero_authority_effect = None;
-    if let Some(zero_outcome) = zero_outcome
-        && command.writes_zero_authority_effect(&zero_outcome)
-    {
-        let activity = ActivityOnly::allocate(client, &envelope.project_scope).await?;
-        let write = command
-            .write_zero_authority_effect(client, envelope, &project, &activity)
-            .await?;
-        insert_activity_payload(
-            client,
-            envelope,
-            outcome.receipt_result().code(),
-            C::SPEC.activity_kind,
-            activity.project_activity_position,
-            &activity.project_activity_event_id,
-            write.activity,
-        )
-        .await?;
-        zero_authority_effect = Some(write.effect);
-    }
+    let zero_authority_effect = match zero_outcome {
+        None => None,
+        Some(zero_outcome) => match command.zero_authority_rows(&zero_outcome) {
+            ZeroAuthorityRows::None => observed_effect,
+            ZeroAuthorityRows::Effect => Some(
+                command
+                    .write_zero_authority_effect(client, envelope, &zero_outcome)
+                    .await?,
+            ),
+            ZeroAuthorityRows::EffectWithActivity => {
+                let activity = ActivityOnly::allocate(client, &envelope.project_scope).await?;
+                let write = command
+                    .write_zero_authority_activity(client, envelope, &project, &activity)
+                    .await?;
+                insert_activity_payload(
+                    client,
+                    envelope,
+                    outcome.receipt_result().code(),
+                    C::SPEC.activity_kind,
+                    activity.project_activity_position,
+                    &activity.project_activity_event_id,
+                    write.activity,
+                )
+                .await?;
+                Some(write.effect)
+            }
+        },
+    };
     let response = C::Response::settle(client, envelope, C::SPEC.kind).await?;
     Ok(ProjectCommandSettlement {
         ids: envelope.ids.clone(),
@@ -416,25 +553,29 @@ fn replay_command<C: ProjectCommand>(
     command: &C,
     replay: &CommandReplay,
 ) -> Result<SettledCommand<C>, ReplayFault> {
-    let mut zero_authority_effect = None;
-    let outcome = match replay
-        .outcome::<C::NoEffect, C::Conflict, C::Refusal>(C::SPEC.applied_result.code())?
-    {
+    command.check_replay_binding(replay)?;
+    let outcome =
+        replay.outcome::<C::NoEffect, C::Conflict, C::Refusal>(C::SPEC.applied_result.code())?;
+    let zero_authority_effect = match &outcome {
+        TransitionOutcome::Applied(()) => None,
+        TransitionOutcome::NoEffect(_)
+        | TransitionOutcome::Conflicted(_)
+        | TransitionOutcome::Refused(_) => {
+            if replay.author_action_sequence.is_some() {
+                return Err(ReplayFault::Unavailable(
+                    "a zero-authority Receipt has an Author Action".into(),
+                ));
+            }
+            command.decode_zero_authority_effect(replay)?
+        }
+    };
+    let outcome = match outcome {
         TransitionOutcome::Applied(()) => {
-            TransitionOutcome::Applied(C::Profile::replay(command.decode(replay)?, replay)?)
+            TransitionOutcome::Applied(C::Profile::replay(|| command.decode(replay), replay)?)
         }
-        TransitionOutcome::NoEffect(reason) => {
-            zero_authority_effect = command.decode_zero_authority_effect(replay)?;
-            TransitionOutcome::NoEffect(reason)
-        }
-        TransitionOutcome::Conflicted(reason) => {
-            zero_authority_effect = command.decode_zero_authority_effect(replay)?;
-            TransitionOutcome::Conflicted(reason)
-        }
-        TransitionOutcome::Refused(reason) => {
-            zero_authority_effect = command.decode_zero_authority_effect(replay)?;
-            TransitionOutcome::Refused(reason)
-        }
+        TransitionOutcome::NoEffect(reason) => TransitionOutcome::NoEffect(reason),
+        TransitionOutcome::Conflicted(reason) => TransitionOutcome::Conflicted(reason),
+        TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(reason),
     };
     Ok(ProjectCommandSettlement {
         zero_authority_effect,
@@ -451,12 +592,18 @@ pub(crate) fn unavailable(
     ProjectCommandError::Unavailable(error.into())
 }
 
-fn challenge_error(error: ProjectCommandChallengeError) -> ProjectCommandError {
+fn challenge_problem(
+    rate_limited: RateLimitedChallenge,
+    error: ProjectCommandChallengeError,
+) -> ProjectCommandError {
     match error {
         ProjectCommandChallengeError::BindingConflict => ProjectCommandError::BindingConflict,
         ProjectCommandChallengeError::InvalidOrExpired => ProjectCommandError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
-        | ProjectCommandChallengeError::Unavailable(_) => unavailable(error),
+        ProjectCommandChallengeError::RateLimited { .. } => match rate_limited {
+            RateLimitedChallenge::InvalidChallenge => ProjectCommandError::InvalidChallenge,
+            RateLimitedChallenge::Unavailable => unavailable(error),
+        },
+        ProjectCommandChallengeError::Unavailable(_) => unavailable(error),
     }
 }
 
