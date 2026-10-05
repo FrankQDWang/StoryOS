@@ -64,6 +64,7 @@ The receipt relation trigger, the Receipt shape checks, and the Activity payload
   - For `setCurrentChapter`, a partial set of Author Action, Snapshot, and tree revision evidence gives `503 project_store_unavailable` instead of `409 idempotency_binding_conflict`.
   - For `takeOverProjectWriter`, a settled Receipt without its Activity record gives `503 author_edit_store_unavailable` instead of `409 idempotency_binding_conflict`. The Activity payload checks already prevent a payload with a missing field.
   - `closeEditorFlowDraft` and `expandRefusedEditDraftToProposal` replay in a separate read-only transaction, not in the write transaction. The response does not change.
+  - For the six Manuscript Structure Transition commands and `setCurrentChapter`, a later canonical Snapshot at the same Activity position no longer breaks an exact retry. Replay reads the earliest canonical Snapshot at that position, which is the one that the command wrote. Before this decision, such a retry gave `503 project_store_unavailable`.
 - Each specification that moves commands lists every other observable difference in its behavior-equivalence review. An unlisted difference is a defect.
 
 ## Relation to ADR 0041 and the glossary
