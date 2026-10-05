@@ -235,9 +235,7 @@ pub use reopen_rejected_operations::{
     ReopenRejectedOperationsStore, reopen_rejected_operations,
 };
 pub use reopen_withdrawn_proposal::{
-    ReopenWithdrawnProposalCommand, ReopenWithdrawnProposalError,
-    ReopenWithdrawnProposalSettlement, ReopenWithdrawnProposalSettlementEffect,
-    ReopenWithdrawnProposalStore, reopen_withdrawn_proposal,
+    ProposalReopened, ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
 pub use replan_proposal::{
     ReplanProposalCommand, ReplanProposalError, ReplanProposalSettlement,

@@ -6,8 +6,9 @@ use storyos_core::{
     ArchiveProjectConflict, ArchiveProjectNoEffect, CreateChapterConflict, CreateChapterRefusal,
     CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect,
     DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    ReasonCode, SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
-    UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
+    ReasonCode, ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
+    ReopenWithdrawnProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
+    SetCurrentChapterRefusal, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
     UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
 };
@@ -217,6 +218,42 @@ fn every_current_chapter_reason_maps_to_its_public_reason() {
         (
             SetCurrentChapterRefusal::EmptyProject,
             contracts::SetCurrentChapterRefusalReason::EmptyProject,
+        ),
+    ]);
+}
+
+#[test]
+fn every_proposal_decision_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        ReopenWithdrawnProposalConflict::ChangedHead,
+        contracts::ReopenWithdrawnProposalConflictReason::ChangedHead,
+    )]);
+    assert_maps(vec![
+        (
+            ReopenWithdrawnProposalRefusal::WrongScope,
+            contracts::ReopenWithdrawnProposalRefusalReason::WrongScope,
+        ),
+        (
+            ReopenWithdrawnProposalRefusal::WrongAdmission,
+            contracts::ReopenWithdrawnProposalRefusalReason::WrongAdmission,
+        ),
+        (
+            ReopenWithdrawnProposalRefusal::StaleProposalRevision,
+            contracts::ReopenWithdrawnProposalRefusalReason::StaleProposalRevision,
+        ),
+    ]);
+    assert_maps(vec![
+        (
+            ReopenWithdrawnProposalNoEffect::TerminalSupersession,
+            contracts::ReopenWithdrawnProposalNoEffectReason::TerminalSupersession,
+        ),
+        (
+            ReopenWithdrawnProposalNoEffect::ClosureNotWithdrawn,
+            contracts::ReopenWithdrawnProposalNoEffectReason::ClosureNotWithdrawn,
+        ),
+        (
+            ReopenWithdrawnProposalNoEffect::WithdrawalEventMismatch,
+            contracts::ReopenWithdrawnProposalNoEffectReason::WithdrawalEventMismatch,
         ),
     ]);
 }
