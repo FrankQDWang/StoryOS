@@ -37,6 +37,8 @@ export interface AuthorEditIdleController {
   flush(): Promise<void>;
   whenIdle(): Promise<void>;
   hasQueuedInput(): boolean;
+  /** Counts each persist call, so a change shows input captured after an earlier count. */
+  capturedInputCount(): number;
   fail(error: unknown): void;
   canAcceptCandidateInput(hardBoundary?: boolean): boolean;
   setHoldSubmission(hold: boolean): void;
@@ -82,6 +84,7 @@ export function createAuthorEditIdleController({
   let pendingTarget = pendingIntentCount > 0 ? "recovered" : undefined;
   let submissionClosed = pendingIntentCount > 0;
   let queuedWrites = 0;
+  let capturedInputs = 0;
   let undoGroupId: string | undefined;
   let lastCompletedAt: number | undefined;
   let idleTimer: TimerHandle | undefined;
@@ -162,6 +165,7 @@ export function createAuthorEditIdleController({
   return {
     persist(edit, origin, createdAt) {
       queuedWrites += 1;
+      capturedInputs += 1;
       const hardInput = origin === "composition_confirmation"
         || origin === "paste" || origin === "cut" || origin === "drop";
       if (hardInput) submissionClosed = true;
@@ -260,6 +264,7 @@ export function createAuthorEditIdleController({
         && (!hardBoundary || pendingIntentCount === 0 && queuedWrites === 0);
     },
     hasQueuedInput: () => queuedWrites > 0,
+    capturedInputCount: () => capturedInputs,
     async whenIdle() {
       await Promise.resolve();
       await queue;
