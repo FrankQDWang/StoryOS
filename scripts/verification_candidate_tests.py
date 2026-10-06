@@ -198,6 +198,37 @@ class CandidateCommandTests(unittest.TestCase):
         self.assertEqual(list(self.root.glob('target/verification/*/report.json')), [])
         self.assertFalse((self.root / 'target/launches').exists())
 
+    def test_admission_accepts_a_cached_tool_result_only_while_its_key_holds(self):
+        tools = self.root / '.tools'
+        tools.mkdir()
+        node = tools / 'node'
+        node.write_text('#!/bin/sh\necho v1\n')
+        node.chmod(0o755)
+        self.repo.environment['PATH'] = f"{tools}{os.pathsep}{os.environ['PATH']}"
+        (self.root / '.gitignore').write_text('target/\n.tools/\n')
+        policy = self.root / 'docs/agents/verification-policy.json'
+        data = json.loads(policy.read_text())
+        data['targeted'] = {'verify-policy': {'command': [sys.executable, str(verification_tests.COMMAND), 'step',
+                                                          'verification-tests', '--', sys.executable, '-c', 'pass'],
+                                              'clean': False}}
+        data['complete']['admission'] = {'version': 1, 'targeted': ['verify-policy']}
+        policy.write_text(json.dumps(data))
+        self.repo.git('add', '.')
+        self.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                      'commit', '--quiet', '-m', 'Require a fresh policy result.')
+        self.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        for _ in range(2):
+            self.assertEqual(self.repo.cli('targeted', '--check', 'verify-policy').returncode, 0)
+        reports = [json.loads(path.read_text()) for path in self.root.glob('target/verification/*/report.json')]
+        latest = max(reports, key=lambda report: report['started_at'])
+        self.assertEqual([step['status'] for step in latest['steps'] if step['stage'] == 'verification-tests'],
+                         ['cached'])
+        self.assertIn('Current independent candidate reviews are required', self.run_complete().stderr)
+        node.write_text('#!/bin/sh\necho v2\n')
+        self.assertIn('The verify-policy result is stale. Refresh it with make verify-targeted CHECK=verify-policy\n',
+                      self.run_complete().stderr)
+        self.assertFalse((self.root / 'target/launches').exists())
+
     def test_corrupt_success_cannot_be_reused_or_trigger_blind_retry(self):
         self.assertEqual(self.run_complete().returncode, 0)
         path = next(self.root.glob('target/verification/*/report.json'))

@@ -192,6 +192,37 @@ class VerificationCommandTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.report()["status"], "incomplete")
 
+    def test_unchanged_tool_inputs_reuse_a_passed_self_test_result(self):
+        child = "from pathlib import Path; p = Path('target/launches'); p.write_text(p.read_text() + 'x' if p.exists() else 'x')"
+        runs = []
+
+        def run():
+            result = self.cli("step", "verification-tests", "--", sys.executable, "-c", child)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = max((json.loads(path.read_text()) for path in self.root.glob("target/verification/*/report.json")),
+                         key=lambda item: item["started_at"])
+            step = next(item for item in report["steps"] if item["stage"] == "verification-tests")
+            runs.append((report, step, (self.root / "target/launches").read_text()))
+
+        run()
+        run()
+        (self.root / "AGENTS.md").write_text("Edit outside the reuse key.\n")
+        run()
+        (self.root / "scripts/tool.py").write_text("Edit inside the reuse key.\n")
+        run()
+        run()
+        self.environment["STORYOS_VERIFICATION_TEST_WORKERS"] = "1"
+        run()
+        self.assertEqual([(report["status"], step["status"], launches) for report, step, launches in runs],
+                         [("passed", "passed", "x"), ("passed", "cached", "x"), ("passed", "cached", "x"),
+                          ("passed", "passed", "xx"), ("passed", "cached", "xx"), ("passed", "passed", "xxx")])
+        producer, executed, _ = runs[3]
+        self.assertEqual({key: runs[4][1].get(key) for key in ("reuse_key", "producer", "producer_step")},
+                         {"reuse_key": executed["reuse_key"], "producer_step": executed["id"],
+                          "producer": f"target/verification/{producer['run_id']}/report.json"})
+        self.assertNotEqual(executed["reuse_key"], runs[0][1]["reuse_key"])
+        self.assertNotIn("reuse_key", runs[5][1])
+
     @unittest.skipUnless(os.name == "posix", "Process-group interruption requires POSIX.")
     def test_interruption_is_reported_after_child_cleanup(self):
         child = ("import signal; "
