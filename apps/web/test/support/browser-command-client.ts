@@ -1,6 +1,7 @@
 import { commands } from "vitest/browser";
 
 import {
+  type AuthorEditSubmissionHoldRequest,
   type ClientSessionCookieRequest,
   type ClientSessionCookieResult,
   type ClipboardPermissionRequest,
@@ -12,6 +13,7 @@ import {
   type ProductionHostResult,
   type TrustedInputRequest,
   type TrustedInputResult,
+  parseAuthorEditSubmissionHoldResult,
   parseClientSessionCookieResult,
   parseClipboardPermissionResult,
   parseCommandChallengeRateWindowsResult,
@@ -36,6 +38,15 @@ export async function applyImeComposition(
 ): Promise<ImeCompositionResult> {
   return parseImeCompositionResult(
     await invokeStoryOSCommand(storyOSBrowserCommandNames.imeComposition, request),
+  );
+}
+
+/** While held, the Author Edit command requests of the page wait and do not reach the Server. */
+export async function updateAuthorEditSubmissionHold(
+  request: AuthorEditSubmissionHoldRequest,
+): Promise<void> {
+  parseAuthorEditSubmissionHoldResult(
+    await invokeStoryOSCommand(storyOSBrowserCommandNames.authorEditSubmissionHold, request),
   );
 }
 
