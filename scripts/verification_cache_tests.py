@@ -175,6 +175,9 @@ class DailyCacheTests(unittest.TestCase):
                                              "written.write_text('cache')\nresults ="))
             result, report = self.run_daily()
             self.assertEqual((result.returncode, report["status"], message in result.stderr), expected, result.stderr)
+        self.assertEqual({key: report[key] for key in ("failed_steps", "failure_reason", "changed_paths")},
+                         {"failed_steps": [], "changed_paths": ["apps/web/node_modules/.pnpm/vite/index.js"],
+                          "failure_reason": f"{message}: apps/web/node_modules/.pnpm/vite/index.js."})
 
     def test_busy_budget_refuses_a_second_run_and_releases_after_interruption(self):
         target = self.root / "target"

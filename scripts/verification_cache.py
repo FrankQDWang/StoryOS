@@ -33,7 +33,8 @@ def budget(root):
             fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-def outputs(root, producer=None):
+def installed(root):
+    """Return the identity of each installed dependency file, or None when the installation is not reusable."""
     directories = [root / name for name in ("node_modules", "apps/web/node_modules")]
     if not all(path.is_dir() for path in directories):
         return None
@@ -55,6 +56,13 @@ def outputs(root, producer=None):
             state = path.lstat()
             identities.append((str(path.relative_to(root)), state.st_mode, state.st_ino,
                                state.st_mtime_ns, state.st_ctime_ns, content))
+    return identities
+
+
+def outputs(root, producer=None):
+    identities = installed(root)
+    if identities is None:
+        return None
     if producer:
         return {"dependencies": digest(identities), "artifacts": {
             name: hashlib.sha256((producer / name).read_bytes()).hexdigest()

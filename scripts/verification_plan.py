@@ -14,6 +14,7 @@ sys.dont_write_bytecode = True
 import verification
 import verification_cache
 import verification_daily
+import verification_failure
 import verification_graph
 import verification_rust_cache
 
@@ -168,7 +169,8 @@ def execute_plan(root, plan):
             command.extend(["--", "--test-threads", str(plan["workers"])])
         elif group in {"node-contract", "browser-source"}:
             output = directory / ("vitest.json" if group == "node-contract" else "browser-source.json")
-            dependencies = verification_cache.outputs(root)
+            before = verification_cache.installed(root)
+            dependencies = None if before is None else verification_cache.digest(before)
             (directory / "dependencies.json").write_text(json.dumps(dependencies))
             command = ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", group,
                        *[str(root / path) for path in check["files"]], "--passWithNoTests=false",
@@ -181,8 +183,13 @@ def execute_plan(root, plan):
         if code:
             return code
         if group in {"node-contract", "browser-source"}:
-            if dependencies != verification_cache.outputs(root):
-                raise ValueError("Installed dependencies changed during the selected tests")
+            after = verification_cache.installed(root)
+            if before != after:
+                reason = "Installed dependencies changed during the selected tests"
+                (directory / "failure.json").write_text(json.dumps({"reason": reason, "changed_paths": (
+                    verification_failure.changed({entry[0]: entry for entry in before or []},
+                                                 {entry[0]: entry for entry in after or []}))}))
+                raise ValueError(reason)
             result = json.loads(output.read_text())
             suites = result.get("testResults", [])
             expected = {str(root / path) for path in check["files"]}
@@ -261,6 +268,10 @@ def main():
             return execute_plan(root, plan)
         raise ValueError("Unsupported verification action")
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
+        if args.action == "execute" and os.environ.get("STORYOS_VERIFICATION_RUN"):
+            failure = Path(os.environ["STORYOS_VERIFICATION_RUN"]) / "failure.json"
+            if not failure.exists():
+                failure.write_text(json.dumps({"reason": str(error).rstrip(".")}))
         if not args.details and (args.action in {'summary', 'status'} or
                                  args.action == 'plan' and args.format == 'text'):
             import verification_summary
