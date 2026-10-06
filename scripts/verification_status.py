@@ -1,7 +1,9 @@
 """Read current results and execute policy-registered targeted checks."""
 
+import bisect
 from datetime import datetime
 import hashlib
+import itertools
 import json
 import os
 from pathlib import Path
@@ -96,19 +98,41 @@ def numstat(root, base, diff_filter):
             yield path, int(added) if added != '-' else 0, int(deleted) if deleted != '-' else 0
 
 
+RUST_CODE = re.compile(r"""//[^\n]*|/\*|b?r(#*)"|b?"(?:\\.|[^"\\])*"|b?'(?:\\(?:u\{[0-9a-fA-F]+\}|.)|[^'\\])'|[{}]""")
+RUST_COMMENT = re.compile(r'/\*|\*/')
+
+
+def item_end(text, start):
+    """Return the offset after the brace that closes the first Rust block at or after an offset."""
+    depth, comment, index = 0, 0, start
+    while match := (RUST_COMMENT if comment else RUST_CODE).search(text, index):
+        token, index = match[0], match.end()
+        if comment or token == '/*':
+            comment += 1 if token == '/*' else -1
+        elif match[1] is not None:
+            index = text.find('"' + match[1], index) + 1 + len(match[1])
+            if index == len(match[1]):
+                return len(text)
+        elif token in '{}':
+            depth += 1 if token == '{' else -1
+            if depth == 0:
+                return index
+    return len(text)
+
+
 def module_lines(text):
-    """Return the line count of a rustfmt-formatted Rust module without its #[cfg(test)] modules."""
-    lines, kept, index = text.splitlines(), 0, 0
+    """Return the line count of a Rust module without its #[cfg(test)] modules."""
+    lines = text.splitlines(keepends=True)
+    starts = list(itertools.accumulate(map(len, lines), initial=0))
+    kept, index = 0, 0
     while index < len(lines):
         end = index + 1
         if lines[index].strip() == '#[cfg(test)]':
             while end < len(lines) and lines[end].lstrip().startswith('#['):
                 end += 1
-            item = re.match(r'(\s*)(pub(\([^)]*\))?\s+)?mod\s', lines[end]) if end < len(lines) else None
-            if item:
-                if lines[end].rstrip().endswith('{'):
-                    while end < len(lines) and lines[end].rstrip() != item[1] + '}':
-                        end += 1
+            if end < len(lines) and re.match(r'\s*(pub(\([^)]*\))?\s+)?mod\s', lines[end]):
+                if not lines[end].rstrip().endswith(';'):
+                    end = bisect.bisect_right(starts, item_end(text, starts[end]) - 1) - 1
                 index = end + 1
                 continue
         kept += 1
