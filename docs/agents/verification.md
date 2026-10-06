@@ -7,7 +7,8 @@ The main flow comes first. The reference sections are after it.
 
 1. At task start, run `make verify-status BASE=origin/main`. Then do its `nextAction`.
    To refuse a commit message with a text guard finding before the commit exists, run
-   `make install-hooks` one time per clone. The hook is optional.
+   `make install-hooks` one time per clone. The hook is optional. The hook refuses the
+   message, but `make verify-policy` only reports commit message findings as advisory.
 2. After each product or test edit, run the smallest check that can fail on that edit.
    For one check, use `make verify-targeted CHECK=<check>`. For the full selected scope,
    use `make verify-changed BASE=<base>`. Set `BASE` to the actual comparison commit.

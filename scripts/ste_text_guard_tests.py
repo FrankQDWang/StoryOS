@@ -155,7 +155,10 @@ class TextGuardTests(unittest.TestCase):
         refused = subprocess.run(["git", "commit", "--allow-empty", "-F", "message.txt"], cwd=self.root,
                                  env=self.environment, capture_output=True, text=True, check=False)
         self.git("commit", "--quiet", "--allow-empty", "--no-verify", "-F", "message.txt")
-        findings = [line.split(":", 1)[1] for line in self.guard("commits", "--base", self.base, expected_code=1)]
+        reported = self.guard("commits", "--base", self.base, expected_code=1)
+        self.assertEqual(self.guard("commits", "--advisory", "--base", self.base, expected_code=0),
+                         [f"advisory: {line}" for line in reported])
+        findings = [line.split(":", 1)[1] for line in reported]
         self.assertEqual(len(findings), 2)
         self.assertEqual((refused.returncode, [line.split(":", 1)[1] for line in refused.stderr.splitlines()]),
                          (1, findings))
