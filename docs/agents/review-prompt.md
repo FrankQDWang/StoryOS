@@ -16,8 +16,9 @@ Do not change files. Write the answer in English that obeys ASD-STE100.
 - Review the scoped diff `git diff <candidate.base>...<verify.head>` from the request.
 - The file `contract.md` in the request directory gives the pull request body and the
   bodies of the issues that the pull request closes.
-- Standards axis: compare the diff with `AGENTS.md`, `CODING_STANDARDS.md`, each
-  `GLOSSARY.md`, and ASD-STE100.
+- Standards axis: compare the diff with `AGENTS.md`, `CODING_STANDARDS.md`, the glossary,
+  and ASD-STE100. `GLOSSARY.md` lists the glossary area files under `docs/glossary/`.
+  Search them for each domain term in the diff.
 - Spec axis: compare the diff with each acceptance criterion of the closed issues. Give
   one evidence line for each criterion: met or not met, with `file:line`.
 
