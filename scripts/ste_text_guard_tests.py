@@ -36,7 +36,8 @@ class TextGuardTests(unittest.TestCase):
         self.git("init", "--quiet", "--initial-branch=main")
         (self.root / "docs/agents").mkdir(parents=True)
         shutil.copyfile(WORD_LIST, self.root / "docs/agents/ste-rejected-words.json")
-        self.write("GLOSSARY.md", "# Glossary\n\n**Whole Draft**:\nA draft term.\n")
+        self.write("GLOSSARY.md", "# Glossary\n\nThe terms are in the area files.\n")
+        self.write("docs/glossary/drafts.md", "# Drafts\n\n**Whole Draft**:\nA draft term.\n")
         self.base = self.commit("Add the base files.")
 
     def git(self, *args):
@@ -126,6 +127,16 @@ class TextGuardTests(unittest.TestCase):
         self.commit("Change the notes.")
         self.assertEqual(self.guard("files", "--base", base, "--head", "HEAD", expected_code=1), expected)
         self.assertEqual(self.guard("files", "--base", "HEAD", expected_code=0), [])
+
+    def test_moved_lines_do_not_fire_and_a_copy_or_an_edit_fires(self):
+        self.write("old.md", f"# Old\n\n{LONG}\n\nKeep it short; split it.\n")
+        base = self.commit("Add the old text.")
+        self.write("old.md", "# Old\n\nThe text moved.\n")
+        self.write("new.md", f"# New\n\n{LONG}\n\nKeep it short; split it.\n\n{LONG}\n\nKeep it brief; split it.\n")
+        self.assertEqual(self.guard("files", "--base", base, expected_code=1), [
+            f"new.md:7: {SENTENCE}",
+            f"new.md:9: {SEMICOLON}",
+        ])
 
     def test_commit_mode_skips_merge_commits_and_trailers_and_message_mode_agrees(self):
         self.git("switch", "--quiet", "-c", "side")

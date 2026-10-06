@@ -89,3 +89,67 @@ The steps below use Matt Pocock skill names, for example `to-spec`. Claude Code 
 Ticket bodies contain Parent, What to build, observable acceptance criteria, and native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the parent delegates them. Use an expand-contract sequence only where a wide refactor cannot remain a complete passing vertical slice.
 
 Closed tickets retain their current contract and exact delivery evidence. Current instructions follow this workflow; immutable historical records describe the workflow used at their recorded commit.
+
+### Comment templates
+
+Use these forms for the Claim of Delivery step 3, the Integration of step 4, and the Resolution of step 8. Replace each `<...>` field with its value. Keep each field line, and write `none` for an empty field. Write the comment in ASD-STE100. Before you post it, examine it with `python3 scripts/ste_text_guard.py message <file>`.
+
+Claim:
+
+```markdown
+## Claim
+
+- Owner: <the session or subagent that implements the ticket>
+- Worktree: `<absolute worktree path>`
+- Branch: `<branch>`
+- Contract revision: the current issue body <and the current parent body, if the ticket has a parent>
+- Exact `main` baseline: `<full commit SHA>`
+- Integration base commit: `<full commit SHA>`
+- Dependency evidence: <for each blocker that Integration evidence satisfies, the blocker, its evidence commit, and the ancestor check>
+- Delivery: <the pull request that closes #<issue>, and who merges it>
+```
+
+Integration:
+
+```markdown
+## Integration
+
+- Branch commit: `<short SHA>` on `<branch>`
+- Integration commit: `<short SHA>` on `<integration branch>`, tree `<short tree SHA>`
+- Unresolved scope: <each item that this ticket does not deliver, with its owner issue>
+
+| Criterion | Result |
+|---|---|
+| <acceptance criterion from the issue body> | <Met or Not met, with the file, test, or command that shows it> |
+
+| Check | Source | Result |
+|---|---|---|
+| `<command>` | `<short SHA>` | <PASS or FAIL> (report `<report ID>`) |
+
+Integration is provisional delivery. The final Resolution records acceptance on `main`.
+```
+
+Resolution:
+
+```markdown
+## Resolution: <PASS or FAIL>
+
+- Merge: [PR #<number>](<pull request URL>), ordinary merge commit `<short SHA>` on `main`, tree `<short tree SHA>`. <Say if this tree is the same as the reviewed candidate head `<short SHA>`, or name each later merge.>
+- Files: <the changed files or file groups>. +<added lines>/−<deleted lines>.
+- Contract change: <each changed contract and its migration effect>
+- Out of scope: <each retained item, with its owner issue>
+
+| Criterion | Result |
+|---|---|
+| <acceptance criterion from the issue body> | <Met or Not met, with the evidence> |
+
+| Check | Source | Result |
+|---|---|---|
+| GitHub `verify` | `<short SHA>` | <PASS or FAIL> |
+| `make verify-changed BASE=origin/main` | `<short SHA>` | <PASS or FAIL> (report `<report ID>`) |
+| Standards review (<agent tool>, read-only, new thread) | request `<request ID>` | [<PASS or FAIL>](<verdict comment URL>) |
+| Spec review (<agent tool>, read-only, new thread) | request `<request ID>` | [<PASS or FAIL>](<verdict comment URL>) |
+| `make verify-tracker` | `main` `<short SHA>` | <PASS or FAIL> (report `<report ID>`) |
+
+Local evidence: `<path of the retained reports>`.
+```
