@@ -161,6 +161,27 @@ print('executed selected files')
                                  {(c["group"], c["status"]) for c in plan["checks"]})
             path.unlink()
 
+    def test_verification_script_change_selects_its_teardown_test_without_a_package(self):
+        self.install_runner_fixture()
+        policy = json.loads(self.policy_path.read_text())
+        policy["daily_consumers"] = json.loads((Path(__file__).parent.parent /
+            "docs/agents/verification-policy.json").read_text())["daily_consumers"]
+        self.policy_path.write_text(json.dumps(policy))
+        teardown = self.add_test("required-global-teardown.test.ts")
+        self.add_test("production-build.test.ts").write_text("import {test} from 'vitest'; test('reads dist',()=>{});\n")
+        self.repo.git("add", ".")
+        self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Declare actual script consumers.")
+        self.base = self.repo.git("rev-parse", "HEAD")
+        (self.root / "scripts/verification_tool.py").write_text("Changed verification tool.\n")
+        result = self.cli("run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = self.repo.report()
+        self.assertEqual([(c["group"], c["files"], c.get("requires_package", False)) for c in report["plan"]["checks"]],
+                         [("policy", ["scripts/verification_tool.py"], False), ("web-typecheck", [], False),
+                          ("node-contract", [str(teardown.relative_to(self.root))], False)])
+        self.assertEqual([step["stage"] for step in report["steps"]], ["policy", "web-typecheck", "node-contract"])
+
     def test_dirty_package_obligation_refuses_before_any_step_record(self):
         self.install_runner_fixture()
         policy = json.loads(self.policy_path.read_text())
