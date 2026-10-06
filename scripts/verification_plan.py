@@ -187,7 +187,7 @@ def execute_plan(root, plan):
             if before != after:
                 reason = "Installed dependencies changed during the selected tests"
                 (directory / "failure.json").write_text(json.dumps({
-                    "reason": reason, "changed_paths": verification_cache.changed_dependencies(before, after)}))
+                    "reason": reason, "changed_paths": verification_cache.changed_dependencies(before, root)}))
                 raise ValueError(reason)
             result = json.loads(output.read_text())
             suites = result.get("testResults", [])

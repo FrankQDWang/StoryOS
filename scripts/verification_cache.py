@@ -35,11 +35,10 @@ def budget(root):
             fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-def installed(root):
-    """Return the identity of each installed dependency file, or None when the installation is not reusable."""
+def scan(root):
+    """Return the identity of each present dependency file and whether the installation is reusable."""
     directories = [root / name for name in ("node_modules", "apps/web/node_modules")]
-    if not all(path.is_dir() for path in directories):
-        return None
+    reusable = all(path.is_dir() for path in directories)
     ignored = set(json.loads((root / "docs/agents/verification-policy.json").read_text()).get("dependency_ignore", []))
     identities = []
     for directory in directories:
@@ -49,7 +48,7 @@ def installed(root):
             if path.is_symlink():
                 if (path.resolve() != (root / "apps/web").resolve()
                         and not any(path.resolve().is_relative_to(base.resolve()) for base in directories)):
-                    return None
+                    reusable = False
                 content = ("link", os.readlink(path))
             elif path.is_file():
                 content = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -58,14 +57,20 @@ def installed(root):
             state = path.lstat()
             identities.append((str(path.relative_to(root)), state.st_mode, state.st_ino,
                                state.st_mtime_ns, state.st_ctime_ns, content))
-    return identities
+    return identities, reusable
 
 
-def changed_dependencies(before, after):
-    """Return the sorted paths whose identity differs between two installed() results."""
+def installed(root):
+    """Return the identity of each installed dependency file, or None when the installation is not reusable."""
+    identities, reusable = scan(root)
+    return identities if reusable else None
+
+
+def changed_dependencies(before, root):
+    """Return the sorted dependency paths whose identity differs from an earlier installed() result."""
     def index(entries):
         return {entry[0]: json.dumps(entry) for entry in entries or []}
-    return verification_failure.changed(index(before), index(after))
+    return verification_failure.changed(index(before), index(scan(root)[0]))
 
 
 def outputs(root, producer=None):
@@ -139,22 +144,22 @@ class DailyCache:
     def prepare(self, report_path):
         if self.path is not None and not self.no_cache and self.observation["status"] == "miss":
             self.required = outputs(self.root, report_path.parent)
-            if self.required and self.required["dependencies"] != json.loads(
+            if (self.required or {}).get("dependencies") != json.loads(
                     (report_path.parent / "dependencies.json").read_text()):
                 reason = "Installed dependencies changed before cache publication"
                 (report_path.parent / "failure.json").write_text(json.dumps({
                     "reason": reason, "changed_paths": changed_dependencies(
-                        json.loads((report_path.parent / "installed.json").read_text()), installed(self.root))}))
+                        json.loads((report_path.parent / "installed.json").read_text()), self.root)}))
                 raise ValueError(reason)
         elif self.observation["status"] == "hit":
             producer = self.root / self.observation["producer"]
             current = outputs(self.root, producer.parent)
             recorded = producer.parent / "installed.json"
-            if current and current["dependencies"] != self.required["dependencies"] and recorded.is_file():
+            if (current or {}).get("dependencies") != self.required["dependencies"] and recorded.is_file():
                 reason = "Installed dependencies changed during cache reuse"
                 (report_path.parent / "failure.json").write_text(json.dumps({
-                    "reason": reason, "changed_paths": changed_dependencies(
-                        json.loads(recorded.read_text()), installed(self.root))}))
+                    "reason": reason,
+                    "changed_paths": changed_dependencies(json.loads(recorded.read_text()), self.root)}))
                 raise ValueError(reason)
             if (self.required != current
                     or self.observation["report_sha256"] != hashlib.sha256(producer.read_bytes()).hexdigest()):
