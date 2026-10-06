@@ -11,6 +11,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 
@@ -66,13 +67,6 @@ def read_holder(handle):
     return holder if isinstance(holder, dict) else None
 
 
-def same_file(handle, path):
-    try:
-        return path.stat().st_ino == os.fstat(handle.fileno()).st_ino
-    except FileNotFoundError:
-        return False
-
-
 def queue_state(root):
     """Return the holder of the host queue, or "free" when no live process holds it."""
     try:
@@ -89,37 +83,39 @@ def describe(holder):
 
 
 @contextmanager
-def host_queue(root, stage, *, poll_seconds=1.0, report_seconds=120.0):
+def host_queue(root, stage, *, report_seconds=120.0):
     """Hold the host queue that all worktrees of the repository share, and wait while another run holds it."""
     if os.environ.get(QUEUE_HELD):
         yield None
         return
     path = queue_path(root)
     record = {"stage": stage, "lock": str(path), "waited_seconds": 0.0, "released": None}
-    started, reported = time.monotonic(), None
-    while True:
-        handle = path.open("a+")
+    started = time.monotonic()
+    handle = path.open("a+")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        done = threading.Event()
+
+        def report():
+            while True:
+                print(f"Host queue: waiting {time.monotonic() - started:.0f}s for "
+                      f"{describe(read_holder(handle) or {})}", flush=True)
+                if done.wait(report_seconds):
+                    return
+
+        reporter = threading.Thread(target=report, daemon=True)
+        reporter.start()
         try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            holder = read_holder(handle)
-            if holder and not holder_alive(holder) and same_file(handle, path):
-                path.unlink()
-                record["released"] = holder
-                print(f"Host queue: released the lock of {describe(holder)}; that process does not exist", flush=True)
-            elif reported is None or time.monotonic() - reported >= report_seconds:
-                reported = time.monotonic()
-                print(f"Host queue: waiting {reported - started:.0f}s for {describe(holder or {})}", flush=True)
-            handle.close()
-            time.sleep(poll_seconds)
-            continue
-        if same_file(handle, path):
-            break
-        handle.close()
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        finally:
+            done.set()
+            reporter.join()
     previous = read_holder(handle)
-    if previous and not holder_alive(previous):
+    if previous:
         record["released"] = previous
-        print(f"Host queue: released the lock of {describe(previous)}; that process does not exist", flush=True)
+        print(f"Host queue: released the lock of {describe(previous)}; that process ended without a release",
+              flush=True)
     holder = {"pid": os.getpid(), "worktree": str(Path(root).resolve()), "stage": stage,
               "started_at": datetime.now(timezone.utc).isoformat()}
     handle.seek(0)
@@ -142,6 +138,7 @@ def host_queue(root, stage, *, poll_seconds=1.0, report_seconds=120.0):
         handle.flush()
         fcntl.flock(handle, fcntl.LOCK_UN)
         handle.close()
+
 
 def scan(root):
     """Return the identity of each present dependency file and whether the installation is reusable."""

@@ -278,26 +278,37 @@ class VerificationCommandTests(unittest.TestCase):
         self.assertEqual(verification_summary.summary({"run_id": "attempt", "hostQueue": "free"})["hostQueue"], "free")
 
     def test_a_holder_without_a_process_is_released_and_recorded(self):
-        self.queue_fixture()
+        second, outside = self.queue_fixture()
         gone = subprocess.Popen([sys.executable, "-c", "pass"])
         gone.wait()
         holder = {"pid": gone.pid, "worktree": "/removed", "stage": "heavy", "started_at": "2026-10-06T00:00:00+00:00"}
         lock = verification_cache.queue_path(self.root)
         lock.write_text(json.dumps(holder))
-        keeper = subprocess.Popen([sys.executable, "-c", "import fcntl, sys; handle = open(sys.argv[1], 'a'); "
-                                   "fcntl.flock(handle, fcntl.LOCK_EX); print('LOCKED', flush=True); sys.stdin.read()",
-                                   str(lock)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        self.assertEqual(verification_cache.queue_state(second), "free")
+        self.assertEqual(verification_summary.summary({"run_id": "attempt", "hostQueue": holder})["hostQueue"], holder)
+        release = outside / "release"
+        first = self.start(self.root, "heavy", "import pathlib, time; print('FIRST_HOLDS', flush=True)\n"
+                           f"while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.05)")
+        waiting = None
         try:
-            self.assertEqual(keeper.stdout.readline(), "LOCKED\n")
-            self.assertEqual(verification_summary.summary({"run_id": "attempt", "hostQueue": holder})["hostQueue"],
-                             holder)
-            self.assertEqual(verification_cache.queue_state(self.root), "free")
-            for _ in range(2):
-                result = self.cli("run", "--", sys.executable, str(COMMAND), "step", "heavy", "--",
-                                  sys.executable, "-c", "print('HEAVY_RUNS')")
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("Host queue: released the lock of stage heavy of worktree /removed", result.stdout)
-                self.assertEqual(self.reports(self.root)[-1]["host_queue"][0]["released"], holder)
-                lock.write_text(json.dumps(holder))
+            output = first.stdout.readline()
+            self.assertEqual(output, "Host queue: released the lock of stage heavy of worktree /removed, started "
+                             f"2026-10-06T00:00:00+00:00, process {gone.pid}; that process ended without a release\n")
+            self.assertEqual(first.stdout.readline(), "FIRST_HOLDS\n")
+            waiting = self.start(second, "heavy", "print('SECOND_RUNS', flush=True)")
+            line = waiting.stdout.readline()
+            self.assertIn(f"stage heavy of worktree {self.root.resolve()}", line)
+            release.write_text("done")
+            self.assertEqual(first.wait(timeout=60), 0)
+            output, errors = waiting.communicate(timeout=60)
+            self.assertEqual(waiting.returncode, 0, errors)
+            self.assertNotIn("released the lock", output)
         finally:
-            keeper.communicate("")
+            for process in (first, waiting):
+                if process and process.poll() is None:
+                    process.kill()
+                if process:
+                    process.communicate()
+        self.assertEqual(self.reports(self.root)[-1]["host_queue"][0]["released"], holder)
+        self.assertEqual(self.reports(second)[-1]["host_queue"][0]["released"], None)
+        self.assertEqual(lock.read_text(), "")
