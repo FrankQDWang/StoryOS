@@ -55,4 +55,4 @@ def final_line(report, report_path):
     if report["status"] == "passed":
         return f"{summary}; report: {report_path}"
     return (f"{summary}; failed step: {', '.join(report['failed_steps']) or 'none'}; "
-            f"reason: {report['failure_reason']}; log: {report['failure_log'] or 'none'}; report: {report_path}")
+            f"reason: {report['failure_reason'].removesuffix('.')}; log: {report['failure_log'] or 'none'}; report: {report_path}")

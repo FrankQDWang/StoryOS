@@ -94,7 +94,7 @@ class VerificationCommandTests(unittest.TestCase):
         report_path = Path(report["repository"]) / "target/verification" / report["run_id"] / "report.json"
         self.assertEqual(result.stdout.splitlines()[-1],
                          f"Verification failed: {report['duration_seconds']:.2f}s; failed step: failure; "
-                         f"reason: {reason}; log: {inner['log']}; report: {report_path}")
+                         f"reason: {reason[:-1]}; log: {inner['log']}; report: {report_path}")
 
     def test_observation_storage_failure_does_not_replace_test_result(self):
         shared = self.root / '.git/storyos-observation'
@@ -115,7 +115,7 @@ class VerificationCommandTests(unittest.TestCase):
                                                        "changed_paths", "failure_log")},
                          {"status": "source-changed", "exit_code": 0, "failed_steps": [], "failure_reason": reason,
                           "changed_paths": ["AGENTS.md"], "failure_log": report["log"]})
-        self.assertIn(f"failed step: none; reason: {reason}; log: {report['log']}", result.stdout.splitlines()[-1])
+        self.assertIn(f"failed step: none; reason: {reason[:-1]}; log: {report['log']}", result.stdout.splitlines()[-1])
         self.assertNotEqual(report["source_start"], report["source_end"])
 
     def test_stage_budget_fails_even_when_child_handles_termination_as_success(self):
