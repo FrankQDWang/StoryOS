@@ -97,20 +97,18 @@ def numstat(root, base, diff_filter):
 
 
 def module_lines(text):
-    """Return the line count of a Rust module without its #[cfg(test)] modules."""
+    """Return the line count of a rustfmt-formatted Rust module without its #[cfg(test)] modules."""
     lines, kept, index = text.splitlines(), 0, 0
     while index < len(lines):
         end = index + 1
         if lines[index].strip() == '#[cfg(test)]':
             while end < len(lines) and lines[end].lstrip().startswith('#['):
                 end += 1
-            if end < len(lines) and re.match(r'(pub(\([^)]*\))?\s+)?mod\s', lines[end].lstrip()):
-                depth = 0
-                while end < len(lines):
-                    depth += lines[end].count('{') - lines[end].count('}')
-                    if depth <= 0 and ('}' in lines[end] or lines[end].rstrip().endswith(';')):
-                        break
-                    end += 1
+            item = re.match(r'(\s*)(pub(\([^)]*\))?\s+)?mod\s', lines[end]) if end < len(lines) else None
+            if item:
+                if lines[end].rstrip().endswith('{'):
+                    while end < len(lines) and lines[end].rstrip() != item[1] + '}':
+                        end += 1
                 index = end + 1
                 continue
         kept += 1

@@ -270,7 +270,8 @@ class TargetedStatusTests(unittest.TestCase):
         (fixture.root / 'AGENTS.md').write_text('Changed source.\nSecond line.\n')
         (fixture.root / 'scripts/large.rs').write_text(rust(400))
         (fixture.root / 'scripts/tested.rs').write_text(
-            rust(400) + '#[cfg(test)]\nmod tests {\n' + '    fn case() {}\n' * 148 + '}\n')
+            rust(400) + '#[cfg(test)]\nmod tests {\n    const CLOSE: &str = "}}";\n'
+            + '    fn case() {}\n' * 146 + '    const OPEN: &str = "{";\n}\n')
         (fixture.root / 'scripts/tested_tests.rs').write_text(rust(600))
         (fixture.root / 'scripts/huge.rs').write_text(rust(801))
         fixture.repo.git('add', '.')
