@@ -102,9 +102,8 @@ def run(root, pr, executor):
         prompt = path.parent / f'{axis}-prompt.md'
         prompt.write_text(TEMPLATE.read_text().replace('{{axis}}', axis).replace('{{request}}', str(path)))
         jobs[axis] = codex('task', '--background', '--fresh', '--prompt-file', str(prompt))['jobId']
-    results = {}
-    for axis, job in jobs.items():
-        verdict = review(job)
+    verdicts, results = {axis: review(job) for axis, job in jobs.items()}, {}
+    for axis, verdict in verdicts.items():
         verdict['result'] = 'FAIL' if verdict['blocking'] else 'PASS'
         context = f'codex-{axis}-pr{pr}'
         body = path.parent / f'{axis}-comment.md'
