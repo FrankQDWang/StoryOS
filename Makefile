@@ -28,7 +28,7 @@ verify-policy-steps:
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
 	$(VERIFY_STEP) diff-whitespace -- scripts/verify-diff-whitespace.sh
 	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
-	$(VERIFY_STEP) ste-text-guard -- sh -c 'if [ -n "$(STORYOS_PR_BASE_SHA)" ]; then echo "The pull-request check does not run the text guard before issue 984."; exit 0; fi; \
+	$(VERIFY_STEP) ste-text-guard -- sh -c 'if [ -n "$(STORYOS_PR_BASE_SHA)" ]; then echo "The pull-request check runs only the file mode, from the base parent to the synthetic merge."; exec python3 scripts/ste_text_guard.py files --base HEAD^1 --head HEAD; fi; \
 		python3 scripts/ste_text_guard.py files --base origin/main; files=$$?; python3 scripts/ste_text_guard.py commits --advisory --base origin/main && exit $$files'
 
 verify-policy: verify-policy-steps
