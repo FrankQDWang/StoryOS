@@ -156,14 +156,12 @@ print('executed selected files')
         for name in ("package-release.py", "verify-project-scope.sh"):
             path = self.root / "scripts" / name
             path.write_text("Changed shared script.\n")
-            result = self.cli("run")
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertIn("input-policy-checked", result.stdout)
-            self.assertIn("Daily scope pending: exact-dist", result.stdout)
-            self.assertIn("Daily scope pending: recovery", result.stdout)
+            plan = json.loads(self.cli("plan").stdout)
+            self.assertLessEqual({("exact-dist", "pending"), ("recovery", "pending")},
+                                 {(c["group"], c["status"]) for c in plan["checks"]})
             path.unlink()
 
-    def test_dirty_package_obligation_does_not_hide_independent_feedback(self):
+    def test_dirty_package_obligation_refuses_before_any_step_record(self):
         self.install_runner_fixture()
         policy = json.loads(self.policy_path.read_text())
         policy["daily_consumers"] = [{"pattern": "docs/fixture.md", "groups": ["database"]}]
@@ -175,14 +173,10 @@ print('executed selected files')
         (self.root / "docs/fixture.md").write_text("Changed fixture contract.\n")
         self.add_test()
         result = self.cli("run")
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("executed selected files", result.stdout)
-        report = self.repo.report()
-        self.assertEqual(report["status"], "pending")
-        self.assertEqual([(c["group"], c["status"]) for c in report["plan"]["checks"]],
-                         [("policy", "ready"), ("web-typecheck", "ready"),
-                          ("node-contract", "ready"), ("database", "pending")])
-        self.assertFalse((self.root / "target/complete-started").exists())
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "",
+            "Release packaging requires a clean tracked and untracked worktree; commit or remove the dirty paths: "
+            "apps/web/test/node-contract/new.test.ts, docs/fixture.md\n"))
+        self.assertEqual(list(self.root.glob("target/verification/*/report.json")), [])
 
     def test_staged_changes_remain_selected_when_working_bytes_match_the_base(self):
         path = self.add_test()

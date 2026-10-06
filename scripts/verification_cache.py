@@ -37,9 +37,12 @@ def outputs(root, producer=None):
     directories = [root / name for name in ("node_modules", "apps/web/node_modules")]
     if not all(path.is_dir() for path in directories):
         return None
+    ignored = set(json.loads((root / "docs/agents/verification-policy.json").read_text()).get("dependency_ignore", []))
     identities = []
     for directory in directories:
         for path in sorted(directory.rglob("*")):
+            if ignored.intersection(path.relative_to(directory).parts):
+                continue
             if path.is_symlink():
                 if (path.resolve() != (root / "apps/web").resolve()
                         and not any(path.resolve().is_relative_to(base.resolve()) for base in directories)):

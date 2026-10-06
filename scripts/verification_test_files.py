@@ -15,7 +15,15 @@ import verification
 
 def run(root):
     policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
-    files = sorted(item["path"] for item in verification.inventory(root)["files"]
+    current = verification.inventory(root)["files"]
+    # The complete-graph self-test compares the committed test inventory with the worktree inventory.
+    uncommitted = sorted({item["path"] for item in current if item["kind"].endswith("-test")}
+                         ^ {item["path"] for item in verification.inventory(root, "HEAD")["files"]
+                            if item["kind"].endswith("-test")})
+    if uncommitted:
+        raise ValueError("The verification-tool self-tests require committed test files; "
+                         "commit or remove these test files: " + ", ".join(uncommitted))
+    files = sorted(item["path"] for item in current
                    if item["kind"] == "verification-test" and item["group"] == "verification-tools"
                    and (root / item["path"]).is_file())
     if not files:

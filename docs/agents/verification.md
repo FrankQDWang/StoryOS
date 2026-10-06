@@ -140,8 +140,17 @@ Bundle. Keep secrets in environment variables, not recorded command arguments.
 results. It does not run tests or write observations. Use
 `python3 scripts/verification_plan.py status --base origin/main` for JSON, or
 `make verify-plan` for a readable plan summary. An empty
-change set remains pending. A prior result can be passed, failed, or stale;
-package-dependent work on dirty sources has unmet prerequisites.
+change set remains pending. A prior result can be passed, failed, or stale.
+Package-dependent work on dirty sources has unmet prerequisites.
+
+Status JSON has `prerequisites.cleanTree` and `prerequisites.policyFresh`. Each
+one has a `status` (`met`, `unmet`, or `not-required`) and a `reason`. A selected
+check that the policy marks `clean`, or that requires the package, needs a clean
+tracked and untracked worktree. A complete run needs a current passed
+`verify-policy` result. When a prerequisite is unmet, `nextAction.prerequisite`
+names it and `agentHint` tells how to meet it. The daily, targeted, and complete
+runs check the same prerequisites before the first step. An unmet prerequisite
+stops the run with the dirty paths or the refresh command. It writes no step record.
 
 `make verify-targeted CHECK=verify-policy VERIFY_ARGS='--issue 744'` runs a check
 registered in the policy. Query it with
@@ -296,7 +305,8 @@ validate this structure. Independent policy self-tests also precede Rust compila
 ## Verification-tool self-tests
 
 `verify-policy` discovers each current `scripts/*_tests.py` file and runs the
-whole file once. The policy lists files approved for overlap and caps workers at
+whole file once. An uncommitted or untracked test file stops this step before
+the self-tests run, and the message tells the author to commit it. The policy lists files approved for overlap and caps workers at
 two. A new or undeclared file runs serially. A missing file, invalid declaration,
 or empty selection fails. The public serial diagnostic command is
 `STORYOS_VERIFICATION_TEST_WORKERS=1 make verify-targeted CHECK=verification-tests`.
@@ -323,7 +333,9 @@ checks and workers; runners and toolchains; host identity; and an environment di
 An unrelated file edit can miss, but a new Git SHA alone does not. Environment values stay private.
 Reuse requires the original complete successful report, its digest and Vitest output,
 and equal installed Node dependency trees, including modes and write stamps. Dependency
-identity must stay equal from prepared test start through report completion. Missing,
+identity must stay equal from prepared test start through report completion. The
+identity skips the directory names in the policy `dependency_ignore` list, for example
+the Vite cache. The `.pnpm` store stays in the identity. Missing,
 changed or corrupt output causes execution. The Web workspace link binds to repository
 inputs; other external links disable reuse. Failed, interrupted, incomplete or
 source-changing runs cannot publish reusable results.

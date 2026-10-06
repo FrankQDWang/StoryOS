@@ -46,11 +46,45 @@ def execute(root, check, context):
         plan = targeted_plan(root, check)
         if plan['checks'][0]['status'] == 'pending':
             import verification_candidate
-            verification_candidate.observe(root, 'refused', issue=context.get('issue'),
-                                           reason='Release package requires clean sources', check=check)
+            reason = refusal(clean_tree(root, True, 'Release packaging'))
+            verification_candidate.observe(root, 'refused', issue=context.get('issue'), reason=reason, check=check)
+            print(reason, file=sys.stderr)
             return 2
         command = [sys.executable, str(Path(runner.__file__).resolve()), 'step', check, '--', *plan['command']]
         return runner.run(root, command, plan=plan, context={**context, 'profile': 'targeted'}, locked=True)
+
+
+def clean_tree(root, required, scope):
+    """Return the clean-tree prerequisite of a scope. An unmet result lists at most 20 dirty paths."""
+    if not required:
+        return {'status': 'not-required', 'reason': 'No selected check requires a clean worktree'}
+    lines = subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=all'],
+                                    cwd=root, text=True).splitlines()
+    paths = [line[3:] for line in lines]
+    if not paths:
+        return {'status': 'met', 'reason': 'The tracked and untracked worktree is clean'}
+    return {'status': 'unmet', 'reason': f'{scope} requires a clean tracked and untracked worktree; '
+            'commit or remove the dirty paths', 'paths': paths[:20], 'omittedPaths': max(0, len(paths) - 20)}
+
+
+def policy_fresh(root):
+    """Return the fresh verify-policy prerequisite of a complete run."""
+    policy = json.loads((root / 'docs/agents/verification-policy.json').read_text())
+    if 'verify-policy' not in policy.get('complete', {}).get('admission', {}).get('targeted', []):
+        return {'status': 'not-required', 'reason': 'Complete admission does not require a verify-policy result'}
+    state = status(root, targeted_plan(root, 'verify-policy'))['status']
+    if state == 'passed':
+        return {'status': 'met', 'reason': 'The verify-policy result is current and passed'}
+    return {'status': 'unmet', 'reason': f'The verify-policy result is {state}; '
+            'refresh it with make verify-targeted CHECK=verify-policy'}
+
+
+def refusal(prerequisite):
+    """Return the refusal message of an unmet prerequisite, or None."""
+    if prerequisite['status'] != 'unmet':
+        return None
+    paths = prerequisite.get('paths')
+    return prerequisite['reason'] + (': ' + ', '.join(paths) if paths else '')
 
 
 def process_state(process):
@@ -93,11 +127,16 @@ def status(root, plan):
         if result['status'] == 'passed' and (report.get('source_end') != plan['source'] or
                 not report.get('steps') or any(s['status'] not in {'passed', 'cached'} for s in report['steps'])):
             result['status'] = 'stale'
-    pending = [c for c in plan['checks'] if c['status'] == 'pending']
-    if pending:
+    if any(c['status'] == 'pending' for c in plan['checks']):
         result['status'] = 'unmet-prerequisites'
-        result['prerequisites'] = pending
-        result['next_command'] = 'git status --short' if plan['source']['dirty'] else 'make verify-plan'
+    if 'check' in plan:
+        registered = json.loads((root / 'docs/agents/verification-policy.json').read_text())['targeted']
+        clean = clean_tree(root, registered[plan['check']]['clean'], 'Release packaging')
+        fresh = {'status': 'not-required', 'reason': 'Only a complete run requires a fresh verify-policy result'}
+    else:
+        clean = clean_tree(root, any(c.get('requires_package') for c in plan['checks']), 'Release packaging')
+        fresh = policy_fresh(root)
+    result['prerequisites'] = {'cleanTree': clean, 'policyFresh': fresh}
     observe = (['python3', 'scripts/verification.py', 'status', '--check', plan['check'], '--json']
                if 'check' in plan else ['python3', 'scripts/verification_plan.py', 'status', '--base', plan['base'],
                                         '--workers', str(plan['workers'])])
@@ -116,20 +155,25 @@ def guidance(result, observe, *, complete):
         if not recoverable:
             action = None
         hint = 'Confirm child-process cleanup before recovery or another run. Recovery rechecks admission.'
+    elif result.get('prerequisites', {}).get('cleanTree', {}).get('status') == 'unmet':
+        decision, reason, action = 'blocked', 'dirty-package-inputs', ['git', 'status', '--short', '--untracked-files=all']
+        hint = ('The cleanTree prerequisite is unmet. Commit or remove the dirty paths that git status lists, '
+                'then run the selected checks.')
     elif result.get('changedInputs') or state in {'stale', 'source-changed', 'incomplete'}:
         decision, reason = 'replan', 'identity-changed' if result.get('changedInputs') else 'invalid-evidence'
         plan = result.get('plan', {})
         action = ['make', 'verify-plan', 'BASE=' + plan.get('base', result.get('base', 'origin/main'))]
         hint = 'Inspect a fresh plan and run applicable targeted checks. Refresh candidate reviews after source edits.'
     elif state == 'unmet-prerequisites':
-        dirty = result['plan']['source']['dirty']
         decision, reason = 'blocked', 'pending-obligations'
         ready = sum(c['status'] == 'ready' for c in result['plan']['checks'])
-        if 'check' in result['plan'] and dirty:
-            reason = 'dirty-package-inputs'
         action = (['make', 'verify-changed', 'BASE=' + result['plan']['base']]
                   if ready and 'base' in result['plan'] else None)
         hint = f'{ready} ready checks can run; pending checks remain unsatisfied. Inspect blocking reasons and check details.'
+    elif state == 'passed' and result.get('prerequisites', {}).get('policyFresh', {}).get('status') == 'unmet':
+        decision, reason, action = 'run', 'stale-policy-result', ['make', 'verify-targeted', 'CHECK=verify-policy']
+        hint = ('This verification scope passed. The policyFresh prerequisite of a complete run is unmet; '
+                'this command refreshes the verify-policy result.')
     elif state == 'passed':
         decision, reason, action = 'satisfied', 'current-pass', None
         hint = 'This verification scope passed. This status does not grant merge approval.'
@@ -143,8 +187,12 @@ def guidance(result, observe, *, complete):
     workers = result.get('plan', {}).get('workers')
     if action and action[:2] in (['make', 'verify-plan'], ['make', 'verify-changed']) and type(workers) is int:
         action.append(f'VERIFY_ARGS=--workers {workers}')
-    result.update(version=2, decision=decision, reasonCode=reason,
-                  nextAction={'argv': action} if action else None, agentHint=hint,
+    next_action = {'argv': action} if action else None
+    if reason == 'dirty-package-inputs':
+        next_action['prerequisite'] = 'cleanTree'
+    elif reason == 'stale-policy-result':
+        next_action['prerequisite'] = 'policyFresh'
+    result.update(version=2, decision=decision, reasonCode=reason, nextAction=next_action, agentHint=hint,
                   next_command=shlex.join(action) if action else None)
     return result
 

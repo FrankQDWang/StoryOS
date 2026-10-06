@@ -224,6 +224,10 @@ def main():
                 if ((args.plan and json.loads(args.plan.read_text()) != plan)
                         or (args.expected and args.expected != plan["digest"])):
                     raise ValueError("The verification plan is stale or has been changed")
+                unmet = verification.verification_status.refusal(verification.verification_status.clean_tree(
+                    root, any(c.get("requires_package") for c in plan["checks"]), "Release packaging"))
+                if unmet:
+                    raise ValueError(unmet)
                 command = [sys.executable, str(Path(__file__).resolve()), "execute", "--base", plan["base"],
                            "--expected", plan["digest"], "--workers", str(plan["workers"])]
                 return verification.run(root, command, plan=plan, no_cache=args.no_cache,
@@ -244,7 +248,8 @@ def main():
                 else:
                     if args.action != 'status' and value['decision'] == 'replan':
                         value['observedStatus'] = value['status']
-                        value['status'] = 'unmet-prerequisites' if value.get('prerequisites') else 'pending'
+                        value['status'] = ('unmet-prerequisites' if any(c['status'] == 'pending' for c in plan['checks'])
+                                           else 'pending')
                         value['changedInputs'] = []
                         value['next_command'] = ('make verify-changed BASE=' + plan['base'] if plan['changes']
                                                  else 'make verify-targeted CHECK=verify-policy')

@@ -113,7 +113,7 @@ class DailyCacheTests(unittest.TestCase):
         def pending_plan():
             result = self.fixture.cli("run")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("pending", result.stdout)
+            self.assertIn("requires a clean tracked and untracked worktree", result.stderr)
             self.assertNotIn("executed selected files", result.stdout)
             self.assertNotIn("daily-result-reuse", result.stdout)
             return json.loads(self.fixture.cli("plan").stdout)
@@ -155,6 +155,26 @@ class DailyCacheTests(unittest.TestCase):
             result, report = self.run_daily()
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(list(self.root.glob("target/verification-cache/*.json")))
+
+    def test_vite_cache_writes_are_ignored_but_other_dependency_writes_fail(self):
+        policy = json.loads(self.fixture.policy_path.read_text())
+        policy["dependency_ignore"] = [".vite", ".vite-temp"]
+        self.fixture.policy_path.write_text(json.dumps(policy))
+        self.fixture.repo.git("add", "docs/agents/verification-policy.json")
+        self.fixture.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                              "commit", "--quiet", "-m", "Ignore the Vite cache.")
+        self.fixture.base = self.fixture.repo.git("rev-parse", "HEAD")
+        tool = self.root / ".tools/pnpm"
+        original = tool.read_text()
+        message = "Installed dependencies changed during the selected tests"
+        for written, expected in (("apps/web/node_modules/.vite/vitest/results.json", (0, "passed", False)),
+                                  ("apps/web/node_modules/.vite-temp/config.mjs", (0, "passed", False)),
+                                  ("apps/web/node_modules/.pnpm/vite/index.js", (1, "failed", True))):
+            tool.write_text(original.replace("results =", f"written = pathlib.Path({written!r}); "
+                                             "written.parent.mkdir(parents=True, exist_ok=True); "
+                                             "written.write_text('cache')\nresults ="))
+            result, report = self.run_daily()
+            self.assertEqual((result.returncode, report["status"], message in result.stderr), expected, result.stderr)
 
     def test_busy_budget_refuses_a_second_run_and_releases_after_interruption(self):
         target = self.root / "target"
