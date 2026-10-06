@@ -90,7 +90,8 @@ def run(root, pr, executor):
     rounds = {}
     for match in filter(None, (VERDICT.match(c['body']) for c in pull['comments'])):
         rounds.setdefault(int(match[2]), {})[match[1]] = match[3]
-    number = 1 + max(rounds, default=0)
+    # A round counts only when it has a verdict comment for each axis; a retry resumes an incomplete round.
+    number = 1 + max((n for n, verdicts in rounds.items() if len(verdicts) == 2), default=0)
     if rounds.get(number - 1) == {'Standards': 'PASS', 'Spec': 'PASS'}:
         raise ValueError(f'Round {number - 1} passed on the two axes. Only a blocking finding starts a new round; '
                          'send the PR link and the verdict comment links to the coordinator session')
@@ -110,16 +111,16 @@ def run(root, pr, executor):
         jobs[axis] = codex('task', '--background', '--fresh', '--prompt-file', str(prompt))['jobId']
     verdicts, results = {axis: review(job) for axis, job in jobs.items()}, {}
     for axis, verdict in verdicts.items():
-        verdict['result'] = 'FAIL' if verdict['blocking'] else 'PASS'
-        context = f'codex-{axis}-pr{pr}'
-        body = path.parent / f'{axis}-comment.md'
-        body.write_text(comment(axis, number, verdict, context, request))
-        url = gh('pr', 'comment', str(pr), '--body-file', str(body)).strip()
-        record = path.parent / f'{axis}-record.json'
-        record.write_text(json.dumps({'request_sha256': request['digest'], 'axis': axis, 'reviewer_context': context,
-                                      'result': verdict['result'], 'evidence': '\n'.join([url, *verdict['evidence']])}))
+        verdict['result'], verdict['context'] = 'FAIL' if verdict['blocking'] else 'PASS', f'codex-{axis}-pr{pr}'
+        # The admission glob reads <axis>-*.json in this directory, so the local record uses another name.
+        record = path.parent / f'record-{axis}.json'
+        record.write_text(json.dumps({'request_sha256': request['digest'], 'axis': axis, 'reviewer_context': verdict['context'],
+                                      'result': verdict['result'], 'evidence': '\n'.join([f"Codex thread {verdict['thread']}", *verdict['evidence']])}))
         subprocess.check_output([sys.executable, str(reviews), 'import', '--request', str(path), '--record', str(record)], cwd=root)
-        results[axis] = (verdict['result'], url)
+    for axis, verdict in verdicts.items():
+        body = path.parent / f'{axis}-comment.md'
+        body.write_text(comment(axis, number, verdict, verdict['context'], request))
+        results[axis] = (verdict['result'], gh('pr', 'comment', str(pr), '--body-file', str(body)).strip())
     print(f'Round {number} of {ROUNDS} for PR {pr}. Request: {path}')
     for axis, (result, url) in results.items():
         print(f'{axis.capitalize()}: {result} {url}')

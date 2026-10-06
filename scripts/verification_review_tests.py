@@ -281,7 +281,7 @@ else:
         self.assertEqual([call[1:4] for call in state['node'] if call[1] == 'task'], [['task', '--background', '--fresh']] * 2)
         self.assertNotIn('--write', sum(state['node'], []))
         for axis in ('standards', 'spec'):
-            record = json.loads(sorted((self.root / 'target/verification/reviews' / request['digest']).glob(f'{axis}-1*.json'))[-1].read_text())
+            record = json.loads(sorted((self.root / 'target/verification/reviews' / request['digest']).glob(f'{axis}-*.json'))[-1].read_text())
             self.assertEqual({k: record[k] for k in ('axis', 'reviewer_context', 'result')}, {'axis': axis, 'reviewer_context': f'codex-{axis}-pr745', 'result': 'PASS'})
         self.assertEqual(result.stdout.splitlines()[1:], ['Standards: PASS https://example.invalid/pull/745#comment-1',
                                                           'Spec: PASS https://example.invalid/pull/745#comment-2',
@@ -304,8 +304,15 @@ else:
         self.assertIn('coordinator session', result.stderr)
         self.assertEqual((len(state['comments']), state['node']), (len(comments), []))
 
+    def test_round_with_one_axis_comment_is_resumed(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        result, state = self.review_round({'standards': clean, 'spec': clean}, comments=['## Standards review, round 1: PASS\n'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c['body'].splitlines()[0] for c in state['comments'][1:]],
+                         ['## Standards review, round 1: PASS', '## Spec review, round 1: PASS'])
+
     def test_round_four_is_refused_with_the_coordinator(self):
-        self.refused_round([f'## Spec review, round {n}: FAIL\n' for n in (1, 2, 3)])
+        self.refused_round([f'## {axis} review, round {n}: FAIL\n' for n in (1, 2, 3) for axis in ('Standards', 'Spec')])
 
     def test_round_after_pass_pass_is_refused_with_the_coordinator(self):
         self.refused_round(['## Standards review, round 1: PASS\n', '## Spec review, round 1: PASS\n'])
