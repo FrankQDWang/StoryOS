@@ -21,8 +21,8 @@ def run(root):
                          ^ {item["path"] for item in verification.inventory(root, "HEAD")["files"]
                             if item["kind"].endswith("-test")})
     if uncommitted:
-        raise ValueError("The verification-tool self-tests require committed test files; "
-                         "commit or remove these test files: " + ", ".join(uncommitted))
+        raise ValueError("The verification-tool self-tests require committed test files. "
+                         "Commit or remove these test files: " + ", ".join(uncommitted))
     files = sorted(item["path"] for item in current
                    if item["kind"] == "verification-test" and item["group"] == "verification-tools"
                    and (root / item["path"]).is_file())

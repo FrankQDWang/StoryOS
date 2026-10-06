@@ -172,8 +172,8 @@ class CandidateCommandTests(unittest.TestCase):
         (self.root / 'AGENTS.md').write_text('Changed input')
         result = self.run_complete()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('Complete verification requires a clean tracked and untracked worktree; '
-                      'commit or remove the dirty paths: AGENTS.md\n', result.stderr)
+        self.assertIn('Complete verification requires a clean tracked and untracked worktree. '
+                      'Commit or remove the dirty paths: AGENTS.md\n', result.stderr)
         self.assertEqual(list(self.root.glob('target/verification/*/report.json')), [])
         self.repo.git('checkout', '--', 'AGENTS.md')
         self.assertEqual(self.run_complete().returncode, 0)
@@ -193,7 +193,7 @@ class CandidateCommandTests(unittest.TestCase):
         self.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
         result = self.run_complete()
         self.assertEqual(result.returncode, 1)
-        self.assertIn('The verify-policy result is pending; refresh it with make verify-targeted CHECK=verify-policy\n',
+        self.assertIn('The verify-policy result is pending. Refresh it with make verify-targeted CHECK=verify-policy\n',
                       result.stderr)
         self.assertEqual(list(self.root.glob('target/verification/*/report.json')), [])
         self.assertFalse((self.root / 'target/launches').exists())

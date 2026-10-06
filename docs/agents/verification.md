@@ -218,8 +218,9 @@ Use `make verify-plan BASE=origin/main` to inspect a bounded daily summary.
 Use `make verify-changed BASE=origin/main` to execute that scope. Set BASE to the
 actual comparison commit or ref; `BASE=HEAD` checks current working changes only.
 The daily entry never dispatches complete verification. Each check is ready or pending.
-Ready checks execute on dirty sources. Package consumers stay pending until sources
-are clean. A pending result returns exit code 2 and cannot publish a cache entry.
+Ready checks execute on dirty sources. When a selected check requires the package,
+a dirty tree stops the run before the first step. A pending result returns exit code 2
+and cannot publish a cache entry.
 Exact-dist, recovery, and unresolved scopes retain explicit pending obligations.
 Save plans under ignored `target/` and run a saved plan with
 `python3 scripts/verification_plan.py run --base origin/main --plan target/plan.json`.

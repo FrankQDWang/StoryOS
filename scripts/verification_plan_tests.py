@@ -174,7 +174,7 @@ print('executed selected files')
         self.add_test()
         result = self.cli("run")
         self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "",
-            "Release packaging requires a clean tracked and untracked worktree; commit or remove the dirty paths: "
+            "Release packaging requires a clean tracked and untracked worktree. Commit or remove the dirty paths: "
             "apps/web/test/node-contract/new.test.ts, docs/fixture.md\n"))
         self.assertEqual(list(self.root.glob("target/verification/*/report.json")), [])
 

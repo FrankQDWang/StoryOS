@@ -142,8 +142,8 @@ class TargetedStatusTests(unittest.TestCase):
         self.assertEqual(self.status('package')['status'], 'unmet-prerequisites')
         result = self.repo.cli('targeted', '--check', 'package')
         self.assertEqual((result.returncode, result.stderr), (2,
-            'Release packaging requires a clean tracked and untracked worktree; '
-            'commit or remove the dirty paths: AGENTS.md\n'))
+            'Release packaging requires a clean tracked and untracked worktree. '
+            'Commit or remove the dirty paths: AGENTS.md\n'))
         self.assertFalse((self.root / 'target/launches').exists())
         result = self.repo.cli('step', 'outer', '--', sys.executable, str(verification_tests.COMMAND),
                                'step', 'inner', '--', sys.executable, '-c', 'print("nested")')
@@ -202,23 +202,26 @@ class TargetedStatusTests(unittest.TestCase):
         path = fixture.add_test()
         path.write_text("import {test} from 'vitest'; test('needs a package',()=>{});\n")
         value = json.loads(fixture.cli('status').stdout)
-        stale = {'status': 'unmet', 'reason': 'The verify-policy result is pending; '
-                 'refresh it with make verify-targeted CHECK=verify-policy'}
+        stale = {'status': 'unmet', 'reason': 'The verify-policy result is pending. '
+                 'Refresh it with make verify-targeted CHECK=verify-policy'}
         self.assertEqual({key: value[key] for key in ('decision', 'reasonCode', 'nextAction', 'prerequisites')}, {
             'decision': 'blocked', 'reasonCode': 'dirty-package-inputs',
             'nextAction': {'argv': ['git', 'status', '--short', '--untracked-files=all'], 'prerequisite': 'cleanTree'},
             'prerequisites': {'cleanTree': {'status': 'unmet', 'reason': 'Release packaging requires a clean tracked '
-                                            'and untracked worktree; commit or remove the dirty paths',
+                                            'and untracked worktree. Commit or remove the dirty paths',
                                             'paths': ['apps/web/test/node-contract/new.test.ts'], 'omittedPaths': 0},
                               'policyFresh': stale}})
         path.write_text("// Verification: repository-inputs-only.\nimport {test} from 'vitest';\ntest('new',()=>{});\n")
-        self.assertEqual(fixture.cli('run').returncode, 0)
-        value = json.loads(fixture.cli('status').stdout)
-        self.assertEqual({key: value[key] for key in ('status', 'decision', 'reasonCode', 'nextAction', 'prerequisites')}, {
-            'status': 'passed', 'decision': 'run', 'reasonCode': 'stale-policy-result',
-            'nextAction': {'argv': ['make', 'verify-targeted', 'CHECK=verify-policy'], 'prerequisite': 'policyFresh'},
-            'prerequisites': {'cleanTree': {'status': 'not-required', 'reason': 'No selected check requires a clean worktree'},
-                              'policyFresh': stale}})
+        refresh = {'decision': 'run', 'reasonCode': 'stale-policy-result',
+                   'nextAction': {'argv': ['make', 'verify-targeted', 'CHECK=verify-policy'], 'prerequisite': 'policyFresh'},
+                   'prerequisites': {'cleanTree': {'status': 'not-required',
+                                                   'reason': 'No selected check requires a clean worktree'},
+                                     'policyFresh': stale}}
+        for status in ('pending', 'passed'):
+            if status == 'passed':
+                self.assertEqual(fixture.cli('run').returncode, 0)
+            value = json.loads(fixture.cli('status').stdout)
+            self.assertEqual({key: value[key] for key in ('status', *refresh)}, {'status': status, **refresh})
         self.assertEqual(fixture.repo.cli('targeted', '--check', 'verify-policy').returncode, 0)
         value = json.loads(fixture.cli('status').stdout)
         self.assertEqual((value['decision'], value['nextAction'], value['prerequisites']['policyFresh']),

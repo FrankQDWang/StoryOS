@@ -49,8 +49,8 @@ class FileInterruptionTests(unittest.TestCase):
         (self.root / "scripts/b_tests.py").write_text("raise AssertionError('self-test ran')\n")
         result = self.fixture.cli("targeted", "--check", "verification-tests")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("The verification-tool self-tests require committed test files; "
-                      "commit or remove these test files: scripts/b_tests.py\n", result.stderr)
+        self.assertIn("The verification-tool self-tests require committed test files. "
+                      "Commit or remove these test files: scripts/b_tests.py\n", result.stderr)
         self.assertNotIn("FILE_READY", result.stdout)
         self.assertNotIn("Traceback", result.stderr)
 

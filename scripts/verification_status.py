@@ -63,8 +63,8 @@ def clean_tree(root, required, scope):
     paths = [line[3:] for line in lines]
     if not paths:
         return {'status': 'met', 'reason': 'The tracked and untracked worktree is clean'}
-    return {'status': 'unmet', 'reason': f'{scope} requires a clean tracked and untracked worktree; '
-            'commit or remove the dirty paths', 'paths': paths[:20], 'omittedPaths': max(0, len(paths) - 20)}
+    return {'status': 'unmet', 'reason': f'{scope} requires a clean tracked and untracked worktree. '
+            'Commit or remove the dirty paths', 'paths': paths[:20], 'omittedPaths': max(0, len(paths) - 20)}
 
 
 def policy_fresh(root):
@@ -75,8 +75,8 @@ def policy_fresh(root):
     state = status(root, targeted_plan(root, 'verify-policy'))['status']
     if state == 'passed':
         return {'status': 'met', 'reason': 'The verify-policy result is current and passed'}
-    return {'status': 'unmet', 'reason': f'The verify-policy result is {state}; '
-            'refresh it with make verify-targeted CHECK=verify-policy'}
+    return {'status': 'unmet', 'reason': f'The verify-policy result is {state}. '
+            'Refresh it with make verify-targeted CHECK=verify-policy'}
 
 
 def refusal(prerequisite):
@@ -159,6 +159,10 @@ def guidance(result, observe, *, complete):
         decision, reason, action = 'blocked', 'dirty-package-inputs', ['git', 'status', '--short', '--untracked-files=all']
         hint = ('The cleanTree prerequisite is unmet. Commit or remove the dirty paths that git status lists, '
                 'then run the selected checks.')
+    elif result.get('prerequisites', {}).get('policyFresh', {}).get('status') == 'unmet':
+        decision, reason, action = 'run', 'stale-policy-result', ['make', 'verify-targeted', 'CHECK=verify-policy']
+        hint = ('The policyFresh prerequisite of a complete run is unmet. This command refreshes the '
+                'verify-policy result. Then run the selected checks.')
     elif result.get('changedInputs') or state in {'stale', 'source-changed', 'incomplete'}:
         decision, reason = 'replan', 'identity-changed' if result.get('changedInputs') else 'invalid-evidence'
         plan = result.get('plan', {})
@@ -170,10 +174,6 @@ def guidance(result, observe, *, complete):
         action = (['make', 'verify-changed', 'BASE=' + result['plan']['base']]
                   if ready and 'base' in result['plan'] else None)
         hint = f'{ready} ready checks can run; pending checks remain unsatisfied. Inspect blocking reasons and check details.'
-    elif state == 'passed' and result.get('prerequisites', {}).get('policyFresh', {}).get('status') == 'unmet':
-        decision, reason, action = 'run', 'stale-policy-result', ['make', 'verify-targeted', 'CHECK=verify-policy']
-        hint = ('This verification scope passed. The policyFresh prerequisite of a complete run is unmet; '
-                'this command refreshes the verify-policy result.')
     elif state == 'passed':
         decision, reason, action = 'satisfied', 'current-pass', None
         hint = 'This verification scope passed. This status does not grant merge approval.'
