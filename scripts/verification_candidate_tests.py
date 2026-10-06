@@ -170,13 +170,33 @@ class CandidateCommandTests(unittest.TestCase):
 
     def test_dirty_preflight_is_not_an_attempt_and_changed_base_cannot_reuse(self):
         (self.root / 'AGENTS.md').write_text('Changed input')
-        self.assertNotEqual(self.run_complete().returncode, 0)
+        result = self.run_complete()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Complete verification requires a clean tracked and untracked worktree. '
+                      'Commit or remove the dirty paths: AGENTS.md\n', result.stderr)
         self.assertEqual(list(self.root.glob('target/verification/*/report.json')), [])
         self.repo.git('checkout', '--', 'AGENTS.md')
         self.assertEqual(self.run_complete().returncode, 0)
         self.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD~1')
         self.assertEqual(self.run_complete().returncode, 0)
         self.assertEqual((self.root / 'target/launches').read_text(), 'xx')
+
+    def test_stale_policy_result_refuses_before_any_attempt(self):
+        policy = self.root / 'docs/agents/verification-policy.json'
+        data = json.loads(policy.read_text())
+        data['targeted'] = {'verify-policy': {'command': [sys.executable, '-c', 'pass'], 'clean': False}}
+        data['complete']['admission'] = {'version': 1, 'targeted': ['verify-policy']}
+        policy.write_text(json.dumps(data))
+        self.repo.git('add', '.')
+        self.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                      'commit', '--quiet', '-m', 'Require a fresh policy result.')
+        self.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        result = self.run_complete()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('The verify-policy result is pending. Refresh it with make verify-targeted CHECK=verify-policy\n',
+                      result.stderr)
+        self.assertEqual(list(self.root.glob('target/verification/*/report.json')), [])
+        self.assertFalse((self.root / 'target/launches').exists())
 
     def test_corrupt_success_cannot_be_reused_or_trigger_blind_retry(self):
         self.assertEqual(self.run_complete().returncode, 0)
