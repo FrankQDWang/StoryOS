@@ -298,8 +298,14 @@ else:
         self.assertIn('Spec: FAIL', result.stdout)
         self.assertIn('Next: fix the blocking findings', result.stdout)
 
-    def test_round_four_is_refused_with_the_coordinator(self):
-        result, state = self.review_round({}, comments=[f'## Spec review, round {n}: FAIL\n' for n in (1, 2, 3)])
+    def refused_round(self, comments):
+        result, state = self.review_round({}, comments=comments)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('coordinator', result.stderr)
-        self.assertEqual((len(state['comments']), state['node']), (3, []))
+        self.assertIn('coordinator session', result.stderr)
+        self.assertEqual((len(state['comments']), state['node']), (len(comments), []))
+
+    def test_round_four_is_refused_with_the_coordinator(self):
+        self.refused_round([f'## Spec review, round {n}: FAIL\n' for n in (1, 2, 3)])
+
+    def test_round_after_pass_pass_is_refused_with_the_coordinator(self):
+        self.refused_round(['## Standards review, round 1: PASS\n', '## Spec review, round 1: PASS\n'])

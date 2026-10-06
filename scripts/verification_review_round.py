@@ -87,7 +87,13 @@ def comment(axis, number, verdict, context, request):
 def run(root, pr, executor):
     route = 'repos/' + json.loads(gh('repo', 'view', '--json', 'nameWithOwner'))['nameWithOwner']
     pull = json.loads(gh('pr', 'view', str(pr), '--json', 'body,closingIssuesReferences,comments,headRefOid'))
-    number = 1 + max((int(m[2]) for c in pull['comments'] if (m := VERDICT.match(c['body']))), default=0)
+    rounds = {}
+    for match in filter(None, (VERDICT.match(c['body']) for c in pull['comments'])):
+        rounds.setdefault(int(match[2]), {})[match[1]] = match[3]
+    number = 1 + max(rounds, default=0)
+    if rounds.get(number - 1) == {'Standards': 'PASS', 'Spec': 'PASS'}:
+        raise ValueError(f'Round {number - 1} passed on the two axes. Only a blocking finding starts a new round; '
+                         'send the PR link and the verdict comment links to the coordinator session')
     if number > ROUNDS:
         raise ValueError(f'PR {pr} had {ROUNDS} review rounds. Send the open findings to the coordinator session; '
                          'it decides the next step')
