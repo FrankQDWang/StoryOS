@@ -148,7 +148,15 @@ class DailyCache:
                 raise ValueError(reason)
         elif self.observation["status"] == "hit":
             producer = self.root / self.observation["producer"]
-            if (self.required != outputs(self.root, producer.parent)
+            current = outputs(self.root, producer.parent)
+            recorded = producer.parent / "installed.json"
+            if current and current["dependencies"] != self.required["dependencies"] and recorded.is_file():
+                reason = "Installed dependencies changed during cache reuse"
+                (report_path.parent / "failure.json").write_text(json.dumps({
+                    "reason": reason, "changed_paths": changed_dependencies(
+                        json.loads(recorded.read_text()), installed(self.root))}))
+                raise ValueError(reason)
+            if (self.required != current
                     or self.observation["report_sha256"] != hashlib.sha256(producer.read_bytes()).hexdigest()):
                 raise ValueError("Cached verification outputs changed during reuse")
 

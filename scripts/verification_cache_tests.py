@@ -185,14 +185,34 @@ class DailyCacheTests(unittest.TestCase):
         report_path = self.root / "target/verification" / report["run_id"] / "report.json"
         (self.root / "node_modules/installed.js").write_text("changed dependency")
         message = "Installed dependencies changed before cache publication"
-        prepare = ("import json, pathlib, sys, verification_cache; path = pathlib.Path(sys.argv[1]); "
+        prepare = ("import json, pathlib, sys; sys.path.insert(0, sys.argv[1]); import verification_cache; "
+                   "path = pathlib.Path(sys.argv[2]); "
                    "verification_cache.DailyCache(pathlib.Path.cwd(), json.loads(path.read_text())['plan'], "
                    "no_cache=False).prepare(path)")
-        result = subprocess.run([sys.executable, "-c", prepare, str(report_path)], cwd=self.root,
-                                capture_output=True, text=True,
-                                env={**self.fixture.repo.environment, "PYTHONPATH": str(Path(__file__).parent)})
+        result = subprocess.run([sys.executable, "-c", prepare, str(Path(__file__).parent), str(report_path)],
+                                cwd=self.root, capture_output=True, text=True, env=self.fixture.repo.environment)
         self.assertIn(f"ValueError: {message}", result.stderr)
         self.assertEqual(json.loads((report_path.parent / "failure.json").read_text()),
+                         {"reason": message, "changed_paths": ["node_modules/installed.js"]})
+
+    def test_dependency_change_during_cache_reuse_names_the_changed_path(self):
+        result, report = self.run_daily()
+        self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
+        reuse = self.root / "target/verification/reuse/report.json"
+        reuse.parent.mkdir()
+        message = "Installed dependencies changed during cache reuse"
+        prepare = ("import json, pathlib, sys; sys.path.insert(0, sys.argv[1]); import verification_cache; "
+                   "import verification_rust_cache; verification_rust_cache.prepare(pathlib.Path.cwd()); "
+                   "plan = json.loads(pathlib.Path(sys.argv[2]).read_text())['plan']; "
+                   "cache = verification_cache.DailyCache(pathlib.Path.cwd(), plan, no_cache=False); "
+                   "assert cache.restore(); "
+                   "pathlib.Path('node_modules/installed.js').write_text('changed dependency'); "
+                   "cache.prepare(pathlib.Path(sys.argv[3]))")
+        producer = self.root / "target/verification" / report["run_id"] / "report.json"
+        result = subprocess.run([sys.executable, "-c", prepare, str(Path(__file__).parent), str(producer), str(reuse)],
+                                cwd=self.root, capture_output=True, text=True, env=self.fixture.repo.environment)
+        self.assertIn(f"ValueError: {message}", result.stderr)
+        self.assertEqual(json.loads((reuse.parent / "failure.json").read_text()),
                          {"reason": message, "changed_paths": ["node_modules/installed.js"]})
 
     def test_busy_budget_refuses_a_second_run_and_releases_after_interruption(self):
