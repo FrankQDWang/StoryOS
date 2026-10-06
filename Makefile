@@ -27,6 +27,8 @@ verify-policy-steps:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
 	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
+	$(VERIFY_STEP) ste-text-guard -- sh -c 'if [ -n "$(STORYOS_PR_BASE_SHA)" ]; then echo "The pull-request check does not run the text guard before issue 984."; exit 0; fi; \
+		python3 scripts/ste_text_guard.py files --base origin/main; files=$$?; python3 scripts/ste_text_guard.py commits --base origin/main && exit $$files'
 
 verify-policy: verify-policy-steps
 	$(MAKE) rust-literal-guard
@@ -88,17 +90,28 @@ verify-pr: verify-policy-steps
 		merge="$$1"; \
 		base="$$2"; \
 		head="$$3"; \
-		if [ "$$base" != "$$STORYOS_PR_BASE_SHA" ]; then \
-			printf 'Expected base %s but found %s\n' "$$STORYOS_PR_BASE_SHA" "$$base" >&2; \
-			exit 1; \
+		if [ "$$base" = "$$STORYOS_PR_BASE_SHA" ]; then \
+			accepted="the event base"; \
+		else \
+			if [ -z "$${STORYOS_PR_BASE_REF:-}" ]; then \
+				printf 'Expected base %s but found %s\n' "$$STORYOS_PR_BASE_SHA" "$$base" >&2; \
+				exit 1; \
+			fi; \
+			git fetch --quiet --depth=1 origin "$$STORYOS_PR_BASE_REF"; \
+			tip="$$(git rev-parse FETCH_HEAD)"; \
+			if [ "$$base" != "$$tip" ]; then \
+				printf 'Expected base %s or remote tip %s but found %s\n' "$$STORYOS_PR_BASE_SHA" "$$tip" "$$base" >&2; \
+				exit 1; \
+			fi; \
+			accepted="the remote base tip"; \
 		fi; \
 		if [ "$$head" != "$$STORYOS_PR_HEAD_SHA" ]; then \
 			printf 'Expected head %s but found %s\n' "$$STORYOS_PR_HEAD_SHA" "$$head" >&2; \
 			exit 1; \
 		fi; \
 		tree="$$(git rev-parse "$$merge^{tree}")"; \
-		printf 'Pull request base: %s\nPull request head: %s\nSynthetic merge: %s\nSynthetic merge tree: %s\n' \
-			"$$base" "$$head" "$$merge" "$$tree"; \
+		printf 'Pull request base: %s\nBase accepted as: %s\nPull request head: %s\nSynthetic merge: %s\nSynthetic merge tree: %s\n' \
+			"$$base" "$$accepted" "$$head" "$$merge" "$$tree"; \
 		git diff --check "$$base" "$$merge" --
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	@$(MAKE) verify-tracker

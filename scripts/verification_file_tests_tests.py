@@ -15,12 +15,11 @@ RUNNER = Path(__file__).with_name("verification_test_files.py")
 
 
 class FileInterruptionTests(unittest.TestCase):
-    @unittest.skipUnless(os.name == "posix", "Process-group interruption requires POSIX.")
-    def test_interruption_cleans_file_process_group(self):
-        fixture = verification_tests.VerificationCommandTests()
+    def setUp(self):
+        self.fixture = fixture = verification_tests.VerificationCommandTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
-        root = fixture.root
+        self.root = root = fixture.root
         policy = root / "docs/agents/verification-policy.json"
         data = json.loads(policy.read_text())
         data["rules"].insert(0, {"pattern": "scripts/*_tests.py", "kind": "verification-test",
@@ -45,6 +44,19 @@ class FileInterruptionTests(unittest.TestCase):
         fixture.git("add", ".")
         fixture.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                     "commit", "--quiet", "-m", "Declare a file self-test.")
+
+    def test_uncommitted_test_file_is_a_named_prerequisite_failure(self):
+        (self.root / "scripts/b_tests.py").write_text("raise AssertionError('self-test ran')\n")
+        result = self.fixture.cli("targeted", "--check", "verification-tests")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("The verification-tool self-tests require committed test files. "
+                      "Commit or remove these test files: scripts/b_tests.py\n", result.stderr)
+        self.assertNotIn("FILE_READY", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
+    @unittest.skipUnless(os.name == "posix", "Process-group interruption requires POSIX.")
+    def test_interruption_cleans_file_process_group(self):
+        fixture, root = self.fixture, self.root
         with subprocess.Popen([sys.executable, str(verification_tests.COMMAND), "targeted", "--check",
                                "verification-tests"], cwd=root, env=fixture.environment,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as process:

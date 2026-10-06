@@ -41,6 +41,9 @@ def summary(value, page=1, selection='all'):
             output[key] = short(value[key])
     if 'supervision' in value:
         output['supervision'] = value['supervision']
+    if 'prerequisites' in value:
+        output['prerequisites'] = {name: {**item, **({'paths': [short(p) for p in item['paths']]} if 'paths' in item else {})}
+                                   for name, item in value['prerequisites'].items()}
     output['changedInputs'] = [short(v) for v in value.get('changedInputs', [])[:PAGE_SIZE]]
     output['omittedChangedInputs'] = max(0, len(value.get('changedInputs', [])) - PAGE_SIZE)
     output['base'] = plan.get('base', value.get('base'))
