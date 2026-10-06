@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import unittest
@@ -181,6 +182,24 @@ print('executed selected files')
                          [("policy", ["scripts/verification_tool.py"], False), ("web-typecheck", [], False),
                           ("node-contract", [str(teardown.relative_to(self.root))], False)])
         self.assertEqual([step["stage"] for step in report["steps"]], ["policy", "web-typecheck", "node-contract"])
+
+    def test_no_cache_neither_reads_nor_publishes_a_self_test_result(self):
+        self.install_runner_fixture()
+        child = "from pathlib import Path; p = Path('target/launches'); p.write_text(p.read_text() + 'x' if p.exists() else 'x')"
+        step = shlex.join([sys.executable, str(verification_tests.COMMAND), "step", "verification-tests", "--",
+                           sys.executable, "-c", child])
+        (self.root / "Makefile").write_text(f"verify-policy:\n\t@{step}\nweb-typecheck:\n\t@echo input-policy-checked\n")
+        self.repo.git("add", ".")
+        self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Run the self-test step in the policy check.")
+        self.base = self.repo.git("rev-parse", "HEAD")
+        self.add_test()
+        launches = []
+        for args in (["--no-cache"], ["--no-cache"], [], [], ["--no-cache"]):
+            result = self.cli("run", *args)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            launches.append((self.root / "target/launches").read_text())
+        self.assertEqual(launches, ["x", "xx", "xxx", "xxx", "xxxx"])
 
     def test_dirty_package_obligation_refuses_before_any_step_record(self):
         self.install_runner_fixture()

@@ -333,7 +333,7 @@ def step(root, stage, command, *, node_id=None, stdout=None, node_only=False):
         node_id = "targeted:" + stage
     result.update(verification_graph.bind_attempt(retained, stage, node_id))
     result["attempt_started"] = False
-    if stage == "verification-tests" and not node_only and not any(
+    if stage == "verification-tests" and not node_only and not retained.get("no_cache") and not any(
             name in os.environ for name in verification_cache.DIAGNOSTIC):
         result["reuse_key"] = verification_cache.tool_key(root)
         reused = verification_cache.tool_result(root, result["reuse_key"])
@@ -376,7 +376,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     (directory / "steps").mkdir(parents=True)
     report_path = directory / "report.json"
     report = {"version": 1, "started_at": datetime.now(timezone.utc).isoformat(), "command": command, "status": "running",
-              "profile": "daily" if plan else "complete",
+              "profile": "daily" if plan else "complete", "no_cache": no_cache,
               "environment": {"system": platform.system(), "machine": platform.machine(),
                               "python": platform.python_version()}}
     import verification_candidate
