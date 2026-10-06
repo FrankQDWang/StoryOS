@@ -196,6 +196,22 @@ A changed identity requires a fresh plan. Recovery commands still enforce curren
 admission and require an accurate reason. A current PASS covers only the selected
 verification scope; merge checks and reviews retain their separate authority.
 
+Daily status shows `prerequisites.policyFresh`. A stale `verify-policy` result
+does not change the daily `nextAction`, because `make verify-changed` runs the
+policy group. Only the complete-run status and the `verify-local` preflight make
+`policyFresh` the next action.
+
+Daily status also gives two size fields for information only. They do not change
+`decision` or `nextAction`. `changeSize` counts the added and changed lines of the
+worktree against the merge base with `BASE`. It counts the deleted files and their
+lines separately. Its `above` list gives each `AGENTS.md` limit, 500 or 800, that
+the count is more than.
+
+`moduleSize` lists each changed Rust module that has more
+than 500 lines without its `#[cfg(test)]` modules and its `_tests.rs` file. Each
+item has an `above` list. The text summary shows these fields after the decision
+and shows at most eight modules.
+
 ### Bounded daily queries
 
 `make verify-plan` now calls `verification_plan.py summary --format text`.

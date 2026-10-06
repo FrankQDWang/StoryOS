@@ -6,7 +6,7 @@ $(PUBLIC_CHECKS):
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check $@ $(VERIFY_ARGS)
 endif
 
-.PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-local-steps verify-policy verify-plan verify-changed verify-pr verify-tracker web web-foundation web-typecheck
+.PHONY: contracts generate-contracts project-scope release-package rust-literal-guard verify verify-local verify-local-steps verify-policy verify-policy-steps verify-plan verify-changed verify-pr verify-tracker web web-foundation web-typecheck
 
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
 BASE ?= origin/main
@@ -17,14 +17,22 @@ verify-plan:
 verify-changed:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py run --base "$(BASE)" $(VERIFY_ARGS)
 
+# The guard checks the Git repository of the working directory with the crate of this workspace.
+rust-literal-guard:
+	$(VERIFY_STEP) rust-literal-guard -- cargo run --quiet --locked --manifest-path "$(dir $(abspath $(firstword $(MAKEFILE_LIST))))Cargo.toml" -p storyos-literal-guard -- "$(BASE)"
+
 ifneq ($(STORYOS_VERIFICATION_RUN),)
-verify-policy:
+# The GitHub verify check runs these policy steps without a Rust toolchain.
+verify-policy-steps:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
 	$(VERIFY_STEP) diff-whitespace -- scripts/verify-diff-whitespace.sh
 	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
 	$(VERIFY_STEP) ste-text-guard -- sh -c 'if [ -n "$(STORYOS_PR_BASE_SHA)" ]; then echo "The pull-request check does not run the text guard before issue 984."; exit 0; fi; \
 		python3 scripts/ste_text_guard.py files --base origin/main; files=$$?; python3 scripts/ste_text_guard.py commits --base origin/main && exit $$files'
+
+verify-policy: verify-policy-steps
+	$(MAKE) rust-literal-guard
 
 contracts: verify-policy
 	$(MAKE) verify-contract-inputs
@@ -64,7 +72,7 @@ verify-local-steps: contracts
 verify-tracker:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py
 
-verify-pr: verify-policy
+verify-pr: verify-policy-steps
 	@set -eu; \
 		if [ -z "$${STORYOS_PR_BASE_SHA:-}" ]; then \
 			printf '%s\n' "STORYOS_PR_BASE_SHA is required" >&2; \

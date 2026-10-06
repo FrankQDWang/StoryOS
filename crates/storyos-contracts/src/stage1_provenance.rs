@@ -9,6 +9,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "crates/storyos-application",
     "crates/storyos-contracts",
     "crates/storyos-core",
+    "crates/storyos-literal-guard",
     "crates/storyos-server",
     "crates/storyos-worker",
     "crates/storyos-worker-bin",
