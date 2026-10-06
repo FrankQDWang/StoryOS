@@ -75,6 +75,11 @@ a clean tree because release packaging binds Git identity. An empty change set o
 empty test discovery cannot report success. When a complete run is requested,
 PostgreSQL fixtures, ordered HTTP groups, exact-dist oracles and both recovery
 drills remain mandatory. The PR `verify` sentinel checks the policy and runner.
+The `verify` workflow does not run on `edited`; a body edit never reruns it.
+A review request accepts any completed successful `verify` run on the head whose printed
+base, head, and merge tree equal the request, even while a newer run is pending.
+`verify-pr` accepts a first parent equal to the event base or to the current tip of the
+remote base branch, and prints which one it accepted.
 
 ## Parallel implementation
 
