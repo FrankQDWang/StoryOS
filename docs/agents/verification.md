@@ -19,6 +19,8 @@ The main flow comes first. The reference sections are after it.
 2. After each product or test edit, run the smallest check that can fail on that edit.
    For one check, use `make verify-targeted CHECK=<check>`. For the full selected scope,
    use `make verify-changed BASE=<base>`. Set `BASE` to the actual comparison commit.
+   To run one exact-dist journey file with the `project-scope` procedure, use
+   `make verify-journey FILE=<file> RUNS=<n> LOAD=<processes>`. `RUNS` and `LOAD` are optional.
 3. After a test lifecycle change, run `make verify-policy`. A test lifecycle change
    adds, renames, or deletes a test, or changes the runner or the
    [input policy](verification-policy.json).
