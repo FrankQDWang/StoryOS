@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import sys
@@ -175,6 +176,53 @@ class DailyCacheTests(unittest.TestCase):
                                              "written.write_text('cache')\nresults ="))
             result, report = self.run_daily()
             self.assertEqual((result.returncode, report["status"], message in result.stderr), expected, result.stderr)
+        self.assertEqual({key: report[key] for key in ("failed_steps", "failure_reason", "changed_paths")},
+                         {"failed_steps": [], "changed_paths": ["apps/web/node_modules/.pnpm/vite/index.js"],
+                          "failure_reason": f"{message}: apps/web/node_modules/.pnpm/vite/index.js."})
+
+    def test_dependency_change_before_cache_publication_names_the_changed_path(self):
+        message = "Installed dependencies changed before cache publication"
+        prepare = ("import json, pathlib, sys; sys.path.insert(0, sys.argv[1]); import verification_cache; "
+                   "path = pathlib.Path(sys.argv[2]); "
+                   "verification_cache.DailyCache(pathlib.Path.cwd(), json.loads(path.read_text())['plan'], "
+                   "no_cache=False).prepare(path)")
+        for mutation, changed in (("node_modules/installed.js", "node_modules/installed.js"),
+                                  ("apps/web/node_modules", "apps/web/node_modules/installed.js")):
+            result, report = self.run_daily()
+            self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
+            report_path = self.root / "target/verification" / report["run_id"] / "report.json"
+            target = self.root / mutation
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.write_text("changed dependency")
+            result = subprocess.run([sys.executable, "-c", prepare, str(Path(__file__).parent), str(report_path)],
+                                    cwd=self.root, capture_output=True, text=True, env=self.fixture.repo.environment)
+            self.assertIn(f"ValueError: {message}", result.stderr)
+            self.assertEqual(json.loads((report_path.parent / "failure.json").read_text()),
+                             {"reason": message, "changed_paths": [changed]})
+            (self.root / changed).parent.mkdir(exist_ok=True)
+            (self.root / changed).write_text("installed tool input")
+
+    def test_dependency_change_during_cache_reuse_names_the_changed_path(self):
+        result, report = self.run_daily()
+        self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
+        reuse = self.root / "target/verification/reuse/report.json"
+        reuse.parent.mkdir()
+        message = "Installed dependencies changed during cache reuse"
+        prepare = ("import json, pathlib, sys; sys.path.insert(0, sys.argv[1]); import verification_cache; "
+                   "import verification_rust_cache; verification_rust_cache.prepare(pathlib.Path.cwd()); "
+                   "plan = json.loads(pathlib.Path(sys.argv[2]).read_text())['plan']; "
+                   "cache = verification_cache.DailyCache(pathlib.Path.cwd(), plan, no_cache=False); "
+                   "assert cache.restore(); "
+                   "import shutil; shutil.rmtree('apps/web/node_modules'); "
+                   "cache.prepare(pathlib.Path(sys.argv[3]))")
+        producer = self.root / "target/verification" / report["run_id"] / "report.json"
+        result = subprocess.run([sys.executable, "-c", prepare, str(Path(__file__).parent), str(producer), str(reuse)],
+                                cwd=self.root, capture_output=True, text=True, env=self.fixture.repo.environment)
+        self.assertIn(f"ValueError: {message}", result.stderr)
+        self.assertEqual(json.loads((reuse.parent / "failure.json").read_text()),
+                         {"reason": message, "changed_paths": ["apps/web/node_modules/installed.js"]})
 
     def test_busy_budget_refuses_a_second_run_and_releases_after_interruption(self):
         target = self.root / "target"

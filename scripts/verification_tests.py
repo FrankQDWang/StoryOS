@@ -74,13 +74,27 @@ class VerificationCommandTests(unittest.TestCase):
         self.assertGreaterEqual(report["duration_seconds"], report["steps"][0]["duration_seconds"])
         self.assertEqual([(s["stage"], s["status"], s["exit_code"]) for s in report["steps"]],
                          [("sample", "passed", 0)])
+        self.assertNotIn("failed_steps", report)
+        report_path = Path(report["repository"]) / "target/verification" / report["run_id"] / "report.json"
+        self.assertEqual(result.stdout.splitlines()[-1],
+                         f"Verification passed: {report['duration_seconds']:.2f}s; report: {report_path}")
 
     def test_child_failure_is_not_a_successful_report(self):
-        result = self.cli("run", "--", sys.executable, str(COMMAND), "step", "failure",
-                          "--", sys.executable, "-c", "raise SystemExit(7)")
+        result = self.cli("run", "--", sys.executable, str(COMMAND), "step", "outer", "--",
+                          sys.executable, str(COMMAND), "step", "failure", "--",
+                          sys.executable, "-c", "print('failure output'); raise SystemExit(7)")
         self.assertEqual(result.returncode, 7, result.stderr)
         report = self.report()
-        self.assertEqual((report["status"], report["steps"][0]["exit_code"]), ("failed", 7))
+        inner = next(step for step in report["steps"] if step["stage"] == "failure")
+        reason = "The failure step stopped with status failed and exit code 7."
+        self.assertEqual({key: report[key] for key in ("status", "failed_steps", "failure_reason", "failure_log")},
+                         {"status": "failed", "failed_steps": ["failure"], "failure_reason": reason,
+                          "failure_log": inner["log"]})
+        self.assertEqual(Path(inner["log"]).read_text(), "failure output\n")
+        report_path = Path(report["repository"]) / "target/verification" / report["run_id"] / "report.json"
+        self.assertEqual(result.stdout.splitlines()[-1],
+                         f"Verification failed: {report['duration_seconds']:.2f}s; failed step: failure; "
+                         f"reason: {reason[:-1]}; log: {inner['log']}; report: {report_path}")
 
     def test_observation_storage_failure_does_not_replace_test_result(self):
         shared = self.root / '.git/storyos-observation'
@@ -96,8 +110,12 @@ class VerificationCommandTests(unittest.TestCase):
                           "from pathlib import Path; Path('AGENTS.md').write_text('changed')")
         self.assertNotEqual(result.returncode, 0)
         report = self.report()
-        self.assertEqual(report["status"], "source-changed")
-        self.assertEqual(report["exit_code"], 0)
+        reason = "Verification inputs changed during the run: AGENTS.md."
+        self.assertEqual({key: report[key] for key in ("status", "exit_code", "failed_steps", "failure_reason",
+                                                       "changed_paths", "failure_log")},
+                         {"status": "source-changed", "exit_code": 0, "failed_steps": [], "failure_reason": reason,
+                          "changed_paths": ["AGENTS.md"], "failure_log": report["log"]})
+        self.assertIn(f"failed step: none; reason: {reason[:-1]}; log: {report['log']}", result.stdout.splitlines()[-1])
         self.assertNotEqual(report["source_start"], report["source_end"])
 
     def test_stage_budget_fails_even_when_child_handles_termination_as_success(self):
@@ -148,6 +166,23 @@ class VerificationCommandTests(unittest.TestCase):
         report = self.report()
         self.assertEqual(report["status"], "source-changed")
         self.assertFalse(report["source_end"]["dirty"])
+
+    def test_whitespace_step_checks_tracked_and_untracked_files_from_the_merge_base(self):
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        script = Path(__file__).with_name("verify-diff-whitespace.sh")
+        environment = {key: value for key, value in self.environment.items() if key != "STORYOS_PR_BASE_SHA"}
+        for path in (self.root / "AGENTS.md", self.root / "docs/untracked.md"):
+            original = path.read_text() if path.exists() else "Fixture source.\n"
+            path.write_text(original + "\n")
+            failure = subprocess.run(["sh", str(script)], cwd=self.root, env=environment,
+                                     capture_output=True, text=True)
+            self.assertEqual((failure.returncode, failure.stdout.strip()),
+                             (2, f"{path.relative_to(self.root)}:2: new blank line at EOF."))
+            path.write_text(original)
+            fixed = subprocess.run(["sh", str(script)], cwd=self.root, env=environment,
+                                   capture_output=True, text=True)
+            self.assertEqual(fixed.returncode, 0, fixed.stdout + fixed.stderr)
+        self.assertEqual(self.git("status", "--porcelain"), "?? docs/untracked.md")
 
     def test_no_executed_stages_cannot_produce_a_successful_report(self):
         result = self.cli("run", "--", sys.executable, "-c", "print('dry run')")
