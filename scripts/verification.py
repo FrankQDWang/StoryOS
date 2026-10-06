@@ -493,7 +493,8 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         cache.publish(report_path)
     failure = ("" if report["status"] == "passed" else
                f"; failed step: {', '.join(report['failed_steps']) or 'none'}"
-               f"; reason: {report['failure_reason'].removesuffix('.')}; log: {report['failure_log'] or 'none'}")
+               f"; reason: {report['failure_reason'].removesuffix('.')}; log: {report['failure_log'] or 'none'}"
+               f"{verification_failure.flake_note(report)}")
     print(f"Verification {report['status']}: {report['duration_seconds']:.2f}s{failure}; report: {report_path}",
           flush=True)
     print('Observation: ' + json.dumps(verification_records.supervision(report_path)), file=sys.stderr, flush=True)
