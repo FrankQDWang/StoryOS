@@ -142,6 +142,12 @@ verify-status:
 verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
 
+.PHONY: verify-journey
+RUNS ?= 1
+LOAD ?= 0
+verify-journey:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_journey.py --file "$(FILE)" --runs "$(RUNS)" --load "$(LOAD)"
+
 .PHONY: install-hooks
 install-hooks:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/ste_text_guard.py install-hook
