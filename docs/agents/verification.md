@@ -427,12 +427,12 @@ reading or publishing a result-cache entry. Local entries in `target/verificatio
 need their referenced reports. A cache hit is daily feedback, not a PR check.
 
 The host queue is a second lock in the common Git directory. All worktrees of the
-repository share it. Only the policy entries with `host_queue` take it: the targeted
-checks with `"host_queue": true` and the complete stages in `complete.host_queue`. The
-Web stage pair takes it one time for both stages. A waiting run prints the holder
-process, worktree, stage, and start time, and prints it again every two minutes.
-When the holder process does not exist, the next run releases the lock and records
-the old holder in `host_queue` of its report.
+repository share it. These runs take it: the targeted checks with `"host_queue": true`,
+the complete stages in `complete.host_queue`, and `make verify-journey`. The Web stage
+pair takes it one time for both stages. A waiting run prints the holder process,
+worktree, stage, and start time, and prints it again every two minutes. When the holder
+process does not exist, the next run releases the lock and records the old holder in
+`host_queue` of its report.
 
 The complete and daily run commands admit one root run per checkout at a time. A busy
 budget fails with a retry reason. The lock covers process-group cleanup; overdue

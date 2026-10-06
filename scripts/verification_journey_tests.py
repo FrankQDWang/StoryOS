@@ -3,11 +3,14 @@
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
+import verification_cache
 import verification_journey
 
 
@@ -25,10 +28,16 @@ class JourneyCommandTests(unittest.TestCase):
                          "commit", "--quiet", "-m", "Add a journey."]):
             subprocess.run(["git", *command], cwd=self.root, check=True)
         self.commands = []
+        environment = mock.patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop(verification_cache.QUEUE_HELD, None)
 
     def runner(self, rows, code):
         def run(command, log, root):
             self.commands.append(command)
+            self.assertEqual(json.loads(verification_cache.queue_path(root).read_text())["stage"], "journey")
+            self.assertEqual(os.environ[verification_cache.QUEUE_HELD], str(verification_cache.queue_path(root)))
             log.write_text("mocked\n")
             Path(command[-1], "runs.tsv").write_text("".join("\t".join(row) + "\n" for row in rows))
             return code
@@ -67,7 +76,11 @@ class JourneyCommandTests(unittest.TestCase):
                                  "1    passed  41       3.10\n"
                                  "2    failed  47       4.25\n"
                                  f"Passed: 1 of 2; duration: 41-47 s; records: {record}\n")
-        self.assertEqual(json.loads((record / "summary.json").read_text()), {
+        summary = json.loads((record / "summary.json").read_text())
+        queue = summary.pop("host_queue")
+        self.assertEqual((queue["stage"], queue["released"], queue["holder"]["worktree"]),
+                         ("journey", None, str(self.root.resolve())))
+        self.assertEqual(summary, {
             "file": "test/browser-exact-dist/s2-statistics.integration.test.ts", "runs": 2, "load": 1,
             "passed": 1, "exit_code": 1,
             "rows": [{"run": 1, "status": "passed", "seconds": 41, "load1m": "3.10"},
