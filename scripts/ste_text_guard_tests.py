@@ -1,5 +1,6 @@
 """Run the ASD-STE100 text guard on disposable Git repositories."""
 
+import operator
 import os
 from pathlib import Path
 import shutil
@@ -148,9 +149,11 @@ class TextGuardTests(unittest.TestCase):
         shutil.copyfile(SCRIPT, self.root / "scripts" / SCRIPT.name)
         hook = self.root.resolve() / ".git/hooks/commit-msg"
         self.assertEqual(self.guard("install-hook", expected_code=0), [f"{hook}: the hook is installed."])
-        installed = hook.stat()
+        # The second install reads the hook, so the access time can change.
+        identity = operator.attrgetter("st_ino", "st_mode", "st_size", "st_mtime_ns")
+        installed = identity(hook.stat())
         self.assertEqual(self.guard("install-hook", expected_code=0), [f"{hook}: the hook is current."])
-        self.assertEqual(hook.stat(), installed)
+        self.assertEqual(identity(hook.stat()), installed)
         (self.root / "message.txt").write_text(" ".join(["word"] * 30) + "\n\nThe whole text is here.\n")
         refused = subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                                   "commit", "--allow-empty", "-F", "message.txt"], cwd=self.root,
