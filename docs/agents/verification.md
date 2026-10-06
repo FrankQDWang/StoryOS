@@ -19,6 +19,8 @@ The main flow comes first. The reference sections are after it.
 2. After each product or test edit, run the smallest check that can fail on that edit.
    For one check, use `make verify-targeted CHECK=<check>`. For the full selected scope,
    use `make verify-changed BASE=<base>`. Set `BASE` to the actual comparison commit.
+   When a failed test is in the [flake register](#flake-register), the final line names its
+   issue and `main` pass rate. A known flake still fails the run.
 3. After a test lifecycle change, run `make verify-policy`. A test lifecycle change
    adds, renames, or deletes a test, or changes the runner or the
    [input policy](verification-policy.json).
@@ -171,6 +173,27 @@ command succeeds. Input write stamps detect ordinary writes even when the origin
 bytes are restored; they are run observations, not reusable cache keys. A report describes local execution within the existing trust
 boundary; it is not an independent attestation or a domain Verification Evidence
 Bundle. Keep secrets in environment variables, not recorded command arguments.
+
+## Flake register
+
+The [flake register](flaky-tests.json) is a contract under `AGENTS.md`. It is a JSON list. Each entry has
+these fields and no other fields:
+
+- `issue`: the number of the issue that owns the intermittent failure.
+- `file` and `test`: the repository path of the vitest file and the test name chain after the file, as
+  vitest prints it with ` > `. For a teardown count, `test` is `global teardown > <count key>`.
+  Or `rust`: the Rust test path, as `cargo test` prints it.
+- `main`: `passed` and `runs` from the last repeated set that the issue records, with the `commit` that
+  `main` contains and the `date` of the set.
+- `symptom`: one line that describes the failure.
+
+When a run fails, the verifier reads each failed step log. It finds the `FAIL` lines of vitest, the
+`test ... FAILED` lines of `cargo test`, and the teardown count difference. When each failed test that it
+finds matches an entry, `report.json` adds `known_flake` with the entries, and the final line adds
+`known flake: #<issue> (<passed>/<runs> on main <commit>)`. When the log names no test or one failed test
+is not in the register, the run gets no mark. The run status does not change.
+
+A self-test in `make verify-policy` validates the register shape. Add an entry in the pull request that opens the issue.
 
 ## Current status and targeted checks
 
