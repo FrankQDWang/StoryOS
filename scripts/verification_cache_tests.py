@@ -8,7 +8,6 @@ import subprocess
 import sys
 import unittest
 
-import verification_cache
 import verification_plan_tests
 
 
@@ -184,11 +183,15 @@ class DailyCacheTests(unittest.TestCase):
         result, report = self.run_daily()
         self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
         report_path = self.root / "target/verification" / report["run_id"] / "report.json"
-        cache = verification_cache.DailyCache(self.root, report["plan"], no_cache=False)
         (self.root / "node_modules/installed.js").write_text("changed dependency")
         message = "Installed dependencies changed before cache publication"
-        with self.assertRaisesRegex(ValueError, message):
-            cache.prepare(report_path)
+        prepare = ("import json, pathlib, sys, verification_cache; path = pathlib.Path(sys.argv[1]); "
+                   "verification_cache.DailyCache(pathlib.Path.cwd(), json.loads(path.read_text())['plan'], "
+                   "no_cache=False).prepare(path)")
+        result = subprocess.run([sys.executable, "-c", prepare, str(report_path)], cwd=self.root,
+                                capture_output=True, text=True,
+                                env={**self.fixture.repo.environment, "PYTHONPATH": str(Path(__file__).parent)})
+        self.assertIn(f"ValueError: {message}", result.stderr)
         self.assertEqual(json.loads((report_path.parent / "failure.json").read_text()),
                          {"reason": message, "changed_paths": ["node_modules/installed.js"]})
 
