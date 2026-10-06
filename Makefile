@@ -28,7 +28,7 @@ verify-policy-steps:
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
 	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
 	$(VERIFY_STEP) ste-text-guard -- sh -c 'if [ -n "$(STORYOS_PR_BASE_SHA)" ]; then echo "The pull-request check does not run the text guard before issue 984."; exit 0; fi; \
-		python3 scripts/ste_text_guard.py files --base origin/main; files=$$?; python3 scripts/ste_text_guard.py commits --base origin/main && exit $$files'
+		python3 scripts/ste_text_guard.py files --base origin/main; files=$$?; python3 scripts/ste_text_guard.py commits --advisory --base origin/main && exit $$files'
 
 verify-policy: verify-policy-steps
 	$(MAKE) rust-literal-guard
@@ -140,6 +140,10 @@ verify-status:
 
 verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
+
+.PHONY: install-hooks
+install-hooks:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/ste_text_guard.py install-hook
 
 OBSERVE = python3 scripts/verification_observation_runtime.py
 .PHONY: observe-build observe-dashboard observe-start observe-stop observe-status observe-rebuild observe-smoke

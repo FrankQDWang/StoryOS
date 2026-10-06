@@ -4,7 +4,9 @@
 Modes:
   files --base REV [--head REV]    Markdown files and Rust and TypeScript comments in the diff.
   commits --base REV [--head REV]  Commit messages in the range, without merge commits.
+          [--advisory]             Mark each finding "advisory: " and exit 0.
   message FILE                     One commit message from a file.
+  install-hook                     Write the commit-msg hook that runs the message mode.
 
 The range starts at the merge base of REV and the head. Without --head, the
 files mode compares with the worktree and the commits mode stops at HEAD.
@@ -324,6 +326,26 @@ def run_message(rules, path):
     return check(path, lines, {number for number, _ in lines}, rules)
 
 
+HOOK = """#!/bin/sh
+# StoryOS commit-msg hook from `make install-hooks`. It runs the ASD-STE100 text guard.
+guard="$(git rev-parse --show-toplevel)/scripts/ste_text_guard.py"
+[ -f "$guard" ] || exit 0
+exec python3 "$guard" message "$1"
+"""
+
+
+def install_hook(root):
+    hook = root / git(root, "rev-parse", "--git-path", "hooks").strip() / "commit-msg"
+    if hook.exists() or hook.is_symlink():
+        if hook.is_file() and hook.read_text(errors="replace") == HOOK:
+            return f"{hook}: the hook is current."
+        raise GuardError(f"{hook}: a different hook exists. Remove it, then run the command again.")
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text(HOOK)
+    hook.chmod(0o755)
+    return f"{hook}: the hook is installed."
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description="Find ASD-STE100 defects in the prose that a change adds.")
     modes = parser.add_subparsers(dest="mode", required=True)
@@ -331,10 +353,16 @@ def main(argv):
         command = modes.add_parser(mode)
         command.add_argument("--base", required=True)
         command.add_argument("--head")
+        if mode == "commits":
+            command.add_argument("--advisory", action="store_true")
     modes.add_parser("message").add_argument("path")
+    modes.add_parser("install-hook")
     arguments = parser.parse_args(argv)
     try:
         root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
+        if arguments.mode == "install-hook":
+            print(install_hook(root))
+            return 0
         rules = load_rules(root)
         if arguments.mode == "files":
             findings = run_files(root, rules, arguments.base, arguments.head)
@@ -345,9 +373,10 @@ def main(argv):
     except GuardError as error:
         print(f"ste-text-guard: {error}", file=sys.stderr)
         return 2
+    advisory = getattr(arguments, "advisory", False)
     for finding in findings:
-        print(finding)
-    return 1 if findings else 0
+        print(f"advisory: {finding}" if advisory else finding)
+    return 1 if findings and not advisory else 0
 
 
 if __name__ == "__main__":
