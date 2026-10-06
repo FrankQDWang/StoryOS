@@ -15,3 +15,6 @@ __pycache__/
 /target/
 node_modules/
 apps/web/dist
+
+# Hooks that `make install-hooks` writes into the checkout (the repository hooks path).
+.githooks/
