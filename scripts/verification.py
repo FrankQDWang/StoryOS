@@ -2,6 +2,7 @@
 """Classify verification inputs and record command results for one source tree."""
 
 import argparse
+from contextlib import nullcontext
 from datetime import datetime, timezone
 import fnmatch
 import hashlib
@@ -135,6 +136,11 @@ def inventory(root, revision=None):
                 or any(item["group"].split(":")[0] not in groups for item in files
                        if item["kind"].endswith("-test") and item["kind"] not in {"historical-test", "prototype-test"})):
             raise ValueError("Incomplete verification stage or test group policy")
+        queued = policy["complete"].get("host_queue", [])
+        if (not isinstance(queued, list) or not all(isinstance(stage, str) for stage in queued)
+                or len(queued) != len(set(queued))
+                or not set(queued) <= set(stages)):
+            raise ValueError("Each complete host_queue entry must be one unique complete stage")
     if "shared_phases" in policy:
         verification_shared.plan(root, policy, files, revision)
     return {"version": 1, "files": files}
@@ -335,12 +341,14 @@ def step(root, stage, command, *, node_id=None, stdout=None, node_only=False):
                           started_monotonic=time.monotonic())
         write_json(path, result)
     observation({"heartbeat_at": result["started_at"]})
-    budgets = json.loads((root / "docs/agents/verification-policy.json").read_text()).get("stage_budgets_seconds", {})
-    timeout = budgets.get(stage)
+    policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
+    timeout = policy.get("stage_budgets_seconds", {}).get(stage)
     result["budget_seconds"] = timeout
-    code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_PARENT": identifier},
-                                os.name == "posix", observation, stdout, timeout,
-                                log=Path(result["log"]) if "log" in result else None)
+    queued = stage in policy.get("complete", {}).get("host_queue", [])
+    with verification_cache.host_queue(root, stage) if queued else nullcontext():
+        code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_PARENT": identifier},
+                                    os.name == "posix", observation, stdout, timeout,
+                                    log=Path(result["log"]) if "log" in result else None)
     result.update(ended_at=datetime.now(timezone.utc).isoformat(), ended_monotonic=time.monotonic(),
                   duration_seconds=time.monotonic() - result["started_monotonic"], exit_code=code,
                   status="interrupted" if interrupted else ("passed" if code == 0 else "failed"))
@@ -446,6 +454,9 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         print(str(error), file=sys.stderr)
     steps = [json.loads(path.read_text()) for path in (directory / "steps").glob("*.json")]
     report["steps"] = sorted(steps, key=lambda item: item["started_monotonic"])
+    queued = [json.loads(path.read_text()) for path in sorted((directory / "host-queue").glob("*.json"))]
+    if queued or report.get("host_queue"):
+        report["host_queue"] = [*report.get("host_queue", []), *queued]
     if (has_verification_file_workers and any(item["stage"] == "verification-tests" for item in steps)):
         attempts = [json.loads(path.read_text()) for path in (directory / "nodes").glob("*.json")]
         report["verification_test_file_attempts"] = sorted(
@@ -512,7 +523,6 @@ def run(root, command, *, plan=None, no_cache=False, context=None, locked=False)
             unmet = verification_status.refusal(verification_status.clean_tree(root, True, "Complete verification"))
             if unmet:
                 raise ValueError(unmet)
-        from contextlib import nullcontext
         with nullcontext() if locked else verification_cache.budget(root):
             rust_cache = verification_rust_cache.prepare(root)
             import verification_candidate

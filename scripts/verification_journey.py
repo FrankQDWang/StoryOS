@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+import verification_cache
 import verification_status
 
 JOURNEYS = "apps/web/test/browser-exact-dist"
@@ -62,14 +63,16 @@ def run(root, name, runs, load, runner=stream):
     record = root / "target/verification/journeys" / stem / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     record.mkdir(parents=True)
     command = ["sh", str(root / "scripts/verify-journey.sh"), test, str(runs), str(load), str(record)]
-    code = runner(command, record / "journey.log", root)
+    with verification_cache.host_queue(root, "journey") as queue:
+        code = runner(command, record / "journey.log", root)
     tsv = record / "runs.tsv"
     rows = [dict(zip(("run", "status", "seconds", "load1m"), line.split("\t")))
             for line in (tsv.read_text().splitlines() if tsv.exists() else [])]
     for row in rows:
         row.update(run=int(row["run"]), seconds=int(row["seconds"]))
     passed = sum(row["status"] == "passed" for row in rows)
-    summary = {"file": test, "runs": runs, "load": load, "passed": passed, "exit_code": code, "rows": rows}
+    summary = {"file": test, "runs": runs, "load": load, "passed": passed, "exit_code": code, "rows": rows,
+               "host_queue": queue}
     (record / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(table(stem, rows, runs, record), flush=True)
     return 0 if code == 0 and passed == runs else (code or 1)

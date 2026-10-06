@@ -54,7 +54,12 @@ def execute(root, check, context):
             print(reason, file=sys.stderr)
             return 2
         command = [sys.executable, str(Path(runner.__file__).resolve()), 'step', check, '--', *plan['command']]
-        return runner.run(root, command, plan=plan, context={**context, 'profile': 'targeted'}, locked=True)
+        registered = json.loads((root / 'docs/agents/verification-policy.json').read_text())['targeted'][check]
+        if not registered.get('host_queue'):
+            return runner.run(root, command, plan=plan, context={**context, 'profile': 'targeted'}, locked=True)
+        with verification_cache.host_queue(root, check) as record:
+            return runner.run(root, command, plan=plan, locked=True,
+                              context={**context, 'profile': 'targeted', 'host_queue': [record] if record else []})
 
 
 def clean_tree(root, required, scope):
@@ -219,6 +224,7 @@ def status(root, plan):
         fresh = policy_fresh(root)
         result['changeSize'], result['moduleSize'] = size_advisory(root, plan['base'])
     result['prerequisites'] = {'cleanTree': clean, 'policyFresh': fresh}
+    result['hostQueue'] = verification_cache.queue_state(root)
     observe = (['python3', 'scripts/verification.py', 'status', '--check', plan['check'], '--json']
                if 'check' in plan else ['python3', 'scripts/verification_plan.py', 'status', '--base', plan['base'],
                                         '--workers', str(plan['workers'])])

@@ -44,7 +44,7 @@ def finish(status, code):
     (run / 'steps' / (stage + '.json')).write_text(json.dumps({
         'stage': stage, 'status': status, 'started_monotonic': started,
         'ended_monotonic': ended, 'duration_seconds': ended - started,
-        'attempt_started': True}))
+        'attempt_started': True, 'queue': os.environ.get('STORYOS_VERIFICATION_HOST_QUEUE')}))
     sys.exit(code)
 signal.signal(signal.SIGTERM, lambda *_: finish('interrupted', 143))
 with (root / (stage + '.ready')).open('w') as ready:
@@ -79,6 +79,7 @@ release-package:
         (self.run / 'report.json').write_text(json.dumps({'profile': profile, 'graph': self.graph}))
         environment = {**os.environ, 'STORYOS_VERIFICATION_RUN': str(self.run)}
         environment.pop('STORYOS_VERIFICATION_COMPARE', None)
+        environment.pop('STORYOS_VERIFICATION_HOST_QUEUE', None)
         if fail:
             environment['FAIL_STAGE'] = fail
         return subprocess.Popen([sys.executable, str(Path(verification_web_overlap.__file__))],
@@ -122,6 +123,25 @@ release-package:
         self.assertLess(max(item['started_monotonic'] for item in after.values()),
                         min(item['ended_monotonic'] for item in after.values()))
         self.assertEqual(set(before), set(after))
+
+    def test_queued_pair_holds_the_host_queue_one_time_and_still_overlaps(self):
+        subprocess.run(['git', 'init', '--quiet'], cwd=self.root, check=True)
+        self.policy['complete'] = {'host_queue': list(STAGES)}
+        lock = self.root / '.git/storyos-host-queue.lock'
+        concurrent = self.launch()
+        self.ready('foundation-tests')
+        self.ready('project-scope')
+        holder = json.loads(lock.read_text())
+        self.assertEqual((holder['stage'], holder['worktree']), ('web', str(self.root.resolve())))
+        self.release('foundation-tests')
+        self.release('project-scope')
+        self.assertEqual(concurrent.communicate()[0].strip(), 'Web stage mode: bounded overlap')
+        self.assertEqual(concurrent.returncode, 0)
+        steps = self.steps()
+        self.assertLess(max(item['started_monotonic'] for item in steps.values()),
+                        min(item['ended_monotonic'] for item in steps.values()))
+        self.assertEqual({item['queue'] for item in steps.values()}, {str(lock.resolve())})
+        self.assertEqual(lock.read_text(), '')
 
     def test_failure_records_independent_stage_and_cancellation_stops_both(self):
         failed = self.launch(fail='foundation-tests')

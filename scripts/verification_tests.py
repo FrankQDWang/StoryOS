@@ -10,6 +10,9 @@ import sys
 import tempfile
 import unittest
 
+import verification_cache
+import verification_summary
+
 
 COMMAND = Path(__file__).with_name("verification.py")
 
@@ -210,3 +213,105 @@ class VerificationCommandTests(unittest.TestCase):
                     process.communicate()
             self.assertNotEqual(process.returncode, 0)
         self.assertEqual(self.report()["status"], "interrupted")
+
+    def queue_fixture(self):
+        policy_path = self.root / "docs/agents/verification-policy.json"
+        policy = json.loads(policy_path.read_text())
+        policy["complete"] = {"stages": ["heavy", "light"], "groups": {}, "host_queue": ["heavy"]}
+        policy_path.write_text(json.dumps(policy))
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                 "commit", "--quiet", "-am", "Queue the heavy stage.")
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        second = Path(outside.name) / "second"
+        self.git("worktree", "add", "--quiet", "--detach", str(second))
+        return second, Path(outside.name)
+
+    def start(self, tree, stage, script):
+        return subprocess.Popen([sys.executable, str(COMMAND), "run", "--", sys.executable, str(COMMAND), "step",
+                                 stage, "--", sys.executable, "-c", script], cwd=tree, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, env=self.environment)
+
+    def reports(self, tree):
+        return sorted((json.loads(path.read_text()) for path in tree.glob("target/verification/*/report.json")),
+                      key=lambda report: report["started_at"])
+
+    def test_heavy_stages_in_two_worktrees_serialize_and_light_stages_do_not_wait(self):
+        second, outside = self.queue_fixture()
+        release = outside / "release"
+        finished = outside / "first-finished"
+        holder_script = ("import pathlib, time; print('FIRST_HOLDS', flush=True)\n"
+                         f"while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.05)\n"
+                         f"pathlib.Path({str(finished)!r}).write_text('done')")
+        second_script = ("import pathlib, sys; print('SECOND_RUNS', flush=True); "
+                         f"sys.exit(0 if pathlib.Path({str(finished)!r}).exists() else 3)")
+        first = self.start(self.root, "heavy", holder_script)
+        waiting = None
+        try:
+            self.assertEqual(first.stdout.readline(), "FIRST_HOLDS\n")
+            holder = verification_cache.queue_state(second)
+            self.assertEqual({k: holder[k] for k in ("pid", "worktree", "stage")},
+                             {"pid": holder["pid"], "worktree": str(self.root.resolve()), "stage": "heavy"})
+            light = subprocess.run([sys.executable, str(COMMAND), "run", "--", sys.executable, str(COMMAND), "step",
+                                    "light", "--", sys.executable, "-c", "print('LIGHT_RUNS')"], cwd=second,
+                                   capture_output=True, text=True, env=self.environment, timeout=60)
+            self.assertEqual(light.returncode, 0, light.stderr)
+            self.assertNotIn("host_queue", self.reports(second)[0])
+            waiting = self.start(second, "heavy", second_script)
+            line = waiting.stdout.readline()
+            self.assertTrue(line.startswith("Host queue: waiting"), line)
+            self.assertIn(f"stage heavy of worktree {self.root.resolve()}", line)
+            self.assertIsNone(waiting.poll())
+            release.write_text("done")
+            self.assertEqual(first.wait(timeout=60), 0)
+            output, errors = waiting.communicate(timeout=60)
+            self.assertEqual(waiting.returncode, 0, errors)
+            self.assertIn("SECOND_RUNS", output)
+        finally:
+            for process in (first, waiting):
+                if process and process.poll() is None:
+                    process.kill()
+                if process:
+                    process.communicate()
+        held = self.reports(self.root)[0]
+        queued = self.reports(second)[-1]
+        self.assertEqual(held["host_queue"][0]["released"], None)
+        self.assertGreater(queued["host_queue"][0]["waited_seconds"], 0)
+        self.assertEqual(verification_cache.queue_state(second), "free")
+        self.assertEqual(verification_summary.summary({"run_id": "attempt", "hostQueue": "free"})["hostQueue"], "free")
+
+    def test_a_holder_without_a_process_is_released_and_recorded(self):
+        second, outside = self.queue_fixture()
+        gone = subprocess.Popen([sys.executable, "-c", "pass"])
+        gone.wait()
+        holder = {"pid": gone.pid, "worktree": "/removed", "stage": "heavy", "started_at": "2026-10-06T00:00:00+00:00"}
+        lock = verification_cache.queue_path(self.root)
+        lock.write_text(json.dumps(holder))
+        self.assertEqual(verification_cache.queue_state(second), "free")
+        self.assertEqual(verification_summary.summary({"run_id": "attempt", "hostQueue": holder})["hostQueue"], holder)
+        release = outside / "release"
+        first = self.start(self.root, "heavy", "import pathlib, time; print('FIRST_HOLDS', flush=True)\n"
+                           f"while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.05)")
+        waiting = None
+        try:
+            output = first.stdout.readline()
+            self.assertEqual(output, "Host queue: released the lock of stage heavy of worktree /removed, started "
+                             f"2026-10-06T00:00:00+00:00, process {gone.pid}; that process ended without a release\n")
+            self.assertEqual(first.stdout.readline(), "FIRST_HOLDS\n")
+            waiting = self.start(second, "heavy", "print('SECOND_RUNS', flush=True)")
+            line = waiting.stdout.readline()
+            self.assertIn(f"stage heavy of worktree {self.root.resolve()}", line)
+            release.write_text("done")
+            self.assertEqual(first.wait(timeout=60), 0)
+            output, errors = waiting.communicate(timeout=60)
+            self.assertEqual(waiting.returncode, 0, errors)
+            self.assertNotIn("released the lock", output)
+        finally:
+            for process in (first, waiting):
+                if process and process.poll() is None:
+                    process.kill()
+                if process:
+                    process.communicate()
+        self.assertEqual(self.reports(self.root)[-1]["host_queue"][0]["released"], holder)
+        self.assertEqual(self.reports(second)[-1]["host_queue"][0]["released"], None)
+        self.assertEqual(lock.read_text(), "")

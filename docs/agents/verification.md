@@ -30,7 +30,8 @@ The main flow comes first. The reference sections are after it.
 4. After `make verify-policy`, inspect a new plan with `make verify-plan BASE=<base>`.
 5. Start a long command in the background with the client's own mechanism. The
    command is complete when its process exits and its structured result is
-   available. A printed stage line is not the end signal.
+   available. A printed stage line is not the end signal. Heavy stages wait in one host
+   queue for all worktrees. `hostQueue` in `verify-status` shows the holder.
 
 The loop is complete when every check that the current sources select has a
 current PASS. A pending check is not a PASS.
@@ -390,6 +391,14 @@ source-changing runs cannot publish reusable results.
 Use `make verify-changed BASE=HEAD VERIFY_ARGS=--no-cache` to force execution without
 reading or publishing a result-cache entry. Local entries in `target/verification-cache/`
 need their referenced reports. A cache hit is daily feedback, not a PR check.
+
+The host queue is a second lock in the common Git directory. All worktrees of the
+repository share it. These runs take it: the targeted checks with `"host_queue": true`,
+the complete stages in `complete.host_queue`, and `make verify-journey`. The Web stage
+pair takes it one time for both stages. A waiting run prints the holder process,
+worktree, stage, and start time, and prints it again every two minutes. When the holder
+process does not exist, the next run releases the lock and records the old holder in
+`host_queue` of its report.
 
 The complete and daily run commands admit one root run per checkout at a time. A busy
 budget fails with a retry reason. The lock covers process-group cleanup; overdue
