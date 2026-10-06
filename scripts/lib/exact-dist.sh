@@ -86,7 +86,6 @@ start_exact_dist_server() {
   done
   STORYOS_DEV_SERVER=$(sed -n 's/^STORYOS_SERVER_URL=//p' "$exact_dist_server_log" | head -n 1)
   export STORYOS_DEV_SERVER
-  export STORYOS_STAGE1_AUTHORITY_ORACLE=1
 }
 
 # The cleanup trap of each caller also calls this function, so it must be idempotent.

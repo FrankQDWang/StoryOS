@@ -36,8 +36,9 @@ def stream(command, log, root):
     with log.open("w") as output, subprocess.Popen(command, cwd=root, stdout=subprocess.PIPE,
                                                    stderr=subprocess.STDOUT, text=True) as process:
         for line in process.stdout:
-            sys.stdout.write(line)
+            print(line, end="", flush=True)
             output.write(line)
+            output.flush()
         return process.wait()
 
 

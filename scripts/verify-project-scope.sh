@@ -519,6 +519,8 @@ echo "Restoring the controlled Project fixture for S1-JRN-001"
 reset_exact_dist_fixture "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
 start_exact_dist_server
+# The authority oracle compares the receipts of the complete exact-dist suite.
+export STORYOS_STAGE1_AUTHORITY_ORACLE=1
 timed_stage exact-dist -- pnpm --dir apps/web exec vitest run --project browser-exact-dist
 stop_exact_dist_server
 echo "Running isolated Recovery Copy restore and Recovery Visibility Proof"
