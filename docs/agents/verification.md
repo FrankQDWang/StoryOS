@@ -201,7 +201,9 @@ Daily status also gives two size fields for information only. They do not change
 `decision` or `nextAction`. `changeSize` counts the added and changed lines of the
 worktree against the merge base with `BASE`. It counts the deleted files and their
 lines separately. Its `above` list gives each `AGENTS.md` limit, 500 or 800, that
-the count is more than. `moduleSize` lists each changed Rust module that has more
+the count is more than.
+
+`moduleSize` lists each changed Rust module that has more
 than 500 lines without its `#[cfg(test)]` modules and its `_tests.rs` file. Each
 item has an `above` list. The text summary shows these fields after the decision
 and shows at most eight modules.
