@@ -68,7 +68,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     }
 
     let scope = seed_project(&store, "5d10").await;
-    let volume = new_volume(&store, &scope, 0x5d11, 1).await;
+    let volume = new_volume(
+        &store, &scope, /*suffix*/ 0x5d11, /*expected_tree_revision*/ 1,
+    )
+    .await;
     for (suffix, volume_id, expected_tree_revision) in [
         (0x5d12, &volume, 2),
         (0x5d13, &volume, 3),
@@ -87,7 +90,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     }
 
     let scope = seed_project(&store, "5d20").await;
-    let volume = new_volume(&store, &scope, 0x5d21, 1).await;
+    let volume = new_volume(
+        &store, &scope, /*suffix*/ 0x5d21, /*expected_tree_revision*/ 1,
+    )
+    .await;
     for (suffix, volume_id, expected_tree_revision) in [
         (0x5d22, &volume, 2),
         (0x5d23, &volume, 3),
@@ -104,7 +110,10 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     }
 
     let scope = seed_project(&store, "5d30").await;
-    let volume = new_volume(&store, &scope, 0x5d31, 1).await;
+    let volume = new_volume(
+        &store, &scope, /*suffix*/ 0x5d31, /*expected_tree_revision*/ 1,
+    )
+    .await;
     for (suffix, volume_id, expected_tree_revision) in [
         (0x5d32, &volume, 2),
         (0x5d33, &volume, 2),
@@ -122,8 +131,14 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     }
 
     let scope = seed_project(&store, "5d40").await;
-    let volume = new_volume(&store, &scope, 0x5d41, 1).await;
-    let chapter = new_chapter(&store, &scope, 0x5d42, &volume, 2).await;
+    let volume = new_volume(
+        &store, &scope, /*suffix*/ 0x5d41, /*expected_tree_revision*/ 1,
+    )
+    .await;
+    let chapter = new_chapter(
+        &store, &scope, /*suffix*/ 0x5d42, &volume, /*expected_tree_revision*/ 2,
+    )
+    .await;
     for (suffix, chapter_id, expected_tree_revision) in [
         (0x5d43, &chapter, 3),
         (0x5d44, &chapter, 4),
@@ -142,9 +157,18 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     }
 
     let scope = seed_project(&store, "5d50").await;
-    let volume = new_volume(&store, &scope, 0x5d51, 1).await;
-    new_chapter(&store, &scope, 0x5d52, &volume, 2).await;
-    let chapter = new_chapter(&store, &scope, 0x5d53, &volume, 3).await;
+    let volume = new_volume(
+        &store, &scope, /*suffix*/ 0x5d51, /*expected_tree_revision*/ 1,
+    )
+    .await;
+    new_chapter(
+        &store, &scope, /*suffix*/ 0x5d52, &volume, /*expected_tree_revision*/ 2,
+    )
+    .await;
+    let chapter = new_chapter(
+        &store, &scope, /*suffix*/ 0x5d53, &volume, /*expected_tree_revision*/ 3,
+    )
+    .await;
     for (suffix, chapter_id, expected_tree_revision) in [
         (0x5d54, &chapter, 4),
         (0x5d55, &chapter, 5),

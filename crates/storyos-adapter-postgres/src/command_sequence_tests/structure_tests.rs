@@ -184,7 +184,7 @@ pub(super) async fn update_volume_call(
     base: u16,
 ) -> CommandCall<UpdateVolumeInput> {
     let scope = seed_project(store, &format!("{base:04x}")).await;
-    let volume_id = new_volume(store, &scope, base + 1, 1).await;
+    let volume_id = new_volume(store, &scope, base + 1, /*expected_tree_revision*/ 1).await;
     let input = UpdateVolumeInput {
         volume_id,
         title: "Renamed".to_owned(),
@@ -200,7 +200,7 @@ pub(super) async fn delete_volume_call(
     base: u16,
 ) -> CommandCall<DeleteVolumeInput> {
     let scope = seed_project(store, &format!("{base:04x}")).await;
-    let volume_id = new_volume(store, &scope, base + 1, 1).await;
+    let volume_id = new_volume(store, &scope, base + 1, /*expected_tree_revision*/ 1).await;
     let input = DeleteVolumeInput {
         volume_id,
         expected_tree_revision: 2,
@@ -214,7 +214,7 @@ pub(super) async fn create_chapter_call(
     base: u16,
 ) -> CommandCall<CreateChapterInput> {
     let scope = seed_project(store, &format!("{base:04x}")).await;
-    let volume_id = new_volume(store, &scope, base + 1, 1).await;
+    let volume_id = new_volume(store, &scope, base + 1, /*expected_tree_revision*/ 1).await;
     let input = CreateChapterInput {
         volume_id: volume_id.as_ref().to_owned(),
         title: "Chapter".to_owned(),
@@ -230,8 +230,15 @@ pub(super) async fn update_chapter_call(
     base: u16,
 ) -> CommandCall<UpdateChapterInput> {
     let scope = seed_project(store, &format!("{base:04x}")).await;
-    let volume_id = new_volume(store, &scope, base + 1, 1).await;
-    let chapter_id = new_chapter(store, &scope, base + 2, &volume_id, 2).await;
+    let volume_id = new_volume(store, &scope, base + 1, /*expected_tree_revision*/ 1).await;
+    let chapter_id = new_chapter(
+        store,
+        &scope,
+        base + 2,
+        &volume_id,
+        /*expected_tree_revision*/ 2,
+    )
+    .await;
     let input = UpdateChapterInput {
         chapter_id,
         title: "Renamed".to_owned(),
@@ -247,8 +254,15 @@ pub(super) async fn delete_chapter_call(
     base: u16,
 ) -> CommandCall<DeleteChapterInput> {
     let scope = seed_project(store, &format!("{base:04x}")).await;
-    let volume_id = new_volume(store, &scope, base + 1, 1).await;
-    let chapter_id = new_chapter(store, &scope, base + 2, &volume_id, 2).await;
+    let volume_id = new_volume(store, &scope, base + 1, /*expected_tree_revision*/ 1).await;
+    let chapter_id = new_chapter(
+        store,
+        &scope,
+        base + 2,
+        &volume_id,
+        /*expected_tree_revision*/ 2,
+    )
+    .await;
     let input = DeleteChapterInput {
         chapter_id,
         expected_tree_revision: 3,
