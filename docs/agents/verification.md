@@ -85,8 +85,7 @@ A review request accepts any successful `verify` run on the head that matches th
 
 In a pull-request run, the `ste-text-guard` step of `verify-pr` runs the text guard file mode.
 The range starts at the base parent of the synthetic merge and stops at the synthetic merge.
-A finding fails the `verify` check.
-This line would fail the guard. The commit message mode stays local, because the GitHub checkout has a depth of two.
+A finding fails the `verify` check. The commit message mode stays local, because the GitHub checkout has a depth of two.
 
 ## Parallel implementation
 
