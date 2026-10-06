@@ -8,7 +8,6 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest import mock
 
 import verification_cache
 import verification_journey
@@ -28,10 +27,6 @@ class JourneyCommandTests(unittest.TestCase):
                          "commit", "--quiet", "-m", "Add a journey."]):
             subprocess.run(["git", *command], cwd=self.root, check=True)
         self.commands = []
-        environment = mock.patch.dict(os.environ)
-        environment.start()
-        self.addCleanup(environment.stop)
-        os.environ.pop(verification_cache.QUEUE_HELD, None)
 
     def runner(self, rows, code):
         def run(command, log, root):

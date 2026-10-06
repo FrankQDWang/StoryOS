@@ -239,8 +239,12 @@ class VerificationCommandTests(unittest.TestCase):
     def test_heavy_stages_in_two_worktrees_serialize_and_light_stages_do_not_wait(self):
         second, outside = self.queue_fixture()
         release = outside / "release"
+        finished = outside / "first-finished"
         holder_script = ("import pathlib, time; print('FIRST_HOLDS', flush=True)\n"
-                         f"while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.05)")
+                         f"while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.05)\n"
+                         f"pathlib.Path({str(finished)!r}).write_text('done')")
+        second_script = ("import pathlib, sys; print('SECOND_RUNS', flush=True); "
+                         f"sys.exit(0 if pathlib.Path({str(finished)!r}).exists() else 3)")
         first = self.start(self.root, "heavy", holder_script)
         waiting = None
         try:
@@ -253,7 +257,7 @@ class VerificationCommandTests(unittest.TestCase):
                                    capture_output=True, text=True, env=self.environment, timeout=60)
             self.assertEqual(light.returncode, 0, light.stderr)
             self.assertNotIn("host_queue", self.reports(second)[0])
-            waiting = self.start(second, "heavy", "print('SECOND_RUNS', flush=True)")
+            waiting = self.start(second, "heavy", second_script)
             line = waiting.stdout.readline()
             self.assertTrue(line.startswith("Host queue: waiting"), line)
             self.assertIn(f"stage heavy of worktree {self.root.resolve()}", line)
@@ -273,7 +277,6 @@ class VerificationCommandTests(unittest.TestCase):
         queued = self.reports(second)[-1]
         self.assertEqual(held["host_queue"][0]["released"], None)
         self.assertGreater(queued["host_queue"][0]["waited_seconds"], 0)
-        self.assertLessEqual(held["steps"][0]["ended_at"], queued["host_queue"][0]["holder"]["started_at"])
         self.assertEqual(verification_cache.queue_state(second), "free")
         self.assertEqual(verification_summary.summary({"run_id": "attempt", "hostQueue": "free"})["hostQueue"], "free")
 
