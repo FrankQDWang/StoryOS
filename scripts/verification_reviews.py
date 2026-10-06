@@ -13,6 +13,7 @@ import verification_status
 
 
 POLICY = 'docs/agents/verification-policy.json'
+GUARDS = ('ste-text-guard', 'rust-literal-guard', 'diff-whitespace')
 
 
 def api(path):
@@ -75,6 +76,17 @@ def current(root, pr, purpose):
     if source['dirty'] or source['tree'] != candidate['tree']:
         raise ValueError('Review requires a clean source matching the candidate tree')
     return candidate, verify
+
+
+def guards(root):
+    """Return passed, failed, or missing for each guard step of the current verify-policy result."""
+    steps = {}
+    if 'verify-policy' in json.loads((root / POLICY).read_text()).get('targeted', {}):
+        state = verification_status.status(root, verification_status.targeted_plan(root, 'verify-policy'))
+        if state['status'] in {'passed', 'failed'}:
+            steps = {s['stage']: s['status'] for s in json.loads(Path(state['report']).read_text())['steps']}
+    return {guard: 'missing' if guard not in steps else 'passed' if steps[guard] in {'passed', 'cached'} else 'failed'
+            for guard in GUARDS}
 
 
 def validate(request, reviews, expected):
@@ -177,7 +189,7 @@ def main():
         if args.action == 'request':
             candidate, verify = current(root, args.pr, args.purpose)
             value = {'version': 1, 'candidate': candidate, 'verify': {k: v for k, v in verify.items() if k != 'check_id'},
-                     'executor_context': args.executor_context}
+                     'executor_context': args.executor_context, 'guards': guards(root)}
             value['digest'] = verification_cache.digest(value)
             path = root / 'target/verification/reviews' / value['digest'] / 'request.json'
         else:
