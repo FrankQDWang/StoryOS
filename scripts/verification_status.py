@@ -98,7 +98,7 @@ def numstat(root, base, diff_filter):
             yield path, int(added) if added != '-' else 0, int(deleted) if deleted != '-' else 0
 
 
-RUST_CODE = re.compile(r"""//[^\n]*|/\*|b?r(#*)"|b?"(?:\\.|[^"\\])*"|b?'(?:\\(?:u\{[0-9a-fA-F]+\}|.)|[^'\\])'|[{}]""")
+RUST_CODE = re.compile(r"""//[^\n]*|/\*|b?r(#*)"|b?"(?:\\.|[^"\\])*"|b?'(?:\\(?:u\{[0-9a-fA-F]+\}|.)|[^'\\])'|[{}]""", re.S)
 RUST_COMMENT = re.compile(r'/\*|\*/')
 
 
