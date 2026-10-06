@@ -189,6 +189,58 @@ def outputs(root, producer=None):
     return digest(identities)
 
 
+TOOL_RESULTS = "target/verification-cache/verification-tests"
+DIAGNOSTIC = ("STORYOS_VERIFICATION_TEST_WORKERS", "STORYOS_VERIFICATION_COMPARE")
+
+
+def tool_key(root):
+    """Return the digest of the inputs that the verification-tool self-tests read."""
+    import verification
+    contents = []
+    for path in verification.input_paths(root):
+        if path == "Makefile" or path.startswith(("scripts/", "docs/agents/", ".github/")):
+            source = root / path
+            contents.append((path, source.lstat().st_mode, os.readlink(source) if source.is_symlink() else None,
+                             hashlib.sha256(source.read_bytes()).hexdigest() if source.is_file() else None)
+                            if source.is_file() or source.is_symlink() else (path, None))
+    tests = sorted((item["path"], item["kind"], item["group"]) for item in verification.inventory(root)["files"]
+                   if item["kind"].endswith("-test"))
+    node = shutil.which("node")
+    versions = [sys.version, subprocess.check_output([node, "--version"], text=True).strip() if node else None]
+    return digest({"version": 1, "inputs": contents, "tests": tests, "versions": versions})
+
+
+def tool_result(root, key):
+    """Return the producer of a passed verification-tool self-test result with this key, or None."""
+    try:
+        entry = json.loads((root / TOOL_RESULTS / f"{key}.json").read_text())
+        producer = (root / entry["report"]).resolve()
+        if not producer.is_relative_to((root / "target/verification").resolve()):
+            return None
+        report = json.loads(producer.read_text())
+        step = next(item for item in report["steps"] if item.get("id") == entry["step"])
+        if (step["stage"] != "verification-tests" or step["status"] != "passed" or step.get("reuse_key") != key
+                or report["source_start"] != report["source_end"]
+                or any(item["status"] != "passed" for item in report.get("verification_test_file_attempts", []))):
+            return None
+        return {"producer": entry["report"], "producer_step": step["id"]}
+    except (OSError, ValueError, KeyError, TypeError, StopIteration):
+        return None
+
+
+def publish_tool_result(root, report_path, step):
+    """Record a passed verification-tool self-test step as the reusable result of its key."""
+    path = root / TOOL_RESULTS / f"{step['reuse_key']}.json"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps({"key": step["reuse_key"], "report": str(report_path.relative_to(root)),
+                                         "step": step["id"]}, indent=2) + "\n")
+        temporary.replace(path)
+    except OSError:
+        pass
+
+
 class DailyCache:
     def __init__(self, root, plan, no_cache):
         self.root, self.path, self.no_cache, self.required = root, None, no_cache, None

@@ -392,6 +392,10 @@ Use `make verify-changed BASE=HEAD VERIFY_ARGS=--no-cache` to force execution wi
 reading or publishing a result-cache entry. Local entries in `target/verification-cache/`
 need their referenced reports. A cache hit is daily feedback, not a PR check.
 
+The `verification-tests` step reuses a passed result with the same key. The key is a digest of `scripts/**`,
+`docs/agents/**`, `.github/**`, the `Makefile`, the test-file membership, and the Python and Node versions. A hit records
+a `cached` step with the key and producer report. Admission accepts it while the key is current. A diagnostic override disables reuse.
+
 The host queue is a second lock in the common Git directory. All worktrees of the
 repository share it. These runs take it: the targeted checks with `"host_queue": true`,
 the complete stages in `complete.host_queue`, and `make verify-journey`. The Web stage

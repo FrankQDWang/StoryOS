@@ -210,8 +210,10 @@ def status(root, plan):
         if report['status'] == 'running':
             result['execution'] = process_state(report.get('process', {}))
             result['heartbeat_at'] = report.get('heartbeat_at')
+        reused = [s['reuse_key'] for s in report.get('steps', []) if s['status'] == 'cached' and 'reuse_key' in s]
         if result['status'] == 'passed' and (report.get('source_end') != plan['source'] or
-                not report.get('steps') or any(s['status'] not in {'passed', 'cached'} for s in report['steps'])):
+                not report.get('steps') or any(s['status'] not in {'passed', 'cached'} for s in report['steps'])
+                or any(key != verification_cache.tool_key(root) for key in reused)):
             result['status'] = 'stale'
     if any(c['status'] == 'pending' for c in plan['checks']):
         result['status'] = 'unmet-prerequisites'
