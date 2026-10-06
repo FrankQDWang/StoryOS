@@ -10,7 +10,7 @@ This file is the operating-rule source for every agent client. Codex reads it di
 - **Decisions:** record a spoken deployment, hosting, or vendor decision as an ADR in the same session. A premise that no ADR records is not a contract. ADR 0022 sets the current production topology.
 - **User changes:** preserve unrelated user changes exactly as you find them.
 - **Language:** write all repository text in ASD-STE100 Simplified Technical English: code, comments, documentation, commit messages, GitHub Issues, and pull requests. Talk to the user in Simplified Chinese.
-- **Glossary:** read every `GLOSSARY.md` and use its ubiquitous language.
+- **Glossary:** use the ubiquitous language of the glossary. [GLOSSARY.md](GLOSSARY.md) lists the design area files under `docs/glossary/` and tells how to find a term with `grep`. Read only the area files that you need.
 - **Domain:** before domain exploration or design, read [Domain docs](docs/agents/domain.md) for the glossary and ADR rules.
 - **Daily loop:** at task start, run `make verify-status BASE=origin/main`. After each product or test edit, follow the [Daily loop](docs/agents/verification.md#daily-loop) to run the smallest check that can fail on that edit.
 - **Commands:** use the StoryOS-owned repository commands for format, lint, test, schema generation, and verification.

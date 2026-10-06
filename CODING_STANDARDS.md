@@ -1,6 +1,6 @@
 # StoryOS coding standards
 
-Read this file before you change Rust code, a test, a generated artifact, or a contract. The Standards reviewer compares a diff with `AGENTS.md`, this file, `GLOSSARY.md`, and ASD-STE100.
+Read this file before you change Rust code, a test, a generated artifact, or a contract. The Standards reviewer compares a diff with `AGENTS.md`, this file, the glossary (`GLOSSARY.md` and its area files under `docs/glossary/`), and ASD-STE100.
 
 Put a new coding rule in this file and a new operating rule in `AGENTS.md`. These rules are complete in StoryOS. Use this file as their source, not a `.reference/` copy.
 
