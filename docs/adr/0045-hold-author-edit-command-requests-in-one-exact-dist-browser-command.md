@@ -1,10 +1,10 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Hold Author Edit Command Requests in One Exact-Dist Browser Command
 
-The author has not accepted this decision. PR #986 must not merge until the author accepts it or rejects it. It proposes one narrow exception to the Browser Command families of [ADR 0015](0015-adopt-typescript-and-vitest-browser-mode-for-the-protected-web-client.md). It is the result of [Wait for the Saved State Instead of the Transient Saving State in Three Exact-Dist Journeys](https://github.com/FrankQDWang/StoryOS/issues/985).
+The author accepted this decision on 2026-10-06. It records one narrow exception to the Browser Command families of [ADR 0015](0015-adopt-typescript-and-vitest-browser-mode-for-the-protected-web-client.md). It is the result of [Wait for the Saved State Instead of the Transient Saving State in Three Exact-Dist Journeys](https://github.com/FrankQDWang/StoryOS/issues/985).
 
 ## Context
 
