@@ -76,6 +76,10 @@ empty test discovery cannot report success. When a complete run is requested,
 PostgreSQL fixtures, ordered HTTP groups, exact-dist oracles and both recovery
 drills remain mandatory. The PR `verify` sentinel checks the policy and runner.
 
+The `verify` workflow does not run on `edited`.
+A review request accepts any successful `verify` run on the head that matches the request base, head, and tree.
+`verify-pr` accepts the event base or the current remote base tip, and prints which one.
+
 ## Parallel implementation
 
 Before starting database or observation commands in parallel worktrees, read
