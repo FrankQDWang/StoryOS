@@ -51,7 +51,7 @@ class ReviewAdmissionTests(unittest.TestCase):
         gh.write_text(f'#!{sys.executable}\nimport json,sys\nfrom pathlib import Path\np=json.loads(Path("target/live.json").read_text())\n'
                       f'print("Pull request base: {self.base}\\nPull request head: {self.head}\\nSynthetic merge tree: {self.tree}") if sys.argv[2].endswith("/logs") else '
                       'print(json.dumps({"nameWithOwner":"fixture/repo"}) if sys.argv[1]=="repo" else '
-                      'json.dumps({"check_runs":p.get("checks") or [{"name":"verify","head_sha":p["head"]["sha"],"id":p.get("check_id",1),"conclusion":"success","status":"completed"}]}) '
+                      'json.dumps({"check_runs":[c for c in (p.get("checks") or [{"name":"verify","head_sha":p["head"]["sha"],"id":p.get("check_id",1),"conclusion":"success","status":"completed"}]) if "filter=all" in sys.argv[2] or c is max(p.get("checks") or [c], key=lambda c:c["id"])] if "page=1" in sys.argv[2] else []}) '
                       'if "check-runs" in sys.argv[2] else json.dumps(p))\n')
         gh.chmod(0o755)
         self.repo.environment['PATH'] = str(tools) + os.pathsep + self.repo.environment['PATH']

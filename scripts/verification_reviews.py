@@ -27,7 +27,12 @@ def binding(root, revision, base, head, pr, purpose):
 
 
 def sentinel(route, head, base, tree):
-    checks = api(f'{route}/commits/{head}/check-runs?per_page=100')['check_runs']
+    checks = []
+    for page in range(1, 11):
+        batch = api(f'{route}/commits/{head}/check-runs?filter=all&per_page=100&page={page}')['check_runs']
+        checks += batch
+        if len(batch) < 100:
+            break
     passed = [c for c in checks if c['name'] == 'verify' and c['head_sha'] == head
               and c.get('status') == 'completed' and c.get('conclusion') == 'success']
     if not passed:
