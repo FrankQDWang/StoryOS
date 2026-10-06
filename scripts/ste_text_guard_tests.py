@@ -152,7 +152,8 @@ class TextGuardTests(unittest.TestCase):
         self.assertEqual(self.guard("install-hook", expected_code=0), [f"{hook}: the hook is current."])
         self.assertEqual(hook.stat(), installed)
         (self.root / "message.txt").write_text(" ".join(["word"] * 30) + "\n\nThe whole text is here.\n")
-        refused = subprocess.run(["git", "commit", "--allow-empty", "-F", "message.txt"], cwd=self.root,
+        refused = subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                                  "commit", "--allow-empty", "-F", "message.txt"], cwd=self.root,
                                  env=self.environment, capture_output=True, text=True, check=False)
         self.git("commit", "--quiet", "--allow-empty", "--no-verify", "-F", "message.txt")
         reported = self.guard("commits", "--base", self.base, expected_code=1)
