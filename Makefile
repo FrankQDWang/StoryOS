@@ -147,6 +147,12 @@ verify-targeted:
 review-round:
 	@env -u CONTEXT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
 
+.PHONY: verify-journey
+RUNS ?= 1
+LOAD ?= 0
+verify-journey:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_journey.py --file "$(FILE)" --runs "$(RUNS)" --load "$(LOAD)"
+
 .PHONY: install-hooks
 install-hooks:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/ste_text_guard.py install-hook

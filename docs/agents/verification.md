@@ -21,6 +21,9 @@ The main flow comes first. The reference sections are after it.
    use `make verify-changed BASE=<base>`. Set `BASE` to the actual comparison commit.
    When a failed test is in the [flake register](#flake-register), the final line names its
    issue and `main` pass rate. A known flake still fails the run.
+
+   To run one exact-dist journey file with the `project-scope` procedure, use
+   `make verify-journey FILE=<file> RUNS=<n> LOAD=<processes>`. `RUNS` and `LOAD` are optional.
 3. After a test lifecycle change, run `make verify-policy`. A test lifecycle change
    adds, renames, or deletes a test, or changes the runner or the
    [input policy](verification-policy.json).
