@@ -10,7 +10,7 @@ import unittest
 
 SCRIPT = Path(__file__).resolve().with_name("ste_text_guard.py")
 WORD_LIST = SCRIPT.parents[1] / "docs/agents/ste-rejected-words.json"
-LONG = " ".join(["word"] * 26) + "."
+LONG = " ".join(["word"] * 25) + " &."
 WOULD = ('"would" is on the rejected-word list. Write the text again without it. '
          'Use the present tense or "will" for a fact.')
 WHOLE = '"whole" is on the rejected-word list. Use "all".'
@@ -23,7 +23,7 @@ SEVEN = "One. Two. Three. Four. Five. Six. Seven."
 COMMIT_MESSAGE = (
     "Write about the guide\n\n"
     "The whole guide is here.\n\n"
-    "Co-Authored-By: Would Could <fixture@example.invalid>\n"
+    "Co-Authored-By: Would Could\n <fixture@example.invalid>\n"
 )
 
 
@@ -95,11 +95,32 @@ class TextGuardTests(unittest.TestCase):
             f"web/app.ts:2: {PARAGRAPH}",
         ])
 
+    def test_lexical_state_and_block_structure_span_lines(self):
+        self.write("web/template.ts", (
+            "const text = `\n// whole; would\n`;\n"
+            "// The whole text.\n"
+            "/** Good. */ const n = 1; // would\n"
+        ))
+        self.write("src/raw.rs", 'let s = r#"\n// would; whole\n"#;\nlet c = \'"\';\n// The whole text.\n')
+        self.write("structure.md", (
+            "The whole heading\n=================\n\n"
+            "Name | Value\n--- | ---\nwhole; would | x\n\n"
+            "Use `whole\nwould;` here.\n\n"
+            "<script>\nconst a = 1;\n\n// would; whole\n</script>\n\n"
+            "<https://example.com/would> is a link.\n"
+        ))
+        self.assertEqual(self.guard("files", "--base", self.base, expected_code=1), [
+            f"src/raw.rs:5: rejected-word: {WHOLE}",
+            f"web/template.ts:4: rejected-word: {WHOLE}",
+            f"web/template.ts:5: rejected-word: {WOULD}",
+        ])
+
     def test_only_added_lines_fire_in_the_worktree_and_in_a_commit_range(self):
-        self.write("notes.md", f"Old text; it stays.\n\n{LONG}\n")
+        self.write("notes.md", f"Old text; it stays.\n\n{LONG}\n\nKeep it in\nplace.\n")
         base = self.commit("Add the notes.")
-        self.write("notes.md", f"Old text; it stays.\n\n{LONG}\n\nNew text; it is new.\n")
-        expected = [f"notes.md:5: {SEMICOLON}"]
+        self.write("notes.md", f"Old text; it stays.\n\n{LONG}\n\nKeep it in\nflight.\n\nNew text; it is new.\n")
+        expected = [f'notes.md:5: rejected-word: "in flight" is on the rejected-word list. Use "in progress".',
+                    f"notes.md:8: {SEMICOLON}"]
         self.assertEqual(self.guard("files", "--base", base, expected_code=1), expected)
         self.commit("Change the notes.")
         self.assertEqual(self.guard("files", "--base", base, "--head", "HEAD", expected_code=1), expected)

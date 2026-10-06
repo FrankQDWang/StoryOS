@@ -32,12 +32,17 @@ HEADING = re.compile(r"#{1,6}(\s|$)")
 LIST_ITEM = re.compile(r"([-*+]|\d+[.)])\s+")
 LINK_DEFINITION = re.compile(r"\[[^\]]+\]:\s")
 RULE_LINE = re.compile(r"[-=*_ ]{3,}")
-HTML_START = re.compile(r"<[A-Za-z!/]")
+HTML_START = re.compile(r"<(!--|/[A-Za-z]|[A-Za-z][A-Za-z0-9-]*(?=[\s/>]|$))")
+HTML_CLOSED_BY_TAG = ("script", "pre", "style", "textarea")
+TABLE_DELIMITER = re.compile(r"\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?")
+RAW_STRING = re.compile(r'r(#*)"')
+CHAR_LITERAL = re.compile(r"'(\\.|[^\\'])'")
+TOOL_COMMENT = re.compile(r"\s*(eslint-|@ts-|prettier-|biome-|#region|#endregion)")
 SENTENCE_END = re.compile(r"[.?!]+[)\]\"'’”]*(?=\s|$)")
 TRAILER = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*: \S")
 HUNK = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 INLINE = [
-    (re.compile(r"(`+)(.+?)\1"), HOLE),
+    (re.compile(r"(`+)(.+?)\1", re.DOTALL), HOLE),
     (re.compile(r"!?\[([^\]]*)\]\([^)]*\)"), r"\1"),
     (re.compile(r"\[([^\]]*)\]\[[^\]]*\]"), r"\1"),
     (re.compile(r"<https?://[^>]*>"), HOLE),
@@ -88,58 +93,65 @@ def load_rules(root):
     return words, pattern, glossary_pattern
 
 
-def inline(text):
-    for pattern, replacement in INLINE:
-        text = pattern.sub(replacement, text)
-    return text
-
-
 def paragraphs(lines):
     """Group (line, text) pairs into prose paragraphs. A None text is a break."""
     result, current = [], []
-    fence, html = None, False
+    fence = html = None
+    table = False
 
     def flush():
         nonlocal current
         if current:
-            result.append(current)
+            text = "\n".join(segment for _, segment in current)
+            for pattern, replacement in INLINE:
+                text = pattern.sub(lambda match: match.expand(replacement) + "\n" * (
+                    match.group(0).count("\n") - match.expand(replacement).count("\n")), text)
+            result.append(list(zip([number for number, _ in current], text.split("\n"))))
         current = []
 
     for number, text in lines:
+        stripped = "" if text is None else text.strip()
         if text is None:
             flush()
-            html = False
+            fence = html = None
+            table = False
+        elif fence:
+            fence = None if stripped.startswith(fence) else fence
+        elif html is not None:
+            html = None if (html and html in stripped.lower()) or not (html or stripped) else html
+        elif not stripped:
+            flush()
+            table = False
+        elif table:
             continue
-        stripped = text.strip()
-        if fence:
-            if stripped.startswith(fence):
-                fence = None
-            continue
-        match = FENCE.match(stripped)
-        if match:
+        elif match := FENCE.match(stripped):
             flush()
             fence = match.group(1)
-            continue
-        if not stripped:
+        elif "|" in stripped and TABLE_DELIMITER.fullmatch(stripped) and current:
+            current.pop()
             flush()
-            html = False
-            continue
-        if html:
-            continue
-        if (HEADING.match(stripped) or stripped.startswith("|") or LINK_DEFINITION.match(stripped)
-                or RULE_LINE.fullmatch(stripped)):
+            table = True
+        elif RULE_LINE.fullmatch(stripped):
+            if set(stripped.replace(" ", "")) in ({"="}, {"-"}):
+                current = []
             flush()
-            continue
-        if HTML_START.match(stripped):
+        elif stripped.startswith("|"):
             flush()
-            html = True
-            continue
-        stripped = stripped.lstrip("> ").strip() if stripped.startswith(">") else stripped
-        item = LIST_ITEM.match(stripped)
-        if item or stripped.startswith("@"):
+            table = True
+        elif HEADING.match(stripped) or LINK_DEFINITION.match(stripped):
             flush()
-            stripped = stripped[item.end():] if item else stripped
-        current.append((number, inline(stripped)))
+        elif tag := HTML_START.match(stripped):
+            flush()
+            name = tag.group(1).lower()
+            html = "-->" if name == "!--" else f"</{name}>" if name in HTML_CLOSED_BY_TAG else ""
+            html = None if html and html in stripped[tag.end():].lower() else html
+        else:
+            stripped = stripped.lstrip("> ").strip() if stripped.startswith(">") else stripped
+            item = LIST_ITEM.match(stripped)
+            if item or stripped.startswith("@"):
+                flush()
+                stripped = stripped[item.end():] if item else stripped
+            current.append((number, stripped))
     flush()
     return result
 
@@ -153,58 +165,47 @@ def markdown_lines(text):
     return lines
 
 
-def comment_start(line, language):
-    """Return the index of a line comment outside string literals, or -1."""
-    quote, index = None, 0
-    quotes = "\"" if language == "rust" else "\"'`"
-    while index < len(line):
-        char = line[index]
-        if quote:
-            if char == "\\":
-                index += 1
-            elif char == quote:
-                quote = None
-        elif char in quotes:
-            quote = char
-        elif language == "rust" and char == "'" and re.match(r"'(\\.|[^\\'])'", line[index:]):
-            index += line[index:].index("'", 2)
-        elif line.startswith("//", index):
-            return index
-        elif line.startswith("/*", index):
-            end = line.find("*/", index + 2)
-            if end < 0:
-                return -1
-            index = end + 1
-        index += 1
-    return -1
-
-
 def comment_lines(text, language):
-    """Return the line comments and doc comments as (line, text) pairs."""
-    result, block = [], False
-    for number, line in enumerate(text.splitlines(), start=1):
-        stripped = line.strip()
-        if block:
-            body = stripped[:stripped.index("*/")] if "*/" in stripped else stripped
-            body = body[1:] if body.startswith("*") else body
-            result.append((number, body))
-            block = "*/" not in stripped
-            continue
-        if stripped.startswith(("/**", "/*!")) and not stripped.startswith("/**/"):
-            body = stripped[3:]
-            block = "*/" not in body
-            body = body[:body.index("*/")] if "*/" in body else body
-            result.append((number, body))
-            continue
-        start = comment_start(line, language)
-        if start < 0:
-            result.append((number, None))
-            continue
-        body = re.sub(r"^//[/!]?", "", line[start:])
-        if re.match(r"\s*(eslint-|@ts-|prettier-|biome-|#region|#endregion)", body):
-            body = None
-        result.append((number, body))
-    return result
+    """Return the line comments and doc comments as (line, text) pairs, outside string literals."""
+    bodies, index, line = {}, 0, 1
+    rust = language == "rust"
+    quotes = "\"" if rust else "\"'`"
+
+    def skip_to(end):
+        nonlocal index, line
+        line += text.count("\n", index, end)
+        index = end
+
+    while index < len(text):
+        char = text[index]
+        if text.startswith("//", index):
+            end = text.find("\n", index) % (len(text) + 1)
+            body = re.sub(r"^[/!]", "", text[index + 2:end])
+            if not TOOL_COMMENT.match(body):
+                bodies.setdefault(line, []).append(body)
+            index = end
+        elif text.startswith("/*", index):
+            end = text.find("*/", index + 2) % (len(text) + 1)
+            if text.startswith(("/**", "/*!"), index) and not text.startswith("/**/", index):
+                for offset, body in enumerate(text[index + 3:end].split("\n")):
+                    body = body.strip()
+                    bodies.setdefault(line + offset, []).append(body[1:] if body.startswith("*") else body)
+            skip_to(end + 2)
+        elif rust and (raw := RAW_STRING.match(text, index)) and not text[index - 1:index].isidentifier():
+            end = text.find("\"" + raw.group(1), raw.end()) % (len(text) + 1)
+            skip_to(end + 1 + len(raw.group(1)))
+        elif rust and (literal := CHAR_LITERAL.match(text, index)):
+            index = literal.end()
+        elif char in quotes:
+            end = index + 1
+            while end < len(text) and text[end] != char:
+                end += 2 if text[end] == "\\" else 1
+            skip_to(end + 1)
+        else:
+            line += char == "\n"
+            index += 1
+    return [(number, " ".join(bodies[number]) if number in bodies else None)
+            for number in range(1, text.count("\n") + 2)]
 
 
 def message_lines(text):
@@ -218,7 +219,8 @@ def message_lines(text):
     start = len(lines)
     while start and lines[start - 1].strip():
         start -= 1
-    if start and all(TRAILER.match(line) for line in lines[start:]):
+    block = lines[start:]
+    if start and TRAILER.match(block[0]) and all(TRAILER.match(line) or line[:1].isspace() for line in block):
         lines = lines[:start]
     return list(enumerate(lines, start=1))
 
@@ -240,7 +242,7 @@ def check(path, lines, added, rules):
 
         sentences, begin = [], 0
         for end in [match.end() for match in SENTENCE_END.finditer(text)] + [len(text)]:
-            count = sum(1 for token in text[begin:end].split() if re.search(r"\w|" + HOLE, token))
+            count = len(text[begin:end].split())
             if count:
                 sentences.append((begin, end, count))
             begin = end
@@ -259,22 +261,16 @@ def check(path, lines, added, rules):
                               "prose contains a semicolon. Write two sentences."))
         masked = glossary.sub(lambda match: HOLE * len(match.group(0)), text) if glossary else text
         for match in pattern.finditer(masked):
-            if line_at(match.start()) not in added:
+            if not {line_at(offset) for offset in range(match.start(), match.end())} & added:
                 continue
-            entry = words[re.sub(r"\s+", " ", match.group(0).lower())]
+            phrase = " ".join(match.group(0).split())
+            entry = words[phrase.lower()]
             advice = (f'Use "{entry["alternative"]}".' if entry["alternative"]
                       else "Write the text again without it.")
             note = f' {entry["note"]}' if entry.get("note") else ""
             findings.add((line_at(match.start()), "rejected-word",
-                          f'"{match.group(0)}" is on the rejected-word list. {advice}{note}'))
+                          f'"{phrase}" is on the rejected-word list. {advice}{note}'))
     return [f"{path}:{line}: {rule}: {message}" for line, rule, message in sorted(findings)]
-
-
-def file_lines(path, text):
-    suffix = Path(path).suffix
-    if suffix in MARKDOWN:
-        return markdown_lines(text)
-    return comment_lines(text, COMMENTED[suffix])
 
 
 def added_lines(root, base, head):
@@ -304,7 +300,9 @@ def run_files(root, rules, base, head):
     findings = []
     for path, added in sorted(added_lines(root, merge_base(root, base, head), head).items()):
         text = git(root, "show", f"{head}:{path}") if head else (root / path).read_text(errors="replace")
-        findings += check(path, file_lines(path, text), added, rules)
+        suffix = Path(path).suffix
+        lines = markdown_lines(text) if suffix in MARKDOWN else comment_lines(text, COMMENTED[suffix])
+        findings += check(path, lines, added, rules)
     return findings
 
 
