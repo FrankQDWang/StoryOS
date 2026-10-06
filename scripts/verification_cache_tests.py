@@ -8,6 +8,7 @@ import subprocess
 import sys
 import unittest
 
+import verification_cache
 import verification_plan_tests
 
 
@@ -178,6 +179,18 @@ class DailyCacheTests(unittest.TestCase):
         self.assertEqual({key: report[key] for key in ("failed_steps", "failure_reason", "changed_paths")},
                          {"failed_steps": [], "changed_paths": ["apps/web/node_modules/.pnpm/vite/index.js"],
                           "failure_reason": f"{message}: apps/web/node_modules/.pnpm/vite/index.js."})
+
+    def test_dependency_change_before_cache_publication_names_the_changed_path(self):
+        result, report = self.run_daily()
+        self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
+        report_path = self.root / "target/verification" / report["run_id"] / "report.json"
+        cache = verification_cache.DailyCache(self.root, report["plan"], no_cache=False)
+        (self.root / "node_modules/installed.js").write_text("changed dependency")
+        message = "Installed dependencies changed before cache publication"
+        with self.assertRaisesRegex(ValueError, message):
+            cache.prepare(report_path)
+        self.assertEqual(json.loads((report_path.parent / "failure.json").read_text()),
+                         {"reason": message, "changed_paths": ["node_modules/installed.js"]})
 
     def test_busy_budget_refuses_a_second_run_and_releases_after_interruption(self):
         target = self.root / "target"

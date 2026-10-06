@@ -491,7 +491,11 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     write_json(report_path, report)
     if cache:
         cache.publish(report_path)
-    print(verification_failure.final_line(report, report_path), flush=True)
+    failure = ("" if report["status"] == "passed" else
+               f"; failed step: {', '.join(report['failed_steps']) or 'none'}"
+               f"; reason: {report['failure_reason'].removesuffix('.')}; log: {report['failure_log'] or 'none'}")
+    print(f"Verification {report['status']}: {report['duration_seconds']:.2f}s{failure}; report: {report_path}",
+          flush=True)
     print('Observation: ' + json.dumps(verification_records.supervision(report_path)), file=sys.stderr, flush=True)
     if report["status"] == "passed":
         return 0

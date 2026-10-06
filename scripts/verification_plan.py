@@ -14,7 +14,6 @@ sys.dont_write_bytecode = True
 import verification
 import verification_cache
 import verification_daily
-import verification_failure
 import verification_graph
 import verification_rust_cache
 
@@ -172,6 +171,7 @@ def execute_plan(root, plan):
             before = verification_cache.installed(root)
             dependencies = None if before is None else verification_cache.digest(before)
             (directory / "dependencies.json").write_text(json.dumps(dependencies))
+            (directory / "installed.json").write_text(json.dumps(before))
             command = ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", group,
                        *[str(root / path) for path in check["files"]], "--passWithNoTests=false",
                        "--allowOnly=false", "--cache=false", f"--maxWorkers={plan['workers']}", "--reporter=default",
@@ -186,9 +186,8 @@ def execute_plan(root, plan):
             after = verification_cache.installed(root)
             if before != after:
                 reason = "Installed dependencies changed during the selected tests"
-                (directory / "failure.json").write_text(json.dumps({"reason": reason, "changed_paths": (
-                    verification_failure.changed({entry[0]: entry for entry in before or []},
-                                                 {entry[0]: entry for entry in after or []}))}))
+                (directory / "failure.json").write_text(json.dumps({
+                    "reason": reason, "changed_paths": verification_cache.changed_dependencies(before, after)}))
                 raise ValueError(reason)
             result = json.loads(output.read_text())
             suites = result.get("testResults", [])

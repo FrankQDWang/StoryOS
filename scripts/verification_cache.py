@@ -11,6 +11,8 @@ import shutil
 import subprocess
 import sys
 
+import verification_failure
+
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
@@ -57,6 +59,13 @@ def installed(root):
             identities.append((str(path.relative_to(root)), state.st_mode, state.st_ino,
                                state.st_mtime_ns, state.st_ctime_ns, content))
     return identities
+
+
+def changed_dependencies(before, after):
+    """Return the sorted paths whose identity differs between two installed() results."""
+    def index(entries):
+        return {entry[0]: json.dumps(entry) for entry in entries or []}
+    return verification_failure.changed(index(before), index(after))
 
 
 def outputs(root, producer=None):
@@ -132,7 +141,11 @@ class DailyCache:
             self.required = outputs(self.root, report_path.parent)
             if self.required and self.required["dependencies"] != json.loads(
                     (report_path.parent / "dependencies.json").read_text()):
-                raise ValueError("Installed dependencies changed before cache publication")
+                reason = "Installed dependencies changed before cache publication"
+                (report_path.parent / "failure.json").write_text(json.dumps({
+                    "reason": reason, "changed_paths": changed_dependencies(
+                        json.loads((report_path.parent / "installed.json").read_text()), installed(self.root))}))
+                raise ValueError(reason)
         elif self.observation["status"] == "hit":
             producer = self.root / self.observation["producer"]
             if (self.required != outputs(self.root, producer.parent)

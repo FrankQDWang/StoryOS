@@ -47,13 +47,3 @@ def describe(report, directory):
         report["changed_paths"] = paths[:PATH_LIMIT]
     report.update(failed_steps=[step["stage"] for step in failed], failure_reason=reason + ".",
                   failure_log=(failed[0].get("log") if failed else None) or report.get("log"))
-
-
-def final_line(report, report_path):
-    """Return the last printed line of a run."""
-    summary = f"Verification {report['status']}: {report['duration_seconds']:.2f}s"
-    if report["status"] == "passed":
-        return f"{summary}; report: {report_path}"
-    return (f"{summary}; failed step: {', '.join(report['failed_steps']) or 'none'}; "
-            f"reason: {report['failure_reason'].removesuffix('.')}; "
-            f"log: {report['failure_log'] or 'none'}; report: {report_path}")
