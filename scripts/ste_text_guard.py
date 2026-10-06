@@ -14,6 +14,7 @@ Each finding is one line `path:line: rule: message`. Exit 1 on a finding.
 """
 
 import argparse
+from collections import Counter
 import json
 from pathlib import Path
 import re
@@ -22,6 +23,7 @@ import sys
 
 WORD_LIST = "docs/agents/ste-rejected-words.json"
 GLOSSARY = "GLOSSARY.md"
+GLOSSARY_AREAS = "docs/glossary"
 MAX_SENTENCE_WORDS = 25
 MAX_PARAGRAPH_SENTENCES = 6
 MARKDOWN = (".md",)
@@ -42,7 +44,7 @@ CHAR_LITERAL = re.compile(r"'(\\.|[^\\'])'")
 TOOL_COMMENT = re.compile(r"\s*(eslint-|@ts-|prettier-|biome-|#region|#endregion)")
 SENTENCE_END = re.compile(r"[.?!]+[)\]\"'’”]*(?=\s|$)")
 TRAILER = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*: \S")
-HUNK = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 INLINE = [
     (re.compile(r"(`+)(.+?)\1", re.DOTALL), HOLE),
     (re.compile(r"!?\[([^\]]*)\]\([^)]*\)"), r"\1"),
@@ -87,9 +89,9 @@ def load_rules(root):
                                            for word in sorted(words, key=len, reverse=True)) + r")\b",
                          re.IGNORECASE)
     terms = []
-    glossary = root / GLOSSARY
-    if glossary.is_file():
-        terms = re.findall(r"^\*\*([^*]+)\*\*:", glossary.read_text(), re.MULTILINE)
+    for glossary in [root / GLOSSARY, *sorted((root / GLOSSARY_AREAS).glob("*.md"))]:
+        if glossary.is_file():
+            terms += re.findall(r"^\*\*([^*]+)\*\*:", glossary.read_text(), re.MULTILINE)
     glossary_pattern = (re.compile(r"\b(" + "|".join(re.escape(term) for term in sorted(terms, key=len, reverse=True))
                                    + r")\b") if terms else None)
     return words, pattern, glossary_pattern
@@ -276,22 +278,42 @@ def check(path, lines, added, rules):
 
 
 def added_lines(root, base, head):
-    """Map each changed text path to the line numbers that the range adds."""
-    diff = git(root, "diff", "--no-color", "--no-ext-diff", "-U0", "-M", "--diff-filter=d", base,
-               *([head] if head else []))
-    result, path = {}, None
+    """Map each changed text path to the line numbers that the range adds.
+
+    A line that the range removes from a text path and adds with the same text is moved, not added.
+    """
+    diff = git(root, "diff", "--no-color", "--no-ext-diff", "-U0", "-M", base, *([head] if head else []))
+    added, removed = [], Counter()
+    old_path = path = None
+    old_left = new_left = number = 0
     for line in diff.splitlines():
-        if line.startswith("+++ "):
-            name = line[4:]
-            path = name[2:] if name.startswith("b/") else None
-            if path and (Path(path).suffix in MARKDOWN or Path(path).suffix in COMMENTED):
-                result.setdefault(path, set())
+        if old_left and line.startswith("-"):
+            old_left -= 1
+            if old_path:
+                removed[line[1:]] += 1
+        elif new_left and line.startswith("+"):
+            new_left -= 1
+            if path:
+                added.append((path, number, line[1:]))
+            number += 1
+        elif old_left or new_left:
+            continue
+        elif line.startswith(("--- a/", "+++ b/", "--- /dev/null", "+++ /dev/null")):
+            name = line[6:] if line[4:6] in ("a/", "b/") else None
+            text_path = name if name and (Path(name).suffix in MARKDOWN or Path(name).suffix in COMMENTED) else None
+            if line.startswith("-"):
+                old_path = text_path
             else:
-                path = None
-        elif path and (match := HUNK.match(line)):
-            start, count = int(match.group(1)), int(match.group(2) or 1)
-            result[path].update(range(start, start + count))
-    return {path: lines for path, lines in result.items() if lines}
+                path = text_path
+        elif match := HUNK.match(line):
+            old_left, number, new_left = int(match.group(1) or 1), int(match.group(2)), int(match.group(3) or 1)
+    result = {}
+    for path, number, text in added:
+        if text.strip() and removed[text]:
+            removed[text] -= 1
+        else:
+            result.setdefault(path, set()).add(number)
+    return result
 
 
 def merge_base(root, base, head):
