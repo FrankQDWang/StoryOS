@@ -71,8 +71,11 @@ def process_identity():
 def readiness(root, candidate, context):
     """Validate current source, targeted checks, and independent review records."""
     import verification as runner
-    if candidate['source']['dirty']:
-        raise ValueError('Complete verification requires a clean tracked and untracked worktree')
+    import verification_status
+    for prerequisite in (verification_status.clean_tree(root, candidate['source']['dirty'], 'Complete verification'),
+                         verification_status.policy_fresh(root)):
+        if verification_status.refusal(prerequisite):
+            raise ValueError(verification_status.refusal(prerequisite))
     runner.inventory(root)
     import verification_reviews
     return verification_reviews.admission(root, context)

@@ -79,6 +79,11 @@ def inventory(root, revision=None):
     if (not isinstance(profiles, dict) or set(profiles) - {"node-contract", "cargo"}
             or any(not isinstance(value, str) or not value for value in profiles.values())):
         raise ValueError("Unsupported file execution profile")
+    ignored = policy.get("dependency_ignore", [])
+    if (not isinstance(ignored, list) or len(ignored) != len(set(ignored)) or any(
+            not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9._-]+", name) or name in {".", ".."}
+            for name in ignored)):
+        raise ValueError("Each dependency_ignore entry must be one unique directory name")
     if (policy.get("result_cache_profiles", []) not in ([], ["node-contract"])
             or type(policy.get("daily_workers", 2)) is not int or not 1 <= policy.get("daily_workers", 2) <= 2):
         raise ValueError("Unsupported cache profile or daily worker budget")
@@ -361,8 +366,6 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
             report["plan"] = plan
             if plan["source"] != report["source_start"]:
                 raise ValueError("The verification plan is stale")
-        if report["source_start"]["dirty"] and report["profile"] == "complete" and not plan:
-            raise ValueError("Complete verification requires a clean tracked and untracked worktree")
         report["inventory"] = inventory(root)
         policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
         has_verification_file_workers = "verification_test_workers" in policy
@@ -463,6 +466,10 @@ def run(root, command, *, plan=None, no_cache=False, context=None, locked=False)
         if not plan and command == ["make", "verify-local-steps"]:
             import verification_candidate
             return verification_candidate.run(root, command, context or {"base": "origin/main"})
+        if not plan and not (context or {}).get("profile"):
+            unmet = verification_status.refusal(verification_status.clean_tree(root, True, "Complete verification"))
+            if unmet:
+                raise ValueError(unmet)
         from contextlib import nullcontext
         with nullcontext() if locked else verification_cache.budget(root):
             rust_cache = verification_rust_cache.prepare(root)
