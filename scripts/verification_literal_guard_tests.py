@@ -1,6 +1,7 @@
 """Run the Rust positional literal guard through its Make target on a disposable repository."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import unittest
@@ -12,6 +13,7 @@ MAKEFILE = Path(__file__).resolve().parent.parent / "Makefile"
 CALL_SITE = "fn f() { open(true); }\n"
 
 
+@unittest.skipIf(os.environ.get("STORYOS_PR_BASE_SHA"), "The GitHub verify check has no Rust toolchain")
 class LiteralGuardMakeTests(unittest.TestCase):
     def setUp(self):
         self.repo = verification_tests.VerificationCommandTests()

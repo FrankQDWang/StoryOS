@@ -43,7 +43,17 @@ impl Finder<'_> {
             }
             let span = argument.span();
             let range = span.byte_range();
-            if has_name_comment(&self.source[..range.start]) {
+            let commented = self.source[..range.start]
+                .trim_end()
+                .strip_suffix("*/")
+                .and_then(|body| body.rfind("/*").map(|start| &body[start + 2..]))
+                .is_some_and(|name| {
+                    !name.is_empty()
+                        && name
+                            .chars()
+                            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+                });
+            if commented {
                 continue;
             }
             let start = span.start();
@@ -104,20 +114,6 @@ fn is_opaque_literal(argument: &Expr) -> bool {
         }) => path.is_ident("None"),
         _ => false,
     }
-}
-
-fn has_name_comment(before: &str) -> bool {
-    let Some(body) = before.trim_end().strip_suffix("*/") else {
-        return false;
-    };
-    let Some(start) = body.rfind("/*") else {
-        return false;
-    };
-    let name = &body[start + 2..];
-    !name.is_empty()
-        && name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
 #[cfg(test)]
