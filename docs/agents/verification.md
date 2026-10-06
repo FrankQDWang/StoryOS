@@ -42,48 +42,14 @@ The implementation session is the executor. It opens the PR and runs the steps
 below. It does not merge. A coordinator session examines the evidence. Then it merges
 the PR with an ordinary merge commit.
 
-1. Open the PR and wait for current `verify` success. On the clean candidate, run `python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
-2. Start two independent read-only reviews, one for each axis. Each review runs in
-   a new context of an agent tool that is different from the implementer's tool.
-   Give each reviewer the printed request and the scoped diff `git diff <base>...HEAD`.
-   The Standards reviewer compares the diff with `AGENTS.md`, `CODING_STANDARDS.md`,
-   `GLOSSARY.md`, and ASD-STE100. The Spec reviewer compares the diff with the
-   ticket or task contract.
-   Each reviewer returns `PASS` or `FAIL` with `file:line` evidence.
-
-   Each reviewer prompt states these review rules. The request `guards` field gives the
-   `ste-text-guard`, `rust-literal-guard`, and `diff-whitespace` results of the candidate.
-   A finding for a guard-owned rule is non-blocking: ASD-STE100 words and sentence
-   length, positional-literal comments, whitespace, and size. The guards use the
-   [rejected-word list](ste-rejected-words.json) and the
-   [exemption list](rust-literal-exemptions.json).
-
-   The reviewer reports blocking and non-blocking findings in two separate lists, and
-   returns `FAIL` only for a blocking finding. A PR gets at most three review rounds.
-   Only a blocking finding starts a new round.
-
-   - Current example when Claude Code implements: the Codex plugin. Use one new
-     thread for each axis. Do not use `--write`. The first command finds the newest
-     installed plugin version:
-
-     ```bash
-     codex_root=$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/ | sort -V | tail -n 1)
-     node "${codex_root}scripts/codex-companion.mjs" task --fresh "<axis prompt>"
-     ```
-
-   - When Codex implements, use a different agent tool or a separate Claude Code
-     session for each axis.
-3. Post each verdict as a PR comment. If a verdict is `FAIL`, fix the findings.
-   Commit and push the fix. Then do steps 1 and 2 again. Continue until the two axes
-   PASS. After the third round, send the open findings to the coordinator.
-4. Write one review record for each axis as JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context` (for example `codex-standards-pr<pr>` or `codex-spec-pr<pr>`), `result` (`PASS` or `FAIL`), and `evidence`. The executor context and the two reviewer contexts must differ. IDs assert consistency, not authenticated identity.
-5. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
-6. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after the imports.
+1. Open the PR. On the clean candidate, run `make review-round PR=<pr> [CONTEXT=<executor context>]`. After the current `verify` succeeds, it writes the request and starts one new read-only Codex plugin thread for each axis with the [review prompt](review-prompt.md). Then it posts the two verdict comments, imports the two records, and prints the next action. When Codex implements, a different agent tool or a separate Claude Code session reviews each axis with the same prompt. The executor posts and imports the same verdicts and records.
+2. If a verdict is `FAIL`, fix the blocking findings, commit, push, and run the command again. A PR gets at most three rounds. The command refuses a fourth round: send the open findings to the coordinator.
+3. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after the imports.
 
    `make verify-local` is the pre-merge evidence command. Start it after the Standards
    and Spec reviews of the candidate tree, and only one time for that tree. Fix a red
    targeted check with another targeted check.
-7. Send the PR link and the verdict comment links to the coordinator.
+4. Send the PR link and the verdict comment links to the coordinator.
 
 For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json` and its recovery command. Recovery needs current reviews and targeted results.
 Source fixes return to targeted checks and a new candidate. Retain every attempt.
