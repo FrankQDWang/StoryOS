@@ -1,0 +1,356 @@
+#!/usr/bin/env python3
+"""Find ASD-STE100 defects in the prose that a change adds.
+
+Modes:
+  files --base REV [--head REV]    Markdown files and Rust and TypeScript comments in the diff.
+  commits --base REV [--head REV]  Commit messages in the range, without merge commits.
+  message FILE                     One commit message from a file.
+
+The range starts at the merge base of REV and the head. Without --head, the
+files mode compares with the worktree and the commits mode stops at HEAD.
+Each finding is one line `path:line: rule: message`. Exit 1 on a finding.
+"""
+
+import argparse
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+WORD_LIST = "docs/agents/ste-rejected-words.json"
+GLOSSARY = "GLOSSARY.md"
+MAX_SENTENCE_WORDS = 25
+MAX_PARAGRAPH_SENTENCES = 6
+MARKDOWN = (".md",)
+COMMENTED = {".rs": "rust", ".ts": "typescript", ".tsx": "typescript", ".mts": "typescript", ".cts": "typescript"}
+# A placeholder for code, URLs, and entities: it counts as one word and matches no rule.
+HOLE = ""
+
+FENCE = re.compile(r"(`{3,}|~{3,})")
+HEADING = re.compile(r"#{1,6}(\s|$)")
+LIST_ITEM = re.compile(r"([-*+]|\d+[.)])\s+")
+LINK_DEFINITION = re.compile(r"\[[^\]]+\]:\s")
+RULE_LINE = re.compile(r"[-=*_ ]{3,}")
+HTML_START = re.compile(r"<[A-Za-z!/]")
+SENTENCE_END = re.compile(r"[.?!]+[)\]\"'’”]*(?=\s|$)")
+TRAILER = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*: \S")
+HUNK = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+INLINE = [
+    (re.compile(r"(`+)(.+?)\1"), HOLE),
+    (re.compile(r"!?\[([^\]]*)\]\([^)]*\)"), r"\1"),
+    (re.compile(r"\[([^\]]*)\]\[[^\]]*\]"), r"\1"),
+    (re.compile(r"<https?://[^>]*>"), HOLE),
+    (re.compile(r"https?://[^\s<>()]*[^\s<>().,;:!?'\"]"), HOLE),
+    (re.compile(r"</?[A-Za-z][^>]*>"), ""),
+    (re.compile(r"&#?\w+;"), HOLE),
+]
+
+
+class GuardError(Exception):
+    """A usage, Git, or word-list error. It is not a text finding."""
+
+
+def git(root, *args):
+    result = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=root,
+                            capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise GuardError(f"git {' '.join(args)}: {result.stderr.strip()}")
+    return result.stdout
+
+
+def load_rules(root):
+    try:
+        data = json.loads((root / WORD_LIST).read_text())
+    except (OSError, ValueError) as error:
+        raise GuardError(f"{WORD_LIST}: {error}") from error
+    entries = data.get("words") if isinstance(data, dict) else None
+    if not isinstance(entries, list) or not entries:
+        raise GuardError(f"{WORD_LIST}: the 'words' list is missing or empty")
+    words = {}
+    for entry in entries:
+        if (not isinstance(entry, dict) or not set(entry) <= {"word", "alternative", "note"}
+                or not isinstance(entry.get("word"), str) or not isinstance(entry.get("alternative"), str)
+                or not isinstance(entry.get("note", ""), str)
+                or entry["word"] != entry["word"].strip().lower() or not entry["word"]
+                or entry["word"] in words):
+            raise GuardError(f"{WORD_LIST}: invalid or duplicate entry {json.dumps(entry)}")
+        words[entry["word"]] = entry
+    pattern = re.compile(r"\b(" + "|".join(re.escape(word).replace(r"\ ", r"\s+")
+                                           for word in sorted(words, key=len, reverse=True)) + r")\b",
+                         re.IGNORECASE)
+    terms = []
+    glossary = root / GLOSSARY
+    if glossary.is_file():
+        terms = re.findall(r"^\*\*([^*]+)\*\*:", glossary.read_text(), re.MULTILINE)
+    glossary_pattern = (re.compile(r"\b(" + "|".join(re.escape(term) for term in sorted(terms, key=len, reverse=True))
+                                   + r")\b") if terms else None)
+    return words, pattern, glossary_pattern
+
+
+def inline(text):
+    for pattern, replacement in INLINE:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def paragraphs(lines):
+    """Group (line, text) pairs into prose paragraphs. A None text is a break."""
+    result, current = [], []
+    fence, html = None, False
+
+    def flush():
+        nonlocal current
+        if current:
+            result.append(current)
+        current = []
+
+    for number, text in lines:
+        if text is None:
+            flush()
+            html = False
+            continue
+        stripped = text.strip()
+        if fence:
+            if stripped.startswith(fence):
+                fence = None
+            continue
+        match = FENCE.match(stripped)
+        if match:
+            flush()
+            fence = match.group(1)
+            continue
+        if not stripped:
+            flush()
+            html = False
+            continue
+        if html:
+            continue
+        if (HEADING.match(stripped) or stripped.startswith("|") or LINK_DEFINITION.match(stripped)
+                or RULE_LINE.fullmatch(stripped)):
+            flush()
+            continue
+        if HTML_START.match(stripped):
+            flush()
+            html = True
+            continue
+        stripped = stripped.lstrip("> ").strip() if stripped.startswith(">") else stripped
+        item = LIST_ITEM.match(stripped)
+        if item or stripped.startswith("@"):
+            flush()
+            stripped = stripped[item.end():] if item else stripped
+        current.append((number, inline(stripped)))
+    flush()
+    return result
+
+
+def markdown_lines(text):
+    lines = list(enumerate(text.splitlines(), start=1))
+    if lines and lines[0][1].strip() == "---":
+        for index, (_, line) in enumerate(lines[1:], start=1):
+            if line.strip() == "---":
+                return [(number, None) for number, _ in lines[:index + 1]] + lines[index + 1:]
+    return lines
+
+
+def comment_start(line, language):
+    """Return the index of a line comment outside string literals, or -1."""
+    quote, index = None, 0
+    quotes = "\"" if language == "rust" else "\"'`"
+    while index < len(line):
+        char = line[index]
+        if quote:
+            if char == "\\":
+                index += 1
+            elif char == quote:
+                quote = None
+        elif char in quotes:
+            quote = char
+        elif language == "rust" and char == "'" and re.match(r"'(\\.|[^\\'])'", line[index:]):
+            index += line[index:].index("'", 2)
+        elif line.startswith("//", index):
+            return index
+        elif line.startswith("/*", index):
+            end = line.find("*/", index + 2)
+            if end < 0:
+                return -1
+            index = end + 1
+        index += 1
+    return -1
+
+
+def comment_lines(text, language):
+    """Return the line comments and doc comments as (line, text) pairs."""
+    result, block = [], False
+    for number, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if block:
+            body = stripped[:stripped.index("*/")] if "*/" in stripped else stripped
+            body = body[1:] if body.startswith("*") else body
+            result.append((number, body))
+            block = "*/" not in stripped
+            continue
+        if stripped.startswith(("/**", "/*!")) and not stripped.startswith("/**/"):
+            body = stripped[3:]
+            block = "*/" not in body
+            body = body[:body.index("*/")] if "*/" in body else body
+            result.append((number, body))
+            continue
+        start = comment_start(line, language)
+        if start < 0:
+            result.append((number, None))
+            continue
+        body = re.sub(r"^//[/!]?", "", line[start:])
+        if re.match(r"\s*(eslint-|@ts-|prettier-|biome-|#region|#endregion)", body):
+            body = None
+        result.append((number, body))
+    return result
+
+
+def message_lines(text):
+    lines = []
+    for line in text.splitlines():
+        if line.startswith("#") and ">8" in line:
+            break
+        lines.append("" if HEADING.match(line) else line)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    start = len(lines)
+    while start and lines[start - 1].strip():
+        start -= 1
+    if start and all(TRAILER.match(line) for line in lines[start:]):
+        lines = lines[:start]
+    return list(enumerate(lines, start=1))
+
+
+def check(path, lines, added, rules):
+    """Return the findings of the paragraphs that contain an added line."""
+    words, pattern, glossary = rules
+    findings = set()
+    for paragraph in paragraphs(lines):
+        if not any(number in added for number, _ in paragraph):
+            continue
+        text, starts = "", []
+        for number, segment in paragraph:
+            starts.append((len(text), number))
+            text += segment + " "
+
+        def line_at(offset):
+            return max((start, number) for start, number in starts if start <= offset)[1]
+
+        sentences, begin = [], 0
+        for end in [match.end() for match in SENTENCE_END.finditer(text)] + [len(text)]:
+            count = sum(1 for token in text[begin:end].split() if re.search(r"\w|" + HOLE, token))
+            if count:
+                sentences.append((begin, end, count))
+            begin = end
+        for begin, end, count in sentences:
+            spanned = [line_at(offset) for offset in range(begin, end) if not text[offset].isspace()]
+            if count > MAX_SENTENCE_WORDS and set(spanned) & added:
+                findings.add((spanned[0], "sentence-length",
+                              f"the sentence has {count} words. The limit is {MAX_SENTENCE_WORDS} words."))
+        if len(sentences) > MAX_PARAGRAPH_SENTENCES:
+            findings.add((paragraph[0][0], "paragraph-length",
+                          f"the paragraph has {len(sentences)} sentences. "
+                          f"The limit is {MAX_PARAGRAPH_SENTENCES} sentences."))
+        for match in re.finditer(";", text):
+            if line_at(match.start()) in added:
+                findings.add((line_at(match.start()), "semicolon",
+                              "prose contains a semicolon. Write two sentences."))
+        masked = glossary.sub(lambda match: HOLE * len(match.group(0)), text) if glossary else text
+        for match in pattern.finditer(masked):
+            if line_at(match.start()) not in added:
+                continue
+            entry = words[re.sub(r"\s+", " ", match.group(0).lower())]
+            advice = (f'Use "{entry["alternative"]}".' if entry["alternative"]
+                      else "Write the text again without it.")
+            note = f' {entry["note"]}' if entry.get("note") else ""
+            findings.add((line_at(match.start()), "rejected-word",
+                          f'"{match.group(0)}" is on the rejected-word list. {advice}{note}'))
+    return [f"{path}:{line}: {rule}: {message}" for line, rule, message in sorted(findings)]
+
+
+def file_lines(path, text):
+    suffix = Path(path).suffix
+    if suffix in MARKDOWN:
+        return markdown_lines(text)
+    return comment_lines(text, COMMENTED[suffix])
+
+
+def added_lines(root, base, head):
+    """Map each changed text path to the line numbers that the range adds."""
+    diff = git(root, "diff", "--no-color", "--no-ext-diff", "-U0", "-M", "--diff-filter=d", base,
+               *([head] if head else []))
+    result, path = {}, None
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            name = line[4:]
+            path = name[2:] if name.startswith("b/") else None
+            if path and (Path(path).suffix in MARKDOWN or Path(path).suffix in COMMENTED):
+                result.setdefault(path, set())
+            else:
+                path = None
+        elif path and (match := HUNK.match(line)):
+            start, count = int(match.group(1)), int(match.group(2) or 1)
+            result[path].update(range(start, start + count))
+    return {path: lines for path, lines in result.items() if lines}
+
+
+def merge_base(root, base, head):
+    return git(root, "merge-base", base, head or "HEAD").strip()
+
+
+def run_files(root, rules, base, head):
+    findings = []
+    for path, added in sorted(added_lines(root, merge_base(root, base, head), head).items()):
+        text = git(root, "show", f"{head}:{path}") if head else (root / path).read_text(errors="replace")
+        findings += check(path, file_lines(path, text), added, rules)
+    return findings
+
+
+def run_commits(root, rules, base, head):
+    findings = []
+    start = merge_base(root, base, head)
+    for commit in git(root, "rev-list", "--no-merges", "--reverse", f"{start}..{head or 'HEAD'}").split():
+        lines = message_lines(git(root, "show", "-s", "--format=%B", commit))
+        findings += check(commit[:12], lines, {number for number, _ in lines}, rules)
+    return findings
+
+
+def run_message(rules, path):
+    try:
+        text = Path(path).read_text()
+    except OSError as error:
+        raise GuardError(str(error)) from error
+    lines = message_lines(text)
+    return check(path, lines, {number for number, _ in lines}, rules)
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(description="Find ASD-STE100 defects in the prose that a change adds.")
+    modes = parser.add_subparsers(dest="mode", required=True)
+    for mode in ("files", "commits"):
+        command = modes.add_parser(mode)
+        command.add_argument("--base", required=True)
+        command.add_argument("--head")
+    modes.add_parser("message").add_argument("path")
+    arguments = parser.parse_args(argv)
+    try:
+        root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
+        rules = load_rules(root)
+        if arguments.mode == "files":
+            findings = run_files(root, rules, arguments.base, arguments.head)
+        elif arguments.mode == "commits":
+            findings = run_commits(root, rules, arguments.base, arguments.head)
+        else:
+            findings = run_message(rules, arguments.path)
+    except GuardError as error:
+        print(f"ste-text-guard: {error}", file=sys.stderr)
+        return 2
+    for finding in findings:
+        print(finding)
+    return 1 if findings else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
