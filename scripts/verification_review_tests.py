@@ -1,6 +1,9 @@
 """Observe review admission before any complete child starts."""
 
 import json
+from pathlib import Path
+import shlex
+import sys
 import unittest
 
 import verification_candidate_tests
@@ -15,7 +18,12 @@ class ReviewAdmissionTests(unittest.TestCase):
         path = self.root / 'docs/agents/verification-policy.json'
         policy = json.loads(path.read_text())
         policy['complete']['admission'] = {'version': 1, 'targeted': ['cheap']}
-        policy['targeted'] = {'cheap': {'command': ['python3', '-c', 'print("checked")'], 'clean': False}}
+        guard = [sys.executable, str(verification_candidate_tests.verification_tests.COMMAND), 'step']
+        steps = '; '.join(shlex.join([*guard, name, '--', sys.executable, '-c', code]) for name, code in (
+            ('ste-text-guard', 'pass'), ('rust-literal-guard', 'pass'),
+            ('diff-whitespace', "from pathlib import Path; assert not Path('target/whitespace').exists()")))
+        policy['targeted'] = {'cheap': {'command': ['python3', '-c', 'print("checked")'], 'clean': False},
+                              'verify-policy': {'command': ['sh', '-c', steps], 'clean': False}}
         path.write_text(json.dumps(policy))
         self.fixture.install_child("from pathlib import Path; Path('target/heavy').touch()")
 
@@ -67,6 +75,23 @@ class ReviewAdmissionTests(unittest.TestCase):
                                           'reviewer_context': axis, 'result': 'PASS', 'evidence': 'Reviewed candidate diff and policy.'}))
             imported = self.review_cli('import', '--request', self.request_path, '--record', str(record))
             self.assertEqual(imported.returncode, 0, imported.stderr)
+
+    def test_request_records_the_guard_steps_of_the_current_policy_result(self):
+        self.prepare_reviews()
+        self.assertEqual(self.request['guards'], {'ste-text-guard': 'missing', 'rust-literal-guard': 'missing',
+                                                  'diff-whitespace': 'missing'})
+        (self.root / 'target/whitespace').touch()
+        self.assertNotEqual(self.repo.cli('targeted', '--check', 'verify-policy').returncode, 0)
+        (self.root / 'target/whitespace').unlink()
+        failed = self.review_cli('request', '--pr', '745', '--executor-context', 'executor')
+        self.assertEqual(failed.returncode, 0, failed.stderr)
+        self.assertEqual(json.loads(Path(failed.stdout.strip()).read_text())['guards'],
+                         {'ste-text-guard': 'passed', 'rust-literal-guard': 'passed', 'diff-whitespace': 'failed'})
+        self.assertEqual(self.repo.cli('targeted', '--check', 'verify-policy').returncode, 0)
+        passed = self.review_cli('request', '--pr', '745', '--executor-context', 'executor')
+        self.assertEqual(passed.returncode, 0, passed.stderr)
+        self.assertEqual(json.loads(Path(passed.stdout.strip()).read_text())['guards'],
+                         {'ste-text-guard': 'passed', 'rust-literal-guard': 'passed', 'diff-whitespace': 'passed'})
 
     def complete(self, purpose="candidate"):
         return self.fixture.run_complete('--pr', '745', '--executor-context', 'executor', '--review-request', self.request_path, '--purpose', purpose)
