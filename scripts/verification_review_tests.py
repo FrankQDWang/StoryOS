@@ -51,7 +51,8 @@ class ReviewAdmissionTests(unittest.TestCase):
         gh.write_text(f'#!{sys.executable}\nimport json,sys\nfrom pathlib import Path\np=json.loads(Path("target/live.json").read_text())\n'
                       f'print("Pull request base: {self.base}\\nPull request head: {self.head}\\nSynthetic merge tree: {self.tree}") if sys.argv[2].endswith("/logs") else '
                       'print(json.dumps({"nameWithOwner":"fixture/repo"}) if sys.argv[1]=="repo" else '
-                      'json.dumps({"check_runs":[c for c in (p.get("checks") or [{"name":"verify","head_sha":p["head"]["sha"],"id":p.get("check_id",1),"conclusion":"success","status":"completed"}]) if "filter=all" in sys.argv[2] or c is max(p.get("checks") or [c], key=lambda c:c["id"])] if "page=1" in sys.argv[2] else []}) '
+                      'json.dumps({"check_runs":(lambda r,q:(r if "filter=all" in q else r[:1])[100*(int(q.split("&page=")[1])-1):][:100])('
+                      'sorted(p.get("checks") or [{"name":"verify","head_sha":p["head"]["sha"],"id":p.get("check_id",1),"conclusion":"success","status":"completed"}],key=lambda c:-c["id"]),sys.argv[2])}) '
                       'if "check-runs" in sys.argv[2] else json.dumps(p))\n')
         gh.chmod(0o755)
         self.repo.environment['PATH'] = str(tools) + os.pathsep + self.repo.environment['PATH']
@@ -164,3 +165,13 @@ class ReviewAdmissionTests(unittest.TestCase):
         refused = self.review_cli('request', '--pr', '745', '--executor-context', 'executor')
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn('successful', refused.stderr)
+
+    def test_successful_verify_run_beyond_the_first_page_is_found(self):
+        self.prepare_reviews()
+        live = json.loads(self.live.read_text())
+        check = {'name': 'verify', 'head_sha': self.head}
+        runs = [{**check, 'id': 1, 'status': 'completed', 'conclusion': 'success'}]
+        runs += [{**check, 'id': n, 'status': 'completed', 'conclusion': 'failure'} for n in range(2, 102)]
+        self.live.write_text(json.dumps({**live, 'checks': runs}))
+        accepted = self.review_cli('request', '--pr', '745', '--executor-context', 'executor')
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
