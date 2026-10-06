@@ -32,13 +32,10 @@ function authorEditCommand(url: URL): boolean {
   return AUTHOR_EDIT_COMMAND_PATH.test(url.pathname);
 }
 
-let authorEditHold: { readonly release: () => void; readonly released: Promise<void> } | undefined;
-
-async function holdAuthorEditCommand(route: Route, request: Request): Promise<void> {
-  if (request.method() === "POST" && authorEditHold !== undefined) await authorEditHold.released;
-  // A reload aborts a held request, and Playwright then refuses to continue it.
-  await route.continue().catch(() => undefined);
-}
+let authorEditHold: {
+  readonly release: () => void;
+  readonly handler: (route: Route, request: Request) => Promise<void>;
+} | undefined;
 
 async function focusedApplicationFrame(context: BrowserCommandContext) {
   const testFrame = await context.frame();
@@ -60,14 +57,22 @@ export const storyOSBrowserCommands = {
         const released = new Promise<void>((resolve) => {
           release = resolve;
         });
-        authorEditHold = { release, released };
-        await context.page.route(authorEditCommand, holdAuthorEditCommand);
+        const orchestrator = context.page.mainFrame();
+        const handler = async (route: Route, held: Request): Promise<void> => {
+          if (held.method() === "POST" && held.frame() !== orchestrator) await released;
+          // A reload aborts a held request, and Playwright then refuses to continue it.
+          await route.continue().catch(() => undefined);
+        };
+        authorEditHold = { release, handler };
+        await context.page.route(authorEditCommand, handler);
         return { kind: "author_edit_submission_hold_updated" } as const;
       }
       const hold = authorEditHold;
       authorEditHold = undefined;
-      hold?.release();
-      await context.page.unroute(authorEditCommand, holdAuthorEditCommand);
+      if (hold !== undefined) {
+        hold.release();
+        await context.page.unroute(authorEditCommand, hold.handler);
+      }
       return { kind: "author_edit_submission_hold_updated" } as const;
     },
   ),
