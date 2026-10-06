@@ -22,6 +22,8 @@ verify-policy:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
 	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
+	$(VERIFY_STEP) ste-text-guard -- sh -c 'if [ -n "$(STORYOS_PR_BASE_SHA)" ]; then echo "The pull-request check does not run the text guard before issue 984."; exit 0; fi; \
+		python3 scripts/ste_text_guard.py files --base origin/main; files=$$?; python3 scripts/ste_text_guard.py commits --base origin/main && exit $$files'
 
 contracts: verify-policy
 	$(MAKE) verify-contract-inputs
