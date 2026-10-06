@@ -72,10 +72,6 @@ verify-local-steps: contracts
 verify-tracker:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py
 
-.PHONY: review-round
-review-round:
-	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
-
 verify-pr: verify-policy-steps
 	@set -eu; \
 		if [ -z "$${STORYOS_PR_BASE_SHA:-}" ]; then \
@@ -145,6 +141,10 @@ verify-status:
 
 verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
+
+.PHONY: review-round
+review-round:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
 
 .PHONY: install-hooks
 install-hooks:
