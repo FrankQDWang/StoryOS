@@ -35,7 +35,7 @@ execution-contract reads or the Claim rules below.
 
 These repository constraints preserve Matt ticket publication and add StoryOS review-size limits:
 
-- Size each ticket so its expected diff follows the current review-size and generated-artifact rules in `AGENTS.md`. Split a larger ticket before publication.
+- Size each ticket so its expected diff follows the change-size and generated-artifact rules in [CODING_STANDARDS.md](../../CODING_STANDARDS.md). Split a larger ticket before publication.
 - Before publication, validate that the approved ticket graph is acyclic and that every blocking edge reflects a real dependency. Run independent dependency-ready tickets in parallel.
 
 ## Current map operations

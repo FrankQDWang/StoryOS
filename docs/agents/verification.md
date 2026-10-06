@@ -9,6 +9,13 @@ The main flow comes first. The reference sections are after it.
    To refuse a commit message with a text guard finding before the commit exists, run
    `make install-hooks` one time per clone. The hook is optional. The hook refuses the
    message, but `make verify-policy` only reports commit message findings as advisory.
+
+   `make verify-policy` runs the ASD-STE100 text guard on added prose with the
+   [rejected-word list](ste-rejected-words.json). It also runs the whitespace check and the
+   Rust literal guard on added Rust lines with the [exemption list](rust-literal-exemptions.json).
+   `make verify-status` shows the change size and the module size as advisory. It also
+   shows two prerequisites. `cleanTree` needs a clean worktree for a check that requires
+   it. `policyFresh` needs a current passed `verify-policy` result for a complete run.
 2. After each product or test edit, run the smallest check that can fail on that edit.
    For one check, use `make verify-targeted CHECK=<check>`. For the full selected scope,
    use `make verify-changed BASE=<base>`. Set `BASE` to the actual comparison commit.
@@ -33,8 +40,9 @@ the PR with an ordinary merge commit.
 2. Start two independent read-only reviews, one for each axis. Each review runs in
    a new context of an agent tool that is different from the implementer's tool.
    Give each reviewer the printed request and the scoped diff `git diff <base>...HEAD`.
-   The Standards reviewer compares the diff with `AGENTS.md`, `GLOSSARY.md`, and
-   ASD-STE100. The Spec reviewer compares the diff with the ticket or task contract.
+   The Standards reviewer compares the diff with `AGENTS.md`, `CODING_STANDARDS.md`,
+   `GLOSSARY.md`, and ASD-STE100. The Spec reviewer compares the diff with the
+   ticket or task contract.
    Each reviewer returns `PASS` or `FAIL` with `file:line` evidence.
 
    Each reviewer prompt states these review rules. The request `guards` field gives the
@@ -65,6 +73,10 @@ the PR with an ordinary merge commit.
 4. Write one review record for each axis as JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context` (for example `codex-standards-pr<pr>` or `codex-spec-pr<pr>`), `result` (`PASS` or `FAIL`), and `evidence`. The executor context and the two reviewer contexts must differ. IDs assert consistency, not authenticated identity.
 5. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
 6. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after the imports.
+
+   `make verify-local` is the pre-merge evidence command. Start it after the Standards
+   and Spec reviews of the candidate tree, and only one time for that tree. Fix a red
+   targeted check with another targeted check.
 7. Send the PR link and the verdict comment links to the coordinator.
 
 For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json` and its recovery command. Recovery needs current reviews and targeted results.
@@ -77,14 +89,17 @@ It imports actual independent reviews and runs fresh targeted checks on Linux. L
 
 ## PR verification and optional complete run
 
+The required GitHub `verify` check validates the pull-request synthetic merge.
 Wait for the required GitHub `verify` sentinel and independent Standards and Spec
 reviews. Resolve findings with targeted checks and push the corrected candidate.
 The `candidate-evidence` status and complete-report publication command are retired.
 Do not start a complete local run only to satisfy a PR status. When a ticket requires
 complete verification, keep its local report and use the recovery procedure above.
+
 Extend the policy and runner together for a new framework or execution group.
 Complete local verification and manual Linux verification retain their stage obligations
 when requested.
+
 Selected dirty-tree runs are daily feedback. Complete candidate verification needs
 a clean tree because release packaging binds Git identity. An empty change set or
 empty test discovery cannot report success. When a complete run is requested,
@@ -219,12 +234,12 @@ policy group. Only the complete-run status and the `verify-local` preflight make
 Daily status also gives two size fields for information only. They do not change
 `decision` or `nextAction`. `changeSize` counts the added and changed lines of the
 worktree against the merge base with `BASE`. It counts the deleted files and their
-lines separately. Its `above` list gives each `AGENTS.md` limit, 500 or 800, that
-the count is more than.
+lines separately. Its `limits` list gives the limits, and its `above` list gives each
+limit that the count is more than.
 
-`moduleSize` lists each changed Rust module that has more
-than 500 lines without its `#[cfg(test)]` modules and its `_tests.rs` file. Each
-item has an `above` list. The text summary shows these fields after the decision
+`moduleSize` lists each changed Rust module that is larger than the lower limit,
+without its `#[cfg(test)]` modules and its `_tests.rs` file. Each item has an `above`
+list. [CODING_STANDARDS.md](../../CODING_STANDARDS.md#change-size) owns the size rules. The text summary shows these fields after the decision
 and shows at most eight modules.
 
 ### Bounded daily queries
