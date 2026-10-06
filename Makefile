@@ -133,6 +133,10 @@ verify-status:
 verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
 
+.PHONY: install-hooks
+install-hooks:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/ste_text_guard.py install-hook
+
 OBSERVE = python3 scripts/verification_observation_runtime.py
 .PHONY: observe-build observe-dashboard observe-start observe-stop observe-status observe-rebuild observe-smoke
 observe-dashboard:
