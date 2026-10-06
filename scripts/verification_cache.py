@@ -66,6 +66,13 @@ def read_holder(handle):
     return holder if isinstance(holder, dict) else None
 
 
+def same_file(handle, path):
+    try:
+        return path.stat().st_ino == os.fstat(handle.fileno()).st_ino
+    except FileNotFoundError:
+        return False
+
+
 def queue_state(root):
     """Return the holder of the host queue, or "free" when no live process holds it."""
     try:
@@ -96,7 +103,7 @@ def host_queue(root, stage, *, poll_seconds=1.0, report_seconds=120.0):
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             holder = read_holder(handle)
-            if holder and not holder_alive(holder) and os.fstat(handle.fileno()).st_ino == path.stat().st_ino:
+            if holder and not holder_alive(holder) and same_file(handle, path):
                 path.unlink()
                 record["released"] = holder
                 print(f"Host queue: released the lock of {describe(holder)}; that process does not exist", flush=True)
@@ -106,11 +113,7 @@ def host_queue(root, stage, *, poll_seconds=1.0, report_seconds=120.0):
             handle.close()
             time.sleep(poll_seconds)
             continue
-        try:
-            current = path.stat().st_ino == os.fstat(handle.fileno()).st_ino
-        except FileNotFoundError:
-            current = False
-        if current:
+        if same_file(handle, path):
             break
         handle.close()
     previous = read_holder(handle)
