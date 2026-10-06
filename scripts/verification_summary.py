@@ -36,6 +36,10 @@ def summary(value, page=1, selection='all'):
         raise ValueError(f'Page must be between 1 and {pages}')
     output = {key: value[key] for key in ('version', 'status', 'decision', 'reasonCode', 'nextAction',
               'next_command', 'agentHint', 'execution', 'heartbeat_at', 'observedStatus', 'retainedStatus', 'retainedResultCurrent') if key in value}
+    if 'changeSize' in value:
+        output['changeSize'] = value['changeSize']
+        output['moduleSize'] = [{**module, 'path': short(module['path'])} for module in value['moduleSize'][:PAGE_SIZE]]
+        output['omittedModules'] = max(0, len(value['moduleSize']) - PAGE_SIZE)
     for key in ('run_id', 'report'):
         if key in value:
             output[key] = short(value[key])
