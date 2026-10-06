@@ -235,6 +235,7 @@
   ],
   "daily_workers": 2,
   "result_cache_profiles": ["node-contract"],
+  "dependency_ignore": [".vite", ".vite-temp"],
   "file_profiles": {
     "node-contract": "// Verification: repository-inputs-only.",
     "cargo": "// Verification: repository-inputs-only."
