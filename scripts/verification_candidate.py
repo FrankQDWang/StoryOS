@@ -27,7 +27,8 @@ def environment():
 def execution_inputs(cache):
     inputs = {key: value for key, value in environment().items()
               if key not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT',
-                             'STORYOS_RUST_CACHE_ROOT', 'PYTHONDONTWRITEBYTECODE'}}
+                             'STORYOS_RUST_CACHE_ROOT', 'PYTHONDONTWRITEBYTECODE',
+                             'STORYOS_VERIFICATION_HOST_QUEUE'}}
     inputs['CARGO_TARGET_DIR'] = cache['target_dir']
     return inputs
 

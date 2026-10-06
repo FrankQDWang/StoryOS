@@ -27,11 +27,11 @@
     "verify-policy": {"command": ["make", "verify-policy"], "clean": false},
     "contracts": {"command": ["make", "contracts"], "clean": true},
     "web-typecheck": {"command": ["make", "web-typecheck"], "clean": false},
-    "release-package": {"command": ["make", "release-package"], "clean": true},
-    "web-foundation": {"command": ["make", "web-foundation"], "clean": true},
-    "web": {"command": ["make", "web"], "clean": true},
+    "release-package": {"command": ["make", "release-package"], "clean": true, "host_queue": true},
+    "web-foundation": {"command": ["make", "web-foundation"], "clean": true, "host_queue": true},
+    "web": {"command": ["make", "web"], "clean": true, "host_queue": true},
     "web-overlap": {"command": ["env", "STORYOS_VERIFICATION_COMPARE=overlap", "make", "web"], "clean": true},
-    "project-scope": {"command": ["make", "project-scope"], "clean": true},
+    "project-scope": {"command": ["make", "project-scope"], "clean": true, "host_queue": true},
     "verify-tracker": {"command": ["make", "verify-tracker"], "clean": false},
     "verify-pr": {"command": ["make", "verify-pr"], "clean": false},
     "verify-contract-inputs": {"command": ["make", "verify-contract-inputs"], "clean": false},
@@ -146,6 +146,7 @@
   "complete": {
     "admission": {"version": 1, "targeted": ["verify-policy"]},
     "recovery": {"project-scope": ["make", "project-scope"]},
+    "host_queue": ["foundation-tests", "project-scope"],
     "stages": [
       "input-ownership", "project-inputs", "diff-whitespace", "verification-tests", "ste-text-guard", "rust-literal-guard",
       "rust-format", "rust-clippy", "rust-tests",

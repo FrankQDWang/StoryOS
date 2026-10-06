@@ -1,6 +1,7 @@
 """Reuse complete isolated daily results within the local execution trust boundary."""
 
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
@@ -10,8 +11,12 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
+import uuid
 
 import verification_failure
+
+QUEUE_HELD = "STORYOS_VERIFICATION_HOST_QUEUE"
 
 
 def digest(value):
@@ -34,6 +39,106 @@ def budget(root):
         finally:
             fcntl.flock(lock, fcntl.LOCK_UN)
 
+
+def queue_path(root):
+    common = subprocess.check_output(["git", "rev-parse", "--git-common-dir"], cwd=root, text=True).strip()
+    return (Path(root) / common).resolve() / "storyos-host-queue.lock"
+
+
+def holder_alive(holder):
+    try:
+        os.kill(int(holder["pid"]), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    return True
+
+
+def read_holder(handle):
+    handle.seek(0)
+    try:
+        holder = json.loads(handle.read() or "null")
+    except ValueError:
+        return None
+    return holder if isinstance(holder, dict) else None
+
+
+def queue_state(root):
+    """Return the holder of the host queue, or "free" when no live process holds it."""
+    try:
+        with queue_path(root).open() as handle:
+            holder = read_holder(handle)
+    except FileNotFoundError:
+        return "free"
+    return holder if holder and holder_alive(holder) else "free"
+
+
+def describe(holder):
+    return (f"stage {holder.get('stage')} of worktree {holder.get('worktree')}, "
+            f"started {holder.get('started_at')}, process {holder.get('pid')}")
+
+
+@contextmanager
+def host_queue(root, stage, *, poll_seconds=1.0, report_seconds=120.0):
+    """Hold the host queue that all worktrees of the repository share, and wait while another run holds it."""
+    if os.environ.get(QUEUE_HELD):
+        yield None
+        return
+    path = queue_path(root)
+    record = {"stage": stage, "lock": str(path), "waited_seconds": 0.0, "released": None}
+    started, reported = time.monotonic(), None
+    while True:
+        handle = path.open("a+")
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            holder = read_holder(handle)
+            if holder and not holder_alive(holder) and os.fstat(handle.fileno()).st_ino == path.stat().st_ino:
+                path.unlink()
+                record["released"] = holder
+                print(f"Host queue: released the lock of {describe(holder)}; that process does not exist", flush=True)
+            elif reported is None or time.monotonic() - reported >= report_seconds:
+                reported = time.monotonic()
+                print(f"Host queue: waiting {reported - started:.0f}s for {describe(holder or {})}", flush=True)
+            handle.close()
+            time.sleep(poll_seconds)
+            continue
+        try:
+            current = path.stat().st_ino == os.fstat(handle.fileno()).st_ino
+        except FileNotFoundError:
+            current = False
+        if current:
+            break
+        handle.close()
+    previous = read_holder(handle)
+    if previous and not holder_alive(previous):
+        record["released"] = previous
+        print(f"Host queue: released the lock of {describe(previous)}; that process does not exist", flush=True)
+    holder = {"pid": os.getpid(), "worktree": str(Path(root).resolve()), "stage": stage,
+              "started_at": datetime.now(timezone.utc).isoformat()}
+    handle.seek(0)
+    handle.truncate()
+    handle.write(json.dumps(holder))
+    handle.flush()
+    record.update(holder=holder, waited_seconds=round(time.monotonic() - started, 3))
+    run_path = os.environ.get("STORYOS_VERIFICATION_RUN")
+    if run_path:
+        directory = Path(run_path) / "host-queue"
+        directory.mkdir(exist_ok=True)
+        (directory / f"{uuid.uuid4().hex}.json").write_text(json.dumps(record))
+    os.environ[QUEUE_HELD] = str(path)
+    try:
+        yield record
+    finally:
+        os.environ.pop(QUEUE_HELD, None)
+        handle.seek(0)
+        handle.truncate()
+        handle.flush()
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        handle.close()
 
 def scan(root):
     """Return the identity of each present dependency file and whether the installation is reusable."""

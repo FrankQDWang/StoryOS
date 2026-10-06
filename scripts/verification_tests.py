@@ -10,6 +10,9 @@ import sys
 import tempfile
 import unittest
 
+import verification_cache
+import verification_summary
+
 
 COMMAND = Path(__file__).with_name("verification.py")
 
@@ -210,3 +213,91 @@ class VerificationCommandTests(unittest.TestCase):
                     process.communicate()
             self.assertNotEqual(process.returncode, 0)
         self.assertEqual(self.report()["status"], "interrupted")
+
+    def queue_fixture(self):
+        policy_path = self.root / "docs/agents/verification-policy.json"
+        policy = json.loads(policy_path.read_text())
+        policy["complete"] = {"stages": ["heavy", "light"], "groups": {}, "host_queue": ["heavy"]}
+        policy_path.write_text(json.dumps(policy))
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                 "commit", "--quiet", "-am", "Queue the heavy stage.")
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        second = Path(outside.name) / "second"
+        self.git("worktree", "add", "--quiet", "--detach", str(second))
+        return second, Path(outside.name)
+
+    def start(self, tree, stage, script):
+        return subprocess.Popen([sys.executable, str(COMMAND), "run", "--", sys.executable, str(COMMAND), "step",
+                                 stage, "--", sys.executable, "-c", script], cwd=tree, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, env=self.environment)
+
+    def reports(self, tree):
+        return sorted((json.loads(path.read_text()) for path in tree.glob("target/verification/*/report.json")),
+                      key=lambda report: report["started_at"])
+
+    def test_heavy_stages_in_two_worktrees_serialize_and_light_stages_do_not_wait(self):
+        second, outside = self.queue_fixture()
+        release = outside / "release"
+        holder_script = ("import pathlib, time; print('FIRST_HOLDS', flush=True)\n"
+                         f"while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.05)")
+        first = self.start(self.root, "heavy", holder_script)
+        waiting = None
+        try:
+            self.assertEqual(first.stdout.readline(), "FIRST_HOLDS\n")
+            holder = verification_cache.queue_state(second)
+            self.assertEqual({k: holder[k] for k in ("pid", "worktree", "stage")},
+                             {"pid": holder["pid"], "worktree": str(self.root.resolve()), "stage": "heavy"})
+            light = subprocess.run([sys.executable, str(COMMAND), "run", "--", sys.executable, str(COMMAND), "step",
+                                    "light", "--", sys.executable, "-c", "print('LIGHT_RUNS')"], cwd=second,
+                                   capture_output=True, text=True, env=self.environment, timeout=60)
+            self.assertEqual(light.returncode, 0, light.stderr)
+            self.assertNotIn("host_queue", self.reports(second)[0])
+            waiting = self.start(second, "heavy", "print('SECOND_RUNS', flush=True)")
+            line = waiting.stdout.readline()
+            self.assertTrue(line.startswith("Host queue: waiting"), line)
+            self.assertIn(f"stage heavy of worktree {self.root.resolve()}", line)
+            self.assertIsNone(waiting.poll())
+            release.write_text("done")
+            self.assertEqual(first.wait(timeout=60), 0)
+            output, errors = waiting.communicate(timeout=60)
+            self.assertEqual(waiting.returncode, 0, errors)
+            self.assertIn("SECOND_RUNS", output)
+        finally:
+            for process in (first, waiting):
+                if process and process.poll() is None:
+                    process.kill()
+                if process:
+                    process.communicate()
+        held = self.reports(self.root)[0]
+        queued = self.reports(second)[-1]
+        self.assertEqual(held["host_queue"][0]["released"], None)
+        self.assertGreater(queued["host_queue"][0]["waited_seconds"], 0)
+        self.assertLessEqual(held["steps"][0]["ended_at"], queued["host_queue"][0]["holder"]["started_at"])
+        self.assertEqual(verification_cache.queue_state(second), "free")
+        self.assertEqual(verification_summary.summary({"run_id": "attempt", "hostQueue": "free"})["hostQueue"], "free")
+
+    def test_a_holder_without_a_process_is_released_and_recorded(self):
+        self.queue_fixture()
+        gone = subprocess.Popen([sys.executable, "-c", "pass"])
+        gone.wait()
+        holder = {"pid": gone.pid, "worktree": "/removed", "stage": "heavy", "started_at": "2026-10-06T00:00:00+00:00"}
+        lock = verification_cache.queue_path(self.root)
+        lock.write_text(json.dumps(holder))
+        keeper = subprocess.Popen([sys.executable, "-c", "import fcntl, sys; handle = open(sys.argv[1], 'a'); "
+                                   "fcntl.flock(handle, fcntl.LOCK_EX); print('LOCKED', flush=True); sys.stdin.read()",
+                                   str(lock)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(keeper.stdout.readline(), "LOCKED\n")
+            self.assertEqual(verification_summary.summary({"run_id": "attempt", "hostQueue": holder})["hostQueue"],
+                             holder)
+            self.assertEqual(verification_cache.queue_state(self.root), "free")
+            for _ in range(2):
+                result = self.cli("run", "--", sys.executable, str(COMMAND), "step", "heavy", "--",
+                                  sys.executable, "-c", "print('HEAVY_RUNS')")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("Host queue: released the lock of stage heavy of worktree /removed", result.stdout)
+                self.assertEqual(self.reports(self.root)[-1]["host_queue"][0]["released"], holder)
+                lock.write_text(json.dumps(holder))
+        finally:
+            keeper.communicate("")

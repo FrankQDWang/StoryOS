@@ -43,6 +43,10 @@ def summary(value, page=1, selection='all'):
     for key in ('run_id', 'report'):
         if key in value:
             output[key] = short(value[key])
+    if 'hostQueue' in value:
+        output['hostQueue'] = (value['hostQueue'] if value['hostQueue'] == 'free'
+                               else {key: short(item) if isinstance(item, str) else item
+                                     for key, item in value['hostQueue'].items()})
     if 'supervision' in value:
         output['supervision'] = value['supervision']
     if 'prerequisites' in value:
