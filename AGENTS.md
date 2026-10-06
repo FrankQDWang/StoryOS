@@ -1,129 +1,40 @@
 # StoryOS repository instructions
 
-## Scope and authority
+This file is the operating-rule source for every agent client. Codex reads it directly. Claude Code reads it through `CLAUDE.md`, which imports only this file.
 
-- This file applies to the whole repository. A nearer nested `AGENTS.md` may add or narrow instructions for its subtree; include only subtree-specific boundaries and commands, and do not duplicate this root file.
-- Repository files and tracked design artifacts are the source of truth. Conversation history and agent client memory, for example Codex memory or Claude Code memory, are supporting context only.
-- This file is the single rule source for every agent client. Codex reads it directly. Claude Code reads it through `CLAUDE.md`, which only imports this file. Put a new rule here, not in `CLAUDE.md` or a client-specific rule file.
-- Layering of authority: code and checked-in generated contracts state the current implementation reality; ADRs under `docs/adr/` and the current Wayfinder map record the product and architecture contract; this `AGENTS.md` states repository operating rules and coding style. When they diverge, code is the fact of what exists today, but a divergence from an ADR is either a defect to fix or an ADR-recorded exception — never a silent override.
-- Record a spoken deployment, hosting, or vendor decision as an ADR in the same session. An unwritten premise is not a contract. The current production topology is fixed by ADR 0022.
-- One ticket has one implementation owner and an isolated worktree. One coordinator owns the specification and shared tracker state; one merger owns integration.
-- Preserve unrelated user changes. Do not rewrite, discard, or clean them up as part of another task.
-- Write all repository artifacts in ASD-STE100 Simplified Technical English: code, comments, documentation, commit messages, GitHub Issues, and pull requests. Talk to the user in Simplified Chinese. Always read `GLOSSARY.md` files, and use their ubiquitous language.
+## Every task
 
-## Agent skills
+- **New rule:** put an operating rule in this file and a coding rule in [CODING_STANDARDS.md](CODING_STANDARDS.md). A nested `AGENTS.md` holds only the boundaries and commands of its subtree.
+- **Authority:** code and tracked generated contracts show what exists today. ADRs under `docs/adr/` and the current Wayfinder map state the product and architecture contract. A divergence from an ADR is a defect to fix or an exception that an ADR records.
+- **Memory:** repository files and tracked design artifacts are the source of truth. Conversation history and agent client memory are supporting context only.
+- **Decisions:** record a spoken deployment, hosting, or vendor decision as an ADR in the same session. A premise that no ADR records is not a contract. ADR 0022 sets the current production topology.
+- **User changes:** preserve unrelated user changes exactly as you find them.
+- **Language:** write all repository text in ASD-STE100 Simplified Technical English: code, comments, documentation, commit messages, GitHub Issues, and pull requests. Talk to the user in Simplified Chinese.
+- **Glossary:** read every `GLOSSARY.md` and use its ubiquitous language.
+- **Domain:** before domain exploration or design, read [Domain docs](docs/agents/domain.md) for the glossary and ADR rules.
+- **Daily loop:** at task start, run `make verify-status BASE=origin/main`. After each product or test edit, follow the [Daily loop](docs/agents/verification.md#daily-loop) to run the smallest check that can fail on that edit.
+- **Commands:** use the StoryOS-owned repository commands for format, lint, test, schema generation, and verification.
+- **Guards:** `make verify-policy` runs the ASD-STE100 text guard and the Rust literal guard. `make verify-status` shows the change size and module size advisory.
 
-- For issue publication, claims, delivery, and the Claude Code and Codex commands that start workflow skills, use GitHub and [Issue tracker](docs/agents/issue-tracker.md).
-- For triage, map the upstream roles with [Triage labels](docs/agents/triage-labels.md).
-- Before domain exploration or design, follow the single-context [Domain docs](docs/agents/domain.md) for the glossary and ADRs.
+## Ticket delivery
 
-## GitHub Issue and pull-request execution
+- **Issue tracker:** use GitHub, and read [Issue tracker](docs/agents/issue-tracker.md) before you publish, claim, deliver, or close a ticket. It also gives the client commands that start workflow skills.
+- **Triage:** when a skill gives a triage role, map it with [Triage labels](docs/agents/triage-labels.md).
+- **Ownership:** one ticket has one implementation owner and an isolated worktree. One coordinator owns the specification and the shared tracker state. One merger owns integration.
+- **Branches:** use one integration branch for each specification and a separate branch and worktree for each implementation ticket. Run independent dependency-ready tickets in parallel. Keep real product release gates.
+- **Pull request:** push the integration branch for one aggregate pull request. Implementation commits go to `main` only through that pull request.
+- **Merge:** the implementation session opens the PR. Only a coordinator session merges it, after it examines the evidence. Use an ordinary merge commit unless the specification requires another method.
+- **Merge gate:** merge only after the current required `verify` check and independent read-only Standards and Spec reviews pass. Follow [Candidate review and admission](docs/agents/verification.md#candidate-review-and-admission) for reviewers, targeted checks, and fresh evidence after a change.
+- **Complete run:** run `make verify-local` only when the ticket contract or an explicit request requires a complete local run. Follow [Candidate review and admission](docs/agents/verification.md#candidate-review-and-admission) for its order and its recovery.
+- **After merge:** synchronize `main`, run `make verify-tracker`, and record final evidence for every child and parent requirement as the issue tracker specifies.
 
-### Parallel specification delivery
+## Code change
 
-- Use one integration branch per specification and a separate branch and worktree per implementation ticket. Run independent dependency-ready tickets in parallel. Preserve real product release gates.
-- Push the integration branch for one aggregate pull request; do not push implementation commits directly to `origin/main`. Merge into `main` only after current required checks and independent Standards and Spec reviews pass. Use an ordinary merge commit unless the specification requires another method. The implementation session opens the PR and does not merge it. A coordinator session examines the evidence and merges the PR.
+- **Coding standards:** read [CODING_STANDARDS.md](CODING_STANDARDS.md) before you change Rust code, a test, a generated artifact, or a contract, and before a Standards review.
 
-### Verification evidence
+## Reference material
 
-- The required GitHub `verify` check validates the pull-request synthetic merge. Require its success and independent read-only Standards and Spec reviews before merging. Each reviewer uses an agent tool that is different from the implementer's tool. Run the ticket-appropriate targeted checks. The retired `candidate-evidence` report gate and comment publication are not merge requirements.
-- Run `make verify-local` only when the ticket contract or an explicit request calls for a complete local run. Follow [Repository verification](docs/agents/verification.md) for policy review and optional complete-run recovery. A changed candidate needs fresh applicable checks and reviews.
-- After the aggregate PR merges, synchronize `main`, run `make verify-tracker`, and record final evidence for every child and parent requirement as specified in the issue tracker.
-
-## Reference source policy
-
-- `.reference/` is local-only, Git-ignored reference material. Do not add any entry under it to Git, and do not edit an individual reference except when a task explicitly refreshes that reference.
-- `.reference/**` must not enter the StoryOS Cargo workspace, dependency graph, build, test, package, release, or product runtime.
-- Learn from upstream patterns, but independently design StoryOS around its domain. Do not fork, embed, or wrap the Codex runtime.
-- Before copying upstream implementation code, verify architectural fit, isolate the copied unit, review its license obligations, and record provenance. Copying a design idea does not make upstream a production dependency.
-- The Rust guidance below is self-contained in StoryOS. Agents must not rely on opening `.reference/` copies to discover these rules.
-
-## Rust engineering rules
-
-Coding style is part of architectural consistency: a uniform Rust style keeps boundaries, call sites, and reviews legible across the workspace.
-
-### Formatting and call sites
-
-```toml
-use_field_init_shorthand = true
-```
-
-- When using format! and you can inline variables into {}, always do that.
-- Always collapse if statements per https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
-- Always inline format! args when possible per https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
-- Use method references over closures when possible per https://rust-lang.github.io/rust-clippy/master/index.html#redundant_closure_for_method_calls
-- Avoid bool or ambiguous `Option` parameters that force callers to write hard-to-read code such as `foo(false)` or `bar(None)`. Prefer enums, named methods, newtypes, or other idiomatic Rust API shapes when they keep the callsite self-documenting.
-- When you cannot make that API change and still need a small positional-literal callsite in Rust, follow the `argument_comment_lint` convention:
-  - Use an exact `/*param_name*/` comment before opaque literal arguments such as `None`, booleans, and numeric literals when passing them by position.
-  - A method's sole non-self argument is exempt when the method and parameter names match, such as `.enabled(false)` for `fn enabled(&self, enabled: bool)`.
-  - Do not add these comments for string or char literals unless the comment adds real clarity; those literals are intentionally exempt from the lint.
-  - The parameter name in the comment must exactly match the callee signature.
-
-### API design
-
-- When possible, make `match` statements exhaustive and avoid wildcard arms.
-- Newly added traits should include doc comments that explain their role and how implementations are expected to use them.
-- Discourage both `#[async_trait]` and `#[allow(async_fn_in_trait)]` in Rust traits.
-  - Preferred trait shape:
-    `fn foo(&self, ...) -> impl std::future::Future<Output = T> + Send;`
-  - Implementations may still use `async fn foo(&self, ...) -> T` when they satisfy that contract.
-  - Do not use `#[allow(async_fn_in_trait)]` as a shortcut around spelling the future contract explicitly.
-- Prefer private modules and explicitly exported public crate API.
-- Keep crate API surfaces as small as possible. Avoid proliferating test-only helpers.
-
-### StoryOS architecture
-
-- Put a new concept in the crate that owns it. Do not grow a central Agent crate merely because it is convenient; introduce a focused crate when that creates a clearer dependency boundary.
-
-### Modules and observability
-
-- Do not create small helper methods that are referenced only once.
-- For tracing async work, instrument the function or method definition with
-  `#[tracing::instrument(...)]` instead of attaching spans to futures with
-  `.instrument(...)` at call sites. Before adding instrumentation, check whether the callee—or
-  the implementation method it immediately delegates to—is already instrumented.
-- Avoid large modules:
-  - Prefer adding new modules instead of growing existing ones.
-  - Target Rust modules under 500 LoC, excluding tests.
-  - If a file exceeds roughly 800 LoC, add new functionality in a new module instead of extending
-    the existing file unless there is a strong documented reason not to.
-  - When extracting code from a large module, move the related tests and module/type docs toward
-    the new implementation so the invariants stay close to the code that owns them.
-
-### Tests and change review
-
-- Add a test only for a realistic observable regression, a non-trivial invariant or boundary, or a concrete bug. A code change or a coverage increase is not enough reason to add a test.
-- Prefer existing coverage at the public behavior boundary.
-- Changes to Agent Loop behavior, tool execution, authorization, recovery, or other user-visible Agent semantics require integration tests at the public boundary.
-- When writing tests, prefer comparing the equality of entire objects over fields one by one.
-- Do not add tests that copy literals, mappings, obvious control flow, or implementation details.
-- Do not add tests for values that are statically defined.
-- Do not add tests for a removed feature unless the absence is itself a contract.
-- For concurrent work, use deterministic coordination or controlled scheduling. Do not use sleeps when a deterministic wait is available.
-- When adding a new test module, define its contents in a separate sibling file rather than inline in the implementation file.
-- Use an explicit `#[path = "..._tests.rs"]` attribute so the test filename is descriptive and easy to locate:
-
-  ```rust
-  #[cfg(test)]
-  #[path = "parser_tests.rs"]
-  mod tests;
-  ```
-
-- This applies only when introducing a new test module. Do not move or rewrite existing inline `#[cfg(test)] mod tests { ... }` modules solely to follow this convention.
-- Avoid test-only functions in the main implementation.
-- Check whether there are existing helpers to make tests more streamlined and readable.
-- Avoid mutating process environment in tests; prefer passing environment-derived flags or dependencies from above.
-- Prefer no comment. A comment that stays gives one non-obvious reason in one line; code changes later and comments do not.
-- Document a public API by its observable contract, in one line where possible. Do not document incidental implementation details.
-- Treat changes to ToolSpec, MCP adapters, Skill manifests, Artifact and Run events, external APIs, configuration, persisted data, or recovery formats as contract changes and review their breaking and migration impact explicitly.
-- Editable sources own deterministic generated artifacts. Change and stage a generated artifact with the editable source that produces it, regenerate it with the StoryOS-owned command, classify its diff separately from hand-written lines, and review the generated diff for drift.
-- Unless the change is mechanical the total number of changed lines should not exceed 800 lines.
-- For complex logic changes the size should be under 500 lines.
-- Base the staging suggestion on the actual diff, dependencies, and affected call sites.
-
-### Verification
-
-- At task start, run `make verify-status BASE=origin/main`. For ordinary edits, test lifecycle changes, candidate reviews, or failed complete runs, follow the single [Repository verification guide](docs/agents/verification.md). Run `make verify-policy` after changes to the verification runner or input policy.
-- Use StoryOS-owned repository commands for formatting, linting, tests, schema generation, and verification.
-- After each product or test edit, run the smallest StoryOS-owned command that can fail on that edit.
-- `make verify-local` is the pre-merge evidence command. Start it only after Standards and Spec review on the candidate tree, and only once for that tree. A red targeted check is fixed with another targeted check.
+- **Local only:** `.reference/` is local-only, Git-ignored reference material. Keep all of its entries out of Git. Edit an individual reference only when a task explicitly refreshes that reference.
+- **Build boundary:** keep `.reference/**` out of the StoryOS Cargo workspace, dependency graph, build, test, package, release, and product runtime.
+- **Own design:** learn from upstream patterns, and design StoryOS independently around its domain. Do not fork, embed, or wrap the Codex runtime.
+- **Copied code:** before you copy upstream implementation code, verify architectural fit, isolate the copied unit, review its license obligations, and record provenance. A copied design idea does not make upstream a production dependency.
