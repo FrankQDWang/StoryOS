@@ -1,10 +1,13 @@
 """Read current results and execute policy-registered targeted checks."""
 
+import bisect
 from datetime import datetime
 import hashlib
+import itertools
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -79,6 +82,84 @@ def policy_fresh(root):
             'Refresh it with make verify-targeted CHECK=verify-policy'}
 
 
+SIZE_LIMITS = (500, 800)
+
+
+def numstat(root, base, diff_filter):
+    """Yield the current path and the added and deleted line counts of each file change against a base."""
+    tokens = iter(subprocess.check_output(['git', 'diff', '--numstat', '-z', '-M', f'--diff-filter={diff_filter}',
+                                           base, '--'], cwd=root, text=True).split('\0'))
+    for token in tokens:
+        if token:
+            added, deleted, path = token.split('\t', 2)
+            if not path:
+                next(tokens)
+                path = next(tokens)
+            yield path, int(added) if added != '-' else 0, int(deleted) if deleted != '-' else 0
+
+
+RUST_CODE = re.compile(r"""//[^\n]*|/\*|b?r(#*)"|b?"(?:\\.|[^"\\])*"|b?'(?:\\(?:u\{[0-9a-fA-F]+\}|.)|[^'\\])'|[{}]""", re.S)
+RUST_COMMENT = re.compile(r'/\*|\*/')
+
+
+def item_end(text, start):
+    """Return the offset after the brace that closes the first Rust block at or after an offset."""
+    depth, comment, index = 0, 0, start
+    while match := (RUST_COMMENT if comment else RUST_CODE).search(text, index):
+        token, index = match[0], match.end()
+        if comment or token == '/*':
+            comment += 1 if token == '/*' else -1
+        elif match[1] is not None:
+            index = text.find('"' + match[1], index) + 1 + len(match[1])
+            if index == len(match[1]):
+                return len(text)
+        elif token in '{}':
+            depth += 1 if token == '{' else -1
+            if depth == 0:
+                return index
+    return len(text)
+
+
+def module_lines(text):
+    """Return the line count of a Rust module without its #[cfg(test)] modules."""
+    lines = text.splitlines(keepends=True)
+    starts = list(itertools.accumulate(map(len, lines), initial=0))
+    kept, index = 0, 0
+    while index < len(lines):
+        end = index + 1
+        if lines[index].strip() == '#[cfg(test)]':
+            while end < len(lines) and lines[end].lstrip().startswith('#['):
+                end += 1
+            if end < len(lines) and re.match(r'\s*(pub(\([^)]*\))?\s+)?mod\s', lines[end]):
+                if not lines[end].rstrip().endswith(';'):
+                    end = bisect.bisect_right(starts, item_end(text, starts[end]) - 1) - 1
+                index = end + 1
+                continue
+        kept += 1
+        index += 1
+    return kept
+
+
+def size_advisory(root, base):
+    """Return the advisory change size and the large changed Rust modules of the worktree against a base."""
+    start = subprocess.check_output(['git', 'merge-base', base, 'HEAD'], cwd=root, text=True).strip()
+    changed = {path: added for path, added, _ in numstat(root, start, 'd')}
+    for path in subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z'],
+                                        cwd=root, text=True).split('\0'):
+        if (root / path).is_file():
+            changed[path] = len((root / path).read_bytes().splitlines())
+    deleted = [lines for _, _, lines in numstat(root, start, 'D')]
+    count = sum(changed.values())
+    modules = []
+    for path in sorted(changed):
+        if path.endswith('.rs') and not path.endswith('_tests.rs') and '/tests/' not in f'/{path}':
+            lines = module_lines((root / path).read_text(errors='replace'))
+            if lines > SIZE_LIMITS[0]:
+                modules.append({'path': path, 'lines': lines, 'above': [n for n in SIZE_LIMITS if lines > n]})
+    return ({'addedAndChanged': count, 'deletedFiles': len(deleted), 'deletedFileLines': sum(deleted),
+             'limits': list(SIZE_LIMITS), 'above': [n for n in SIZE_LIMITS if count > n]}, modules)
+
+
 def refusal(prerequisite):
     """Return the refusal message of an unmet prerequisite, or None."""
     if prerequisite['status'] != 'unmet':
@@ -136,6 +217,7 @@ def status(root, plan):
     else:
         clean = clean_tree(root, any(c.get('requires_package') for c in plan['checks']), 'Release packaging')
         fresh = policy_fresh(root)
+        result['changeSize'], result['moduleSize'] = size_advisory(root, plan['base'])
     result['prerequisites'] = {'cleanTree': clean, 'policyFresh': fresh}
     observe = (['python3', 'scripts/verification.py', 'status', '--check', plan['check'], '--json']
                if 'check' in plan else ['python3', 'scripts/verification_plan.py', 'status', '--base', plan['base'],
@@ -159,7 +241,7 @@ def guidance(result, observe, *, complete):
         decision, reason, action = 'blocked', 'dirty-package-inputs', ['git', 'status', '--short', '--untracked-files=all']
         hint = ('The cleanTree prerequisite is unmet. Commit or remove the dirty paths that git status lists, '
                 'then run the selected checks.')
-    elif result.get('prerequisites', {}).get('policyFresh', {}).get('status') == 'unmet':
+    elif complete and state != 'passed' and result.get('prerequisites', {}).get('policyFresh', {}).get('status') == 'unmet':
         decision, reason, action = 'run', 'stale-policy-result', ['make', 'verify-targeted', 'CHECK=verify-policy']
         hint = ('The policyFresh prerequisite of a complete run is unmet. This command refreshes the '
                 'verify-policy result. Then run the selected checks.')
@@ -224,4 +306,6 @@ def attempt_status(root, attempt):
               'next_command': f"python3 scripts/verification.py recover --attempt {shlex.quote(attempt)} --reason 'Check failed stage'"}
     if report['status'] == 'running':
         result.update(execution=process_state(report['process']), heartbeat_at=report.get('heartbeat_at'))
+    result['prerequisites'] = {'cleanTree': clean_tree(root, candidate['source']['dirty'], 'Complete verification'),
+                               'policyFresh': policy_fresh(root)}
     return guidance(result, ['python3', 'scripts/verification.py', 'status', '--attempt', attempt, '--json'], complete=True)
