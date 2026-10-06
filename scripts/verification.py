@@ -333,6 +333,17 @@ def step(root, stage, command, *, node_id=None, stdout=None, node_only=False):
         node_id = "targeted:" + stage
     result.update(verification_graph.bind_attempt(retained, stage, node_id))
     result["attempt_started"] = False
+    if stage == "verification-tests" and not node_only and not retained.get("no_cache") and not any(
+            name in os.environ for name in verification_cache.DIAGNOSTIC):
+        result["reuse_key"] = verification_cache.tool_key(root)
+        reused = verification_cache.tool_result(root, result["reuse_key"])
+        if reused:
+            result.update(reused, status="cached", exit_code=0, duration_seconds=0, command=[],
+                          ended_at=result["started_at"], ended_monotonic=started)
+            write_json(path, result)
+            print(f"Reused the verification-tests result of {reused['producer']}; key {result['reuse_key']}",
+                  flush=True)
+            return 0
     write_json(path, result)
     def observation(fields):
         result.update(fields)
@@ -365,7 +376,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     (directory / "steps").mkdir(parents=True)
     report_path = directory / "report.json"
     report = {"version": 1, "started_at": datetime.now(timezone.utc).isoformat(), "command": command, "status": "running",
-              "profile": "daily" if plan else "complete",
+              "profile": "daily" if plan else "complete", "no_cache": no_cache,
               "environment": {"system": platform.system(), "machine": platform.machine(),
                               "python": platform.python_version()}}
     import verification_candidate
@@ -457,7 +468,9 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     queued = [json.loads(path.read_text()) for path in sorted((directory / "host-queue").glob("*.json"))]
     if queued or report.get("host_queue"):
         report["host_queue"] = [*report.get("host_queue", []), *queued]
-    if (has_verification_file_workers and any(item["stage"] == "verification-tests" for item in steps)):
+    tools = [item for item in steps if item["stage"] == "verification-tests" and item["status"] != "cached"]
+    tested = True
+    if has_verification_file_workers and tools:
         attempts = [json.loads(path.read_text()) for path in (directory / "nodes").glob("*.json")]
         report["verification_test_file_attempts"] = sorted(
             (item for item in attempts if item.get("node_id", "").startswith("file:verification-tools:")),
@@ -465,9 +478,9 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         expected = {"file:verification-tools:" + item["path"] for item in report["inventory"]["files"]
                     if item["kind"] == "verification-test" and item["group"] == "verification-tools"}
         actual = report["verification_test_file_attempts"]
-        if (report["status"] == "passed" and (len(actual) != len(expected)
-                or {item["node_id"] for item in actual} != expected
-                or any(item["status"] != "passed" or not item["attempt_started"] for item in actual))):
+        tested = (len(actual) == len(expected) and {item["node_id"] for item in actual} == expected
+                  and all(item["status"] == "passed" and item["attempt_started"] for item in actual))
+        if report["status"] == "passed" and not tested:
             report["status"] = "incomplete"
     if (plan and code == 2 and report["status"] == "failed" and steps
             and all(item["status"] == "passed" for item in steps)
@@ -476,7 +489,8 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     if (directory / "rust-test-files.json").is_file():
         report["rust_test_files"] = json.loads((directory / "rust-test-files.json").read_text())
     allowed = {"cached"} if cache and cache.observation["status"] == "hit" else {"passed"}
-    if report["status"] == "passed" and (not steps or any(item["status"] not in allowed for item in steps)):
+    if report["status"] == "passed" and (not steps or any(item["status"] not in allowed and not (
+            item["status"] == "cached" and item.get("producer")) for item in steps)):
         report["status"] = "incomplete"
     if report["status"] == "passed" and report["profile"] == "complete" and "plan" in report:
         try:
@@ -502,6 +516,10 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     write_json(report_path, report)
     if cache:
         cache.publish(report_path)
+    if tested and report.get("source_start") and report.get("source_end") == report["source_start"]:
+        for item in tools:
+            if item["status"] == "passed" and item.get("reuse_key"):
+                verification_cache.publish_tool_result(root, report_path, item)
     failure = ("" if report["status"] == "passed" else
                f"; failed step: {', '.join(report['failed_steps']) or 'none'}"
                f"; reason: {report['failure_reason'].removesuffix('.')}; log: {report['failure_log'] or 'none'}"

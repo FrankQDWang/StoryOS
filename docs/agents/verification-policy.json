@@ -204,7 +204,8 @@
     }
   ],
   "daily_consumers": [
-    {"pattern": "scripts/verification*.py", "groups": ["node-contract"]},
+    {"pattern": "scripts/verification*.py", "groups": ["node-contract"],
+     "files": ["apps/web/test/node-contract/required-global-teardown.test.ts"]},
     {"pattern": "crates/storyos-application/*", "groups": ["database", "node-postgresql"]},
     {"pattern": "crates/storyos-server/*", "groups": ["database", "node-postgresql", "node-contract"]},
     {"pattern": "crates/storyos-worker/*", "groups": ["database", "node-process-cut"]},
