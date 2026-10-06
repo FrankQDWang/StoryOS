@@ -1,5 +1,5 @@
-//! Reports each positional opaque literal argument without a `/*param*/` comment on the added
-//! lines of the Rust files that changed after the merge base with a Git revision.
+//! Reports positional opaque literal arguments that have no `/*param*/` comment.
+//! The guard checks only the added lines of the Rust files that changed after the merge base.
 
 mod finder;
 

@@ -21,16 +21,18 @@ fn finding(line: usize, column: usize, callee: &str, literal: &str) -> Finding {
 
 #[test]
 fn bare_opaque_literals_fire() {
-    let source = "fn f() {\n    open(None, true, 3, -2.5);\n    client.send(false);\n    run(|| step(0));\n}\n";
+    let source = "fn f() {\n    open(None, true, 3, -2.5);\n    client.send(false);\n    run(|| step(0));\n    (callback)(false);\n    handlers[0](3);\n}\n";
     assert_eq!(
         findings(source, &[]),
         vec![
-            finding(2, 10, "open", "None"),
-            finding(2, 16, "open", "true"),
-            finding(2, 22, "open", "3"),
-            finding(2, 25, "open", "-2.5"),
-            finding(3, 17, "send", "false"),
-            finding(4, 17, "step", "0"),
+            finding(/*line*/ 2, /*column*/ 10, "open", "None"),
+            finding(/*line*/ 2, /*column*/ 16, "open", "true"),
+            finding(/*line*/ 2, /*column*/ 22, "open", "3"),
+            finding(/*line*/ 2, /*column*/ 25, "open", "-2.5"),
+            finding(/*line*/ 3, /*column*/ 17, "send", "false"),
+            finding(/*line*/ 4, /*column*/ 17, "step", "0"),
+            finding(/*line*/ 5, /*column*/ 16, "(callback)", "false"),
+            finding(/*line*/ 6, /*column*/ 17, "handlers[0]", "3"),
         ]
     );
 }
@@ -66,10 +68,10 @@ fn exemption_list_passes_only_sole_argument_methods_it_names() {
     assert_eq!(
         findings(source, &["enabled"]),
         vec![
-            finding(3, 20, "visible", "true"),
-            finding(4, 20, "enabled", "true"),
-            finding(4, 26, "enabled", "2"),
-            finding(5, 13, "enabled", "false"),
+            finding(/*line*/ 3, /*column*/ 20, "visible", "true"),
+            finding(/*line*/ 4, /*column*/ 20, "enabled", "true"),
+            finding(/*line*/ 4, /*column*/ 26, "enabled", "2"),
+            finding(/*line*/ 5, /*column*/ 13, "enabled", "false"),
         ]
     );
 }

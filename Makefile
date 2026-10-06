@@ -17,8 +17,9 @@ verify-plan:
 verify-changed:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py run --base "$(BASE)" $(VERIFY_ARGS)
 
+# The guard checks the Git repository of the working directory with the crate of this workspace.
 rust-literal-guard:
-	$(VERIFY_STEP) rust-literal-guard -- cargo run --quiet --locked -p storyos-literal-guard -- "$(BASE)"
+	$(VERIFY_STEP) rust-literal-guard -- cargo run --quiet --locked --manifest-path "$(dir $(abspath $(firstword $(MAKEFILE_LIST))))Cargo.toml" -p storyos-literal-guard -- "$(BASE)"
 
 ifneq ($(STORYOS_VERIFICATION_RUN),)
 # The GitHub verify check runs these policy steps without a Rust toolchain.

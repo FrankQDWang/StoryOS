@@ -59,15 +59,17 @@ impl Finder<'_> {
 
 impl<'ast> Visit<'ast> for Finder<'_> {
     fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
-        // A callee with an upper-case last segment is a tuple struct or enum variant, such as `Some(1)`.
-        if let Expr::Path(ExprPath { path, .. }) = &*call.func
-            && let Some(segment) = path.segments.last()
-            && !segment
-                .ident
-                .to_string()
-                .starts_with(|first: char| first.is_ascii_uppercase())
-        {
-            self.check_arguments(&segment.ident.to_string(), call.args.iter());
+        let callee = match &*call.func {
+            // A callee with an upper-case last segment is a tuple struct or enum variant, such as `Some(1)`.
+            Expr::Path(ExprPath { path, .. }) => path
+                .segments
+                .last()
+                .map(|segment| segment.ident.to_string())
+                .filter(|name| !name.starts_with(|first: char| first.is_ascii_uppercase())),
+            callee => Some(self.source[callee.span().byte_range()].to_owned()),
+        };
+        if let Some(callee) = callee {
+            self.check_arguments(&callee, call.args.iter());
         }
         visit::visit_expr_call(self, call);
     }
