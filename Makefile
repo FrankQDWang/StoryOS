@@ -143,8 +143,9 @@ verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
 
 .PHONY: review-round
+# The verification input fingerprint reads the environment, so the recipe removes CONTEXT.
 review-round:
-	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
+	@env -u CONTEXT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
 
 .PHONY: install-hooks
 install-hooks:

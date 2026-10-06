@@ -31,8 +31,11 @@ def codex(*args):
 
 
 def verify_ready(route, head):
-    runs = [c for c in json.loads(gh('api', f'{route}/commits/{head}/check-runs?filter=all&per_page=100&page=1'))['check_runs']
-            if c['name'] == 'verify' and c['head_sha'] == head]
+    checks, page = [], 1
+    while len(checks) == 100 * (page - 1):
+        checks += json.loads(gh('api', f'{route}/commits/{head}/check-runs?filter=all&per_page=100&page={page}'))['check_runs']
+        page += 1
+    runs = [c for c in checks if c['name'] == 'verify' and c['head_sha'] == head]
     if not any(c.get('status') == 'completed' and c.get('conclusion') == 'success' for c in runs):
         links = ', '.join(c.get('html_url') or str(c['id']) for c in runs) or 'no verify run yet'
         raise ValueError(f'Wait for a successful verify run on the head {head}: {links}')
@@ -95,6 +98,16 @@ def run(root, pr, executor):
     if rounds.get(number - 1) == {'Standards': 'PASS', 'Spec': 'PASS'}:
         raise ValueError(f'Round {number - 1} passed on the two axes. Only a blocking finding starts a new round; '
                          'send the PR link and the verdict comment links to the coordinator session')
+    missing = [axis for axis in ('Standards', 'Spec') if rounds.get(number) and axis not in rounds[number]]
+    if missing:
+        # The records are already imported; post only the retained comment and do not review again.
+        stored = [b for b in root.glob(f'target/verification/reviews/*/{missing[0].lower()}-comment.md')
+                  if b.read_text().startswith(f'## {missing[0]} review, round {number}:')]
+        if not stored:
+            raise ValueError(f'Round {number} has no {missing[0]} comment and no retained verdict; ask the coordinator session')
+        print(f'Round {number}: posted the retained {missing[0]} verdict:',
+              gh('pr', 'comment', str(pr), '--body-file', str(max(stored, key=lambda b: b.stat().st_mtime))).strip())
+        return
     if number > ROUNDS:
         raise ValueError(f'PR {pr} had {ROUNDS} review rounds. Send the open findings to the coordinator session; '
                          'it decides the next step')

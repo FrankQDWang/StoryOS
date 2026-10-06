@@ -304,12 +304,22 @@ else:
         self.assertIn('coordinator session', result.stderr)
         self.assertEqual((len(state['comments']), state['node']), (len(comments), []))
 
-    def test_round_with_one_axis_comment_is_resumed(self):
-        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
-        result, state = self.review_round({'standards': clean, 'spec': clean}, comments=['## Standards review, round 1: PASS\n'])
+    def test_round_with_one_axis_comment_posts_only_the_retained_comment(self):
+        retained = '## Spec review, round 1: FAIL\n\nRetained verdict.\n'
+        stored = self.root / 'target/verification/reviews/retained/spec-comment.md'
+        stored.parent.mkdir(parents=True)
+        stored.write_text(retained)
+        result, state = self.review_round({}, comments=['## Standards review, round 1: PASS\n'])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual([c['body'].splitlines()[0] for c in state['comments'][1:]],
-                         ['## Standards review, round 1: PASS', '## Spec review, round 1: PASS'])
+        self.assertEqual((state['comments'][1]['body'], state['node']), (retained, []))
+
+    def test_round_finds_a_successful_verify_run_beyond_the_first_page(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        checks = [{'name': 'verify', 'id': n, 'status': 'completed', 'conclusion': 'success' if n == 1 else 'failure'}
+                  for n in range(1, 102)]
+        result, state = self.review_round({'standards': clean, 'spec': clean}, checks=checks)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(state['comments']), 2)
 
     def test_round_four_is_refused_with_the_coordinator(self):
         self.refused_round([f'## {axis} review, round {n}: FAIL\n' for n in (1, 2, 3) for axis in ('Standards', 'Spec')])
