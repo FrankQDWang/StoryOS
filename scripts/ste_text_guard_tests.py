@@ -143,6 +143,29 @@ class TextGuardTests(unittest.TestCase):
         self.assertEqual(self.guard("message", "message.txt", expected_code=1),
                          [f"message.txt:{finding}" for finding in expected])
 
+    def test_installed_hook_refuses_a_defective_message_with_the_commit_mode_findings(self):
+        (self.root / "scripts").mkdir()
+        shutil.copyfile(SCRIPT, self.root / "scripts" / SCRIPT.name)
+        hook = self.root.resolve() / ".git/hooks/commit-msg"
+        self.assertEqual(self.guard("install-hook", expected_code=0), [f"{hook}: the hook is installed."])
+        installed = hook.stat()
+        self.assertEqual(self.guard("install-hook", expected_code=0), [f"{hook}: the hook is current."])
+        self.assertEqual(hook.stat(), installed)
+        (self.root / "message.txt").write_text(" ".join(["word"] * 30) + "\n\nThe whole text is here.\n")
+        refused = subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                                  "commit", "--allow-empty", "-F", "message.txt"], cwd=self.root,
+                                 env=self.environment, capture_output=True, text=True, check=False)
+        self.git("commit", "--quiet", "--allow-empty", "--no-verify", "-F", "message.txt")
+        reported = self.guard("commits", "--base", self.base, expected_code=1)
+        self.assertEqual(self.guard("commits", "--advisory", "--base", self.base, expected_code=0),
+                         [f"advisory: {line}" for line in reported])
+        findings = [line.split(":", 1)[1] for line in reported]
+        self.assertEqual(len(findings), 2)
+        self.assertEqual((refused.returncode, [line.split(":", 1)[1] for line in refused.stderr.splitlines()]),
+                         (1, findings))
+        self.git("commit", "--quiet", "--allow-empty", "-m", "Install the hook.")
+        self.assertEqual(self.git("log", "-1", "--format=%s"), "Install the hook.")
+
 
 if __name__ == "__main__":
     unittest.main()
