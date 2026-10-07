@@ -153,6 +153,10 @@ project_command_request!(
     contracts::ExportHumanReadableManuscriptRequest,
     nested export_human_readable_manuscript_input
 );
+project_command_request!(
+    contracts::ExportProjectArchiveRequest,
+    nested export_project_archive_input
+);
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
     fn command_schema(&self) -> &str {

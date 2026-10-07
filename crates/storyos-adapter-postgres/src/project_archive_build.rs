@@ -1,6 +1,6 @@
 use storyos_application::{
-    CanonicalSnapshot, ExportOperationPage, ExportProjectArchiveError, PinnedArchiveFamily,
-    ProjectReadError, ProjectScope, VerifiedExportArchive,
+    CanonicalSnapshot, ExportOperationPage, PinnedArchiveFamily, ProjectReadError, ProjectScope,
+    VerifiedExportArchive,
 };
 use storyos_core::{
     ARCHIVE_PATH_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
@@ -9,6 +9,36 @@ use storyos_core::{
     classify_export_record, package_verified_project_archive_zip, require_delivered_families,
     required_export_tables,
 };
+
+/// A failure of one archive build step: a refusal of the archive build or a store fault.
+#[derive(Debug)]
+pub(crate) enum ArchiveBuildError {
+    Refused(ProjectArchiveBuildRefusal),
+    Unavailable(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl std::fmt::Display for ArchiveBuildError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refused(_) => formatter.write_str("The Project Export Archive did not complete"),
+            Self::Unavailable(_) => {
+                formatter.write_str("The Project Export Archive store is unavailable")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ArchiveBuildError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Unavailable(source) => Some(source.as_ref()),
+            Self::Refused(_) => None,
+        }
+    }
+}
+
+/// The families that the admission of the export writes rows to before it pins the families.
+const ADMISSION_TABLES: [&str; 2] = ["author_command_admissions", "project_export_operations"];
 
 const EXPORT_TABLES: &[(&str, &str)] = &[
     ("acceptance_receipts", "canonical/acceptance_receipts.json"),
@@ -239,7 +269,7 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
 pub(super) async fn collect_exportable_families(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
-) -> Result<Vec<PinnedArchiveFamily>, ExportProjectArchiveError> {
+) -> Result<Vec<PinnedArchiveFamily>, ArchiveBuildError> {
     if !crate::validation_history::unavailable_revisions(client, scope)
         .await
         .map_err(|error| archive_table_error("validation_receipts", error))?
@@ -263,6 +293,24 @@ pub(super) async fn collect_exportable_families(
     Ok(families)
 }
 
+/// Reads the families of `ADMISSION_TABLES` again after the Admission and the operation row
+/// of the export, so the Pinned Export Source keeps these two rows.
+pub(super) async fn reload_admission_families(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    families: &mut [PinnedArchiveFamily],
+) -> Result<(), ArchiveBuildError> {
+    for family in families
+        .iter_mut()
+        .filter(|family| ADMISSION_TABLES.contains(&family.table.as_str()))
+    {
+        let rows = load_table_json(client, &family.table, scope).await?;
+        classify_rows(&rows, scope)?;
+        family.rows_json = canonical_json(&serde_json::Value::Array(rows));
+    }
+    Ok(())
+}
+
 pub(super) async fn persist_export_archive(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
@@ -270,7 +318,7 @@ pub(super) async fn persist_export_archive(
     snapshot: &CanonicalSnapshot,
     created_at: &str,
     families: &[PinnedArchiveFamily],
-) -> Result<String, ExportProjectArchiveError> {
+) -> Result<String, ArchiveBuildError> {
     let mut sources = Vec::with_capacity(families.len());
     let mut present = Vec::with_capacity(families.len());
     let mut counts = Vec::with_capacity(families.len());
@@ -295,7 +343,7 @@ pub(super) async fn persist_export_archive(
         });
     }
     let catalog: serde_json::Value = serde_json::from_str(PERSISTENCE_CATALOG)
-        .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
+        .map_err(|error| ArchiveBuildError::Unavailable(Box::new(error)))?;
     if catalog
         .get("families")
         .and_then(serde_json::Value::as_array)
@@ -370,7 +418,7 @@ pub(super) async fn persist_export_archive(
         .await
         .map_err(|error| archive_table_error("project_export_manifests", error))?;
     if updated != 1 {
-        return Err(ExportProjectArchiveError::Unavailable(Box::new(
+        return Err(ArchiveBuildError::Unavailable(Box::new(
             std::io::Error::other("the admitted export did not persist one immutable root"),
         )));
     }
@@ -525,7 +573,7 @@ async fn load_table_json(
     client: &tokio_postgres::Client,
     table: &str,
     scope: &ProjectScope,
-) -> Result<Vec<serde_json::Value>, ExportProjectArchiveError> {
+) -> Result<Vec<serde_json::Value>, ArchiveBuildError> {
     let expression = super::project_archive_draft::export_row_expression(table);
     let sql = format!(
         "SELECT ({expression})::text
@@ -544,7 +592,7 @@ async fn load_table_json(
     for row in rows {
         let raw: String = row.get(0);
         let value: serde_json::Value = serde_json::from_str(&raw)
-            .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
+            .map_err(|error| ArchiveBuildError::Unavailable(Box::new(error)))?;
         values.push(value);
     }
     if table == "pinned_export_sources" {
@@ -562,7 +610,7 @@ async fn load_table_json(
 fn classify_rows(
     rows: &[serde_json::Value],
     scope: &ProjectScope,
-) -> Result<(), ExportProjectArchiveError> {
+) -> Result<(), ArchiveBuildError> {
     let owner = scope.owner_user_id.as_ref();
     let project = scope.project_id.as_ref();
     for row in rows {
@@ -603,14 +651,12 @@ const PERSISTENCE_CATALOG: &str = include_str!(concat!(
     "/../../docs/foundation/postgresql-release-1-persistence-catalog.json"
 ));
 
-fn archive_build_error(reason: ProjectArchiveBuildRefusal) -> ExportProjectArchiveError {
-    ExportProjectArchiveError::ArchiveBuild(reason)
+fn archive_build_error(reason: ProjectArchiveBuildRefusal) -> ArchiveBuildError {
+    ArchiveBuildError::Refused(reason)
 }
 
-fn archive_table_error(table: &str, error: tokio_postgres::Error) -> ExportProjectArchiveError {
-    ExportProjectArchiveError::Unavailable(Box::new(std::io::Error::other(format!(
-        "{table}: {error}"
-    ))))
+fn archive_table_error(table: &str, error: tokio_postgres::Error) -> ArchiveBuildError {
+    ArchiveBuildError::Unavailable(Box::new(std::io::Error::other(format!("{table}: {error}"))))
 }
 
 #[cfg(test)]

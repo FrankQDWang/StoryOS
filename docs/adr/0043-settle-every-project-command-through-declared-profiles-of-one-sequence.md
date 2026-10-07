@@ -202,6 +202,24 @@ Specification C ([#1043](https://github.com/FrankQDWang/StoryOS/issues/1043)) mo
   - A zero-authority Receipt with an Author Action gives a store fault. Before, replay ignored the Author Action. The receipt relation trigger already prevents such a record.
 - The behavior-equivalence review against `main` found no other difference.
 
+#### `exportProjectArchive`
+
+- `exportProjectArchive` uses the admit step with the explicit project command Admission form and the Command-response Project. A rate-limited Challenge gives a store fault, as on `main`. The work rows are the export operation row with its two archive profiles and the Pinned Export Source row. Their columns do not change. The Worker settlement does not change.
+- The fact load reads the latest canonical Snapshot and collects the exportable families before the Admission. An archived Project gives `422 archived_project`, and each archive build refusal gives its `422` problem code, as on `main`. Each is a refusal before Admission.
+- The Pinned Export Source keeps the Admission row and the operation row of the export, as on `main`. The command reads these two families again after it writes the two rows.
+- The route uses the generic project command admission with the problem order of `main`. The route refuses an archive profile or an archive path profile that is not the current profile with `400 invalid_request`, as on `main`. The problem texts use the name "Project Export Archive", as on `main`. The `202` response body does not change.
+- The application binding self-check, the Store trait, and the error type of the command are removed. The archive build steps use an adapter error that only the adapter sees.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - An archive build refusal comes before a store fault of the Admission insert or the operation insert. Before, the store fault came first. After the Challenge consumption, these two inserts fail only on a store fault.
+  - An exact retry in progress whose operation row or pinned Snapshot is missing gives `503 project_store_unavailable`. Before, it gave `409 idempotency_binding_conflict`. An in-progress fence without its Admission also gives the store fault. Foreign keys already prevent a missing Admission or Snapshot.
+  - A settled Receipt whose operation row or pinned Snapshot is missing gives `503 project_store_unavailable`. Before, a refused Receipt, or an applied Receipt without its export manifest row, gave `409 idempotency_binding_conflict` for such a record.
+  - An applied Receipt with its export manifest row but without its operation row gives `503 project_store_unavailable`. Before, replay read the export identity and the pinned Snapshot from the manifest row and returned the admitted operation. The Worker never deletes an operation row, so only a manual change makes such a record.
+  - A settled retry reads the pinned Snapshot of the operation row. Before, an applied Receipt read the pinned Snapshot of the manifest row. The Worker writes the same Snapshot in the two rows.
+  - Replay reads the two archive profiles from the operation row. Before, replay returned the current profiles. The checks of the operation row allow only the current profiles, so this change is not observable.
+  - A settled Receipt with a result kind other than `authoritative_applied` or `refused`, or with a refusal reason other than `archived_project` or `pinned_export_source_unavailable`, gives `409 idempotency_binding_conflict`. Before, each `refused` reason replayed as admitted. The Receipt shape check already prevents such a record.
+  - A Receipt field with the wrong JSON type is damaged evidence and gives a store fault. A numeric work field that is not unsigned decimal text is also damaged evidence.
+
 ## Relation to ADR 0041 and the glossary
 
 ADR 0041 stays in force. ADR 0041 lets the sequence allocate authority records for an `Applied` outcome only in the `Structural` shape. This decision replaces that statement: the settlement profile now fixes the authority records of an `Applied` outcome. The glossary term Core Transition Outcome changes in the same way. Only Applied changes the target of the command, and its settlement profile fixes which authority records it allocates.

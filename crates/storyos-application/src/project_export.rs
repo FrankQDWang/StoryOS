@@ -1,10 +1,10 @@
 use std::future::Future;
 
-use storyos_core::ProjectArchiveBuildRefusal;
+use storyos_core::{ExportProjectArchiveRefusal, ProjectArchiveBuildRefusal};
 
 use crate::{
-    AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding, Project,
-    ProjectCommandChallengeBinding, ProjectReadError, ProjectScope,
+    AdmittedProjectCommand, CanonicalSnapshot, ProjectReadError, ProjectScope,
+    RefusableCommandError,
 };
 
 pub const PROJECT_EXPORT_COMMAND_KIND: &str = "exportProjectArchive";
@@ -17,127 +17,35 @@ pub const PROJECT_EXPORT_ARCHIVE_PATH_PROFILE: &str =
 pub const PROJECT_ARCHIVE_ZIP_MEDIA_TYPE: &str =
     "application/vnd.storyos.project-archive+zip; profile=\"storyos.project-export.v1\"";
 
+/// The command-specific input of one exportProjectArchive.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ExportProjectArchiveCommand {
-    pub project_scope: ProjectScope,
-    pub client_binding: EditorClientBinding,
-    pub challenge_binding: ProjectCommandChallengeBinding,
-    pub nonce_digest: String,
-    pub canonical_command_bytes: Vec<u8>,
-    pub correlation_id: String,
-    pub ids: AuthorCommandAdmissionIds,
+pub struct ExportProjectArchiveInput {
+    /// The export identity of a first use. An exact retry returns the admitted identity.
+    pub export_id: String,
+}
+
+/// The admitted Project Export Archive operation, its two profiles, and its pinned Snapshot.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ArchiveExportOperation {
     pub export_id: String,
     pub archive_profile: String,
     pub archive_path_profile: String,
+    pub source_snapshot: CanonicalSnapshot,
 }
 
+pub type ExportProjectArchiveAdmission = AdmittedProjectCommand<ArchiveExportOperation>;
+
+/// A refusal of exportProjectArchive before its Admission.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ExportProjectArchiveAdmission {
-    pub ids: AuthorCommandAdmissionIds,
-    pub export_id: String,
-    pub effect: ExportProjectArchiveAdmissionEffect,
-    pub response_project: Project,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ExportProjectArchiveAdmissionEffect {
-    Admitted {
-        archive_profile: String,
-        archive_path_profile: String,
-        source_snapshot: Box<CanonicalSnapshot>,
-    },
-}
-
-#[derive(Debug)]
-pub enum ExportProjectArchiveError {
-    BindingConflict,
-    HistoricalAcknowledgementUnavailable,
-    InvalidChallenge,
-    MissingProject,
-    ArchivedProject,
+pub enum ArchiveExportRefusal {
+    /// The Core classification of the Project lifecycle refuses the export.
+    Lifecycle(ExportProjectArchiveRefusal),
+    /// The exportable families cannot make a Project Export Archive.
     ArchiveBuild(ProjectArchiveBuildRefusal),
-    Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl std::fmt::Display for ExportProjectArchiveError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::BindingConflict => {
-                formatter.write_str("The Project Export Archive binding conflicts")
-            }
-            Self::HistoricalAcknowledgementUnavailable => formatter.write_str(
-                "The original Project Export Archive acknowledgement cannot be recovered",
-            ),
-            Self::InvalidChallenge => {
-                formatter.write_str("The Project Export Archive challenge is invalid")
-            }
-            Self::MissingProject => formatter.write_str("The Project is not in exact Scope"),
-            Self::ArchivedProject => formatter.write_str("The Project is archived"),
-            Self::ArchiveBuild(_) => {
-                formatter.write_str("The Project Export Archive did not complete")
-            }
-            Self::Unavailable(_) => {
-                formatter.write_str("The Project Export Archive store is unavailable")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ExportProjectArchiveError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict
-            | Self::HistoricalAcknowledgementUnavailable
-            | Self::InvalidChallenge
-            | Self::MissingProject
-            | Self::ArchivedProject
-            | Self::ArchiveBuild(_) => None,
-        }
-    }
-}
-
-/// Owns one admitted Project Export Archive operation.
-pub trait ExportProjectArchiveStore: Sync {
-    fn export_project_archive(
-        &self,
-        command: &ExportProjectArchiveCommand,
-    ) -> impl Future<Output = Result<ExportProjectArchiveAdmission, ExportProjectArchiveError>> + Send;
-}
-
-pub async fn request_export_project_archive(
-    store: &impl ExportProjectArchiveStore,
-    command: &ExportProjectArchiveCommand,
-) -> Result<ExportProjectArchiveAdmission, ExportProjectArchiveError> {
-    let challenge = &command.challenge_binding;
-    let command_digest = {
-        use sha2::{Digest as _, Sha256};
-        let value = Sha256::digest(&command.canonical_command_bytes)
-            .iter()
-            .fold(String::with_capacity(64), |mut value, byte| {
-                use std::fmt::Write as _;
-                write!(value, "{byte:02x}").expect("writing to String cannot fail");
-                value
-            });
-        format!("sha256:{PROJECT_EXPORT_DIGEST_PROFILE}:{value}")
-    };
-    if challenge.project_scope != command.project_scope
-        || challenge.client_session_binding_digest != command.client_binding.binding_ref
-        || challenge.client_session_generation != command.client_binding.session_generation
-        || challenge.client_contract_revision != command.client_binding.client_contract_revision
-        || challenge.security_policy_revision != command.client_binding.security_policy_revision
-        || challenge.command_kind != PROJECT_EXPORT_COMMAND_KIND
-        || challenge.canonical_command_digest != command_digest
-        || challenge.method != "POST"
-        || challenge.route_template != PROJECT_EXPORT_ROUTE
-        || challenge.command_schema != PROJECT_EXPORT_REQUEST_SCHEMA
-        || command.archive_profile != PROJECT_EXPORT_ARCHIVE_PROFILE
-        || command.archive_path_profile != PROJECT_EXPORT_ARCHIVE_PATH_PROFILE
-    {
-        return Err(ExportProjectArchiveError::BindingConflict);
-    }
-    store.export_project_archive(command).await
-}
+/// An archived Project and each archive build refusal refuse the export before its Admission.
+pub type ExportProjectArchiveError = RefusableCommandError<ArchiveExportRefusal>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExportOperationProgress {
