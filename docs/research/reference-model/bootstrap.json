@@ -1,0 +1,450 @@
+{
+  "seed": 1,
+  "count": 1,
+  "base": "479224809cdaae997cda51cb8853e3fafa242b65",
+  "coverage": {
+    "createProject:created": 1,
+    "createVolume:authoritative_applied": 1,
+    "createChapter:authoritative_applied": 1
+  },
+  "differences": [],
+  "trace": [
+    {
+      "method": "GET",
+      "path": "/api/v1/protocol",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.protocol-profile.response.v1",
+        "api_major": 1,
+        "public_protocol_release": "storyos.public.release.1",
+        "envelope_version": 1,
+        "problem_profile": "storyos.problem.v1",
+        "activity_profile": "storyos.project-activity.v1",
+        "limit_profile_revision": "storyos.foundation.absolute.v1",
+        "max_json_string_utf8_bytes": 1048576,
+        "compatibility_profile": "storyos.public.same-release.v1",
+        "contract_revision": "release1-wire-catalog-2026-09-27-expiry-rebuild",
+        "required_capabilities": [
+          "project_lifecycle",
+          "volume_chapter_lifecycle",
+          "chapter_navigation",
+          "manuscript_search",
+          "direct_author_edit",
+          "single_match_replace",
+          "multi_match_cross_location_proposal",
+          "manuscript_statistics",
+          "human_readable_manuscript_export",
+          "portable_project_archive",
+          "editor_session_takeover",
+          "snapshot_resync",
+          "proposal_draft_lifecycle",
+          "project_activity",
+          "acknowledgement_loss_outcome_query"
+        ],
+        "release_identity": {
+          "schema_id": "storyos.compatibility.release-identity.v1",
+          "api_major": 1,
+          "public_protocol_release": "storyos.public.release.1",
+          "envelope_profile": "storyos.public.envelope.v1",
+          "contract_graph_revision": "release1-wire-catalog-2026-09-27-expiry-rebuild",
+          "contract_graph_digest": "sha256:e18e4b121933df479b274b93a57a3ae93cb638a442e6329de006d8d670fc9f68",
+          "web_client_contract_revision": "storyos.web-client.release-1.v3",
+          "server_contract_revision": "storyos.server.release-1.v7",
+          "worker_contract_revision": "storyos.worker.release-1.v6",
+          "generated_client_revision": "storyos.typescript-client.release-1.v32",
+          "openapi_digest": "sha256:fa7740402d9daf63a4425db1e954d27e35017c0063c0ec72604096110ca9ca02",
+          "json_schema_catalog_digest": "sha256:76e298b0063aa1162f1a3ce530df2438e3505bce7b0ec0c4d6c267c068358db4",
+          "typescript_artifact_digest": "sha256:970fce9a7a4bc5795ca1907cc9a961defd4b98d378a4cfd2e735ab50e387fed8",
+          "fixture_corpus_digest": "sha256:741d6e9ed7268419deb1e3c46230d930029403a705f5b4c0740744f9853495a7",
+          "activity_profile": "storyos.project-activity.v1",
+          "limit_profile_revision": "storyos.foundation.absolute.v1"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/anti-forgery-challenges",
+      "request": {
+        "command_schema": "storyos.command.create-project.request.v1",
+        "create_project_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-78f1-91b7-584a2265b1f5",
+          "title": "Reference 1"
+        },
+        "idempotency_key": "01a107ee-ec48-7027-8386-bbc4cd613e30"
+      },
+      "status": 200,
+      "response": {
+        "prospective_project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createProject.jcs.v1",
+          "value_hex_lowercase": "b361a00c112687379d0b5a76d0f1efab6f287ebd8c85f0092281ed64d065eccc"
+        },
+        "expires_at": "2026-10-04T17:35:02.621Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects",
+      "request": {
+        "command_schema": "storyos.command.create-project.request.v1",
+        "create_project_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-78f1-91b7-584a2265b1f5",
+          "title": "Reference 1"
+        },
+        "prospective_project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-project.response.v1",
+        "correlation_id": "01a107ee-ec48-78f1-91b7-584a2265b1f5",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+        },
+        "command_id": "01a107f7-303f-7711-b5d0-5dda18b49deb",
+        "author_command_admission_id": "01a107f7-303f-7711-b5d0-5de7806c70a2",
+        "receipt": {
+          "receipt_id": "01a107f7-303f-7711-b5d0-5dfb7d8f64ce",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+          },
+          "command_kind": "createProject",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.createProject.jcs.v1",
+            "value_hex_lowercase": "b361a00c112687379d0b5a76d0f1efab6f287ebd8c85f0092281ed64d065eccc"
+          },
+          "idempotency_key": "01a107ee-ec48-7027-8386-bbc4cd613e30",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a107f7-303f-7711-b5d0-5de7806c70a2",
+          "expected_heads": [],
+          "prior_heads": [],
+          "resulting_heads": [],
+          "authoritative_revision_ids": [],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [],
+          "author_action_sequence": null,
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:30:02.747Z"
+        },
+        "project": {
+          "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678",
+          "title": "Reference 1",
+          "open": {
+            "kind": "empty"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a107f7-2fc7-75f0-a88e-b6927c9e3678/manuscript/tree",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.manuscript-tree.response.v1",
+        "correlation_id": "01a107f7-30f2-73b1-9808-25eb1da1d1d0",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+        },
+        "tree_revision": "1",
+        "snapshot": {
+          "snapshot_id": "01a107f7-308d-71e0-b872-fc3185a3e0d6",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+          },
+          "snapshot_kind": "canonical",
+          "project_activity_position": "1",
+          "source_watermarks": {},
+          "projection_generations": {},
+          "redaction_profile": "storyos.author.v1",
+          "schema_profile": "storyos.public.release.1",
+          "replay_generation": "1",
+          "created_at": "2026-10-04T17:30:02.778Z",
+          "expires_at": null
+        },
+        "volumes": []
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a107f7-2fc7-75f0-a88e-b6927c9e3678/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/volumes",
+        "command_schema": "storyos.command.create-volume.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createVolume.jcs.v1",
+          "value_hex_lowercase": "b83b0680a0438d696af2879ea4ffd19e694421ce49af33ed828e83e531a2fbc9"
+        },
+        "idempotency_key": "01a107ee-ec48-712e-a6ce-cc1b78e51061"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T17:35:02.903Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a107f7-2fc7-75f0-a88e-b6927c9e3678/volumes",
+      "request": {
+        "command_schema": "storyos.command.create-volume.request.v1",
+        "create_volume_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-7311-82ce-6f447ed4d57b",
+          "title": "Night1931",
+          "expected_tree_revision": "1"
+        }
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-volume.response.v1",
+        "correlation_id": "01a107ee-ec48-7311-82ce-6f447ed4d57b",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+        },
+        "command_id": "01a107f7-3126-7671-ae5e-76f9fa6be1e0",
+        "author_command_admission_id": "01a107f7-3126-7671-ae5e-77063f8ae545",
+        "receipt": {
+          "receipt_id": "01a107f7-3126-7671-ae5e-771d65b10b72",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+          },
+          "command_kind": "createVolume",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.createVolume.jcs.v1",
+            "value_hex_lowercase": "b83b0680a0438d696af2879ea4ffd19e694421ce49af33ed828e83e531a2fbc9"
+          },
+          "idempotency_key": "01a107ee-ec48-712e-a6ce-cc1b78e51061",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a107f7-3126-7671-ae5e-77063f8ae545",
+          "expected_heads": [],
+          "prior_heads": [],
+          "resulting_heads": [],
+          "authoritative_revision_ids": [],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [
+            "01a107f7-3134-7c30-9b99-fb978170f8cd"
+          ],
+          "author_action_sequence": "1",
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:30:02.933Z"
+        },
+        "project": {
+          "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678",
+          "title": "Reference 1",
+          "open": {
+            "kind": "empty"
+          }
+        },
+        "effect": {
+          "kind": "authoritative_applied",
+          "volume_id": "01a107f7-313a-7f00-a773-d6bda00f257d",
+          "title": "Night1931",
+          "tree_revision": "2",
+          "order": "1",
+          "project_activity_position": "2"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a107f7-2fc7-75f0-a88e-b6927c9e3678/manuscript/tree",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.manuscript-tree.response.v1",
+        "correlation_id": "01a107f7-3164-7a40-b94d-b3101769c62d",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+        },
+        "tree_revision": "2",
+        "snapshot": {
+          "snapshot_id": "01a107f7-3134-7c30-9b99-fbb289dfdd50",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+          },
+          "snapshot_kind": "canonical",
+          "project_activity_position": "2",
+          "source_watermarks": {},
+          "projection_generations": {},
+          "redaction_profile": "storyos.author.v1",
+          "schema_profile": "storyos.public.release.1",
+          "replay_generation": "1",
+          "created_at": "2026-10-04T17:30:02.954Z",
+          "expires_at": null
+        },
+        "volumes": [
+          {
+            "volume_id": "01a107f7-313a-7f00-a773-d6bda00f257d",
+            "title": "Night1931",
+            "order": "1",
+            "chapters": []
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a107f7-2fc7-75f0-a88e-b6927c9e3678/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+        "command_schema": "storyos.command.create-chapter.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createChapter.jcs.v1",
+          "value_hex_lowercase": "1ddd67a9f9e8474374afaba46d06aee002fb8913aa190fe3d40438be0a56bcac"
+        },
+        "idempotency_key": "01a107ee-ec48-7ec9-a3ca-828dd5f4b3b2"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T17:35:03.001Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a107f7-2fc7-75f0-a88e-b6927c9e3678/volumes/01a107f7-313a-7f00-a773-d6bda00f257d/chapters",
+      "request": {
+        "command_schema": "storyos.command.create-chapter.request.v1",
+        "create_chapter_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-74b0-8741-c7a87ce42c82",
+          "title": "Dawn1537",
+          "expected_tree_revision": "2"
+        }
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-chapter.response.v1",
+        "correlation_id": "01a107ee-ec48-74b0-8741-c7a87ce42c82",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+        },
+        "command_id": "01a107f7-3189-7110-b591-7ace1c171367",
+        "author_command_admission_id": "01a107f7-3189-7110-b591-7ad6217e3f2a",
+        "receipt": {
+          "receipt_id": "01a107f7-3189-7110-b591-7ae3fba65751",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+          },
+          "command_kind": "createChapter",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.createChapter.jcs.v1",
+            "value_hex_lowercase": "1ddd67a9f9e8474374afaba46d06aee002fb8913aa190fe3d40438be0a56bcac"
+          },
+          "idempotency_key": "01a107ee-ec48-7ec9-a3ca-828dd5f4b3b2",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a107f7-3189-7110-b591-7ad6217e3f2a",
+          "expected_heads": [],
+          "prior_heads": [],
+          "resulting_heads": [],
+          "authoritative_revision_ids": [],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [
+            "01a107f7-3198-7762-9324-8515e2cc3446"
+          ],
+          "author_action_sequence": "2",
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:30:03.033Z"
+        },
+        "project": {
+          "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678",
+          "title": "Reference 1",
+          "open": {
+            "kind": "current_chapter",
+            "current_chapter_id": "01a107f7-319d-7da2-91a3-9d09595ab33a"
+          }
+        },
+        "effect": {
+          "kind": "authoritative_applied",
+          "volume_id": "01a107f7-313a-7f00-a773-d6bda00f257d",
+          "chapter_id": "01a107f7-319d-7da2-91a3-9d09595ab33a",
+          "title": "Dawn1537",
+          "tree_revision": "3",
+          "order": "1",
+          "current_chapter_id": "01a107f7-319d-7da2-91a3-9d09595ab33a",
+          "project_activity_position": "3"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a107f7-2fc7-75f0-a88e-b6927c9e3678/manuscript/tree",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.manuscript-tree.response.v1",
+        "correlation_id": "01a107f7-31ca-7880-b8a1-425093123dbc",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+        },
+        "tree_revision": "3",
+        "snapshot": {
+          "snapshot_id": "01a107f7-3198-7762-9324-8534cbdd434f",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a107f7-2fc7-75f0-a88e-b6927c9e3678"
+          },
+          "snapshot_kind": "canonical",
+          "project_activity_position": "3",
+          "source_watermarks": {},
+          "projection_generations": {},
+          "redaction_profile": "storyos.author.v1",
+          "schema_profile": "storyos.public.release.1",
+          "replay_generation": "1",
+          "created_at": "2026-10-04T17:30:03.057Z",
+          "expires_at": null
+        },
+        "volumes": [
+          {
+            "volume_id": "01a107f7-313a-7f00-a773-d6bda00f257d",
+            "title": "Night1931",
+            "order": "1",
+            "chapters": [
+              {
+                "chapter_id": "01a107f7-319d-7da2-91a3-9d09595ab33a",
+                "title": "Dawn1537",
+                "order": "1"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
