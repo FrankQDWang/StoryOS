@@ -1,5 +1,7 @@
 # StoryOS test asset audit
 
+> Complete evidence: the Git tag `evidence/test-asset-audit-2026-10-05` holds the full study, including the files that are not in `main` (the `evidence/` directory, compressed batches, and files above 64 KB). Read them with `git show evidence/test-asset-audit-2026-10-05:docs/research/test-asset-audit/<path>`.
+
 The audit gives a verdict to all 865 runtime test cases in 256 test files. The final recommendations are 330 DELETE, 478 KEEP, 52 MERGE and 5 MOVE. Direct deletion candidates cover 13,750 source lines, including exclusive support. MERGE and MOVE add no immediate line savings.
 
 The 30 fixed random samples are complete: 16 KILL, 13 MISS, and 1 timeout-only BLOCKED. The failed and blocked results are retained. The report does not treat every deletion as mutation-proved redundancy. Private unreachable guards, static declarations and unexecuted schema fields have explicit limits and transfer requirements.
