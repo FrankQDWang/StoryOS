@@ -1,8 +1,8 @@
 use std::convert::Infallible;
 
 use storyos_application::{
-    ExportProjectArchiveError, PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,
-    ProjectCommandError, ProjectScope,
+    PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts, ProjectCommandError,
+    ProjectScope,
 };
 use storyos_core::{ReadableExportChapter, ReadableExportVolume, ReasonCode, canonical_json};
 use tokio_postgres::GenericClient;
@@ -101,7 +101,7 @@ pub(crate) async fn insert_archive_pinned_export_source(
     export_id: &str,
     source_snapshot_id: &str,
     families: &[PinnedArchiveFamily],
-) -> Result<(), ExportProjectArchiveError> {
+) -> Result<(), ProjectCommandError> {
     let facts = archive_facts_json(families)?;
     insert_pinned_export_source(
         client,
@@ -112,7 +112,7 @@ pub(crate) async fn insert_archive_pinned_export_source(
         &facts,
     )
     .await
-    .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))
+    .map_err(unavailable)
 }
 
 async fn insert_pinned_export_source(
@@ -257,11 +257,11 @@ fn volumes_from_facts_json(facts: &serde_json::Value) -> Option<Vec<ReadableExpo
 
 fn archive_facts_json(
     families: &[PinnedArchiveFamily],
-) -> Result<serde_json::Value, ExportProjectArchiveError> {
+) -> Result<serde_json::Value, ProjectCommandError> {
     let mut encoded = Vec::with_capacity(families.len());
     for family in families {
-        let rows: serde_json::Value = serde_json::from_str(&family.rows_json)
-            .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
+        let rows: serde_json::Value =
+            serde_json::from_str(&family.rows_json).map_err(unavailable)?;
         encoded.push(serde_json::json!({
             "table": family.table,
             "path": family.path,
