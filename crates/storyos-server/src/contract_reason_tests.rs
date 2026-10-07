@@ -3,12 +3,12 @@ use std::fmt::Debug;
 use serde::de::DeserializeOwned;
 use storyos_contracts as contracts;
 use storyos_core::{
-    ArchiveProjectConflict, ArchiveProjectNoEffect, CloseEditorFlowDraftConflict,
-    CloseEditorFlowDraftRefusal, CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict,
-    CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal,
-    DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal, PauseAgentRunConflict,
-    PauseAgentRunNoEffect, ReasonCode, RejectProposalOperationsConflict,
+    ArchiveProjectConflict, ArchiveProjectNoEffect, CancelAgentRunConflict, CancelAgentRunNoEffect,
+    CloseEditorFlowDraftConflict, CloseEditorFlowDraftRefusal, CreateChapterConflict,
+    CreateChapterRefusal, CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict,
+    DeleteChapterNoEffect, DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect,
+    DeleteVolumeRefusal, ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal,
+    PauseAgentRunConflict, PauseAgentRunNoEffect, ReasonCode, RejectProposalOperationsConflict,
     RejectProposalOperationsRefusal, ReopenRejectedOperationsConflict,
     ReopenRejectedOperationsRefusal, ReopenWithdrawnProposalConflict,
     ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, ReplanProposalConflict,
@@ -518,5 +518,17 @@ fn every_agent_run_pause_reason_maps_to_its_public_reason() {
     assert_maps(vec![(
         PauseAgentRunConflict::TerminalRun,
         contracts::PauseAgentRunConflictReason::TerminalRun,
+    )]);
+}
+
+#[test]
+fn every_agent_run_cancel_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        CancelAgentRunNoEffect::AlreadyCancelled,
+        contracts::CancelAgentRunNoEffectReason::AlreadyCancelled,
+    )]);
+    assert_maps(vec![(
+        CancelAgentRunConflict::TerminalRun,
+        contracts::CancelAgentRunConflictReason::TerminalRun,
     )]);
 }

@@ -1,10 +1,9 @@
 use storyos_application::{
     AgentRunControlCommand, AgentRunControlConflict, AgentRunControlEffect, AgentRunControlError,
-    AgentRunControlIntent, AgentRunControlNoEffect, AgentRunControlSettlement,
-    AgentRunControlStatus, AgentRunControlStore, ChapterId, Project, ProjectCommandChallengeError,
-    ProjectCommandChallengeUse,
+    AgentRunControlIntent, AgentRunControlSettlement, AgentRunControlStore, ChapterId, Project,
+    ProjectCommandChallengeError, ProjectCommandChallengeUse,
 };
-use storyos_core::{AgentRunLifecycle, CancelAgentRunResult, classify_cancel_agent_run};
+use storyos_core::AgentRunLifecycle;
 use uuid::Uuid;
 
 use crate::command_response_project::{
@@ -152,57 +151,12 @@ async fn persist_control(
                 }
             }
         }
-        AgentRunControlIntent::Cancel => match classify_cancel_agent_run(lifecycle) {
-            CancelAgentRunResult::Applied => {
-                let in_flight = crate::agent_run_recovery::in_flight_attempt(
-                    client,
-                    &command.project_scope,
-                    &command.run_id,
-                )
-                .await
-                .map_err(|error| AgentRunControlError::Unavailable(Box::new(error)))?;
-                let effect =
-                    apply_control(client, command, AgentRunControlStatus::Cancelled).await?;
-                if in_flight {
-                    crate::agent_run_recovery::mark_cancellation_duties(
-                        client,
-                        &command.project_scope,
-                        &command.run_id,
-                    )
-                    .await
-                    .map_err(|error| AgentRunControlError::Unavailable(Box::new(error)))?;
-                }
-                crate::agent_run_successor::prohibit_automatic_successor(
-                    client,
-                    &command.project_scope,
-                    &command.run_id,
-                )
-                .await
-                .map_err(|error| AgentRunControlError::Unavailable(Box::new(error)))?;
-                effect
-            }
-            CancelAgentRunResult::AlreadyCancelled => AgentRunControlEffect::NoEffect {
-                reason: AgentRunControlNoEffect::AlreadyCancelled,
-            },
-            CancelAgentRunResult::Terminal => AgentRunControlEffect::Conflicted {
-                reason: AgentRunControlConflict::TerminalRun,
-            },
-        },
     };
     insert_control_admission(client, command).await?;
     let (result_kind, result_payload) = match &effect {
         AgentRunControlEffect::Retained { .. } => {
             ("no_effect", r#"{"reason":"steering_retained"}"#.to_owned())
         }
-        AgentRunControlEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
-        AgentRunControlEffect::NoEffect { reason } => (
-            "no_effect",
-            match reason {
-                AgentRunControlNoEffect::AlreadyCancelled => {
-                    r#"{"reason":"already_cancelled"}"#.to_owned()
-                }
-            },
-        ),
         AgentRunControlEffect::Conflicted { .. } => {
             ("conflicted", r#"{"reason":"terminal_run"}"#.to_owned())
         }
@@ -254,10 +208,10 @@ async fn persist_control(
         .await
         .map_err(control_database_error)?;
     let project_activity_position = match &effect {
-        AgentRunControlEffect::Retained { .. } | AgentRunControlEffect::Applied { .. } => {
+        AgentRunControlEffect::Retained { .. } => {
             write_control_activity(client, command, &effect).await?
         }
-        AgentRunControlEffect::NoEffect { .. } | AgentRunControlEffect::Conflicted { .. } => 0,
+        AgentRunControlEffect::Conflicted { .. } => 0,
     };
     let encoded_project = encode_command_response_project(&response_project);
     client
@@ -287,42 +241,6 @@ async fn persist_control(
         project_activity_position,
         response_project,
         effect,
-    })
-}
-
-async fn apply_control(
-    client: &tokio_postgres::Client,
-    command: &AgentRunControlCommand,
-    control_status: AgentRunControlStatus,
-) -> Result<AgentRunControlEffect, AgentRunControlError> {
-    let status = match control_status {
-        AgentRunControlStatus::Cancelled => "cancelled",
-    };
-    let fence_generation = client
-        .query_one(
-            "UPDATE storyos.agent_runs
-                SET status = $4,
-                    fence_token = fence_token + 1,
-                    lease_expires_at = NULL,
-                    wakeup_pending = false
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-          RETURNING fence_token",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.run_id,
-                &status,
-            ],
-        )
-        .await
-        .map_err(control_database_error)?
-        .get::<_, i64>(0);
-    Ok(AgentRunControlEffect::Applied {
-        run_id: command.run_id.clone(),
-        status: control_status,
-        fence_generation: u64::try_from(fence_generation).map_err(control_parse_error)?,
     })
 }
 
@@ -426,21 +344,7 @@ async fn write_control_activity(
                 }),
             )
         }
-        AgentRunControlEffect::Applied {
-            status,
-            fence_generation,
-            ..
-        } => {
-            let kind = match status {
-                AgentRunControlStatus::Cancelled => "agent_run_cancelled",
-            };
-            (
-                kind,
-                "authoritative_applied",
-                serde_json::json!({"kind": kind, "run_id": command.run_id, "fence_generation": fence_generation.to_string()}),
-            )
-        }
-        AgentRunControlEffect::NoEffect { .. } | AgentRunControlEffect::Conflicted { .. } => {
+        AgentRunControlEffect::Conflicted { .. } => {
             return Err(AgentRunControlError::BindingConflict);
         }
     };
@@ -474,7 +378,6 @@ async fn write_control_activity(
 
 pub(super) fn command_kind(intent: AgentRunControlIntent) -> &'static str {
     match intent {
-        AgentRunControlIntent::Cancel => "cancelAgentRun",
         AgentRunControlIntent::Steer => "steerAgentRun",
     }
 }

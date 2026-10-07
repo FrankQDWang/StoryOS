@@ -1,13 +1,14 @@
 use storyos_application::{
-    AgentRunControlRefusal, ConversationSelection, CreateAgentRunInput, CreateAgentRunSettlement,
-    PauseAgentRunInput, PauseAgentRunSettlement, ProjectCommandError, ProjectScope,
-    RefusableCommandError, UpdateProjectAssistanceInput,
+    AgentRunControlRefusal, CancelAgentRunInput, CancelAgentRunSettlement, ConversationSelection,
+    CreateAgentRunInput, CreateAgentRunSettlement, PauseAgentRunInput, PauseAgentRunSettlement,
+    ProjectCommandError, ProjectScope, RefusableCommandError, UpdateProjectAssistanceInput,
 };
 use storyos_core::{AssistanceAvailability, CreateAgentRunRefusal, ReceiptResult};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
+use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::set_current_chapter_authority_tests::seed_two_chapters;
 use crate::update_volume_tests::seed_project;
 
@@ -20,6 +21,13 @@ pub(super) const PAUSE_AGENT_RUN: Route = Route {
     method: storyos_contracts::PAUSE_AGENT_RUN_METHOD,
     path: storyos_contracts::PAUSE_AGENT_RUN_PATH,
     schema: storyos_contracts::PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
+};
+
+pub(super) const CANCEL_AGENT_RUN: Route = Route {
+    kind: "cancelAgentRun",
+    method: storyos_contracts::CANCEL_AGENT_RUN_METHOD,
+    path: storyos_contracts::CANCEL_AGENT_RUN_PATH,
+    schema: storyos_contracts::CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
 };
 
 pub(super) const CREATE_AGENT_RUN: Route = Route {
@@ -137,6 +145,16 @@ pub(super) async fn pause_agent_run(
         .map_err(SequenceError::sequence)
 }
 
+pub(super) async fn cancel_agent_run(
+    store: &PostgresProjectReader,
+    call: &CommandCall<CancelAgentRunInput>,
+) -> Result<CancelAgentRunSettlement, ProjectCommandError> {
+    store
+        .cancel_agent_run(&call.envelope, &call.input)
+        .await
+        .map_err(SequenceError::sequence)
+}
+
 /// Inserts one leased AgentRun with `status` and a pending wakeup, without its foreign keys.
 ///
 /// The status must be one that the Worker never claims, because later HTTP files drain all work.
@@ -187,30 +205,63 @@ pub(super) async fn pause_agent_run_call(
     .await
 }
 
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_refusal_before_admission_writes_no_row_and_keeps_the_challenge_unused() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let scope = seed_project(&store, "b200").await;
+/// One applicable cancelAgentRun of a paused AgentRun in a new Project.
+pub(super) async fn cancel_agent_run_call(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+) -> CommandCall<CancelAgentRunInput> {
+    let scope = seed_project(store, &format!("{base:04x}")).await;
     let run_id = Uuid::now_v7().to_string();
-    let call = issued(
-        &store,
+    seed_run(admin, &scope, &run_id, "paused").await;
+    issued(
+        store,
         &scope,
-        /*suffix*/ 0xb209,
-        &PAUSE_AGENT_RUN,
-        PauseAgentRunInput {
-            run_id: run_id.clone(),
-        },
+        base + 9,
+        &CANCEL_AGENT_RUN,
+        CancelAgentRunInput { run_id },
     )
-    .await;
-    let refused = store.pause_agent_run(&call.envelope, &call.input).await;
+    .await
+}
+
+/// The rows of a refusal before Admission, and then the Run and the Admission after the same
+/// call settles against a waiting AgentRun.
+#[derive(Debug, PartialEq)]
+struct RefusedThenSettled {
+    refused_rows: [i64; 4],
+    settled: ReceiptResult,
+    run: (String, i64, bool, bool, String),
+}
+
+/// Settles `input` of `route` for a missing AgentRun, then seeds that AgentRun and settles the
+/// same call again.
+async fn refused_then_settled<C>(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    base: u16,
+    route: &Route,
+    input: impl FnOnce(String) -> C,
+) -> RefusedThenSettled
+where
+    C: ProjectCommand<Error = RefusableCommandError<AgentRunControlRefusal>>,
+{
+    let scope = seed_project(store, &format!("{base:04x}")).await;
+    let run_id = Uuid::now_v7().to_string();
+    let call = issued(store, &scope, base + 9, route, input(run_id.clone())).await;
+    let refused = settle_project_command(store, &call.envelope, &call.input).await;
+    assert!(matches!(
+        refused,
+        Err(RefusableCommandError::RefusedBeforeAdmission(
+            AgentRunControlRefusal::MissingRun
+        ))
+    ));
     let key = &call.envelope.challenge_binding.idempotency_key;
-    let written = request_rows(&admin, key).await;
-    seed_run(&admin, &scope, &run_id, "waiting").await;
-    let settled = pause_agent_run(&store, &call).await.unwrap();
+    let written = request_rows(admin, key).await;
+    seed_run(admin, &scope, &run_id, "waiting").await;
+    let settled = settle_project_command(store, &call.envelope, &call.input)
+        .await
+        .map_err(SequenceError::sequence)
+        .unwrap();
     let run = admin
         .query_one(
             "SELECT run.status, run.fence_token, run.lease_expires_at IS NULL, run.wakeup_pending,
@@ -221,33 +272,57 @@ async fn a_refusal_before_admission_writes_no_row_and_keeps_the_challenge_unused
         )
         .await
         .unwrap();
-    assert!(matches!(
-        refused,
-        Err(RefusableCommandError::RefusedBeforeAdmission(
-            AgentRunControlRefusal::MissingRun
-        ))
-    ));
-    assert_eq!(written, [0, 0, 0, 1]);
-    assert_eq!(
-        settled.outcome.receipt_result(),
-        ReceiptResult::AuthoritativeApplied
-    );
-    assert_eq!(
-        (
-            run.get::<_, String>(/*idx*/ 0),
-            run.get::<_, i64>(/*idx*/ 1),
-            run.get::<_, bool>(/*idx*/ 2),
-            run.get::<_, bool>(/*idx*/ 3),
-            run.get::<_, String>(/*idx*/ 4),
+    RefusedThenSettled {
+        refused_rows: written,
+        settled: settled.outcome.receipt_result(),
+        run: (
+            run.get(/*idx*/ 0),
+            run.get(/*idx*/ 1),
+            run.get(/*idx*/ 2),
+            run.get(/*idx*/ 3),
+            run.get(/*idx*/ 4),
         ),
-        (
-            "paused".to_owned(),
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_refusal_before_admission_writes_no_row_and_keeps_the_challenge_unused() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let observed = vec![
+        refused_then_settled(
+            &store,
+            &admin,
+            /*base*/ 0xb200,
+            &PAUSE_AGENT_RUN,
+            |run_id| PauseAgentRunInput { run_id },
+        )
+        .await,
+        refused_then_settled(
+            &store,
+            &admin,
+            /*base*/ 0xd500,
+            &CANCEL_AGENT_RUN,
+            |run_id| CancelAgentRunInput { run_id },
+        )
+        .await,
+    ];
+    // Without an in-flight Model Attempt, cancellation clears the wakeup.
+    let settled = |status: &str| RefusedThenSettled {
+        refused_rows: [0, 0, 0, 1],
+        settled: ReceiptResult::AuthoritativeApplied,
+        run: (
+            status.to_owned(),
             1,
             true,
             false,
-            "agent_run_control".to_owned()
-        )
-    );
+            "agent_run_control".to_owned(),
+        ),
+    };
+    assert_eq!(observed, vec![settled("paused"), settled("cancelled")]);
 }
 
 #[tokio::test]

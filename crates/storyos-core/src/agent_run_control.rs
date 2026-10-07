@@ -48,13 +48,20 @@ pub enum PauseAgentRunConflict {
 reason_codes!(PauseAgentRunNoEffect { AlreadyPaused => "already_paused" });
 reason_codes!(PauseAgentRunConflict { TerminalRun => "terminal_run" });
 
-/// Result of classifying one cancelAgentRun against the current Run.
+/// The `no_effect` reason of a cancelAgentRun.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CancelAgentRunResult {
-    Applied,
+pub enum CancelAgentRunNoEffect {
     AlreadyCancelled,
-    Terminal,
 }
+
+/// The `conflicted` reason of a cancelAgentRun.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CancelAgentRunConflict {
+    TerminalRun,
+}
+
+reason_codes!(CancelAgentRunNoEffect { AlreadyCancelled => "already_cancelled" });
+reason_codes!(CancelAgentRunConflict { TerminalRun => "terminal_run" });
 
 /// Classifies pause without treating it as cancellation.
 pub fn classify_pause_agent_run(
@@ -76,13 +83,19 @@ pub fn classify_pause_agent_run(
 }
 
 /// Classifies cancel as the irreversible fence, including a paused Run.
-pub fn classify_cancel_agent_run(lifecycle: AgentRunLifecycle) -> CancelAgentRunResult {
+pub fn classify_cancel_agent_run(
+    lifecycle: AgentRunLifecycle,
+) -> TransitionOutcome<(), CancelAgentRunNoEffect, CancelAgentRunConflict, Infallible> {
     match lifecycle {
         AgentRunLifecycle::Queued
         | AgentRunLifecycle::Claimed
         | AgentRunLifecycle::Waiting
-        | AgentRunLifecycle::Paused => CancelAgentRunResult::Applied,
-        AgentRunLifecycle::Cancelled => CancelAgentRunResult::AlreadyCancelled,
-        AgentRunLifecycle::Completed | AgentRunLifecycle::Refused => CancelAgentRunResult::Terminal,
+        | AgentRunLifecycle::Paused => TransitionOutcome::Applied(()),
+        AgentRunLifecycle::Cancelled => {
+            TransitionOutcome::NoEffect(CancelAgentRunNoEffect::AlreadyCancelled)
+        }
+        AgentRunLifecycle::Completed | AgentRunLifecycle::Refused => {
+            TransitionOutcome::Conflicted(CancelAgentRunConflict::TerminalRun)
+        }
     }
 }

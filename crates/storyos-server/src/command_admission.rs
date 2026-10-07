@@ -147,6 +147,7 @@ project_command_request!(
     nested expand_refused_edit_draft_to_proposal_input
 );
 project_command_request!(contracts::PauseAgentRunRequest, nested pause_agent_run_input);
+project_command_request!(contracts::CancelAgentRunRequest, nested cancel_agent_run_input);
 project_command_request!(contracts::CreateAgentRunRequest, nested create_agent_run_input);
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {

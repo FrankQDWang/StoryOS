@@ -13,7 +13,9 @@ use crate::command_sequence::{
     ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
 };
 
-use super::agent_run::{create_agent_run_call, park_run, pause_agent_run_call};
+use super::agent_run::{
+    cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
+};
 use super::draft::{close_editor_flow_draft_call, expand_refused_edit_draft_call};
 use super::project_session::{
     archive_project_call, take_over_project_writer_call, update_project_assistance_call,
@@ -377,6 +379,12 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &pause_agent_run_call(&store, &admin, /*base*/ 0xb230).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &cancel_agent_run_call(&store, &admin, /*base*/ 0xd530).await,
+        )
+        .await,
         failed_then_settled(&store, &admin, &create).await,
     ];
     park_run(&admin, &create).await;
@@ -397,6 +405,6 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::Refused));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 9]);
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10]);
     assert_eq!(observed, expected);
 }

@@ -11,7 +11,7 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::set_current_chapter_authority_tests::open_session;
 use crate::update_volume_tests::seed_project;
 
-use super::agent_run::{create_agent_run_call, pause_agent_run_call};
+use super::agent_run::{cancel_agent_run_call, create_agent_run_call, pause_agent_run_call};
 use super::draft::{close_editor_flow_draft_call, expand_refused_edit_draft_call};
 use super::project_session::{
     TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, archive_project_call, take_over_project_writer,
@@ -198,11 +198,17 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
         in_progress_retry(
             &store,
             &admin,
+            &cancel_agent_run_call(&store, &admin, /*base*/ 0xd520).await,
+        )
+        .await,
+        in_progress_retry(
+            &store,
+            &admin,
             &create_agent_run_call(&store, /*base*/ 0xb330).await,
         )
         .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 22]);
+    assert_eq!(observed, vec![(true, [0; 5]); 23]);
 }
 
 #[tokio::test]

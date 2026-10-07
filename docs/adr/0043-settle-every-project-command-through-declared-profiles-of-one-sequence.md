@@ -123,6 +123,16 @@ Specification C ([#1043](https://github.com/FrankQDWang/StoryOS/issues/1043)) mo
   - A zero-authority Receipt with an Author Action gives a store fault. Before, replay ignored the Author Action. The receipt relation trigger already prevents such a record.
   - An applied Receipt with a `reason` payload value replays as applied. Before, it gave `409 idempotency_binding_conflict`. The Receipt shape checks already require an empty applied payload, so this change is not observable.
 
+#### `cancelAgentRun`
+
+- `cancelAgentRun` uses the `agent_run_control` Admission form, the `ActivityOnly` profile with the Activity kind `agent_run_cancelled`, and the Command-response Project. It locks the Project row and then the AgentRun row. It does not refuse an archived Project.
+- A missing AgentRun is a refusal before Admission. It gives `404 resource_unavailable`, as on `main`.
+- The route uses the generic project command admission with the problem order of `main`, as `pauseAgentRun` does.
+- The applied outcome keeps its order of effects. It reads the in-flight Model Attempt before the status update. It sets the wakeup only for an in-flight Model Attempt. It prohibits the automatic successor. The fence token, lease, and wakeup values of each update do not change. Thus the Worker sends one Abort and fences late output as before (ADR 0039).
+- The applied outcome, `already_cancelled`, `terminal_run`, and the rows do not change. The zero-authority outcomes write no Activity record, as on `main`.
+- The Core classifier returns a Core Transition Outcome with the reasons `already_cancelled` and `terminal_run`.
+- The observable changes of `pauseAgentRun` in the list above also apply to `cancelAgentRun`, with the same causes. The behavior-equivalence review against `main` found no other difference.
+
 #### Contention refusal
 
 - A command can declare the refusal for a serialization failure, a unique violation, or a deadlock of its first-use transaction. This includes the commit. The sequence finds such a failure in the source chain of a store fault. It rolls back, so no row stays and the Command Challenge stays unused.
