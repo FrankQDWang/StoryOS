@@ -1,4 +1,4 @@
-use storyos_application::{AgentRunControlRefusal, CancelAgentRunInput, RefusableCommandError};
+use storyos_application::{CancelAgentRunInput, RefusableCommandError};
 use storyos_core::TransitionOutcome;
 
 use super::command_admission::{
@@ -6,6 +6,7 @@ use super::command_admission::{
     SettledReceipt, TargetValidation, admit, controlled_project,
 };
 use super::contract_reason::contract_reason;
+use super::steer_agent_run::control_refusal;
 use super::*;
 
 const CANCEL_AGENT_RUN: ProjectCommandRoute = ProjectCommandRoute {
@@ -45,9 +46,7 @@ pub(super) async fn cancel_agent_run(
         .cancel_agent_run(&admitted.envelope, &admitted.input)
         .await
         .map_err(|error| match error {
-            RefusableCommandError::RefusedBeforeAdmission(AgentRunControlRefusal::MissingRun) => {
-                resource_unavailable()
-            }
+            RefusableCommandError::RefusedBeforeAdmission(refusal) => control_refusal(refusal),
             RefusableCommandError::Command(error) => CANCEL_AGENT_RUN.problem(error),
         })?;
     let result = settlement.outcome.receipt_result();

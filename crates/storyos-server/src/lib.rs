@@ -18,7 +18,6 @@ use uuid::Uuid;
 
 mod accept_proposal;
 mod acknowledgement_hold;
-mod agent_run_control;
 mod archive_project;
 mod author_edit;
 mod author_edit_outcome;
@@ -57,6 +56,7 @@ mod request_origin;
 mod session_bootstrap;
 mod set_current_chapter;
 mod snapshot;
+mod steer_agent_run;
 mod takeover;
 mod undo_latest_author_action;
 mod update_chapter;
@@ -81,7 +81,6 @@ pub use web_assets::WebAssetSet;
 pub use web_host::router_with_web;
 
 use accept_proposal::accept_proposal;
-use agent_run_control::steer_agent_run;
 use archive_project::archive_project;
 use author_edit::apply_author_edit;
 use author_edit_outcome::{
@@ -117,6 +116,7 @@ use replan_proposal::replan_proposal;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use set_current_chapter::set_current_chapter;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
+use steer_agent_run::steer_agent_run;
 use takeover::take_over_project_writer;
 use undo_latest_author_action::undo_latest_author_action;
 use update_chapter::update_chapter;

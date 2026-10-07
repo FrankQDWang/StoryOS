@@ -38,6 +38,7 @@ use super::proposal_generation::{
     COMPLETE_READY_PARTIAL_PROPOSAL, CONTINUE_PROPOSAL_GENERATION, complete_ready_partial_proposal,
     continue_proposal_generation, ready_partial_proposal,
 };
+use super::steer_agent_run::{STEER_AGENT_RUN, steer_agent_run, steering};
 use super::structure::{
     CREATE_CHAPTER, CREATE_VOLUME, DELETE_CHAPTER, DELETE_VOLUME, SET_CURRENT_CHAPTER,
     UPDATE_CHAPTER, UPDATE_VOLUME, create_chapter, create_volume, delete_chapter, delete_volume,
@@ -611,6 +612,17 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         outcome,
     ));
 
+    let scope = seed_project(&store, "c710").await;
+    let (waiting, completed) = (Uuid::now_v7().to_string(), Uuid::now_v7().to_string());
+    seed_run(&admin, &scope, &waiting, "waiting").await;
+    seed_run(&admin, &scope, &completed, "completed").await;
+    for (suffix, run_id) in [(0xc711, &waiting), (0xc712, &waiting), (0xc713, &completed)] {
+        let input = steering(&admin, run_id, /*characters*/ 12).await;
+        let call = issued(&store, &scope, suffix, &STEER_AGENT_RUN, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, steer_agent_run).await;
+        observed.push((STEER_AGENT_RUN.kind, outcome));
+    }
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
@@ -624,6 +636,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let proposal_created_from_draft = ("proposal_created_from_draft", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
     let writer_takeover = ("no_effect", [1, 0, 1, 0, 1]);
+    let steering_retained = ("no_effect", [1, 0, 1, 0, 0]);
     let conflicted = ("conflicted", [1, 0, 0, 0, 0]);
     let refused = ("refused", [1, 0, 0, 0, 0]);
     assert_eq!(
@@ -711,6 +724,9 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("cancelAgentRun", no_effect),
             ("cancelAgentRun", conflicted),
             ("createAgentRun", activity_applied),
+            ("steerAgentRun", steering_retained),
+            ("steerAgentRun", steering_retained),
+            ("steerAgentRun", conflicted),
         ]
     );
     assert_eq!(rejection_records, vec![1; 4]);

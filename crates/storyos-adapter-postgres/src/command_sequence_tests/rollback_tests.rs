@@ -28,6 +28,7 @@ use super::proposal_decision::{
 use super::proposal_generation::{
     complete_ready_partial_proposal_call, continue_proposal_generation_call,
 };
+use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
     create_chapter_call, create_volume_call, delete_chapter_call, delete_volume_call,
     set_current_chapter_call, update_chapter_call, update_volume_call,
@@ -386,6 +387,12 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         )
         .await,
         failed_then_settled(&store, &admin, &create).await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &steer_agent_run_call(&store, &admin, /*base*/ 0xc730).await,
+        )
+        .await,
     ];
     park_run(&admin, &create).await;
     let rolled_back = |result| {
@@ -406,5 +413,6 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::Refused));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10]);
+    expected.push(rolled_back(ReceiptResult::NoEffect));
     assert_eq!(observed, expected);
 }
