@@ -123,7 +123,7 @@ async fn the_admit_step_keeps_the_fence_open_and_replays_the_first_admission() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let ready = export_call(&store, /*base*/ 0xd500).await;
+    let ready = export_call(&store, /*base*/ 0xe600).await;
     let ([.., activity_before, _], _) = admitted_rows(&admin, &ready).await;
     let first = export(&store, &ready).await.unwrap();
     let open = admitted_rows(&admin, &ready).await;
@@ -131,7 +131,7 @@ async fn the_admit_step_keeps_the_fence_open_and_replays_the_first_admission() {
     let ready_settlement = settle(&store, &ready, &first).await;
     let after_ready = export(&store, &retry(&ready)).await.unwrap();
 
-    let refused = export_call(&store, /*base*/ 0xd510).await;
+    let refused = export_call(&store, /*base*/ 0xe610).await;
     let refused_first = export(&store, &refused).await.unwrap();
     run_without_foreign_keys(
         &admin,
@@ -227,7 +227,7 @@ async fn a_failed_or_refused_admission_writes_no_row_and_keeps_the_challenge_unu
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let failing = export_call(&store, /*base*/ 0xd520).await;
+    let failing = export_call(&store, /*base*/ 0xe620).await;
     let ([.., activity_before, _], _) = admitted_rows(&admin, &failing).await;
     // A Pinned Export Source with the export identity fails the last work row insert.
     let scope = &failing.envelope.project_scope;
@@ -257,7 +257,7 @@ async fn a_failed_or_refused_admission_writes_no_row_and_keeps_the_challenge_unu
     let after_failure = export(&store, &failing).await.unwrap();
     settle(&store, &failing, &after_failure).await;
 
-    let archived = export_call(&store, /*base*/ 0xd530).await;
+    let archived = export_call(&store, /*base*/ 0xe630).await;
     admin
         .execute(
             "UPDATE storyos.projects SET lifecycle_state = 'archived'
@@ -309,7 +309,7 @@ async fn pre_capture_and_damaged_admission_evidence_give_different_errors() {
         .await;
     let (store, admin) = stores().await;
     let mut faults = Vec::new();
-    for (base, settled) in [(0xd540_u16, false), (0xd550, true)] {
+    for (base, settled) in [(0xe640_u16, false), (0xe650, true)] {
         let call = export_call(&store, base).await;
         let first = export(&store, &call).await.unwrap();
         if settled {
