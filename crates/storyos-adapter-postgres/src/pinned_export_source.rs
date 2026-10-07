@@ -1,12 +1,16 @@
+use std::convert::Infallible;
+
 use storyos_application::{
-    ExportHumanReadableManuscriptError, ExportProjectArchiveError, PinnedArchiveFamily,
-    PinnedExportSource, PinnedExportSourceFacts, ProjectScope,
+    ExportProjectArchiveError, PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,
+    ProjectCommandError, ProjectScope,
 };
-use storyos_core::{ReadableExportChapter, ReadableExportVolume, canonical_json};
+use storyos_core::{ReadableExportChapter, ReadableExportVolume, ReasonCode, canonical_json};
 use tokio_postgres::GenericClient;
 
 use super::{ProjectReadError, read_error};
 use crate::author_edit::sha256_hex;
+use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_sequence::unavailable;
 
 /// Receipt reason when export settlement refuses an archived Project, or when
 /// settlement finds no Project row.
@@ -15,6 +19,36 @@ pub(crate) const EXPORT_REFUSED_RECEIPT_REASON: &str = "archived_project";
 /// Receipt reason when settlement cannot prove the Pinned Export Source.
 pub(crate) const PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON: &str =
     "pinned_export_source_unavailable";
+
+/// A refusal reason that the Worker settlement of an export writes on its Domain Receipt.
+#[derive(Debug)]
+pub(crate) enum ExportSettlementRefusal {
+    ArchivedProject,
+    PinnedExportSourceUnavailable,
+}
+
+impl ReasonCode for ExportSettlementRefusal {
+    fn code(&self) -> &'static str {
+        match self {
+            Self::ArchivedProject => EXPORT_REFUSED_RECEIPT_REASON,
+            Self::PinnedExportSourceUnavailable => PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON,
+        }
+    }
+
+    fn from_code(code: &str) -> Option<Self> {
+        [Self::ArchivedProject, Self::PinnedExportSourceUnavailable]
+            .into_iter()
+            .find(|reason| reason.code() == code)
+    }
+}
+
+/// Accepts the Domain Receipt that the Worker settlement of an admitted export writes: an
+/// applied Receipt or a refusal with a reason of `ExportSettlementRefusal`.
+pub(crate) fn check_export_settlement(replay: &CommandReplay) -> Result<(), ReplayFault> {
+    replay
+        .outcome::<Infallible, Infallible, ExportSettlementRefusal>("authoritative_applied")
+        .map(|_outcome| ())
+}
 
 /// Completeness profile stored with one Pinned Export Source row.
 #[derive(Clone, Copy)]
@@ -48,7 +82,7 @@ pub(crate) async fn insert_human_readable_pinned_export_source(
     export_id: &str,
     source_snapshot_id: &str,
     volumes: &[ReadableExportVolume],
-) -> Result<(), ExportHumanReadableManuscriptError> {
+) -> Result<(), ProjectCommandError> {
     insert_pinned_export_source(
         client,
         scope,
@@ -58,7 +92,7 @@ pub(crate) async fn insert_human_readable_pinned_export_source(
         &human_readable_facts_json(volumes),
     )
     .await
-    .map_err(|error| ExportHumanReadableManuscriptError::Unavailable(Box::new(error)))
+    .map_err(unavailable)
 }
 
 pub(crate) async fn insert_archive_pinned_export_source(

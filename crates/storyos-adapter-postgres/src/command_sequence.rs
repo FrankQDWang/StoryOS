@@ -15,6 +15,7 @@ use crate::PostgresProjectReader;
 mod action_only;
 mod activity_only;
 mod admission;
+mod admit;
 mod chapter_selection;
 mod records;
 mod response;
@@ -23,6 +24,7 @@ use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
 pub(crate) use action_only::{ActionOnly, ActionSequence};
 pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
+pub(crate) use admit::{AdmitCommand, AdmitSpec, admit_project_command};
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
 use records::{ReceiptRecord, insert_activity_payload, insert_receipt, lock_project};
 pub(crate) use response::{NoResponse, ProjectAssistanceResponse, ProjectResponse, ResponseRecord};
@@ -134,6 +136,9 @@ pub(crate) enum ReplayEffect {
     /// One query that takes the owner, Project, and Receipt identities as `$1`, `$2`, and `$3`.
     /// Its optional row holds one JSON object text.
     Query(&'static str),
+    /// One query that takes the owner, Project, and Admission identities as `$1`, `$2`, and
+    /// `$3`. Its optional row holds one JSON object text.
+    AdmissionQuery(&'static str),
 }
 
 pub(crate) struct CommandSpec {
@@ -418,16 +423,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
             )
             .await
             .and_then(|replay| replay_command(command, &replay))
-            .map_err(|fault| {
-                match fault {
-                    ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
-                    ReplayFault::HistoricalAcknowledgementUnavailable => {
-                        ProjectCommandError::HistoricalAcknowledgementUnavailable
-                    }
-                    ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
-                }
-                .into()
-            })
+            .map_err(|fault| replay_problem(fault).into())
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
             transaction.rollback().await.map_err(challenge_error)?;
@@ -460,7 +456,14 @@ async fn first_use<C: ProjectCommand>(
         heads,
         zero_receipt,
     } = command.classify(client, envelope, &project).await?;
-    insert_admission(client, envelope, &C::SPEC, &admission).await?;
+    insert_admission(
+        client,
+        envelope,
+        C::SPEC.kind,
+        &C::SPEC.missing_admission,
+        &admission,
+    )
+    .await?;
     let (mut zero_fields, zero_refs, observed_effect) = match zero_receipt {
         ZeroReceipt::Reason => (serde_json::Map::new(), ReceiptRefs::default(), None),
         ZeroReceipt::Observed {
@@ -610,6 +613,16 @@ pub(crate) fn unavailable(
     error: impl Into<Box<dyn std::error::Error + Send + Sync>>,
 ) -> ProjectCommandError {
     ProjectCommandError::Unavailable(error.into())
+}
+
+fn replay_problem(fault: ReplayFault) -> ProjectCommandError {
+    match fault {
+        ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
+        ReplayFault::HistoricalAcknowledgementUnavailable => {
+            ProjectCommandError::HistoricalAcknowledgementUnavailable
+        }
+        ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
+    }
 }
 
 fn challenge_problem(

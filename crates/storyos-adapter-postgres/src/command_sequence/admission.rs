@@ -4,7 +4,7 @@ use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use tokio_postgres::Client;
 
 use super::{
-    Admission, CommandSpec, EditorAdmission, EditorWriter, MissingAdmission, ProjectActionClass,
+    Admission, EditorAdmission, EditorWriter, MissingAdmission, ProjectActionClass,
     TakeoverAdmission, unavailable,
 };
 
@@ -12,7 +12,8 @@ use super::{
 pub(super) async fn insert_admission(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
-    spec: &CommandSpec,
+    command_kind: &str,
+    missing_admission: &MissingAdmission,
     admission: &Admission,
 ) -> Result<(), ProjectCommandError> {
     let binding = &envelope.client_binding;
@@ -67,7 +68,7 @@ pub(super) async fn insert_admission(
                         &challenge.idempotency_key,
                         &envelope.correlation_id,
                         &command_bytes,
-                        &spec.kind,
+                        &command_kind,
                         &action_class,
                     ],
                 )
@@ -148,7 +149,7 @@ pub(super) async fn insert_admission(
                         &binding.binding_ref,
                         &binding.client_contract_revision,
                         &binding.security_policy_revision,
-                        &spec.kind,
+                        &command_kind,
                         &client_writer_generation,
                         target_refs,
                     ],
@@ -224,7 +225,7 @@ pub(super) async fn insert_admission(
                         &binding.binding_ref,
                         &binding.client_contract_revision,
                         &binding.security_policy_revision,
-                        &spec.kind,
+                        &command_kind,
                     ],
                 )
                 .await
@@ -232,7 +233,7 @@ pub(super) async fn insert_admission(
     }
     .map_err(unavailable)?;
     if inserted != 1 {
-        return Err(match spec.missing_admission {
+        return Err(match missing_admission {
             MissingAdmission::InvalidChallenge => ProjectCommandError::InvalidChallenge,
             MissingAdmission::BindingConflict => ProjectCommandError::BindingConflict,
             MissingAdmission::InvalidWriter => ProjectCommandError::WriterIneligible,
