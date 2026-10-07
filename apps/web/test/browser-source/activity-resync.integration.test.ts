@@ -195,7 +195,7 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
 });
 
 it.each([
-  "valid", "valid_other_session", "valid_activity_advance", "scope", "locator_scope", "session",
+  "valid", "valid_other_session", "valid_activity_advance", "valid_activity_after_snapshot", "scope", "locator_scope", "session",
   "generation", "binding", "reused_base", "digest", "snapshot", "position_before_base",
   "position_after_chapter", "position_invalid", "expired", "drift",
 ])("resumes a Takeover winner without rebinding old journal evidence: %s", async (fault) => {
@@ -217,7 +217,7 @@ it.each([
       project_activity_position: "5", created_at: "2026-08-20T04:00:00.000Z" },
   };
   const chapter = { ...structuredClone(scenario.chapter), project_activity_position:
-    fault === "valid_activity_advance" ? "6" : "5" };
+    fault === "valid_activity_advance" || fault === "valid_activity_after_snapshot" ? "6" : "5" };
   const canonical: SnapshotDescriptor = {
     snapshot_id: CANONICAL_SNAPSHOT, project_scope: scenario.project.project_scope,
     snapshot_kind: "canonical", project_activity_position:

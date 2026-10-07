@@ -77,6 +77,10 @@ mod update_chapter_tests;
 mod update_chapter_rank_batch_tests;
 
 #[cfg(test)]
+#[path = "numeric_tree_order_tests.rs"]
+mod numeric_tree_order_tests;
+
+#[cfg(test)]
 #[path = "delete_chapter_tests.rs"]
 mod delete_chapter_tests;
 
