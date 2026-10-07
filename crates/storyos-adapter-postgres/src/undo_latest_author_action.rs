@@ -16,6 +16,11 @@ use uuid::Uuid;
 
 use super::*;
 use crate::author_edit::{parse_u64, sha256_hex};
+use crate::set_current_chapter::CurrentChapterCompensation;
+use crate::structural_authority_settlement::StructureCompensation;
+use crate::undo_compensation::{
+    CompensationAdapter, CompensationReplay, ForwardCommand, UndoDisposition,
+};
 use crate::undo_frontier::{LoadedUndoFrontier, ObservedFrontier, ObservedProseFrontier};
 
 impl UndoLatestAuthorActionStore for PostgresProjectReader {
@@ -82,24 +87,6 @@ async fn persist_undo(
     if lifecycle_state != "active" {
         return Err(UndoLatestAuthorActionError::BindingConflict);
     }
-    let observed = match observed {
-        Some(ObservedFrontier::CurrentChapter(frontier)) => {
-            if crate::undo_current_chapter::live_chapter_is_lawful_target(
-                client,
-                command,
-                &frontier.prior_chapter_id,
-            )
-            .await?
-            {
-                Some(ObservedFrontier::CurrentChapter(frontier))
-            } else {
-                Some(ObservedFrontier::Barrier {
-                    sequence: frontier.sequence,
-                })
-            }
-        }
-        other => other,
-    };
     let retry_source = match &observed {
         Some(ObservedFrontier::Prose(_) | ObservedFrontier::Proposal(_)) => {
             crate::undo_draft_close::load_frontier(
@@ -129,7 +116,7 @@ async fn persist_undo(
             .unwrap_or_default()
             .to_owned(),
     });
-    let session_chapter = crate::undo_structure::editor_session_chapter(client, command).await?;
+    let session_chapter = crate::undo_frontier::editor_session_chapter(client, command).await?;
     let (admission_chapter, admission_expected) = match &observed {
         Some(ObservedFrontier::Acceptance(frontier)) => (
             Some(frontier.chapter_id.as_str()),
@@ -222,22 +209,11 @@ async fn persist_undo(
                 persist_compensation(client, command, frontier, source_sequence).await
             }
             Some(ObservedFrontier::Structure(frontier)) => {
-                crate::undo_structure::persist_structure_compensation(
-                    client,
-                    command,
-                    frontier,
-                    source_sequence,
-                )
-                .await
+                StructureCompensation::compensate(client, command, frontier, source_sequence).await
             }
             Some(ObservedFrontier::CurrentChapter(frontier)) => {
-                crate::undo_current_chapter::persist_current_chapter_compensation(
-                    client,
-                    command,
-                    frontier,
-                    source_sequence,
-                )
-                .await
+                CurrentChapterCompensation::compensate(client, command, frontier, source_sequence)
+                    .await
             }
             Some(ObservedFrontier::Proposal(frontier)) => {
                 crate::undo_proposal::persist_proposal_compensation(
@@ -929,7 +905,8 @@ async fn read_undo_settlement(
                         compensation_snapshot.project_activity_position,
                         idempotency.acknowledgement_format,
                         idempotency.response_project::text, receipt.result_payload::text,
-                        source_receipt.result_kind, restored_proposal.revision_id::text
+                        source_receipt.result_kind, restored_proposal.revision_id::text,
+                        source_receipt.command_kind
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -1099,7 +1076,25 @@ async fn read_undo_settlement(
                     .map_err(undo_parse_error)?;
                 let authoritative_commit_id = row.get::<_, Option<String>>(8);
                 let source_result_kind = row.get::<_, Option<String>>(18);
-                if source_result_kind.as_deref() == Some("proposal_closure_changed") {
+                let replay = CompensationReplay {
+                    source_sequence,
+                    author_action_sequence,
+                    authoritative_commit_id: authoritative_commit_id.clone(),
+                    snapshot_id: row.get(/*idx*/ 13),
+                    author_undo_frontier_sequence: current_frontier,
+                };
+                let disposition = match (row.get::<_, Option<String>>(/*idx*/ 20), source_result_kind.as_deref()) {
+                    (Some(command_kind), Some(result_kind)) => {
+                        ForwardCommand::from_receipt(&command_kind, result_kind)
+                            .map(ForwardCommand::disposition)
+                    }
+                    (None, _) | (_, None) => None,
+                };
+                if let Some(UndoDisposition::Structure(_)) = disposition {
+                    StructureCompensation::decode(&client, command, &replay).await?
+                } else if let Some(UndoDisposition::CurrentChapter) = disposition {
+                    CurrentChapterCompensation::decode(&client, command, &replay).await?
+                } else if source_result_kind.as_deref() == Some("proposal_closure_changed") {
                     let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
                         .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
                     let proposal_revision_id = payload["proposal_revision_id"]
@@ -1155,23 +1150,6 @@ async fn read_undo_settlement(
                         author_undo_frontier_sequence: current_frontier,
                         proposal_id: None,
                         proposal_revision_id: None,
-                    }
-                } else if let Some(authoritative_commit_id) = authoritative_commit_id {
-                    UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
-                        source_sequence,
-                        author_action_sequence,
-                        authoritative_commit_id,
-                        snapshot_id: row
-                            .get::<_, Option<String>>(13)
-                            .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-                        author_undo_frontier_sequence: current_frontier,
-                    }
-                } else if let Some(snapshot_id) = row.get::<_, Option<String>>(13) {
-                    UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
-                        source_sequence,
-                        author_action_sequence,
-                        snapshot_id,
-                        author_undo_frontier_sequence: current_frontier,
                     }
                 } else {
                     UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
