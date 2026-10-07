@@ -53,6 +53,10 @@ pub(crate) struct CompensationReplay {
     pub(crate) author_action_sequence: u64,
     pub(crate) authoritative_commit_id: Option<String>,
     pub(crate) snapshot_id: Option<String>,
+    /// The JSON text of the result payload of the Undo Receipt.
+    pub(crate) result_payload: String,
+    /// The Proposal Revision that a Proposal Compensation appended to the source head.
+    pub(crate) restored_proposal_revision_id: Option<String>,
     pub(crate) author_undo_frontier_sequence: Option<u64>,
 }
 

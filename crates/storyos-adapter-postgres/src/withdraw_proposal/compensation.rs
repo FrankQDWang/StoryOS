@@ -1,16 +1,72 @@
+//! The author withdrawal Compensation of Author Undo (ADR 0044).
+
 use storyos_application::{
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
     UndoLatestAuthorActionSettlementEffect,
 };
+use storyos_core::AuthorUndoFrontierKind;
+use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::author_edit::parse_u64;
-use super::undo_latest_author_action::{
+use crate::author_edit::parse_u64;
+use crate::undo_compensation::{CompensationAdapter, CompensationReplay};
+use crate::undo_latest_author_action::{
     UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
     undo_from_author_edit, undo_from_session,
 };
 
-pub(super) struct ObservedAuthorWithdrawal {
+/// Reopens a Proposal that the author withdrew.
+pub(crate) struct AuthorWithdrawalCompensation;
+
+impl CompensationAdapter for AuthorWithdrawalCompensation {
+    type Forward = ();
+    type Evidence = ObservedAuthorWithdrawal;
+
+    async fn load(
+        client: &Client,
+        command: &UndoLatestAuthorActionCommand,
+        _forward: (),
+        sequence: u64,
+    ) -> Result<Option<ObservedAuthorWithdrawal>, UndoLatestAuthorActionError> {
+        load_author_withdrawal(client, command, sequence).await
+    }
+
+    fn frontier_kind(_evidence: &ObservedAuthorWithdrawal) -> AuthorUndoFrontierKind {
+        AuthorUndoFrontierKind::ReversibleStructureTransition
+    }
+
+    async fn compensate(
+        client: &Client,
+        command: &UndoLatestAuthorActionCommand,
+        evidence: &ObservedAuthorWithdrawal,
+        source_sequence: u64,
+    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
+        persist_withdrawal_compensation(client, command, evidence, source_sequence).await
+    }
+
+    async fn decode(
+        _client: &Client,
+        _command: &UndoLatestAuthorActionCommand,
+        replay: &CompensationReplay,
+    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
+        let payload: serde_json::Value = serde_json::from_str(&replay.result_payload)
+            .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
+        let proposal_revision_id = payload["proposal_revision_id"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
+        Ok(
+            UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
+                source_sequence: replay.source_sequence,
+                author_action_sequence: replay.author_action_sequence,
+                proposal_revision_id: Some(proposal_revision_id),
+                author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
+            },
+        )
+    }
+}
+
+pub(crate) struct ObservedAuthorWithdrawal {
     pub sequence: u64,
     pub chapter_id: String,
     pub current_revision_id: String,
@@ -19,8 +75,8 @@ pub(super) struct ObservedAuthorWithdrawal {
     pub base_authoritative_revision_id: String,
 }
 
-pub(super) async fn load_author_withdrawal(
-    client: &tokio_postgres::Client,
+async fn load_author_withdrawal(
+    client: &Client,
     command: &UndoLatestAuthorActionCommand,
     sequence: u64,
 ) -> Result<Option<ObservedAuthorWithdrawal>, UndoLatestAuthorActionError> {
@@ -82,8 +138,8 @@ pub(super) async fn load_author_withdrawal(
     }))
 }
 
-pub(super) async fn persist_withdrawal_compensation(
-    client: &tokio_postgres::Client,
+async fn persist_withdrawal_compensation(
+    client: &Client,
     command: &UndoLatestAuthorActionCommand,
     frontier: &ObservedAuthorWithdrawal,
     source_sequence: u64,

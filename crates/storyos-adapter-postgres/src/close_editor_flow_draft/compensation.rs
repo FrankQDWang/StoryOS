@@ -1,15 +1,69 @@
+//! The Draft close and expansion Compensation of Author Undo (ADR 0044).
+
 use storyos_application::{
     ProjectScope, UndoLatestAuthorActionCommand, UndoLatestAuthorActionError,
     UndoLatestAuthorActionSettlement, UndoLatestAuthorActionSettlementEffect,
 };
 use storyos_core::{AuthorUndoFrontierKind, canonical_json, hex_sha256};
+use tokio_postgres::Client;
 use uuid::Uuid;
 
+use crate::undo_compensation::{CompensationAdapter, CompensationReplay};
 use crate::undo_latest_author_action::{
     UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
 };
 
-pub(super) struct ObservedDraftClose {
+/// Reopens a Refused Edit Draft that the author closed or expanded to a Proposal.
+pub(crate) struct DraftCompensation;
+
+impl CompensationAdapter for DraftCompensation {
+    type Forward = ();
+    type Evidence = ObservedDraftClose;
+
+    async fn load(
+        client: &Client,
+        command: &UndoLatestAuthorActionCommand,
+        _forward: (),
+        sequence: u64,
+    ) -> Result<Option<ObservedDraftClose>, UndoLatestAuthorActionError> {
+        load_frontier(client, command, sequence).await
+    }
+
+    fn frontier_kind(evidence: &ObservedDraftClose) -> AuthorUndoFrontierKind {
+        evidence.kind.clone()
+    }
+
+    async fn compensate(
+        client: &Client,
+        command: &UndoLatestAuthorActionCommand,
+        evidence: &ObservedDraftClose,
+        _source_sequence: u64,
+    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
+        persist_compensation(client, command, evidence).await
+    }
+
+    async fn decode(
+        client: &Client,
+        command: &UndoLatestAuthorActionCommand,
+        replay: &CompensationReplay,
+    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
+        let payload: serde_json::Value = serde_json::from_str(&replay.result_payload)
+            .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
+        let event_id = payload["event_id"]
+            .as_str()
+            .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
+        Ok(UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
+            event: Box::new(read_event(client, &command.project_scope, event_id).await?),
+            author_undo_frontier_sequence: payload["author_undo_frontier_sequence"]
+                .as_str()
+                .map(str::parse)
+                .transpose()
+                .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?,
+        })
+    }
+}
+
+pub(crate) struct ObservedDraftClose {
     pub sequence: u64,
     pub draft_id: String,
     pub revision_id: String,
@@ -20,7 +74,7 @@ pub(super) struct ObservedDraftClose {
     pub derived_proposal: Option<(String, String)>,
 }
 
-pub(super) async fn load_frontier(
+pub(crate) async fn load_frontier(
     client: &tokio_postgres::Client,
     command: &UndoLatestAuthorActionCommand,
     sequence: u64,
@@ -108,7 +162,7 @@ pub(super) async fn load_frontier(
     }))
 }
 
-pub(super) async fn persist_compensation(
+async fn persist_compensation(
     client: &tokio_postgres::Client,
     command: &UndoLatestAuthorActionCommand,
     frontier: &ObservedDraftClose,
@@ -196,14 +250,14 @@ pub(super) async fn persist_compensation(
     })
 }
 
-pub(super) struct DraftReopenWrite {
+pub(crate) struct DraftReopenWrite {
     pub event_id: String,
     pub handler_receipt_id: String,
     pub sequence: String,
     pub created_at: String,
 }
 
-pub(super) async fn persist_reopen(
+pub(crate) async fn persist_reopen(
     client: &tokio_postgres::Client,
     command: &UndoLatestAuthorActionCommand,
     frontier: &ObservedDraftClose,
@@ -270,7 +324,7 @@ pub(super) async fn persist_reopen(
     Ok(event)
 }
 
-pub(super) async fn read_event(
+pub(crate) async fn read_event(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     event_id: &str,
