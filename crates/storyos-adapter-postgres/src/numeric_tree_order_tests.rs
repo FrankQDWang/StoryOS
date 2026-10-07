@@ -1,13 +1,6 @@
 //! Canonical sibling order of ten or more siblings is numeric (ADR 0018).
 //! A text order puts rank 10 before rank 2.
 
-use storyos_application::{
-    CanonicalManuscriptTree, CreateVolumeInput, GetManuscriptTree, ProjectScope,
-    get_manuscript_tree, issue_project_command_challenge,
-    render_readable_manuscript_from_pinned_source,
-};
-use tokio_postgres::NoTls;
-
 use crate::PostgresProjectReader;
 use crate::command_sequence::tests::{
     applied, command_call, create_volume, update_chapter, update_volume,
@@ -15,7 +8,13 @@ use crate::command_sequence::tests::{
 use crate::pinned_export_source::{
     PinnedExportSourceCompleteness, PinnedExportSourceLoad, load_pinned_export_source,
 };
+use crate::update_chapter_rank_batch_tests::{connect_admin, runtime_store};
 use crate::update_volume_tests::{apply_chapter, named_issue, seed_project};
+use storyos_application::{
+    CanonicalManuscriptTree, CreateVolumeInput, GetManuscriptTree, ProjectScope,
+    get_manuscript_tree, issue_project_command_challenge,
+    render_readable_manuscript_from_pinned_source,
+};
 
 const VOLUME_COUNT: u16 = 10;
 const CHAPTER_COUNT: u16 = 12;
@@ -47,23 +46,6 @@ fn numbered(prefix: &str, count: u16) -> Vec<String> {
     (1..=count)
         .map(|index| format!("{prefix} {index}"))
         .collect()
-}
-
-async fn connect_admin() -> tokio_postgres::Client {
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
-    tokio::spawn(async move {
-        connection.await.unwrap();
-    });
-    admin
-}
-
-fn runtime_store() -> PostgresProjectReader {
-    PostgresProjectReader::new(
-        std::env::var("STORYOS_TEST_DATABASE_URL")
-            .expect("run through scripts/verify-project-scope.sh"),
-    )
 }
 
 /// One test sends more author commands than one fixed challenge window admits.
