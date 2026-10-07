@@ -1,0 +1,1356 @@
+{
+  "stages": {
+    "stage-1": [
+      {
+        "outcome": "createVolume:authoritative_applied",
+        "hits": 1350,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "createVolume:conflicted:stale_tree_revision",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "createVolume:refused:archived_project",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "createVolume:refused:invalid_title",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-001"
+      },
+      {
+        "outcome": "createChapter:authoritative_applied",
+        "hits": 954,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "createChapter:conflicted:stale_tree_revision",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "createChapter:refused:archived_project",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "createChapter:refused:invalid_title",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-001"
+      },
+      {
+        "outcome": "createChapter:refused:invalid_volume_join",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "createChapter:refused:invalid_placement",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateVolume:authoritative_applied",
+        "hits": 58,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateVolume:no_effect:unchanged",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateVolume:conflicted:stale_tree_revision",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateVolume:refused:archived_project",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateVolume:refused:invalid_title",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-001"
+      },
+      {
+        "outcome": "updateVolume:refused:invalid_order",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateVolume:refused:invalid_volume_join",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateChapter:authoritative_applied",
+        "hits": 31,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateChapter:no_effect:unchanged",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateChapter:conflicted:stale_tree_revision",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateChapter:refused:archived_project",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateChapter:refused:invalid_title",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-001"
+      },
+      {
+        "outcome": "updateChapter:refused:invalid_order",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateChapter:refused:invalid_chapter_join",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteVolume:authoritative_applied",
+        "hits": 67,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteVolume:no_effect:already_removed",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteVolume:conflicted:stale_tree_revision",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteVolume:refused:archived_project",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteVolume:refused:invalid_volume_join",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteVolume:refused:nonempty_volume",
+        "hits": 27,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteChapter:authoritative_applied",
+        "hits": 74,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteChapter:no_effect:already_removed",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteChapter:conflicted:stale_tree_revision",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteChapter:refused:archived_project",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "deleteChapter:refused:invalid_chapter_join",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "setCurrentChapter:authoritative_applied",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "setCurrentChapter:no_effect:already_current",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "setCurrentChapter:conflicted:stale_current_chapter",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "setCurrentChapter:conflicted:wrong_target_head",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "setCurrentChapter:refused:archived_project",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "setCurrentChapter:refused:invalid_chapter_join",
+        "hits": 41,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "setCurrentChapter:refused:empty_project",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-002"
+      },
+      {
+        "outcome": "updateProject:authoritative_applied",
+        "hits": 46,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateProject:no_effect:title_unchanged",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "updateProject:conflicted:stale_project_revision",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "archiveProject:authoritative_applied",
+        "hits": 186,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "archiveProject:no_effect:already_archived",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "archiveProject:conflicted:stale_project_revision",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      }
+    ],
+    "stage-2": [
+      {
+        "outcome": "applyAuthorEdit:refused_to_draft",
+        "hits": 40,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "applyAuthorEdit:authoritative_applied",
+        "hits": 596,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "applyAuthorEdit:proposal_revised",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "applyAuthorEdit:no_effect:content_unchanged",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "applyAuthorEdit:conflicted:stale_authoritative_head",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "applyAuthorEdit:conflicted:proposal_head_present",
+        "hits": 40,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "applyAuthorEdit:conflicted:ownership_changed",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "applyAuthorEdit:refused:unsupported_intent_shape",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "applyAuthorEdit:refused:invalid_selection",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "applyAuthorEdit:refused:target_mismatch",
+        "hits": 40,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "undoLatestAuthorAction:draft_compensated",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "undoLatestAuthorAction:compensated",
+        "hits": 62,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "undoLatestAuthorAction:reversal_required",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "undoLatestAuthorAction:conflicted:frontier_mismatch",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "undoLatestAuthorAction:conflicted:wrong_target_head",
+        "hits": 40,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "undoLatestAuthorAction:conflicted:source_binding_changed",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "undoLatestAuthorAction:unavailable:no_frontier",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "undoLatestAuthorAction:unavailable:barrier",
+        "hits": 21,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "undoLatestAuthorAction:unavailable:source_unavailable",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-003"
+      }
+    ],
+    "stage-3": [
+      {
+        "outcome": "acceptProposal:applied",
+        "hits": 40,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "acceptProposal:invalid:invalid_validation",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "acceptProposal:invalid:altered_candidate",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-005"
+      },
+      {
+        "outcome": "acceptProposal:conflicted:changed_head",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "acceptProposal:refused:wrong_scope",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "acceptProposal:refused:wrong_admission",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "acceptProposal:refused:stale_proposal_revision",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "acceptProposal:refused:not_eligible",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "acceptProposal:refused:operation_not_pending",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "acceptProposal:refused:duplicate_identities",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "acceptProposal:refused:missing_required_dependencies",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "acceptProposal:refused:incomplete_bundle_closure",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "rejectProposalOperations:resolved",
+        "hits": 81,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "rejectProposalOperations:conflicted:changed_head",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "rejectProposalOperations:refused:wrong_scope",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "rejectProposalOperations:refused:wrong_admission",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "rejectProposalOperations:refused:stale_proposal_revision",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "rejectProposalOperations:refused:not_eligible",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "rejectProposalOperations:refused:operation_not_pending",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "rejectProposalOperations:refused:duplicate_identities",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "rejectProposalOperations:refused:missing_required_dependencies",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "rejectProposalOperations:refused:incomplete_bundle_closure",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "withdrawProposal:resolved",
+        "hits": 121,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "withdrawProposal:conflicted:changed_head",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "withdrawProposal:refused:wrong_scope",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "withdrawProposal:refused:wrong_admission",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "withdrawProposal:refused:stale_proposal_revision",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "withdrawProposal:no_effect:unsupported_cause",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "withdrawProposal:no_effect:terminal_supersession",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-006"
+      },
+      {
+        "outcome": "withdrawProposal:no_effect:closure_not_open",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenWithdrawnProposal:resolved",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenWithdrawnProposal:conflicted:changed_head",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenWithdrawnProposal:refused:wrong_scope",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "reopenWithdrawnProposal:refused:wrong_admission",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "reopenWithdrawnProposal:refused:stale_proposal_revision",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenWithdrawnProposal:no_effect:terminal_supersession",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-006"
+      },
+      {
+        "outcome": "reopenWithdrawnProposal:no_effect:closure_not_withdrawn",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-007"
+      },
+      {
+        "outcome": "reopenWithdrawnProposal:no_effect:withdrawal_event_mismatch",
+        "hits": 60,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenRejectedOperations:resolved",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenRejectedOperations:conflicted:changed_head",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenRejectedOperations:refused:wrong_scope",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "reopenRejectedOperations:refused:wrong_admission",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "reopenRejectedOperations:refused:stale_proposal_revision",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenRejectedOperations:refused:not_eligible",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenRejectedOperations:refused:operation_not_rejected",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "reopenRejectedOperations:refused:unavailable_proof",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "replanProposal:resolved",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "replanProposal:conflicted:changed_head",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "replanProposal:refused:wrong_scope",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "replanProposal:refused:wrong_admission",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-004"
+      },
+      {
+        "outcome": "replanProposal:refused:stale_proposal_revision",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "replanProposal:refused:not_eligible",
+        "hits": 20,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "replanProposal:refused:unavailable_proof",
+        "hits": 40,
+        "status": "threshold_met",
+        "reachability": null
+      }
+    ],
+    "stage-4": [
+      {
+        "outcome": "takeOverProjectWriter:takeover_applied",
+        "hits": 25,
+        "status": "threshold_met",
+        "reachability": null
+      },
+      {
+        "outcome": "takeOverProjectWriter:takeover_compare_failed:writer_generation_advanced_after_admission",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-008"
+      },
+      {
+        "outcome": "takeOverProjectWriter:takeover_compare_failed:requester_became_current_after_admission",
+        "hits": 0,
+        "status": "reachability_limit",
+        "reachability": "R-008"
+      }
+    ]
+  },
+  "all_counts": {
+    "acceptProposal:applied": 40,
+    "acceptProposal:conflicted:changed_head": 20,
+    "acceptProposal:invalid:invalid_validation": 20,
+    "acceptProposal:refused:duplicate_identities": 20,
+    "acceptProposal:refused:incomplete_bundle_closure": 20,
+    "acceptProposal:refused:missing_required_dependencies": 20,
+    "acceptProposal:refused:not_eligible": 20,
+    "acceptProposal:refused:operation_not_pending": 20,
+    "acceptProposal:refused:stale_proposal_revision": 20,
+    "applyAuthorEdit:HTTP_422:command_target_refused": 20,
+    "applyAuthorEdit:authoritative_applied": 596,
+    "applyAuthorEdit:conflicted:ownership_changed": 20,
+    "applyAuthorEdit:conflicted:proposal_head_present": 40,
+    "applyAuthorEdit:conflicted:stale_authoritative_head": 20,
+    "applyAuthorEdit:no_effect:content_unchanged": 20,
+    "applyAuthorEdit:proposal_revised": 21,
+    "applyAuthorEdit:refused:invalid_selection": 20,
+    "applyAuthorEdit:refused:target_mismatch": 40,
+    "applyAuthorEdit:refused:unsupported_intent_shape": 20,
+    "applyAuthorEdit:refused_to_draft": 40,
+    "archiveProject:authoritative_applied": 186,
+    "archiveProject:conflicted:stale_project_revision": 20,
+    "archiveProject:no_effect:already_archived": 21,
+    "challenge:author_edit:capacity_120": 25,
+    "challenge:author_edit:retry_after_limit": 25,
+    "challenge:changed_digest_conflict": 25,
+    "challenge:exact_retry:True": 6196,
+    "challenge:expired_pending_refused": 20,
+    "challenge:shared:capacity_10": 25,
+    "challenge:shared:retry_after_limit": 25,
+    "createAgentRun:admitted": 444,
+    "createAgentRun:proposal_ready": 424,
+    "createChapter:HTTP_400:invalid_request": 21,
+    "createChapter:authoritative_applied": 954,
+    "createChapter:conflicted:stale_tree_revision": 21,
+    "createChapter:refused:archived_project": 20,
+    "createChapter:refused:invalid_placement": 20,
+    "createChapter:refused:invalid_volume_join": 21,
+    "createEditorSession:current_writer": 617,
+    "createEditorSession:read_only": 25,
+    "createProject:created": 1516,
+    "createVolume:HTTP_400:invalid_request": 20,
+    "createVolume:authoritative_applied": 1350,
+    "createVolume:conflicted:stale_tree_revision": 21,
+    "createVolume:refused:archived_project": 21,
+    "delayed_replay:applyAuthorEdit:True": 25,
+    "delayed_replay:applyAuthorEdit_after_expiry:True": 20,
+    "delayed_replay:createChapter:False": 26,
+    "delayed_replay:createEditorSession:False": 1,
+    "delayed_replay:createProject:True": 25,
+    "delayed_replay:createVolume:True": 25,
+    "deleteChapter:authoritative_applied": 74,
+    "deleteChapter:conflicted:stale_tree_revision": 21,
+    "deleteChapter:no_effect:already_removed": 21,
+    "deleteChapter:refused:archived_project": 20,
+    "deleteChapter:refused:invalid_chapter_join": 21,
+    "deleteVolume:authoritative_applied": 67,
+    "deleteVolume:conflicted:stale_tree_revision": 21,
+    "deleteVolume:no_effect:already_removed": 21,
+    "deleteVolume:refused:archived_project": 21,
+    "deleteVolume:refused:invalid_volume_join": 21,
+    "deleteVolume:refused:nonempty_volume": 27,
+    "expandRefusedEditDraftToProposal:proposal_created_from_draft": 20,
+    "foundation_probe:proposal_structural:HTTP_422": 1,
+    "project_rename_undo:compensated": 1,
+    "rejectProposalOperations:conflicted:changed_head": 20,
+    "rejectProposalOperations:refused:duplicate_identities": 20,
+    "rejectProposalOperations:refused:incomplete_bundle_closure": 20,
+    "rejectProposalOperations:refused:missing_required_dependencies": 20,
+    "rejectProposalOperations:refused:not_eligible": 20,
+    "rejectProposalOperations:refused:operation_not_pending": 20,
+    "rejectProposalOperations:refused:stale_proposal_revision": 20,
+    "rejectProposalOperations:resolved": 81,
+    "reopenRejectedOperations:conflicted:changed_head": 20,
+    "reopenRejectedOperations:refused:not_eligible": 20,
+    "reopenRejectedOperations:refused:operation_not_rejected": 20,
+    "reopenRejectedOperations:refused:stale_proposal_revision": 20,
+    "reopenRejectedOperations:refused:unavailable_proof": 20,
+    "reopenRejectedOperations:resolved": 20,
+    "reopenWithdrawnProposal:conflicted:changed_head": 20,
+    "reopenWithdrawnProposal:no_effect:withdrawal_event_mismatch": 60,
+    "reopenWithdrawnProposal:refused:stale_proposal_revision": 20,
+    "reopenWithdrawnProposal:resolved": 20,
+    "replanProposal:conflicted:changed_head": 20,
+    "replanProposal:refused:not_eligible": 20,
+    "replanProposal:refused:stale_proposal_revision": 20,
+    "replanProposal:refused:unavailable_proof": 40,
+    "replanProposal:resolved": 20,
+    "replay:acceptProposal:True": 200,
+    "replay:applyAuthorEdit:True": 917,
+    "replay:archiveProject:True": 66,
+    "replay:closeEditorFlowDraft:True": 20,
+    "replay:createAgentRun:True": 444,
+    "replay:createChapter:True": 634,
+    "replay:createEditorSession:True": 541,
+    "replay:createProject:True": 793,
+    "replay:createVolume:True": 741,
+    "replay:deleteChapter:True": 43,
+    "replay:deleteVolume:True": 54,
+    "replay:expandRefusedEditDraftToProposal:True": 20,
+    "replay:rejectProposalOperations:True": 221,
+    "replay:reopenRejectedOperations:True": 120,
+    "replay:reopenWithdrawnProposal:True": 120,
+    "replay:replanProposal:True": 120,
+    "replay:setCurrentChapter:True": 42,
+    "replay:takeOverProjectWriter:True": 25,
+    "replay:undoLatestAuthorAction:False": 21,
+    "replay:undoLatestAuthorAction:True": 203,
+    "replay:updateChapter:True": 39,
+    "replay:updateProject:True": 44,
+    "replay:updateProjectAssistance:True": 424,
+    "replay:updateVolume:True": 47,
+    "replay:withdrawProposal:True": 201,
+    "replay_binding:changed_body:refused": 25,
+    "replay_binding:new_key_old_nonce:refused": 25,
+    "replay_binding:wrong_nonce:refused": 25,
+    "schema_probe:createVolume:HTTP_400": 1,
+    "setCurrentChapter:authoritative_applied": 21,
+    "setCurrentChapter:conflicted:stale_current_chapter": 20,
+    "setCurrentChapter:conflicted:wrong_target_head": 21,
+    "setCurrentChapter:no_effect:already_current": 20,
+    "setCurrentChapter:refused:archived_project": 20,
+    "setCurrentChapter:refused:invalid_chapter_join": 41,
+    "takeOverProjectWriter:stale_before_admission": 25,
+    "takeOverProjectWriter:takeover_applied": 25,
+    "undoLatestAuthorAction:compensated": 62,
+    "undoLatestAuthorAction:conflicted:frontier_mismatch": 20,
+    "undoLatestAuthorAction:conflicted:source_binding_changed": 20,
+    "undoLatestAuthorAction:conflicted:wrong_target_head": 40,
+    "undoLatestAuthorAction:draft_compensated": 20,
+    "undoLatestAuthorAction:reversal_required": 20,
+    "undoLatestAuthorAction:unavailable:barrier": 21,
+    "undoLatestAuthorAction:unavailable:no_frontier": 20,
+    "updateChapter:HTTP_400:invalid_request": 20,
+    "updateChapter:authoritative_applied": 31,
+    "updateChapter:conflicted:stale_tree_revision": 21,
+    "updateChapter:no_effect:unchanged": 21,
+    "updateChapter:refused:archived_project": 21,
+    "updateChapter:refused:invalid_chapter_join": 21,
+    "updateChapter:refused:invalid_order": 21,
+    "updateProject:authoritative_applied": 46,
+    "updateProject:conflicted:stale_project_revision": 21,
+    "updateProject:no_effect:title_unchanged": 21,
+    "updateVolume:HTTP_400:invalid_request": 21,
+    "updateVolume:authoritative_applied": 58,
+    "updateVolume:conflicted:stale_tree_revision": 21,
+    "updateVolume:no_effect:unchanged": 21,
+    "updateVolume:refused:archived_project": 21,
+    "updateVolume:refused:invalid_order": 20,
+    "updateVolume:refused:invalid_volume_join": 21,
+    "withdrawProposal:conflicted:changed_head": 20,
+    "withdrawProposal:no_effect:closure_not_open": 20,
+    "withdrawProposal:no_effect:unsupported_cause": 20,
+    "withdrawProposal:refused:stale_proposal_revision": 20,
+    "withdrawProposal:resolved": 121,
+    "writer:stale_refused": 25
+  },
+  "project_allocation_audit": {
+    "createProject:missing_action": 1516,
+    "archiveProject:missing_action": 186,
+    "updateProject:missing_action": 46
+  },
+  "foundation_outcomes": [
+    {
+      "outcome": "acceptProposal:no_effect",
+      "hits": 0,
+      "status": "contract_gap",
+      "explanation": "A-008: no wire variant or specified trigger"
+    },
+    {
+      "outcome": "applyAuthorEdit:proposal_revised:structural_reshape_conflict",
+      "hits": 0,
+      "status": "current_profile_limit",
+      "explanation": "A-011: explicit Proposal target is replacement-only; structured classifier has no ProposalRevised"
+    }
+  ],
+  "differences": [
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "draft-binding-360-379.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-420-424.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-420-424.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-420-424.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-420-424.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-420-424.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-425-429.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-425-429.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-425-429.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-425-429.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-425-429.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-430-434.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-430-434.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-430-434.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-430-434.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-430-434.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-435-439.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-435-439.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-435-439.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-435-439.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-435-439.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-440-444.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-440-444.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-440-444.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-440-444.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-440-444.json.gz",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-minimals.json",
+      "label": "createChapter/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-002",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-minimals.json",
+      "label": "createEditorSession/delayed immutable acknowledgement",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-003",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "replay-minimals.json",
+      "label": "Project rename must not be skipped by Author Undo",
+      "expected": "Keep this sentence.",
+      "actual": "",
+      "finding_id": "D-001",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "proposal-undo-353.json.gz",
+      "label": "D-004: Undo response preserves immutable authoritative payload",
+      "expected": {
+        "revision_id": "01a1084f-26bc-73c1-8ecd-8f3137b18129",
+        "body": "A quiet room before dawn."
+      },
+      "actual": {
+        "revision_id": "01a1084f-26bc-73c1-8ecd-8f3137b18129",
+        "body": ""
+      },
+      "seed_case": "353/proposal/proposal-undo",
+      "trace_start": 1,
+      "trace_end": 56,
+      "finding_id": "D-004",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "withdrawal-undo-354.json.gz",
+      "label": "undoLatestAuthorAction/Command exact retry bytes",
+      "expected": true,
+      "actual": false,
+      "finding_id": "D-005",
+      "classification": "implementation_defect"
+    },
+    {
+      "evidence": "withdrawal-undo-354.json.gz",
+      "label": "D-004: Undo response preserves immutable authoritative payload",
+      "expected": {
+        "revision_id": "01a1084f-5299-71e2-9ebf-768b4cffdbf0",
+        "body": "A quiet room before dawn."
+      },
+      "actual": {
+        "revision_id": "01a1084f-5299-71e2-9ebf-768b4cffdbf0",
+        "body": ""
+      },
+      "seed_case": "354/proposal/withdrawal-undo",
+      "trace_start": 1,
+      "trace_end": 55,
+      "finding_id": "D-004",
+      "classification": "implementation_defect"
+    }
+  ],
+  "unclassified_differences": 0
+}

@@ -275,6 +275,7 @@
     {"pattern": ".cursor/*", "kind": "agent-guidance", "group": "complete"},
     {"pattern": ".githooks/*", "kind": "git-policy", "group": "complete"},
     {"pattern": ".gitattributes", "kind": "git-policy", "group": "complete"},
+    {"pattern": ".ignore", "kind": "configuration", "group": "complete"},
     {"pattern": ".github/*", "kind": "ci-policy", "group": "complete"},
     {"pattern": "*.md", "kind": "documentation-input", "group": "contracts"},
     {"pattern": "Cargo.toml", "kind": "configuration", "group": "complete"},

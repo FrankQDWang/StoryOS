@@ -1,0 +1,1285 @@
+{
+  "seed": 300,
+  "count": 1,
+  "stage": "proposals",
+  "case": null,
+  "base": "479224809cdaae997cda51cb8853e3fafa242b65",
+  "coverage": {
+    "challenge:exact_retry:True": 5,
+    "replay:createProject:True": 1,
+    "createProject:created": 1,
+    "replay:createVolume:True": 1,
+    "createVolume:authoritative_applied": 1,
+    "replay:createChapter:True": 1,
+    "createChapter:authoritative_applied": 1,
+    "replay:createEditorSession:True": 1,
+    "replay:applyAuthorEdit:True": 1,
+    "applyAuthorEdit:authoritative_applied": 1
+  },
+  "differences": [],
+  "trace": [
+    {
+      "method": "GET",
+      "path": "/api/v1/protocol",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.protocol-profile.response.v1",
+        "api_major": 1,
+        "public_protocol_release": "storyos.public.release.1",
+        "envelope_version": 1,
+        "problem_profile": "storyos.problem.v1",
+        "activity_profile": "storyos.project-activity.v1",
+        "limit_profile_revision": "storyos.foundation.absolute.v1",
+        "max_json_string_utf8_bytes": 1048576,
+        "compatibility_profile": "storyos.public.same-release.v1",
+        "contract_revision": "release1-wire-catalog-2026-09-27-expiry-rebuild",
+        "required_capabilities": [
+          "project_lifecycle",
+          "volume_chapter_lifecycle",
+          "chapter_navigation",
+          "manuscript_search",
+          "direct_author_edit",
+          "single_match_replace",
+          "multi_match_cross_location_proposal",
+          "manuscript_statistics",
+          "human_readable_manuscript_export",
+          "portable_project_archive",
+          "editor_session_takeover",
+          "snapshot_resync",
+          "proposal_draft_lifecycle",
+          "project_activity",
+          "acknowledgement_loss_outcome_query"
+        ],
+        "release_identity": {
+          "schema_id": "storyos.compatibility.release-identity.v1",
+          "api_major": 1,
+          "public_protocol_release": "storyos.public.release.1",
+          "envelope_profile": "storyos.public.envelope.v1",
+          "contract_graph_revision": "release1-wire-catalog-2026-09-27-expiry-rebuild",
+          "contract_graph_digest": "sha256:e18e4b121933df479b274b93a57a3ae93cb638a442e6329de006d8d670fc9f68",
+          "web_client_contract_revision": "storyos.web-client.release-1.v3",
+          "server_contract_revision": "storyos.server.release-1.v7",
+          "worker_contract_revision": "storyos.worker.release-1.v6",
+          "generated_client_revision": "storyos.typescript-client.release-1.v32",
+          "openapi_digest": "sha256:fa7740402d9daf63a4425db1e954d27e35017c0063c0ec72604096110ca9ca02",
+          "json_schema_catalog_digest": "sha256:76e298b0063aa1162f1a3ce530df2438e3505bce7b0ec0c4d6c267c068358db4",
+          "typescript_artifact_digest": "sha256:970fce9a7a4bc5795ca1907cc9a961defd4b98d378a4cfd2e735ab50e387fed8",
+          "fixture_corpus_digest": "sha256:741d6e9ed7268419deb1e3c46230d930029403a705f5b4c0740744f9853495a7",
+          "activity_profile": "storyos.project-activity.v1",
+          "limit_profile_revision": "storyos.foundation.absolute.v1"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/anti-forgery-challenges",
+      "request": {
+        "command_schema": "storyos.command.create-project.request.v1",
+        "create_project_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-776d-98b0-71497d9217e0",
+          "title": "Reference 300/author-edit"
+        },
+        "idempotency_key": "01a107ee-ec48-7c67-a5a0-32c6d2ba9053"
+      },
+      "status": 200,
+      "response": {
+        "prospective_project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createProject.jcs.v1",
+          "value_hex_lowercase": "6d726634fdb9ea9eaae51233d8e2e6692795d63674f50b1910cbc4a804b2bcb3"
+        },
+        "expires_at": "2026-10-04T18:01:03.925Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/anti-forgery-challenges",
+      "request": {
+        "command_schema": "storyos.command.create-project.request.v1",
+        "create_project_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-776d-98b0-71497d9217e0",
+          "title": "Reference 300/author-edit"
+        },
+        "idempotency_key": "01a107ee-ec48-7c67-a5a0-32c6d2ba9053"
+      },
+      "status": 200,
+      "response": {
+        "prospective_project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createProject.jcs.v1",
+          "value_hex_lowercase": "6d726634fdb9ea9eaae51233d8e2e6692795d63674f50b1910cbc4a804b2bcb3"
+        },
+        "expires_at": "2026-10-04T18:01:03.925Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects",
+      "request": {
+        "command_schema": "storyos.command.create-project.request.v1",
+        "create_project_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-776d-98b0-71497d9217e0",
+          "title": "Reference 300/author-edit"
+        },
+        "prospective_project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-project.response.v1",
+        "correlation_id": "01a107ee-ec48-776d-98b0-71497d9217e0",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "command_id": "01a1080f-02e9-7653-ab04-ce6aaf852dde",
+        "author_command_admission_id": "01a1080f-02e9-7653-ab04-ce7ac85541fe",
+        "receipt": {
+          "receipt_id": "01a1080f-02e9-7653-ab04-ce82a2475e91",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "command_kind": "createProject",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.createProject.jcs.v1",
+            "value_hex_lowercase": "6d726634fdb9ea9eaae51233d8e2e6692795d63674f50b1910cbc4a804b2bcb3"
+          },
+          "idempotency_key": "01a107ee-ec48-7c67-a5a0-32c6d2ba9053",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a1080f-02e9-7653-ab04-ce7ac85541fe",
+          "expected_heads": [],
+          "prior_heads": [],
+          "resulting_heads": [],
+          "authoritative_revision_ids": [],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [],
+          "author_action_sequence": null,
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:56:03.953Z"
+        },
+        "project": {
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+          "title": "Reference 300/author-edit",
+          "open": {
+            "kind": "empty"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects",
+      "request": {
+        "command_schema": "storyos.command.create-project.request.v1",
+        "create_project_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-776d-98b0-71497d9217e0",
+          "title": "Reference 300/author-edit"
+        },
+        "prospective_project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-project.response.v1",
+        "correlation_id": "01a107ee-ec48-776d-98b0-71497d9217e0",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "command_id": "01a1080f-02e9-7653-ab04-ce6aaf852dde",
+        "author_command_admission_id": "01a1080f-02e9-7653-ab04-ce7ac85541fe",
+        "receipt": {
+          "receipt_id": "01a1080f-02e9-7653-ab04-ce82a2475e91",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "command_kind": "createProject",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.createProject.jcs.v1",
+            "value_hex_lowercase": "6d726634fdb9ea9eaae51233d8e2e6692795d63674f50b1910cbc4a804b2bcb3"
+          },
+          "idempotency_key": "01a107ee-ec48-7c67-a5a0-32c6d2ba9053",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a1080f-02e9-7653-ab04-ce7ac85541fe",
+          "expected_heads": [],
+          "prior_heads": [],
+          "resulting_heads": [],
+          "authoritative_revision_ids": [],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [],
+          "author_action_sequence": null,
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:56:03.953Z"
+        },
+        "project": {
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+          "title": "Reference 300/author-edit",
+          "open": {
+            "kind": "empty"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/manuscript/tree",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.manuscript-tree.response.v1",
+        "correlation_id": "01a1080f-0324-7892-afe9-9d47b2019ed8",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "tree_revision": "1",
+        "snapshot": {
+          "snapshot_id": "01a1080f-02fd-7e12-ab36-763887951c76",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "snapshot_kind": "canonical",
+          "project_activity_position": "1",
+          "source_watermarks": {},
+          "projection_generations": {},
+          "redaction_profile": "storyos.author.v1",
+          "schema_profile": "storyos.public.release.1",
+          "replay_generation": "1",
+          "created_at": "2026-10-04T17:56:03.964Z",
+          "expires_at": null
+        },
+        "volumes": []
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/volumes",
+        "command_schema": "storyos.command.create-volume.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createVolume.jcs.v1",
+          "value_hex_lowercase": "8197d3d2faf8b85e43050b8ffa383de4d2f660d14d9d907c7dfba666db776487"
+        },
+        "idempotency_key": "01a107ee-ec48-74eb-ad7a-ec1a1f3a0a33"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T18:01:04.012Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/volumes",
+        "command_schema": "storyos.command.create-volume.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createVolume.jcs.v1",
+          "value_hex_lowercase": "8197d3d2faf8b85e43050b8ffa383de4d2f660d14d9d907c7dfba666db776487"
+        },
+        "idempotency_key": "01a107ee-ec48-74eb-ad7a-ec1a1f3a0a33"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T18:01:04.012Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/volumes",
+      "request": {
+        "command_schema": "storyos.command.create-volume.request.v1",
+        "create_volume_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-7965-aa6c-6cf6946fe30f",
+          "expected_tree_revision": "1",
+          "title": "Volume 74991"
+        }
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-volume.response.v1",
+        "correlation_id": "01a107ee-ec48-7965-aa6c-6cf6946fe30f",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "command_id": "01a1080f-0345-7971-9536-15acc32ee020",
+        "author_command_admission_id": "01a1080f-0345-7971-9536-15ba04550c42",
+        "receipt": {
+          "receipt_id": "01a1080f-0345-7971-9536-15c8f6a7dd84",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "command_kind": "createVolume",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.createVolume.jcs.v1",
+            "value_hex_lowercase": "8197d3d2faf8b85e43050b8ffa383de4d2f660d14d9d907c7dfba666db776487"
+          },
+          "idempotency_key": "01a107ee-ec48-74eb-ad7a-ec1a1f3a0a33",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a1080f-0345-7971-9536-15ba04550c42",
+          "expected_heads": [],
+          "prior_heads": [],
+          "resulting_heads": [],
+          "authoritative_revision_ids": [],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [
+            "01a1080f-034b-7cd1-ac9f-12805fc950c7"
+          ],
+          "author_action_sequence": "1",
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:56:04.038Z"
+        },
+        "project": {
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+          "title": "Reference 300/author-edit",
+          "open": {
+            "kind": "empty"
+          }
+        },
+        "effect": {
+          "kind": "authoritative_applied",
+          "volume_id": "01a1080f-034d-7591-bfb6-6eb1e7116d87",
+          "title": "Volume 74991",
+          "tree_revision": "2",
+          "order": "1",
+          "project_activity_position": "2"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/volumes",
+      "request": {
+        "command_schema": "storyos.command.create-volume.request.v1",
+        "create_volume_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-7965-aa6c-6cf6946fe30f",
+          "expected_tree_revision": "1",
+          "title": "Volume 74991"
+        }
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-volume.response.v1",
+        "correlation_id": "01a107ee-ec48-7965-aa6c-6cf6946fe30f",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "command_id": "01a1080f-0345-7971-9536-15acc32ee020",
+        "author_command_admission_id": "01a1080f-0345-7971-9536-15ba04550c42",
+        "receipt": {
+          "receipt_id": "01a1080f-0345-7971-9536-15c8f6a7dd84",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "command_kind": "createVolume",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.createVolume.jcs.v1",
+            "value_hex_lowercase": "8197d3d2faf8b85e43050b8ffa383de4d2f660d14d9d907c7dfba666db776487"
+          },
+          "idempotency_key": "01a107ee-ec48-74eb-ad7a-ec1a1f3a0a33",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a1080f-0345-7971-9536-15ba04550c42",
+          "expected_heads": [],
+          "prior_heads": [],
+          "resulting_heads": [],
+          "authoritative_revision_ids": [],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [
+            "01a1080f-034b-7cd1-ac9f-12805fc950c7"
+          ],
+          "author_action_sequence": "1",
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:56:04.038Z"
+        },
+        "project": {
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+          "title": "Reference 300/author-edit",
+          "open": {
+            "kind": "empty"
+          }
+        },
+        "effect": {
+          "kind": "authoritative_applied",
+          "volume_id": "01a1080f-034d-7591-bfb6-6eb1e7116d87",
+          "title": "Volume 74991",
+          "tree_revision": "2",
+          "order": "1",
+          "project_activity_position": "2"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/manuscript/tree",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.manuscript-tree.response.v1",
+        "correlation_id": "01a1080f-0368-77e1-98b2-d5235227db26",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "tree_revision": "2",
+        "snapshot": {
+          "snapshot_id": "01a1080f-034b-7cd1-ac9f-12ac4292d096",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "snapshot_kind": "canonical",
+          "project_activity_position": "2",
+          "source_watermarks": {},
+          "projection_generations": {},
+          "redaction_profile": "storyos.author.v1",
+          "schema_profile": "storyos.public.release.1",
+          "replay_generation": "1",
+          "created_at": "2026-10-04T17:56:04.047Z",
+          "expires_at": null
+        },
+        "volumes": [
+          {
+            "volume_id": "01a1080f-034d-7591-bfb6-6eb1e7116d87",
+            "title": "Volume 74991",
+            "order": "1",
+            "chapters": []
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.project.response.v1",
+        "correlation_id": "01a1080f-036c-7eb3-b882-852b6ab85771",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "project": {
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+          "title": "Reference 300/author-edit",
+          "open": {
+            "kind": "empty"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+        "command_schema": "storyos.command.create-chapter.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createChapter.jcs.v1",
+          "value_hex_lowercase": "bbbe567a2455e94c41c5a51100fa4cc9d123fbcbf14ad06a43564a15ceed2707"
+        },
+        "idempotency_key": "01a107ee-ec48-7825-9dba-a9543f103b87"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T18:01:04.085Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+        "command_schema": "storyos.command.create-chapter.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createChapter.jcs.v1",
+          "value_hex_lowercase": "bbbe567a2455e94c41c5a51100fa4cc9d123fbcbf14ad06a43564a15ceed2707"
+        },
+        "idempotency_key": "01a107ee-ec48-7825-9dba-a9543f103b87"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T18:01:04.085Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/volumes/01a1080f-034d-7591-bfb6-6eb1e7116d87/chapters",
+      "request": {
+        "command_schema": "storyos.command.create-chapter.request.v1",
+        "create_chapter_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-71b1-a378-acea92329bce",
+          "expected_tree_revision": "2",
+          "title": "Chapter 48260"
+        }
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-chapter.response.v1",
+        "correlation_id": "01a107ee-ec48-71b1-a378-acea92329bce",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "command_id": "01a1080f-0388-7822-bd9d-f569164e3c45",
+        "author_command_admission_id": "01a1080f-0388-7822-bd9d-f5762df12c7a",
+        "receipt": {
+          "receipt_id": "01a1080f-0388-7822-bd9d-f583b3d75521",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "command_kind": "createChapter",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.createChapter.jcs.v1",
+            "value_hex_lowercase": "bbbe567a2455e94c41c5a51100fa4cc9d123fbcbf14ad06a43564a15ceed2707"
+          },
+          "idempotency_key": "01a107ee-ec48-7825-9dba-a9543f103b87",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a1080f-0388-7822-bd9d-f5762df12c7a",
+          "expected_heads": [],
+          "prior_heads": [],
+          "resulting_heads": [],
+          "authoritative_revision_ids": [],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [
+            "01a1080f-038d-7e33-878e-cd727f69127f"
+          ],
+          "author_action_sequence": "2",
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:56:04.105Z"
+        },
+        "project": {
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+          "title": "Reference 300/author-edit",
+          "open": {
+            "kind": "current_chapter",
+            "current_chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d"
+          }
+        },
+        "effect": {
+          "kind": "authoritative_applied",
+          "volume_id": "01a1080f-034d-7591-bfb6-6eb1e7116d87",
+          "chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+          "title": "Chapter 48260",
+          "tree_revision": "3",
+          "order": "1",
+          "current_chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+          "project_activity_position": "3"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/volumes/01a1080f-034d-7591-bfb6-6eb1e7116d87/chapters",
+      "request": {
+        "command_schema": "storyos.command.create-chapter.request.v1",
+        "create_chapter_input": {
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "correlation_id": "01a107ee-ec48-71b1-a378-acea92329bce",
+          "expected_tree_revision": "2",
+          "title": "Chapter 48260"
+        }
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-chapter.response.v1",
+        "correlation_id": "01a107ee-ec48-71b1-a378-acea92329bce",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "command_id": "01a1080f-0388-7822-bd9d-f569164e3c45",
+        "author_command_admission_id": "01a1080f-0388-7822-bd9d-f5762df12c7a",
+        "receipt": {
+          "receipt_id": "01a1080f-0388-7822-bd9d-f583b3d75521",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "command_kind": "createChapter",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.createChapter.jcs.v1",
+            "value_hex_lowercase": "bbbe567a2455e94c41c5a51100fa4cc9d123fbcbf14ad06a43564a15ceed2707"
+          },
+          "idempotency_key": "01a107ee-ec48-7825-9dba-a9543f103b87",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a1080f-0388-7822-bd9d-f5762df12c7a",
+          "expected_heads": [],
+          "prior_heads": [],
+          "resulting_heads": [],
+          "authoritative_revision_ids": [],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [
+            "01a1080f-038d-7e33-878e-cd727f69127f"
+          ],
+          "author_action_sequence": "2",
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:56:04.105Z"
+        },
+        "project": {
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+          "title": "Reference 300/author-edit",
+          "open": {
+            "kind": "current_chapter",
+            "current_chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d"
+          }
+        },
+        "effect": {
+          "kind": "authoritative_applied",
+          "volume_id": "01a1080f-034d-7591-bfb6-6eb1e7116d87",
+          "chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+          "title": "Chapter 48260",
+          "tree_revision": "3",
+          "order": "1",
+          "current_chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+          "project_activity_position": "3"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/manuscript/tree",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.manuscript-tree.response.v1",
+        "correlation_id": "01a1080f-03c2-7bc1-9259-d964251c9cf0",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "tree_revision": "3",
+        "snapshot": {
+          "snapshot_id": "01a1080f-038d-7e33-878e-cd95b4cab22a",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "snapshot_kind": "canonical",
+          "project_activity_position": "3",
+          "source_watermarks": {},
+          "projection_generations": {},
+          "redaction_profile": "storyos.author.v1",
+          "schema_profile": "storyos.public.release.1",
+          "replay_generation": "1",
+          "created_at": "2026-10-04T17:56:04.127Z",
+          "expires_at": null
+        },
+        "volumes": [
+          {
+            "volume_id": "01a1080f-034d-7591-bfb6-6eb1e7116d87",
+            "title": "Volume 74991",
+            "order": "1",
+            "chapters": [
+              {
+                "chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+                "title": "Chapter 48260",
+                "order": "1"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.project.response.v1",
+        "correlation_id": "01a1080f-03c6-77f1-a785-09d191def4e9",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "project": {
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e",
+          "title": "Reference 300/author-edit",
+          "open": {
+            "kind": "current_chapter",
+            "current_chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/editor-sessions",
+        "command_schema": "storyos.command.create-editor-session.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createEditorSession.jcs.v1",
+          "value_hex_lowercase": "c18692643d48cb24317f5364ce43a125d13b27e1ef7494caa1ec15765479ed73"
+        },
+        "idempotency_key": "01a107ee-ec48-7c38-85a4-98deea95deea"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T18:01:04.174Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/editor-sessions",
+        "command_schema": "storyos.command.create-editor-session.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.createEditorSession.jcs.v1",
+          "value_hex_lowercase": "c18692643d48cb24317f5364ce43a125d13b27e1ef7494caa1ec15765479ed73"
+        },
+        "idempotency_key": "01a107ee-ec48-7c38-85a4-98deea95deea"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T18:01:04.174Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/editor-sessions",
+      "request": {
+        "command_schema": "storyos.command.create-editor-session.request.v1",
+        "client_contract_revision": "storyos.web-client.release-1.v3",
+        "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+        "correlation_id": "01a107ee-ec48-73e4-860d-06c680b79b0f"
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-editor-session.response.v1",
+        "correlation_id": "01a107ee-ec48-73e4-860d-06c680b79b0f",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "editor_session": {
+          "editor_session_id": "01a1080f-03e1-7ef0-b869-6b3302de6250",
+          "client_session_binding_ref": "18eb6997eae4d707efb8cec8898c8eb0f45e4a60a2a108842a5ffe0356c11d66",
+          "client_session_generation": "1",
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "opened_at": "2026-10-04T17:56:04.193Z",
+          "disposition": "open"
+        },
+        "writer": {
+          "kind": "current_writer",
+          "writer_generation": "1"
+        },
+        "base_snapshot": {
+          "snapshot_id": "01a1080f-03e1-7ef0-b869-6b453567068d",
+          "chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+          "project_activity_position": "3",
+          "authoritative_head_revision_id": "01a1080f-0393-74c1-a426-2073597287a7",
+          "proposal_head_revision_ids": [],
+          "target_refs": [
+            "manuscript:01a1080f-0391-7251-95ae-c8456e31dd4d"
+          ],
+          "observed_ownership_partition": "authoritative",
+          "materialized_revision": {
+            "revision_id": "01a1080f-0393-74c1-a426-2073597287a7",
+            "body": "",
+            "blocks": [
+              {
+                "manuscript_block_id": "01a1080f-0395-79b1-a73e-ba6363557e1c",
+                "block_kind": "paragraph",
+                "text": ""
+              }
+            ]
+          },
+          "materialized_payload_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.canonical-payload.sha256.v1",
+            "value_hex_lowercase": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "created_at": "2026-10-04T17:56:04.197Z"
+        },
+        "author_undo_frontier_sequence": "2"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/editor-sessions",
+      "request": {
+        "command_schema": "storyos.command.create-editor-session.request.v1",
+        "client_contract_revision": "storyos.web-client.release-1.v3",
+        "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+        "correlation_id": "01a107ee-ec48-73e4-860d-06c680b79b0f"
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.create-editor-session.response.v1",
+        "correlation_id": "01a107ee-ec48-73e4-860d-06c680b79b0f",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "editor_session": {
+          "editor_session_id": "01a1080f-03e1-7ef0-b869-6b3302de6250",
+          "client_session_binding_ref": "18eb6997eae4d707efb8cec8898c8eb0f45e4a60a2a108842a5ffe0356c11d66",
+          "client_session_generation": "1",
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "opened_at": "2026-10-04T17:56:04.193Z",
+          "disposition": "open"
+        },
+        "writer": {
+          "kind": "current_writer",
+          "writer_generation": "1"
+        },
+        "base_snapshot": {
+          "snapshot_id": "01a1080f-03e1-7ef0-b869-6b453567068d",
+          "chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+          "project_activity_position": "3",
+          "authoritative_head_revision_id": "01a1080f-0393-74c1-a426-2073597287a7",
+          "proposal_head_revision_ids": [],
+          "target_refs": [
+            "manuscript:01a1080f-0391-7251-95ae-c8456e31dd4d"
+          ],
+          "observed_ownership_partition": "authoritative",
+          "materialized_revision": {
+            "revision_id": "01a1080f-0393-74c1-a426-2073597287a7",
+            "body": "",
+            "blocks": [
+              {
+                "manuscript_block_id": "01a1080f-0395-79b1-a73e-ba6363557e1c",
+                "block_kind": "paragraph",
+                "text": ""
+              }
+            ]
+          },
+          "materialized_payload_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.canonical-payload.sha256.v1",
+            "value_hex_lowercase": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "created_at": "2026-10-04T17:56:04.197Z"
+        },
+        "author_undo_frontier_sequence": "2"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/manuscript/author-edits",
+        "command_schema": "storyos.command.apply-author-edit.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.applyAuthorEdit.jcs.v1",
+          "value_hex_lowercase": "d0c44eec7ae4174664b53e58bbed18bc9920fa5f920c2c474d3c7af9902d6bfc"
+        },
+        "idempotency_key": "01a107ee-ec48-70fc-84e0-a1c559b3dbae"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T18:01:04.226Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/anti-forgery-challenges",
+      "request": {
+        "method": "POST",
+        "route_template": "/api/v1/projects/{project_id}/manuscript/author-edits",
+        "command_schema": "storyos.command.apply-author-edit.request.v1",
+        "canonical_command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.applyAuthorEdit.jcs.v1",
+          "value_hex_lowercase": "d0c44eec7ae4174664b53e58bbed18bc9920fa5f920c2c474d3c7af9902d6bfc"
+        },
+        "idempotency_key": "01a107ee-ec48-70fc-84e0-a1c559b3dbae"
+      },
+      "status": 200,
+      "response": {
+        "expires_at": "2026-10-04T18:01:04.226Z",
+        "limit_profile_revision": "storyos.foundation.absolute.v1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/manuscript/author-edits",
+      "request": {
+        "command_schema": "storyos.command.apply-author-edit.request.v1",
+        "client_contract_revision": "storyos.web-client.release-1.v3",
+        "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+        "correlation_id": "01a107ee-ec48-734c-864a-1db6823b5af6",
+        "editor_session_id": "01a1080f-03e1-7ef0-b869-6b3302de6250",
+        "writer_generation": "1",
+        "chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+        "expected_authoritative_revision_id": "01a1080f-0393-74c1-a426-2073597287a7",
+        "expected_proposal_head_revision_ids": [],
+        "target_refs": [
+          "manuscript:01a1080f-0391-7251-95ae-c8456e31dd4d"
+        ],
+        "observed_ownership_partition": "authoritative",
+        "editor_contract_revision": "storyos.editor-contract.release-1.v3",
+        "undo_group_id": "01a107ee-ec48-7bfa-90cf-d600b0bab0f8",
+        "completed_intent_record_id": "01a107ee-ec48-73fc-a2e9-943e4a44fa7e",
+        "local_intent_sequence": "1",
+        "author_edit_units": [
+          {
+            "normalized_primitives": [
+              {
+                "kind": "replace_selection",
+                "from": 0,
+                "to": 0,
+                "text": "A quiet room before dawn."
+              }
+            ],
+            "selection_snapshot": {
+              "coordinate_profile": "storyos.editor.utf16-code-unit.v1",
+              "from": 0,
+              "to": 0
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.apply-author-edit.response.v2",
+        "correlation_id": "01a107ee-ec48-734c-864a-1db6823b5af6",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "command_id": "01a1080f-0413-73b3-8325-0186c0a0acaf",
+        "author_command_admission_id": "01a1080f-0413-73b3-8325-019357c7b518",
+        "receipt": {
+          "receipt_id": "01a1080f-0413-73b3-8325-01adb82e11f4",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "command_kind": "applyAuthorEdit",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.applyAuthorEdit.jcs.v1",
+            "value_hex_lowercase": "d0c44eec7ae4174664b53e58bbed18bc9920fa5f920c2c474d3c7af9902d6bfc"
+          },
+          "idempotency_key": "01a107ee-ec48-70fc-84e0-a1c559b3dbae",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a1080f-0413-73b3-8325-019357c7b518",
+          "expected_heads": [
+            "01a1080f-0393-74c1-a426-2073597287a7"
+          ],
+          "prior_heads": [
+            "01a1080f-0393-74c1-a426-2073597287a7"
+          ],
+          "resulting_heads": [
+            "01a1080f-042f-7f12-af85-4aff6dd36d14"
+          ],
+          "authoritative_revision_ids": [
+            "01a1080f-042f-7f12-af85-4aff6dd36d14"
+          ],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [
+            "01a1080f-042f-7f12-af85-4b153f0f25cd"
+          ],
+          "author_action_sequence": "3",
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:56:04.273Z"
+        },
+        "effect": {
+          "kind": "authoritative_applied",
+          "authoritative_revision": {
+            "revision_id": "01a1080f-042f-7f12-af85-4aff6dd36d14",
+            "body": "A quiet room before dawn.",
+            "blocks": [
+              {
+                "manuscript_block_id": "01a1080f-0395-79b1-a73e-ba6363557e1c",
+                "block_kind": "paragraph",
+                "text": "A quiet room before dawn."
+              }
+            ]
+          },
+          "authoritative_commit_id": "01a1080f-042f-7f12-af85-4b153f0f25cd",
+          "author_action_sequence": "3",
+          "project_activity_position": "4"
+        },
+        "completed_intent_record_id": "01a107ee-ec48-73fc-a2e9-943e4a44fa7e",
+        "local_intent_sequence": "1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/manuscript/author-edits",
+      "request": {
+        "command_schema": "storyos.command.apply-author-edit.request.v1",
+        "client_contract_revision": "storyos.web-client.release-1.v3",
+        "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+        "correlation_id": "01a107ee-ec48-734c-864a-1db6823b5af6",
+        "editor_session_id": "01a1080f-03e1-7ef0-b869-6b3302de6250",
+        "writer_generation": "1",
+        "chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+        "expected_authoritative_revision_id": "01a1080f-0393-74c1-a426-2073597287a7",
+        "expected_proposal_head_revision_ids": [],
+        "target_refs": [
+          "manuscript:01a1080f-0391-7251-95ae-c8456e31dd4d"
+        ],
+        "observed_ownership_partition": "authoritative",
+        "editor_contract_revision": "storyos.editor-contract.release-1.v3",
+        "undo_group_id": "01a107ee-ec48-7bfa-90cf-d600b0bab0f8",
+        "completed_intent_record_id": "01a107ee-ec48-73fc-a2e9-943e4a44fa7e",
+        "local_intent_sequence": "1",
+        "author_edit_units": [
+          {
+            "normalized_primitives": [
+              {
+                "kind": "replace_selection",
+                "from": 0,
+                "to": 0,
+                "text": "A quiet room before dawn."
+              }
+            ],
+            "selection_snapshot": {
+              "coordinate_profile": "storyos.editor.utf16-code-unit.v1",
+              "from": 0,
+              "to": 0
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.command.apply-author-edit.response.v2",
+        "correlation_id": "01a107ee-ec48-734c-864a-1db6823b5af6",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "command_id": "01a1080f-0413-73b3-8325-0186c0a0acaf",
+        "author_command_admission_id": "01a1080f-0413-73b3-8325-019357c7b518",
+        "receipt": {
+          "receipt_id": "01a1080f-0413-73b3-8325-01adb82e11f4",
+          "project_scope": {
+            "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+            "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+          },
+          "command_kind": "applyAuthorEdit",
+          "command_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.command.applyAuthorEdit.jcs.v1",
+            "value_hex_lowercase": "d0c44eec7ae4174664b53e58bbed18bc9920fa5f920c2c474d3c7af9902d6bfc"
+          },
+          "idempotency_key": "01a107ee-ec48-70fc-84e0-a1c559b3dbae",
+          "producer_cause": "author_command_admission",
+          "author_command_admission_id": "01a1080f-0413-73b3-8325-019357c7b518",
+          "expected_heads": [
+            "01a1080f-0393-74c1-a426-2073597287a7"
+          ],
+          "prior_heads": [
+            "01a1080f-0393-74c1-a426-2073597287a7"
+          ],
+          "resulting_heads": [
+            "01a1080f-042f-7f12-af85-4aff6dd36d14"
+          ],
+          "authoritative_revision_ids": [
+            "01a1080f-042f-7f12-af85-4aff6dd36d14"
+          ],
+          "proposal_revision_ids": [],
+          "authoritative_commit_ids": [
+            "01a1080f-042f-7f12-af85-4b153f0f25cd"
+          ],
+          "author_action_sequence": "3",
+          "draft_artifact_refs": [],
+          "artifact_lifecycle_event_refs": [],
+          "condition_refs": [],
+          "result": "authoritative_applied",
+          "created_at": "2026-10-04T17:56:04.273Z"
+        },
+        "effect": {
+          "kind": "authoritative_applied",
+          "authoritative_revision": {
+            "revision_id": "01a1080f-042f-7f12-af85-4aff6dd36d14",
+            "body": "A quiet room before dawn.",
+            "blocks": [
+              {
+                "manuscript_block_id": "01a1080f-0395-79b1-a73e-ba6363557e1c",
+                "block_kind": "paragraph",
+                "text": "A quiet room before dawn."
+              }
+            ]
+          },
+          "authoritative_commit_id": "01a1080f-042f-7f12-af85-4b153f0f25cd",
+          "author_action_sequence": "3",
+          "project_activity_position": "4"
+        },
+        "completed_intent_record_id": "01a107ee-ec48-73fc-a2e9-943e4a44fa7e",
+        "local_intent_sequence": "1"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/chapters/01a1080f-0391-7251-95ae-c8456e31dd4d",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.chapter.response.v1",
+        "correlation_id": "01a1080f-0468-7371-99c6-7b9cb8e42ada",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "project_activity_position": "4",
+        "chapter": {
+          "chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+          "title": "Chapter 48260",
+          "current_revision": {
+            "revision_id": "01a1080f-042f-7f12-af85-4aff6dd36d14",
+            "body": "A quiet room before dawn.",
+            "blocks": [
+              {
+                "manuscript_block_id": "01a1080f-0395-79b1-a73e-ba6363557e1c",
+                "block_kind": "paragraph",
+                "text": "A quiet room before dawn."
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/editor-sessions/01a1080f-03e1-7ef0-b869-6b3302de6250",
+      "request": null,
+      "status": 200,
+      "response": {
+        "schema_id": "storyos.query.editor-session.response.v1",
+        "correlation_id": "01a1080f-0470-7840-bc76-e80fc03ce77f",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "01a1080f-02cb-7d33-8618-c093ff00d09e"
+        },
+        "editor_session": {
+          "editor_session_id": "01a1080f-03e1-7ef0-b869-6b3302de6250",
+          "client_session_binding_ref": "18eb6997eae4d707efb8cec8898c8eb0f45e4a60a2a108842a5ffe0356c11d66",
+          "client_session_generation": "1",
+          "client_contract_revision": "storyos.web-client.release-1.v3",
+          "security_policy_revision": "storyos.web-security-policy.release-1.v1",
+          "opened_at": "2026-10-04T17:56:04.193Z",
+          "disposition": "open"
+        },
+        "writer": {
+          "kind": "current_writer",
+          "writer_generation": "1"
+        },
+        "base_snapshot": {
+          "snapshot_id": "01a1080f-043a-7783-b374-6abd5966417e",
+          "chapter_id": "01a1080f-0391-7251-95ae-c8456e31dd4d",
+          "project_activity_position": "4",
+          "authoritative_head_revision_id": "01a1080f-042f-7f12-af85-4aff6dd36d14",
+          "proposal_head_revision_ids": [],
+          "target_refs": [
+            "manuscript:01a1080f-0391-7251-95ae-c8456e31dd4d"
+          ],
+          "observed_ownership_partition": "authoritative",
+          "materialized_revision": {
+            "revision_id": "01a1080f-042f-7f12-af85-4aff6dd36d14",
+            "body": "A quiet room before dawn.",
+            "blocks": [
+              {
+                "manuscript_block_id": "01a1080f-0395-79b1-a73e-ba6363557e1c",
+                "block_kind": "paragraph",
+                "text": "A quiet room before dawn."
+              }
+            ]
+          },
+          "materialized_payload_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.canonical-payload.sha256.v1",
+            "value_hex_lowercase": "d69cbb16b799ce1a69f214e7065aae91281a086d44c9f4f0b0028f676da50859"
+          },
+          "created_at": "2026-10-04T17:56:04.279Z"
+        },
+        "author_undo_frontier_sequence": "3"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/01a1080f-02cb-7d33-8618-c093ff00d09e/assistance",
+      "request": null,
+      "status": 404,
+      "response": {
+        "schema_id": "storyos.problem.v1",
+        "code": "resource_unavailable",
+        "message": "The requested resource is unavailable."
+      }
+    }
+  ]
+}
