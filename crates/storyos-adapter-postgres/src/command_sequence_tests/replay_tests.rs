@@ -13,7 +13,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::update_volume_tests::seed_project;
 
-use super::agent_run::{PAUSE_AGENT_RUN, pause_agent_run, seed_run};
+use super::agent_run::{
+    PAUSE_AGENT_RUN, create_agent_run, create_agent_run_call, park_run, pause_agent_run, seed_run,
+};
 use super::draft::{
     CLOSE_EDITOR_FLOW_DRAFT, EXPAND_REFUSED_EDIT_DRAFT, close_editor_flow_draft, discard_call,
     expand_refused_edit_draft, expansion_call, refused_edit_draft, refused_edit_expansion,
@@ -585,6 +587,14 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((PAUSE_AGENT_RUN.kind, outcome));
     }
 
+    let call = create_agent_run_call(&store, /*base*/ 0xb320).await;
+    let outcome = replayed_outcome(&store, &admin, &call, create_agent_run).await;
+    park_run(&admin, &call).await;
+    observed.push((
+        call.envelope.challenge_binding.command_kind.as_str(),
+        outcome,
+    ));
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
@@ -681,6 +691,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("pauseAgentRun", activity_applied),
             ("pauseAgentRun", no_effect),
             ("pauseAgentRun", conflicted),
+            ("createAgentRun", activity_applied),
         ]
     );
     assert_eq!(rejection_records, vec![1; 4]);

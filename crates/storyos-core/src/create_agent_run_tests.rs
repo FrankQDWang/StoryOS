@@ -1,8 +1,8 @@
 use super::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
-    CreateAgentRunRefusal, CreateAgentRunResult, create_agent_run,
+    CreateAgentRunRefusal, create_agent_run,
 };
-use crate::{ProjectLifecycle, ProjectPresence};
+use crate::{ProjectLifecycle, ProjectPresence, TransitionOutcome};
 
 #[test]
 fn admits_a_new_conversation_when_assistance_and_target_are_current() {
@@ -14,7 +14,7 @@ fn admits_a_new_conversation_when_assistance_and_target_are_current() {
             conversation: ConversationAdmission::New,
             chapter: ChapterAdmission::Current,
         }),
-        CreateAgentRunResult::Admitted
+        Ok(TransitionOutcome::Applied(()))
     );
 }
 
@@ -28,9 +28,7 @@ fn refuses_an_inaccessible_existing_conversation() {
             conversation: ConversationAdmission::ExistingMissing,
             chapter: ChapterAdmission::Current,
         }),
-        CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::InaccessibleConversation,
-        }
+        Err(CreateAgentRunRefusal::InaccessibleConversation)
     );
 }
 
@@ -50,9 +48,7 @@ fn refuses_an_archived_project() {
     command.lifecycle = ProjectLifecycle::Archived;
     assert_eq!(
         create_agent_run(&command),
-        CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::ArchivedProject,
-        }
+        Err(CreateAgentRunRefusal::ArchivedProject)
     );
 }
 
@@ -62,9 +58,7 @@ fn refuses_unavailable_assistance() {
     command.assistance = AssistanceAdmission::Unavailable;
     assert_eq!(
         create_agent_run(&command),
-        CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::AssistanceUnavailable,
-        }
+        Err(CreateAgentRunRefusal::AssistanceUnavailable)
     );
 }
 
@@ -74,9 +68,7 @@ fn refuses_a_busy_existing_conversation() {
     command.conversation = ConversationAdmission::ExistingBusy;
     assert_eq!(
         create_agent_run(&command),
-        CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::ConversationBusy,
-        }
+        Err(CreateAgentRunRefusal::ConversationBusy)
     );
 }
 
@@ -86,8 +78,6 @@ fn refuses_an_invalid_working_target_chapter() {
     command.chapter = ChapterAdmission::Invalid;
     assert_eq!(
         create_agent_run(&command),
-        CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::InvalidChapterJoin,
-        }
+        Err(CreateAgentRunRefusal::InvalidChapterJoin)
     );
 }

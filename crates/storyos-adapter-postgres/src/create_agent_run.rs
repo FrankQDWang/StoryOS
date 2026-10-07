@@ -1,16 +1,23 @@
+use std::convert::Infallible;
+
 use storyos_application::{
-    AgentRunRecord, ChapterId, ConversationSelection, CreateAgentRunAdmission,
-    CreateAgentRunCommand, CreateAgentRunError, CreateAgentRunStore, Project,
-    ProjectCommandChallengeError, ProjectCommandChallengeUse, ProjectScope,
+    AgentRunReadStore, AgentRunRecord, ConversationSelection, CreateAgentRunApplied,
+    CreateAgentRunCommandError, CreateAgentRunError, CreateAgentRunInput, CreateAgentRunSettlement,
+    ProjectAssistanceRecord, ProjectCommandChallengeError, ProjectCommandEnvelope,
+    ProjectCommandError, ProjectScope, RefusableCommandError,
 };
 use storyos_core::{
     AssistanceAdmission, AssistanceAvailability, ChapterAdmission, ConversationAdmission,
-    CreateAgentRun as CoreCreateAgentRun, CreateAgentRunRefusal, CreateAgentRunResult,
-    ProjectLifecycle, ProjectPresence, create_agent_run,
+    CreateAgentRun as CoreCreateAgentRun, CreateAgentRunRefusal, ProjectPresence, create_agent_run,
 };
+use tokio_postgres::Client;
 
-use crate::command_response_project::{
-    COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
+use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_sequence::{
+    ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedResult, Classification,
+    CommandIsolation, CommandSpec, LockedProject, MissingAdmission, ProjectActionClass,
+    ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt,
+    settle_project_command, unavailable,
 };
 use crate::update_project_assistance::read_assistance_record;
 
@@ -23,52 +30,19 @@ mod read;
 #[path = "create_agent_run_write.rs"]
 mod write;
 
-impl CreateAgentRunStore for PostgresProjectReader {
-    async fn create_agent_run(
+impl PostgresProjectReader {
+    /// Settles one createAgentRun. A refusal of its facts and a transaction race are refusals
+    /// before Admission.
+    pub async fn create_agent_run(
         &self,
-        command: &CreateAgentRunCommand,
-    ) -> Result<CreateAgentRunAdmission, CreateAgentRunError> {
-        let mut transaction = self
-            .begin_serializable_project_command_transaction(&command.project_scope)
-            .await
-            .map_err(agent_run_challenge_error)?;
-        let challenge_use = transaction
-            .consume(&command.challenge_binding, &command.nonce_digest)
-            .await
-            .map_err(agent_run_challenge_error)?;
-        match challenge_use {
-            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(agent_run_challenge_error)?;
-                read::read_create_agent_run_settlement(self, command, &result_reference).await
-            }
-            ProjectCommandChallengeUse::ExactRetryInProgress => {
-                transaction
-                    .rollback()
-                    .await
-                    .map_err(agent_run_challenge_error)?;
-                Err(CreateAgentRunError::BindingConflict)
-            }
-            ProjectCommandChallengeUse::FirstUse => {
-                match persist_create_agent_run(&transaction.client, command).await {
-                    Ok(admission) => {
-                        transaction
-                            .commit_sql()
-                            .await
-                            .map_err(agent_run_database_error)?;
-                        Ok(admission)
-                    }
-                    Err(error) => {
-                        let _rollback = transaction.rollback().await;
-                        Err(error)
-                    }
-                }
-            }
-        }
+        envelope: &ProjectCommandEnvelope,
+        input: &CreateAgentRunInput,
+    ) -> Result<CreateAgentRunSettlement, CreateAgentRunCommandError> {
+        settle_project_command(self, envelope, input).await
     }
+}
 
+impl AgentRunReadStore for PostgresProjectReader {
     async fn read_agent_run(
         &self,
         scope: &ProjectScope,
@@ -103,208 +77,159 @@ impl CreateAgentRunStore for PostgresProjectReader {
     }
 }
 
-async fn persist_create_agent_run(
-    client: &tokio_postgres::Client,
-    command: &CreateAgentRunCommand,
-) -> Result<CreateAgentRunAdmission, CreateAgentRunError> {
-    let row = client
-        .query_opt(
-            "SELECT title, lifecycle_state, current_chapter_id::text
-               FROM storyos.projects
+impl ProjectCommand for CreateAgentRunInput {
+    const SPEC: CommandSpec = CommandSpec {
+        kind: "createAgentRun",
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
+        isolation: CommandIsolation::Serializable,
+        missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::Unavailable,
+        activity_kind: "agent_run_created",
+        replay_effect: ReplayEffect::Query(
+            "SELECT jsonb_build_object('run_id', run_id::text)::text
+               FROM storyos.agent_runs
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-              FOR UPDATE",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(agent_run_database_error)?;
-    let Some(row) = row else {
-        return Err(CreateAgentRunError::MissingProject);
+                AND receipt_id = $3::text::uuid",
+        ),
     };
-    let current_title = row.get::<_, String>(0);
-    let lifecycle = if row.get::<_, String>(1) == "archived" {
-        ProjectLifecycle::Archived
-    } else {
-        ProjectLifecycle::Active
-    };
-    let current_chapter_id = row.get::<_, Option<String>>(2);
-    let assistance_record = read_assistance_record(client, &command.project_scope)
-        .await
-        .map_err(|error| {
-            if std::error::Error::source(&error)
-                .and_then(|source| source.downcast_ref::<tokio_postgres::Error>())
-                .is_some_and(admission_race)
-            {
-                return CreateAgentRunError::ConversationBusy;
+    type Error = CreateAgentRunCommandError;
+    type Profile = ActivityOnly;
+    type Response = ProjectResponse;
+    type ZeroEffect = ();
+    type Applied = ();
+    /// The assistance record whose grant and Model Use Binding revision the Run captures.
+    type Plan = ProjectAssistanceRecord;
+    type Effect = CreateAgentRunApplied;
+    type NoEffect = Infallible;
+    type Conflict = Infallible;
+    type Refusal = Infallible;
+
+    fn contention_refusal() -> Option<CreateAgentRunCommandError> {
+        Some(RefusableCommandError::RefusedBeforeAdmission(
+            CreateAgentRunRefusal::ConversationBusy,
+        ))
+    }
+
+    async fn classify(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+    ) -> Result<Classification<Self>, CreateAgentRunCommandError> {
+        let scope = &envelope.project_scope;
+        let assistance = read_assistance_record(client, scope)
+            .await
+            .map_err(unavailable)?;
+        let conversation = match &self.conversation {
+            ConversationSelection::New => ConversationAdmission::New,
+            ConversationSelection::Existing { conversation_id } => {
+                conversation_admission(client, scope, conversation_id).await?
             }
-            CreateAgentRunError::Unavailable(Box::new(error))
-        })?;
-    let assistance = match &assistance_record {
-        Some(record) if record.availability == AssistanceAvailability::Available => {
-            AssistanceAdmission::Available
-        }
-        Some(_) => AssistanceAdmission::Unavailable,
-        None => AssistanceAdmission::Missing,
-    };
-    let conversation = match &command.conversation {
-        ConversationSelection::New => ConversationAdmission::New,
-        ConversationSelection::Existing { conversation_id } => {
-            conversation_admission(client, command, conversation_id).await?
-        }
-    };
-    let chapter = if current_chapter_id.as_deref() == Some(command.chapter_id.as_str()) {
-        ChapterAdmission::Current
-    } else {
-        ChapterAdmission::Invalid
-    };
-    match create_agent_run(&CoreCreateAgentRun {
-        presence: ProjectPresence::Present,
-        lifecycle,
-        assistance,
-        conversation,
-        chapter,
-    }) {
-        CreateAgentRunResult::Admitted => {}
-        CreateAgentRunResult::Refused { reason } => {
-            return Err(match reason {
-                CreateAgentRunRefusal::MissingProject => CreateAgentRunError::MissingProject,
-                CreateAgentRunRefusal::ArchivedProject => CreateAgentRunError::ArchivedProject,
-                CreateAgentRunRefusal::AssistanceUnavailable => {
-                    CreateAgentRunError::AssistanceUnavailable
+        };
+        let outcome = create_agent_run(&CoreCreateAgentRun {
+            presence: ProjectPresence::Present,
+            lifecycle: project.lifecycle,
+            assistance: match &assistance {
+                Some(record) if record.availability == AssistanceAvailability::Available => {
+                    AssistanceAdmission::Available
                 }
-                CreateAgentRunRefusal::InaccessibleConversation => {
-                    CreateAgentRunError::InaccessibleConversation
-                }
-                CreateAgentRunRefusal::ConversationBusy => CreateAgentRunError::ConversationBusy,
-                CreateAgentRunRefusal::InvalidChapterJoin => {
-                    CreateAgentRunError::InvalidChapterJoin
-                }
-            });
+                Some(_) => AssistanceAdmission::Unavailable,
+                None => AssistanceAdmission::Missing,
+            },
+            conversation,
+            chapter: if project.current_chapter_id.as_deref() == Some(self.chapter_id.as_str()) {
+                ChapterAdmission::Current
+            } else {
+                ChapterAdmission::Invalid
+            },
+        })
+        .map_err(RefusableCommandError::RefusedBeforeAdmission)?;
+        if let Some(target) = &self.candidate_target
+            && crate::candidate_revision_target::load(client, scope, &self.chapter_id, target)
+                .await
+                .map_err(sequence_error)?
+                .is_none()
+        {
+            return Err(ProjectCommandError::BindingConflict.into());
         }
+        let assistance = assistance.ok_or(RefusableCommandError::RefusedBeforeAdmission(
+            CreateAgentRunRefusal::AssistanceUnavailable,
+        ))?;
+        hold_conversation_if_requested(&envelope.challenge_binding.idempotency_key).await;
+        Ok(Classification {
+            outcome: outcome.map_applied(|()| ((), assistance)),
+            admission: Admission::Project(ProjectActionClass::AgentRunStart),
+            heads: ReceiptHeads::default(),
+            zero_receipt: ZeroReceipt::Reason,
+        })
     }
-    if let Some(target) = &command.candidate_target
-        && crate::candidate_revision_target::load(
+
+    async fn apply(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        _project: &LockedProject,
+        _sequences: &ActivitySequences,
+        assistance: ProjectAssistanceRecord,
+        _applied: (),
+    ) -> Result<ActivityWrite<CreateAgentRunApplied>, ProjectCommandError> {
+        let applied = write::persist_conversation_and_run(
             client,
-            &command.project_scope,
-            &command.chapter_id,
-            target,
+            envelope,
+            self,
+            &assistance.grant_id,
+            &assistance.project_model_use_binding_revision,
         )
-        .await?
-        .is_none()
-    {
-        return Err(CreateAgentRunError::BindingConflict);
+        .await
+        .map_err(sequence_error)?;
+        context::persist_current_passage_assembly(
+            client,
+            &context::PassageContextInput {
+                project_scope: &envelope.project_scope,
+                run_id: &self.run_id,
+                chapter_id: &self.chapter_id,
+                author_message: &self.author_message,
+                receipt_id: &envelope.ids.receipt_id,
+                decision_position: "0",
+                passage_targets: self.passage_targets.as_deref(),
+                candidate_target: self.candidate_target.as_ref(),
+            },
+            &assistance.processing_destination_identity,
+        )
+        .await
+        .map_err(sequence_error)?;
+        Ok(ActivityWrite {
+            activity: serde_json::json!({
+                "project_agent_id": applied.project_agent_id,
+                "conversation_id": applied.conversation_id,
+                "memory_settings_revision": applied.memory_settings_revision,
+                "run_id": applied.run_id,
+            }),
+            effect: applied,
+        })
     }
-    hold_conversation_if_requested(&command.challenge_binding.idempotency_key).await;
-    write::insert_create_agent_run_admission(client, command).await?;
-    client
-        .execute(
-            "INSERT INTO storyos.domain_receipts
-               (owner_user_id, project_id, receipt_id, author_command_admission_id,
-                command_id, command_kind, command_digest, idempotency_key, producer_cause,
-                expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
-                proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
-                artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'createAgentRun', $6, $7::text::uuid,
-                     'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
-                     '{}'::text[], 'authoritative_applied', '{}'::jsonb)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.command_id,
-                &command.challenge_binding.canonical_command_digest,
-                &command.challenge_binding.idempotency_key,
-            ],
-        )
-        .await
-        .map_err(agent_run_database_error)?;
-    client
-        .execute(
-            "INSERT INTO storyos.author_command_admission_settlements
-               (owner_user_id, project_id, author_command_admission_id, settlement_kind, receipt_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
-                     'receipt_settled', $4::text::uuid)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(agent_run_database_error)?;
-    let assistance_record = assistance_record.ok_or(CreateAgentRunError::AssistanceUnavailable)?;
-    let identities = write::persist_conversation_and_run(
-        client,
-        command,
-        &assistance_record.grant_id,
-        &assistance_record.project_model_use_binding_revision,
-    )
-    .await?;
-    context::persist_current_passage_assembly(
-        client,
-        &context::PassageContextInput {
-            project_scope: &command.project_scope,
-            run_id: &command.run_id,
-            chapter_id: &command.chapter_id,
-            author_message: &command.author_message,
-            receipt_id: &command.ids.receipt_id,
-            decision_position: "0",
-            passage_targets: command.passage_targets.as_deref(),
-            candidate_target: command.candidate_target.as_ref(),
-        },
-        &assistance_record.processing_destination_identity,
-    )
-    .await?;
-    let project_activity_position =
-        write::write_agent_run_activity(client, command, &identities).await?;
-    let response_project = Project {
-        project_id: command.project_scope.project_id.clone(),
-        title: current_title,
-        current_chapter_id: current_chapter_id.map(ChapterId::new),
-    };
-    let encoded_project = encode_command_response_project(&response_project);
-    client
-        .execute(
-            "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled',
-                    result_reference = $3,
-                    acknowledgement_format = $5,
-                    response_project = $6::text::jsonb
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'createAgentRun' AND idempotency_key = $4::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.challenge_binding.idempotency_key,
-                &COMMAND_RESPONSE_PROJECT_FORMAT,
-                &encoded_project,
-            ],
-        )
-        .await
-        .map_err(agent_run_database_error)?;
-    Ok(CreateAgentRunAdmission {
-        ids: command.ids.clone(),
-        project_agent_id: identities.project_agent_id,
-        conversation_id: identities.conversation_id,
-        memory_settings_revision: identities.memory_settings_revision,
-        run_id: identities.run_id,
-        project_activity_position,
-        response_project,
-    })
+
+    fn decode(&self, replay: &CommandReplay) -> Result<CreateAgentRunApplied, ReplayFault> {
+        let applied = CreateAgentRunApplied {
+            project_agent_id: replay.activity_uuid("project_agent_id")?,
+            conversation_id: replay.activity_uuid("conversation_id")?,
+            memory_settings_revision: replay.activity_uuid("memory_settings_revision")?,
+            run_id: replay.activity_uuid("run_id")?,
+        };
+        if replay.effect_text("run_id")?.as_deref() != Some(applied.run_id.as_str()) {
+            return Err(ReplayFault::Unavailable(
+                "the AgentRun of the applied Receipt is missing".into(),
+            ));
+        }
+        Ok(applied)
+    }
 }
 
 async fn conversation_admission(
-    client: &tokio_postgres::Client,
-    command: &CreateAgentRunCommand,
+    client: &Client,
+    scope: &ProjectScope,
     conversation_id: &str,
-) -> Result<ConversationAdmission, CreateAgentRunError> {
+) -> Result<ConversationAdmission, ProjectCommandError> {
     let found = client
         .query_opt(
             "SELECT 1
@@ -313,13 +238,13 @@ async fn conversation_admission(
                 AND project_id = $2::text::uuid
                 AND conversation_id = $3::text::uuid",
             &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
                 &conversation_id,
             ],
         )
         .await
-        .map_err(agent_run_database_error)?
+        .map_err(unavailable)?
         .is_some();
     if !found {
         return Ok(ConversationAdmission::ExistingMissing);
@@ -333,13 +258,13 @@ async fn conversation_admission(
                 AND conversation_id = $3::text::uuid
                 AND status IN ('queued', 'claimed', 'waiting', 'paused')",
             &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
                 &conversation_id,
             ],
         )
         .await
-        .map_err(agent_run_database_error)?
+        .map_err(unavailable)?
         .is_some();
     Ok(if busy {
         ConversationAdmission::ExistingBusy
@@ -367,41 +292,18 @@ async fn hold_conversation_if_requested(idempotency_key: &str) {
     }
 }
 
-pub(super) fn agent_run_challenge_error(
-    error: ProjectCommandChallengeError,
-) -> CreateAgentRunError {
+fn sequence_error(error: CreateAgentRunError) -> ProjectCommandError {
     match error {
-        ProjectCommandChallengeError::BindingConflict => CreateAgentRunError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired => CreateAgentRunError::InvalidChallenge,
-        ProjectCommandChallengeError::RateLimited { .. }
-        | ProjectCommandChallengeError::Unavailable(_) => {
-            CreateAgentRunError::Unavailable(Box::new(error))
-        }
+        CreateAgentRunError::BindingConflict => ProjectCommandError::BindingConflict,
+        CreateAgentRunError::Unavailable(source) => ProjectCommandError::Unavailable(source),
     }
 }
 
-fn admission_race(error: &tokio_postgres::Error) -> bool {
-    matches!(
-        error.code(),
-        Some(
-            &tokio_postgres::error::SqlState::UNIQUE_VIOLATION
-                | &tokio_postgres::error::SqlState::T_R_SERIALIZATION_FAILURE
-                | &tokio_postgres::error::SqlState::T_R_DEADLOCK_DETECTED
-        )
-    )
-}
-
-pub(super) fn agent_run_database_error(error: tokio_postgres::Error) -> CreateAgentRunError {
-    if admission_race(&error) {
-        return CreateAgentRunError::ConversationBusy;
-    }
+fn agent_run_challenge_error(error: ProjectCommandChallengeError) -> CreateAgentRunError {
     CreateAgentRunError::Unavailable(Box::new(error))
 }
 
-pub(super) fn agent_run_write_error(error: tokio_postgres::Error) -> CreateAgentRunError {
-    if admission_race(&error) {
-        return CreateAgentRunError::ConversationBusy;
-    }
+pub(super) fn agent_run_database_error(error: tokio_postgres::Error) -> CreateAgentRunError {
     CreateAgentRunError::Unavailable(Box::new(error))
 }
 
