@@ -19,6 +19,9 @@ use crate::command_sequence::{
 };
 use crate::structural_authority_settlement::CurrentChapterSequences;
 
+mod compensation;
+pub(crate) use compensation::{CurrentChapterCompensation, ObservedCurrentChapterFrontier};
+
 impl PostgresProjectReader {
     /// Settles one Current Chapter change of the writer Editor Session.
     pub async fn set_current_chapter(
