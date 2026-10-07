@@ -1,0 +1,38 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/delete-volume-http.integration.test.ts (4 tests | 1 failed | 3 skipped) 972ms
+   × deleteVolume removes an empty Volume, refuses a nonempty Volume, and honors deletion 970ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/delete-volume-http.integration.test.ts > deleteVolume removes an empty Volume, refuses a nonempty Volume, and honors deletion
+AssertionError: Expected values to be strictly equal:
++ actual - expected
+
++ 'authoritative_applied'
+- 'refused'
+
+
+Expected: "refused"
+Received: "authoritative_applied"
+
+ ❯ test/node-postgresql/delete-volume-http.integration.test.ts:284:12
+    282|       deleteRequest("4", "018f0000-0000-7001-8000-00000000d210"),
+    283|     );
+    284|     assert.equal(refused.effect.kind, "refused");
+       |            ^
+    285|     if (refused.effect.kind === "refused") {
+    286|       assert.equal(refused.effect.reason, "nonempty_volume");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  05:46:01
+   Duration  1.21s (transform 78ms, setup 0ms, import 100ms, tests 972ms, environment 0ms)
+
+Verification failed: 8.35s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/33e364d4e2ba406b8bf02acea7249993/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

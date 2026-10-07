@@ -1,0 +1,47 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/create-volume-http.integration.test.ts (4 tests | 1 failed | 3 skipped) 1110ms
+   × createVolume distinguishes historical absence from damaged new-format evidence 1109ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/create-volume-http.integration.test.ts > createVolume distinguishes historical absence from damaged new-format evidence
+AssertionError: The validation function is expected to return "true". Received false
+
+Caught error:
+
+StoryOSProtocolError: StoryOS command failed with HTTP 409
+
+- Expected:
+[Function anonymous]
+
++ Received:
+StoryOSProtocolError {
+  "message": "StoryOS command failed with HTTP 409",
+  "name": "StoryOSProtocolError",
+  "code": "command_http_error",
+  "status": 409,
+  "responseBody": "{\"schema_id\":\"storyos.problem.v1\",\"code\":\"historical_acknowledgement_unavailable\",\"message\":\"The original Create Volume acknowledgement cannot be recovered. Refresh to inspect the current Project.\"}",
+  "retryAfterSeconds": undefined,
+}
+
+ ❯ test/node-postgresql/create-volume-http.integration.test.ts:812:5
+    810|          AND idempotency_key = '018f0000-0000-7001-8000-000000000898':…
+    811|     `);
+    812|     await assert.rejects(
+       |     ^
+    813|       createVolume({
+    814|         baseUrl,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  04:56:36
+   Duration  1.43s (transform 98ms, setup 0ms, import 127ms, tests 1.11s, environment 0ms)
+
+Verification failed: 9.42s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/29cbb9f7abcf456fa94365774ace21f2/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

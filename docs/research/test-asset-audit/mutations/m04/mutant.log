@@ -1,0 +1,38 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/create-chapter-http.integration.test.ts (6 tests | 1 failed | 5 skipped) 1179ms
+   × createChapter creates three named Chapters, keeps the first current, and fails closed 1179ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/create-chapter-http.integration.test.ts > createChapter creates three named Chapters, keeps the first current, and fails closed
+AssertionError: Expected values to be strictly equal:
++ actual - expected
+
++ 'conflicted'
+- 'refused'
+
+
+Expected: "refused"
+Received: "conflicted"
+
+ ❯ test/node-postgresql/create-chapter-http.integration.test.ts:565:12
+    563|       chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-000000…
+    564|     );
+    565|     assert.equal(invalidJoin.created.receipt.result, "refused");
+       |            ^
+    566|     assert.equal(invalidJoin.created.effect.kind, "refused");
+    567|     if (invalidJoin.created.effect.kind !== "refused") {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  04:54:39
+   Duration  1.37s (transform 68ms, setup 0ms, import 87ms, tests 1.18s, environment 0ms)
+
+Verification failed: 7.26s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/12c7ac783d964d3f9afdb293e7e00fd0/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

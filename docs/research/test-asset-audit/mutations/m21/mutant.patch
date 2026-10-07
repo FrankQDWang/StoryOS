@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/rebuild_expired_reference.rs
++++ b/crates/storyos-core/src/rebuild_expired_reference.rs
+@@ -66,7 +66,7 @@
+         predecessor_stays_terminal: facts.predecessor_terminal,
+     };
+     match facts.reference {
+-        ContinuationReferenceCondition::Usable => idle,
++        ContinuationReferenceCondition::Usable => ExpiryRebuildDecision { disposition: ExpiryRebuildDisposition::Rebuilt, new_run_step_and_invocation: true, ..idle },
+         ContinuationReferenceCondition::UnknownCreate => ExpiryRebuildDecision {
+             disposition: ExpiryRebuildDisposition::UnknownCreate,
+             ..idle

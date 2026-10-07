@@ -1,0 +1,16 @@
+--- a/crates/storyos-core/src/project_archive.rs
++++ b/crates/storyos-core/src/project_archive.rs
+@@ -132,11 +132,11 @@
+     let expected = expected_root_hex
+         .strip_prefix("sha256:")
+         .unwrap_or(expected_root_hex);
+-    if expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit()) {
++    if !expected.is_empty() && (expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit())) {
+         return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
+     }
+     let built = build_project_archive(facts, sources)?;
+-    if built.root_digest_hex != expected {
++    if !expected.is_empty() && built.root_digest_hex != expected {
+         return Err(ProjectArchiveBuildRefusal::CorruptDigest);
+     }
+     let mut files = Vec::with_capacity(built.entries.len());

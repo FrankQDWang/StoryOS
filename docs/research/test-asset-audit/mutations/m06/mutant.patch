@@ -1,0 +1,11 @@
+--- a/crates/storyos-application/src/manuscript_search.rs
++++ b/crates/storyos-application/src/manuscript_search.rs
+@@ -144,7 +144,7 @@
+ ) -> SearchManuscript {
+     let projection_watermark = facts.snapshot.project_activity_position;
+     if let Some(required) = request.required_watermark
+-        && required > projection_watermark
++        && required < projection_watermark
+     {
+         return SearchManuscript::ProjectionNotReady {
+             source_snapshot: facts.snapshot,

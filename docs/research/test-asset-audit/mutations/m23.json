@@ -1,0 +1,37 @@
+{
+  "sample": 23,
+  "id": "CO022",
+  "source": "crates/storyos-core/src/update_volume.rs",
+  "source_sha256": "60dd0e3635553b55e1d506b7b80b58c4e0cd401b5261fe204734fb7b7ab09c15",
+  "old": "    if command.title.is_empty() || command.title.len() > 1024 {\n        return UpdateVolumeResult::Refused(UpdateVolumeRefusal::InvalidTitle);\n    }\n",
+  "new": "",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/update-volume-http.integration.test.ts",
+    "-t",
+    "^updateVolume\\ renames\\ and\\ reorders\\ one\\ Volume,\\ replays,\\ and\\ fails\\ closed$"
+  ],
+  "defect": "Allow invalid Volume title lengths in the Core classifier.",
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-core",
+    "--lib",
+    "update_volume_tests::an_invalid_title_classifies_as_refused_with_zero_authority_effect",
+    "--",
+    "--exact",
+    "--nocapture"
+  ]
+}

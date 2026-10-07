@@ -1,0 +1,25 @@
+{
+  "sample": 1,
+  "id": "CO105",
+  "source": "crates/storyos-core/src/readable_export_command.rs",
+  "source_sha256": "f473b41f4a02bf1e2ec94149a714e29696966f5e7b523571cc399a517e16c1f4",
+  "old": "if command.current_lifecycle == ProjectLifecycle::Archived {",
+  "new": "if command.current_lifecycle != ProjectLifecycle::Archived {",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/readable-export-admission-http.integration.test.ts",
+    "-t",
+    "^exportHumanReadableManuscript admits one inspectable in-progress operation$"
+  ],
+  "defect": "Refuse active Project readable export admission."
+}

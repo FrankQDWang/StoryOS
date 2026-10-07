@@ -1,0 +1,25 @@
+{
+  "sample": 5,
+  "id": "NP057",
+  "source": "crates/storyos-adapter-postgres/src/command_replay.rs",
+  "source_sha256": "fc353119e5001e96a47ccebca2f2d1d93dbdd5a880a8dcf8ebc2f19c70b9e333",
+  "old": "            Err(()) => Err(unavailable(std::io::Error::other(\n                \"command acknowledgement evidence is damaged\",\n            ))),",
+  "new": "            Err(()) => Err(ReplayFault::HistoricalAcknowledgementUnavailable),",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/create-volume-http.integration.test.ts",
+    "-t",
+    "^createVolume\\ distinguishes\\ historical\\ absence\\ from\\ damaged\\ new\\-format\\ evidence$"
+  ],
+  "defect": "Report damaged new-format acknowledgement as historical absence instead of service failure."
+}

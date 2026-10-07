@@ -1,0 +1,39 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/delete-chapter-http.integration.test.ts (4 tests | 1 failed | 3 skipped) 3683ms
+   × deleteChapter removes a Chapter, honors deletion, and selects next then previous then empty 3681ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/delete-chapter-http.integration.test.ts > deleteChapter removes a Chapter, honors deletion, and selects next then previous then empty
+AssertionError: Expected values to be strictly equal:
++ actual - expected
+
++ '01a108d6-ba25-7441-85ae-49aed0358413'
+- '01a108d6-bd8f-7c90-8b23-f20427885287'
+             ^
+
+
+Expected: "01a108d6-bd8f-7c90-8b23-f20427885287"
+Received: "01a108d6-ba25-7441-85ae-49aed0358413"
+
+ ❯ test/node-postgresql/delete-chapter-http.integration.test.ts:359:14
+    357|     assert.equal(removedA.project.open.kind, "current_chapter");
+    358|     if (removedA.project.open.kind === "current_chapter") {
+    359|       assert.equal(removedA.project.open.current_chapter_id, chapterCI…
+       |              ^
+    360|     }
+    361|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  05:34:10
+   Duration  3.97s (transform 99ms, setup 0ms, import 124ms, tests 3.68s, environment 0ms)
+
+Verification failed: 28.00s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/0eb90dcd54e44a7aaa782a1002f00c30/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

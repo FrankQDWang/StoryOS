@@ -1,0 +1,37 @@
+{
+  "sample": 6,
+  "id": "AP039",
+  "source": "crates/storyos-application/src/manuscript_search.rs",
+  "source_sha256": "c4a08f3fcf307889bcdfd08abe7095881742d7e63d9116553453d161e96b6e9b",
+  "old": "&& required > projection_watermark",
+  "new": "&& required < projection_watermark",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/manuscript-search-http.integration.test.ts",
+    "-t",
+    "^searchManuscript\\ returns\\ a\\ ready\\ empty\\ page\\ and\\ fail\\-closes\\ across\\ Project\\ Scope$"
+  ],
+  "defect": "Accept an unmet required search watermark.",
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-application",
+    "--lib",
+    "manuscript_search::tests::an_unmet_required_watermark_is_projection_not_ready",
+    "--",
+    "--exact",
+    "--nocapture"
+  ]
+}

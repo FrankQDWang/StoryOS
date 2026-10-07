@@ -1,0 +1,37 @@
+{
+  "sample": 3,
+  "id": "AP055",
+  "source": "crates/storyos-application/src/update_project_assistance.rs",
+  "source_sha256": "4fd79986e7249c6c950408e701dea1c02b2432e71b03845c4f04a7ef8d65d1a0",
+  "old": "        || challenge.canonical_command_digest != command_digest\n",
+  "new": "",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/update-project-assistance-http.integration.test.ts",
+    "-t",
+    "^project\\ assistance\\ prepares\\ the\\ host\\ fake\\ binding\\ without\\ a\\ run$"
+  ],
+  "defect": "Ignore canonical bytes/digest disagreement in Application Assistance dispatch.",
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-application",
+    "--lib",
+    "update_project_assistance::tests::a_changed_retry_digest_is_refused_before_the_store",
+    "--",
+    "--exact",
+    "--nocapture"
+  ]
+}

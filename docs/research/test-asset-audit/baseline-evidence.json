@@ -1,0 +1,544 @@
+[
+  {
+    "run_id": "62fab459d82d4bb29a1967e8f6fcbe95",
+    "status": "source-changed",
+    "exit_code": 0,
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/scripts/verification.py",
+      "step",
+      "verify-policy",
+      "--",
+      "make",
+      "verify-policy"
+    ],
+    "started_at": "2026-10-04T17:23:23.049561+00:00",
+    "ended_at": "2026-10-04T17:29:52.309632+00:00",
+    "duration_seconds": 389.2605881670024,
+    "source_start": {
+      "commit": "479224809cdaae997cda51cb8853e3fafa242b65",
+      "tree": "7041dd99e04b95e48b01adb142f5abcc2c008ad0",
+      "write_stamps_sha256": "a5a6b4ebae2695707dc6be10bc11f841a6956c778cc1b0e0a6c01d58fd505448",
+      "inputs_sha256": "7bcd19e264cbf122aa5e3d9bcd9ff3d0f2bbfabcfcbb4c0a438e00d9841e1662",
+      "index_sha256": "6aaed5d82aa6435ff12cda9238345f2f505ae9f35d3261d5bc86fa7ea860081d",
+      "dirty": false
+    },
+    "source_end": {
+      "commit": "89de2e0130f8acefce80a719306ba968dd7513f7",
+      "tree": "9281712f53cca4eea5ea8a1d2829cefbbcf50432",
+      "write_stamps_sha256": "47351f1753177c5993c9030ccd01592a889ecd47b5d31830019580bdd1276e9e",
+      "inputs_sha256": "193f012d4f3e31134e17899a07d96790eb0f57b98fffe95b2584dc3c77fb5f81",
+      "index_sha256": "8a528aa7c54d2074a0561ca6fcce4584e735968169387fa4eb87e4a893331112",
+      "dirty": false
+    },
+    "steps": [
+      {
+        "id": "959d54d6b01f40e4b72c0f2d966952ac",
+        "stage": "verify-policy",
+        "command": [
+          "make",
+          "verify-policy"
+        ],
+        "parent": null,
+        "started_monotonic": 703923.837488291,
+        "started_at": "2026-10-04T17:23:23.539586+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "62fab459d82d4bb29a1967e8f6fcbe95",
+        "graph_sha256": "bfccf4198176797562bf5e6fb9d483e80b814d2b39d4c4cac5591cebb8b2d94c",
+        "node_id": "targeted:verify-policy",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": {
+          "profile": "targeted:verify-policy",
+          "node": "targeted:verify-policy"
+        },
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:29:48.971940+00:00",
+        "budget_seconds": null,
+        "child_group": 40686,
+        "ended_at": "2026-10-04T17:29:51.732129+00:00",
+        "ended_monotonic": 704312.030614083,
+        "duration_seconds": 388.19312604202423,
+        "exit_code": 0
+      },
+      {
+        "id": "26cfb45f33ac4a86a918972edf422e2c",
+        "stage": "input-ownership",
+        "command": [
+          "python3",
+          "scripts/verification.py",
+          "inventory",
+          "--check"
+        ],
+        "parent": "959d54d6b01f40e4b72c0f2d966952ac",
+        "started_monotonic": 703924.083462958,
+        "started_at": "2026-10-04T17:23:23.785521+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "62fab459d82d4bb29a1967e8f6fcbe95",
+        "graph_sha256": "bfccf4198176797562bf5e6fb9d483e80b814d2b39d4c4cac5591cebb8b2d94c",
+        "node_id": "check:input-ownership",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": {
+          "profile": "input-ownership",
+          "node": "check:input-ownership"
+        },
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:23:23.758356+00:00",
+        "budget_seconds": null,
+        "child_group": 40712,
+        "ended_at": "2026-10-04T17:23:24.017051+00:00",
+        "ended_monotonic": 703924.314931833,
+        "duration_seconds": 0.23146891698706895,
+        "exit_code": 0
+      },
+      {
+        "id": "45b9580a426d4133996e410805cdaf9c",
+        "stage": "project-inputs",
+        "command": [
+          "scripts/verify-project-scope.sh",
+          "--check-inputs"
+        ],
+        "parent": "959d54d6b01f40e4b72c0f2d966952ac",
+        "started_monotonic": 703924.485905666,
+        "started_at": "2026-10-04T17:23:24.187972+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "62fab459d82d4bb29a1967e8f6fcbe95",
+        "graph_sha256": "bfccf4198176797562bf5e6fb9d483e80b814d2b39d4c4cac5591cebb8b2d94c",
+        "node_id": "check:project-inputs",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": {
+          "profile": "project-inputs",
+          "node": "check:project-inputs"
+        },
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:23:24.169345+00:00",
+        "budget_seconds": null,
+        "child_group": 40729,
+        "ended_at": "2026-10-04T17:23:24.685390+00:00",
+        "ended_monotonic": 703924.983269291,
+        "duration_seconds": 0.4973637090297416,
+        "exit_code": 0
+      },
+      {
+        "id": "cd855961bca642aea58f83d8c9705daa",
+        "stage": "verification-tests",
+        "command": [
+          "python3",
+          "scripts/verification_test_files.py"
+        ],
+        "parent": "959d54d6b01f40e4b72c0f2d966952ac",
+        "started_monotonic": 703925.117445791,
+        "started_at": "2026-10-04T17:23:24.819463+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "62fab459d82d4bb29a1967e8f6fcbe95",
+        "graph_sha256": "bfccf4198176797562bf5e6fb9d483e80b814d2b39d4c4cac5591cebb8b2d94c",
+        "node_id": "check:verification-tests",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": {
+          "profile": "verification-tests",
+          "node": "check:verification-tests"
+        },
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:29:50.228274+00:00",
+        "budget_seconds": null,
+        "child_group": 40783,
+        "ended_at": "2026-10-04T17:29:51.694612+00:00",
+        "ended_monotonic": 704311.99288775,
+        "duration_seconds": 386.8754423339851,
+        "exit_code": 0
+      }
+    ]
+  },
+  {
+    "run_id": "88f7e20a28e345b380ae15c2133bd0e4",
+    "status": "passed",
+    "exit_code": 0,
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/scripts/verification.py",
+      "step",
+      "release-package",
+      "--",
+      "make",
+      "release-package"
+    ],
+    "started_at": "2026-10-04T17:34:30.567367+00:00",
+    "ended_at": "2026-10-04T17:40:23.228884+00:00",
+    "duration_seconds": 352.62687208293937,
+    "source_start": {
+      "commit": "d1d8393cd32156f0485b5982a2cf37f5515fdcc3",
+      "tree": "09fccacde8e5a4a9254d8b802bd6c3f3782f8df9",
+      "write_stamps_sha256": "13ba799701bc9ded5ad20b303c0831afcf85d787895ada2e5cd8db90b4ab7d8b",
+      "inputs_sha256": "5567928a479c386850cd43b68409f125f6d7e3c597129ae94f5d7755fea8bd34",
+      "index_sha256": "9380273fd8857b886de87b3cdae7ea295daea12fe2dd893c84ed1bd8f2ab160e",
+      "dirty": false
+    },
+    "source_end": {
+      "commit": "d1d8393cd32156f0485b5982a2cf37f5515fdcc3",
+      "tree": "09fccacde8e5a4a9254d8b802bd6c3f3782f8df9",
+      "write_stamps_sha256": "13ba799701bc9ded5ad20b303c0831afcf85d787895ada2e5cd8db90b4ab7d8b",
+      "inputs_sha256": "5567928a479c386850cd43b68409f125f6d7e3c597129ae94f5d7755fea8bd34",
+      "index_sha256": "9380273fd8857b886de87b3cdae7ea295daea12fe2dd893c84ed1bd8f2ab160e",
+      "dirty": false
+    },
+    "steps": [
+      {
+        "id": "958d7afcf03c4843bdbb31bf5dc55e52",
+        "stage": "release-package",
+        "command": [
+          "make",
+          "release-package"
+        ],
+        "parent": null,
+        "started_monotonic": 704591.362009708,
+        "started_at": "2026-10-04T17:34:31.063353+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "88f7e20a28e345b380ae15c2133bd0e4",
+        "graph_sha256": "b90315f360f9903869cbaad7cdd0136a879b34094130bebdfc1436c2cc8e6eb0",
+        "node_id": "targeted:release-package",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": {
+          "profile": "targeted:release-package",
+          "node": "targeted:release-package"
+        },
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:40:21.851471+00:00",
+        "budget_seconds": null,
+        "child_group": 88259,
+        "ended_at": "2026-10-04T17:40:22.195025+00:00",
+        "ended_monotonic": 704942.458440083,
+        "duration_seconds": 351.09643050003797,
+        "exit_code": 0
+      },
+      {
+        "id": "f4c6bf43b4de441ea1b8e20a1eea3f88",
+        "stage": "node-install",
+        "command": [
+          "pnpm",
+          "install",
+          "--frozen-lockfile"
+        ],
+        "parent": "958d7afcf03c4843bdbb31bf5dc55e52",
+        "started_monotonic": 704591.986922958,
+        "started_at": "2026-10-04T17:34:31.687408+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "88f7e20a28e345b380ae15c2133bd0e4",
+        "graph_sha256": "b90315f360f9903869cbaad7cdd0136a879b34094130bebdfc1436c2cc8e6eb0",
+        "node_id": "check:node-install",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": {
+          "profile": "node-install",
+          "node": "check:node-install"
+        },
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:34:31.640203+00:00",
+        "budget_seconds": null,
+        "child_group": 88278,
+        "ended_at": "2026-10-04T17:34:34.607431+00:00",
+        "ended_monotonic": 704594.906003458,
+        "duration_seconds": 2.9190807919949293,
+        "exit_code": 0
+      },
+      {
+        "id": "613a650736dd4722aa652cce80c81c06",
+        "stage": "web-typecheck",
+        "command": [
+          "pnpm",
+          "--dir",
+          "apps/web",
+          "run",
+          "typecheck"
+        ],
+        "parent": "958d7afcf03c4843bdbb31bf5dc55e52",
+        "started_monotonic": 704595.551056333,
+        "started_at": "2026-10-04T17:34:35.252415+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "88f7e20a28e345b380ae15c2133bd0e4",
+        "graph_sha256": "b90315f360f9903869cbaad7cdd0136a879b34094130bebdfc1436c2cc8e6eb0",
+        "node_id": "check:web-typecheck",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": {
+          "profile": "web-typecheck",
+          "node": "check:web-typecheck"
+        },
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:34:45.266163+00:00",
+        "budget_seconds": null,
+        "child_group": 88338,
+        "ended_at": "2026-10-04T17:34:45.778199+00:00",
+        "ended_monotonic": 704606.076769625,
+        "duration_seconds": 10.525713457958773,
+        "exit_code": 0
+      },
+      {
+        "id": "378215dd84ea4b1cb27f767ca535f59c",
+        "stage": "release-package",
+        "command": [
+          "python3",
+          "scripts/package-release.py"
+        ],
+        "parent": "958d7afcf03c4843bdbb31bf5dc55e52",
+        "started_monotonic": 704606.449373875,
+        "started_at": "2026-10-04T17:34:46.150746+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "88f7e20a28e345b380ae15c2133bd0e4",
+        "graph_sha256": "b90315f360f9903869cbaad7cdd0136a879b34094130bebdfc1436c2cc8e6eb0",
+        "node_id": "check:release-package",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": [
+          {
+            "group": "release-package",
+            "status": "ready"
+          }
+        ],
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:40:21.856498+00:00",
+        "budget_seconds": null,
+        "child_group": 88520,
+        "ended_at": "2026-10-04T17:40:22.140551+00:00",
+        "ended_monotonic": 704942.403957666,
+        "duration_seconds": 335.95458404091187,
+        "exit_code": 0
+      },
+      {
+        "id": "a01b4fe864d14313bc6989ae1e6ef8ed",
+        "stage": "web-build",
+        "command": [
+          "pnpm",
+          "--dir",
+          "apps/web",
+          "exec",
+          "vite",
+          "build"
+        ],
+        "parent": "378215dd84ea4b1cb27f767ca535f59c",
+        "started_monotonic": 704606.831725208,
+        "started_at": "2026-10-04T17:34:46.533048+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "88f7e20a28e345b380ae15c2133bd0e4",
+        "graph_sha256": "b90315f360f9903869cbaad7cdd0136a879b34094130bebdfc1436c2cc8e6eb0",
+        "node_id": "check:web-build",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": {
+          "profile": "web-build",
+          "node": "check:web-build"
+        },
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:34:51.535504+00:00",
+        "budget_seconds": null,
+        "child_group": 88527,
+        "ended_at": "2026-10-04T17:34:52.154688+00:00",
+        "ended_monotonic": 704612.453259541,
+        "duration_seconds": 5.621534417034127,
+        "exit_code": 0
+      },
+      {
+        "id": "eabaf7f9dfaa46faa578788c39de7aae",
+        "stage": "rust-release-build",
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--release",
+          "--target-dir",
+          "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/web-release",
+          "-p",
+          "storyos-server",
+          "-p",
+          "storyos-worker-bin",
+          "-p",
+          "storyos-adapter-postgres"
+        ],
+        "parent": "378215dd84ea4b1cb27f767ca535f59c",
+        "started_monotonic": 704649.488090666,
+        "started_at": "2026-10-04T17:35:29.189451+00:00",
+        "status": "passed",
+        "node_version": 1,
+        "run_id": "88f7e20a28e345b380ae15c2133bd0e4",
+        "graph_sha256": "b90315f360f9903869cbaad7cdd0136a879b34094130bebdfc1436c2cc8e6eb0",
+        "node_id": "check:rust-release-build",
+        "selection_reason": [
+          "Registered command boundary"
+        ],
+        "execution_scope": {
+          "profile": "rust-release-build",
+          "node": "check:rust-release-build"
+        },
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:40:20.160474+00:00",
+        "budget_seconds": null,
+        "child_group": 91117,
+        "ended_at": "2026-10-04T17:40:21.084080+00:00",
+        "ended_monotonic": 704941.347487916,
+        "duration_seconds": 291.85939733404666,
+        "exit_code": 0
+      }
+    ]
+  },
+  {
+    "run_id": "6f092501aea044ad9f3e6a57d5d3aaf7",
+    "status": "passed",
+    "exit_code": 0,
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/scripts/verification.py",
+      "step",
+      "audit-startup-baseline",
+      "--",
+      "pnpm",
+      "--dir",
+      "apps/web",
+      "exec",
+      "vitest",
+      "run",
+      "--project",
+      "node-contract",
+      "test/node-contract/protocol-http.integration.test.ts"
+    ],
+    "started_at": "2026-10-04T17:42:23.928179+00:00",
+    "ended_at": "2026-10-04T17:42:29.248124+00:00",
+    "duration_seconds": 5.320876333047636,
+    "source_start": {
+      "commit": "14d5d723812d23c43ee2b46aaa373863adddd289",
+      "tree": "756538338130febe4f2c806b137e965d300dc410",
+      "write_stamps_sha256": "d66b5398f039b7b7a70199945dddc77143b13cd698621b2722d4e5dc6fda4ced",
+      "inputs_sha256": "38c6ae586918b0cde0b4e08e5d3e140bcba92617b56cbcab0e742d56d54c0d7d",
+      "index_sha256": "473837ae749f55f56ad90a0d190d5240f92782d8ad624c05ec206cc4fddf2170",
+      "dirty": false
+    },
+    "source_end": {
+      "commit": "14d5d723812d23c43ee2b46aaa373863adddd289",
+      "tree": "756538338130febe4f2c806b137e965d300dc410",
+      "write_stamps_sha256": "d66b5398f039b7b7a70199945dddc77143b13cd698621b2722d4e5dc6fda4ced",
+      "inputs_sha256": "38c6ae586918b0cde0b4e08e5d3e140bcba92617b56cbcab0e742d56d54c0d7d",
+      "index_sha256": "473837ae749f55f56ad90a0d190d5240f92782d8ad624c05ec206cc4fddf2170",
+      "dirty": false
+    },
+    "steps": [
+      {
+        "id": "acf99e40514449879a5529926bad2868",
+        "stage": "audit-startup-baseline",
+        "command": [
+          "pnpm",
+          "--dir",
+          "apps/web",
+          "exec",
+          "vitest",
+          "run",
+          "--project",
+          "node-contract",
+          "test/node-contract/protocol-http.integration.test.ts"
+        ],
+        "parent": null,
+        "started_monotonic": 705065.150967166,
+        "started_at": "2026-10-04T17:42:24.888161+00:00",
+        "status": "passed",
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:42:24.857580+00:00",
+        "budget_seconds": null,
+        "child_group": 6072,
+        "ended_at": "2026-10-04T17:42:28.261751+00:00",
+        "ended_monotonic": 705068.5244955,
+        "duration_seconds": 3.3735285840230063,
+        "exit_code": 0
+      }
+    ]
+  },
+  {
+    "run_id": "be14876b3d724cafa7e5c66ab6fe4f83",
+    "status": "passed",
+    "exit_code": 0,
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/scripts/verification.py",
+      "step",
+      "audit-browser-baseline",
+      "--",
+      "pnpm",
+      "--dir",
+      "apps/web",
+      "exec",
+      "vitest",
+      "run",
+      "--project",
+      "browser-source",
+      "test/browser-source/chapter-navigation.integration.test.ts",
+      "test/browser-source/list-open.integration.test.ts"
+    ],
+    "started_at": "2026-10-04T17:42:53.987538+00:00",
+    "ended_at": "2026-10-04T17:43:15.733695+00:00",
+    "duration_seconds": 21.746967583079822,
+    "source_start": {
+      "commit": "14d5d723812d23c43ee2b46aaa373863adddd289",
+      "tree": "756538338130febe4f2c806b137e965d300dc410",
+      "write_stamps_sha256": "d66b5398f039b7b7a70199945dddc77143b13cd698621b2722d4e5dc6fda4ced",
+      "inputs_sha256": "38c6ae586918b0cde0b4e08e5d3e140bcba92617b56cbcab0e742d56d54c0d7d",
+      "index_sha256": "473837ae749f55f56ad90a0d190d5240f92782d8ad624c05ec206cc4fddf2170",
+      "dirty": false
+    },
+    "source_end": {
+      "commit": "14d5d723812d23c43ee2b46aaa373863adddd289",
+      "tree": "756538338130febe4f2c806b137e965d300dc410",
+      "write_stamps_sha256": "d66b5398f039b7b7a70199945dddc77143b13cd698621b2722d4e5dc6fda4ced",
+      "inputs_sha256": "38c6ae586918b0cde0b4e08e5d3e140bcba92617b56cbcab0e742d56d54c0d7d",
+      "index_sha256": "473837ae749f55f56ad90a0d190d5240f92782d8ad624c05ec206cc4fddf2170",
+      "dirty": false
+    },
+    "steps": [
+      {
+        "id": "06b3932eaf434a6a9bdd5e0d5f11cb59",
+        "stage": "audit-browser-baseline",
+        "command": [
+          "pnpm",
+          "--dir",
+          "apps/web",
+          "exec",
+          "vitest",
+          "run",
+          "--project",
+          "browser-source",
+          "test/browser-source/chapter-navigation.integration.test.ts",
+          "test/browser-source/list-open.integration.test.ts"
+        ],
+        "parent": null,
+        "started_monotonic": 705095.519513125,
+        "started_at": "2026-10-04T17:42:55.256880+00:00",
+        "status": "passed",
+        "attempt_started": true,
+        "heartbeat_at": "2026-10-04T17:43:10.345172+00:00",
+        "budget_seconds": null,
+        "child_group": 8154,
+        "ended_at": "2026-10-04T17:43:14.862421+00:00",
+        "ended_monotonic": 705115.124917291,
+        "duration_seconds": 19.605404333095066,
+        "exit_code": 0
+      }
+    ]
+  }
+]

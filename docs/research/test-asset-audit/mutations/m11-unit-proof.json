@@ -1,0 +1,23 @@
+{
+  "sample": 11,
+  "id": "CO124",
+  "source": "crates/storyos-core/src/project_archive.rs",
+  "source_sha256": "230a26d512d28e7d536a3ffe6021c1468caabb18d3266d61149496bd881a7542",
+  "old": "    if expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit()) {\n        return Err(ProjectArchiveBuildRefusal::InvalidProvenance);\n    }\n    let built = build_project_archive(facts, sources)?;\n    if built.root_digest_hex != expected {\n        return Err(ProjectArchiveBuildRefusal::CorruptDigest);\n    }\n",
+  "new": "    if !expected.is_empty() && (expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit())) {\n        return Err(ProjectArchiveBuildRefusal::InvalidProvenance);\n    }\n    let built = build_project_archive(facts, sources)?;\n    if !expected.is_empty() && built.root_digest_hex != expected {\n        return Err(ProjectArchiveBuildRefusal::CorruptDigest);\n    }\n",
+  "release": false,
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-core",
+    "--lib",
+    "project_archive::tests::a_missing_root_is_unsettled_and_exposes_no_zip_bytes",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "defect": "Permit ZIP delivery without an expected immutable root.",
+  "attempt": "unit-proof"
+}

@@ -1,0 +1,38 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/edit-inline-proposal-http.integration.test.ts (18 tests | 1 failed | 17 skipped) 3536ms
+   × inline Proposal uses exact Anchors, keeps source and candidate distinct, and Accepts a splice 3535ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/edit-inline-proposal-http.integration.test.ts > inline Proposal uses exact Anchors, keeps source and candidate distinct, and Accepts a splice
+AssertionError: Expected values to be strictly equal:
++ actual - expected
+
++ 'narrator tone Keep the voice consistent.'
+- 'narrxxr tone Keep the voice consistent.'
+
+
+Expected: "narrxxr tone Keep the voice consistent."
+Received: "narrator tone Keep the voice consistent."
+
+ ❯ test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1017:12
+    1015|       proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fet…
+    1016|     });
+    1017|     assert.equal(revised.proposal.candidate_text, INTERIOR_CANDIDATE);
+       |            ^
+    1018|     assert.equal(revised.proposal.validation, "valid");
+    1019|     if (opened.proposal.validation_receipt.kind !== "present"
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 skipped (18)
+   Start at  05:09:11
+   Duration  3.94s (transform 207ms, setup 0ms, import 242ms, tests 3.54s, environment 0ms)
+
+Verification failed: 24.65s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/3c5ed40ea0f14c368339dd28e171eeaa/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

@@ -1,0 +1,37 @@
+{
+  "sample": 28,
+  "id": "AP008",
+  "source": "crates/storyos-application/src/archive_project.rs",
+  "source_sha256": "21843f9c2506d336373d7258036049f1c756c652a555db7552d9bed2925a1695",
+  "old": "        || challenge.command_kind != \"archiveProject\"\n",
+  "new": "",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/archive-project-http.integration.test.ts",
+    "-t",
+    "^archiveProject\\ settles\\ lifecycle,\\ replays,\\ lists\\ archived,\\ and\\ fails\\ closed$"
+  ],
+  "defect": "Ignore the internal Archive command-kind mismatch.",
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-application",
+    "--lib",
+    "archive_project::tests::a_changed_archive_project_binding_is_refused_before_the_store",
+    "--",
+    "--exact",
+    "--nocapture"
+  ]
+}

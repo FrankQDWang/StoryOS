@@ -1,0 +1,11 @@
+--- a/crates/storyos-application/src/update_project.rs
++++ b/crates/storyos-application/src/update_project.rs
+@@ -115,8 +115,6 @@
+         || challenge.method != "PATCH"
+         || challenge.route_template != "/api/v1/projects/{project_id}"
+         || challenge.command_schema != "storyos.command.update-project.request.v1"
+-        || command.title.is_empty()
+-        || command.title.len() > 1024
+         || command.expected_revision < 1
+     {
+         return Err(UpdateProjectError::BindingConflict);

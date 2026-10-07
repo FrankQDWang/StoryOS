@@ -1,0 +1,37 @@
+{
+  "sample": 17,
+  "id": "CO028",
+  "source": "crates/storyos-core/src/create_chapter.rs",
+  "source_sha256": "32adbd9213631675eb03487cb03aba9c9c406e08259330ce38dc0a3b1cf2a4ce",
+  "old": "    if command.title.is_empty() || command.title.len() > 1024 {\n        return CreateChapterResult::Refused(CreateChapterRefusal::InvalidTitle);\n    }\n",
+  "new": "",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/create-chapter-http.integration.test.ts",
+    "-t",
+    "^createChapter\\ creates\\ three\\ named\\ Chapters,\\ keeps\\ the\\ first\\ current,\\ and\\ fails\\ closed$"
+  ],
+  "defect": "Allow invalid Chapter title lengths in the Core classifier.",
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-core",
+    "--lib",
+    "create_chapter_tests::an_invalid_title_classifies_as_refused_with_zero_authority_effect",
+    "--",
+    "--exact",
+    "--nocapture"
+  ]
+}

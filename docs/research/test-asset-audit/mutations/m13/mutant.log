@@ -1,0 +1,30 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/project-export-admission-http.integration.test.ts (6 tests | 1 failed | 5 skipped) 6394ms
+   × the in-process Worker settles an admitted Project Export Archive to ready 6392ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/project-export-admission-http.integration.test.ts > the in-process Worker settles an admitted Project Export Archive to ready
+Error: Project Export Archive did not become ready
+ ❯ waitForExportStatus test/node-postgresql/project-export-admission-http.integration.test.ts:292:9
+    290|     });
+    291|   }
+    292|   throw new Error(`Project Export Archive did not become ${status}`);
+       |         ^
+    293| }
+    294|
+ ❯ test/node-postgresql/project-export-admission-http.integration.test.ts:574:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  05:16:48
+   Duration  6.75s (transform 128ms, setup 0ms, import 156ms, tests 6.39s, environment 0ms)
+
+Verification failed: 17.52s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/7dcebdb21e5f4392a2aeeaf20a73527a/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

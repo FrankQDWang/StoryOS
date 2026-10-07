@@ -1,0 +1,25 @@
+{
+  "sample": 13,
+  "id": "AD046",
+  "source": "crates/storyos-adapter-postgres/src/export_work.rs",
+  "source_sha256": "07a5f60a6f036d82f3af85bb72ab46bba8d0979c38cd52a640c919c926b6a4fa",
+  "old": "        Ok(claimed.map(ClaimedExportWork::Archive))",
+  "new": "        let _ = claimed;\n        Ok(None)",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/project-export-admission-http.integration.test.ts",
+    "-t",
+    "^the\\ in\\-process\\ Worker\\ settles\\ an\\ admitted\\ Project\\ Export\\ Archive\\ to\\ ready$"
+  ],
+  "defect": "Drop claimed Archive fallback work instead of dispatching it."
+}

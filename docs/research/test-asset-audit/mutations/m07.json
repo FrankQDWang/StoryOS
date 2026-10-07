@@ -1,0 +1,16 @@
+{
+  "sample": 7,
+  "id": "AD013",
+  "source": "crates/storyos-adapter-postgres/src/manuscript_block.rs",
+  "source_sha256": "fe21fcb387721b7c834f749eb504ef5477dcaaa5122e4fb3bdffd9eb9ce7670d",
+  "old": "            \"heading\" => ManuscriptBlockKind::Heading,",
+  "new": "            \"heading\" => ManuscriptBlockKind::Paragraph,",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "node",
+    "docs/research/test-asset-audit/mutations/browser-probe.mts"
+  ],
+  "defect": "Decode a stored heading as a paragraph, losing the persisted kind."
+}

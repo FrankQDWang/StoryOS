@@ -1,0 +1,488 @@
+[
+  {
+    "id": "BD001",
+    "path": "apps/web/test/browser-exact-dist/exact-dist-foundation.test.ts",
+    "line": 22,
+    "test": "serves untransformed dist bytes in a reloadable same-origin child frame",
+    "verdict": "DELETE",
+    "reason": "D4",
+    "evidence": "The product-host byte and resource contract is covered by the real HTTP host test, and actual editor reload is exercised by the Stage 1 journey. This case instead checks the test-only exactDistPlugin plus native iframe realm/sessionStorage semantics. Root/Project byte equality and Content-Length do not compare either response with a built artifact, so the title overstates untransformed-byte proof. No product covering test is claimed for a mutation confined to the Vite test plugin or the artificial realm marker.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106; apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307",
+    "remove": [
+      1,
+      67
+    ]
+  },
+  {
+    "id": "BD002",
+    "path": "apps/web/test/browser-exact-dist/production-page.integration.test.ts",
+    "line": 34,
+    "test": "loads the exact Vite production page in Google Chrome and shows the Stage 1 surface",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move protected-ready heading/message, no alert and no premature editor/AI controls into the Create Chapter journey before it creates the Project. Its iframe already loads the same packaged root. The explicit Chrome user-agent check tests runner selection; byte/header smoke belongs to the retained real-host HTTP test. Remove this standalone page fixture only after the initial-surface assertions transfer.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43; apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106",
+    "remove": null
+  },
+  {
+    "id": "BD003",
+    "path": "apps/web/test/browser-exact-dist/s2-01-bootstrap-challenge.integration.test.ts",
+    "line": 48,
+    "test": "a new local browser session reaches protected-ready without AI and acquires createProjectChallenge",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "The Create Chapter journey starts through the same root bootstrap and obtains a real Create Project Challenge on form submission. Transfer its root no-alert/no-AI surface checks, including MCP absence, into that fixture before creation; the production-page transfer supplies the rest of the initial surface. The extra direct generated-client Challenge call and static nonce/profile shape checks add no separate browser interaction. Removal depends on the surface transfer.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43; apps/web/test/browser-exact-dist/production-page.integration.test.ts:34",
+    "remove": null
+  },
+  {
+    "id": "BD004",
+    "path": "apps/web/test/browser-exact-dist/s2-02-create-empty-project.integration.test.ts",
+    "line": 34,
+    "test": "the protected browser creates one empty workspace without a starter Chapter",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "The Create Chapter journey already creates an empty Project before any Volume. Add its exact Project heading, empty tree and empty-workspace/no-starter content checks at that point, then remove this duplicate bootstrap/create fixture. Its textarea absence is obsolete as a general editor absence check because production uses Tiptap; preserve the actual empty-tree/current-state behavior.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43",
+    "remove": null
+  },
+  {
+    "id": "BD005",
+    "path": "apps/web/test/browser-exact-dist/s2-03-list-open-library.integration.test.ts",
+    "line": 34,
+    "test": "the current User library lists owned Projects and opens an empty Project from getProject",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Rename Project already creates an empty Project, reloads the real library, checks scoped/no-secret results and opens the same Project with the current title. Transfer the final empty-tree assertion into that case before removal; this case has no divergent list/query title (the retained source test does). Do not retain a second complete fixture only for unchanged title versus renamed title.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-04-rename-project.integration.test.ts:46; apps/web/test/browser-source/list-open.integration.test.ts:11",
+    "remove": null
+  },
+  {
+    "id": "BD006",
+    "path": "apps/web/test/browser-exact-dist/s2-04-rename-project.integration.test.ts",
+    "line": 46,
+    "test": "the author renames one exact Project and the library plus opened title converge",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Submitting the real Project rename form must update the opened heading and the newly loaded library, then open the renamed Project correctly. HTTP rename observes durable query values but does not execute menu/form wiring or library refresh; the source historical-acknowledgement test returns an error and never proves successful packaged rename. Receive the empty-tree check from the library-only case.",
+    "coverage": "apps/web/test/node-postgresql/update-project-http.integration.test.ts:294; apps/web/test/browser-source/rename-historical-acknowledgement.integration.test.ts:15; apps/web/test/browser-exact-dist/s2-03-list-open-library.integration.test.ts:34",
+    "remove": null
+  },
+  {
+    "id": "BD007",
+    "path": "apps/web/test/browser-exact-dist/s2-05-archive-project.integration.test.ts",
+    "line": 47,
+    "test": "the library fails closed on open and write for an archived Project",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The reloaded library must render an archived Project as a disabled open button and stay protected-ready when clicked. HTTP Archive refuses commands but cannot detect an enabled stale library entry. The fixture archives through an imported command wrapper, not the packaged Archive UI; absent form[data-rename]/form[data-archive] and textarea selectors do not prove all current menu/write controls are disabled. Retain only the actual disabled-open regression.",
+    "coverage": "apps/web/test/node-postgresql/archive-project-http.integration.test.ts:431; apps/web/test/browser-source/archive-historical-acknowledgement.integration.test.ts:11",
+    "remove": null
+  },
+  {
+    "id": "BD008",
+    "path": "apps/web/test/browser-exact-dist/s2-07-create-volume.integration.test.ts",
+    "line": 35,
+    "test": "the author creates one named Volume from the empty manuscript workspace",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Volume rename/reorder already creates the same first named Volume and checks the exact single-item title list. Transfer the first-Volume empty-project state and zero child-Chapter assertion there before creating its second Volume, then remove this repeated Project/Volume creation fixture. Repeated textarea and AI-text absences do not justify a separate scenario.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts:65",
+    "remove": null
+  },
+  {
+    "id": "BD009",
+    "path": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts",
+    "line": 43,
+    "test": "the author creates Chapters at inline menu positions and keeps the first current Chapter",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Pointer versus overflow Chapter menus must offer the correct before/after placements, put the title editor between exact siblings, cancel on Escape without insertion, choose the default last Volume versus an explicit Volume, and retain the first Current Chapter and order after reload. HTTP ordering never executes this menu position/selection wiring; ordinary journey setup only appends. Keep those behaviors, not the fixed 12px styling or screenshot creation as independent regressions. Receive the root/empty-Project assertion transfers.",
+    "coverage": "apps/web/test/node-postgresql/create-chapter-http.integration.test.ts:1002; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130",
+    "remove": null
+  },
+  {
+    "id": "BD010",
+    "path": "apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts",
+    "line": 65,
+    "test": "the author renames and reorders Volumes from the canonical tree and they survive reopen",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The packaged Volume menu must rename one exact Volume, reopen its persisted title, move the first Volume down and reopen the exact new order. Core/HTTP ordering cannot detect stale menu target/form wiring or a display order that diverges after reload; Chapter menu updates have separate component/command paths. Receive first-Volume empty-workspace/zero-Chapter checks before creating Volume B.",
+    "coverage": "apps/web/test/node-postgresql/update-volume-http.integration.test.ts:196; apps/web/test/browser-exact-dist/s2-07-create-volume.integration.test.ts:35",
+    "remove": null
+  },
+  {
+    "id": "BD011",
+    "path": "apps/web/test/browser-exact-dist/s2-09-navigate-reopen.integration.test.ts",
+    "line": 95,
+    "test": "the author opens each Chapter from the tree and reopens the current Chapter",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Its distinct input is conflicting localStorage, query and hash Chapter hints on reopen: the server Current Chapter must win. Transfer those hints into save-truth before its final reopen, pointing them to inspected Chapter A while B is current. That receiver already inspects non-current A read-only, retains both Chapters' prose and reopens B. Three empty-Chapter clicks add no distinct ownership rule; removal depends on preserving the conflicting-hint input.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-source/chapter-navigation.integration.test.ts:38",
+    "remove": null
+  },
+  {
+    "id": "BD012",
+    "path": "apps/web/test/browser-exact-dist/s2-11-rename-reorder-chapters.integration.test.ts",
+    "line": 91,
+    "test": "the author renames and reorders Chapters from the canonical tree and they survive reopen",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The actual Chapter menu/form must rename the selected Current Chapter, preserve that identity while moving it down, and reopen with the renamed Chapter still current although it is no longer first. Volume reorder has a separate menu/command and no current-editor binding; HTTP Chapter update cannot detect incorrect rendered heading/current selection after reorder.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-10-rename-reorder-volumes.integration.test.ts:65; apps/web/test/node-postgresql/update-chapter-http.integration.test.ts:252",
+    "remove": null
+  },
+  {
+    "id": "BD013",
+    "path": "apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts",
+    "line": 84,
+    "test": "writes in two Chapters, switches current Chapter, and reopens the current Chapter",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "The save-truth case already types Alpha/Beta in two Chapters, makes B current, inspects A read-only and reopens B. Transfer the exact second Chapter GET, reopened editability and current-selection menu observations into that case. Check current-menu visibility only while the relevant menu is open; current absence checks can otherwise pass because a menu is closed. Keep the transfer prerequisite rather than maintaining the same create/type/switch fixture twice.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130",
+    "remove": null
+  },
+  {
+    "id": "BD014",
+    "path": "apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts",
+    "line": 181,
+    "test": "the author confirms Chapter removal, keeps the next current Chapter, then opens empty",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "After confirming removal of a written Current Chapter, the packaged editor must bind the next Chapter, become writable with no old pending input, repeat that transition, and disappear after the last Chapter is deleted. HTTP deletion checks tree/head rules but cannot catch stale editor/controller attachment after the delete form completes. Statistics deletion does not by itself establish this repeated writable-successor-to-empty transition.",
+    "coverage": "apps/web/test/node-postgresql/delete-chapter-http.integration.test.ts:571; apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts:66",
+    "remove": null
+  },
+  {
+    "id": "BD015",
+    "path": "apps/web/test/browser-exact-dist/s2-14-delete-volume.integration.test.ts",
+    "line": 66,
+    "test": "the author cannot remove a nonempty Volume, then removes an empty Volume",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A confirmed nonempty Volume removal must show the refusal while retaining both rows; a following empty-Volume removal must succeed and clear that prior error. Chapter deletion uses another form and command, while HTTP Volume refusal cannot detect a stale error left in the mounted UI after a later success.",
+    "coverage": "apps/web/test/node-postgresql/delete-volume-http.integration.test.ts:517; apps/web/test/browser-exact-dist/s2-13-delete-chapter.integration.test.ts:181",
+    "remove": null
+  },
+  {
+    "id": "BD016",
+    "path": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts",
+    "line": 77,
+    "test": "shows pending, saving, and saved without calling local input saved, across Chapters",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The first sampled state with newly visible local text must be pending/saving rather than saved, and later saved labels must follow settled prose through current-Chapter change, read-only inspection and reopen. The ordinary current-Chapter case waits for saving eventually but does not reject saved at this first sample. This is a sampled observation with no held server response; it does not prove that every frame remains unsaved until acknowledgement. Receive conflicting reopen hints and remaining two-Chapter query/editability checks from navigation/current-Chapter duplicates.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts:84; apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307",
+    "remove": null
+  },
+  {
+    "id": "BD017",
+    "path": "apps/web/test/browser-exact-dist/s2-editor.integration.test.ts",
+    "line": 77,
+    "test": "hydrates production Tiptap for one paragraph Block without a textarea write path",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Move initial no-editor state and first paragraph/Block identity, editability and zero-pending hydration checks into Create Chapter:43, which already transitions from an empty Project to its first packaged editor. The Ctrl+B check runs on an empty document with no subsequent typing, so enabled stored marks could still produce no strong/b element and no text change; it does not establish unsupported formatting rejection. Do not preserve a separate fixture for that masked assertion.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-08-create-chapter.integration.test.ts:43; apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284",
+    "remove": null
+  },
+  {
+    "id": "BD018",
+    "path": "apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts",
+    "line": 95,
+    "test": "recovers Local Edit Journal text after reload without a second Author Edit",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Transfer the repeated reload and complete authoritative Revision equality check into Stage 1 journey after its recovered saved state. That journey already observes a retained pending Journal intent before reloading and settles the same visible text. This test accepts either pending or already saved before its supposed interruption, so it can exercise only ordinary reload. It counts no POSTs; unchanged Revision on the final reload proves no new authoritative revision, not necessarily no duplicate request.",
+    "coverage": "apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts:307; apps/web/test/browser-source/reload-recovery.integration.test.ts:68",
+    "remove": null
+  },
+  {
+    "id": "BD019",
+    "path": "apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts",
+    "line": 69,
+    "test": "keeps the editor writable through frequent Author Undo between Author Edit batches",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Repeated real Edit/Edit/Undo cycles must keep the packaged editor writable and create exactly 24 Author Edit and 12 Undo requests with only successful Challenge responses, without resetting quota windows. Single Undo covers one cycle, the long-session journey performs one Undo and explicitly resets quotas, and source tests mock network admission. Retain continued-cycle/frontier behavior; elapsed time is logged but has no threshold, so this does not prove 12 Undos occurred inside one minute. Receive exact Block/frontier/reload assertions from the single-Undo case.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-undo.integration.test.ts:162; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-source/author-undo-rate-limit.integration.test.ts:143",
+    "remove": null
+  },
+  {
+    "id": "BD020",
+    "path": "apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts",
+    "line": 123,
+    "test": "repeats Chapter switching, Undo, search, and reload without losing work",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "After 2401 individual trusted inputs, the packaged editor must complete automatic batching/collection, switch Chapters, reload and save another input without losing either Chapter. The source working-set test calls persist/collect directly and cannot detect broken mounted-controller collection or post-reload continued input. Search/statistics smoke is incidental. This journey resets Challenge windows and logs timings with no performance thresholds; it proves neither sustained quota behavior nor a latency/RPO/RTO bound.",
+    "coverage": "apps/web/test/browser-source/journal-working-set.integration.test.ts:16; apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77",
+    "remove": null
+  },
+  {
+    "id": "BD021",
+    "path": "apps/web/test/browser-exact-dist/s2-undo.integration.test.ts",
+    "line": 162,
+    "test": "undoes one exact admitted Author Action and restores identity after reload",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Frequent Undo already types two distinct settled edits, reverses only the latest and continues editing. Transfer the exact stable Block identity, before/after undo frontier and final reload/restored frontier checks into a selected cycle and final reload of that case. The current receiver checks text/request counts but not these identities; complete the transfer before removing this duplicate setup.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69",
+    "remove": null
+  },
+  {
+    "id": "BD022",
+    "path": "apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts",
+    "line": 74,
+    "test": "saves sustained Chinese composition, idle pauses, and Block boundaries without a quota reset",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Repeated Chinese composition, punctuation, split and join must yield exactly 50 Author Edit requests, successful Challenge responses and exact final text without quota-window resets. Packaged input exercises only a few such operations; long-session explicitly resets quota windows and uses plain characters, while frequent Undo exercises a different command family. This case detects additional composition submissions or boundary edits that exhaust real admission during sustained writing. Runtime measurements are logged, not a declared latency target.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-exact-dist/s2-frequent-undo.integration.test.ts:69",
+    "remove": null
+  },
+  {
+    "id": "BD023",
+    "path": "apps/web/test/browser-exact-dist/s2-search.integration.test.ts",
+    "line": 127,
+    "test": "searches the current Chapter and manuscript with bounded Snapshot identity",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The packaged search radio/form must distinguish current-Chapter misses from manuscript hits, render exact Chapter/Block/range identities, clear prior hits for no-match, and exclude a deleted Chapter on later search while preserving another Chapter's hit. HTTP query logic cannot detect a radio value ignored by the client or stale result DOM; the aggregate journey checks only one positive hit.",
+    "coverage": "apps/web/test/node-postgresql/manuscript-search-http.integration.test.ts:78; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130",
+    "remove": null
+  },
+  {
+    "id": "BD024",
+    "path": "apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts",
+    "line": 120,
+    "test": "rebuilds Chapter and manuscript statistics after edit, switch, and deletion",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The mounted statistics panel must refresh exact Chapter versus manuscript counts after editing a different Chapter and deleting that Current Chapter. Distinct word/character totals expose swapped fields or stale selection/aggregate display. Core Unicode golden cases own counting semantics but do not execute panel refresh, and the aggregate/long journeys check only lag and Snapshot shape.",
+    "coverage": "crates/storyos-core/src/statistics_profile_tests.rs:4; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123",
+    "remove": null
+  },
+  {
+    "id": "BD025",
+    "path": "apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts",
+    "line": 115,
+    "test": "exports a durable human-readable manuscript through the Worker",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "After one ready export, creating and editing a second Chapter then requesting another must render a new export identity and exact updated manuscript bytes with a download control. This catches a panel reusing the earlier ready result. HTTP pinned-source tests own durable capture/output but not browser polling/render identity; the aggregate journey requests only one export. A visible download button is not proof that downloading works.",
+    "coverage": "apps/web/test/node-postgresql/readable-export-pinned-source-http.integration.test.ts:124; apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130",
+    "remove": null
+  },
+  {
+    "id": "BD026",
+    "path": "apps/web/test/browser-exact-dist/s2-physical-drill.integration.test.ts",
+    "line": 89,
+    "test": "writes Chinese and English after restore, settles, reloads, and keeps isolation",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The physical-restore runner replays a post-backup WAL title, opens that restored Project through the real library, continues writing, reloads and checks isolation from foreign/stale fixture content. Ordinary new-Project journeys cannot detect inability to resume with restored Session/base/storage state. vitest.config selects this file only in the restore suite, and verify-recovery-hold.sh checks the WAL marker before invoking it. This source audit did not execute the physical drill.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123",
+    "remove": null
+  },
+  {
+    "id": "BD027",
+    "path": "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
+    "line": 65,
+    "test": "the production page uses the approved workspace without losing writing state",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Collapsing and reopening the unavailable assistant beside newly typed text must preserve the same writable editor, Chapter and writer generation; disabled composer submission must stay idle and further typing must work. Other journeys use the composer enabled or never collapse it. Fixed width/font and repeated label/selector inventories are not separate KEEP reasons. The test observes DOM/state continuity, not a held unsaved interval or final server persistence.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts:130; apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77",
+    "remove": null
+  },
+  {
+    "id": "BD028",
+    "path": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
+    "line": 130,
+    "test": "runs the AI-disabled production journey without losing Chapter work",
+    "verdict": "MERGE",
+    "reason": "M1",
+    "evidence": "Its two-Chapter write/reopen, single positive search, ready statistics and one export are covered more precisely by the focused save/search/statistics/export tests. Carry its exact final GET equality for both Chapters into save-truth and the unavailable-assistant/no-AI presentation checks into readable export (workspace already checks the unavailable assistant). Then retire this second aggregate setup or point its release evidence at those retained cases. Preserve the product release gate; no gate change is part of this audit.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts:77; apps/web/test/browser-exact-dist/s2-search.integration.test.ts:127; apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts:120; apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts:115; apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts:65",
+    "remove": null
+  },
+  {
+    "id": "BD029",
+    "path": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts",
+    "line": 184,
+    "test": "moves and retypes Blocks with stable identity and refuses copy as a move",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A real move shortcut must reorder the selected Block without changing either identity, while later multiline paste must mint a third identity and retype must change only the selected moved Block's kind. The final reload checks all identities/kinds/text together. Core primitives and split/join do not execute selection-to-move/retype key binding. Despite the title, no copy-as-move request is refused; the actual copy protection is a newly allocated pasted Block identity.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts:179; apps/web/test/browser-exact-dist/s2-input.integration.test.ts:284",
+    "remove": null
+  },
+  {
+    "id": "BD030",
+    "path": "apps/web/test/browser-exact-dist/s2-split-join.integration.test.ts",
+    "line": 179,
+    "test": "splits and joins adjacent Blocks and reopens the same identities",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Splitting, reloading the two stored Blocks, then Backspace-joining a nonempty right Block must retain the left identity and complete concatenated text through another reload. Sustained writing joins an empty newly split Block; source adapter join does not persist/reload and is DELETE. This case protects actual hydrated Block identity plus the right text after join; middle-of-text splitting remains a distinct source input.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts:55; apps/web/test/browser-source/manuscript-tiptap-adapter.integration.test.ts:110",
+    "remove": null
+  },
+  {
+    "id": "BD031",
+    "path": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts",
+    "line": 188,
+    "test": "consumes real assistance and Run Activity before the author continues writing",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "The packaged Activity consumer must advance its rendered cursor through real assistance_updated, agent_run_created and Author Edit events, then allow another saved edit. Mock SSE tests cannot detect drift between real Server event bytes and this mounted consumer; enabled composer journeys do not assert this exact stream/cursor sequence. The optional database teardown also expects these two fixed-key assistance/Run receipts. Preserve that fixture dependency during any future consolidation.",
+    "coverage": "apps/web/test/browser-source/activity-stream-consume.integration.test.ts:105; apps/web/test/browser-source/activity-stream-consume.integration.test.ts:322; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10",
+    "remove": null
+  },
+  {
+    "id": "BD032",
+    "path": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts",
+    "line": 284,
+    "test": "settles IME, clipboard, drop, and contiguous Block replacement without reusing identity",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Two complete multiline replacements must allocate distinct new right Block identities; cross-Block cut must remove the old right identity; IME cancellation/confirmation and drop must persist the resulting text across reload. Single paste in move/retype cannot detect reusing an earlier replacement identity, and repeated composition/split writing never performs a cross-Block selected cut. Drop is a synthesized DragEvent with DataTransfer, while clipboard commands drive the actual browser; do not label it native drag gesture coverage.",
+    "coverage": "apps/web/test/browser-exact-dist/s2-move-retype.integration.test.ts:184; apps/web/test/browser-exact-dist/s2-sustained-writing.integration.test.ts:74; apps/web/test/browser-source/local-edit-journal-append-projection.integration.test.ts:156",
+    "remove": null
+  },
+  {
+    "id": "BD033",
+    "path": "apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts",
+    "line": 307,
+    "test": "S1-JRN-001 uses the Vite production page, storyos-server, Application, Core, and PostgreSQL",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Real packaged input must produce linked durable Journal groups, collected payload fences and matching Server Activity through three settled edits and a fourth retained intent recovered after browser reload. Source GC uses mocked acknowledgements; long-session checks text after automatic collection but not these cross-store/Activity identity relationships. The optional database teardown independently requires exactly four Receipts, Activities and Author Actions. Chinese text is inserted directly here, not composed through IME. Command/coverage digests and timestamps are normalized, so only cross-reference consistency (plus independently checked event digest and pinned body/unit digests) is claimed. Receive the repeated-reload exact Revision check from interruption:95.",
+    "coverage": "apps/web/test/browser-source/journal-gc.integration.test.ts:43; apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts:123; apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts:95",
+    "remove": null
+  },
+  {
+    "id": "BD034",
+    "path": "apps/web/test/browser-exact-dist/production-captured-memory.integration.test.ts",
+    "line": 5,
+    "test": "shows exact captured Memory settings through Run selection, reload, and unavailable evidence",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The helper never asserts rendered captured Memory settings or switches a displayed historical Run: all Memory facts are checked with direct getAgentRun calls. The retained HTTP case already cancels the first Run, continues the same Conversation with use=false/contribution=true, preserves old settings and uses restrictive RLS to make captured evidence unavailable. Current and historical lookups use the same exact-revision LEFT JOIN and boolean mapping. Real composer continuation after reload is covered by the production prose journey. Remove its exclusive helper/dispatch route and reconcile optional teardown captured_memory counters.",
+    "coverage": "apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:554; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10",
+    "remove": [
+      1,
+      8
+    ]
+  },
+  {
+    "id": "BD035",
+    "path": "apps/web/test/browser-exact-dist/production-run-evidence.integration.test.ts",
+    "line": 5,
+    "test": "shows bounded selected Run input and recovery evidence through the packaged production host",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The helper evidence assertions call getAgentRun directly; they do not assert selected Context, compaction, reference recovery, retrieval or successor evidence rendered in the UI. Existing HTTP cases cover immutable/superseded input, over-limit refusal, compaction install/refusal, expiry rebuild, original/cancelled retrieval and successor eligibility/fence cancellation. Browser reload followed by another direct GET adds no browser evidence-reader boundary. Real composer continuity is covered by production prose/controls. Remove this exclusive 13-Project helper and its route, and update optional teardown run_evidence counters. No rendered evidence coverage is claimed lost. Execution order: keep the cited covering test until NP129, NP135 has transferred its required assertions to its named destination. Current source coverage is not a claim that the destination already contains them.",
+    "coverage": "apps/web/test/node-postgresql/admitted-proposal-target-http.integration.test.ts:58; apps/web/test/node-postgresql/continue-conversation-input-http.integration.test.ts:237; apps/web/test/node-postgresql/create-agent-run-http.integration.test.ts:944; apps/web/test/node-postgresql/compact-active-context-http.integration.test.ts:165; apps/web/test/node-postgresql/rebuild-expired-reference-http.integration.test.ts:201; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:128; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:220; apps/web/test/node-postgresql/retrieve-original-result-http.integration.test.ts:277; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:288; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:317; apps/web/test/node-postgresql/unknown-create-successor-http.integration.test.ts:362; apps/web/test/node-postgresql/complete-fake-model-decision-http.integration.test.ts:237; apps/web/test/browser-exact-dist/production-host.integration.test.ts:10; apps/web/test/browser-exact-dist/production-host.integration.test.ts:30",
+    "remove": [
+      1,
+      8
+    ],
+    "coverage_dependencies": [
+      "NP129",
+      "NP135"
+    ]
+  },
+  {
+    "id": "BD036",
+    "path": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+    "line": 5,
+    "test": "opens, edits, reloads, and takes over through the real production host in Chrome",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Cold real-origin Chrome enforces Trusted Types/frame-ancestors and HttpOnly session issuance; replay-generation resync remains writable. A held old-writer POST crosses actual Takeover and returns 412: old local text and Journal partitions survive in a read-only editor while the winner reloads and writes. HTTP header checks cannot detect browser enforcement or mounted stale-writer state; source mocked Takeover does not exercise this actual response.",
+    "coverage": "apps/web/test/node-postgresql/protocol-http-host.integration.test.ts:106; apps/web/test/browser-source/manual-input.integration.test.ts:579",
+    "remove": null
+  },
+  {
+    "id": "BD037",
+    "path": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+    "line": 10,
+    "test": "recovers one prose request through the production Web, Server, database, and Worker",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Real composer retains lost Run admission identity without another POST; delayed Run/Proposal reads preserve both candidates. A held candidate edit blocks a second input, then reload recovers committed revision without resubmission. Rejection and Acceptance require explicit retries with frozen bytes/key across pre-commit and post-commit losses; pending editor state and the sibling candidate survive. New Conversation choice persists and subsequent follow-up targets the current context. Mocked source delivery and HTTP replay do not cover mounted composer, candidate projection and durable decision controls together.",
+    "coverage": "apps/web/test/browser-source/accept-block-proposal.integration.test.ts:12",
+    "remove": null
+  },
+  {
+    "id": "BD038",
+    "path": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+    "line": 15,
+    "test": "preserves and copies a complete mixed edit through response loss, reload and Server restart",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Real mixed candidate/Manuscript selection creates a complete Refused Edit Draft after lost response and Server restart, without another POST. Native Copy, source Chapter switching/rename/late response/deletion, retry preview, proposal versus authoritative targets, corrupt returned Snapshot, expansion and Root Undo all preserve durable bindings and the displayed source text. Distinct lost/received Undo observations survive restart. Discard, repeated reopen and pinned Archive state feed physical restore. HTTP Inline lifecycle tests cannot detect native selection, clipboard, stale source labels or IndexedDB recovery. The reservation race uses a controlled SQL barrier, not timing guesses.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:427; apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:1499; apps/web/test/browser-exact-dist/restored-discard.integration.test.ts:4",
+    "remove": null
+  },
+  {
+    "id": "BD039",
+    "path": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+    "line": 19,
+    "test": "recovers a conflicted Proposal through reload, replan, and an explicit retry",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "A held actual Acceptance crosses Takeover: old UI becomes ineligible but keeps Copy and candidate text. Winner conflict renders Replan/Reject versus Withdraw for different conflict classes; forged local eligibility cannot restore Accept. Lost pre-commit Replan requires explicit same-key retry after reload and preserves writable other prose. Native clipboard and pending-validation controls are observed. Revision drift is installed with SQL; this is not proof of an external Author Edit sequence. HTTP conflict settlement and source mocked delivery do not cover these mounted controls.",
+    "coverage": "apps/web/test/browser-source/accept-block-proposal.integration.test.ts:12",
+    "remove": null
+  },
+  {
+    "id": "BD040",
+    "path": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+    "line": 24,
+    "test": "revises real cross-Chapter locations through the composer and central editor",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Real cross-Chapter location links select the exact secondary Operation; late navigation cannot replace the newer location. Editing/composer targeting preserves the primary candidate. Primary Acceptance remounts a writable editor, secondary conflict/Replan preserves applied state and immutable history, and historical/current Run Return restores its own Chapter origin. HTTP multi-operation cases cannot catch wrong DOM selection or navigation ownership. The final whole-request retry uses a directly imported client, so it is not a separate UI bulk-Acceptance retention reason.",
+    "coverage": "apps/web/test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts:1055",
+    "remove": null
+  },
+  {
+    "id": "BD041",
+    "path": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+    "line": 30,
+    "test": "uses the approved composer and controls the retained Run through the production host",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Mounted composer expands within its height cap, controls paused/current Run and retains lost steering acknowledgement across reload with exact-body/key retry and one Guidance. Terminal Cancel and Takeover disable the proper controls. Real controls and durable input clearing are not exercised by direct HTTP steering or the normal prose admission journey; pixel values alone are not a KEEP reason.",
+    "coverage": "apps/web/test/browser-exact-dist/production-host.integration.test.ts:10",
+    "remove": null
+  },
+  {
+    "id": "BD042",
+    "path": "apps/web/test/browser-exact-dist/inline-proposal.integration.test.ts",
+    "line": 4,
+    "test": "edits an exact Inline Proposal in the packaged writing workspace",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Real inline candidate edits and composer selection bind exact Operation/Revision without changing authority; lost edit/Acceptance responses preserve retry identity across reload. Forward/reverse mixed selections retain ordered provenance, while cursor positions at each inline edge edit surrounding authoritative text only. Winner Takeover prevents old candidate Acceptance POST before and after reload. Block Proposal UI and HTTP Inline settlement cannot detect embedded-node coordinate capture, real edge keys or mounted explicit retry.",
+    "coverage": "apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts:973; apps/web/test/browser-exact-dist/production-host.integration.test.ts:15",
+    "remove": null
+  },
+  {
+    "id": "BD043",
+    "path": "apps/web/test/browser-exact-dist/restored-discard.integration.test.ts",
+    "line": 4,
+    "test": "consumes the original production Discard and local Journal after isolated physical restore",
+    "verdict": "KEEP",
+    "reason": "K2",
+    "evidence": "Consumes the physical recovery fixture and original browser Journal, then reloads without mutation. Reopened Draft Copy remains complete after its source Chapter was removed; closure/reopen records, exact local Discard/Undo records and downloaded Archive digest remain unchanged. The producer proves only pre-backup state; ordinary reload/restart cannot detect loss in physical backup/WAL recovery. This case requires the recovery runner and is not a standalone empty database test.",
+    "coverage": "apps/web/test/browser-exact-dist/production-host.integration.test.ts:15",
+    "remove": null
+  }
+]

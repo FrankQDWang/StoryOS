@@ -1,0 +1,74 @@
+# Inventory and coverage reconciliation
+
+All 256 test files have verdict tables: 865 runtime cases. The inventory stores attribute/leading-whitespace starts in some files; verdict tables use declaration lines. Two dynamic Node files instead use each literal case location: protocol-boot has five blocked inputs plus one success; required-global-teardown has three parameter inputs. These explain the declaration-set differences, not missing tests. All 798 verdict source locations are represented by those declarations or explicit cases.
+
+No Web support file remains unreviewed. The report generator was accidentally invoked once with two group names; its second argument expects JSON, so it made no changes. Both groups were regenerated separately and checked before this checkpoint.
+
+## Accepted contracts versus unreachable inputs
+
+- AD032 changes from DELETE D5 to KEEP K1. Migration 0002 explicitly stores generation as numeric(20,0), bounded to the full u64 range. Signed narrowing is a realistic storage conversion regression on accepted data. Bootstrap generation 1 is not a change to that persisted contract; ordinary low-value cases do not cover it.
+- Other D5 rows distinguish a current producer guarantee from external authorization. Core missing-Project inputs follow a failed scoped lookup; wrong local command-kind/digest tuples cannot be independently supplied through current Server constructors. Existing HTTP tests own actual changed-request/stored-Challenge refusal. No internal guard-only mutation kill is claimed.
+- Server origin configuration is validated before binding construction. The expiry portion of SV028 has real Web-host coverage; independently changed binding identity/generation remains a synthetic config tuple at this baseline. ADR 0013 requires exact accepted identities but does not create a current rotation producer. Revisit if a session rotation/config loading path is implemented.
+- Contracts D5 cases mutate private historical constant structures or pinned Git-object copies. They do not consume live tracker inputs. Full artifact comparison protects emitted facts, not every redundant private verifier guard.
+- D5 conclusions retain their source-specific limitations and enter the same random population as other DELETE rows. A selected surviving guard mutation is a MISS, never a substitute sample or a claimed product kill.
+
+## Coverage chains and execution prerequisites
+
+References to deleted shared replay tests now point directly to retained Create Volume:760. Application outcome points to public Project:253; static profile points to retained Project open:31. Their earlier intermediate tests are not required deletion owners.
+
+The following DELETE rows still cite a current MERGE/MOVE owner. They can be removed while that owner remains. To also remove or move the owner, first complete its named assertion transfer and verify its receiving test. Until then, the receiving test is not claimed to provide equivalent coverage. This is an explicit thinning-plan dependency, not immediate permission to remove all rows together.
+
+| DELETE row | Required owner transfer before owner removal |
+|---|---|
+| CO003 | NP030 |
+| CO004 | NP030 |
+| CO005 | NP030 |
+| CO006 | NP030 |
+| CO007 | NP025 |
+| CO008 | NP025 |
+| CO009 | NP025 |
+| CO011 | NP025 |
+| CO058 | BD021 |
+| CO082 | NP083 |
+| CO085 | NP135 |
+| CO142 | NP135, NP111 |
+| CO143 | NP111 |
+| CO158 | NP104 |
+| CO160 | NP104 |
+| CO172 | NP129 |
+| CO183 | BD017 |
+| AP003 | NP025 |
+| AP004 | NP025 |
+| AP005 | NP025 |
+| AP006 | NP025 |
+| AP007 | NP030 |
+| AP008 | NP030 |
+| AP009 | NP030 |
+| AP010 | NP030 |
+| AP013 | BD021 |
+| AP014 | BD021 |
+| AD098 | NP138 |
+| SV026 | NP006 |
+| SV035 | NP006 |
+| CT016 | NP006 |
+| NP001 | BD003 |
+| BD035 | NP129, NP135 |
+
+All current coverage paths exist. Source comparison does not replace mutation evidence. All 30 fixed samples are complete; mutation-sample.json retains every KILL, MISS and timeout-only BLOCKED result.
+
+## Mutation correction: private guard equivalence
+
+Samples 2 (AP004), 3 (AP055) and 22 (CT033) each pass the cited coverage after guard removal, while the original unit test fails. All three clean/restored runs pass. These are MISS results. The same limitation is now explicit on every remaining D5 row: public behavior coverage is not equivalent guard coverage. Their deletion recommendation still rests on the documented lack of a current producer for the synthetic tuple, under the user's burden-of-proof rule. No mutation-confirmed redundancy or independent guard coverage is claimed for this class. If the internal contract becomes an actual input boundary, re-audit it.
+
+## Mutation correction: export phase and document consumers
+
+- CO124 changes D1 to D5 after sample 11. InProgress is mapped to Unsettled before packaging; Ready requires a non-NULL, database-format-checked root. The HTTP result is not equivalent coverage of the private empty-root guard. Related Archive negative rows were checked: CO114 cites a retained direct Core packaging case; CO125 stays KEEP; CO126 covers the actual Ready packaging path.
+- CT010, CT011 and CT012 change DELETE to MERGE after sample 14. The registry checks IDs, route bindings and request closure but does not validate individual field grammars. Transfer Outcome, Activity and Takeover document-consumer cases before removing their inventories. CT009 remains DELETE for route/export substring checks; it does not assert those schema field constraints. Existing executable malformed-schema cases CT001-CT003, CT013 and CT017 remain KEEP.
+- AD046 changes DELETE to MERGE after sample 13. Dropped Archive fallback triggers only the HTTP bounded readiness wait. Preserve the exact immediate claim assertion by adding the second Archive selection to AD045 before removing AD046. This is a no-timeout evidence correction, not a claim that the mutation had no product effect.
+- Sample 4's optional original-test probe selected zero tests due to an incorrect module filter; it is not evidence. Its primary HTTP failure is valid. A separate corrected unit probe is retained rather than overwriting the zero-test log.
+
+## Mutation correction: redundant storage enforcement and count masking
+
+- CO134 changes D1 to D6 after sample18. Busy Conversation reaches Core, but the live-Conversation unique index plus same-command rollback and ConversationBusy mapping preserves the public result. This is not D5. The adjacent inaccessible-Conversation and unavailable-Assistance classifiers were reviewed; their different public mappings do not get this conclusion automatically.
+- CT007 changes DELETE to MERGE after sample29. Both coupled count ceilings were raised, both cited cover tests executed and stayed green, and the original policy unit failed. NP008 must receive genuine-Challenge requests and exact command_target_refused checks before CT007 is removed. The existing body-byte413 case remains distinct. No other DELETE row claims the masked count cases as its sole evidence.
+- D5 samples17/21/23/25/28/30 retain the explicit distinction between a synthetic internal input and current public behavior. Their mutant-only original-test failures are diagnostics; only the named covering test has the clean/restored pair unless a supplemental record says otherwise.

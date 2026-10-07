@@ -1,0 +1,87 @@
+{
+  "sample": 7,
+  "id": "AD013",
+  "status": "candidate-kill",
+  "source": "crates/storyos-adapter-postgres/src/manuscript_block.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m07-baseline",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "node",
+        "docs/research/test-asset-audit/mutations/browser-probe.mts"
+      ],
+      "exit": 0,
+      "seconds": 13.136,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m07/baseline.log"
+    },
+    {
+      "phase": "build",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m07-build",
+        "--",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--target-dir",
+        "target/web-release",
+        "-p",
+        "storyos-server",
+        "-p",
+        "storyos-worker-bin",
+        "-p",
+        "storyos-adapter-postgres"
+      ],
+      "exit": 0,
+      "seconds": 112.368,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m07/build.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m07-mutant",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "node",
+        "docs/research/test-asset-audit/mutations/browser-probe.mts"
+      ],
+      "exit": 1,
+      "seconds": 15.781,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m07/mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m07-restored",
+        "--",
+        "scripts/dev-postgres.sh",
+        "run",
+        "node",
+        "docs/research/test-asset-audit/mutations/browser-probe.mts"
+      ],
+      "exit": 0,
+      "seconds": 13.812,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m07/restored.log"
+    }
+  ],
+  "manual_result": "kill",
+  "manual_finding": "Real browser full Block comparison sees paragraph instead of heading at :252."
+}

@@ -1,0 +1,20 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+   Compiling storyos-core v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-core)
+warning: unused variable: `next`
+   --> crates/storyos-core/src/delete_chapter.rs:104:17
+    |
+104 |     if let Some(next) = command.ordered_active_chapter_ids.get(index + 1) {
+    |                 ^^^^ help: if this is intentional, prefix it with an underscore: `_next`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling storyos-application v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-application)
+warning: `storyos-core` (lib) generated 1 warning (run `cargo fix --lib -p storyos-core` to apply 1 suggestion)
+   Compiling storyos-adapter-postgres v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-adapter-postgres)
+   Compiling storyos-worker v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-worker)
+   Compiling storyos-adapter-fake-destination v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-adapter-fake-destination)
+   Compiling storyos-server v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-server)
+   Compiling storyos-worker-bin v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-worker-bin)
+    Finished `release` profile [optimized] target(s) in 1m 42s
+Verification passed: 104.38s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/3f229132452341ce80712be875d2d8e6/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

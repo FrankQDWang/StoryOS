@@ -1,0 +1,107 @@
+{
+  "sample": 29,
+  "id": "CT007",
+  "status": "candidate-miss",
+  "source": "crates/storyos-contracts/src/release1.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m29-baseline",
+        "--",
+        "python3",
+        "-c",
+        "import subprocess,sys; commands=[['scripts/dev-postgres.sh', 'run', 'pnpm', '--dir', 'apps/web', 'exec', 'vitest', 'run', '--project', 'node-postgresql', 'test/node-postgresql/project-http.integration.test.ts', '-t', '^one\\\\ current\\\\ writer\\\\ settles\\\\ one\\\\ Author\\\\ Edit\\\\ and\\\\ exact\\\\ retries\\\\ return\\\\ one\\\\ result$'], ['cargo', 'test', '--locked', '-p', 'storyos-contracts', '--lib', 'release1_artifacts::tests::every_registered_operation_matches_the_reviewed_catalog_and_generated_wire', '--', '--exact', '--nocapture']]; codes=[subprocess.run(command).returncode for command in commands]; print(\"COVERAGE_EXIT_CODES\", codes, flush=True); sys.exit(int(any(codes)))"
+      ],
+      "exit": 0,
+      "seconds": 11.648,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m29/baseline.log"
+    },
+    {
+      "phase": "build",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m29-build",
+        "--",
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--target-dir",
+        "target/web-release",
+        "-p",
+        "storyos-server",
+        "-p",
+        "storyos-worker-bin",
+        "-p",
+        "storyos-adapter-postgres"
+      ],
+      "exit": 0,
+      "seconds": 143.715,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m29/build.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m29-mutant",
+        "--",
+        "python3",
+        "-c",
+        "import subprocess,sys; commands=[['scripts/dev-postgres.sh', 'run', 'pnpm', '--dir', 'apps/web', 'exec', 'vitest', 'run', '--project', 'node-postgresql', 'test/node-postgresql/project-http.integration.test.ts', '-t', '^one\\\\ current\\\\ writer\\\\ settles\\\\ one\\\\ Author\\\\ Edit\\\\ and\\\\ exact\\\\ retries\\\\ return\\\\ one\\\\ result$'], ['cargo', 'test', '--locked', '-p', 'storyos-contracts', '--lib', 'release1_artifacts::tests::every_registered_operation_matches_the_reviewed_catalog_and_generated_wire', '--', '--exact', '--nocapture']]; codes=[subprocess.run(command).returncode for command in commands]; print(\"COVERAGE_EXIT_CODES\", codes, flush=True); sys.exit(int(any(codes)))"
+      ],
+      "exit": 0,
+      "seconds": 28.427,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m29/mutant.log"
+    },
+    {
+      "phase": "removed-mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m29-removed-mutant",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-contracts",
+        "--lib",
+        "release1::tests::apply_author_edit_contract_activates_the_bounded_batch_policy",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 1.64,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m29/removed-mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m29-restored",
+        "--",
+        "python3",
+        "-c",
+        "import subprocess,sys; commands=[['scripts/dev-postgres.sh', 'run', 'pnpm', '--dir', 'apps/web', 'exec', 'vitest', 'run', '--project', 'node-postgresql', 'test/node-postgresql/project-http.integration.test.ts', '-t', '^one\\\\ current\\\\ writer\\\\ settles\\\\ one\\\\ Author\\\\ Edit\\\\ and\\\\ exact\\\\ retries\\\\ return\\\\ one\\\\ result$'], ['cargo', 'test', '--locked', '-p', 'storyos-contracts', '--lib', 'release1_artifacts::tests::every_registered_operation_matches_the_reviewed_catalog_and_generated_wire', '--', '--exact', '--nocapture']]; codes=[subprocess.run(command).returncode for command in commands]; print(\"COVERAGE_EXIT_CODES\", codes, flush=True); sys.exit(int(any(codes)))"
+      ],
+      "exit": 0,
+      "seconds": 21.602,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m29/restored.log"
+    }
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Both count ceilings changed240->241. HTTP and registry each execute one test and pass; original policy-alignment unit fails. CT007 becomes MERGE with genuine Challenge and exact problem-code count checks in NP008."
+}

@@ -1,0 +1,13 @@
+--- a/crates/storyos-core/src/create_agent_run.rs
++++ b/crates/storyos-core/src/create_agent_run.rs
+@@ -77,9 +77,7 @@
+         ConversationAdmission::ExistingMissing => CreateAgentRunResult::Refused {
+             reason: CreateAgentRunRefusal::InaccessibleConversation,
+         },
+-        ConversationAdmission::ExistingBusy => CreateAgentRunResult::Refused {
+-            reason: CreateAgentRunRefusal::ConversationBusy,
+-        },
++        ConversationAdmission::ExistingBusy => CreateAgentRunResult::Admitted,
+     }
+ }
+ 

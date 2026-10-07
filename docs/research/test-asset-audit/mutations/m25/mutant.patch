@@ -1,0 +1,11 @@
+--- a/crates/storyos-application/src/chapter_query.rs
++++ b/crates/storyos-application/src/chapter_query.rs
+@@ -36,7 +36,7 @@
+ ) -> Result<OpenChapter, ProjectReadError> {
+     match reader.read_chapter_query(scope, chapter_id).await? {
+         OpenChapter::Found(facts)
+-            if &facts.project_scope == scope && facts.chapter.chapter_id == *chapter_id =>
++            if &facts.project_scope == scope =>
+         {
+             Ok(OpenChapter::Found(facts))
+         }

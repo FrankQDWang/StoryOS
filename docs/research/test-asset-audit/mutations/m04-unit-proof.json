@@ -1,0 +1,23 @@
+{
+  "sample": 4,
+  "id": "CO026",
+  "source": "crates/storyos-core/src/create_chapter.rs",
+  "source_sha256": "32adbd9213631675eb03487cb03aba9c9c406e08259330ce38dc0a3b1cf2a4ce",
+  "old": "if command.volume_join == VolumeJoin::Invalid {",
+  "new": "if false && command.volume_join == VolumeJoin::Invalid {",
+  "release": false,
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-core",
+    "--lib",
+    "create_chapter_tests::an_invalid_volume_join_classifies_as_refused_with_zero_authority_effect",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "defect": "Allow an invalid Volume join at Core Create Chapter classification.",
+  "attempt": "unit-proof"
+}

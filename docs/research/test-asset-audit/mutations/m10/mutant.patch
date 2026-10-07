@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/lib.rs
++++ b/crates/storyos-core/src/lib.rs
+@@ -519,7 +519,7 @@
+                 ApplyAuthorEditResult::AuthoritativeApplied { body }
+             }
+             AuthorEditAppliedKind::Proposal => ApplyAuthorEditResult::ProposalRevised {
+-                candidate_text: body,
++                candidate_text: command.current_body.clone(),
+             },
+         }
+     }

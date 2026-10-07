@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/delete_chapter.rs
++++ b/crates/storyos-core/src/delete_chapter.rs
+@@ -92,7 +92,7 @@
+ 
+ fn successor(command: &DeleteChapter) -> DeleteChapterCurrent {
+     if command.current_chapter_id.as_deref() != Some(command.chapter_id.as_str()) {
+-        return DeleteChapterCurrent::PreserveExisting;
++        return DeleteChapterCurrent::Empty;
+     }
+     let Some(index) = command
+         .ordered_active_chapter_ids

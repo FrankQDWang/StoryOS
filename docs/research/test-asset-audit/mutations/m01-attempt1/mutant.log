@@ -1,0 +1,30 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+
+ RUN  v4.1.11 /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/apps/web
+
+ ❯ |node-postgresql| test/node-postgresql/readable-export-admission-http.integration.test.ts (6 tests | 1 failed | 5 skipped) 247ms
+   × exportHumanReadableManuscript admits one inspectable in-progress operation 247ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node-postgresql| test/node-postgresql/readable-export-admission-http.integration.test.ts > exportHumanReadableManuscript admits one inspectable in-progress operation
+Error: StoryOS Server exited with 1: Error: Custom { kind: Other, error: "Web manifest does not match the packaged Server" }
+
+ ❯ ChildProcess.<anonymous> test/support/node-integration.ts:90:12
+     88|     server.once("error", fail);
+     89|     server.once("exit", (code) => {
+     90|       fail(new Error(`StoryOS Server exited with ${code}: ${stderr}`));
+       |            ^
+     91|     });
+     92|     server.stderr.on("data", (chunk: Buffer) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  04:43:14
+   Duration  548ms (transform 96ms, setup 0ms, import 127ms, tests 247ms, environment 0ms)
+
+Verification failed: 9.30s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/600719fb04674c35bf44e63de8847f31/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

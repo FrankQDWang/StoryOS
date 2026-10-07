@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/create_chapter.rs
++++ b/crates/storyos-core/src/create_chapter.rs
+@@ -113,7 +113,7 @@
+         tree_revision: command.current_tree_revision + 1,
+         order,
+         current: match command.current_open {
+-            CreateChapterOpen::Empty => CreateChapterCurrent::SelectCreated,
++            CreateChapterOpen::Empty => CreateChapterCurrent::PreserveExisting,
+             CreateChapterOpen::CurrentChapter => CreateChapterCurrent::PreserveExisting,
+         },
+     })

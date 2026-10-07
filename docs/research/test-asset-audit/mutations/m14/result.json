@@ -1,0 +1,103 @@
+{
+  "sample": 14,
+  "id": "CT012",
+  "status": "candidate-miss",
+  "source": "crates/storyos-contracts/src/release1_takeover_artifacts.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m14-baseline",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-contracts",
+        "--lib",
+        "release1_artifacts::tests::every_registered_operation_matches_the_reviewed_catalog_and_generated_wire",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 2.395,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m14/baseline.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m14-mutant",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-contracts",
+        "--lib",
+        "release1_artifacts::tests::every_registered_operation_matches_the_reviewed_catalog_and_generated_wire",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 11.933,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m14/mutant.log"
+    },
+    {
+      "phase": "removed-mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m14-removed-mutant",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-contracts",
+        "--lib",
+        "release1_artifacts::tests::take_over_project_writer_wire_is_generated_without_stage1_coverage",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 1.811,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m14/removed-mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m14-restored",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-contracts",
+        "--lib",
+        "release1_artifacts::tests::every_registered_operation_matches_the_reviewed_catalog_and_generated_wire",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 11.424,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m14/restored.log"
+    }
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Generated Takeover generation type changes to integer; registry test still passes and original field test fails. CT010-CT012 now require schema-consumer assertion transfer before removal."
+}

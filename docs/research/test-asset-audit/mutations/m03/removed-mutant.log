@@ -1,0 +1,32 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+   Compiling storyos-application v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-application)
+warning: unused variable: `command_digest`
+   --> crates/storyos-application/src/update_project_assistance.rs:123:9
+    |
+123 |     let command_digest = {
+    |         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_command_digest`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `storyos-application` (lib test) generated 1 warning (run `cargo fix --lib -p storyos-application --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.17s
+     Running unittests src/lib.rs (target/rust-cache/gen-f249a5399a7e4905b98070796744bffd/debug/deps/storyos_application-c4d593f1c62281fd)
+
+running 1 test
+
+thread 'update_project_assistance::tests::a_changed_retry_digest_is_refused_before_the_store' (103311747) panicked at crates/storyos-application/src/update_project_assistance_tests.rs:114:5:
+assertion failed: matches!(update_project_assistance(&store, &changed).await,
+    Err(UpdateProjectAssistanceError::BindingConflict))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test update_project_assistance::tests::a_changed_retry_digest_is_refused_before_the_store ... FAILED
+
+failures:
+
+failures:
+    update_project_assistance::tests::a_changed_retry_digest_is_refused_before_the_store
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 57 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p storyos-application --lib`
+Verification failed: 2.19s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/10f30c55a7c14e0392a015094107e0a6/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

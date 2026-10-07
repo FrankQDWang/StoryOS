@@ -1,0 +1,6 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+STORYOS_STORAGE_ACTIVATION=Refused
+STORYOS_STORAGE_ACTIVATION_REASON=unavailable
+error communicating with the server
+Verification failed: 8.15s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/ef9506dda68843689736ead09fc78076/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

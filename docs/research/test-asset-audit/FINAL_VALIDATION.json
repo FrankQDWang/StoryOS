@@ -1,0 +1,60 @@
+{
+  "baseline": "479224809cdaae997cda51cb8853e3fafa242b65",
+  "branch": "codex/test-asset-audit",
+  "result": "PASS",
+  "runtime_cases": 865,
+  "test_files": 256,
+  "verdicts": {
+    "DELETE": 330,
+    "KEEP": 478,
+    "MERGE": 52,
+    "MOVE": 5
+  },
+  "candidate_lines": 13750,
+  "self_check": {
+    "kill": 16,
+    "miss": 13,
+    "blocked-timeout": 1
+  },
+  "fixed_population_and_draw_verified": true,
+  "all_test_file_tables_present": true,
+  "all_verdict_ids_unique": true,
+  "retained_declarations_outside_removal_intervals": true,
+  "coverage_path_and_line_bounds_verified": true,
+  "source_declaration_locations_verified": true,
+  "all_mutated_source_hashes_restored": {
+    "crates/storyos-core/src/readable_export_command.rs": "f473b41f4a02bf1e2ec94149a714e29696966f5e7b523571cc399a517e16c1f4",
+    "crates/storyos-application/src/update_project.rs": "d46ee15f45e7cac0b79f34b78b8103d6a64faa564989450715449c326b1b74ab",
+    "crates/storyos-application/src/update_project_assistance.rs": "4fd79986e7249c6c950408e701dea1c02b2432e71b03845c4f04a7ef8d65d1a0",
+    "crates/storyos-core/src/create_chapter.rs": "32adbd9213631675eb03487cb03aba9c9c406e08259330ce38dc0a3b1cf2a4ce",
+    "crates/storyos-adapter-postgres/src/command_replay.rs": "fc353119e5001e96a47ccebca2f2d1d93dbdd5a880a8dcf8ebc2f19c70b9e333",
+    "crates/storyos-application/src/manuscript_search.rs": "c4a08f3fcf307889bcdfd08abe7095881742d7e63d9116553453d161e96b6e9b",
+    "crates/storyos-adapter-postgres/src/manuscript_block.rs": "fe21fcb387721b7c834f749eb504ef5477dcaaa5122e4fb3bdffd9eb9ce7670d",
+    "crates/storyos-core/src/rebuild_expired_reference.rs": "09b9b7011b89278c339f5cc3ea0361ba0dff525701e8ffde23b704c6e8598feb",
+    "crates/storyos-core/src/lib.rs": "6b43014d79564e63e98051435e7037592dfa1c3442eb23e91f0fa584ab2ea49c",
+    "crates/storyos-core/src/project_archive.rs": "230a26d512d28e7d536a3ffe6021c1468caabb18d3266d61149496bd881a7542",
+    "crates/storyos-core/src/delete_chapter.rs": "d2656181c5a3bdaabc04f80c92954bcc641fdfc8dda95af81b656a079dfaee2b",
+    "crates/storyos-adapter-postgres/src/export_work.rs": "07a5f60a6f036d82f3af85bb72ab46bba8d0979c38cd52a640c919c926b6a4fa",
+    "crates/storyos-contracts/src/release1_takeover_artifacts.rs": "4ed5eff7d460c01971e0d9f9fdc03ff7b1ee4f97e0800f6ebb6f2cd4b08c61a1",
+    "crates/storyos-core/src/statistics_profile.rs": "094df89393af30592181f4c3f256af2ea95f564b45a66d341362f2a06d725b6d",
+    "crates/storyos-core/src/accept_proposal.rs": "1a5ba23754f6daed80d61f23f248ab5ef87a42abc527363ce33d553e241c1d25",
+    "crates/storyos-core/src/create_agent_run.rs": "81bbcbccf37acd0f31ab51f3424fe2c15dc06b505b53558daada3247cdd2eb9c",
+    "crates/storyos-server/src/request_origin.rs": "6d6202441d45764047182d6338080e4bd04faa764cb34828f562cca5d7c89968",
+    "crates/storyos-contracts/src/stage1_handoff.rs": "871c9f5bd3c42269e451a7603790ecd174e5cf4514c38aea7fe5dd5685f69bb0",
+    "crates/storyos-core/src/update_volume.rs": "60dd0e3635553b55e1d506b7b80b58c4e0cd401b5261fe204734fb7b7ab09c15",
+    "crates/storyos-application/src/chapter_query.rs": "346f0a918509523586c6f4df972c7cb6a515979854eba951fa7088d388f804f1",
+    "crates/storyos-core/src/delete_volume.rs": "db83eefdb2cf320c23e90d0989b16271c9e95a10d88d869a921a306d5eff998f",
+    "crates/storyos-core/src/reopen_rejected_operations.rs": "8c62136944855e93f207d8c4f411c8483e19d01d0b2d8b4dd6155e232ebc5a37",
+    "crates/storyos-application/src/archive_project.rs": "21843f9c2506d336373d7258036049f1c756c652a555db7552d9bed2925a1695",
+    "crates/storyos-contracts/src/release1.rs": "41feb61c40f5d3549dc3f8f11af29c275de7b45ce05bc8221df253e31fa20b2b"
+  },
+  "packaged_binaries_match_original": {
+    "storyos-server": "9984dc67db86c4149eb9efab0b6d1ee3c2610b2aaad4d8d01993fa23231d70aa",
+    "storyos-worker": "24c4868edc6ed483c4532508388b1b131b5e053172847c50d5e11c51d6e387a6",
+    "storyos-storage": "337f64a15a441d5fc78b4720a83a4e207e0f00561c2cba97af613a9ddf83e561"
+  },
+  "restored_release_build": "final-restored-build.json",
+  "no_database_lease_files": true,
+  "tracked_and_untracked_changes_only_in_report_directory": true,
+  "markdown_links_and_table_columns_verified": true
+}

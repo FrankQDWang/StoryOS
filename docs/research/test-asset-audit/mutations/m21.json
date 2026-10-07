@@ -1,0 +1,37 @@
+{
+  "sample": 21,
+  "id": "CO136",
+  "source": "crates/storyos-core/src/rebuild_expired_reference.rs",
+  "source_sha256": "09b9b7011b89278c339f5cc3ea0361ba0dff525701e8ffde23b704c6e8598feb",
+  "old": "ContinuationReferenceCondition::Usable => idle,",
+  "new": "ContinuationReferenceCondition::Usable => ExpiryRebuildDecision { disposition: ExpiryRebuildDisposition::Rebuilt, new_run_step_and_invocation: true, ..idle },",
+  "release": true,
+  "command": [
+    "scripts/dev-postgres.sh",
+    "run",
+    "pnpm",
+    "--dir",
+    "apps/web",
+    "exec",
+    "vitest",
+    "run",
+    "--project",
+    "node-postgresql",
+    "test/node-postgresql/continue-conversation-input-http.integration.test.ts",
+    "-t",
+    "^continuation\\ consumes\\ an\\ eligible\\ prior\\ binding\\ and\\ keeps\\ current\\ input\\ inspectable$"
+  ],
+  "defect": "Rebuild an already usable reference in the isolated classifier.",
+  "removed_command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "storyos-core",
+    "--lib",
+    "rebuild_expired_reference::tests::usable_reference_does_not_rebuild_or_erase_an_ordinary_correction",
+    "--",
+    "--exact",
+    "--nocapture"
+  ]
+}

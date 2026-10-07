@@ -1,0 +1,27 @@
+[
+  {
+    "id": "SI001",
+    "path": "crates/storyos-server/tests/public_origin_startup.rs",
+    "line": 14,
+    "test": "invalid_public_origin_refuses_before_storage",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged Node process test executes the same main entry, supplies the same Origin and bind arguments, and asserts refusal before Storage Activation with no readiness marker. It additionally uses a real paired Web root. This Cargo process test uses a missing root but asserts the same Origin error; it adds no input or observation.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:127",
+    "remove": [
+      1,
+      33
+    ]
+  },
+  {
+    "id": "SI002",
+    "path": "crates/storyos-server/tests/public_origin_startup.rs",
+    "line": 25,
+    "test": "public_origin_refuses_a_non_loopback_listen_before_storage",
+    "verdict": "DELETE",
+    "reason": "D1",
+    "evidence": "The packaged Node process test executes the same main entry, supplies the same Origin and bind arguments, and asserts refusal before Storage Activation with no readiness marker. It additionally uses a real paired Web root. This Cargo process test uses a missing root but asserts the same Origin error; it adds no input or observation.",
+    "coverage": "apps/web/test/node-contract/protocol-http.integration.test.ts:137",
+    "remove": null
+  }
+]

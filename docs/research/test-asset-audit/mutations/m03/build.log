@@ -1,0 +1,19 @@
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}
+   Compiling storyos-application v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-application)
+warning: unused variable: `command_digest`
+   --> crates/storyos-application/src/update_project_assistance.rs:123:9
+    |
+123 |     let command_digest = {
+    |         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_command_digest`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling storyos-adapter-postgres v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-adapter-postgres)
+   Compiling storyos-worker v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-worker)
+   Compiling storyos-adapter-fake-destination v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-adapter-fake-destination)
+warning: `storyos-application` (lib) generated 1 warning (run `cargo fix --lib -p storyos-application` to apply 1 suggestion)
+   Compiling storyos-server v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-server)
+   Compiling storyos-worker-bin v0.1.0 (/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/crates/storyos-worker-bin)
+    Finished `release` profile [optimized] target(s) in 1m 14s
+Verification passed: 75.24s; report: /Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/verification/bd6d4fca0a2a4f94a67537321da4d481/report.json
+Observation: {"status": "unavailable", "receipt": "not-requested", "nextAction": ["make", "observe-status"]}

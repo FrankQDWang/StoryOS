@@ -1,0 +1,103 @@
+{
+  "sample": 22,
+  "id": "CT033",
+  "status": "candidate-miss",
+  "source": "crates/storyos-contracts/src/stage1_handoff.rs",
+  "source_restored": true,
+  "results": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m22-baseline",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-contracts",
+        "--lib",
+        "stage1_crosswalk::tests::checked_in_crosswalk_matches_fresh_generation",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 51.731,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m22/baseline.log"
+    },
+    {
+      "phase": "mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m22-mutant",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-contracts",
+        "--lib",
+        "stage1_crosswalk::tests::checked_in_crosswalk_matches_fresh_generation",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 7.549,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m22/mutant.log"
+    },
+    {
+      "phase": "removed-mutant",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m22-removed-mutant",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-contracts",
+        "--lib",
+        "stage1_handoff::tests::open_parent_is_rejected",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 101,
+      "seconds": 0.923,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m22/removed-mutant.log"
+    },
+    {
+      "phase": "restored",
+      "command": [
+        "python3",
+        "scripts/verification.py",
+        "step",
+        "audit-m22-restored",
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "storyos-contracts",
+        "--lib",
+        "stage1_crosswalk::tests::checked_in_crosswalk_matches_fresh_generation",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit": 0,
+      "seconds": 5.843,
+      "log": "/Users/frankqdwang/.codex/worktrees/test-asset-audit/StoryOS/target/test-asset-audit/m22/restored.log"
+    }
+  ],
+  "manual_result": "miss",
+  "manual_finding": "Named covering test passes the mutant; original proposed-removal test fails. Clean and restored covering tests pass. The isolated guard is not equivalent coverage; D5 deletion depends on current producer reachability, not redundancy."
+}

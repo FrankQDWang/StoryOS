@@ -1,0 +1,11 @@
+--- a/crates/storyos-core/src/reopen_rejected_operations.rs
++++ b/crates/storyos-core/src/reopen_rejected_operations.rs
+@@ -77,7 +77,7 @@
+             reason: ReopenRejectedOperationsConflict::ChangedHead,
+         };
+     }
+-    ReopenRejectedOperationsResult::Resolved
++    ReopenRejectedOperationsResult::Refused { reason: ReopenRejectedOperationsRefusal::NotEligible }
+ }
+ 
+ #[cfg(test)]
