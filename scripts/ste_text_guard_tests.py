@@ -128,6 +128,11 @@ class TextGuardTests(unittest.TestCase):
         self.assertEqual(self.guard("files", "--base", base, "--head", "HEAD", expected_code=1), expected)
         self.assertEqual(self.guard("files", "--base", "HEAD", expected_code=0), [])
 
+    def test_research_evidence_is_not_examined(self):
+        self.write("docs/research/study/REPORT.md", "Old text; it stays. The whole book loads.\n")
+        self.write("docs/notes.md", "New text; it is new.\n")
+        self.assertEqual(self.guard("files", "--base", self.base, expected_code=1), [f"docs/notes.md:1: {SEMICOLON}"])
+
     def test_moved_lines_do_not_fire_and_a_copy_or_an_edit_fires(self):
         self.write("old.md", f"# Old\n\n{LONG}\n\nKeep it short; split it.\n")
         base = self.commit("Add the old text.")

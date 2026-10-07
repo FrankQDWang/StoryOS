@@ -27,6 +27,8 @@ GLOSSARY_AREAS = "docs/glossary"
 MAX_SENTENCE_WORDS = 25
 MAX_PARAGRAPH_SENTENCES = 6
 MARKDOWN = (".md",)
+# Research reports are evidence records, not instructions. The guard does not examine them.
+EVIDENCE = ("docs/research/",)
 COMMENTED = {".rs": "rust", ".ts": "typescript", ".tsx": "typescript", ".mts": "typescript", ".cts": "typescript"}
 # A placeholder for code, URLs, and entities: it counts as one word and matches no rule.
 HOLE = ""
@@ -300,7 +302,8 @@ def added_lines(root, base, head):
             continue
         elif line.startswith(("--- a/", "+++ b/", "--- /dev/null", "+++ /dev/null")):
             name = line[6:] if line[4:6] in ("a/", "b/") else None
-            text_path = name if name and (Path(name).suffix in MARKDOWN or Path(name).suffix in COMMENTED) else None
+            text_path = (name if name and not name.startswith(EVIDENCE)
+                         and (Path(name).suffix in MARKDOWN or Path(name).suffix in COMMENTED) else None)
             if line.startswith("-"):
                 old_path = text_path
             else:
