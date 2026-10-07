@@ -1,18 +1,21 @@
 use storyos_application::{UndoLatestAuthorActionCommand, UndoLatestAuthorActionError};
 use storyos_core::AuthorUndoFrontierKind;
 
+use crate::author_edit_proposal::{ObservedProposalFrontier, ProposalEditCompensation};
+use crate::close_editor_flow_draft::{DraftCompensation, ObservedDraftClose};
 use crate::set_current_chapter::{CurrentChapterCompensation, ObservedCurrentChapterFrontier};
 use crate::structural_authority_settlement::{ObservedStructureFrontier, StructureCompensation};
 use crate::undo_compensation::{CompensationAdapter, ForwardCommand, UndoDisposition};
+use crate::withdraw_proposal::{AuthorWithdrawalCompensation, ObservedAuthorWithdrawal};
 
 pub(super) enum ObservedFrontier {
     Acceptance(crate::undo_acceptance::LoadedAcceptance),
     Prose(ObservedProseFrontier),
     Structure(ObservedStructureFrontier),
     CurrentChapter(ObservedCurrentChapterFrontier),
-    Proposal(crate::author_edit_proposal::ObservedProposalFrontier),
-    AuthorWithdrawal(crate::undo_withdrawal::ObservedAuthorWithdrawal),
-    DraftClose(crate::undo_draft_close::ObservedDraftClose),
+    Proposal(ObservedProposalFrontier),
+    AuthorWithdrawal(ObservedAuthorWithdrawal),
+    DraftClose(ObservedDraftClose),
     Barrier { sequence: u64 },
 }
 
@@ -126,19 +129,11 @@ pub(super) async fn load_observed_frontier(
             )),
             None => None,
         },
-        UndoDisposition::ProposalEdit => crate::author_edit_proposal::load_proposal_frontier(
-            client,
-            &command.project_scope,
-            sequence,
-        )
-        .await
-        .map_err(|error| match error {
-            storyos_application::AuthorEditError::Unavailable(source) => {
-                UndoLatestAuthorActionError::Unavailable(source)
-            }
-            _ => UndoLatestAuthorActionError::BindingConflict,
-        })?
-        .map(ObservedFrontier::Proposal),
+        UndoDisposition::ProposalEdit => {
+            ProposalEditCompensation::load(client, command, (), sequence)
+                .await?
+                .map(ObservedFrontier::Proposal)
+        }
         UndoDisposition::Structure(forward) => {
             StructureCompensation::load(client, command, forward, sequence)
                 .await?
@@ -150,11 +145,11 @@ pub(super) async fn load_observed_frontier(
                 .map(ObservedFrontier::CurrentChapter)
         }
         UndoDisposition::AuthorWithdrawal => {
-            crate::undo_withdrawal::load_author_withdrawal(client, command, sequence)
+            AuthorWithdrawalCompensation::load(client, command, (), sequence)
                 .await?
                 .map(ObservedFrontier::AuthorWithdrawal)
         }
-        UndoDisposition::Draft => crate::undo_draft_close::load_frontier(client, command, sequence)
+        UndoDisposition::Draft => DraftCompensation::load(client, command, (), sequence)
             .await?
             .map(ObservedFrontier::DraftClose),
         UndoDisposition::Barrier => None,
@@ -243,10 +238,11 @@ impl ObservedFrontier {
             },
             Self::Structure(frontier) => StructureCompensation::frontier_kind(frontier),
             Self::CurrentChapter(frontier) => CurrentChapterCompensation::frontier_kind(frontier),
-            Self::Proposal(_) | Self::AuthorWithdrawal(_) => {
-                AuthorUndoFrontierKind::ReversibleStructureTransition
+            Self::Proposal(frontier) => ProposalEditCompensation::frontier_kind(frontier),
+            Self::AuthorWithdrawal(frontier) => {
+                AuthorWithdrawalCompensation::frontier_kind(frontier)
             }
-            Self::DraftClose(frontier) => frontier.kind.clone(),
+            Self::DraftClose(frontier) => DraftCompensation::frontier_kind(frontier),
             Self::Barrier { .. } => AuthorUndoFrontierKind::Barrier,
         }
     }

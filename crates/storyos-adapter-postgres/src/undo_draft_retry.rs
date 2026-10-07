@@ -2,7 +2,7 @@ use storyos_application::{UndoLatestAuthorActionCommand, UndoLatestAuthorActionE
 use storyos_core::AuthorUndoFrontierKind;
 use uuid::Uuid;
 
-use crate::undo_draft_close::{DraftReopenWrite, load_frontier};
+use crate::close_editor_flow_draft::{DraftReopenWrite, load_frontier};
 use crate::undo_latest_author_action::undo_database_error;
 
 pub(super) async fn persist_reopen(
@@ -26,7 +26,7 @@ pub(super) async fn persist_reopen(
         to_char(transaction_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
         FROM storyos.scope_counters WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid",
         &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref()]).await.map_err(undo_database_error)?;
-    let event = crate::undo_draft_close::persist_reopen(
+    let event = crate::close_editor_flow_draft::persist_reopen(
         client,
         command,
         &source,
@@ -59,9 +59,15 @@ pub(super) async fn read_reopen(
         AND receipt.draft_artifact_refs=ARRAY[event.draft_id::text] AND receipt.artifact_lifecycle_event_refs=ARRAY[event.event_id::text]",
       &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&receipt_id]).await.map_err(undo_database_error)?;
     match row {
-        Some(row) => crate::undo_draft_close::read_event(client, scope, &row.get::<_, String>(0))
+        Some(row) => {
+            crate::close_editor_flow_draft::read_event(
+                client,
+                scope,
+                &row.get::<_, String>(/*idx*/ 0),
+            )
             .await
-            .map(Some),
+            .map(Some)
+        }
         None => Ok(None),
     }
 }
