@@ -23,6 +23,7 @@ use super::proposal_decision::{
 use super::proposal_generation::{
     complete_ready_partial_proposal_call, continue_proposal_generation_call,
 };
+use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
     create_chapter_call, create_volume_call, delete_chapter_call, delete_volume_call,
     set_current_chapter_call, update_chapter_call, update_volume_call,
@@ -212,15 +213,25 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &cancel_agent_run_call(&store, &admin, /*base*/ 0xd540).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &steer_agent_run_call(&store, &admin, /*base*/ 0xc740).await,
+        )
+        .await,
     ];
-    let separated = (
-        ReceiptResult::AuthoritativeApplied,
-        [
-            ReplayError::HistoricalAcknowledgementUnavailable,
-            ReplayError::Unavailable,
-        ],
-    );
-    assert_eq!(observed, vec![separated; 19]);
+    let separated = |result| {
+        (
+            result,
+            [
+                ReplayError::HistoricalAcknowledgementUnavailable,
+                ReplayError::Unavailable,
+            ],
+        )
+    };
+    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 19];
+    expected.push(separated(ReceiptResult::NoEffect));
+    assert_eq!(observed, expected);
 }
 
 /// Settles the call, damages its records with `damage` that takes the Receipt identity, and

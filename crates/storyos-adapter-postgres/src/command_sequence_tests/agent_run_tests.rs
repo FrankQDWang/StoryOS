@@ -115,6 +115,26 @@ pub(super) async fn cancel_agent_run_call(
     .await
 }
 
+/// Counts the Admission, Receipt, and settled fence rows of one idempotency key, and its unused
+/// Command Challenges.
+pub(super) async fn admission_rows(admin: &Client, idempotency_key: &str) -> [i64; 4] {
+    let written = admin
+        .query_one(
+            "SELECT (SELECT count(*) FROM storyos.author_command_admissions
+                      WHERE idempotency_key = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.domain_receipts
+                      WHERE idempotency_key = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.command_idempotency
+                      WHERE idempotency_key = $1::text::uuid AND outcome_kind <> 'pending'),
+                    (SELECT count(*) FROM storyos.project_command_challenges
+                      WHERE idempotency_key = $1::text::uuid AND consumed_at IS NULL)",
+            &[&idempotency_key],
+        )
+        .await
+        .unwrap();
+    [0, 1, 2, 3].map(|index| written.get::<_, i64>(index))
+}
+
 /// The rows of a refusal before Admission, and then the Run and the Admission after the same
 /// call settles against a waiting AgentRun.
 #[derive(Debug, PartialEq)]
@@ -147,20 +167,7 @@ where
         ))
     ));
     let key = &call.envelope.challenge_binding.idempotency_key;
-    let written = admin
-        .query_one(
-            "SELECT (SELECT count(*) FROM storyos.author_command_admissions
-                      WHERE idempotency_key = $1::text::uuid),
-                    (SELECT count(*) FROM storyos.domain_receipts
-                      WHERE idempotency_key = $1::text::uuid),
-                    (SELECT count(*) FROM storyos.command_idempotency
-                      WHERE idempotency_key = $1::text::uuid AND outcome_kind <> 'pending'),
-                    (SELECT count(*) FROM storyos.project_command_challenges
-                      WHERE idempotency_key = $1::text::uuid AND consumed_at IS NULL)",
-            &[key],
-        )
-        .await
-        .unwrap();
+    let refused_rows = admission_rows(admin, key).await;
     seed_run(admin, &scope, &run_id, "waiting").await;
     let settled = settle_project_command(store, &call.envelope, &call.input)
         .await
@@ -177,7 +184,7 @@ where
         .await
         .unwrap();
     RefusedThenSettled {
-        refused_rows: [0, 1, 2, 3].map(|index| written.get::<_, i64>(index)),
+        refused_rows,
         settled: settled.outcome.receipt_result(),
         run: (
             run.get(/*idx*/ 0),

@@ -24,6 +24,7 @@ use super::proposal_decision::{
 use super::proposal_generation::{
     complete_ready_partial_proposal_call, continue_proposal_generation_call,
 };
+use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
     DELETE_VOLUME, SET_CURRENT_CHAPTER, create_chapter_call, create_volume_call,
     delete_chapter_call, delete_volume, delete_volume_call, new_volume, set_current_chapter_call,
@@ -201,8 +202,14 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &cancel_agent_run_call(&store, &admin, /*base*/ 0xd520).await,
         )
         .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &steer_agent_run_call(&store, &admin, /*base*/ 0xc720).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 22]);
+    assert_eq!(observed, vec![(true, [0; 5]); 23]);
 }
 
 #[tokio::test]

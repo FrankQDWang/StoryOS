@@ -1,14 +1,11 @@
 use std::convert::Infallible;
-use std::future::Future;
 
 use storyos_core::{
     CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict, PauseAgentRunNoEffect,
+    SteerAgentRunConflict, SteerAgentRunNoEffect,
 };
 
-use crate::{
-    ActivityApplied, AuthorCommandAdmissionIds, EditorClientBinding, Project,
-    ProjectCommandChallengeBinding, ProjectCommandSettlement, ProjectScope, RefusableCommandError,
-};
+use crate::{ActivityApplied, Project, ProjectCommandSettlement, RefusableCommandError};
 
 /// One pauseAgentRun of an existing AgentRun.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -26,8 +23,10 @@ pub struct PauseAgentRunApplied {
 /// The refusal of an AgentRun control command before its Admission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentRunControlRefusal {
-    /// The AgentRun is not in exact Scope.
+    /// The AgentRun is not in exact Scope, or the steering conversation is not its conversation.
     MissingRun,
+    /// The steering input makes the effective author input exceed the Context item bound.
+    InputLimit,
 }
 
 pub type PauseAgentRunSettlement = ProjectCommandSettlement<
@@ -61,158 +60,29 @@ pub type CancelAgentRunSettlement = ProjectCommandSettlement<
 
 pub type CancelAgentRunError = RefusableCommandError<AgentRunControlRefusal>;
 
-/// One admitted steering command for an existing AgentRun.
+/// One steerAgentRun: a correction for an existing AgentRun in its conversation.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AgentRunControlCommand {
-    pub project_scope: ProjectScope,
-    pub client_binding: EditorClientBinding,
-    pub challenge_binding: ProjectCommandChallengeBinding,
-    pub nonce_digest: String,
-    pub canonical_command_bytes: Vec<u8>,
-    pub correlation_id: String,
+pub struct SteerAgentRunInput {
     pub run_id: String,
-    pub ids: AuthorCommandAdmissionIds,
-    pub intent: AgentRunControlIntent,
-    pub steering_input: Option<AgentRunSteeringInput>,
-}
-
-/// The intent of the shared control path, which only steering uses.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AgentRunControlIntent {
-    Steer,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AgentRunSteeringInput {
     pub conversation_id: String,
     pub author_message: String,
 }
 
-/// Settlement of one steering command.
+/// The steering input that one steerAgentRun retains at its input position.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AgentRunControlSettlement {
-    pub ids: AuthorCommandAdmissionIds,
-    pub receipt_created_at: String,
-    pub project_activity_position: u64,
-    pub response_project: Project,
-    pub effect: AgentRunControlEffect,
+pub struct SteeringRetained {
+    pub run_id: String,
+    pub steering_input_id: String,
+    pub input_position: u64,
 }
 
-/// Observable effect of one steering command.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum AgentRunControlEffect {
-    Retained {
-        run_id: String,
-        steering_input_id: String,
-        input_position: u64,
-    },
-    Conflicted {
-        reason: AgentRunControlConflict,
-    },
-}
+pub type SteerAgentRunSettlement = ProjectCommandSettlement<
+    ActivityApplied<Infallible>,
+    SteerAgentRunNoEffect,
+    SteerAgentRunConflict,
+    Infallible,
+    Project,
+    SteeringRetained,
+>;
 
-/// Conflict that leaves the current terminal Run unchanged.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AgentRunControlConflict {
-    TerminalRun,
-}
-
-/// Failure while admitting steering.
-#[derive(Debug)]
-pub enum AgentRunControlError {
-    BindingConflict,
-    InputLimit,
-    HistoricalAcknowledgementUnavailable,
-    InvalidChallenge,
-    MissingProject,
-    MissingRun,
-    Unavailable(Box<dyn std::error::Error + Send + Sync>),
-}
-
-impl std::fmt::Display for AgentRunControlError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InputLimit => {
-                formatter.write_str("The effective author input exceeds the Context item bound")
-            }
-            Self::BindingConflict => formatter.write_str("The AgentRun control binding conflicts"),
-            Self::HistoricalAcknowledgementUnavailable => formatter
-                .write_str("The original AgentRun control acknowledgement cannot be recovered"),
-            Self::InvalidChallenge => {
-                formatter.write_str("The AgentRun control challenge is invalid")
-            }
-            Self::MissingProject => formatter.write_str("The Project is not in exact Scope"),
-            Self::MissingRun => formatter.write_str("The AgentRun is not in exact Scope"),
-            Self::Unavailable(_) => {
-                formatter.write_str("The AgentRun control store is unavailable")
-            }
-        }
-    }
-}
-
-impl std::error::Error for AgentRunControlError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Unavailable(source) => Some(source.as_ref()),
-            Self::InputLimit
-            | Self::BindingConflict
-            | Self::HistoricalAcknowledgementUnavailable
-            | Self::InvalidChallenge
-            | Self::MissingProject
-            | Self::MissingRun => None,
-        }
-    }
-}
-
-/// Owns one admitted steering command and its durable fence.
-pub trait AgentRunControlStore: Sync {
-    fn control_agent_run(
-        &self,
-        command: &AgentRunControlCommand,
-    ) -> impl Future<Output = Result<AgentRunControlSettlement, AgentRunControlError>> + Send;
-}
-
-pub async fn control_agent_run(
-    store: &impl AgentRunControlStore,
-    command: &AgentRunControlCommand,
-) -> Result<AgentRunControlSettlement, AgentRunControlError> {
-    let challenge = &command.challenge_binding;
-    let (command_kind, method, route, schema, digest_profile) = match command.intent {
-        AgentRunControlIntent::Steer => (
-            "steerAgentRun",
-            "POST",
-            "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs",
-            "storyos.command.steer-agent-run.request.v1",
-            "storyos.command.steerAgentRun.jcs.v1",
-        ),
-    };
-    let command_digest = {
-        use sha2::{Digest as _, Sha256};
-        let value = Sha256::digest(&command.canonical_command_bytes)
-            .iter()
-            .fold(String::with_capacity(64), |mut value, byte| {
-                use std::fmt::Write as _;
-                write!(value, "{byte:02x}").expect("writing to String cannot fail");
-                value
-            });
-        format!("sha256:{digest_profile}:{value}")
-    };
-    if (command.intent == AgentRunControlIntent::Steer) != command.steering_input.is_some()
-        || command.steering_input.as_ref().is_some_and(|input| {
-            input.author_message.is_empty() || input.author_message.chars().count() > 8000
-        })
-        || challenge.project_scope != command.project_scope
-        || challenge.client_session_binding_digest != command.client_binding.binding_ref
-        || challenge.client_session_generation != command.client_binding.session_generation
-        || challenge.client_contract_revision != command.client_binding.client_contract_revision
-        || challenge.security_policy_revision != command.client_binding.security_policy_revision
-        || challenge.command_kind != command_kind
-        || challenge.canonical_command_digest != command_digest
-        || challenge.method != method
-        || challenge.route_template != route
-        || challenge.command_schema != schema
-    {
-        return Err(AgentRunControlError::BindingConflict);
-    }
-    store.control_agent_run(command).await
-}
+pub type SteerAgentRunError = RefusableCommandError<AgentRunControlRefusal>;

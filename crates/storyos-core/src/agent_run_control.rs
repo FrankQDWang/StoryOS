@@ -63,6 +63,21 @@ pub enum CancelAgentRunConflict {
 reason_codes!(CancelAgentRunNoEffect { AlreadyCancelled => "already_cancelled" });
 reason_codes!(CancelAgentRunConflict { TerminalRun => "terminal_run" });
 
+/// The `no_effect` reason of a steerAgentRun.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SteerAgentRunNoEffect {
+    SteeringRetained,
+}
+
+/// The `conflicted` reason of a steerAgentRun.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SteerAgentRunConflict {
+    TerminalRun,
+}
+
+reason_codes!(SteerAgentRunNoEffect { SteeringRetained => "steering_retained" });
+reason_codes!(SteerAgentRunConflict { TerminalRun => "terminal_run" });
+
 /// Classifies pause without treating it as cancellation.
 pub fn classify_pause_agent_run(
     lifecycle: AgentRunLifecycle,
@@ -99,3 +114,26 @@ pub fn classify_cancel_agent_run(
         }
     }
 }
+
+/// Classifies steering. A Run that is not terminal retains the input and changes no authority.
+pub fn classify_steer_agent_run(
+    lifecycle: AgentRunLifecycle,
+) -> TransitionOutcome<Infallible, SteerAgentRunNoEffect, SteerAgentRunConflict, Infallible> {
+    match lifecycle {
+        AgentRunLifecycle::Queued
+        | AgentRunLifecycle::Claimed
+        | AgentRunLifecycle::Waiting
+        | AgentRunLifecycle::Paused => {
+            TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained)
+        }
+        AgentRunLifecycle::Completed
+        | AgentRunLifecycle::Refused
+        | AgentRunLifecycle::Cancelled => {
+            TransitionOutcome::Conflicted(SteerAgentRunConflict::TerminalRun)
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "agent_run_control_tests.rs"]
+mod tests;

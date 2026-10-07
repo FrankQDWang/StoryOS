@@ -133,6 +133,20 @@ Specification C ([#1043](https://github.com/FrankQDWang/StoryOS/issues/1043)) mo
 - The Core classifier returns a Core Transition Outcome with the reasons `already_cancelled` and `terminal_run`.
 - The observable changes of `pauseAgentRun` in the list above also apply to `cancelAgentRun`, with the same causes. The behavior-equivalence review against `main` found no other difference.
 
+#### `steerAgentRun`
+
+- `steerAgentRun` uses the `agent_run_control` Admission form, the `ActivityOnly` profile with the Activity kind `agent_run_steering_retained`, and the Command-response Project. It locks the Project row and then the AgentRun row. It does not refuse an archived Project.
+- The Core classifier returns a Core Transition Outcome with no applied outcome. A Run that is not terminal gives `no_effect` with the reason `steering_retained`. A terminal Run gives `conflicted` with the reason `terminal_run`.
+- A missing AgentRun and a conversation that is not the conversation of the Run are refusals before Admission. Each gives `404 resource_unavailable`, as on `main`. An input that makes the effective author input exceed the Context item bound is a refusal before Admission. It gives `413 steering_input_limit`, as on `main`.
+- The retained outcome declares `EffectWithActivity`. It resumes a paused Run without a change to its fence token, and it writes the `agent_run_steering_retained` Activity record at the next input position. The payload keys and their string types do not change, because the Worker reads them. The `terminal_run` outcome writes no Activity record, as on `main`.
+- The route uses the generic project command admission. It checks the conversation identity before the session. It checks the message limit of 8000 characters after the session, header, and Command Challenge secret checks. Thus the problem order of `main` does not change. A message that is empty or above the limit gives `409 idempotency_binding_conflict`, as on `main`.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - Damaged replay evidence gives `503 project_store_unavailable` instead of `409 idempotency_binding_conflict`. Such evidence is a damaged Command-response Project record or a `steering_retained` Receipt without its Activity record. It is also an Activity `run_id`, `steering_input_id`, or `input_position` value that is absent, null, or not a string. The receipt relation trigger and the Activity payload checks already prevent the Activity faults.
+  - An Activity `run_id` or `steering_input_id` that is not UUID text gives `503 project_store_unavailable`. Before, replay returned that text. The Activity payload checks already require an `input_position` of unsigned decimal text without leading zeros.
+  - A zero-authority Receipt with an Author Action gives a store fault. Before, replay ignored the Author Action. The receipt relation trigger already prevents such a record.
+- The behavior-equivalence review against `main` found no other difference.
+
 ## Relation to ADR 0041 and the glossary
 
 ADR 0041 stays in force. ADR 0041 lets the sequence allocate authority records for an `Applied` outcome only in the `Structural` shape. This decision replaces that statement: the settlement profile now fixes the authority records of an `Applied` outcome. The glossary term Core Transition Outcome changes in the same way. Only Applied changes the target of the command, and its settlement profile fixes which authority records it allocates.
