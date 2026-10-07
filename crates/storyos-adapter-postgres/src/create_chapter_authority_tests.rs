@@ -11,7 +11,7 @@ use storyos_application::{
 };
 use tokio_postgres::NoTls;
 
-use crate::structure_command::tests::{applied, command_call, create_chapter, create_volume};
+use crate::command_sequence::tests::{applied, command_call, create_chapter, create_volume};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";

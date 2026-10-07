@@ -1,10 +1,15 @@
 use super::*;
 use storyos_application::{
-    ArchiveProjectCommand, ArchiveProjectSettlementEffect, AuthorCommandAdmissionIds,
-    EditorClientBinding, IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, UserId, archive_project, issue_project_command_challenge,
+    ArchiveProjectInput, ArchiveProjectSettlement, IssueProjectCommandChallenge,
+    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId,
+    issue_project_command_challenge,
+};
+use storyos_core::{
+    ArchiveProjectApplied, ArchiveProjectConflict, ArchiveProjectNoEffect, TransitionOutcome,
 };
 use tokio_postgres::NoTls;
+
+use crate::command_sequence::tests::{CommandCall, command_call};
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000201";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
@@ -59,36 +64,33 @@ fn issue_named_request(
 }
 
 fn command(
-    binding: ProjectCommandChallengeBinding,
-    nonce_digest: &str,
+    issue: &IssueProjectCommandChallenge,
     ids_suffix: &str,
     expected_revision: u64,
     bytes: &[u8],
-) -> ArchiveProjectCommand {
-    ArchiveProjectCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
-        },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        expected_revision,
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-    }
+) -> CommandCall<ArchiveProjectInput> {
+    command_call(
+        issue.binding.clone(),
+        &issue.nonce_digest,
+        ids_suffix,
+        bytes,
+        ArchiveProjectInput { expected_revision },
+    )
+}
+
+async fn archive_project(
+    store: &PostgresProjectReader,
+    call: &CommandCall<ArchiveProjectInput>,
+) -> ArchiveProjectSettlement {
+    store
+        .archive_project(&call.envelope, &call.input)
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn archive_project_is_atomic_replayable_and_scope_safe() {
+async fn archive_project_archives_only_its_scope_once_and_replays_the_captured_project() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -124,32 +126,17 @@ async fn archive_project_is_atomic_replayable_and_scope_safe() {
     let first = archive_project(
         &store,
         &command(
-            first_issue.binding.clone(),
-            &first_issue.nonce_digest,
+            &first_issue,
             "0602",
-            1,
+            /*expected_revision*/ 1,
             COMMAND_BYTES,
         ),
     )
-    .await
-    .unwrap();
-    assert_eq!(
-        first.effect,
-        ArchiveProjectSettlementEffect::Applied { revision: 2 }
-    );
-    let replay = archive_project(
-        &store,
-        &command(
-            first_issue.binding.clone(),
-            &first_issue.nonce_digest,
-            "0699",
-            1,
-            COMMAND_BYTES,
-        ),
-    )
-    .await
-    .unwrap();
-    assert_eq!(replay, first);
+    .await;
+    let TransitionOutcome::Applied(applied) = &first.outcome else {
+        panic!("the archival must apply, got {:?}", first.outcome);
+    };
+    assert_eq!(applied.effect, ArchiveProjectApplied { revision: 2 });
 
     let stale_issue = issue_request("0603");
     issue_project_command_challenge(&store, &stale_issue)
@@ -158,20 +145,16 @@ async fn archive_project_is_atomic_replayable_and_scope_safe() {
     let stale = archive_project(
         &store,
         &command(
-            stale_issue.binding.clone(),
-            &stale_issue.nonce_digest,
+            &stale_issue,
             "0604",
-            1,
+            /*expected_revision*/ 1,
             COMMAND_BYTES,
         ),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        stale.effect,
-        ArchiveProjectSettlementEffect::Conflicted {
-            reason: storyos_core::ArchiveProjectConflict::StaleProjectRevision,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(ArchiveProjectConflict::StaleProjectRevision)
     );
 
     let later_issue = issue_named_request("0605", &later_digest());
@@ -181,30 +164,21 @@ async fn archive_project_is_atomic_replayable_and_scope_safe() {
     let already = archive_project(
         &store,
         &command(
-            later_issue.binding.clone(),
-            &later_issue.nonce_digest,
+            &later_issue,
             "0606",
-            2,
+            /*expected_revision*/ 2,
             LATER_COMMAND_BYTES,
         ),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        already.effect,
-        ArchiveProjectSettlementEffect::NoEffect {
-            reason: storyos_core::ArchiveProjectNoEffect::AlreadyArchived,
-        }
+        already.outcome,
+        TransitionOutcome::NoEffect(ArchiveProjectNoEffect::AlreadyArchived)
     );
 
     let row = admin
         .query_one(
             "SELECT lifecycle_state, revision::text,
-                    (SELECT count(*) FROM storyos.domain_receipts
-                      WHERE project_id = $1::text::uuid AND command_kind = 'archiveProject'),
-                    (SELECT count(*) FROM storyos.project_activity_event_payloads
-                      WHERE project_id = $1::text::uuid
-                        AND event_kind = 'project_archival_changed'),
                     (SELECT count(*) FROM storyos.project_archival_decisions
                       WHERE project_id = $1::text::uuid)
                FROM storyos.projects
@@ -217,25 +191,21 @@ async fn archive_project_is_atomic_replayable_and_scope_safe() {
         (
             row.get::<_, String>(0),
             row.get::<_, String>(1),
-            row.get::<_, i64>(2),
-            row.get::<_, i64>(3),
-            row.get::<_, i64>(4)
+            row.get::<_, i64>(/*idx*/ 2)
         ),
-        ("archived".to_owned(), "2".to_owned(), 3, 1, 1)
+        ("archived".to_owned(), "2".to_owned(), 1)
     );
 
     let frozen = archive_project(
         &store,
         &command(
-            first_issue.binding.clone(),
-            &first_issue.nonce_digest,
+            &first_issue,
             "0698",
-            1,
+            /*expected_revision*/ 1,
             COMMAND_BYTES,
         ),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(frozen, first);
 
     let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();

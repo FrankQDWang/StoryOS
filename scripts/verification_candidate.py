@@ -27,7 +27,8 @@ def environment():
 def execution_inputs(cache):
     inputs = {key: value for key, value in environment().items()
               if key not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT',
-                             'STORYOS_RUST_CACHE_ROOT', 'PYTHONDONTWRITEBYTECODE'}}
+                             'STORYOS_RUST_CACHE_ROOT', 'PYTHONDONTWRITEBYTECODE',
+                             'STORYOS_VERIFICATION_HOST_QUEUE'}}
     inputs['CARGO_TARGET_DIR'] = cache['target_dir']
     return inputs
 
@@ -71,8 +72,11 @@ def process_identity():
 def readiness(root, candidate, context):
     """Validate current source, targeted checks, and independent review records."""
     import verification as runner
-    if candidate['source']['dirty']:
-        raise ValueError('Complete verification requires a clean tracked and untracked worktree')
+    import verification_status
+    for prerequisite in (verification_status.clean_tree(root, candidate['source']['dirty'], 'Complete verification'),
+                         verification_status.policy_fresh(root)):
+        if verification_status.refusal(prerequisite):
+            raise ValueError(verification_status.refusal(prerequisite))
     runner.inventory(root)
     import verification_reviews
     return verification_reviews.admission(root, context)

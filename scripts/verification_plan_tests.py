@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import unittest
@@ -156,14 +157,51 @@ print('executed selected files')
         for name in ("package-release.py", "verify-project-scope.sh"):
             path = self.root / "scripts" / name
             path.write_text("Changed shared script.\n")
-            result = self.cli("run")
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertIn("input-policy-checked", result.stdout)
-            self.assertIn("Daily scope pending: exact-dist", result.stdout)
-            self.assertIn("Daily scope pending: recovery", result.stdout)
+            plan = json.loads(self.cli("plan").stdout)
+            self.assertLessEqual({("exact-dist", "pending"), ("recovery", "pending")},
+                                 {(c["group"], c["status"]) for c in plan["checks"]})
             path.unlink()
 
-    def test_dirty_package_obligation_does_not_hide_independent_feedback(self):
+    def test_verification_script_change_selects_its_teardown_test_without_a_package(self):
+        self.install_runner_fixture()
+        policy = json.loads(self.policy_path.read_text())
+        policy["daily_consumers"] = json.loads((Path(__file__).parent.parent /
+            "docs/agents/verification-policy.json").read_text())["daily_consumers"]
+        self.policy_path.write_text(json.dumps(policy))
+        teardown = self.add_test("required-global-teardown.test.ts")
+        self.add_test("production-build.test.ts").write_text("import {test} from 'vitest'; test('reads dist',()=>{});\n")
+        self.repo.git("add", ".")
+        self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Declare actual script consumers.")
+        self.base = self.repo.git("rev-parse", "HEAD")
+        (self.root / "scripts/verification_tool.py").write_text("Changed verification tool.\n")
+        result = self.cli("run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = self.repo.report()
+        self.assertEqual([(c["group"], c["files"], c.get("requires_package", False)) for c in report["plan"]["checks"]],
+                         [("policy", ["scripts/verification_tool.py"], False), ("web-typecheck", [], False),
+                          ("node-contract", [str(teardown.relative_to(self.root))], False)])
+        self.assertEqual([step["stage"] for step in report["steps"]], ["policy", "web-typecheck", "node-contract"])
+
+    def test_no_cache_neither_reads_nor_publishes_a_self_test_result(self):
+        self.install_runner_fixture()
+        child = "from pathlib import Path; p = Path('target/launches'); p.write_text(p.read_text() + 'x' if p.exists() else 'x')"
+        step = shlex.join([sys.executable, str(verification_tests.COMMAND), "step", "verification-tests", "--",
+                           sys.executable, "-c", child])
+        (self.root / "Makefile").write_text(f"verify-policy:\n\t@{step}\nweb-typecheck:\n\t@echo input-policy-checked\n")
+        self.repo.git("add", ".")
+        self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Run the self-test step in the policy check.")
+        self.base = self.repo.git("rev-parse", "HEAD")
+        self.add_test()
+        launches = []
+        for args in (["--no-cache"], ["--no-cache"], [], [], ["--no-cache"]):
+            result = self.cli("run", *args)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            launches.append((self.root / "target/launches").read_text())
+        self.assertEqual(launches, ["x", "xx", "xxx", "xxx", "xxxx"])
+
+    def test_dirty_package_obligation_refuses_before_any_step_record(self):
         self.install_runner_fixture()
         policy = json.loads(self.policy_path.read_text())
         policy["daily_consumers"] = [{"pattern": "docs/fixture.md", "groups": ["database"]}]
@@ -175,14 +213,10 @@ print('executed selected files')
         (self.root / "docs/fixture.md").write_text("Changed fixture contract.\n")
         self.add_test()
         result = self.cli("run")
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("executed selected files", result.stdout)
-        report = self.repo.report()
-        self.assertEqual(report["status"], "pending")
-        self.assertEqual([(c["group"], c["status"]) for c in report["plan"]["checks"]],
-                         [("policy", "ready"), ("web-typecheck", "ready"),
-                          ("node-contract", "ready"), ("database", "pending")])
-        self.assertFalse((self.root / "target/complete-started").exists())
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "",
+            "Release packaging requires a clean tracked and untracked worktree. Commit or remove the dirty paths: "
+            "apps/web/test/node-contract/new.test.ts, docs/fixture.md\n"))
+        self.assertEqual(list(self.root.glob("target/verification/*/report.json")), [])
 
     def test_staged_changes_remain_selected_when_working_bytes_match_the_base(self):
         path = self.add_test()

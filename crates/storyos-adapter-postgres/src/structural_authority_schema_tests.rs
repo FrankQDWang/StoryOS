@@ -4,15 +4,14 @@ use storyos_application::{
     CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
     EditorSessionId, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
     OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectId,
-    ProjectScope, SetCurrentChapterCommand, SetCurrentChapterSettlementEffect, UpdateChapterInput,
-    UpdateVolumeInput, UserId, VolumeCreated, VolumeId, create_editor_session, create_project,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
-    set_current_chapter,
+    ProjectScope, SetCurrentChapterInput, UpdateChapterInput, UpdateVolumeInput, UserId,
+    VolumeCreated, VolumeId, create_editor_session, create_project, issue_create_project_challenge,
+    issue_project_command_challenge, open_chapter,
 };
 use storyos_core::{TransitionOutcome, UpdateChapterApplied, UpdateVolumeApplied};
 use tokio_postgres::NoTls;
 
-use crate::structure_command::tests::{
+use crate::command_sequence::tests::{
     CommandCall, applied, command_call, create_chapter, create_volume, update_chapter,
 };
 
@@ -640,37 +639,23 @@ async fn applied_set_current_chapter_receipt_may_bind_author_action_without_comm
     issue_project_command_challenge(&store, &switch_issue)
         .await
         .unwrap();
-    let switched = set_current_chapter(
-        &store,
-        &SetCurrentChapterCommand {
-            project_scope: switch_issue.binding.project_scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: switch_issue.binding.client_session_binding_digest.clone(),
-                session_generation: switch_issue.binding.client_session_generation,
-                client_contract_revision: switch_issue.binding.client_contract_revision.clone(),
-                security_policy_revision: switch_issue.binding.security_policy_revision.clone(),
-            },
-            challenge_binding: switch_issue.binding.clone(),
-            nonce_digest: switch_issue.nonce_digest.clone(),
-            canonical_command_bytes: CURRENT_BYTES.to_vec(),
-            correlation_id: "018f0000-0000-7001-8000-00000000085c".to_owned(),
-            ids: AuthorCommandAdmissionIds {
-                command_id: "018f0000-0000-7001-8000-00000001085c".to_owned(),
-                author_command_admission_id: "018f0000-0000-7001-8000-00000002085c".to_owned(),
-                receipt_id: "018f0000-0000-7001-8000-00000003085c".to_owned(),
-            },
+    let switch_call = command_call(
+        switch_issue.binding.clone(),
+        &switch_issue.nonce_digest,
+        "085c",
+        CURRENT_BYTES,
+        SetCurrentChapterInput {
             editor_session_id: EditorSessionId::new(editor_session_id),
             chapter_id: chapter_b.clone(),
             expected_current_chapter_id: chapter_a,
             expected_target_revision_id: opened_b.chapter.revision_id.as_ref().to_owned(),
         },
-    )
-    .await
-    .unwrap();
-    assert!(matches!(
-        switched.effect,
-        SetCurrentChapterSettlementEffect::Applied { .. }
-    ));
+    );
+    let switched = store
+        .set_current_chapter(&switch_call.envelope, &switch_call.input)
+        .await
+        .unwrap();
+    assert!(matches!(switched.outcome, TransitionOutcome::Applied(_)));
     let admin = open_admin().await;
     let bound: serde_json::Value = serde_json::from_str(
         &admin

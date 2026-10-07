@@ -149,6 +149,7 @@ export function ManuscriptEditor({
   undoChallengeTimers,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
+  const capturedInputRef = useRef(0);
   const composingRef = useRef(false);
   const focusedProposalRef = useRef<string | undefined>(undefined);
   const mixedCompositionRef = useRef<StructuredSelectionEdit | undefined>(undefined);
@@ -226,6 +227,7 @@ export function ManuscriptEditor({
         const primitive = mixed.authorEditUnit.normalized_primitives[0];
         const text = primitive?.kind === "replace_structured_selection"
           ? primitive.replacement.map((block) => block.text).join("\n") : "";
+        capturedInputRef.current += 1;
         void idleRef.current?.persist(mixed, originFromTransaction(transaction,
           { from: 0, to: 1, text }), new Date().toISOString());
         return;
@@ -270,6 +272,7 @@ export function ManuscriptEditor({
       if (paragraphsEqual(nextBlocks, observedBlocksRef.current)) return;
       const edit = capturedManuscriptEditFromTransaction(transaction);
       observedBlocksRef.current = nextBlocks;
+      capturedInputRef.current += 1;
       if (edit === undefined) {
         idleRef.current?.fail(new Error("Manuscript replacement is not a supported Block edit"));
         return;
@@ -429,6 +432,7 @@ export function ManuscriptEditor({
     return () => { editor.view.dom.removeEventListener("click", onClick); };
   }, [editor]);
 
+  const inputAtRender = capturedInputRef.current;
   useEffect(() => {
     if (editor === null || editor.view.composing || composingRef.current) return;
     const identityKey = blocks.map((block) =>
@@ -436,9 +440,10 @@ export function ManuscriptEditor({
     const rendered = readManuscriptParagraphs(editor.state.doc);
     const renderedKey = rendered?.map((block) =>
       `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" ");
-    if (renderedKey !== identityKey || (rendered !== undefined
+    // Author input after this render is newer than these blocks. The render for that input does this check again.
+    if (capturedInputRef.current === inputAtRender && (renderedKey !== identityKey || (rendered !== undefined
       && !paragraphsEqual(rendered, blocks) && persistWorkspace?.pending.save_state === "saved"
-      && persistWorkspace.pending.unsettled_intent_count === 0)) {
+      && persistWorkspace.pending.unsettled_intent_count === 0))) {
       hydrateManuscriptBlocks(editor, blocks);
       projectBlockProposals(editor, proposals);
     }
@@ -454,7 +459,7 @@ export function ManuscriptEditor({
       const detached: ManualInputController = {
         flush: () => Promise.resolve(),
         whenIdle: () => Promise.resolve(),
-        installProjection: (projection) => onProjectionRef.current(projection),
+        installProjection: async (projection) => { onProjectionRef.current(projection); },
         hasIncompleteSemanticIntent: () => composingRef.current,
         close() {},
         replaceBound: async () => "refused",
@@ -487,7 +492,22 @@ export function ManuscriptEditor({
     });
     idleRef.current = idle;
     const controller: ManualInputController = {
-      installProjection,
+      // A projection that another reader read from the Journal can be older than input that persisted after that read.
+      async installProjection(projection) {
+        const rendered = readManuscriptParagraphs(editor.state.doc);
+        if (rendered === undefined || paragraphsEqual(rendered, projection.blocks) || idle.hasQueuedInput()) {
+          installProjection(projection);
+          return;
+        }
+        const captured = idle.capturedInputCount();
+        try {
+          const current = await rebuildPendingProjection(persistWorkspace);
+          // Input captured during this read installs its own newer projection.
+          if (idleRef.current === idle && idle.capturedInputCount() === captured) installProjection(current);
+        } catch (error: unknown) {
+          if (idleRef.current === idle) onFailureRef.current(error);
+        }
+      },
       flush: () => idle.flush(),
       whenIdle: () => idle.whenIdle(),
       hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing,
@@ -653,6 +673,7 @@ export function ManuscriptEditor({
       }
       const edit = captureManuscriptChange(observedBlocksRef.current, nextBlocks);
       observedBlocksRef.current = nextBlocks;
+      capturedInputRef.current += 1;
       if (edit === undefined) {
         idle.fail(new Error("Manuscript replacement is not a supported Block edit"));
         return;

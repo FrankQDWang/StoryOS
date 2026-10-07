@@ -31,6 +31,11 @@ const SOURCE_SLICE = "narrator voice";
 const GOLDEN_DIGEST =
   "sha256:bc395ed925fa201c3c0ecd550ed362f89e6069001d6c23af2ce214b107d9ce40";
 
+function problemOf(error: unknown): { status: number | undefined; code: unknown } {
+  const protocol = requireStoryOSProtocolError(error);
+  return { status: protocol.status, code: JSON.parse(String(protocol.responseBody)).code };
+}
+
 function sliceDigest(manuscriptBlockId: string): string {
   return `sha256:${createHash("sha256").update(JSON.stringify({
     base_slice: SOURCE_SLICE,
@@ -297,7 +302,7 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
         baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId: opened.proposal.proposal_id,
         request: rejection, fetchImpl: prepared.fetchImpl, antiForgery, idempotencyKey: id("e0fb52") }));
     const request: ExpandRefusedEditDraftRequest = { command_schema: "storyos.command.expand-refused-edit-draft-to-proposal.request.v1",
-      expand_refused_edit_draft_to_proposal_input: { ...BINDING, correlation_id: id("e0fb61"),
+      expand_refused_edit_draft_to_proposal_input: { ...BINDING, correlation_id: id("e0fb61").toUpperCase(),
         draft_id: source.draft_id, source_current_draft_revision_id: source.draft_revision_id,
         source_draft_payload_digest: source.payload_digest, expected_source_draft_closure: "open",
         selected_payload_range: { kind: "whole_draft_payload" }, proposal_kind: "inline_edit",
@@ -317,6 +322,16 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
         ...(index === 1 ? { anchors: [{ ...request.expand_refused_edit_draft_to_proposal_input.anchors[0]!, base_authoritative_revision_id: id("e0fb899") }] } : {}) } };
       if (index === 2) await assert.rejects(() => sendExpansion(changed, id(`e0fb8${index}`)), (error) => requireStoryOSProtocolError(error).status === 409);
       else assert.equal((await sendExpansion(changed, id(`e0fb8${index}`))).effect.kind, "conflicted");
+      assert.deepEqual(await retainedState(prepared.projectId), before);
+    }
+    const uppercase = { ...request, expand_refused_edit_draft_to_proposal_input: {
+      ...request.expand_refused_edit_draft_to_proposal_input, draft_id: source.draft_id.toUpperCase() } };
+    assert.notEqual(uppercase.expand_refused_edit_draft_to_proposal_input.draft_id, source.draft_id);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await assert.rejects(() => sendExpansion(uppercase, id("e0fbc1")), (error) => {
+        assert.deepEqual(problemOf(error), { status: 409, code: "draft_expansion_binding_conflict" });
+        return true;
+      });
       assert.deepEqual(await retainedState(prepared.projectId), before);
     }
     await assert.rejects(() => sendExpansion(request, id("e0fb83"), browserFetch(started.baseUrl, "session-b")),
@@ -344,6 +359,7 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
     for (const attempt of attempts) if (attempt.status === "rejected") assert.ok([409, 503].some((status) => status === requireStoryOSProtocolError(attempt.reason).status));
     const response = responses[0]!;
     for (const observed of responses) assert.deepEqual(observed, response);
+    assert.equal(response.correlation_id, id("e0fb61"));
     if (response.effect.kind !== "proposal_created_from_draft") throw new Error("expected expanded Proposal");
     const proposal = (await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: response.effect.proposal_id, fetchImpl: prepared.fetchImpl })).proposal;
@@ -1529,7 +1545,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     const [closed, archived, tombstoned] = drafts;
     if (!closed || !archived || !tombstoned) throw new Error("expected three retained Drafts");
     const closeRequest: CloseEditorFlowDraftRequest = { command_schema: "storyos.command.close-editor-flow-draft.request.v1",
-      close_editor_flow_draft_input: { ...BINDING, correlation_id: id("e0db1"),
+      close_editor_flow_draft_input: { ...BINDING, correlation_id: id("e0db1").toUpperCase(),
         editor_session_id: writer.session.editor_session.editor_session_id, writer_generation: writer.writerGeneration,
         draft_kind: "refused_edit", draft_id: closed.draft.draft_id,
         source_current_draft_revision_id: closed.draft.draft_revision_id,
@@ -1572,6 +1588,21 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       WHERE project_id='${prepared.projectId}'::uuid AND idempotency_key='${id("e0db94")}'::uuid`), "0");
     closeRequest.close_editor_flow_draft_input.writer_generation = writer.writerGeneration;
     const beforeClose = await retainedState(prepared.projectId);
+    const uppercaseClose: CloseEditorFlowDraftRequest = { ...closeRequest, close_editor_flow_draft_input: {
+      ...closeRequest.close_editor_flow_draft_input, draft_id: closed.draft.draft_id.toUpperCase() } };
+    assert.notEqual(uppercaseClose.close_editor_flow_draft_input.draft_id, closed.draft.draft_id);
+    const uppercaseDigest = await digestCloseEditorFlowDraft(uppercaseClose);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await assert.rejects(() => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/drafts/{draft_id}/closures", uppercaseClose.command_schema, uppercaseDigest,
+        id("e0d9a1"), (antiForgery) => closeEditorFlowDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          draftId: uppercaseClose.close_editor_flow_draft_input.draft_id, request: uppercaseClose,
+          idempotencyKey: id("e0d9a1"), antiForgery, fetchImpl: prepared.fetchImpl })), (error) => {
+        assert.deepEqual(problemOf(error), { status: 409, code: "draft_binding_conflict" });
+        return true;
+      });
+      assert.deepEqual(await retainedState(prepared.projectId), beforeClose);
+    }
     const key = id("e0db2");
     const digest = await digestCloseEditorFlowDraft(closeRequest);
     let nonce = "";
@@ -1608,6 +1639,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     const [closeResponse, concurrentReplay] = await Promise.all([sendClose(), sendClose()]);
     assert.deepEqual(closeResponse, lost);
     assert.deepEqual(concurrentReplay, closeResponse);
+    assert.equal(closeResponse.correlation_id, id("e0db1"));
     if (closeResponse.effect.kind !== "draft_closure_changed") throw new Error("expected complete Discard");
     const closeEvent = closeResponse.effect.event;
     const scope = { owner_user_id: USER_A, project_id: prepared.projectId };

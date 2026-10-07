@@ -152,7 +152,8 @@ moving files must not conceal a cross-zone merge.
 │   ├── storyos-adapter-*/             # PostgreSQL and external implementations
 │   ├── storyos-server/                # public HTTP/SSE process entrypoint
 │   ├── storyos-worker/                # fenced asynchronous Worker loop library
-│   └── storyos-worker-bin/            # Worker process entrypoint (ADR 0039)
+│   ├── storyos-worker-bin/            # Worker process entrypoint (ADR 0039)
+│   └── storyos-literal-guard/         # repository tool crate; not a product member
 ├── apps/
 │   └── web/                           # production author-facing Web Client
 ├── generated/                         # checked-in generator output; never hand-edited
@@ -190,6 +191,9 @@ topology is a governance target, not authorization to create empty crates now.
   depend inward on application, contracts, and selected adapters but may not be
   imported by Core, Kernel, domain zones, or the Web Client. The
   `storyos-worker` library holds the Worker loop and depends on no adapter.
+- A repository tool crate, such as `storyos-literal-guard`, checks repository
+  sources. No package depends on it, and the release package does not contain
+  it. `scripts/verify-workspace-boundaries.py` lists each tool crate.
 - `apps/web` imports only generated client/types and presentation-safe packages.
   It does not import Rust implementation code, database schemas, internal
   Worker/Adapter contracts, or generated artifacts for another release surface.

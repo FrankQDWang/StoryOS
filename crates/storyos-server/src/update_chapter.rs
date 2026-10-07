@@ -1,20 +1,25 @@
 use storyos_application::{ChapterId, UpdateChapterInput};
 use storyos_core::TransitionOutcome;
 
-use super::contract_reason::contract_reason;
-use super::structure_admission::{
-    SettledReceipt, StructureRoute, admit, positive, structure_title,
+use super::command_admission::{
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    SettledReceipt, TargetValidation, admit, controlled_project, positive, structure_title,
 };
+use super::contract_reason::contract_reason;
 use super::*;
 
-const UPDATE_CHAPTER: StructureRoute = StructureRoute {
+const UPDATE_CHAPTER: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Update Chapter",
     command_kind: "updateChapter",
     method: contracts::UPDATE_CHAPTER_METHOD,
     path: contracts::UPDATE_CHAPTER_PATH,
     schema_id: contracts::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
     digest_profile: contracts::UPDATE_CHAPTER_DIGEST_PROFILE,
-    receipt_kind: contracts::DomainReceiptCommandKind::UpdateChapter,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
+    target_validation: TargetValidation::BeforeContentType,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn update_chapter(
@@ -49,7 +54,7 @@ pub(super) async fn update_chapter(
     let result = settlement.outcome.receipt_result();
     let effect = match settlement.outcome {
         TransitionOutcome::Applied(applied) => {
-            authority = applied.authority.into_settled();
+            authority = applied.authority.into_settled().map(Into::into);
             contracts::UpdateChapterEffect::AuthoritativeApplied {
                 chapter_id,
                 title: applied.effect.title,
@@ -70,12 +75,13 @@ pub(super) async fn update_chapter(
     };
     let ack = admitted.acknowledgement(
         &UPDATE_CHAPTER,
+        contracts::DomainReceiptCommandKind::UpdateChapter,
         SettledReceipt {
             ids: settlement.ids,
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
-            project: settlement.response_project,
+            heads: Vec::new(),
         },
     );
     Ok(Json(contracts::UpdateChapterResponse {
@@ -85,7 +91,7 @@ pub(super) async fn update_chapter(
         command_id: ack.command_id,
         author_command_admission_id: ack.author_command_admission_id,
         receipt: ack.receipt,
-        project: ack.project,
+        project: controlled_project(settlement.response),
         effect,
     }))
 }

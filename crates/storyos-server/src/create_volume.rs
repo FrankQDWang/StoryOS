@@ -1,20 +1,25 @@
 use storyos_application::{CreateVolumeInput, CreateVolumePublicOrder};
 use storyos_core::TransitionOutcome;
 
-use super::contract_reason::contract_reason;
-use super::structure_admission::{
-    SettledReceipt, StructureRoute, admit, positive, structure_title,
+use super::command_admission::{
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    SettledReceipt, TargetValidation, admit, controlled_project, positive, structure_title,
 };
+use super::contract_reason::contract_reason;
 use super::*;
 
-const CREATE_VOLUME: StructureRoute = StructureRoute {
+const CREATE_VOLUME: ProjectCommandRoute = ProjectCommandRoute {
     display_name: "Create Volume",
     command_kind: "createVolume",
     method: contracts::CREATE_VOLUME_METHOD,
     path: contracts::CREATE_VOLUME_PATH,
     schema_id: contracts::CREATE_VOLUME_REQUEST_SCHEMA_ID,
     digest_profile: contracts::CREATE_VOLUME_DIGEST_PROFILE,
-    receipt_kind: contracts::DomainReceiptCommandKind::CreateVolume,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
+    target_validation: TargetValidation::BeforeContentType,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    problem_mapping: ProblemMapping::Standard,
 };
 
 pub(super) async fn create_volume(
@@ -49,7 +54,7 @@ pub(super) async fn create_volume(
         TransitionOutcome::Applied(applied) => {
             let order = match applied.effect.order {
                 CreateVolumePublicOrder::CanonicalSiblingOrder(rank) => {
-                    authority = applied.authority.into_settled();
+                    authority = applied.authority.into_settled().map(Into::into);
                     rank.to_string()
                 }
                 CreateVolumePublicOrder::HistoricalCreateVolumeAck => "1".to_owned(),
@@ -72,12 +77,13 @@ pub(super) async fn create_volume(
     };
     let ack = admitted.acknowledgement(
         &CREATE_VOLUME,
+        contracts::DomainReceiptCommandKind::CreateVolume,
         SettledReceipt {
             ids: settlement.ids,
             receipt_created_at: settlement.receipt_created_at,
             result,
             authority,
-            project: settlement.response_project,
+            heads: Vec::new(),
         },
     );
     Ok(Json(contracts::CreateVolumeResponse {
@@ -87,7 +93,7 @@ pub(super) async fn create_volume(
         command_id: ack.command_id,
         author_command_admission_id: ack.author_command_admission_id,
         receipt: ack.receipt,
-        project: ack.project,
+        project: controlled_project(settlement.response),
         effect,
     }))
 }

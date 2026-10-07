@@ -1,295 +1,141 @@
-use axum::body::to_bytes;
-use sha2::{Digest, Sha256};
-use storyos_application::{
-    AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId,
-    ProjectCommandChallengeBinding, ReopenWithdrawnProposalCommand, ReopenWithdrawnProposalError,
-    ReopenWithdrawnProposalSettlementEffect,
-};
+use storyos_application::{EditorSessionId, ReopenWithdrawnProposalInput};
+use storyos_core::TransitionOutcome;
 
-use super::editor_session::{exact_header, session_binding_ref};
-use super::project_command_challenge::{
-    hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
+use super::command_admission::{
+    BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
+    TargetValidation, admit, controlled_project,
 };
+use super::contract_reason::contract_reason;
 use super::*;
+
+const REOPEN_WITHDRAWN_PROPOSAL: ProjectCommandRoute = ProjectCommandRoute {
+    display_name: "Reopen",
+    command_kind: "reopenWithdrawnProposal",
+    method: contracts::REOPEN_WITHDRAWN_PROPOSAL_METHOD,
+    path: contracts::REOPEN_WITHDRAWN_PROPOSAL_PATH,
+    schema_id: contracts::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID,
+    digest_profile: contracts::REOPEN_WITHDRAWN_PROPOSAL_DIGEST_PROFILE,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
+    target_validation: TargetValidation::AfterContentType,
+    problem_mapping: ProblemMapping::Standard,
+};
 
 pub(super) async fn reopen_withdrawn_proposal(
     State(state): State<Arc<ServerState>>,
     Path((project_id, proposal_id)): Path<(String, String)>,
     request: Request,
 ) -> Result<Json<contracts::ReopenWithdrawnProposalResponse>, ApiError> {
-    let (parts, body_stream) = request.into_parts();
-    let headers = parts.headers;
-    let scope = authenticate_scope(
+    let admitted = admit(
         &state,
-        &headers,
         &project_id,
-        RequestOriginPolicy::StateChanging,
-    )?;
-    validate_json_content_type(&headers)?;
-    valid_uuid(&proposal_id)?;
-    let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
+        &[&proposal_id],
+        request,
+        &REOPEN_WITHDRAWN_PROPOSAL,
+        |body: &contracts::ReopenWithdrawnProposalRequest| {
+            let input = &body.reopen_withdrawn_proposal_input;
+            let [expected_authoritative_revision_id] = input.expected_target_revisions.as_slice()
+            else {
+                return Err(invalid_request());
+            };
+            if input.expected_closure != "withdrawn" {
+                return Err(invalid_request());
+            }
+            valid_uuid(&input.proposal_revision_id)?;
+            valid_uuid(&input.withdrawal_event_ref)?;
+            valid_uuid(expected_authoritative_revision_id)?;
+            valid_uuid(&input.editor_session_id)?;
+            Ok(ReopenWithdrawnProposalInput {
+                editor_session_id: EditorSessionId::new(input.editor_session_id.clone()),
+                proposal_id: proposal_id.clone(),
+                proposal_revision_id: input.proposal_revision_id.clone(),
+                withdrawal_event_id: input.withdrawal_event_ref.clone(),
+                expected_authoritative_revision_id: expected_authoritative_revision_id.clone(),
+            })
+        },
+    )
+    .await?;
+    let settlement = admitted
+        .store
+        .reopen_withdrawn_proposal(&admitted.envelope, &admitted.input)
         .await
-        .map_err(|_| payload_too_large())?;
-    let body = serde_json::from_slice::<contracts::ReopenWithdrawnProposalRequest>(&bytes)
-        .map_err(|_| invalid_request_shape())?;
-    let input = &body.reopen_withdrawn_proposal_input;
-    let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
-    let session = state
-        .client_session_binding(session_handle)
-        .ok_or_else(authentication_required)?;
-    if body.command_schema != contracts::REOPEN_WITHDRAWN_PROPOSAL_REQUEST_SCHEMA_ID
-        || input.client_contract_revision != session.client_contract_revision
-        || input.security_policy_revision != session.security_policy_revision
-        || input.expected_closure != "withdrawn"
-        || input.expected_target_revisions.len() != 1
-    {
-        return Err(invalid_request());
-    }
-    let expected_authoritative_revision_id = input.expected_target_revisions[0].clone();
-    valid_uuid(&input.correlation_id)?;
-    valid_uuid(&input.proposal_revision_id)?;
-    valid_uuid(&input.withdrawal_event_ref)?;
-    valid_uuid(&expected_authoritative_revision_id)?;
-    valid_uuid(&input.editor_session_id)?;
-    let idempotency_key = exact_header(&headers, "idempotency-key")?;
-    let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
-    if !valid_uuid_v7(idempotency_key)
-        || nonce.len() != 64
-        || !nonce
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err(invalid_request());
-    }
-    let secret = state
-        .config
-        .project_command_challenge_secret
-        .as_deref()
-        .filter(|secret| secret.len() >= 32)
-        .ok_or_else(challenge_store_unavailable)?;
-    let binding_ref = session_binding_ref(secret, session_handle);
-    let canonical_command_bytes = canonical_body_bytes(&body)?;
-    let digest_hex = hex_bytes(&Sha256::digest(&canonical_command_bytes));
-    let canonical_command_digest = format!(
-        "sha256:{}:{digest_hex}",
-        contracts::REOPEN_WITHDRAWN_PROPOSAL_DIGEST_PROFILE
-    );
-    let store = project_reader(&state).await?;
-    let command = ReopenWithdrawnProposalCommand {
-        project_scope: scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding_ref.clone(),
-            session_generation: session.session_generation,
-            client_contract_revision: session.client_contract_revision.clone(),
-            security_policy_revision: session.security_policy_revision.clone(),
-        },
-        challenge_binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: binding_ref,
-            client_session_generation: session.session_generation,
-            client_contract_revision: session.client_contract_revision.clone(),
-            security_policy_revision: session.security_policy_revision.clone(),
-            limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-            challenge_rate_policy_revision:
-                storyos_application::PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION.to_owned(),
-            method: contracts::REOPEN_WITHDRAWN_PROPOSAL_METHOD.to_owned(),
-            route_template: contracts::REOPEN_WITHDRAWN_PROPOSAL_PATH.to_owned(),
-            command_schema: body.command_schema.clone(),
-            command_kind: "reopenWithdrawnProposal".to_owned(),
-            canonical_command_digest: canonical_command_digest.clone(),
-            idempotency_key: idempotency_key.to_owned(),
-        },
-        nonce_digest: plain_digest(nonce.as_bytes()),
-        canonical_command_bytes,
-        correlation_id: input.correlation_id.clone(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: Uuid::now_v7().to_string(),
-            author_command_admission_id: Uuid::now_v7().to_string(),
-            receipt_id: Uuid::now_v7().to_string(),
-        },
-        editor_session_id: EditorSessionId::new(input.editor_session_id.clone()),
-        proposal_id,
-        proposal_revision_id: input.proposal_revision_id.clone(),
-        withdrawal_event_id: input.withdrawal_event_ref.clone(),
-        expected_closure: input.expected_closure.clone(),
-        expected_authoritative_revision_id,
-    };
-    let settlement = storyos_application::reopen_withdrawn_proposal(&store, &command)
-        .await
-        .map_err(reopen_error)?;
-    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
-    reopen_response(&command, &digest_hex, settlement)
-}
-
-fn reopen_response(
-    command: &ReopenWithdrawnProposalCommand,
-    digest_hex: &str,
-    settlement: storyos_application::ReopenWithdrawnProposalSettlement,
-) -> Result<Json<contracts::ReopenWithdrawnProposalResponse>, ApiError> {
-    let project = settlement.response_project;
-    let contract_project_scope = contract_scope(&command.project_scope);
-    let resulting_proposal_revision_id = match &settlement.effect {
-        ReopenWithdrawnProposalSettlementEffect::Resolved {
-            resulting_proposal_revision_id,
-            ..
-        } => Some(resulting_proposal_revision_id.clone()),
-        ReopenWithdrawnProposalSettlementEffect::Conflicted { .. }
-        | ReopenWithdrawnProposalSettlementEffect::Refused { .. }
-        | ReopenWithdrawnProposalSettlementEffect::NoEffect { .. } => None,
-    };
-    let (result, effect) = match settlement.effect {
-        ReopenWithdrawnProposalSettlementEffect::Resolved {
-            author_action_sequence,
-            resulting_proposal_revision_id,
-            preserved_generation,
-            preserved_operation_resolution,
-        } => (
+        .map_err(|error| REOPEN_WITHDRAWN_PROPOSAL.problem(error))?;
+    admitted.hold_first_acknowledgement().await;
+    let input = &admitted.input;
+    let (result, resulting_proposal_revision_id, effect) = match settlement.outcome {
+        TransitionOutcome::Applied(applied) => (
             contracts::ReopenWithdrawnReceiptResult::Resolved,
+            Some(applied.effect.resulting_proposal_revision_id.clone()),
             contracts::ReopenWithdrawnProposalEffect::Resolved {
-                author_action_sequence: author_action_sequence.to_string(),
+                author_action_sequence: applied.author_action_sequence.to_string(),
                 undo_disposition: contracts::AuthorUndoDisposition::Forward,
-                resulting_proposal_revision_id: resulting_proposal_revision_id.clone(),
+                resulting_proposal_revision_id: applied
+                    .effect
+                    .resulting_proposal_revision_id
+                    .clone(),
                 prior_closure: "withdrawn".to_owned(),
                 resulting_closure: "open".to_owned(),
                 resulting_validation: "pending".to_owned(),
-                preserved_generation,
-                preserved_operation_resolution,
-                withdrawal_event_ref: command.withdrawal_event_id.clone(),
-                state_event_refs: vec![resulting_proposal_revision_id],
+                preserved_generation: applied.effect.preserved_generation,
+                preserved_operation_resolution: applied.effect.preserved_operation_resolution,
+                withdrawal_event_ref: input.withdrawal_event_id.clone(),
+                state_event_refs: vec![applied.effect.resulting_proposal_revision_id],
             },
         ),
-        ReopenWithdrawnProposalSettlementEffect::Conflicted { reason } => (
-            contracts::ReopenWithdrawnReceiptResult::Conflicted,
-            contracts::ReopenWithdrawnProposalEffect::Conflicted {
-                reason: match reason {
-                    storyos_core::ReopenWithdrawnProposalConflict::ChangedHead => {
-                        contracts::ReopenWithdrawnProposalConflictReason::ChangedHead
-                    }
-                },
-            },
-        ),
-        ReopenWithdrawnProposalSettlementEffect::Refused { reason } => (
-            contracts::ReopenWithdrawnReceiptResult::Refused,
-            contracts::ReopenWithdrawnProposalEffect::Refused {
-                reason: match reason {
-                    storyos_core::ReopenWithdrawnProposalRefusal::WrongScope => {
-                        contracts::ReopenWithdrawnProposalRefusalReason::WrongScope
-                    }
-                    storyos_core::ReopenWithdrawnProposalRefusal::WrongAdmission => {
-                        contracts::ReopenWithdrawnProposalRefusalReason::WrongAdmission
-                    }
-                    storyos_core::ReopenWithdrawnProposalRefusal::StaleProposalRevision => {
-                        contracts::ReopenWithdrawnProposalRefusalReason::StaleProposalRevision
-                    }
-                },
-            },
-        ),
-        ReopenWithdrawnProposalSettlementEffect::NoEffect { reason } => (
+        TransitionOutcome::NoEffect(reason) => (
             contracts::ReopenWithdrawnReceiptResult::NoEffect,
+            None,
             contracts::ReopenWithdrawnProposalEffect::NoEffect {
-                reason: match reason {
-                    storyos_core::ReopenWithdrawnProposalNoEffect::TerminalSupersession => {
-                        contracts::ReopenWithdrawnProposalNoEffectReason::TerminalSupersession
-                    }
-                    storyos_core::ReopenWithdrawnProposalNoEffect::ClosureNotWithdrawn => {
-                        contracts::ReopenWithdrawnProposalNoEffectReason::ClosureNotWithdrawn
-                    }
-                    storyos_core::ReopenWithdrawnProposalNoEffect::WithdrawalEventMismatch => {
-                        contracts::ReopenWithdrawnProposalNoEffectReason::WithdrawalEventMismatch
-                    }
-                },
+                reason: contract_reason(&reason)?,
+            },
+        ),
+        TransitionOutcome::Conflicted(reason) => (
+            contracts::ReopenWithdrawnReceiptResult::Conflicted,
+            None,
+            contracts::ReopenWithdrawnProposalEffect::Conflicted {
+                reason: contract_reason(&reason)?,
+            },
+        ),
+        TransitionOutcome::Refused(reason) => (
+            contracts::ReopenWithdrawnReceiptResult::Refused,
+            None,
+            contracts::ReopenWithdrawnProposalEffect::Refused {
+                reason: contract_reason(&reason)?,
             },
         ),
     };
+    let envelope = &admitted.envelope;
+    let project_scope = contract_scope(&envelope.project_scope);
+    let head = vec![input.expected_authoritative_revision_id.clone()];
     Ok(Json(contracts::ReopenWithdrawnProposalResponse {
         schema_id: contracts::REOPEN_WITHDRAWN_PROPOSAL_RESPONSE_SCHEMA_ID.to_owned(),
-        correlation_id: command.correlation_id.clone(),
-        project_scope: contract_project_scope.clone(),
+        correlation_id: envelope.correlation_id.clone(),
+        project_scope: project_scope.clone(),
         command_id: settlement.ids.command_id,
         author_command_admission_id: settlement.ids.author_command_admission_id.clone(),
         receipt: contracts::ReopenWithdrawnReceipt {
             receipt_id: settlement.ids.receipt_id,
-            project_scope: contract_project_scope,
+            project_scope,
             command_digest: contracts::DigestValue {
                 algorithm: contracts::DigestAlgorithm::Sha256,
                 profile: contracts::REOPEN_WITHDRAWN_PROPOSAL_DIGEST_PROFILE.to_owned(),
-                value_hex_lowercase: digest_hex.to_owned(),
+                value_hex_lowercase: admitted.digest_hex.clone(),
             },
-            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            idempotency_key: envelope.challenge_binding.idempotency_key.clone(),
             author_command_admission_id: settlement.ids.author_command_admission_id,
-            proposal_id: command.proposal_id.clone(),
-            source_proposal_revision_id: command.proposal_revision_id.clone(),
+            proposal_id: input.proposal_id.clone(),
+            source_proposal_revision_id: input.proposal_revision_id.clone(),
             resulting_proposal_revision_id,
-            withdrawal_event_ref: command.withdrawal_event_id.clone(),
-            expected_target_revisions: vec![command.expected_authoritative_revision_id.clone()],
-            prior_authoritative_revision_ids: vec![
-                command.expected_authoritative_revision_id.clone(),
-            ],
-            resulting_authoritative_revision_ids: vec![
-                command.expected_authoritative_revision_id.clone(),
-            ],
+            withdrawal_event_ref: input.withdrawal_event_id.clone(),
+            expected_target_revisions: head.clone(),
+            prior_authoritative_revision_ids: head.clone(),
+            resulting_authoritative_revision_ids: head,
             authoritative_commit_ids: Vec::new(),
             result,
             created_at: settlement.receipt_created_at,
         },
-        project: contracts::ControlledProject {
-            project_id: project.project_id.as_ref().to_owned(),
-            title: project.title,
-            open: match project.current_chapter_id {
-                Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {
-                    current_chapter_id: chapter_id.as_ref().to_owned(),
-                },
-                None => contracts::ProjectOpenState::Empty,
-            },
-        },
+        project: controlled_project(settlement.response),
         effect,
     }))
-}
-
-fn canonical_body_bytes(
-    body: &contracts::ReopenWithdrawnProposalRequest,
-) -> Result<Vec<u8>, ApiError> {
-    let canonical =
-        canonical_json(serde_json::to_value(body).map_err(|_| invalid_request_shape())?);
-    serde_json::to_vec(&canonical).map_err(|_| invalid_request_shape())
-}
-
-fn canonical_json(value: serde_json::Value) -> serde_json::Value {
-    match value {
-        serde_json::Value::Object(map) => serde_json::Value::Object(
-            map.into_iter()
-                .map(|(key, nested)| (key, canonical_json(nested)))
-                .collect(),
-        ),
-        serde_json::Value::Array(values) => {
-            serde_json::Value::Array(values.into_iter().map(canonical_json).collect())
-        }
-        scalar => scalar,
-    }
-}
-
-fn reopen_error(error: ReopenWithdrawnProposalError) -> ApiError {
-    match error {
-        ReopenWithdrawnProposalError::BindingConflict => problem(
-            StatusCode::CONFLICT,
-            "idempotency_binding_conflict",
-            "The Reopen binding conflicts.",
-        ),
-        ReopenWithdrawnProposalError::HistoricalAcknowledgementUnavailable => problem(
-            StatusCode::CONFLICT,
-            "historical_acknowledgement_unavailable",
-            "The original Reopen acknowledgement cannot be recovered. Refresh to inspect the current Project.",
-        ),
-        ReopenWithdrawnProposalError::InvalidChallenge => problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "challenge_invalid",
-            "The Reopen challenge is invalid.",
-        ),
-        ReopenWithdrawnProposalError::MissingProject => resource_unavailable(),
-        ReopenWithdrawnProposalError::Unavailable(_) => problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "project_store_unavailable",
-            "The Project store is unavailable.",
-        ),
-    }
 }

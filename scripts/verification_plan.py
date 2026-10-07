@@ -168,8 +168,10 @@ def execute_plan(root, plan):
             command.extend(["--", "--test-threads", str(plan["workers"])])
         elif group in {"node-contract", "browser-source"}:
             output = directory / ("vitest.json" if group == "node-contract" else "browser-source.json")
-            dependencies = verification_cache.outputs(root)
+            before = verification_cache.installed(root)
+            dependencies = None if before is None else verification_cache.digest(before)
             (directory / "dependencies.json").write_text(json.dumps(dependencies))
+            (directory / "installed.json").write_text(json.dumps(before))
             command = ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", group,
                        *[str(root / path) for path in check["files"]], "--passWithNoTests=false",
                        "--allowOnly=false", "--cache=false", f"--maxWorkers={plan['workers']}", "--reporter=default",
@@ -181,8 +183,12 @@ def execute_plan(root, plan):
         if code:
             return code
         if group in {"node-contract", "browser-source"}:
-            if dependencies != verification_cache.outputs(root):
-                raise ValueError("Installed dependencies changed during the selected tests")
+            after = verification_cache.installed(root)
+            if before != after:
+                reason = "Installed dependencies changed during the selected tests"
+                (directory / "failure.json").write_text(json.dumps({
+                    "reason": reason, "changed_paths": verification_cache.changed_dependencies(before, root)}))
+                raise ValueError(reason)
             result = json.loads(output.read_text())
             suites = result.get("testResults", [])
             expected = {str(root / path) for path in check["files"]}
@@ -224,6 +230,10 @@ def main():
                 if ((args.plan and json.loads(args.plan.read_text()) != plan)
                         or (args.expected and args.expected != plan["digest"])):
                     raise ValueError("The verification plan is stale or has been changed")
+                unmet = verification.verification_status.refusal(verification.verification_status.clean_tree(
+                    root, any(c.get("requires_package") for c in plan["checks"]), "Release packaging"))
+                if unmet:
+                    raise ValueError(unmet)
                 command = [sys.executable, str(Path(__file__).resolve()), "execute", "--base", plan["base"],
                            "--expected", plan["digest"], "--workers", str(plan["workers"])]
                 return verification.run(root, command, plan=plan, no_cache=args.no_cache,
@@ -244,7 +254,8 @@ def main():
                 else:
                     if args.action != 'status' and value['decision'] == 'replan':
                         value['observedStatus'] = value['status']
-                        value['status'] = 'unmet-prerequisites' if value.get('prerequisites') else 'pending'
+                        value['status'] = ('unmet-prerequisites' if any(c['status'] == 'pending' for c in plan['checks'])
+                                           else 'pending')
                         value['changedInputs'] = []
                         value['next_command'] = ('make verify-changed BASE=' + plan['base'] if plan['changes']
                                                  else 'make verify-targeted CHECK=verify-policy')
@@ -256,6 +267,10 @@ def main():
             return execute_plan(root, plan)
         raise ValueError("Unsupported verification action")
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
+        if args.action == "execute" and os.environ.get("STORYOS_VERIFICATION_RUN"):
+            failure = Path(os.environ["STORYOS_VERIFICATION_RUN"]) / "failure.json"
+            if not failure.exists():
+                failure.write_text(json.dumps({"reason": str(error).rstrip(".")}))
         if not args.details and (args.action in {'summary', 'status'} or
                                  args.action == 'plan' and args.format == 'text'):
             import verification_summary
