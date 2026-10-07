@@ -40,7 +40,8 @@ export interface BoundReplacementMatch {
 export interface ManualInputController {
   flush(): Promise<void>;
   whenIdle(): Promise<void>;
-  installProjection(projection: PendingEditProjection): void;
+  /** Resolves when the editor shows this projection or a newer one. */
+  installProjection(projection: PendingEditProjection): Promise<void>;
   hasIncompleteSemanticIntent(): boolean;
   close(): void;
   replaceBound(options: {
@@ -404,7 +405,7 @@ export function attachManualInput({
   if (pendingIntentCount > 0) scheduleIdle();
 
   return {
-    installProjection: onProjection,
+    installProjection: async (projection) => { onProjection(projection); },
     flush() {
       clearIdle();
       return enqueue(submitPending);

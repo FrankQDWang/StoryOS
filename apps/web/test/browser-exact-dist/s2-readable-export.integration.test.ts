@@ -56,13 +56,6 @@ function appRoot(frame: HTMLIFrameElement): Element {
   return root;
 }
 
-async function waitSaved(root: Element): Promise<void> {
-  await expect.poll(() =>
-    root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
-    { timeout: 10_000 },
-  ).toBe("saved");
-}
-
 async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<void> {
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
@@ -73,16 +66,30 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<
   const realm = applicationWindow(frame);
   realm.focus();
   const editor = manuscriptEditor(root, realm);
+  const previousRevision = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id");
+  if (previousRevision === null || previousRevision === undefined) {
+    throw new Error("the authoritative revision is missing");
+  }
   editor.click();
   editor.focus();
   focusManuscriptEnd(editor, realm);
   await applyTrustedInput({ operation: "insert_text", text });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(text);
-  await expect.poll(() =>
-    root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
-    { timeout: 10_000 },
-  ).toBe("saving");
-  await waitSaved(root);
+  // A new authoritative revision proves that the input reached the saved manuscript.
+  await expect.poll(() => {
+    const save = root.querySelector("[data-save-state]");
+    return {
+      body: manuscriptBody(editor),
+      saveState: save?.getAttribute("data-save-state"),
+      unsettledIntentCount: save?.getAttribute("data-unsettled-intent-count"),
+      revisionChanged: save?.getAttribute("data-authoritative-revision-id") !== previousRevision,
+    };
+  }, { timeout: 10_000 }).toEqual({
+    body: text,
+    saveState: "saved",
+    unsettledIntentCount: "0",
+    revisionChanged: true,
+  });
 }
 
 async function requestExport(root: Element): Promise<void> {

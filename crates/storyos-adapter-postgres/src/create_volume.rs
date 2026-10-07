@@ -13,11 +13,13 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, RateLimitedChallenge,
+    ReplayEffect, Structural, StructureIdentity, StructureWrite, WriterBase,
+    settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 impl PostgresProjectReader {
     /// Settles one Create Volume as a Manuscript Structure Transition.
@@ -26,19 +28,26 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &CreateVolumeInput,
     ) -> Result<CreateVolumeSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
 /// The Canonical Sibling Order of the new Volume among the live Volumes.
 pub(crate) struct NewVolumeOrder(u64);
 
-impl StructureCommand for CreateVolumeInput {
+impl ProjectCommand for CreateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createVolume",
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
+        missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "volume_created",
+        replay_effect: ReplayEffect::NoQuery,
     };
+    type Profile = Structural;
+    type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = CreateVolumeApplied;
     type Plan = NewVolumeOrder;
     type Effect = VolumeCreated;
@@ -51,14 +60,14 @@ impl StructureCommand for CreateVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let classified = classify_create_volume(&CoreCreateVolume {
             expected_tree_revision: self.expected_tree_revision,
             current_tree_revision: project.tree_revision,
             current_lifecycle: project.lifecycle,
             title: self.title.clone(),
         });
-        Ok(match classified {
+        Ok(Classification::project_command(match classified {
             TransitionOutcome::Applied(applied) => {
                 let live_volumes = client
                     .query_one(
@@ -87,7 +96,7 @@ impl StructureCommand for CreateVolumeInput {
             TransitionOutcome::NoEffect(reason) => match reason {},
             TransitionOutcome::Conflicted(reason) => TransitionOutcome::Conflicted(reason),
             TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(reason),
-        })
+        }))
     }
 
     fn applied_receipt_payload(
@@ -103,6 +112,7 @@ impl StructureCommand for CreateVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         order: NewVolumeOrder,
         applied: CreateVolumeApplied,
     ) -> Result<StructureWrite<VolumeCreated>, ProjectCommandError> {
@@ -146,13 +156,14 @@ impl StructureCommand for CreateVolumeInput {
 
     fn decode(&self, replay: &CommandReplay) -> Result<VolumeCreated, ReplayFault> {
         let tree_revision = replay.activity_u64("tree_revision")?;
-        let volume_id = replay.activity_text("volume_id")?;
-        let order = match replay.receipt_text("order") {
-            Some(order) => match order.parse::<u64>() {
-                Ok(0) => return Err(ReplayFault::BindingConflict),
-                Ok(rank) => CreateVolumePublicOrder::CanonicalSiblingOrder(rank),
-                Err(error) => return Err(ReplayFault::Unavailable(Box::new(error))),
-            },
+        let volume_id = replay.activity_uuid("volume_id")?;
+        let order = match replay.receipt_historical_decimal("order")? {
+            Some(0) => {
+                return Err(ReplayFault::Unavailable(
+                    "the stored sibling order is zero".into(),
+                ));
+            }
+            Some(rank) => CreateVolumePublicOrder::CanonicalSiblingOrder(rank),
             None => CreateVolumePublicOrder::HistoricalCreateVolumeAck,
         };
         Ok(VolumeCreated {

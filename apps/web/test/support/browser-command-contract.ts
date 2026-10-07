@@ -1,4 +1,5 @@
 export const storyOSBrowserCommandNames = {
+  authorEditSubmissionHold: "storyosAuthorEditSubmissionHold",
   clipboardPermission: "storyosClipboardPermission",
   clientSessionCookie: "storyosClientSessionCookie",
   commandChallengeRateWindows: "storyosCommandChallengeRateWindows",
@@ -33,6 +34,10 @@ export type ImeCompositionResult = Readonly<{ kind: "ime_composition_applied" }>
 export type TrustedInputResult = Readonly<{ kind: "trusted_input_applied" }>;
 export type ClipboardPermissionResult = Readonly<{ kind: "clipboard_permission_updated" }>;
 export type ClientSessionCookieResult = Readonly<{ kind: "client_session_cookie_updated" }>;
+export type AuthorEditSubmissionHoldRequest = Readonly<{ action: "hold" | "release" }>;
+export type AuthorEditSubmissionHoldResult = Readonly<{
+  kind: "author_edit_submission_hold_updated";
+}>;
 export type ProductionHostRequest = Readonly<{
   scenario: "open_edit_reload_takeover" | "prose_request" | "refused_edit" | "restored_refused_edit"
     | "conflicted_proposal" | "inline_proposal" | "run_evidence" | "captured_memory" | "multi_proposal" | "composer_controls";
@@ -192,6 +197,27 @@ export function parseClipboardPermissionResult(value: unknown): ClipboardPermiss
 
 export function parseClientSessionCookieResult(value: unknown): ClientSessionCookieResult {
   return parseResult(value, "client_session_cookie_updated", "Client Session cookie");
+}
+
+export function parseAuthorEditSubmissionHoldRequest(
+  value: unknown,
+): AuthorEditSubmissionHoldRequest {
+  const request = exactObject(value, ["action"], "Author Edit submission hold request");
+  const action = property(request, "action");
+  if (action !== "hold" && action !== "release") {
+    throw new TypeError("Author Edit submission hold action is unsupported");
+  }
+  return { action };
+}
+
+export function parseAuthorEditSubmissionHoldResult(
+  value: unknown,
+): AuthorEditSubmissionHoldResult {
+  return parseResult(
+    value,
+    "author_edit_submission_hold_updated",
+    "Author Edit submission hold",
+  );
 }
 
 export function parseProductionHostRequest(value: unknown): ProductionHostRequest {

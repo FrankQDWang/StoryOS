@@ -12,7 +12,7 @@ use storyos_application::{
 use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
 
-use crate::structure_command::tests::{
+use crate::command_sequence::tests::{
     CommandCall, applied, command_call, create_chapter, create_volume, delete_chapter,
 };
 

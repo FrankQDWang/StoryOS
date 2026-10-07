@@ -1,0 +1,51 @@
+[
+  {
+    "issue": 707,
+    "file": "apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts",
+    "test": "repeats Chapter switching, Undo, search, and reload without losing work",
+    "main": {"passed": 8, "runs": 8, "commit": "33f0db93", "date": "2026-10-05"},
+    "symptom": "The editor lost the last typed character when an older Journal projection installed after the input. PR #975 repaired the cause."
+  },
+  {
+    "issue": 928,
+    "file": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+    "test": "revises real cross-Chapter locations through the composer and central editor",
+    "main": {"passed": 24, "runs": 24, "commit": "9104bcf3", "date": "2026-10-05"},
+    "symptom": "Keyboard input was lost because the editor was read-only for some milliseconds after a Proposal navigation. PR #941 repaired the cause."
+  },
+  {
+    "issue": 942,
+    "file": "apps/web/test/browser-source/journal-working-set.integration.test.ts",
+    "test": "continues writing after 2400 saved and collected input intents",
+    "main": {"passed": 10, "runs": 10, "commit": "93743225", "date": "2026-10-06"},
+    "symptom": "The test reached its timeout on a loaded host because the Journal persist time grew with the retained intents. PR #987 repaired the cause."
+  },
+  {
+    "issue": 973,
+    "file": "apps/web/test/support/exact-dist-global-setup.ts",
+    "test": "global teardown > createVolume",
+    "main": {"passed": 12, "runs": 12, "commit": "ead3cec4", "date": "2026-10-06"},
+    "symptom": "The teardown counted one more createVolume Receipt than expected because a title input blur sent a second create. PR #990 repaired the cause."
+  },
+  {
+    "issue": 985,
+    "file": "apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts",
+    "test": "writes in two Chapters, switches current Chapter, and reopens the current Chapter",
+    "main": {"passed": 10, "runs": 10, "commit": "4fa01d21", "date": "2026-10-06"},
+    "symptom": "The journey waited for the transient saving state and saw the saved state first. PR #986 replaced the wait."
+  },
+  {
+    "issue": 985,
+    "file": "apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts",
+    "test": "exports a durable human-readable manuscript through the Worker",
+    "main": {"passed": 10, "runs": 10, "commit": "4fa01d21", "date": "2026-10-06"},
+    "symptom": "The journey waited for the transient saving state and saw the saved state first. PR #986 replaced the wait."
+  },
+  {
+    "issue": 985,
+    "file": "apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts",
+    "test": "rebuilds Chapter and manuscript statistics after edit, switch, and deletion",
+    "main": {"passed": 10, "runs": 10, "commit": "4fa01d21", "date": "2026-10-06"},
+    "symptom": "The journey waited for the transient saving state and saw the saved state first. PR #986 replaced the wait."
+  }
+]

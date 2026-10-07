@@ -16,7 +16,7 @@ import { validDraftRetry, validRetrySettlement } from "./draft-retry-binding.ts"
 import { readDraftUndoJournal } from "./draft-undo-journal.ts";
 import { readDiscardJournal } from "./refused-edit-discard.ts";
 import { readExpansionJournal } from "./refused-edit-expansion.ts";
-import { readAcceptanceJournal } from "./acceptance-journal.ts";
+import { readUnsettledAcceptanceJournal } from "./acceptance-journal.ts";
 import type {
   EditorWorkspace,
   InputOrigin,
@@ -343,7 +343,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
     "readonly",
   );
   const localRecoveryPromise = readRecoveryDispositions(transaction, workspace);
-  const explicitAcceptancePromise = readAcceptanceJournal(workspace, transaction);
+  const explicitAcceptancePromise = readUnsettledAcceptanceJournal(workspace, transaction);
   void explicitAcceptancePromise.catch(() => {});
   const partitionId = workspace.partition.journal_partition_id;
   const [schemaValue, watermarkValue, activeBaseValue, recordsValue, payloadChainsValue,
@@ -983,14 +983,10 @@ export async function candidateProjectionFromJournal(
 ): Promise<string | undefined> {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const retained = retainedRecoverySequences(snapshot);
+  // A settled revision of this target stays local until the display shows the new Proposal Revision (#943).
   const unresolved = snapshot.records.filter((record) =>
     !retained.has(record.local_intent_sequence)
-    && JSON.stringify(record.proposal_target) === JSON.stringify(target)
-    && !snapshot.groups.some((group) => group.settlement.kind
-      === "zero_authority_receipt_settled"
-      && group.settlement.effect.kind === "proposal_revised"
-      && group.ordered_coverage.some((item) => item.local_intent_sequence
-        === record.local_intent_sequence)));
+    && JSON.stringify(record.proposal_target) === JSON.stringify(target));
   const latest = unresolved.at(-1);
   return latest === undefined ? undefined : snapshot.bodyBySequence.get(latest.local_intent_sequence);
 }
@@ -1349,35 +1345,43 @@ async function persistAuthorEditUnit(
   const recoveryPromise = readRecoveryDispositions(transaction, workspace);
   const metadata = transaction.objectStore("metadata");
   const intents = transaction.objectStore("intents");
+  const chainStore = transaction.objectStore("payload_chains");
+  const groupStore = transaction.objectStore("submission_groups");
   const partitionId = workspace.partition.journal_partition_id;
+  // Collected rows change only when they leave the working index, so their keys prove them.
+  const openRecords = snapshot.records.filter((record) => record.author_edit_unit !== undefined);
+  const openChains = snapshot.payloadChains.filter((chain) =>
+    chain.payload_collection?.kind !== "collected");
+  const openGroups = snapshot.groups.filter((group) =>
+    group.payload_collection?.kind !== "collected");
+  const workingKeys = (store: IDBObjectStore) => requestResult(store.index("working_partition")
+    .getAllKeys(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)) as Promise<IDBValidKey[]>;
   const [schemaValue, partition, currentValue, watermarkValue, activeBaseValue,
-    durableRecordsValue, chainsValue, groupsValue, storedFencesValue, boundaryValue] =
+    recordKeys, chainKeys, groupKeys, durableOpenRecords, chains, durableOpenGroups,
+    storedFencesValue, boundaryValue] =
     await Promise.all([
       requestResult(metadata.get("schema")),
       requestResult(transaction.objectStore("partitions").get(partitionId)),
       requestResult(metadata.get("local_intent_sequence")),
       requestResult(metadata.get(`durable_high_watermark:${partitionId}`)),
       requestResult(metadata.get(`active_base:${partitionId}`)),
-      requestResult(intents.index("working_partition")
-        .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
-      requestResult(transaction.objectStore("payload_chains").index("working_partition")
-        .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
-      requestResult(transaction.objectStore("submission_groups").index("working_partition")
-        .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
+      workingKeys(intents),
+      workingKeys(chainStore),
+      workingKeys(groupStore),
+      Promise.all(openRecords.map((record) =>
+        requestResult(intents.get([partitionId, record.local_intent_sequence])))),
+      Promise.all(openChains.map((chain) =>
+        requestResult(chainStore.get(chain.payload_chain_id)))) as Promise<JournalPayloadChain[]>,
+      Promise.all(openGroups.map((group) =>
+        requestResult(groupStore.get(group.journal_submission_group_id)))),
       requestResult(metadata.get(`collection_fences:${partitionId}`)),
       requestResult(metadata.get(`working_boundary:${partitionId}`)),
     ]);
   const schema = schemaValue as { version?: unknown } | undefined;
   const activeBase = activeBaseValue as { value?: unknown } | undefined;
   const durableWatermark = watermarkValue as JournalSnapshot["watermark"];
-  const durableRecords = durableRecordsValue as JournalIntentRecord[];
-  const chains = chainsValue as JournalPayloadChain[];
-  const groups = groupsValue as JournalSubmissionGroup[];
   const storedFences = storedFencesValue as { value?: unknown[] } | undefined;
   const fences = storedFences?.value ?? [];
-  durableRecords.sort((left, right) => left.local_intent_sequence - right.local_intent_sequence);
-  groups.sort((left, right) => left.covered_sequence_range.first
-    - right.covered_sequence_range.first);
   const current = currentValue as { value?: number } | undefined;
   const currentSequence = current?.value ?? 0;
   // The allocator is Project-wide. Another partition can advance it without
@@ -1389,17 +1393,23 @@ async function persistAuthorEditUnit(
       !== JSON.stringify(snapshot.workingBoundary)
     || JSON.stringify(durableWatermark) !== JSON.stringify(snapshot.watermark)
     || JSON.stringify(activeBase?.value) !== JSON.stringify(snapshot.activeBase)
-    || JSON.stringify(durableRecords) !== JSON.stringify(snapshot.records)
-    || JSON.stringify(chains) !== JSON.stringify(snapshot.payloadChains)
-    || JSON.stringify(groups) !== JSON.stringify(snapshot.groups)
+    || JSON.stringify(recordKeys) !== JSON.stringify(snapshot.records.map((record) =>
+      [record.journal_partition_id, record.local_intent_sequence]))
+    || JSON.stringify(chainKeys) !== JSON.stringify(snapshot.payloadChains.map((chain) =>
+      chain.payload_chain_id))
+    || JSON.stringify(groupKeys) !== JSON.stringify(snapshot.groups.map((group) =>
+      group.journal_submission_group_id).sort())
+    || JSON.stringify(durableOpenRecords) !== JSON.stringify(openRecords)
+    || JSON.stringify(chains) !== JSON.stringify(openChains)
+    || JSON.stringify(durableOpenGroups) !== JSON.stringify(openGroups)
     || JSON.stringify(fences) !== JSON.stringify(snapshot.fences)) {
     transaction.abort();
     throw new Error("Local Edit Journal changed before append");
   }
-  const hasUnsettledGroup = groups.some((group) => group.settlement?.kind === "unsettled");
-  const coveredSequences = new Set(groups.flatMap((group) =>
+  const hasUnsettledGroup = snapshot.groups.some((group) => group.settlement?.kind === "unsettled");
+  const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
     (group.ordered_coverage ?? []).map((coverage) => coverage.local_intent_sequence)));
-  const priorRecord = durableRecords.filter((record) =>
+  const priorRecord = snapshot.records.filter((record) =>
     record.base_snapshot_id === base.snapshot_id
       && !coveredSequences.has(record.local_intent_sequence))
     .sort((left, right) => left.local_intent_sequence - right.local_intent_sequence).at(-1);
@@ -1418,9 +1428,9 @@ async function persistAuthorEditUnit(
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || JSON.stringify(activeBase?.value) !== JSON.stringify(base)
-    || durableRecords.length >= MAX_WORKING_JOURNAL_ITEMS
-    || chains.length >= MAX_WORKING_JOURNAL_ITEMS
-    || groups.length > MAX_WORKING_JOURNAL_ITEMS
+    || recordKeys.length >= MAX_WORKING_JOURNAL_ITEMS
+    || chainKeys.length >= MAX_WORKING_JOURNAL_ITEMS
+    || groupKeys.length > MAX_WORKING_JOURNAL_ITEMS
     || hasUnsettledGroup
     || !Number.isSafeInteger(sequence)) {
     transaction.abort();

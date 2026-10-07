@@ -6,6 +6,7 @@ import subprocess
 import sys
 import unittest
 
+import verification_candidate_tests
 import verification_tests
 import verification_plan_tests
 
@@ -121,7 +122,7 @@ class TargetedStatusTests(unittest.TestCase):
                     self.assertEqual(len(list(self.root.glob('target/verification/*/report.json'))), 1)
             finally:
                 process.send_signal(signal.SIGTERM)
-                process.communicate(timeout=10)
+                process.communicate()
 
     def test_make_selector_does_not_invalidate_public_python_status(self):
         runner = verification_tests.COMMAND.resolve()
@@ -141,7 +142,9 @@ class TargetedStatusTests(unittest.TestCase):
         (self.root / 'AGENTS.md').write_text('Dirty package input.\n')
         self.assertEqual(self.status('package')['status'], 'unmet-prerequisites')
         result = self.repo.cli('targeted', '--check', 'package')
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual((result.returncode, result.stderr), (2,
+            'Release packaging requires a clean tracked and untracked worktree. '
+            'Commit or remove the dirty paths: AGENTS.md\n'))
         self.assertFalse((self.root / 'target/launches').exists())
         result = self.repo.cli('step', 'outer', '--', sys.executable, str(verification_tests.COMMAND),
                                'step', 'inner', '--', sys.executable, '-c', 'print("nested")')
@@ -183,6 +186,116 @@ class TargetedStatusTests(unittest.TestCase):
         self.assertEqual(json.loads(fixture.cli('status').stdout)['status'], 'passed')
         self.assertEqual(fixture.repo.report()['issue'], 744)
 
+    def test_daily_prerequisites_name_the_dirty_tree_and_the_stale_policy_result(self):
+        fixture = verification_plan_tests.FilePlanTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.install_runner_fixture()
+        policy = json.loads(fixture.policy_path.read_text())
+        policy['targeted'] = {'verify-policy': {'command': [sys.executable, '-c', 'pass'], 'clean': False}}
+        policy['complete'] = {'stages': ['sample'], 'groups': {'node-contract': ['sample']},
+                              'admission': {'version': 1, 'targeted': ['verify-policy']}}
+        fixture.policy_path.write_text(json.dumps(policy))
+        fixture.repo.git('add', '.')
+        fixture.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                         'commit', '--quiet', '-m', 'Require a fresh policy result.')
+        fixture.base = fixture.repo.git('rev-parse', 'HEAD')
+        path = fixture.add_test()
+        path.write_text("import {test} from 'vitest'; test('needs a package',()=>{});\n")
+        value = json.loads(fixture.cli('status').stdout)
+        stale = {'status': 'unmet', 'reason': 'The verify-policy result is pending. '
+                 'Refresh it with make verify-targeted CHECK=verify-policy'}
+        self.assertEqual({key: value[key] for key in ('decision', 'reasonCode', 'nextAction', 'prerequisites')}, {
+            'decision': 'blocked', 'reasonCode': 'dirty-package-inputs',
+            'nextAction': {'argv': ['git', 'status', '--short', '--untracked-files=all'], 'prerequisite': 'cleanTree'},
+            'prerequisites': {'cleanTree': {'status': 'unmet', 'reason': 'Release packaging requires a clean tracked '
+                                            'and untracked worktree. Commit or remove the dirty paths',
+                                            'paths': ['apps/web/test/node-contract/new.test.ts'], 'omittedPaths': 0},
+                              'policyFresh': stale}})
+        path.write_text("// Verification: repository-inputs-only.\nimport {test} from 'vitest';\ntest('new',()=>{});\n")
+        prerequisites = {'cleanTree': {'status': 'not-required', 'reason': 'No selected check requires a clean worktree'},
+                         'policyFresh': stale}
+        for status in ('pending', 'passed'):
+            if status == 'passed':
+                self.assertEqual(fixture.cli('run').returncode, 0)
+            value = json.loads(fixture.cli('status', '--details').stdout)
+            daily = ({'decision': 'run', 'reasonCode': 'missing-evidence', 'nextAction': {'argv': [
+                'make', 'verify-changed', 'BASE=' + fixture.base, f"VERIFY_ARGS=--workers {value['plan']['workers']}"]}}
+                     if status == 'pending' else {'decision': 'satisfied', 'reasonCode': 'current-pass', 'nextAction': None})
+            self.assertEqual({key: value[key] for key in ('status', *daily, 'prerequisites')},
+                             {'status': status, **daily, 'prerequisites': prerequisites})
+        self.assertEqual(fixture.repo.cli('targeted', '--check', 'verify-policy').returncode, 0)
+        value = json.loads(fixture.cli('status').stdout)
+        self.assertEqual((value['decision'], value['nextAction'], value['prerequisites']['policyFresh']),
+                         ('satisfied', None, {'status': 'met', 'reason': 'The verify-policy result is current and passed'}))
+
+    def test_complete_status_names_the_stale_policy_result(self):
+        fixture = verification_candidate_tests.CandidateCommandTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.install_child('raise SystemExit(1)')
+        self.assertNotEqual(fixture.run_complete().returncode, 0)
+        policy = json.loads((fixture.root / 'docs/agents/verification-policy.json').read_text())
+        policy['targeted'] = {'verify-policy': {'command': [sys.executable, '-c', 'pass'], 'clean': False}}
+        policy['complete']['admission'] = {'version': 1, 'targeted': ['verify-policy']}
+        (fixture.root / 'docs/agents/verification-policy.json').write_text(json.dumps(policy))
+        fixture.install_child('raise SystemExit(1)')
+        attempt = fixture.repo.report()['run_id']
+        value = json.loads(fixture.repo.cli('status', '--attempt', attempt, '--json').stdout)
+        self.assertEqual({key: value[key] for key in ('decision', 'reasonCode', 'nextAction', 'prerequisites')}, {
+            'decision': 'run', 'reasonCode': 'stale-policy-result',
+            'nextAction': {'argv': ['make', 'verify-targeted', 'CHECK=verify-policy'], 'prerequisite': 'policyFresh'},
+            'prerequisites': {'cleanTree': {'status': 'not-required',
+                                            'reason': 'No selected check requires a clean worktree'},
+                              'policyFresh': {'status': 'unmet', 'reason': 'The verify-policy result is pending. '
+                                              'Refresh it with make verify-targeted CHECK=verify-policy'}}})
+        self.assertEqual(fixture.repo.cli('targeted', '--check', 'verify-policy').returncode, 0)
+        value = json.loads(fixture.repo.cli('status', '--attempt', attempt, '--json').stdout)
+        self.assertEqual((value['decision'], value['prerequisites']['policyFresh']['status']), ('replan', 'met'))
+
+    def test_size_advisory_reports_the_change_and_large_rust_modules_without_new_guidance(self):
+        fixture = verification_plan_tests.FilePlanTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        commit = ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m']
+        policy = json.loads(fixture.policy_path.read_text())
+        policy['rules'].insert(0, {'pattern': 'scripts/*_tests.rs', 'kind': 'rust-test', 'group': 'verification-tools'})
+        fixture.policy_path.write_text(json.dumps(policy))
+        (fixture.root / 'docs/old.md').write_text('Old line.\n' * 10)
+        fixture.repo.git('add', '.')
+        fixture.repo.git(*commit, 'Add a file to delete.')
+        fixture.base = fixture.repo.git('rev-parse', 'HEAD')
+        rust = lambda count: ''.join(f'fn item_{index}() {{}}\n' for index in range(count))
+        (fixture.root / 'docs/old.md').unlink()
+        (fixture.root / 'AGENTS.md').write_text('Changed source.\nSecond line.\n')
+        (fixture.root / 'scripts/large.rs').write_text(rust(400))
+        (fixture.root / 'scripts/tested.rs').write_text(
+            rust(400) + '#[cfg(test)]\nmod tests {\n    const TEXT: &str = "continued\\\n}";\n    const CLOSE: &str = "}}";\n'
+            + '    const RAW: &str = r#"\n}\n"#;\n    // }\n    /* } /* { */ } */\n    const BRACE: char = \'}\';\n'
+            + '    fn case() {}\n' * 138 + '    const OPEN: &str = "{";\n}\n')
+        (fixture.root / 'scripts/tested_tests.rs').write_text(rust(600))
+        (fixture.root / 'scripts/huge.rs').write_text(rust(801))
+        fixture.repo.git('add', '.')
+        fixture.repo.git(*commit, 'Change the sources.')
+        (fixture.root / 'docs/new.md').write_text('New line.\n' * 3)
+        guidance = ('decision', 'reasonCode', 'nextAction')
+        small = json.loads(fixture.cli('status').stdout)
+        (fixture.root / 'scripts/large.rs').write_text(rust(600))
+        fixture.repo.git('add', '.')
+        fixture.repo.git(*commit, 'Grow one module.')
+        large = json.loads(fixture.cli('status').stdout)
+        self.assertEqual({key: small[key] for key in guidance}, {key: large[key] for key in guidance})
+        self.assertEqual((small['changeSize'], small['moduleSize']), (
+            {'addedAndChanged': 2357, 'deletedFiles': 1, 'deletedFileLines': 10, 'limits': [500, 800],
+             'above': [500, 800]},
+            [{'path': 'scripts/huge.rs', 'lines': 801, 'above': [500, 800]}]))
+        self.assertEqual(large['moduleSize'], [{'path': 'scripts/huge.rs', 'lines': 801, 'above': [500, 800]},
+                                               {'path': 'scripts/large.rs', 'lines': 600, 'above': [500]}])
+        text = fixture.cli('plan', '--format', 'text')
+        self.assertEqual(text.returncode, 0, text.stderr)
+        rows = text.stdout.splitlines()
+        self.assertEqual([row.split(':')[0] for row in rows[2:6]],
+                         ['nextAction', 'changeSize', 'moduleSize', 'omittedModules'])
 
 if __name__ == '__main__':
     unittest.main()

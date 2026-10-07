@@ -11,16 +11,21 @@ PACKAGE = {"browser-source", "node-postgresql", "node-process-cut", "database"}
 
 def validate(policy):
     for name, entry in policy.get("targeted", {}).items():
-        if (not re.fullmatch(r"[a-z][a-z0-9-]*", name) or set(entry) != {"command", "clean"}
-                or type(entry['clean']) is not bool or not isinstance(entry['command'], list)
+        if (not re.fullmatch(r"[a-z][a-z0-9-]*", name) or not {"command", "clean"} <= set(entry)
+                or not set(entry) <= {"command", "clean", "host_queue"}
+                or type(entry['clean']) is not bool or type(entry.get('host_queue', False)) is not bool or not isinstance(entry['command'], list)
                 or not entry['command'] or not all(isinstance(arg, str) for arg in entry['command'])
                 or any(arg in {'verify-local', 'verify-local-steps', 'verify'} for arg in entry['command'])):
             raise ValueError("Invalid targeted check; complete execution is not a targeted entry")
     rules = policy.get("daily_consumers", [])
     for rule in rules:
-        if (set(rule) != {"pattern", "groups"} or not isinstance(rule["pattern"], str)
+        if (not {"pattern", "groups"} <= set(rule) <= {"pattern", "groups", "files"}
+                or not isinstance(rule["pattern"], str)
                 or not isinstance(rule["groups"], list) or not rule["groups"]
-                or any(group not in GROUPS for group in rule["groups"])):
+                or any(group not in GROUPS for group in rule["groups"])
+                or ("files" in rule and (not isinstance(rule["files"], list) or not rule["files"]
+                                         or not all(isinstance(path, str) for path in rule["files"])
+                                         or not set(rule["groups"]) <= {"node-contract", "browser-source"}))):
             raise ValueError("Invalid daily consumer rule; update verification-policy.json")
 
 
@@ -34,7 +39,8 @@ def checks(root, changes, files, previous, targets, policy, dirty):
         items = [mapping[path] for mapping in [files, *previous] if path in mapping]
         if not items:
             raise ValueError(f"Unclassified prior input: {path}; update verification-policy.json")
-        groups = {group for rule in rules if fnmatch.fnmatchcase(path, rule["pattern"]) for group in rule["groups"]}
+        matched = [rule for rule in rules if fnmatch.fnmatchcase(path, rule["pattern"])]
+        groups = {group for rule in matched for group in rule["groups"]}
         groups.update(consumers)
         if path.startswith("crates/") or path in {"Cargo.toml", "Cargo.lock"}:
             groups.update(f"cargo:{name}" for name in targets)
@@ -55,7 +61,9 @@ def checks(root, changes, files, previous, targets, policy, dirty):
         for group in sorted(groups):
             check = selected.setdefault(group, {"group": group, "files": [], "reasons": []})
             check["reasons"].append(f"{path}: current and prior ownership")
-            check["files"].append(path)
+            narrowed = [rule.get("files") for rule in matched if group in rule["groups"]]
+            selection = sorted({test for files in narrowed for test in files}) if narrowed and all(narrowed) else [path]
+            check["files"].extend(item for item in selection if item not in check["files"])
     for name, data in targets.items():
         if ("database" not in selected and any(re.search(r"#\s*\[\s*(?:ignore|cfg_attr)\b", p.read_text())
                                                for p in (root / data["directory"]).rglob("*.rs"))):

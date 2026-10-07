@@ -180,7 +180,11 @@ def main():
     if not any(item['stage'] == prerequisite and item['status'] == 'passed' for item in steps):
         raise ValueError('The release package must pass before Web children start')
     print('Web stage mode: ' + ('bounded overlap' if concurrent else 'serial'), flush=True)
-    return run(stages, concurrent)
+    if not set(stages) & set(policy.get('complete', {}).get('host_queue', [])):
+        return run(stages, concurrent)
+    import verification_cache
+    with verification_cache.host_queue(root, 'web'):
+        return run(stages, concurrent)
 
 
 if __name__ == '__main__':

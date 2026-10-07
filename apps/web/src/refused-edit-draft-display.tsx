@@ -15,7 +15,7 @@ import type { EditorWorkspace, JournalSubmissionGroup, PendingEditProjection } f
 export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, refreshKey, onHoldChange, onProjection, onResult }: {
   workspace: EditorWorkspace | undefined; scope: ProjectScope; baseUrl: string;
   fetchImpl: typeof fetch; refreshKey: string; onHoldChange?: ((hold: boolean) => void) | undefined;
-  onProjection?: ((projection: PendingEditProjection) => void) | undefined; onResult?: (() => void) | undefined;
+  onProjection?: ((projection: PendingEditProjection) => Promise<void> | void) | undefined; onResult?: (() => void) | undefined;
 }) {
   const [reads, setReads] = useState<{ group: JournalSubmissionGroup;
     draft?: RefusedEditDraftInspect; copied?: boolean; discard?: DiscardObservation | undefined }[]>([]);
@@ -116,7 +116,7 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
         setSettledWriter(workspace.partition.disposition === "current_writer_open"
           && workspace.session.writer.kind === "current_writer" && currentProjection.save_state === "saved"
           && currentProjection.unsettled_intent_count === 0 && (snapshot.explicitDiscard?.length ?? MAX_DISCARD_RECORDS) < MAX_DISCARD_RECORDS);
-        onProjection?.(currentProjection); }
+        void onProjection?.(currentProjection); }
     })().catch(() => { if (active) setReads([]); });
     return () => { active = false; lifetime.current += 1; };
   }, [workspace, scope.owner_user_id, scope.project_id, baseUrl, fetchImpl, refreshKey, retryRefresh]);
@@ -137,7 +137,8 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       if (started !== lifetime.current) return;
       setReads((current) => current.map((item) => item.group === group
         ? { group, draft, discard: observation } : item));
-      onProjection?.(projection);
+      // The hold stays until the editor shows the result.
+      await onProjection?.(projection);
     } catch {
       if (started === lifetime.current) setReads((current) => current.map((item) => item.group === group ? { group } : item));
     } finally { if (started === lifetime.current) { setBusy(false); onHoldChange?.(false); } }
@@ -153,7 +154,7 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       const projection = await retryRefusedEdit({ workspace, draft, from, to, target, targetFrom, targetTo, targetRead,
         baseUrl, fetchImpl, isCurrent: () => started === lifetime.current });
       if (started !== lifetime.current) return;
-      onProjection?.(projection); onResult?.();
+      await onProjection?.(projection); onResult?.();
       setRetryRefresh((value) => value + 1);
     } finally { if (started === lifetime.current) { setBusy(false); onHoldChange?.(false); } }
   }
