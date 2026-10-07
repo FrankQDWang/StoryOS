@@ -1,0 +1,25 @@
+{
+  "unicode_version": "16.0.0",
+  "purpose": "Expected research vectors. No test runner is attached.",
+  "vectors": [
+    {"name": "empty", "text": "", "expected": {"scalars": 0, "letters_numbers": 0, "wide_letters_other_tokens": 0, "utf16_units": 0}},
+    {"name": "Chinese punctuation", "text": "雨落在窗沿。", "expected": {"scalars": 6, "letters_numbers": 5, "wide_letters_other_tokens": 5, "utf16_units": 6}},
+    {"name": "supplementary Han", "text": "𠀀𠮷", "expected": {"scalars": 2, "letters_numbers": 2, "wide_letters_other_tokens": 2, "utf16_units": 4}},
+    {"name": "NFD Latin", "text": "é", "expected": {"scalars": 2, "letters_numbers": 1, "wide_letters_other_tokens": 1, "utf16_units": 2}},
+    {"name": "NFC Latin", "text": "é", "expected": {"scalars": 1, "letters_numbers": 1, "wide_letters_other_tokens": 1, "utf16_units": 1}},
+    {"name": "family emoji", "text": "👨‍👩‍👧‍👦", "expected": {"scalars": 7, "letters_numbers": 0, "wide_letters_other_tokens": 0, "utf16_units": 11}},
+    {"name": "keycap emoji", "text": "1️⃣", "expected": {"scalars": 3, "letters_numbers": 1, "wide_letters_other_tokens": 1, "utf16_units": 3}},
+    {"name": "Latin number tokens", "text": "abc 12", "expected": {"scalars": 6, "letters_numbers": 5, "wide_letters_other_tokens": 2, "utf16_units": 6}},
+    {"name": "mixed script", "text": "abc中文42", "expected": {"scalars": 7, "letters_numbers": 7, "wide_letters_other_tokens": 4, "utf16_units": 7}},
+    {"name": "fullwidth Latin and digits", "text": "ＡＢ１２", "expected": {"scalars": 4, "letters_numbers": 4, "wide_letters_other_tokens": 4, "utf16_units": 4}},
+    {"name": "CRLF", "text": "\r\n", "expected": {"scalars": 2, "letters_numbers": 0, "wide_letters_other_tokens": 0, "utf16_units": 2}},
+    {"name": "ideographic space", "text": "　汉", "expected": {"scalars": 2, "letters_numbers": 1, "wide_letters_other_tokens": 1, "utf16_units": 2}},
+    {"name": "format boundary", "text": "a‍b", "expected": {"scalars": 3, "letters_numbers": 2, "wide_letters_other_tokens": 2, "utf16_units": 3}},
+    {"name": "mark continuation", "text": "áb", "expected": {"scalars": 3, "letters_numbers": 2, "wide_letters_other_tokens": 1, "utf16_units": 3}},
+    {"name": "numbers categories", "text": "½Ⅷ", "expected": {"scalars": 2, "letters_numbers": 2, "wide_letters_other_tokens": 1, "utf16_units": 2}},
+    {"name": "ideographic variation", "text": "汉󠄀", "expected": {"scalars": 2, "letters_numbers": 1, "wide_letters_other_tokens": 1, "utf16_units": 3}},
+    {"name": "Hangul NFC", "text": "가", "expected": {"scalars": 1, "letters_numbers": 1, "wide_letters_other_tokens": 1, "utf16_units": 1}},
+    {"name": "Hangul NFD", "text": "가", "expected": {"scalars": 2, "letters_numbers": 2, "wide_letters_other_tokens": 2, "utf16_units": 2}},
+    {"name": "control not White_Space", "text": "\u001c", "expected": {"scalars": 1, "letters_numbers": 0, "wide_letters_other_tokens": 0, "utf16_units": 1}}
+  ]
+}

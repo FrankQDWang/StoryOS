@@ -1,0 +1,538 @@
+{
+  "unicode_version": "16.0.0",
+  "rows": [
+    {
+      "input": "prototypes/chinese-long-form-baseline/out/corpus-1000000.json",
+      "sha256": "18eefd3afe11e970c5a89a0cf88bca603b90f08b80fa4a88f795aad8dedaaa01",
+      "chapters": 500,
+      "counts": {
+        "scalars": 1000000,
+        "white_space_runs": 11557,
+        "non_white_space": 986023,
+        "letters_numbers": 869515,
+        "wide_letters_other_tokens": 869265,
+        "utf16_units": 1000000
+      },
+      "delta_percent": {
+        "scalars": 0.0,
+        "white_space_runs": -98.8443,
+        "non_white_space": -1.3977,
+        "letters_numbers": -13.0485,
+        "wide_letters_other_tokens": -13.0735,
+        "utf16_units": 0.0
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 985773,
+        "characters": 986023,
+        "characters_with_spaces": 988943,
+        "east_asian_characters": 985615
+      },
+      "microsoft_word_delta_percent": {
+        "words": -1.4227,
+        "characters": -1.3977,
+        "characters_with_spaces": -1.1057,
+        "east_asian_characters": -1.4385
+      }
+    },
+    {
+      "input": "prototypes/chinese-long-form-baseline/out/corpus-30000.json",
+      "sha256": "51574d9a9bbb9428392ef461c49a5b4bb5ae06d8b60620a2d580eeb96919065f",
+      "chapters": 15,
+      "counts": {
+        "scalars": 30000,
+        "white_space_runs": 352,
+        "non_white_space": 29583,
+        "letters_numbers": 26136,
+        "wide_letters_other_tokens": 26131,
+        "utf16_units": 30000
+      },
+      "delta_percent": {
+        "scalars": 0.0,
+        "white_space_runs": -98.826667,
+        "non_white_space": -1.39,
+        "letters_numbers": -12.88,
+        "wide_letters_other_tokens": -12.896667,
+        "utf16_units": 0.0
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 29578,
+        "characters": 29583,
+        "characters_with_spaces": 29663,
+        "east_asian_characters": 29574
+      },
+      "microsoft_word_delta_percent": {
+        "words": -1.406667,
+        "characters": -1.39,
+        "characters_with_spaces": -1.123333,
+        "east_asian_characters": -1.42
+      }
+    },
+    {
+      "input": "prototypes/chinese-long-form-baseline/out/corpus-300000.json",
+      "sha256": "8a1f988fec4e58234c63c814feac71ccec44a867814dac584b5b3df721974e86",
+      "chapters": 150,
+      "counts": {
+        "scalars": 300000,
+        "white_space_runs": 3442,
+        "non_white_space": 295797,
+        "letters_numbers": 260884,
+        "wide_letters_other_tokens": 260809,
+        "utf16_units": 300000
+      },
+      "delta_percent": {
+        "scalars": 0.0,
+        "white_space_runs": -98.852667,
+        "non_white_space": -1.401,
+        "letters_numbers": -13.038667,
+        "wide_letters_other_tokens": -13.063667,
+        "utf16_units": 0.0
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 295722,
+        "characters": 295797,
+        "characters_with_spaces": 296708,
+        "east_asian_characters": 295658
+      },
+      "microsoft_word_delta_percent": {
+        "words": -1.426,
+        "characters": -1.401,
+        "characters_with_spaces": -1.097333,
+        "east_asian_characters": -1.447333
+      }
+    },
+    {
+      "input": "prototypes/chinese-long-form-baseline/out/corpus-3000000.json",
+      "sha256": "0b260d20f0516fed3b1c225a0f79af2ab1e92d874a3fef8e57a1a877690db8e3",
+      "chapters": 1500,
+      "counts": {
+        "scalars": 3000000,
+        "white_space_runs": 34626,
+        "non_white_space": 2958474,
+        "letters_numbers": 2609036,
+        "wide_letters_other_tokens": 2608286,
+        "utf16_units": 3000000
+      },
+      "delta_percent": {
+        "scalars": 0.0,
+        "white_space_runs": -98.8458,
+        "non_white_space": -1.3842,
+        "letters_numbers": -13.032133,
+        "wide_letters_other_tokens": -13.057133,
+        "utf16_units": 0.0
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 2957724,
+        "characters": 2958474,
+        "characters_with_spaces": 2966874,
+        "east_asian_characters": 2957257
+      },
+      "microsoft_word_delta_percent": {
+        "words": -1.4092,
+        "characters": -1.3842,
+        "characters_with_spaces": -1.1042,
+        "east_asian_characters": -1.424767
+      }
+    },
+    {
+      "input": "prototypes/chinese-long-form-baseline/public-domain.txt",
+      "sha256": "e30eeb8fe1c9da824baeb21e16f960c42ca64b428a514c11ee6befb4a2ccffc1",
+      "chapters": 1,
+      "counts": {
+        "scalars": 2401,
+        "white_space_runs": 74,
+        "non_white_space": 2312,
+        "letters_numbers": 1984,
+        "wide_letters_other_tokens": 1984,
+        "utf16_units": 2401
+      },
+      "delta_percent": {
+        "scalars": 0.0,
+        "white_space_runs": -96.917951,
+        "non_white_space": -3.706789,
+        "letters_numbers": -17.367763,
+        "wide_letters_other_tokens": -17.367763,
+        "utf16_units": 0.0
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 2312,
+        "characters": 2312,
+        "characters_with_spaces": 2328,
+        "east_asian_characters": 2301
+      },
+      "microsoft_word_delta_percent": {
+        "words": -3.706789,
+        "characters": -3.706789,
+        "characters_with_spaces": -3.0404,
+        "east_asian_characters": -4.164931
+      }
+    }
+  ],
+  "golden_observations": [
+    {
+      "name": "empty",
+      "text": "",
+      "measured": {
+        "scalars": 0,
+        "white_space_runs": 0,
+        "non_white_space": 0,
+        "letters_numbers": 0,
+        "wide_letters_other_tokens": 0,
+        "utf16_units": 0
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 0,
+        "characters": 0,
+        "characters_with_spaces": 0,
+        "east_asian_characters": 0
+      }
+    },
+    {
+      "name": "Chinese punctuation",
+      "text": "雨落在窗沿。",
+      "measured": {
+        "scalars": 6,
+        "white_space_runs": 1,
+        "non_white_space": 6,
+        "letters_numbers": 5,
+        "wide_letters_other_tokens": 5,
+        "utf16_units": 6
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 6,
+        "characters": 6,
+        "characters_with_spaces": 6,
+        "east_asian_characters": 6
+      }
+    },
+    {
+      "name": "supplementary Han",
+      "text": "𠀀𠮷",
+      "measured": {
+        "scalars": 2,
+        "white_space_runs": 1,
+        "non_white_space": 2,
+        "letters_numbers": 2,
+        "wide_letters_other_tokens": 2,
+        "utf16_units": 4
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 2,
+        "characters": 2,
+        "characters_with_spaces": 2,
+        "east_asian_characters": 2
+      }
+    },
+    {
+      "name": "NFD Latin",
+      "text": "é",
+      "measured": {
+        "scalars": 2,
+        "white_space_runs": 1,
+        "non_white_space": 2,
+        "letters_numbers": 1,
+        "wide_letters_other_tokens": 1,
+        "utf16_units": 2
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 2,
+        "characters_with_spaces": 2,
+        "east_asian_characters": 0
+      }
+    },
+    {
+      "name": "NFC Latin",
+      "text": "é",
+      "measured": {
+        "scalars": 1,
+        "white_space_runs": 1,
+        "non_white_space": 1,
+        "letters_numbers": 1,
+        "wide_letters_other_tokens": 1,
+        "utf16_units": 1
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 1,
+        "characters_with_spaces": 1,
+        "east_asian_characters": 1
+      }
+    },
+    {
+      "name": "family emoji",
+      "text": "👨‍👩‍👧‍👦",
+      "measured": {
+        "scalars": 7,
+        "white_space_runs": 1,
+        "non_white_space": 7,
+        "letters_numbers": 0,
+        "wide_letters_other_tokens": 0,
+        "utf16_units": 11
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 7,
+        "characters_with_spaces": 7,
+        "east_asian_characters": 0
+      }
+    },
+    {
+      "name": "keycap emoji",
+      "text": "1️⃣",
+      "measured": {
+        "scalars": 3,
+        "white_space_runs": 1,
+        "non_white_space": 3,
+        "letters_numbers": 1,
+        "wide_letters_other_tokens": 1,
+        "utf16_units": 3
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 2,
+        "characters_with_spaces": 2,
+        "east_asian_characters": 0
+      }
+    },
+    {
+      "name": "Latin number tokens",
+      "text": "abc 12",
+      "measured": {
+        "scalars": 6,
+        "white_space_runs": 2,
+        "non_white_space": 5,
+        "letters_numbers": 5,
+        "wide_letters_other_tokens": 2,
+        "utf16_units": 6
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 2,
+        "characters": 5,
+        "characters_with_spaces": 6,
+        "east_asian_characters": 0
+      }
+    },
+    {
+      "name": "mixed script",
+      "text": "abc中文42",
+      "measured": {
+        "scalars": 7,
+        "white_space_runs": 1,
+        "non_white_space": 7,
+        "letters_numbers": 7,
+        "wide_letters_other_tokens": 4,
+        "utf16_units": 7
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 4,
+        "characters": 7,
+        "characters_with_spaces": 7,
+        "east_asian_characters": 2
+      }
+    },
+    {
+      "name": "fullwidth Latin and digits",
+      "text": "ＡＢ１２",
+      "measured": {
+        "scalars": 4,
+        "white_space_runs": 1,
+        "non_white_space": 4,
+        "letters_numbers": 4,
+        "wide_letters_other_tokens": 4,
+        "utf16_units": 4
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 4,
+        "characters": 4,
+        "characters_with_spaces": 4,
+        "east_asian_characters": 4
+      }
+    },
+    {
+      "name": "CRLF",
+      "text": "\r\n",
+      "measured": {
+        "scalars": 2,
+        "white_space_runs": 0,
+        "non_white_space": 0,
+        "letters_numbers": 0,
+        "wide_letters_other_tokens": 0,
+        "utf16_units": 2
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 0,
+        "characters": 0,
+        "characters_with_spaces": 0,
+        "east_asian_characters": 0
+      }
+    },
+    {
+      "name": "ideographic space",
+      "text": "　汉",
+      "measured": {
+        "scalars": 2,
+        "white_space_runs": 1,
+        "non_white_space": 1,
+        "letters_numbers": 1,
+        "wide_letters_other_tokens": 1,
+        "utf16_units": 2
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 1,
+        "characters_with_spaces": 2,
+        "east_asian_characters": 1
+      }
+    },
+    {
+      "name": "format boundary",
+      "text": "a‍b",
+      "measured": {
+        "scalars": 3,
+        "white_space_runs": 1,
+        "non_white_space": 3,
+        "letters_numbers": 2,
+        "wide_letters_other_tokens": 2,
+        "utf16_units": 3
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 3,
+        "characters_with_spaces": 3,
+        "east_asian_characters": 0
+      }
+    },
+    {
+      "name": "mark continuation",
+      "text": "áb",
+      "measured": {
+        "scalars": 3,
+        "white_space_runs": 1,
+        "non_white_space": 3,
+        "letters_numbers": 2,
+        "wide_letters_other_tokens": 1,
+        "utf16_units": 3
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 3,
+        "characters_with_spaces": 3,
+        "east_asian_characters": 0
+      }
+    },
+    {
+      "name": "numbers categories",
+      "text": "½Ⅷ",
+      "measured": {
+        "scalars": 2,
+        "white_space_runs": 1,
+        "non_white_space": 2,
+        "letters_numbers": 2,
+        "wide_letters_other_tokens": 1,
+        "utf16_units": 2
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 2,
+        "characters": 2,
+        "characters_with_spaces": 2,
+        "east_asian_characters": 2
+      }
+    },
+    {
+      "name": "ideographic variation",
+      "text": "汉󠄀",
+      "measured": {
+        "scalars": 2,
+        "white_space_runs": 1,
+        "non_white_space": 2,
+        "letters_numbers": 1,
+        "wide_letters_other_tokens": 1,
+        "utf16_units": 3
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 1,
+        "characters_with_spaces": 1,
+        "east_asian_characters": 1
+      }
+    },
+    {
+      "name": "Hangul NFC",
+      "text": "가",
+      "measured": {
+        "scalars": 1,
+        "white_space_runs": 1,
+        "non_white_space": 1,
+        "letters_numbers": 1,
+        "wide_letters_other_tokens": 1,
+        "utf16_units": 1
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 1,
+        "characters_with_spaces": 1,
+        "east_asian_characters": 1
+      }
+    },
+    {
+      "name": "Hangul NFD",
+      "text": "가",
+      "measured": {
+        "scalars": 2,
+        "white_space_runs": 1,
+        "non_white_space": 2,
+        "letters_numbers": 2,
+        "wide_letters_other_tokens": 2,
+        "utf16_units": 2
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 2,
+        "characters": 2,
+        "characters_with_spaces": 2,
+        "east_asian_characters": 2
+      }
+    },
+    {
+      "name": "control not White_Space",
+      "text": "\u001c",
+      "measured": {
+        "scalars": 1,
+        "white_space_runs": 1,
+        "non_white_space": 1,
+        "letters_numbers": 0,
+        "wide_letters_other_tokens": 0,
+        "utf16_units": 1
+      },
+      "microsoft_word_measured": {
+        "version": "16.89.1",
+        "words": 1,
+        "characters": 1,
+        "characters_with_spaces": 1,
+        "east_asian_characters": 0
+      }
+    }
+  ]
+}

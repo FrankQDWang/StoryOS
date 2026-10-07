@@ -1,0 +1,12 @@
+{
+  "title": "Hong lou meng: opening excerpt of Chapter 1",
+  "author": "Cao Xueqin",
+  "edition": "Project Gutenberg eBook 24264; digital text credited to Wei-yi Kao; updated 2021-12-22",
+  "catalog_url": "https://www.gutenberg.org/ebooks/24264",
+  "text_url": "https://www.gutenberg.org/cache/epub/24264/pg24264.txt",
+  "access_date": "2026-10-05",
+  "rights": "Catalog states public domain in the USA; 18th-century original. No modern translation or editorial summary included.",
+  "source_sha256": "ff1526996bf4b81807651921a85e5c1c0f1d1d123c9fa4553057ba6a3ec72011",
+  "fixture_sha256": "e30eeb8fe1c9da824baeb21e16f960c42ca64b428a514c11ee6befb4a2ccffc1",
+  "transform": "Decode UTF-8; replace CRLF with LF; extract from first 此開卷第一回也 up to but excluding LF + IDEOGRAPHIC SPACE + 空空道人听如此說. Preserve spelling, punctuation, indentation, and hard line wraps. No final LF added."
+}
