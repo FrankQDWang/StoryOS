@@ -9,6 +9,11 @@ use uuid::Uuid;
 
 use super::author_edit::author_edit_database_error;
 
+mod compensation;
+pub(crate) use compensation::{
+    ObservedProposalFrontier, ProposalEditCompensation, settle_proposal_compensation,
+};
+
 #[derive(Clone, Debug)]
 pub(super) struct ProposalEditContext {
     pub proposal_id: String,
@@ -33,16 +38,6 @@ pub(super) struct LoadedProposalHeads {
     pub ownership: CurrentOwnershipFacts,
     pub edit_body: String,
     pub context: Option<ProposalEditContext>,
-}
-
-pub(super) struct ObservedProposalFrontier {
-    pub sequence: u64,
-    pub chapter_id: String,
-    pub proposal_id: String,
-    pub current_revision_id: String,
-    pub restored_candidate_text: String,
-    pub manuscript_block_id: String,
-    pub base_authoritative_revision_id: String,
 }
 
 pub(super) async fn load_chapter_proposal_heads(
@@ -534,66 +529,4 @@ pub(super) async fn append_proposal_revision(
         return Err(AuthorEditError::BindingConflict);
     }
     Ok(revision_id)
-}
-
-pub(super) async fn load_proposal_frontier(
-    client: &Client,
-    scope: &ProjectScope,
-    sequence: u64,
-) -> Result<Option<ObservedProposalFrontier>, AuthorEditError> {
-    let row = client
-        .query_opt(
-            "SELECT proposal.chapter_id::text, proposal.proposal_id::text,
-                    head.current_revision_id::text, parent.candidate_text,
-                    proposal.manuscript_block_id::text,
-                    revision.base_authoritative_revision_id::text
-               FROM storyos.author_action_entries AS action
-               JOIN storyos.domain_receipts AS receipt
-                 ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
-                    (action.owner_user_id, action.project_id, action.receipt_id)
-               JOIN storyos.proposal_revisions AS revision
-                 ON (revision.owner_user_id, revision.project_id, revision.revision_id) =
-                    (receipt.owner_user_id, receipt.project_id,
-                     receipt.proposal_revision_ids[1])
-               JOIN storyos.proposal_heads AS head
-                 ON (head.owner_user_id, head.project_id, head.proposal_id,
-                     head.current_revision_id) =
-                    (revision.owner_user_id, revision.project_id, revision.proposal_id,
-                     revision.revision_id)
-               JOIN storyos.proposals AS proposal
-                 ON (proposal.owner_user_id, proposal.project_id, proposal.proposal_id) =
-                    (revision.owner_user_id, revision.project_id, revision.proposal_id)
-               JOIN storyos.proposal_revisions AS parent
-                 ON (parent.owner_user_id, parent.project_id, parent.proposal_id,
-                     parent.revision_id) =
-                    (revision.owner_user_id, revision.project_id, revision.proposal_id,
-                     revision.parent_revision_id)
-              LEFT JOIN storyos.author_action_entries AS compensation
-                ON compensation.owner_user_id = action.owner_user_id
-               AND compensation.project_id = action.project_id
-               AND compensation.disposition = 'compensation'
-               AND compensation.compensated_source_sequence = action.author_action_sequence
-              WHERE action.owner_user_id = $1::text::uuid
-                AND action.project_id = $2::text::uuid
-                AND action.author_action_sequence = $3::text::numeric
-                AND action.disposition = 'forward'
-                AND receipt.result_kind = 'proposal_revised'
-                AND compensation.author_action_sequence IS NULL",
-            &[
-                &scope.owner_user_id.as_ref(),
-                &scope.project_id.as_ref(),
-                &sequence.to_string(),
-            ],
-        )
-        .await
-        .map_err(author_edit_database_error)?;
-    Ok(row.map(|row| ObservedProposalFrontier {
-        sequence,
-        chapter_id: row.get(0),
-        proposal_id: row.get(1),
-        current_revision_id: row.get(2),
-        restored_candidate_text: row.get(3),
-        manuscript_block_id: row.get(4),
-        base_authoritative_revision_id: row.get(5),
-    }))
 }

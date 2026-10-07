@@ -2,6 +2,9 @@ use storyos_application::ProjectScope;
 use tokio_postgres::Client;
 use uuid::Uuid;
 
+mod compensation;
+pub(crate) use compensation::{ObservedStructureFrontier, StructureCompensation};
+
 pub(crate) struct StructureTransitionSequences {
     pub author_action_sequence: u64,
     pub authoritative_commit_sequence: u64,

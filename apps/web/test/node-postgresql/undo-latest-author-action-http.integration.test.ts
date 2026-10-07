@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
+  acceptProposal,
   createChapter,
   createEditorSession,
   createProject,
@@ -12,28 +13,47 @@ import {
   createProjectCommandChallenge,
   createVolume,
   deleteChapter,
+  digestAcceptProposal,
   digestCreateChapter,
   digestCreateEditorSession,
   digestCreateVolume,
   digestDeleteChapter,
+  digestRejectProposalOperations,
+  digestReopenRejectedOperations,
+  digestReopenWithdrawnProposal,
+  digestReplanProposal,
   digestSetCurrentChapter,
   digestUndoLatestAuthorAction,
   digestUpdateProject,
+  digestWithdrawProposal,
   getChapter,
   getProject,
+  getProposal,
+  rejectProposalOperations,
+  reopenRejectedOperations,
+  reopenWithdrawnProposal,
+  replanProposal,
   setCurrentChapter,
   undoLatestAuthorAction,
   updateProject,
+  withdrawProposal,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
+  AcceptProposalRequest,
   CreateChapterRequest,
   CreateEditorSessionRequest,
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
   DeleteChapterRequest,
+  GetProposalResponse,
+  RejectProposalOperationsRequest,
+  ReopenRejectedOperationsRequest,
+  ReopenWithdrawnProposalRequest,
+  ReplanProposalRequest,
   SetCurrentChapterRequest,
   UndoLatestAuthorActionRequest,
   UpdateProjectRequest,
+  WithdrawProposalRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -44,6 +64,16 @@ import {
   stopStoryOSServer as stopRealServer,
   withChallengeBudget,
 } from "../support/node-integration.ts";
+import {
+  BINDING,
+  admitProse,
+  challenged,
+  drainLeftoverWork,
+  id,
+  prepare,
+  reviseCandidate,
+  startRealServer as startProposalServer,
+} from "../support/acceptance.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
@@ -821,5 +851,332 @@ test("undoLatestAuthorAction Challenges use the author_edit Challenge Rate Class
     );
   } finally {
     await stopRealServer(server);
+  }
+});
+
+type OpenedProposal = Awaited<ReturnType<typeof openProposal>>;
+type EditorSession = Awaited<ReturnType<typeof reviseCandidate>>["session"];
+
+async function openProposal(baseUrl: string, ns: string) {
+  const prepared = await prepare(baseUrl, id(`${ns}10`), "Undo Proposal Decision Novel", ns);
+  const queried = await admitProse(baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id(`${ns}11`));
+  if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") {
+    throw new Error("expected an opened Proposal");
+  }
+  const proposalId = queried.decision.opened_proposal.proposal_id;
+  const opened = await getProposal({ baseUrl, projectId: prepared.projectId, proposalId, fetchImpl: prepared.fetchImpl });
+  return { ...prepared, baseUrl, proposalId, opened };
+}
+
+async function openSession(proposal: OpenedProposal, ns: string): Promise<EditorSession> {
+  const request: CreateEditorSessionRequest = {
+    command_schema: "storyos.command.create-editor-session.request.v1",
+    ...BINDING,
+    correlation_id: id(`${ns}12`),
+  };
+  return challenged(
+    proposal.baseUrl, proposal.fetchImpl, proposal.projectId, "POST", "/api/v1/projects/{project_id}/editor-sessions",
+    request.command_schema, await digestCreateEditorSession(request), id(`${ns}13`),
+    (antiForgery) => createEditorSession({
+      baseUrl: proposal.baseUrl, projectId: proposal.projectId, fetchImpl: proposal.fetchImpl,
+      idempotencyKey: id(`${ns}13`), antiForgery, request,
+    }),
+  );
+}
+
+async function inspect(proposal: OpenedProposal): Promise<GetProposalResponse> {
+  return getProposal({
+    baseUrl: proposal.baseUrl, projectId: proposal.projectId, proposalId: proposal.proposalId, fetchImpl: proposal.fetchImpl,
+  });
+}
+
+async function chapterHead(proposal: OpenedProposal): Promise<string> {
+  return (await getChapter({
+    baseUrl: proposal.baseUrl, projectId: proposal.projectId, chapterId: proposal.chapterId, fetchImpl: proposal.fetchImpl,
+  })).chapter.current_revision.revision_id;
+}
+
+// The Proposal as the author sees it, without the identities that each new revision gets.
+function authorView(inspected: GetProposalResponse) {
+  let text = JSON.stringify(inspected.proposal).replaceAll(inspected.proposal.revision_id, "<revision>");
+  if (inspected.proposal.validation_receipt.kind === "present") {
+    text = text.replaceAll(inspected.proposal.validation_receipt.validation_receipt_id, "<validation-receipt>");
+  }
+  return JSON.parse(text) as unknown;
+}
+
+async function withdraw(proposal: OpenedProposal, session: EditorSession, ns: string) {
+  const request: WithdrawProposalRequest = {
+    command_schema: "storyos.command.withdraw-proposal.request.v1",
+    withdraw_proposal_input: {
+      cause: "author",
+      proposal_revision_id: (await inspect(proposal)).proposal.revision_id,
+      expected_closure: "open",
+      expected_target_revisions: [await chapterHead(proposal)],
+      withdrawal_reason: { kind: "author_withdrew", note: { kind: "omitted" } },
+      editor_session_id: session.editor_session.editor_session_id,
+      ...BINDING,
+      correlation_id: id(`${ns}21`),
+    },
+  };
+  const withdrawn = await challenged(
+    proposal.baseUrl, proposal.fetchImpl, proposal.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals",
+    request.command_schema, await digestWithdrawProposal(request), id(`${ns}22`),
+    (antiForgery) => withdrawProposal({
+      baseUrl: proposal.baseUrl, projectId: proposal.projectId, proposalId: proposal.proposalId,
+      fetchImpl: proposal.fetchImpl, idempotencyKey: id(`${ns}22`), antiForgery, request,
+    }),
+  );
+  if (withdrawn.effect.kind !== "resolved" || withdrawn.effect.author_action_sequence === null) {
+    throw new Error("expected an author withdrawal");
+  }
+  return { sequence: withdrawn.effect.author_action_sequence, eventId: withdrawn.effect.closure_event_refs[0] ?? "" };
+}
+
+async function reopenWithdrawn(proposal: OpenedProposal, session: EditorSession, withdrawalEventId: string, ns: string) {
+  const request: ReopenWithdrawnProposalRequest = {
+    command_schema: "storyos.command.reopen-withdrawn-proposal.request.v1",
+    reopen_withdrawn_proposal_input: {
+      proposal_revision_id: (await inspect(proposal)).proposal.revision_id,
+      withdrawal_event_ref: withdrawalEventId,
+      expected_closure: "withdrawn",
+      expected_target_revisions: [await chapterHead(proposal)],
+      editor_session_id: session.editor_session.editor_session_id,
+      ...BINDING,
+      correlation_id: id(`${ns}31`),
+    },
+  };
+  const reopened = await challenged(
+    proposal.baseUrl, proposal.fetchImpl, proposal.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/reopenings",
+    request.command_schema, await digestReopenWithdrawnProposal(request), id(`${ns}32`),
+    (antiForgery) => reopenWithdrawnProposal({
+      baseUrl: proposal.baseUrl, projectId: proposal.projectId, proposalId: proposal.proposalId,
+      fetchImpl: proposal.fetchImpl, idempotencyKey: id(`${ns}32`), antiForgery, request,
+    }),
+  );
+  if (reopened.effect.kind !== "resolved") throw new Error("expected a reopen");
+  return reopened.effect.author_action_sequence;
+}
+
+async function rejectAndReopen(proposal: OpenedProposal, session: EditorSession, ns: string) {
+  const rejectRequest: RejectProposalOperationsRequest = {
+    command_schema: "storyos.command.reject-proposal-operations.request.v1",
+    reject_proposal_operations_input: {
+      proposal_revision_id: proposal.opened.proposal.revision_id,
+      selected_pending_operation_ids: [proposal.opened.proposal.operation_id],
+      expected_target_revisions: [await chapterHead(proposal)],
+      rejection_reason: { kind: "author_declined", note: { kind: "omitted" } },
+      editor_session_id: session.editor_session.editor_session_id,
+      ...BINDING,
+      correlation_id: id(`${ns}41`),
+    },
+  };
+  const rejected = await challenged(
+    proposal.baseUrl, proposal.fetchImpl, proposal.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections",
+    rejectRequest.command_schema, await digestRejectProposalOperations(rejectRequest), id(`${ns}42`),
+    (antiForgery) => rejectProposalOperations({
+      baseUrl: proposal.baseUrl, projectId: proposal.projectId, proposalId: proposal.proposalId,
+      fetchImpl: proposal.fetchImpl, idempotencyKey: id(`${ns}42`), antiForgery, request: rejectRequest,
+    }),
+  );
+  if (rejected.effect.kind !== "resolved") throw new Error("expected a rejection");
+  const beforeReopen = await inspect(proposal);
+  const reopenRequest: ReopenRejectedOperationsRequest = {
+    command_schema: "storyos.command.reopen-rejected-operations.request.v1",
+    reopen_rejected_operations_input: {
+      proposal_revision_id: beforeReopen.proposal.revision_id,
+      selected_rejected_operation_ids: [proposal.opened.proposal.operation_id],
+      rejection_event_refs: [rejected.effect.resolution_event_refs[0] ?? ""],
+      expected_target_revisions: [await chapterHead(proposal)],
+      editor_session_id: session.editor_session.editor_session_id,
+      ...BINDING,
+      correlation_id: id(`${ns}43`),
+    },
+  };
+  const reopened = await challenged(
+    proposal.baseUrl, proposal.fetchImpl, proposal.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/operation-reopenings",
+    reopenRequest.command_schema, await digestReopenRejectedOperations(reopenRequest), id(`${ns}44`),
+    (antiForgery) => reopenRejectedOperations({
+      baseUrl: proposal.baseUrl, projectId: proposal.projectId, proposalId: proposal.proposalId,
+      fetchImpl: proposal.fetchImpl, idempotencyKey: id(`${ns}44`), antiForgery, request: reopenRequest,
+    }),
+  );
+  if (reopened.effect.kind !== "resolved") throw new Error("expected a reopen");
+  return { beforeReopen, sequence: reopened.effect.author_action_sequence };
+}
+
+// A Replan needs a conflicted Proposal: an Acceptance after the Chapter head moved.
+async function conflictAndReplan(proposal: OpenedProposal, ns: string) {
+  const { session, revised } = await reviseCandidate(proposal.baseUrl, proposal.fetchImpl, proposal.projectId, proposal.opened, `${ns}5`);
+  if (revised.proposal.validation_receipt.kind !== "present") throw new Error("expected a validation receipt");
+  const head = await chapterHead(proposal);
+  const moved = id(`${ns}59`);
+  await queryPostgres(`INSERT INTO storyos.authoritative_revisions
+    SELECT owner_user_id, project_id, manuscript_object_id, '${moved}'::uuid, payload_id
+    FROM storyos.authoritative_revisions WHERE project_id = '${proposal.projectId}'::uuid AND revision_id = '${head}'::uuid;
+    INSERT INTO storyos.manuscript_revision_members
+    SELECT owner_user_id, project_id, manuscript_object_id, '${moved}'::uuid, manuscript_block_id, block_order
+    FROM storyos.manuscript_revision_members WHERE project_id = '${proposal.projectId}'::uuid AND revision_id = '${head}'::uuid;
+    UPDATE storyos.authoritative_heads SET current_revision_id = '${moved}'::uuid
+    WHERE project_id = '${proposal.projectId}'::uuid AND manuscript_object_id = '${proposal.chapterId}'::uuid`);
+  const acceptRequest: AcceptProposalRequest = {
+    command_schema: "storyos.command.accept-proposal.request.v1",
+    accept_proposal_input: {
+      proposal_revision_id: revised.proposal.revision_id,
+      validation_receipt_id: revised.proposal.validation_receipt.validation_receipt_id,
+      selected_operation_ids: [revised.proposal.operation_id],
+      expected_authoritative_revision_id: moved,
+      editor_session_id: session.editor_session.editor_session_id,
+      ...BINDING,
+      correlation_id: id(`${ns}61`),
+    },
+  };
+  const conflicted = await challenged(
+    proposal.baseUrl, proposal.fetchImpl, proposal.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
+    acceptRequest.command_schema, await digestAcceptProposal(acceptRequest), id(`${ns}62`),
+    (antiForgery) => acceptProposal({
+      baseUrl: proposal.baseUrl, projectId: proposal.projectId, proposalId: proposal.proposalId,
+      fetchImpl: proposal.fetchImpl, idempotencyKey: id(`${ns}62`), antiForgery, request: acceptRequest,
+    }),
+  );
+  const conflictRef = conflicted.receipt.condition_refs[0] ?? "";
+  const beforeReplan = await inspect(proposal);
+  const replanRequest: ReplanProposalRequest = {
+    command_schema: "storyos.command.replan-proposal.request.v1",
+    replan_proposal_input: {
+      conflicted_proposal_revision_id: beforeReplan.proposal.revision_id,
+      expected_current_proposal_head: beforeReplan.proposal.revision_id,
+      expected_current_target_revisions: [moved],
+      replacement_operations: [beforeReplan.proposal.operation_id],
+      source_condition: { kind: "proposal_conflict", proposal_conflict_ref: conflictRef },
+      editor_session_id: session.editor_session.editor_session_id,
+      ...BINDING,
+      correlation_id: id(`${ns}71`),
+    },
+  };
+  const replanned = await challenged(
+    proposal.baseUrl, proposal.fetchImpl, proposal.projectId, "POST",
+    "/api/v1/projects/{project_id}/proposals/{proposal_id}/replans",
+    replanRequest.command_schema, await digestReplanProposal(replanRequest), id(`${ns}72`),
+    (antiForgery) => replanProposal({
+      baseUrl: proposal.baseUrl, projectId: proposal.projectId, proposalId: proposal.proposalId,
+      fetchImpl: proposal.fetchImpl, idempotencyKey: id(`${ns}72`), antiForgery, request: replanRequest,
+    }),
+  );
+  if (replanned.effect.kind !== "resolved") throw new Error("expected a replan");
+  return { session, beforeReplan, sequence: replanned.effect.author_action_sequence };
+}
+
+async function postProposalUndo(proposal: OpenedProposal, session: EditorSession, sequence: string, ns: string) {
+  const request = undoRequest({
+    expectedFrontier: sequence,
+    expectedRevisionId: await chapterHead(proposal),
+    editorSessionId: session.editor_session.editor_session_id,
+    correlationId: id(`${ns}81`),
+  });
+  const posted = await postUndo(proposal.baseUrl, proposal.fetchImpl, proposal.projectId, id(`${ns}82`), request);
+  return { ...posted, request };
+}
+
+// An exact retry replays the same acknowledgement.
+async function undoProposalDecision(proposal: OpenedProposal, session: EditorSession, sequence: string, ns: string) {
+  const { challenge, undone, request } = await postProposalUndo(proposal, session, sequence, ns);
+  const retried = await undoLatestAuthorAction({
+    baseUrl: proposal.baseUrl, projectId: proposal.projectId, fetchImpl: proposal.fetchImpl,
+    idempotencyKey: id(`${ns}82`), antiForgery: challenge.nonce, request,
+  });
+  assert.deepEqual(retried, undone);
+  return undone;
+}
+
+function assertCompensated(undone: Awaited<ReturnType<typeof undoLatestAuthorAction>>, sourceSequence: string, after: GetProposalResponse) {
+  assert.equal(undone.effect.kind, "compensated");
+  if (undone.effect.kind !== "compensated") throw new Error("expected a Compensation");
+  assert.equal(undone.effect.source_sequence, sourceSequence);
+  assert.equal(undone.effect.authoritative_commit_id, "");
+  assert.equal(undone.proposal_revision_id, after.proposal.revision_id);
+}
+
+// A later Proposal head move: a withdrawal and its Undo append a revision after the decision.
+async function assertBarrierAfterHeadMove(proposal: OpenedProposal, session: EditorSession, sequence: string, ns: string) {
+  const later = await withdraw(proposal, session, `${ns}9`);
+  const reopened = await postProposalUndo(proposal, session, later.sequence, `${ns}9`);
+  assert.equal(reopened.undone.effect.kind, "compensated");
+  const blocked = await undoProposalDecision(proposal, session, sequence, ns);
+  assert.deepEqual(blocked.effect, { kind: "unavailable", reason: "barrier" });
+}
+
+test("undoLatestAuthorAction withdraws a reopened Proposal again, and a later head move makes the reopen a Barrier", async () => {
+  const started = await startProposalServer();
+  try {
+    await drainLeftoverWork();
+    const proposal = await openProposal(started.baseUrl, "c96311");
+    const session = await openSession(proposal, "c96311");
+    const withdrawn = await withdraw(proposal, session, "c96311");
+    const beforeReopen = await inspect(proposal);
+    const sequence = await reopenWithdrawn(proposal, session, withdrawn.eventId, "c96311");
+    const undone = await undoProposalDecision(proposal, session, sequence, "c96311");
+    const after = await inspect(proposal);
+    assertCompensated(undone, sequence, after);
+    assert.equal(after.proposal.closure, "withdrawn");
+    assert.deepEqual(authorView(after), authorView(beforeReopen));
+
+    const moved = await openProposal(started.baseUrl, "c96312");
+    const movedSession = await openSession(moved, "c96312");
+    const movedWithdrawal = await withdraw(moved, movedSession, "c96312");
+    const movedSequence = await reopenWithdrawn(moved, movedSession, movedWithdrawal.eventId, "c96312");
+    await assertBarrierAfterHeadMove(moved, movedSession, movedSequence, "c96312");
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+test("undoLatestAuthorAction rejects reopened operations again, and a later head move makes the reopen a Barrier", async () => {
+  const started = await startProposalServer();
+  try {
+    await drainLeftoverWork();
+    const proposal = await openProposal(started.baseUrl, "c96321");
+    const session = await openSession(proposal, "c96321");
+    const { beforeReopen, sequence } = await rejectAndReopen(proposal, session, "c96321");
+    const undone = await undoProposalDecision(proposal, session, sequence, "c96321");
+    const after = await inspect(proposal);
+    assertCompensated(undone, sequence, after);
+    assert.equal(after.proposal.operation_resolution, "rejected");
+    assert.deepEqual(authorView(after), authorView(beforeReopen));
+
+    const moved = await openProposal(started.baseUrl, "c96322");
+    const movedSession = await openSession(moved, "c96322");
+    const reopened = await rejectAndReopen(moved, movedSession, "c96322");
+    await assertBarrierAfterHeadMove(moved, movedSession, reopened.sequence, "c96322");
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
+test("undoLatestAuthorAction restores the Proposal before a Replan, and a later head move makes the Replan a Barrier", async () => {
+  const started = await startProposalServer();
+  try {
+    await drainLeftoverWork();
+    const proposal = await openProposal(started.baseUrl, "c96331");
+    const { session, beforeReplan, sequence } = await conflictAndReplan(proposal, "c96331");
+    const undone = await undoProposalDecision(proposal, session, sequence, "c96331");
+    const after = await inspect(proposal);
+    assertCompensated(undone, sequence, after);
+    // The Acceptance conflict condition stays on the conflicted revision (ADR 0044).
+    assert.deepEqual(authorView(after), authorView({
+      ...beforeReplan,
+      proposal: { ...beforeReplan.proposal, validation: "valid", condition_refs: [], source_condition: { kind: "absent" } },
+    }));
+
+    const moved = await openProposal(started.baseUrl, "c96332");
+    const replanned = await conflictAndReplan(moved, "c96332");
+    await assertBarrierAfterHeadMove(moved, replanned.session, replanned.sequence, "c96332");
+  } finally {
+    await stopRealServer(started.server);
   }
 });
