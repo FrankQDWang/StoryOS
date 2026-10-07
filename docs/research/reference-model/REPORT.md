@@ -1,5 +1,7 @@
 # Reference Model Report
 
+> Complete evidence: the Git tag `evidence/reference-model-2026-10-05` holds the full study, including the files that are not in `main` (the `evidence/` directory, compressed batches, and files above 64 KB). Read them with `git show evidence/reference-model-2026-10-05:docs/research/reference-model/<path>`.
+
 ## Conclusion
 
 All four requested stages meet the outcome-count criterion at product base `479224809cdaae997cda51cb8853e3fafa242b65`. The counted corpus has no unexplained compared-value difference. It retains five implementation defects and eleven contract questions. Product code is unchanged.
