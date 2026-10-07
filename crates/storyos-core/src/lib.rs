@@ -99,7 +99,7 @@ pub use continuation_input::{
 };
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
-    CreateAgentRunRefusal, CreateAgentRunResult, create_agent_run,
+    CreateAgentRunOutcome, CreateAgentRunRefusal, create_agent_run,
 };
 pub use create_chapter::{
     CreateChapter, CreateChapterApplied, CreateChapterConflict, CreateChapterCurrent,

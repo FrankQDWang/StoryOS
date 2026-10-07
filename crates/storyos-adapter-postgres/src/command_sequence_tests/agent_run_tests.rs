@@ -1,15 +1,19 @@
 use storyos_application::{
-    AgentRunControlRefusal, CancelAgentRunInput, CancelAgentRunSettlement, PauseAgentRunInput,
-    PauseAgentRunSettlement, ProjectCommandError, ProjectScope, RefusableCommandError,
+    AgentRunControlRefusal, CancelAgentRunInput, CancelAgentRunSettlement, ConversationSelection,
+    CreateAgentRunInput, CreateAgentRunSettlement, PauseAgentRunInput, PauseAgentRunSettlement,
+    ProjectCommandError, ProjectScope, RefusableCommandError, UpdateProjectAssistanceInput,
 };
-use storyos_core::ReceiptResult;
+use storyos_core::{AssistanceAvailability, CreateAgentRunRefusal, ReceiptResult};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
+use crate::set_current_chapter_authority_tests::seed_two_chapters;
 use crate::update_volume_tests::seed_project;
 
+use super::damaged_evidence::{ReplayError, damaged_replay};
+use super::project_session::UPDATE_PROJECT_ASSISTANCE;
 use super::support::{CommandCall, Route, SequenceError, issued, stores};
 
 pub(super) const PAUSE_AGENT_RUN: Route = Route {
@@ -25,6 +29,111 @@ pub(super) const CANCEL_AGENT_RUN: Route = Route {
     path: storyos_contracts::CANCEL_AGENT_RUN_PATH,
     schema: storyos_contracts::CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
 };
+
+pub(super) const CREATE_AGENT_RUN: Route = Route {
+    kind: "createAgentRun",
+    method: storyos_contracts::CREATE_AGENT_RUN_METHOD,
+    path: storyos_contracts::CREATE_AGENT_RUN_PATH,
+    schema: storyos_contracts::CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
+};
+
+pub(super) async fn create_agent_run(
+    store: &PostgresProjectReader,
+    call: &CommandCall<CreateAgentRunInput>,
+) -> Result<CreateAgentRunSettlement, ProjectCommandError> {
+    store
+        .create_agent_run(&call.envelope, &call.input)
+        .await
+        .map_err(SequenceError::sequence)
+}
+
+/// A createAgentRun of a new conversation on `chapter_id`.
+fn run_input(chapter_id: String) -> CreateAgentRunInput {
+    CreateAgentRunInput {
+        conversation: ConversationSelection::New,
+        author_message: "Help with this passage.".to_owned(),
+        chapter_id,
+        passage_targets: None,
+        candidate_target: None,
+        run_id: Uuid::now_v7().to_string(),
+        conversation_id: Uuid::now_v7().to_string(),
+        project_agent_id: Uuid::now_v7().to_string(),
+    }
+}
+
+/// One applicable createAgentRun in a new Project with a current Chapter and available assistance.
+pub(super) async fn create_agent_run_call(
+    store: &PostgresProjectReader,
+    base: u16,
+) -> CommandCall<CreateAgentRunInput> {
+    let suffix = |offset: u16| format!("{:04x}", base + offset);
+    let (scope, _volume_id, chapter_id, _chapter_b) = seed_two_chapters(
+        store,
+        "018f0000-0000-7001-8000-000000000001",
+        &suffix(/*offset*/ 0),
+        &suffix(/*offset*/ 1),
+        &suffix(/*offset*/ 2),
+        &suffix(/*offset*/ 3),
+    )
+    .await;
+    let assistance = UpdateProjectAssistanceInput {
+        availability: AssistanceAvailability::Available,
+        expected_revision: 0,
+    };
+    let call = issued(
+        store,
+        &scope,
+        base + 4,
+        &UPDATE_PROJECT_ASSISTANCE,
+        assistance,
+    )
+    .await;
+    store
+        .update_project_assistance(&call.envelope, &call.input)
+        .await
+        .unwrap();
+    issued(
+        store,
+        &scope,
+        base + 9,
+        &CREATE_AGENT_RUN,
+        run_input(chapter_id),
+    )
+    .await
+}
+
+/// Pauses the queued Run of one createAgentRun, because later HTTP files drain all queued work.
+pub(super) async fn park_run(admin: &Client, call: &CommandCall<CreateAgentRunInput>) {
+    admin
+        .execute(
+            "UPDATE storyos.agent_runs
+                SET status = 'paused', lease_expires_at = NULL, wakeup_pending = false
+              WHERE run_id = $1::text::uuid",
+            &[&call.input.run_id],
+        )
+        .await
+        .unwrap();
+}
+
+/// Counts the Admission, Receipt, and settled fence rows of one idempotency key, and its unused
+/// Command Challenges.
+async fn request_rows(admin: &Client, key: &str) -> [i64; 4] {
+    let written = admin
+        .query_one(
+            "SELECT (SELECT count(*) FROM storyos.author_command_admissions
+                      WHERE idempotency_key = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.domain_receipts
+                      WHERE idempotency_key = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.command_idempotency
+                      WHERE idempotency_key = $1::text::uuid AND outcome_kind <> 'pending'),
+                    (SELECT count(*) FROM storyos.project_command_challenges
+                      WHERE idempotency_key = $1::text::uuid AND consumed_at IS NULL)",
+            &[&key],
+        )
+        .await
+        .unwrap();
+    [0, 1, 2, 3].map(|index| written.get(index))
+}
 
 pub(super) async fn pause_agent_run(
     store: &PostgresProjectReader,
@@ -147,20 +256,7 @@ where
         ))
     ));
     let key = &call.envelope.challenge_binding.idempotency_key;
-    let written = admin
-        .query_one(
-            "SELECT (SELECT count(*) FROM storyos.author_command_admissions
-                      WHERE idempotency_key = $1::text::uuid),
-                    (SELECT count(*) FROM storyos.domain_receipts
-                      WHERE idempotency_key = $1::text::uuid),
-                    (SELECT count(*) FROM storyos.command_idempotency
-                      WHERE idempotency_key = $1::text::uuid AND outcome_kind <> 'pending'),
-                    (SELECT count(*) FROM storyos.project_command_challenges
-                      WHERE idempotency_key = $1::text::uuid AND consumed_at IS NULL)",
-            &[key],
-        )
-        .await
-        .unwrap();
+    let written = request_rows(admin, key).await;
     seed_run(admin, &scope, &run_id, "waiting").await;
     let settled = settle_project_command(store, &call.envelope, &call.input)
         .await
@@ -177,7 +273,7 @@ where
         .await
         .unwrap();
     RefusedThenSettled {
-        refused_rows: [0, 1, 2, 3].map(|index| written.get::<_, i64>(index)),
+        refused_rows: written,
         settled: settled.outcome.receipt_result(),
         run: (
             run.get(/*idx*/ 0),
@@ -227,4 +323,37 @@ async fn a_refusal_before_admission_writes_no_row_and_keeps_the_challenge_unused
         ),
     };
     assert_eq!(observed, vec![settled("paused"), settled("cancelled")]);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_create_agent_run_refusal_writes_no_row_and_a_missing_run_is_damaged() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let scope = seed_project(&store, "b300").await;
+    let call = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xb309,
+        &CREATE_AGENT_RUN,
+        run_input(Uuid::now_v7().to_string()),
+    )
+    .await;
+    let refused = store.create_agent_run(&call.envelope, &call.input).await;
+    let key = &call.envelope.challenge_binding.idempotency_key;
+    let call_without_run = create_agent_run_call(&store, /*base*/ 0xb310).await;
+    let missing_run = damaged_replay(&store, &admin, &call_without_run, |receipt_id| {
+        format!("DELETE FROM storyos.agent_runs WHERE receipt_id = '{receipt_id}'::uuid")
+    })
+    .await;
+    assert!(matches!(
+        refused,
+        Err(RefusableCommandError::RefusedBeforeAdmission(
+            CreateAgentRunRefusal::AssistanceUnavailable
+        ))
+    ));
+    assert_eq!(request_rows(&admin, key).await, [0, 0, 0, 1]);
+    assert_eq!(missing_run, ReplayError::Unavailable);
 }

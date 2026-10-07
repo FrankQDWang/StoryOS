@@ -133,6 +133,28 @@ Specification C ([#1043](https://github.com/FrankQDWang/StoryOS/issues/1043)) mo
 - The Core classifier returns a Core Transition Outcome with the reasons `already_cancelled` and `terminal_run`.
 - The observable changes of `pauseAgentRun` in the list above also apply to `cancelAgentRun`, with the same causes. The behavior-equivalence review against `main` found no other difference.
 
+#### Contention refusal
+
+- A command can declare the refusal for a serialization failure, a unique violation, or a deadlock of its first-use transaction. This includes the commit. The sequence finds such a failure in the source chain of a store fault. It rolls back, so no row stays and the Command Challenge stays unused.
+- Only `createAgentRun` declares a contention refusal: `conversation_busy`. For the other commands, such a failure stays a store fault.
+- A failure to begin the transaction, a failure of the Challenge consumption, and a failure of a rollback keep their own errors.
+
+#### `createAgentRun`
+
+- `createAgentRun` uses the `agent_run_start` Admission form, the `ActivityOnly` profile with the Activity kind `agent_run_created`, and the Command-response Project. Its Core classifier returns a Core Transition Outcome that has only the applied outcome.
+- An archived Project, unavailable assistance, an invalid Chapter join, an inaccessible conversation, and a busy conversation are refusals before Admission. Their problems do not change: `422 archived_project`, `422 assistance_unavailable`, `422 invalid_chapter_join`, `404 resource_unavailable`, and `422 conversation_busy`. A missing candidate target stays `409 idempotency_binding_conflict`.
+- The `apply` step writes the Project Agent, the conversation, the memory settings, and the AgentRun with status `queued`. It also writes the Context Assembly rows at decision position 0. The captured grant, Model Use Binding revision, and memory settings revision do not change.
+- The route uses the generic project command admission. A new body validation option keeps the problem order of `main`. The revision, the correlation identity, the challenge headers, and the challenge secret come first. The conversation and Working Target identities come after them. The message limit of 8000 characters is a route check after the Project store check, with `409 idempotency_binding_conflict`, as on `main`.
+- Replay decodes the applied effect from the Activity record and requires the AgentRun row of the Receipt.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - An applied Receipt without its Activity record or its AgentRun row gives `503 project_store_unavailable`. Before, it gave `409 idempotency_binding_conflict`. The receipt relation trigger already prevents a missing Activity record.
+  - An Activity identity field that is absent, null, not a string, or not UUID text gives `503 project_store_unavailable`. An Activity `run_id` that is not the `run_id` of the AgentRun row of the Receipt gives the same store fault. Before, replay read the identities from the AgentRun row and ignored the Activity fields. The Activity payload checks already prevent a field that is absent, null, or not a string.
+  - Replay returns the conversation identity text of the first acknowledgement. Before, it returned the canonical UUID text of the stored row. The two texts are different when the client sends a UUID in another form, for example in uppercase.
+  - A stored Receipt of another result kind gives `409 idempotency_binding_conflict`. Before, replay ignored the result kind.
+  - A Project lifecycle value other than `active` or `archived` gives a store fault. Before, the command used the value as `active`. The Project lifecycle check already prevents such a value.
+  - A serialization failure, a unique violation, or a deadlock in an AgentRun read or in a Worker Context Assembly is now a store fault. Before, the read error was the busy conversation error. A read-only Repeatable Read transaction cannot have such a failure, and the Worker reported both errors as a store fault.
+
 #### Admit step
 
 - A command of the admit step declares its kind, isolation level, missing-Admission error, rate-limited Challenge error, and one work query. The work query takes the owner, Project, and Admission identities and gives one JSON object.

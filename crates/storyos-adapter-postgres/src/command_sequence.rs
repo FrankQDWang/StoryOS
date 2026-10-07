@@ -17,6 +17,7 @@ mod activity_only;
 mod admission;
 mod admit;
 mod chapter_selection;
+mod contention;
 mod records;
 mod response;
 mod structural;
@@ -26,6 +27,8 @@ pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
 pub(crate) use admit::{AdmitCommand, AdmitSpec, admit_project_command};
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
+pub(crate) use contention::CommandError;
+use contention::contended;
 use records::{ReceiptRecord, insert_activity_payload, insert_receipt, lock_project};
 pub(crate) use response::{NoResponse, ProjectAssistanceResponse, ProjectResponse, ResponseRecord};
 pub(crate) use structural::{
@@ -49,10 +52,6 @@ pub(crate) enum Admission {
 /// The action class of an Admission without an Editor Session. Each class writes the same columns.
 pub(crate) enum ProjectActionClass {
     ExplicitProjectCommand,
-    #[expect(
-        dead_code,
-        reason = "createAgentRun settles through this form in its own ticket"
-    )]
     AgentRunStart,
     AgentRunControl,
 }
@@ -284,7 +283,7 @@ pub(crate) trait ProjectCommand: Sync {
     /// The settlement error. A command that refuses before its Admission declares
     /// `RefusableCommandError` with its refusal type. The other commands declare
     /// `ProjectCommandError`.
-    type Error: From<ProjectCommandError> + Send;
+    type Error: CommandError;
     type Profile: SettlementProfile;
     type Response: ResponseRecord;
     /// The effect of a zero-authority outcome that writes effect rows. Other commands use `()`.
@@ -304,6 +303,12 @@ pub(crate) trait ProjectCommand: Sync {
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
     ) -> impl Future<Output = Result<Classification<Self>, Self::Error>> + Send;
+
+    /// The refusal of a serialization failure, a unique violation, or a deadlock of the first-use
+    /// transaction, including its commit. `None` keeps such a failure a store fault.
+    fn contention_refusal() -> Option<Self::Error> {
+        None
+    }
 
     /// The Domain Receipt payload of an applied outcome.
     fn applied_receipt_payload(&self, _applied: &Self::Applied, _plan: &Self::Plan) -> String {
@@ -430,16 +435,24 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
             Err(ProjectCommandError::BindingConflict.into())
         }
         ProjectCommandChallengeUse::FirstUse => {
-            match first_use(&transaction.client, envelope, command).await {
-                Ok(settlement) => {
-                    transaction.commit().await.map_err(challenge_error)?;
-                    Ok(settlement)
-                }
+            let settled = match first_use(&transaction.client, envelope, command).await {
+                Ok(settlement) => transaction
+                    .commit()
+                    .await
+                    .map(|()| settlement)
+                    .map_err(|error| challenge_error(error).into()),
                 Err(error) => {
                     transaction.rollback().await.map_err(challenge_error)?;
                     Err(error)
                 }
-            }
+            };
+            settled.map_err(|error| {
+                let contention = error.sequence_error().is_some_and(contended);
+                match C::contention_refusal() {
+                    Some(refusal) if contention => refusal,
+                    Some(_) | None => error,
+                }
+            })
         }
     }
 }
