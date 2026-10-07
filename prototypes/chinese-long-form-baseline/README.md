@@ -9,7 +9,9 @@ WORD_COUNTS=1 sh prototypes/chinese-long-form-baseline/run.sh
 This builds the clean product package if absent and generates four seeded corpora.
 It runs each scale in its own `scripts/dev-postgres.sh run` database. It writes
 operation observations, SQL execution plans, corpus counts, Unicode observations,
-and a derived table under `out/`. It does not run the test suite. Without
+and a derived table under `out/`.
+
+It does not run the test suite. Without
 `WORD_COUNTS=1`, the independent Unicode profiles run but native Word does not.
 The native Word option needs Microsoft Word. Other runs need the locked repository
 Node toolchain, installed Chrome, Python with Unicode 16.0.0, and Docker.
@@ -46,10 +48,12 @@ rounding. Buffer counts are accesses, not unique pages or byte totals.
 Each Web phase has a new browser journal and a publicly prepared writer session.
 The harness sets only its server-issued active-session reference in sessionStorage.
 It measures the packaged production UI, real input, IndexedDB APIs, and reload.
+
 Browser response bodies and IndexedDB API observations include the completed
 action window and its triggered reads. Editor remount can finish later. Such Web
 rows are lower bounds for the full journey.
- The evidence keeps inter-window plans
+
+The evidence keeps inter-window plans
 separate from measured counters. The rows are distinct from isolated HTTP
 operation counts. A stopped Worker runs once for each export or fake-adapter
 Proposal setup. No external model or provider is called.
