@@ -124,6 +124,7 @@ mod author_edit_outcome;
 mod author_edit_proposal;
 mod author_edit_replay;
 mod author_edit_settlement;
+mod cancel_agent_run;
 mod chapter_query;
 mod close_editor_flow_draft;
 mod command_replay;

@@ -1,7 +1,9 @@
 use std::convert::Infallible;
 use std::future::Future;
 
-use storyos_core::{PauseAgentRunConflict, PauseAgentRunNoEffect};
+use storyos_core::{
+    CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict, PauseAgentRunNoEffect,
+};
 
 use crate::{
     ActivityApplied, AuthorCommandAdmissionIds, EditorClientBinding, Project,
@@ -37,7 +39,29 @@ pub type PauseAgentRunSettlement = ProjectCommandSettlement<
 
 pub type PauseAgentRunError = RefusableCommandError<AgentRunControlRefusal>;
 
-/// One admitted cancel or steering command for an existing AgentRun.
+/// One cancelAgentRun of an existing AgentRun.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CancelAgentRunInput {
+    pub run_id: String,
+}
+
+/// The applied effect of one cancelAgentRun: the Run is cancelled at a new fence generation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CancelAgentRunApplied {
+    pub run_id: String,
+    pub fence_generation: u64,
+}
+
+pub type CancelAgentRunSettlement = ProjectCommandSettlement<
+    ActivityApplied<CancelAgentRunApplied>,
+    CancelAgentRunNoEffect,
+    CancelAgentRunConflict,
+    Infallible,
+>;
+
+pub type CancelAgentRunError = RefusableCommandError<AgentRunControlRefusal>;
+
+/// One admitted steering command for an existing AgentRun.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunControlCommand {
     pub project_scope: ProjectScope,
@@ -52,10 +76,9 @@ pub struct AgentRunControlCommand {
     pub steering_input: Option<AgentRunSteeringInput>,
 }
 
-/// Distinguishes cancel from steering at the Application boundary.
+/// The intent of the shared control path, which only steering uses.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentRunControlIntent {
-    Cancel,
     Steer,
 }
 
@@ -65,7 +88,7 @@ pub struct AgentRunSteeringInput {
     pub author_message: String,
 }
 
-/// Settlement of one cancel or steering command.
+/// Settlement of one steering command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunControlSettlement {
     pub ids: AuthorCommandAdmissionIds,
@@ -75,7 +98,7 @@ pub struct AgentRunControlSettlement {
     pub effect: AgentRunControlEffect,
 }
 
-/// Observable effect of one cancel or steering command.
+/// Observable effect of one steering command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AgentRunControlEffect {
     Retained {
@@ -83,29 +106,9 @@ pub enum AgentRunControlEffect {
         steering_input_id: String,
         input_position: u64,
     },
-    Applied {
-        run_id: String,
-        status: AgentRunControlStatus,
-        fence_generation: u64,
-    },
-    NoEffect {
-        reason: AgentRunControlNoEffect,
-    },
     Conflicted {
         reason: AgentRunControlConflict,
     },
-}
-
-/// Terminal status written by a control command.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AgentRunControlStatus {
-    Cancelled,
-}
-
-/// Zero-effect reason that is not a terminal conflict.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AgentRunControlNoEffect {
-    AlreadyCancelled,
 }
 
 /// Conflict that leaves the current terminal Run unchanged.
@@ -114,7 +117,7 @@ pub enum AgentRunControlConflict {
     TerminalRun,
 }
 
-/// Failure while admitting cancel or steering.
+/// Failure while admitting steering.
 #[derive(Debug)]
 pub enum AgentRunControlError {
     BindingConflict,
@@ -161,7 +164,7 @@ impl std::error::Error for AgentRunControlError {
     }
 }
 
-/// Owns one admitted cancel or steering command and its durable fence.
+/// Owns one admitted steering command and its durable fence.
 pub trait AgentRunControlStore: Sync {
     fn control_agent_run(
         &self,
@@ -181,13 +184,6 @@ pub async fn control_agent_run(
             "/api/v1/projects/{project_id}/agent-runs/{run_id}/steering-inputs",
             "storyos.command.steer-agent-run.request.v1",
             "storyos.command.steerAgentRun.jcs.v1",
-        ),
-        AgentRunControlIntent::Cancel => (
-            "cancelAgentRun",
-            "POST",
-            "/api/v1/projects/{project_id}/agent-runs/{run_id}/cancel",
-            "storyos.command.cancel-agent-run.request.v1",
-            "storyos.command.cancelAgentRun.jcs.v1",
         ),
     };
     let command_digest = {

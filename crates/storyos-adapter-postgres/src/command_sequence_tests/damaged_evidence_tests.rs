@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 
-use super::agent_run::pause_agent_run_call;
+use super::agent_run::{cancel_agent_run_call, pause_agent_run_call};
 use super::draft::{
     close_editor_flow_draft_call, discard_call, expand_refused_edit_draft_call, expansion_call,
     refused_edit_draft, refused_edit_expansion,
@@ -206,6 +206,12 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &pause_agent_run_call(&store, &admin, /*base*/ 0xb240).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &cancel_agent_run_call(&store, &admin, /*base*/ 0xd540).await,
+        )
+        .await,
     ];
     let separated = (
         ReceiptResult::AuthoritativeApplied,
@@ -214,7 +220,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ReplayError::Unavailable,
         ],
     );
-    assert_eq!(observed, vec![separated; 18]);
+    assert_eq!(observed, vec![separated; 19]);
 }
 
 /// Settles the call, damages its records with `damage` that takes the Receipt identity, and
