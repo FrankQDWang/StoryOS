@@ -357,8 +357,11 @@ export async function openEditorWorkspace({
       canonicalSnapshot = validatedCanonicalSnapshot(await getSnapshot({
         baseUrl, projectId: scope.project_id, snapshotId, fetchImpl,
       }), workspace, snapshotId);
+      // Activity-only commands, for example a readable export, advance the Chapter
+      // position without a canonical Snapshot (ADR 0043). Only a later Snapshot is stale.
       if (JSON.stringify(canonicalSnapshot) !== JSON.stringify(tree.snapshot)
-        || canonicalSnapshot.project_activity_position !== chapter.project_activity_position
+        || BigInt(canonicalSnapshot.project_activity_position)
+          > BigInt(chapter.project_activity_position)
         || BigInt(canonicalSnapshot.project_activity_position)
           < BigInt(base.project_activity_position)) {
         throw new Error("Takeover Snapshot binding mismatch");
