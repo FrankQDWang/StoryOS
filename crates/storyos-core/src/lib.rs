@@ -65,8 +65,8 @@ pub use accept_proposal::{
     ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
 pub use agent_run_control::{
-    AgentRunLifecycle, CancelAgentRunResult, PauseAgentRunResult, classify_cancel_agent_run,
-    classify_pause_agent_run,
+    AgentRunLifecycle, CancelAgentRunResult, PauseAgentRunConflict, PauseAgentRunNoEffect,
+    classify_cancel_agent_run, classify_pause_agent_run,
 };
 pub use append_proposal_generation_batch::{
     AppendProposalGenerationBatch, AppendProposalGenerationBatchConflict,

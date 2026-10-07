@@ -5,7 +5,7 @@ use storyos_application::{
     UpdateChapterInput, UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput,
     WithdrawProposalInput,
 };
-use storyos_application::{ChapterId, EditorSessionId, VolumeId};
+use storyos_application::{ChapterId, EditorSessionId, PauseAgentRunInput, VolumeId};
 use storyos_application::{CompleteReadyPartialProposalInput, ContinueProposalGenerationInput};
 use storyos_core::{AssistanceAvailability, CreateChapterPlacement, OpenInlineProposalAnchor};
 use uuid::Uuid;
@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::update_volume_tests::seed_project;
 
+use super::agent_run::{PAUSE_AGENT_RUN, pause_agent_run, seed_run};
 use super::draft::{
     CLOSE_EDITOR_FLOW_DRAFT, EXPAND_REFUSED_EDIT_DRAFT, close_editor_flow_draft, discard_call,
     expand_refused_edit_draft, expansion_call, refused_edit_draft, refused_edit_expansion,
@@ -571,6 +572,19 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((CONTINUE_PROPOSAL_GENERATION.kind, outcome));
     }
 
+    let scope = seed_project(&store, "b210").await;
+    let (waiting, completed) = (Uuid::now_v7().to_string(), Uuid::now_v7().to_string());
+    seed_run(&admin, &scope, &waiting, "waiting").await;
+    seed_run(&admin, &scope, &completed, "completed").await;
+    for (suffix, run_id) in [(0xb211, &waiting), (0xb212, &waiting), (0xb213, &completed)] {
+        let input = PauseAgentRunInput {
+            run_id: run_id.clone(),
+        };
+        let call = issued(&store, &scope, suffix, &PAUSE_AGENT_RUN, input).await;
+        let outcome = replayed_outcome(&store, &admin, &call, pause_agent_run).await;
+        observed.push((PAUSE_AGENT_RUN.kind, outcome));
+    }
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
@@ -664,6 +678,9 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("continueProposalGeneration", conflicted),
             ("continueProposalGeneration", generation_started),
             ("continueProposalGeneration", refused),
+            ("pauseAgentRun", activity_applied),
+            ("pauseAgentRun", no_effect),
+            ("pauseAgentRun", conflicted),
         ]
     );
     assert_eq!(rejection_records, vec![1; 4]);

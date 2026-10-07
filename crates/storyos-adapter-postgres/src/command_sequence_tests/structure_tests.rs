@@ -15,8 +15,8 @@ use crate::update_volume_tests::seed_project;
 use super::damaged_evidence::{ReplayError, replay_past_checks};
 use super::project_session::update_project_call;
 use super::support::{
-    CommandCall, Route, applied, issued, run_without_foreign_keys, stores, two_chapter_writer,
-    with_new_request_ids,
+    CommandCall, Route, SequenceError, applied, issued, run_without_foreign_keys, stores,
+    two_chapter_writer, with_new_request_ids,
 };
 
 pub(crate) async fn create_volume(
@@ -272,7 +272,7 @@ pub(super) async fn delete_chapter_call(
 
 /// Settles the call and replays it once with its Activity payload set to `changed`, an SQL
 /// expression over `payload`.
-async fn replay_with_activity_payload<C: ProjectCommand + Clone>(
+async fn replay_with_activity_payload<C: ProjectCommand<Error: SequenceError> + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,

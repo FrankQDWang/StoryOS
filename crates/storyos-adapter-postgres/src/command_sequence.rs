@@ -36,11 +36,23 @@ pub(crate) enum CommandIsolation {
 
 /// The action class and Editor Session binding that the Author Command Admission records.
 pub(crate) enum Admission {
-    ExplicitProjectCommand,
+    /// A command without an Editor Session.
+    Project(ProjectActionClass),
     /// A command of the current writer Editor Session. The insert requires its writer generation.
     ExplicitEditorCommand(EditorAdmission),
     /// A writer takeover. The insert requires the observed writer generation of another session.
     WriterTakeover(TakeoverAdmission),
+}
+
+/// The action class of an Admission without an Editor Session. Each class writes the same columns.
+pub(crate) enum ProjectActionClass {
+    ExplicitProjectCommand,
+    #[expect(
+        dead_code,
+        reason = "createAgentRun settles through this form in its own ticket"
+    )]
+    AgentRunStart,
+    AgentRunControl,
 }
 
 pub(crate) struct TakeoverAdmission {
@@ -200,7 +212,7 @@ impl<C: ProjectCommand + ?Sized> Classification<C> {
     pub(crate) fn project_command(outcome: Classified<C>) -> Self {
         Self {
             outcome,
-            admission: Admission::ExplicitProjectCommand,
+            admission: Admission::Project(ProjectActionClass::ExplicitProjectCommand),
             heads: ReceiptHeads::default(),
             zero_receipt: ZeroReceipt::Reason,
         }
@@ -264,6 +276,10 @@ pub(crate) type ProfileApplied<C> =
 /// those rows in one fixed order.
 pub(crate) trait ProjectCommand: Sync {
     const SPEC: CommandSpec;
+    /// The settlement error. A command that refuses before its Admission declares
+    /// `RefusableCommandError` with its refusal type. The other commands declare
+    /// `ProjectCommandError`.
+    type Error: From<ProjectCommandError> + Send;
     type Profile: SettlementProfile;
     type Response: ResponseRecord;
     /// The effect of a zero-authority outcome that writes effect rows. Other commands use `()`.
@@ -275,13 +291,14 @@ pub(crate) trait ProjectCommand: Sync {
     type Conflict: ReasonCode + Send + Sync;
     type Refusal: ReasonCode + Send + Sync;
 
-    /// Locks the command facts and classifies them through Core.
+    /// Locks the command facts and classifies them through Core. A refusal before Admission
+    /// rolls back the transaction.
     fn classify(
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> impl Future<Output = Result<Classification<Self>, ProjectCommandError>> + Send;
+    ) -> impl Future<Output = Result<Classification<Self>, Self::Error>> + Send;
 
     /// The Domain Receipt payload of an applied outcome.
     fn applied_receipt_payload(&self, _applied: &Self::Applied, _plan: &Self::Plan) -> String {
@@ -375,7 +392,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
-) -> Result<SettledCommand<C>, ProjectCommandError> {
+) -> Result<SettledCommand<C>, C::Error> {
     let challenge_error = |error| challenge_problem(C::SPEC.rate_limited, error);
     let mut transaction = match C::SPEC.isolation {
         CommandIsolation::Serializable => {
@@ -401,17 +418,20 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
             )
             .await
             .and_then(|replay| replay_command(command, &replay))
-            .map_err(|fault| match fault {
-                ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
-                ReplayFault::HistoricalAcknowledgementUnavailable => {
-                    ProjectCommandError::HistoricalAcknowledgementUnavailable
+            .map_err(|fault| {
+                match fault {
+                    ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
+                    ReplayFault::HistoricalAcknowledgementUnavailable => {
+                        ProjectCommandError::HistoricalAcknowledgementUnavailable
+                    }
+                    ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
                 }
-                ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
+                .into()
             })
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
             transaction.rollback().await.map_err(challenge_error)?;
-            Err(ProjectCommandError::BindingConflict)
+            Err(ProjectCommandError::BindingConflict.into())
         }
         ProjectCommandChallengeUse::FirstUse => {
             match first_use(&transaction.client, envelope, command).await {
@@ -432,7 +452,7 @@ async fn first_use<C: ProjectCommand>(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
     command: &C,
-) -> Result<SettledCommand<C>, ProjectCommandError> {
+) -> Result<SettledCommand<C>, C::Error> {
     let project = lock_project(client, envelope).await?;
     let Classification {
         outcome: classified,

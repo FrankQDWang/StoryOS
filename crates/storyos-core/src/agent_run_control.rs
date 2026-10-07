@@ -1,3 +1,10 @@
+//! Pure Core classification for AgentRun control.
+
+use std::convert::Infallible;
+
+use super::TransitionOutcome;
+use crate::transition_outcome::reason_codes;
+
 /// Current lifecycle of one AgentRun for pause and cancel classification.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentRunLifecycle {
@@ -26,13 +33,20 @@ impl AgentRunLifecycle {
     }
 }
 
-/// Result of classifying one pauseAgentRun against the current Run.
+/// The `no_effect` reason of a pauseAgentRun.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PauseAgentRunResult {
-    Applied,
+pub enum PauseAgentRunNoEffect {
     AlreadyPaused,
-    Terminal,
 }
+
+/// The `conflicted` reason of a pauseAgentRun.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PauseAgentRunConflict {
+    TerminalRun,
+}
+
+reason_codes!(PauseAgentRunNoEffect { AlreadyPaused => "already_paused" });
+reason_codes!(PauseAgentRunConflict { TerminalRun => "terminal_run" });
 
 /// Result of classifying one cancelAgentRun against the current Run.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,15 +57,21 @@ pub enum CancelAgentRunResult {
 }
 
 /// Classifies pause without treating it as cancellation.
-pub fn classify_pause_agent_run(lifecycle: AgentRunLifecycle) -> PauseAgentRunResult {
+pub fn classify_pause_agent_run(
+    lifecycle: AgentRunLifecycle,
+) -> TransitionOutcome<(), PauseAgentRunNoEffect, PauseAgentRunConflict, Infallible> {
     match lifecycle {
         AgentRunLifecycle::Queued | AgentRunLifecycle::Claimed | AgentRunLifecycle::Waiting => {
-            PauseAgentRunResult::Applied
+            TransitionOutcome::Applied(())
         }
-        AgentRunLifecycle::Paused => PauseAgentRunResult::AlreadyPaused,
+        AgentRunLifecycle::Paused => {
+            TransitionOutcome::NoEffect(PauseAgentRunNoEffect::AlreadyPaused)
+        }
         AgentRunLifecycle::Completed
         | AgentRunLifecycle::Refused
-        | AgentRunLifecycle::Cancelled => PauseAgentRunResult::Terminal,
+        | AgentRunLifecycle::Cancelled => {
+            TransitionOutcome::Conflicted(PauseAgentRunConflict::TerminalRun)
+        }
     }
 }
 

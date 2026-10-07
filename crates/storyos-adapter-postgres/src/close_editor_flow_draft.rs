@@ -122,6 +122,7 @@ impl ProjectCommand for CloseEditorFlowDraftInput {
                 AND event.receipt_id = $3::text::uuid",
         ),
     };
+    type Error = ProjectCommandError;
     type Profile = ActionOnly;
     type Response = NoResponse;
     type ZeroEffect = DraftCloseObservation;

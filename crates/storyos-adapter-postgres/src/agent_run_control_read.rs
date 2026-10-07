@@ -89,7 +89,6 @@ pub(super) async fn read_control_settlement(
                     AgentRunControlIntent::Steer => {
                         return Err(AgentRunControlError::BindingConflict);
                     }
-                    AgentRunControlIntent::Pause => AgentRunControlStatus::Paused,
                     AgentRunControlIntent::Cancel => AgentRunControlStatus::Cancelled,
                 },
                 fence_generation: row
@@ -111,11 +110,6 @@ pub(super) async fn read_control_settlement(
                         .ok_or(AgentRunControlError::BindingConflict)?
                         .parse()
                         .map_err(control_parse_error)?,
-                }
-            }
-            ("no_effect", Some("already_paused"), AgentRunControlIntent::Pause) => {
-                AgentRunControlEffect::NoEffect {
-                    reason: AgentRunControlNoEffect::AlreadyPaused,
                 }
             }
             ("no_effect", Some("already_cancelled"), AgentRunControlIntent::Cancel) => {

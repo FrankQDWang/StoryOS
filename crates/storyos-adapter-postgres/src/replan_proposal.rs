@@ -74,6 +74,7 @@ impl ProjectCommand for ReplanProposalInput {
                 AND replan_receipt_id = $3::text::uuid",
         ),
     };
+    type Error = ProjectCommandError;
     type Profile = ActionOnly;
     type Response = ProjectResponse;
     type ZeroEffect = ();

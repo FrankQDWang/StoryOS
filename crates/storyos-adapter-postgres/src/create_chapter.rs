@@ -46,6 +46,7 @@ impl ProjectCommand for CreateChapterInput {
         activity_kind: "chapter_created",
         replay_effect: ReplayEffect::NoQuery,
     };
+    type Error = ProjectCommandError;
     type Profile = Structural;
     type Response = ProjectResponse;
     type ZeroEffect = ();

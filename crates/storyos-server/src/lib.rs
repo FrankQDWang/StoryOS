@@ -42,6 +42,7 @@ mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
 mod passage_targets;
+mod pause_agent_run;
 mod project_command_challenge;
 mod project_export;
 mod proposal_generation_decision;
@@ -79,7 +80,7 @@ pub use web_assets::WebAssetSet;
 pub use web_host::router_with_web;
 
 use accept_proposal::accept_proposal;
-use agent_run_control::{cancel_agent_run, pause_agent_run, steer_agent_run};
+use agent_run_control::{cancel_agent_run, steer_agent_run};
 use archive_project::archive_project;
 use author_edit::apply_author_edit;
 use author_edit_outcome::{
@@ -100,6 +101,7 @@ use list_projects::list_projects;
 use manuscript_search::search_manuscript_query;
 use manuscript_statistics::get_statistics;
 use manuscript_tree::get_manuscript_tree;
+use pause_agent_run::pause_agent_run;
 use project_command_challenge::create_project_command_challenge;
 use project_export::{export_project_archive, get_export_operation_query};
 use proposal_generation_decision::{complete_ready_partial_proposal, continue_proposal_generation};

@@ -7,13 +7,13 @@ use storyos_core::{
     CloseEditorFlowDraftRefusal, CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict,
     CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal,
     DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal, ReasonCode,
-    RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
-    ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
-    ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
-    ReopenWithdrawnProposalRefusal, ReplanProposalConflict, ReplanProposalRefusal,
-    SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
-    UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
+    ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal, PauseAgentRunConflict,
+    PauseAgentRunNoEffect, ReasonCode, RejectProposalOperationsConflict,
+    RejectProposalOperationsRefusal, ReopenRejectedOperationsConflict,
+    ReopenRejectedOperationsRefusal, ReopenWithdrawnProposalConflict,
+    ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, ReplanProposalConflict,
+    ReplanProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
+    SetCurrentChapterRefusal, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
     UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
     WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
@@ -507,4 +507,16 @@ fn every_draft_expansion_reason_maps_to_its_public_or_persisted_reason() {
             "target_unavailable".to_owned(),
         ),
     ]);
+}
+
+#[test]
+fn every_agent_run_pause_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        PauseAgentRunNoEffect::AlreadyPaused,
+        contracts::PauseAgentRunNoEffectReason::AlreadyPaused,
+    )]);
+    assert_maps(vec![(
+        PauseAgentRunConflict::TerminalRun,
+        contracts::PauseAgentRunConflictReason::TerminalRun,
+    )]);
 }

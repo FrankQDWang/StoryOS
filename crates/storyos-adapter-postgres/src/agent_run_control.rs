@@ -4,10 +4,7 @@ use storyos_application::{
     AgentRunControlStatus, AgentRunControlStore, ChapterId, Project, ProjectCommandChallengeError,
     ProjectCommandChallengeUse,
 };
-use storyos_core::{
-    AgentRunLifecycle, CancelAgentRunResult, PauseAgentRunResult, classify_cancel_agent_run,
-    classify_pause_agent_run,
-};
+use storyos_core::{AgentRunLifecycle, CancelAgentRunResult, classify_cancel_agent_run};
 use uuid::Uuid;
 
 use crate::command_response_project::{
@@ -155,17 +152,6 @@ async fn persist_control(
                 }
             }
         }
-        AgentRunControlIntent::Pause => match classify_pause_agent_run(lifecycle) {
-            PauseAgentRunResult::Applied => {
-                apply_control(client, command, AgentRunControlStatus::Paused).await?
-            }
-            PauseAgentRunResult::AlreadyPaused => AgentRunControlEffect::NoEffect {
-                reason: AgentRunControlNoEffect::AlreadyPaused,
-            },
-            PauseAgentRunResult::Terminal => AgentRunControlEffect::Conflicted {
-                reason: AgentRunControlConflict::TerminalRun,
-            },
-        },
         AgentRunControlIntent::Cancel => match classify_cancel_agent_run(lifecycle) {
             CancelAgentRunResult::Applied => {
                 let in_flight = crate::agent_run_recovery::in_flight_attempt(
@@ -212,9 +198,6 @@ async fn persist_control(
         AgentRunControlEffect::NoEffect { reason } => (
             "no_effect",
             match reason {
-                AgentRunControlNoEffect::AlreadyPaused => {
-                    r#"{"reason":"already_paused"}"#.to_owned()
-                }
                 AgentRunControlNoEffect::AlreadyCancelled => {
                     r#"{"reason":"already_cancelled"}"#.to_owned()
                 }
@@ -313,7 +296,6 @@ async fn apply_control(
     control_status: AgentRunControlStatus,
 ) -> Result<AgentRunControlEffect, AgentRunControlError> {
     let status = match control_status {
-        AgentRunControlStatus::Paused => "paused",
         AgentRunControlStatus::Cancelled => "cancelled",
     };
     let fence_generation = client
@@ -450,7 +432,6 @@ async fn write_control_activity(
             ..
         } => {
             let kind = match status {
-                AgentRunControlStatus::Paused => "agent_run_paused",
                 AgentRunControlStatus::Cancelled => "agent_run_cancelled",
             };
             (
@@ -493,7 +474,6 @@ async fn write_control_activity(
 
 pub(super) fn command_kind(intent: AgentRunControlIntent) -> &'static str {
     match intent {
-        AgentRunControlIntent::Pause => "pauseAgentRun",
         AgentRunControlIntent::Cancel => "cancelAgentRun",
         AgentRunControlIntent::Steer => "steerAgentRun",
     }

@@ -94,6 +94,35 @@ A specification that moves commands can also fix a defect of those commands. Eac
   - A settled effect row whose `preserved_*` columns are NULL is a pre-capture record and gives `409 historical_acknowledgement_unavailable`. An applied Receipt without its effect row or its Forward Author Action is damaged evidence and gives `503 project_store_unavailable`. Before, a missing effect row gave `409 historical_acknowledgement_unavailable` for four of the five commands, and a missing Forward Author Action gave it for all five.
   - A preserved value that its Proposal State Axis does not have is damaged evidence and gives `503 project_store_unavailable`. The checks of migration 0083 already prevent such a value in the five effect tables.
 
+### Amendment for Specification C: AgentRun commands and export admissions
+
+Specification C ([#1043](https://github.com/FrankQDWang/StoryOS/issues/1043)) moves `createAgentRun`, `pauseAgentRun`, `cancelAgentRun`, `steerAgentRun`, and the admissions of the two exports into the sequence. Each ticket adds its sequence changes and the observable changes of its commands to this section.
+
+#### Refusal before Admission
+
+- Each command declares its settlement error. A command that refuses before its Admission declares `RefusableCommandError` with its own refusal type. The other commands declare `ProjectCommandError`, and their errors and problems do not change.
+- The fact load returns the refusal as a typed error. The sequence rolls back the transaction, so it writes no Admission, Receipt, or Command Idempotency Fence row, and the Command Challenge stays unused. A rollback that fails gives a store fault.
+- The Server maps the refusal to the problem code of the command on `main`.
+- The same typed error can carry the missing-Admission diagnosis of `acceptProposal` (ADR 0044).
+
+#### AgentRun Admission forms
+
+- An Admission without an Editor Session declares one action class: `explicit_project_command`, `agent_run_start`, or `agent_run_control`. The three forms write the same columns. Only the action class differs.
+- A missing Admission gives `InvalidChallenge`, as on `main`.
+
+#### `pauseAgentRun`
+
+- `pauseAgentRun` uses the `agent_run_control` Admission form, the `ActivityOnly` profile with the Activity kind `agent_run_paused`, and the Command-response Project. It locks the Project row and then the AgentRun row. It does not refuse an archived Project.
+- A missing AgentRun is a refusal before Admission. It gives `404 resource_unavailable`, as on `main`.
+- The route uses the generic project command admission with the problem order of `main`. The problem texts use the name "AgentRun control", as on `main`.
+- The applied outcome, `already_paused`, `terminal_run`, the Run update, and the rows do not change.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - Damaged replay evidence gives `503 project_store_unavailable` instead of `409 idempotency_binding_conflict`. Such evidence is a damaged Command-response Project record or an applied Receipt without its Activity record. It is also an Activity `run_id` or `fence_generation` value that is absent, null, or not a string. The receipt relation trigger and the Activity payload checks already prevent the Activity faults.
+  - An Activity `run_id` that is not UUID text, or a `fence_generation` that is not unsigned decimal text, gives `503 project_store_unavailable`. Before, replay returned the `run_id` text and parsed a `fence_generation` with leading zeros.
+  - A zero-authority Receipt with an Author Action gives a store fault. Before, replay ignored the Author Action. The receipt relation trigger already prevents such a record.
+  - An applied Receipt with a `reason` payload value replays as applied. Before, it gave `409 idempotency_binding_conflict`. The Receipt shape checks already require an empty applied payload, so this change is not observable.
+
 ## Relation to ADR 0041 and the glossary
 
 ADR 0041 stays in force. ADR 0041 lets the sequence allocate authority records for an `Applied` outcome only in the `Structural` shape. This decision replaces that statement: the settlement profile now fixes the authority records of an `Applied` outcome. The glossary term Core Transition Outcome changes in the same way. Only Applied changes the target of the command, and its settlement profile fixes which authority records it allocates.

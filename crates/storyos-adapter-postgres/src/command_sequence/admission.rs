@@ -1,11 +1,11 @@
-//! The Author Command Admission row of the sequence, for project and editor commands.
+//! The Author Command Admission row of the sequence, for project, AgentRun, and editor commands.
 
 use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use tokio_postgres::Client;
 
 use super::{
-    Admission, CommandSpec, EditorAdmission, EditorWriter, MissingAdmission, TakeoverAdmission,
-    unavailable,
+    Admission, CommandSpec, EditorAdmission, EditorWriter, MissingAdmission, ProjectActionClass,
+    TakeoverAdmission, unavailable,
 };
 
 /// Inserts the Admission after the consumed Command Challenge. An insert without a row gives the command's error.
@@ -22,7 +22,12 @@ pub(super) async fn insert_admission(
     let project_id = envelope.project_scope.project_id.as_ref();
     let command_bytes = envelope.canonical_command_bytes.as_slice();
     let inserted = match admission {
-        Admission::ExplicitProjectCommand => {
+        Admission::Project(action_class) => {
+            let action_class = match action_class {
+                ProjectActionClass::ExplicitProjectCommand => "explicit_project_command",
+                ProjectActionClass::AgentRunStart => "agent_run_start",
+                ProjectActionClass::AgentRunControl => "agent_run_control",
+            };
             client
                 .execute(
                     "INSERT INTO storyos.author_command_admissions
@@ -37,7 +42,7 @@ pub(super) async fn insert_admission(
                 undo_group_id, completed_intent_record_id, local_intent_sequence, command_payload)
              SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                     NULL, NULL, $5, $6::text::numeric, $7, $8,
-                    'explicit_project_command', $9, $10, $11, $16,
+                    $17, $9, $10, $11, $16,
                     $12, $13::text::uuid, challenge.consumed_at, challenge.expires_at,
                     $14::text::uuid, NULL, NULL, '{}'::uuid[], '{}'::text[], NULL, $7,
                     NULL, NULL, NULL, convert_from($15::bytea, 'UTF8')::jsonb
@@ -63,6 +68,7 @@ pub(super) async fn insert_admission(
                         &envelope.correlation_id,
                         &command_bytes,
                         &spec.kind,
+                        &action_class,
                     ],
                 )
                 .await
