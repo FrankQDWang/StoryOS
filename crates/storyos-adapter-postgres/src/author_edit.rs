@@ -105,6 +105,12 @@ impl PostgresProjectReader {
                          writer.current_editor_session_id, writer.writer_generation) =
                         (admission.owner_user_id, admission.project_id,
                          admission.editor_session_id, admission.writer_generation)
+                    AND writer.writer_generation = (
+                      SELECT max(current_writer.writer_generation)
+                        FROM storyos.project_writer_generations AS current_writer
+                       WHERE (current_writer.owner_user_id, current_writer.project_id) =
+                             (admission.owner_user_id, admission.project_id)
+                    )
                    JOIN storyos.authoritative_heads AS head
                      ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
                         (admission.owner_user_id, admission.project_id,
@@ -138,14 +144,24 @@ impl PostgresProjectReader {
             .await
             .map_err(author_edit_database_error)?;
         let Some(row) = row else {
-            let expired = transaction
+            let diagnosis = transaction
                 .client
                 .query_one(
                     "SELECT EXISTS (
-                   SELECT 1 FROM storyos.author_command_admissions
-                    WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                      AND author_command_admission_id = $3::text::uuid
-                      AND challenge_expires_at <= clock_timestamp())",
+                       SELECT 1 FROM storyos.author_command_admissions
+                        WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                          AND author_command_admission_id = $3::text::uuid
+                          AND challenge_expires_at <= clock_timestamp()),
+                            EXISTS (
+                       SELECT 1 FROM storyos.author_command_admissions AS admission
+                        WHERE admission.owner_user_id = $1::text::uuid
+                          AND admission.project_id = $2::text::uuid
+                          AND admission.author_command_admission_id = $3::text::uuid
+                          AND admission.writer_generation < (
+                            SELECT max(current_writer.writer_generation)
+                              FROM storyos.project_writer_generations AS current_writer
+                             WHERE (current_writer.owner_user_id, current_writer.project_id) =
+                                   (admission.owner_user_id, admission.project_id)))",
                     &[
                         &command.project_scope.owner_user_id.as_ref(),
                         &command.project_scope.project_id.as_ref(),
@@ -153,8 +169,9 @@ impl PostgresProjectReader {
                     ],
                 )
                 .await
-                .map_err(author_edit_database_error)?
-                .get::<_, bool>(0);
+                .map_err(author_edit_database_error)?;
+            let expired = diagnosis.get::<_, bool>(/*idx*/ 0);
+            let stale_writer = diagnosis.get::<_, bool>(/*idx*/ 1);
             let settled = existing_receipt_id(&transaction.client, command).await?;
             transaction
                 .rollback()
@@ -165,6 +182,8 @@ impl PostgresProjectReader {
             }
             return Err(if expired {
                 AuthorEditError::AdmissionExpired
+            } else if stale_writer {
+                AuthorEditError::StaleWriter
             } else {
                 AuthorEditError::BindingConflict
             });
