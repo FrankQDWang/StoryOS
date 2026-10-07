@@ -33,6 +33,9 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       ), multi_location AS (
         SELECT owner_user_id, project_id FROM storyos.projects
         WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Multi-location %'
+      ), takeover_export AS (
+        SELECT owner_user_id, project_id FROM storyos.projects
+        WHERE owner_user_id = '${USER_A}'::uuid AND title = 'Takeover export reload'
       )
       SELECT json_build_object(
         'prose_request', json_build_object(
@@ -90,6 +93,14 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
               'acceptProposal', 'rejectProposalOperations', 'replanProposal')
             GROUP BY command_kind
           ) AS receipts)
+        ),
+        'takeover_export', json_build_object(
+          'project_count', (SELECT count(*) FROM takeover_export),
+          'takeover_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
+            JOIN takeover_export USING (owner_user_id, project_id)
+            WHERE command_kind = 'takeOverProjectWriter'),
+          'writer_generations', (SELECT json_agg(writer_generation::text ORDER BY writer_generation)
+            FROM storyos.project_writer_generations JOIN takeover_export USING (owner_user_id, project_id))
         ),
         'production_host', json_build_object(
           'project_count', (SELECT count(*) FROM production),
@@ -159,6 +170,8 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             AND project_id NOT IN (SELECT project_id FROM captured_memory)
             AND project_id NOT IN (SELECT project_id FROM run_evidence)
             AND project_id NOT IN (SELECT project_id FROM composer)
+            AND NOT (project_id IN (SELECT project_id FROM takeover_export)
+              AND command_kind = 'takeOverProjectWriter')
             AND NOT (project_id IN (SELECT project_id FROM multi_location)
               AND command_kind IN ('updateProjectAssistance', 'createAgentRun',
                 'acceptProposal', 'rejectProposalOperations', 'replanProposal'))
@@ -224,6 +237,11 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
         project_count: 1,
         receipts: { updateProjectAssistance: 1, createAgentRun: 3,
           acceptProposal: 3, rejectProposalOperations: 2, replanProposal: 1 },
+      },
+      takeover_export: {
+        project_count: 1,
+        takeover_receipt_count: 1,
+        writer_generations: ["1", "2"],
       },
       production_host: {
         project_count: 1,
