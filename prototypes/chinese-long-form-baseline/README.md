@@ -6,12 +6,12 @@ From the repository root, on this research branch:
 WORD_COUNTS=1 sh prototypes/chinese-long-form-baseline/run.sh
 ```
 
-This builds the clean product package if absent, generates four seeded corpora,
-runs each scale in its own `scripts/dev-postgres.sh run` database, and writes
+This builds the clean product package if absent and generates four seeded corpora.
+It runs each scale in its own `scripts/dev-postgres.sh run` database. It writes
 operation observations, SQL execution plans, corpus counts, Unicode observations,
 and a derived table under `out/`. It does not run the test suite. Without
 `WORD_COUNTS=1`, the independent Unicode profiles run but native Word does not.
-The native Word option needs Microsoft Word; other runs need the locked repository
+The native Word option needs Microsoft Word. Other runs need the locked repository
 Node toolchain, installed Chrome, Python with Unicode 16.0.0, and Docker.
 
 `SCALES=30000` selects the small calibration run. `SKIP_BROWSER=1` selects only
@@ -23,7 +23,7 @@ or verification input extension.
 The generator uses original Chinese sentence templates, dialogue, 28–160-character
 paragraph targets, indented paragraphs, and a small Latin/digit component. Five
 Chapters total exactly 10,000 Unicode scalars. The four corpora share prefixes.
-Chapter titles do not enter the size; one LF between paragraphs does. This is a
+Chapter titles do not enter the size. One LF between paragraphs does. This is a
 controlled prose-shaped workload, not a natural-language quality sample.
 
 Create Project, Create Volume, Create Chapter, Set Current Chapter, and Apply
@@ -36,7 +36,8 @@ PostgreSQL instrumentation installs pg_stat_statements in the temporary database
 and preloads it by restarting that owned container. Its newly assigned port is
 read again. auto_explain records actual plans with buffers and no node timing.
 A paired statistics request runs before and after explicit ANALYZE. All other
-operation samples use that analyzed state; default-run evidence is kept separately.
+operation samples use that analyzed state. Default-run evidence is kept separately.
+
 Only the runtime role enters SQL-call totals. Administrative probes do not.
 Returned/affected SQL rows are separate from scan-row visits in actual plans.
 EXPLAIN averages per-loop row values, so aggregated scan visits can carry its
@@ -46,11 +47,12 @@ Each Web phase has a new browser journal and a publicly prepared writer session.
 The harness sets only its server-issued active-session reference in sessionStorage.
 It measures the packaged production UI, real input, IndexedDB APIs, and reload.
 Browser response bodies and IndexedDB API observations include the completed
-action window and its triggered reads. Editor remount can finish later; such Web
-rows are lower bounds for the full journey. The evidence keeps inter-window plans
+action window and its triggered reads. Editor remount can finish later. Such Web
+rows are lower bounds for the full journey.
+ The evidence keeps inter-window plans
 separate from measured counters. The rows are distinct from isolated HTTP
 operation counts. A stopped Worker runs once for each export or fake-adapter
-Proposal setup; no external model or provider is called.
+Proposal setup. No external model or provider is called.
 
 The report branch retains compact evidence. To derive it from a completed run:
 
