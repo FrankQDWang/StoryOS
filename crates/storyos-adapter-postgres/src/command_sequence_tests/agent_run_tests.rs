@@ -117,7 +117,7 @@ pub(super) async fn park_run(admin: &Client, call: &CommandCall<CreateAgentRunIn
 
 /// Counts the Admission, Receipt, and settled fence rows of one idempotency key, and its unused
 /// Command Challenges.
-async fn request_rows(admin: &Client, key: &str) -> [i64; 4] {
+pub(super) async fn request_rows(admin: &Client, key: &str) -> [i64; 4] {
     let written = admin
         .query_one(
             "SELECT (SELECT count(*) FROM storyos.author_command_admissions

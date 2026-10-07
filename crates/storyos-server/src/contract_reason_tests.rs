@@ -13,10 +13,11 @@ use storyos_core::{
     ReopenRejectedOperationsRefusal, ReopenWithdrawnProposalConflict,
     ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, ReplanProposalConflict,
     ReplanProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
-    SetCurrentChapterRefusal, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
-    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
-    UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
-    WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
+    SetCurrentChapterRefusal, SteerAgentRunConflict, SteerAgentRunNoEffect, UpdateChapterConflict,
+    UpdateChapterNoEffect, UpdateChapterRefusal, UpdateProjectAssistanceConflict,
+    UpdateProjectAssistanceNoEffect, UpdateProjectConflict, UpdateProjectNoEffect,
+    UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal, WithdrawProposalConflict,
+    WithdrawProposalNoEffect, WithdrawProposalRefusal,
 };
 
 use storyos_core::{
@@ -530,5 +531,17 @@ fn every_agent_run_cancel_reason_maps_to_its_public_reason() {
     assert_maps(vec![(
         CancelAgentRunConflict::TerminalRun,
         contracts::CancelAgentRunConflictReason::TerminalRun,
+    )]);
+}
+
+#[test]
+fn every_agent_run_steering_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        SteerAgentRunNoEffect::SteeringRetained,
+        "steering_retained".to_owned(),
+    )]);
+    assert_maps(vec![(
+        SteerAgentRunConflict::TerminalRun,
+        contracts::PauseAgentRunConflictReason::TerminalRun,
     )]);
 }

@@ -125,6 +125,7 @@ pub const PAUSE_AGENT_RUN_PATH: &str = PAUSE_AGENT_RUN.path;
 pub const PAUSE_AGENT_RUN_METHOD: &str = PAUSE_AGENT_RUN.method;
 pub const CANCEL_AGENT_RUN_PATH: &str = CANCEL_AGENT_RUN.path;
 pub const CANCEL_AGENT_RUN_METHOD: &str = CANCEL_AGENT_RUN.method;
+pub const STEER_AGENT_RUN_METHOD: &str = STEER_AGENT_RUN.method;
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
