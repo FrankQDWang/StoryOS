@@ -19,6 +19,9 @@ mod draft;
 #[path = "command_sequence_tests/agent_run_tests.rs"]
 mod agent_run;
 
+#[path = "command_sequence_tests/admit_tests.rs"]
+mod admit;
+
 #[path = "command_sequence_tests/replay_tests.rs"]
 mod replay;
 

@@ -2,7 +2,7 @@
 
 use storyos_application::{
     AuthorCommandAdmissionIds, Project, ProjectAssistanceAcknowledgement,
-    ProjectCommandChallengeBinding,
+    ProjectCommandChallengeBinding, ProjectScope,
 };
 use storyos_core::{ReasonCode, TransitionOutcome};
 
@@ -46,7 +46,7 @@ pub(crate) struct CommandReplay {
     result_kind: String,
     receipt: JsonFields,
     activity: JsonFields,
-    effect: JsonFields,
+    effect: EffectRecord,
     acknowledgement_format: Option<String>,
     response_project: Option<String>,
     response_assistance: Option<String>,
@@ -150,6 +150,34 @@ impl JsonFields {
             Field::Null => Ok(None),
             Field::Absent => Err(unavailable(format!("the stored field {key} is missing"))),
         }
+    }
+}
+
+/// The fields of one effect row that a query reads as one JSON object text. An absent row has
+/// no fields.
+pub(crate) struct EffectRecord(JsonFields);
+
+impl EffectRecord {
+    pub(crate) fn parse(text: Option<String>) -> Result<Self, ReplayFault> {
+        JsonFields::parse(text).map(Self)
+    }
+
+    /// The string of `key`, or `None` when the row or its column is absent.
+    pub(crate) fn text(&self, key: &str) -> Result<Option<String>, ReplayFault> {
+        Ok(match self.0.field(key)? {
+            Field::Text(text) => Some(text.to_owned()),
+            Field::Absent | Field::Null => None,
+        })
+    }
+
+    /// The string of `key`. An absent row or a null column is damaged evidence.
+    pub(crate) fn required(&self, key: &str) -> Result<String, ReplayFault> {
+        self.0.required(key).map(str::to_owned)
+    }
+
+    /// The unsigned decimal value of `key`. An absent row or a null column is damaged evidence.
+    pub(crate) fn required_u64(&self, key: &str) -> Result<u64, ReplayFault> {
+        decimal(key, self.0.required(key)?)
     }
 }
 
@@ -288,10 +316,12 @@ impl CommandReplay {
     /// One string field of the effect row that the command's `ReplayEffect` query reads, or
     /// `None` when the row or its column is absent.
     pub(crate) fn effect_text(&self, key: &str) -> Result<Option<String>, ReplayFault> {
-        Ok(match self.effect.field(key)? {
-            Field::Text(text) => Some(text.to_owned()),
-            Field::Absent | Field::Null => None,
-        })
+        self.effect.text(key)
+    }
+
+    /// The effect row that the command's `ReplayEffect` query reads.
+    pub(crate) fn effect(&self) -> &EffectRecord {
+        &self.effect
     }
 
     /// The Manuscript Tree Revision of the newest Activity payload that records one at or before
@@ -315,18 +345,10 @@ impl CommandReplay {
     }
 
     pub(crate) fn response_project(&self) -> Result<Project, ReplayFault> {
-        match read_command_response_project(
+        response_project(
             self.acknowledgement_format.as_deref(),
             self.response_project.as_deref(),
-        ) {
-            Ok(CommandResponseProjectEvidence::Captured(project)) => Ok(project),
-            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
-                Err(ReplayFault::HistoricalAcknowledgementUnavailable)
-            }
-            Err(()) => Err(unavailable(std::io::Error::other(
-                "command acknowledgement evidence is damaged",
-            ))),
-        }
+        )
     }
 
     /// The Command-response Project and the assistance record of an assistance acknowledgement.
@@ -367,6 +389,23 @@ impl CommandReplay {
     }
 }
 
+/// The Command-response Project of the fence columns `acknowledgement_format` and
+/// `response_project`.
+pub(crate) fn response_project(
+    format: Option<&str>,
+    payload: Option<&str>,
+) -> Result<Project, ReplayFault> {
+    match read_command_response_project(format, payload) {
+        Ok(CommandResponseProjectEvidence::Captured(project)) => Ok(project),
+        Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+            Err(ReplayFault::HistoricalAcknowledgementUnavailable)
+        }
+        Err(()) => Err(unavailable(std::io::Error::other(
+            "command acknowledgement evidence is damaged",
+        ))),
+    }
+}
+
 /// Reads the settled acknowledgement evidence of one exact retry in a read-only transaction.
 pub(crate) async fn read_command_replay(
     store: &PostgresProjectReader,
@@ -401,13 +440,15 @@ pub(crate) async fn read_command_replay(
             )
             .await
             .map_err(unavailable)?;
-        let effect = match effect {
-            ReplayEffect::NoQuery => None,
-            ReplayEffect::Query(sql) => client
-                .query_opt(*sql, &[&owner_user_id, &project_id, &receipt_id])
-                .await
-                .map_err(unavailable)?
-                .and_then(|effect| effect.get::<_, Option<String>>(/*idx*/ 0)),
+        let effect = match (effect, &row) {
+            (ReplayEffect::NoQuery, _) | (ReplayEffect::AdmissionQuery(_), None) => None,
+            (ReplayEffect::Query(sql), _) => {
+                read_effect(&client, sql, &binding.project_scope, receipt_id).await?
+            }
+            (ReplayEffect::AdmissionQuery(sql), Some(row)) => {
+                let admission_id = row.get::<_, String>(/*idx*/ 1);
+                read_effect(&client, sql, &binding.project_scope, &admission_id).await?
+            }
         };
         Ok((row, effect))
     }
@@ -460,7 +501,7 @@ pub(crate) async fn read_command_replay(
         result_kind: row.get(4),
         receipt: JsonFields::parse(row.get(/*idx*/ 5))?,
         activity: JsonFields::parse(row.get(/*idx*/ 6))?,
-        effect: JsonFields::parse(effect)?,
+        effect: EffectRecord::parse(effect)?,
         project_activity_position: row
             .get::<_, Option<String>>(7)
             .unwrap_or_else(|| "0".to_owned())
@@ -477,6 +518,27 @@ pub(crate) async fn read_command_replay(
         draft_artifact_refs: row.get(/*idx*/ 22),
         admission_matches: row.get::<_, Option<bool>>(/*idx*/ 23).unwrap_or_default(),
     })
+}
+
+/// Reads the one JSON object text of an effect query that takes the owner, Project, and `key`.
+pub(crate) async fn read_effect(
+    client: &tokio_postgres::Client,
+    sql: &str,
+    scope: &ProjectScope,
+    key: &str,
+) -> Result<Option<String>, ReplayFault> {
+    Ok(client
+        .query_opt(
+            sql,
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &key,
+            ],
+        )
+        .await
+        .map_err(unavailable)?
+        .and_then(|effect| effect.get::<_, Option<String>>(/*idx*/ 0)))
 }
 
 fn unavailable(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> ReplayFault {

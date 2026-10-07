@@ -90,6 +90,19 @@ pub struct ProjectCommandSettlement<A, N, C, R, P = Project, Z = ()> {
     pub zero_authority_effect: Option<Z>,
 }
 
+/// The first admission of a command that the admit step commits (ADR 0043).
+///
+/// It is equal on first use and on each exact retry, also after a later settlement.
+///
+/// `W` is the admitted work of the command. `P` is the acknowledgement record on the fence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdmittedProjectCommand<W, P = Project> {
+    pub command_id: String,
+    pub author_command_admission_id: String,
+    pub work: W,
+    pub response: P,
+}
+
 /// The applied value of an `ActivityOnly` command: its effect and its one Activity record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ActivityApplied<A> {

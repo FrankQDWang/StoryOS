@@ -149,6 +149,10 @@ project_command_request!(
 project_command_request!(contracts::PauseAgentRunRequest, nested pause_agent_run_input);
 project_command_request!(contracts::CancelAgentRunRequest, nested cancel_agent_run_input);
 project_command_request!(contracts::CreateAgentRunRequest, nested create_agent_run_input);
+project_command_request!(
+    contracts::ExportHumanReadableManuscriptRequest,
+    nested export_human_readable_manuscript_input
+);
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
     fn command_schema(&self) -> &str {
