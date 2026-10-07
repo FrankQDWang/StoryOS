@@ -1,0 +1,3 @@
+# Paths that ripgrep and the Grep tool skip. Raw research evidence stays on its Git tag.
+docs/research/*/evidence/
+docs/research/**/*.json.gz
