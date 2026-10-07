@@ -85,10 +85,10 @@ pub(super) async fn read_control_settlement(
                         .get::<_, Option<String>>(6)
                         .ok_or(AgentRunControlError::BindingConflict)?,
                     steering_input_id: row
-                        .get::<_, Option<String>>(10)
+                        .get::<_, Option<String>>(/*idx*/ 10)
                         .ok_or(AgentRunControlError::BindingConflict)?,
                     input_position: row
-                        .get::<_, Option<String>>(11)
+                        .get::<_, Option<String>>(/*idx*/ 11)
                         .ok_or(AgentRunControlError::BindingConflict)?
                         .parse()
                         .map_err(control_parse_error)?,
@@ -100,7 +100,7 @@ pub(super) async fn read_control_settlement(
             _ => return Err(AgentRunControlError::BindingConflict),
         };
         let response_project = match read_command_response_project(
-            row.get::<_, Option<String>>(8).as_deref(),
+            row.get::<_, Option<String>>(/*idx*/ 8).as_deref(),
             row.get::<_, Option<String>>(9).as_deref(),
         ) {
             Ok(CommandResponseProjectEvidence::Captured(project)) => project,
@@ -117,7 +117,7 @@ pub(super) async fn read_control_settlement(
             },
             receipt_created_at: row.get(3),
             project_activity_position: row
-                .get::<_, Option<String>>(7)
+                .get::<_, Option<String>>(/*idx*/ 7)
                 .unwrap_or_else(|| "0".to_owned())
                 .parse::<u64>()
                 .map_err(control_parse_error)?,
