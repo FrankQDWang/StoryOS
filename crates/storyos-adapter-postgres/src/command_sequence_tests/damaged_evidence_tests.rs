@@ -8,7 +8,9 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 
-use super::agent_run::{cancel_agent_run_call, pause_agent_run_call};
+use super::agent_run::{
+    cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
+};
 use super::draft::{
     close_editor_flow_draft_call, discard_call, expand_refused_edit_draft_call, expansion_call,
     refused_edit_draft, refused_edit_expansion,
@@ -98,6 +100,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         .lock()
         .await;
     let (store, admin) = stores().await;
+    let create = create_agent_run_call(&store, /*base*/ 0xb350).await;
     let observed = vec![
         evidence_replays(
             &store,
@@ -213,6 +216,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &cancel_agent_run_call(&store, &admin, /*base*/ 0xd540).await,
         )
         .await,
+        evidence_replays(&store, &admin, &create).await,
         evidence_replays(
             &store,
             &admin,
@@ -220,6 +224,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
         )
         .await,
     ];
+    park_run(&admin, &create).await;
     let separated = |result| {
         (
             result,
@@ -229,7 +234,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             ],
         )
     };
-    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 19];
+    let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 20];
     expected.push(separated(ReceiptResult::NoEffect));
     assert_eq!(observed, expected);
 }

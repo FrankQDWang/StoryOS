@@ -1,6 +1,8 @@
 //! Pure Core classification for one bounded createAgentRun admission.
 
-use super::{ProjectLifecycle, ProjectPresence};
+use std::convert::Infallible;
+
+use super::{ProjectLifecycle, ProjectPresence, TransitionOutcome};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AssistanceAdmission {
@@ -42,44 +44,35 @@ pub enum CreateAgentRunRefusal {
     InvalidChapterJoin,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CreateAgentRunResult {
-    Admitted,
-    Refused { reason: CreateAgentRunRefusal },
-}
+/// The Core Transition Outcome of a createAgentRun. It has no zero-authority outcome.
+pub type CreateAgentRunOutcome = TransitionOutcome<(), Infallible, Infallible, Infallible>;
 
 /// Classify one createAgentRun against Scope, assistance, conversation, and Working Target.
-pub fn create_agent_run(command: &CreateAgentRun) -> CreateAgentRunResult {
+///
+/// Each refusal comes before the Admission of the command.
+pub fn create_agent_run(
+    command: &CreateAgentRun,
+) -> Result<CreateAgentRunOutcome, CreateAgentRunRefusal> {
     if command.presence == ProjectPresence::Absent {
-        return CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::MissingProject,
-        };
+        return Err(CreateAgentRunRefusal::MissingProject);
     }
     if command.lifecycle == ProjectLifecycle::Archived {
-        return CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::ArchivedProject,
-        };
+        return Err(CreateAgentRunRefusal::ArchivedProject);
     }
     if command.assistance != AssistanceAdmission::Available {
-        return CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::AssistanceUnavailable,
-        };
+        return Err(CreateAgentRunRefusal::AssistanceUnavailable);
     }
     if command.chapter != ChapterAdmission::Current {
-        return CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::InvalidChapterJoin,
-        };
+        return Err(CreateAgentRunRefusal::InvalidChapterJoin);
     }
     match command.conversation {
         ConversationAdmission::New | ConversationAdmission::ExistingIdle => {
-            CreateAgentRunResult::Admitted
+            Ok(TransitionOutcome::Applied(()))
         }
-        ConversationAdmission::ExistingMissing => CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::InaccessibleConversation,
-        },
-        ConversationAdmission::ExistingBusy => CreateAgentRunResult::Refused {
-            reason: CreateAgentRunRefusal::ConversationBusy,
-        },
+        ConversationAdmission::ExistingMissing => {
+            Err(CreateAgentRunRefusal::InaccessibleConversation)
+        }
+        ConversationAdmission::ExistingBusy => Err(CreateAgentRunRefusal::ConversationBusy),
     }
 }
 

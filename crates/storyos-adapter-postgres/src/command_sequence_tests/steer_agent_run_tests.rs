@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::update_volume_tests::seed_project;
 
-use super::agent_run::{admission_rows, seed_run};
+use super::agent_run::{request_rows, seed_run};
 use super::support::{CommandCall, Route, SequenceError, issued, stores};
 
 pub(super) const STEER_AGENT_RUN: Route = Route {
@@ -107,7 +107,7 @@ async fn a_steering_refusal_before_admission_writes_no_row_and_keeps_the_challen
             Err(RefusableCommandError::Command(_)) | Ok(_) => None,
         };
         let key = &call.envelope.challenge_binding.idempotency_key;
-        observed.push((refusal, admission_rows(&admin, key).await));
+        observed.push((refusal, request_rows(&admin, key).await));
     }
     let boundary = issued(
         &store,

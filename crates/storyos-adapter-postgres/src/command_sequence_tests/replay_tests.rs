@@ -16,7 +16,8 @@ use crate::PostgresProjectReader;
 use crate::update_volume_tests::seed_project;
 
 use super::agent_run::{
-    CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, cancel_agent_run, pause_agent_run, seed_run,
+    CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, cancel_agent_run, create_agent_run, create_agent_run_call,
+    park_run, pause_agent_run, seed_run,
 };
 use super::draft::{
     CLOSE_EDITOR_FLOW_DRAFT, EXPAND_REFUSED_EDIT_DRAFT, close_editor_flow_draft, discard_call,
@@ -603,6 +604,14 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((CANCEL_AGENT_RUN.kind, outcome));
     }
 
+    let call = create_agent_run_call(&store, /*base*/ 0xb320).await;
+    let outcome = replayed_outcome(&store, &admin, &call, create_agent_run).await;
+    park_run(&admin, &call).await;
+    observed.push((
+        call.envelope.challenge_binding.command_kind.as_str(),
+        outcome,
+    ));
+
     let scope = seed_project(&store, "c710").await;
     let (waiting, completed) = (Uuid::now_v7().to_string(), Uuid::now_v7().to_string());
     seed_run(&admin, &scope, &waiting, "waiting").await;
@@ -714,6 +723,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("cancelAgentRun", activity_applied),
             ("cancelAgentRun", no_effect),
             ("cancelAgentRun", conflicted),
+            ("createAgentRun", activity_applied),
             ("steerAgentRun", steering_retained),
             ("steerAgentRun", steering_retained),
             ("steerAgentRun", conflicted),

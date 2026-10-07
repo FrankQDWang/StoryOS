@@ -2,12 +2,11 @@ use std::sync::Mutex;
 
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
-    ContractFaultObserver, ContractFaultPoint, ConversationSelection, CreateAgentRunCommand,
-    DestinationRequest, EditorClientBinding, IssueProjectCommandChallenge, ModelProviderAdapter,
-    ModelResponse, ModelStreamSink, ModelUsage, NoContractFaults, Observation, PreDispatchRefusal,
-    PreparedRequest, ProjectScope, UpdateProjectAssistanceInput, complete_agent_run,
-    issue_project_command_challenge, request_create_agent_run,
+    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ContractFaultObserver,
+    ContractFaultPoint, ConversationSelection, CreateAgentRunInput, DestinationRequest,
+    ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage, NoContractFaults,
+    Observation, PreDispatchRefusal, PreparedRequest, ProjectScope, UpdateProjectAssistanceInput,
+    complete_agent_run, issue_project_command_challenge,
 };
 use storyos_core::{
     AssistanceAvailability, DecisionCandidate, ModelOutput, NativeStreamItem, OutputPhase,
@@ -190,23 +189,6 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
     }
 }
 
-fn binding(issue: &IssueProjectCommandChallenge) -> EditorClientBinding {
-    EditorClientBinding {
-        binding_ref: issue.binding.client_session_binding_digest.clone(),
-        session_generation: issue.binding.client_session_generation,
-        client_contract_revision: issue.binding.client_contract_revision.clone(),
-        security_policy_revision: issue.binding.security_policy_revision.clone(),
-    }
-}
-
-fn ids(suffix: &str) -> AuthorCommandAdmissionIds {
-    AuthorCommandAdmissionIds {
-        command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-        author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-        receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
-    }
-}
-
 fn digest(kind: &str, bytes: &[u8]) -> String {
     format!(
         "sha256:storyos.command.{kind}.jcs.v1:{}",
@@ -278,28 +260,26 @@ async fn claimed_run(
         &digest("createAgentRun", RUN_BYTES),
     );
     issue_project_command_challenge(store, &run).await.unwrap();
-    let admitted = request_create_agent_run(
-        store,
-        &CreateAgentRunCommand {
+    let call = crate::command_sequence::tests::command_call(
+        run.binding.clone(),
+        &run.nonce_digest,
+        &format!("{prefix}6"),
+        RUN_BYTES,
+        CreateAgentRunInput {
             passage_targets: None,
             candidate_target: None,
-            project_scope: scope.clone(),
-            client_binding: binding(&run),
-            challenge_binding: run.binding.clone(),
-            nonce_digest: run.nonce_digest.clone(),
-            canonical_command_bytes: RUN_BYTES.to_vec(),
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{prefix}6"),
             conversation: ConversationSelection::New,
             author_message: "Help with this passage.".to_owned(),
             chapter_id,
-            ids: ids(&format!("{prefix}6")),
             run_id: format!("018f0000-0000-7001-8000-00000004{prefix}6"),
             conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
         },
-    )
-    .await
-    .unwrap();
+    );
+    store
+        .create_agent_run(&call.envelope, &call.input)
+        .await
+        .unwrap();
     let fence_token = admin
         .query_one(
             "UPDATE storyos.agent_runs
@@ -309,14 +289,14 @@ async fn claimed_run(
                     status = 'claimed'
               WHERE run_id = $1::text::uuid
           RETURNING fence_token",
-            &[&admitted.run_id],
+            &[&call.input.run_id],
         )
         .await
         .unwrap()
         .get(0);
     ClaimedAgentRun {
         project_scope: scope,
-        run_id: admitted.run_id,
+        run_id: call.input.run_id,
         fence_token,
     }
 }

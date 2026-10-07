@@ -1,11 +1,13 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, ConversationSelection, CreateAgentRunCommand, CreateAgentRunError,
-    EditorClientBinding, IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, UpdateProjectAssistanceInput, UserId, issue_project_command_challenge,
-    open_agent_run, request_create_agent_run,
+    ConversationSelection, CreateAgentRunApplied, CreateAgentRunCommandError, CreateAgentRunInput,
+    CreateAgentRunSettlement, IssueProjectCommandChallenge, ProjectCommandChallengeBinding,
+    ProjectId, ProjectScope, RefusableCommandError, UpdateProjectAssistanceInput, UserId,
+    issue_project_command_challenge, open_agent_run,
 };
-use storyos_core::AssistanceAvailability;
+use storyos_core::{AssistanceAvailability, CreateAgentRunRefusal, TransitionOutcome};
+
+use crate::command_sequence::tests::{CommandCall, command_call};
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -86,32 +88,47 @@ fn run_command(
     conversation: ConversationSelection,
     conversation_id: &str,
     chapter_id: &str,
-) -> CreateAgentRunCommand {
-    CreateAgentRunCommand {
-        passage_targets: None,
-        candidate_target: None,
-        project_scope: binding.project_scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding.client_session_binding_digest.clone(),
-            session_generation: binding.client_session_generation,
-            client_contract_revision: binding.client_contract_revision.clone(),
-            security_policy_revision: binding.security_policy_revision.clone(),
+) -> CommandCall<CreateAgentRunInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        RUN_BYTES,
+        CreateAgentRunInput {
+            passage_targets: None,
+            candidate_target: None,
+            conversation,
+            author_message: "Help with this passage.".to_owned(),
+            chapter_id: chapter_id.to_owned(),
+            run_id: format!("018f0000-0000-7001-8000-00000004{ids_suffix}"),
+            conversation_id: conversation_id.to_owned(),
+            project_agent_id: format!("018f0000-0000-7001-8000-00000005{ids_suffix}"),
         },
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: RUN_BYTES.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        conversation,
-        author_message: "Help with this passage.".to_owned(),
-        chapter_id: chapter_id.to_owned(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
-        },
-        run_id: format!("018f0000-0000-7001-8000-00000004{ids_suffix}"),
-        conversation_id: conversation_id.to_owned(),
-        project_agent_id: format!("018f0000-0000-7001-8000-00000005{ids_suffix}"),
+    )
+}
+
+async fn create(
+    store: &PostgresProjectReader,
+    call: CommandCall<CreateAgentRunInput>,
+) -> Result<CreateAgentRunSettlement, CreateAgentRunCommandError> {
+    store.create_agent_run(&call.envelope, &call.input).await
+}
+
+fn admitted(settlement: &CreateAgentRunSettlement) -> CreateAgentRunApplied {
+    match &settlement.outcome {
+        TransitionOutcome::Applied(applied) => applied.effect.clone(),
+        TransitionOutcome::NoEffect(reason) => match *reason {},
+        TransitionOutcome::Conflicted(reason) => match *reason {},
+        TransitionOutcome::Refused(reason) => match *reason {},
+    }
+}
+
+fn refused(
+    result: Result<CreateAgentRunSettlement, CreateAgentRunCommandError>,
+) -> CreateAgentRunRefusal {
+    match result {
+        Err(RefusableCommandError::RefusedBeforeAdmission(refusal)) => refusal,
+        other => panic!("the createAgentRun must refuse before its Admission, got {other:?}"),
     }
 }
 
@@ -187,9 +204,9 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
     issue_project_command_challenge(&store, &first_issue)
         .await
         .unwrap();
-    let first = request_create_agent_run(
+    let first = create(
         &store,
-        &run_command(
+        run_command(
             first_issue.binding.clone(),
             &first_issue.nonce_digest,
             "7a12",
@@ -200,24 +217,25 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
     )
     .await
     .unwrap();
+    let first_run = admitted(&first);
     assert_eq!(
-        uuid::Uuid::parse_str(&first.memory_settings_revision)
+        uuid::Uuid::parse_str(&first_run.memory_settings_revision)
             .expect("settings revision is a UUID")
             .get_version_num(),
         7
     );
     assert_eq!(
-        first.conversation_id,
+        first_run.conversation_id,
         "018f0000-0000-7001-8000-000000067a12"
     );
-    let opened = open_agent_run(&store, &scope, &first.run_id)
+    let opened = open_agent_run(&store, &scope, &first_run.run_id)
         .await
         .unwrap()
         .expect("admitted run");
-    assert_eq!(opened.conversation_id, first.conversation_id);
+    assert_eq!(opened.conversation_id, first_run.conversation_id);
     assert_eq!(
         opened.memory_settings_revision,
-        first.memory_settings_revision
+        first_run.memory_settings_revision
     );
     assert_eq!(
         opened.context.record.sufficiency,
@@ -246,7 +264,7 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
-            &[&USER_A, &PROJECT, &first.run_id],
+            &[&USER_A, &PROJECT, &first_run.run_id],
         )
         .await
         .unwrap()
@@ -264,7 +282,7 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND conversation_id = $3::text::uuid",
-            &[&USER_A, &PROJECT, &first.conversation_id],
+            &[&USER_A, &PROJECT, &first_run.conversation_id],
         )
         .await
         .unwrap();
@@ -273,9 +291,9 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
         (true, true)
     );
 
-    let replay = request_create_agent_run(
+    let replay = create(
         &store,
-        &run_command(
+        run_command(
             first_issue.binding.clone(),
             &first_issue.nonce_digest,
             "7a99",
@@ -292,29 +310,28 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
     issue_project_command_challenge(&store, &busy_issue)
         .await
         .unwrap();
-    let busy = request_create_agent_run(
+    let busy = create(
         &store,
-        &run_command(
+        run_command(
             busy_issue.binding.clone(),
             &busy_issue.nonce_digest,
             "7a22",
             ConversationSelection::Existing {
-                conversation_id: first.conversation_id.clone(),
+                conversation_id: first_run.conversation_id.clone(),
             },
-            &first.conversation_id,
+            &first_run.conversation_id,
             CHAPTER,
         ),
     )
-    .await
-    .expect_err("queued conversation must stay busy");
-    assert!(matches!(busy, CreateAgentRunError::ConversationBusy));
+    .await;
+    assert_eq!(refused(busy), CreateAgentRunRefusal::ConversationBusy);
 
     admin
         .execute(
             "DELETE FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid",
-            &[&USER_A, &PROJECT, &first.run_id],
+            &[&USER_A, &PROJECT, &first_run.run_id],
         )
         .await
         .unwrap();
@@ -323,7 +340,7 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
             "DELETE FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid",
-            &[&USER_A, &PROJECT, &first.run_id],
+            &[&USER_A, &PROJECT, &first_run.run_id],
         )
         .await
         .unwrap();
@@ -332,7 +349,7 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
             "DELETE FROM storyos.operation_requirements
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid",
-            &[&USER_A, &PROJECT, &first.run_id],
+            &[&USER_A, &PROJECT, &first_run.run_id],
         )
         .await
         .unwrap();
@@ -341,7 +358,7 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
             "DELETE FROM storyos.agent_runs
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid",
-            &[&USER_A, &PROJECT, &first.run_id],
+            &[&USER_A, &PROJECT, &first_run.run_id],
         )
         .await
         .unwrap();
@@ -349,35 +366,36 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
     issue_project_command_challenge(&store, &reopen_issue)
         .await
         .unwrap();
-    let reopened = request_create_agent_run(
+    let reopened = create(
         &store,
-        &run_command(
+        run_command(
             reopen_issue.binding.clone(),
             &reopen_issue.nonce_digest,
             "7a26",
             ConversationSelection::Existing {
-                conversation_id: first.conversation_id.clone(),
+                conversation_id: first_run.conversation_id.clone(),
             },
-            &first.conversation_id,
+            &first_run.conversation_id,
             CHAPTER,
         ),
     )
     .await
     .unwrap();
-    assert_eq!(reopened.conversation_id, first.conversation_id);
+    let reopened = admitted(&reopened);
+    assert_eq!(reopened.conversation_id, first_run.conversation_id);
     assert_eq!(
         reopened.memory_settings_revision,
-        first.memory_settings_revision
+        first_run.memory_settings_revision
     );
-    assert_ne!(reopened.run_id, first.run_id);
+    assert_ne!(reopened.run_id, first_run.run_id);
 
     let missing_issue = issue_run("7a31");
     issue_project_command_challenge(&store, &missing_issue)
         .await
         .unwrap();
-    let missing = request_create_agent_run(
+    let missing = create(
         &store,
-        &run_command(
+        run_command(
             missing_issue.binding.clone(),
             &missing_issue.nonce_digest,
             "7a32",
@@ -388,20 +406,19 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
             CHAPTER,
         ),
     )
-    .await
-    .expect_err("unknown conversation must stay inaccessible");
-    assert!(matches!(
-        missing,
-        CreateAgentRunError::InaccessibleConversation
-    ));
+    .await;
+    assert_eq!(
+        refused(missing),
+        CreateAgentRunRefusal::InaccessibleConversation
+    );
 
     let chapter_issue = issue_run("7a41");
     issue_project_command_challenge(&store, &chapter_issue)
         .await
         .unwrap();
-    let chapter = request_create_agent_run(
+    let chapter = create(
         &store,
-        &run_command(
+        run_command(
             chapter_issue.binding.clone(),
             &chapter_issue.nonce_digest,
             "7a42",
@@ -410,9 +427,8 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
             "018f0000-0000-7001-8000-00000000bad1",
         ),
     )
-    .await
-    .expect_err("wrong chapter must refuse");
-    assert!(matches!(chapter, CreateAgentRunError::InvalidChapterJoin));
+    .await;
+    assert_eq!(refused(chapter), CreateAgentRunRefusal::InvalidChapterJoin);
 
     let conversations = admin
         .query_one(
@@ -437,7 +453,7 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
     let hidden = open_agent_run(
         &store,
         &ProjectScope::new(UserId::new(USER_B), ProjectId::new(PROJECT)),
-        &first.run_id,
+        &first_run.run_id,
     )
     .await
     .unwrap();
