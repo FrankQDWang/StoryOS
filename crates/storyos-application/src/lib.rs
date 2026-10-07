@@ -183,10 +183,10 @@ pub use pinned_export_source::{
     render_readable_manuscript_from_pinned_source,
 };
 pub use project_command::{
-    ActionApplied, ActivityApplied, AuthorityEvidence, ChapterSelectionApplied,
-    ChapterSelectionAuthority, ProjectCommandEnvelope, ProjectCommandError,
-    ProjectCommandSettlement, RefusableCommandError, StructureApplied, StructureAuthority,
-    StructureAuthorityEvidence, StructureSettlement,
+    ActionApplied, ActivityApplied, AdmittedProjectCommand, AuthorityEvidence,
+    ChapterSelectionApplied, ChapterSelectionAuthority, ProjectCommandEnvelope,
+    ProjectCommandError, ProjectCommandSettlement, RefusableCommandError, StructureApplied,
+    StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,
@@ -210,15 +210,14 @@ pub use proposal_generation_decision::{
     ProposalGenerationCompleted, ProposalGenerationStarted,
 };
 pub use readable_export::{
-    ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptAdmissionEffect,
-    ExportHumanReadableManuscriptCommand, ExportHumanReadableManuscriptError,
-    ExportHumanReadableManuscriptStore, GetHumanReadableManuscriptExport,
+    ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError,
+    ExportHumanReadableManuscriptInput, GetHumanReadableManuscriptExport,
     HUMAN_READABLE_EXPORT_COMMAND_KIND, HUMAN_READABLE_EXPORT_DIGEST_PROFILE,
     HUMAN_READABLE_EXPORT_REQUEST_SCHEMA, HUMAN_READABLE_EXPORT_ROUTE,
     HumanReadableManuscriptExportPage, HumanReadableManuscriptExportProgress,
-    HumanReadableManuscriptExportReader, get_human_readable_manuscript_export,
-    readable_volumes_from_canonical_facts, render_readable_manuscript_from_facts,
-    request_human_readable_manuscript_export,
+    HumanReadableManuscriptExportReader, ReadableExportOperation,
+    get_human_readable_manuscript_export, readable_volumes_from_canonical_facts,
+    render_readable_manuscript_from_facts,
 };
 pub use readable_export_work::{
     ClaimedReadableExport, CompleteReadableExport, CompleteReadableExportError,

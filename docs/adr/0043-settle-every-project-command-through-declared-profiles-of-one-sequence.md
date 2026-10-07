@@ -155,6 +155,39 @@ Specification C ([#1043](https://github.com/FrankQDWang/StoryOS/issues/1043)) mo
   - A Project lifecycle value other than `active` or `archived` gives a store fault. Before, the command used the value as `active`. The Project lifecycle check already prevents such a value.
   - A serialization failure, a unique violation, or a deadlock in an AgentRun read or in a Worker Context Assembly is now a store fault. Before, the read error was the busy conversation error. A read-only Repeatable Read transaction cannot have such a failure, and the Worker reported both errors as a store fault.
 
+#### Admit step
+
+- A command of the admit step declares its kind, isolation level, missing-Admission error, rate-limited Challenge error, and one work query. The work query takes the owner, Project, and Admission identities and gives one JSON object.
+- The step runs these steps in this order in one transaction:
+  1. Begin at the declared isolation level and set Project Scope.
+  2. Consume the Command Challenge.
+  3. Lock the Project row.
+  4. Load the command facts.
+  5. Insert the Admission.
+  6. Write the work rows.
+  7. Record the response record on the fence.
+  8. Commit. The fence stays `in_progress`.
+- The step writes no Domain Receipt and no Activity record.
+- The fact load can refuse before Admission. The command declares its Admission form for its facts, so `applyAuthorEdit` can declare its own form (ADR 0044).
+- An exact retry in progress calls the admitted replay of the command. The default replay reads the fence, the Admission, and the work query in one read-only transaction. A fence that is not `in_progress` with the command digest is a binding conflict. A fence without its Admission, or an Admission without its work rows, is damaged evidence. A pre-capture response record gives `historical_acknowledgement_unavailable`. A command can replace this replay, for example `applyAuthorEdit` (ADR 0044).
+- An exact retry of a settled command reads the one replay query and the work query by the Admission of the Receipt. The command accepts only the result kinds and reasons that its later settlement writes. Another result kind or reason is a binding conflict. Then the work and the response record are decoded. Damaged evidence is a store fault.
+- Every path returns the first admission: the command and Admission identities, the admitted work, and the response record. It has no Receipt identity, because the admit step writes no Receipt.
+
+#### `exportHumanReadableManuscript`
+
+- `exportHumanReadableManuscript` uses the admit step with the explicit project command Admission form and the Command-response Project. A rate-limited Challenge gives a store fault, as on `main`. The work rows are the export operation row and the Pinned Export Source row. Their columns do not change. The Worker settlement does not change.
+- An archived Project is a refusal before Admission. It gives `422 archived_project`, as on `main`.
+- The route uses the generic project command admission with the problem order of `main`. The problem texts use the name "human-readable export", as on `main`. The `202` response body does not change.
+- The application binding self-check and the Store trait of the command are removed.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - An exact retry in progress whose operation row or pinned Snapshot is missing gives `503 project_store_unavailable`. Before, it gave `409 idempotency_binding_conflict`. An in-progress fence without its Admission also gives the store fault. Foreign keys already prevent a missing Admission or Snapshot.
+  - A settled Receipt whose operation row or pinned Snapshot is missing gives `503 project_store_unavailable`. Before, a refused Receipt gave `409 idempotency_binding_conflict` for such a record.
+  - An applied Receipt with its readable export row but without its operation row gives `503 project_store_unavailable`. Before, replay read the export identity and the pinned Snapshot from the export row and returned the admitted operation. The Worker never deletes an operation row, so only a manual change makes such a record.
+  - A settled retry reads the pinned Snapshot of the operation row. Before, an applied Receipt read the pinned Snapshot of the export row. The Worker writes the same Snapshot in the two rows.
+  - A settled Receipt with a result kind other than `authoritative_applied` or `refused`, or with a refusal reason other than `archived_project` or `pinned_export_source_unavailable`, gives `409 idempotency_binding_conflict`. Before, each `refused` reason replayed as admitted. The Receipt shape check already prevents such a record.
+  - A Receipt field with the wrong JSON type is damaged evidence and gives a store fault. A numeric work field that is not unsigned decimal text is also damaged evidence.
+
 #### `steerAgentRun`
 
 - `steerAgentRun` uses the `agent_run_control` Admission form, the `ActivityOnly` profile with the Activity kind `agent_run_steering_retained`, and the Command-response Project. It locks the Project row and then the AgentRun row. It does not refuse an archived Project.
