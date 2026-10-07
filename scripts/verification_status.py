@@ -1,10 +1,13 @@
 """Read current results and execute policy-registered targeted checks."""
 
+import bisect
 from datetime import datetime
 import hashlib
+import itertools
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -46,11 +49,128 @@ def execute(root, check, context):
         plan = targeted_plan(root, check)
         if plan['checks'][0]['status'] == 'pending':
             import verification_candidate
-            verification_candidate.observe(root, 'refused', issue=context.get('issue'),
-                                           reason='Release package requires clean sources', check=check)
+            reason = refusal(clean_tree(root, True, 'Release packaging'))
+            verification_candidate.observe(root, 'refused', issue=context.get('issue'), reason=reason, check=check)
+            print(reason, file=sys.stderr)
             return 2
         command = [sys.executable, str(Path(runner.__file__).resolve()), 'step', check, '--', *plan['command']]
-        return runner.run(root, command, plan=plan, context={**context, 'profile': 'targeted'}, locked=True)
+        registered = json.loads((root / 'docs/agents/verification-policy.json').read_text())['targeted'][check]
+        if not registered.get('host_queue'):
+            return runner.run(root, command, plan=plan, context={**context, 'profile': 'targeted'}, locked=True)
+        with verification_cache.host_queue(root, check) as record:
+            return runner.run(root, command, plan=plan, locked=True,
+                              context={**context, 'profile': 'targeted', 'host_queue': [record] if record else []})
+
+
+def clean_tree(root, required, scope):
+    """Return the clean-tree prerequisite of a scope. An unmet result lists at most 20 dirty paths."""
+    if not required:
+        return {'status': 'not-required', 'reason': 'No selected check requires a clean worktree'}
+    lines = subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=all'],
+                                    cwd=root, text=True).splitlines()
+    paths = [line[3:] for line in lines]
+    if not paths:
+        return {'status': 'met', 'reason': 'The tracked and untracked worktree is clean'}
+    return {'status': 'unmet', 'reason': f'{scope} requires a clean tracked and untracked worktree. '
+            'Commit or remove the dirty paths', 'paths': paths[:20], 'omittedPaths': max(0, len(paths) - 20)}
+
+
+def policy_fresh(root):
+    """Return the fresh verify-policy prerequisite of a complete run."""
+    policy = json.loads((root / 'docs/agents/verification-policy.json').read_text())
+    if 'verify-policy' not in policy.get('complete', {}).get('admission', {}).get('targeted', []):
+        return {'status': 'not-required', 'reason': 'Complete admission does not require a verify-policy result'}
+    state = status(root, targeted_plan(root, 'verify-policy'))['status']
+    if state == 'passed':
+        return {'status': 'met', 'reason': 'The verify-policy result is current and passed'}
+    return {'status': 'unmet', 'reason': f'The verify-policy result is {state}. '
+            'Refresh it with make verify-targeted CHECK=verify-policy'}
+
+
+SIZE_LIMITS = (500, 800)
+
+
+def numstat(root, base, diff_filter):
+    """Yield the current path and the added and deleted line counts of each file change against a base."""
+    tokens = iter(subprocess.check_output(['git', 'diff', '--numstat', '-z', '-M', f'--diff-filter={diff_filter}',
+                                           base, '--'], cwd=root, text=True).split('\0'))
+    for token in tokens:
+        if token:
+            added, deleted, path = token.split('\t', 2)
+            if not path:
+                next(tokens)
+                path = next(tokens)
+            yield path, int(added) if added != '-' else 0, int(deleted) if deleted != '-' else 0
+
+
+RUST_CODE = re.compile(r"""//[^\n]*|/\*|b?r(#*)"|b?"(?:\\.|[^"\\])*"|b?'(?:\\(?:u\{[0-9a-fA-F]+\}|.)|[^'\\])'|[{}]""", re.S)
+RUST_COMMENT = re.compile(r'/\*|\*/')
+
+
+def item_end(text, start):
+    """Return the offset after the brace that closes the first Rust block at or after an offset."""
+    depth, comment, index = 0, 0, start
+    while match := (RUST_COMMENT if comment else RUST_CODE).search(text, index):
+        token, index = match[0], match.end()
+        if comment or token == '/*':
+            comment += 1 if token == '/*' else -1
+        elif match[1] is not None:
+            index = text.find('"' + match[1], index) + 1 + len(match[1])
+            if index == len(match[1]):
+                return len(text)
+        elif token in '{}':
+            depth += 1 if token == '{' else -1
+            if depth == 0:
+                return index
+    return len(text)
+
+
+def module_lines(text):
+    """Return the line count of a Rust module without its #[cfg(test)] modules."""
+    lines = text.splitlines(keepends=True)
+    starts = list(itertools.accumulate(map(len, lines), initial=0))
+    kept, index = 0, 0
+    while index < len(lines):
+        end = index + 1
+        if lines[index].strip() == '#[cfg(test)]':
+            while end < len(lines) and lines[end].lstrip().startswith('#['):
+                end += 1
+            if end < len(lines) and re.match(r'\s*(pub(\([^)]*\))?\s+)?mod\s', lines[end]):
+                if not lines[end].rstrip().endswith(';'):
+                    end = bisect.bisect_right(starts, item_end(text, starts[end]) - 1) - 1
+                index = end + 1
+                continue
+        kept += 1
+        index += 1
+    return kept
+
+
+def size_advisory(root, base):
+    """Return the advisory change size and the large changed Rust modules of the worktree against a base."""
+    start = subprocess.check_output(['git', 'merge-base', base, 'HEAD'], cwd=root, text=True).strip()
+    changed = {path: added for path, added, _ in numstat(root, start, 'd')}
+    for path in subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z'],
+                                        cwd=root, text=True).split('\0'):
+        if (root / path).is_file():
+            changed[path] = len((root / path).read_bytes().splitlines())
+    deleted = [lines for _, _, lines in numstat(root, start, 'D')]
+    count = sum(changed.values())
+    modules = []
+    for path in sorted(changed):
+        if path.endswith('.rs') and not path.endswith('_tests.rs') and '/tests/' not in f'/{path}':
+            lines = module_lines((root / path).read_text(errors='replace'))
+            if lines > SIZE_LIMITS[0]:
+                modules.append({'path': path, 'lines': lines, 'above': [n for n in SIZE_LIMITS if lines > n]})
+    return ({'addedAndChanged': count, 'deletedFiles': len(deleted), 'deletedFileLines': sum(deleted),
+             'limits': list(SIZE_LIMITS), 'above': [n for n in SIZE_LIMITS if count > n]}, modules)
+
+
+def refusal(prerequisite):
+    """Return the refusal message of an unmet prerequisite, or None."""
+    if prerequisite['status'] != 'unmet':
+        return None
+    paths = prerequisite.get('paths')
+    return prerequisite['reason'] + (': ' + ', '.join(paths) if paths else '')
 
 
 def process_state(process):
@@ -90,14 +210,23 @@ def status(root, plan):
         if report['status'] == 'running':
             result['execution'] = process_state(report.get('process', {}))
             result['heartbeat_at'] = report.get('heartbeat_at')
+        reused = [s['reuse_key'] for s in report.get('steps', []) if s['status'] == 'cached' and 'reuse_key' in s]
         if result['status'] == 'passed' and (report.get('source_end') != plan['source'] or
-                not report.get('steps') or any(s['status'] not in {'passed', 'cached'} for s in report['steps'])):
+                not report.get('steps') or any(s['status'] not in {'passed', 'cached'} for s in report['steps'])
+                or any(key != verification_cache.tool_key(root) for key in reused)):
             result['status'] = 'stale'
-    pending = [c for c in plan['checks'] if c['status'] == 'pending']
-    if pending:
+    if any(c['status'] == 'pending' for c in plan['checks']):
         result['status'] = 'unmet-prerequisites'
-        result['prerequisites'] = pending
-        result['next_command'] = 'git status --short' if plan['source']['dirty'] else 'make verify-plan'
+    if 'check' in plan:
+        registered = json.loads((root / 'docs/agents/verification-policy.json').read_text())['targeted']
+        clean = clean_tree(root, registered[plan['check']]['clean'], 'Release packaging')
+        fresh = {'status': 'not-required', 'reason': 'Only a complete run requires a fresh verify-policy result'}
+    else:
+        clean = clean_tree(root, any(c.get('requires_package') for c in plan['checks']), 'Release packaging')
+        fresh = policy_fresh(root)
+        result['changeSize'], result['moduleSize'] = size_advisory(root, plan['base'])
+    result['prerequisites'] = {'cleanTree': clean, 'policyFresh': fresh}
+    result['hostQueue'] = verification_cache.queue_state(root)
     observe = (['python3', 'scripts/verification.py', 'status', '--check', plan['check'], '--json']
                if 'check' in plan else ['python3', 'scripts/verification_plan.py', 'status', '--base', plan['base'],
                                         '--workers', str(plan['workers'])])
@@ -116,17 +245,22 @@ def guidance(result, observe, *, complete):
         if not recoverable:
             action = None
         hint = 'Confirm child-process cleanup before recovery or another run. Recovery rechecks admission.'
+    elif result.get('prerequisites', {}).get('cleanTree', {}).get('status') == 'unmet':
+        decision, reason, action = 'blocked', 'dirty-package-inputs', ['git', 'status', '--short', '--untracked-files=all']
+        hint = ('The cleanTree prerequisite is unmet. Commit or remove the dirty paths that git status lists, '
+                'then run the selected checks.')
+    elif complete and state != 'passed' and result.get('prerequisites', {}).get('policyFresh', {}).get('status') == 'unmet':
+        decision, reason, action = 'run', 'stale-policy-result', ['make', 'verify-targeted', 'CHECK=verify-policy']
+        hint = ('The policyFresh prerequisite of a complete run is unmet. This command refreshes the '
+                'verify-policy result. Then run the selected checks.')
     elif result.get('changedInputs') or state in {'stale', 'source-changed', 'incomplete'}:
         decision, reason = 'replan', 'identity-changed' if result.get('changedInputs') else 'invalid-evidence'
         plan = result.get('plan', {})
         action = ['make', 'verify-plan', 'BASE=' + plan.get('base', result.get('base', 'origin/main'))]
         hint = 'Inspect a fresh plan and run applicable targeted checks. Refresh candidate reviews after source edits.'
     elif state == 'unmet-prerequisites':
-        dirty = result['plan']['source']['dirty']
         decision, reason = 'blocked', 'pending-obligations'
         ready = sum(c['status'] == 'ready' for c in result['plan']['checks'])
-        if 'check' in result['plan'] and dirty:
-            reason = 'dirty-package-inputs'
         action = (['make', 'verify-changed', 'BASE=' + result['plan']['base']]
                   if ready and 'base' in result['plan'] else None)
         hint = f'{ready} ready checks can run; pending checks remain unsatisfied. Inspect blocking reasons and check details.'
@@ -143,8 +277,12 @@ def guidance(result, observe, *, complete):
     workers = result.get('plan', {}).get('workers')
     if action and action[:2] in (['make', 'verify-plan'], ['make', 'verify-changed']) and type(workers) is int:
         action.append(f'VERIFY_ARGS=--workers {workers}')
-    result.update(version=2, decision=decision, reasonCode=reason,
-                  nextAction={'argv': action} if action else None, agentHint=hint,
+    next_action = {'argv': action} if action else None
+    if reason == 'dirty-package-inputs':
+        next_action['prerequisite'] = 'cleanTree'
+    elif reason == 'stale-policy-result':
+        next_action['prerequisite'] = 'policyFresh'
+    result.update(version=2, decision=decision, reasonCode=reason, nextAction=next_action, agentHint=hint,
                   next_command=shlex.join(action) if action else None)
     return result
 
@@ -176,4 +314,6 @@ def attempt_status(root, attempt):
               'next_command': f"python3 scripts/verification.py recover --attempt {shlex.quote(attempt)} --reason 'Check failed stage'"}
     if report['status'] == 'running':
         result.update(execution=process_state(report['process']), heartbeat_at=report.get('heartbeat_at'))
+    result['prerequisites'] = {'cleanTree': clean_tree(root, candidate['source']['dirty'], 'Complete verification'),
+                               'policyFresh': policy_fresh(root)}
     return guidance(result, ['python3', 'scripts/verification.py', 'status', '--attempt', attempt, '--json'], complete=True)

@@ -119,7 +119,7 @@ if [ "${STORYOS_WEB_TYPECHECKED:-}" != "1" ]; then
   make release-package
 fi
 
-. "$repository_root/scripts/lib/controlled-postgres.sh"
+. "$repository_root/scripts/lib/exact-dist.sh"
 
 copy_catalogued_sql() {
   docker cp "$repository_root/crates/storyos-adapter-postgres/migrations/." \
@@ -147,19 +147,11 @@ raise SystemExit(subprocess.call(
 PY
 }
 
-storage_bin="$repository_root/target/release-package/storyos-storage"
-server_bin="$repository_root/target/release-package/storyos-server"
-worker_bin="$repository_root/target/release-package/storyos-worker"
-web_root="$repository_root/target/release-package/web"
-if [ ! -x "$storage_bin" ] || [ ! -x "$server_bin" ] || [ ! -x "$worker_bin" ]; then
-  echo "The release package does not contain storyos-storage, Server, and Worker" >&2
-  exit 1
-fi
+require_release_package
 
 gate_sessions="{\"session-a\":\"018f0000-0000-7001-8000-000000000001\"}"
 gate_secret="test-only-challenge-secret-that-is-at-least-thirty-two-bytes"
 closed_postgres_url="postgres://storyos_runtime:runtime@127.0.0.1:1/postgres"
-canary_admin_url="postgres://postgres:wrong@127.0.0.1:1/postgres"
 
 assert_offline_storage_activation_checks() {
   echo "Checking packaged offline Server and Worker checks access no PostgreSQL"
@@ -360,17 +352,9 @@ prove_bound_request_path_activation() {
 container="storyos-issue105-$$"
 oracle_container="storyos-storage-oracle-$$"
 activation_container="storyos-storage-activation-$$"
-s1_server_pid=""
-s1_server_log=""
 export CARGO_NET_OFFLINE=true
 cleanup() {
-  if [ -n "$s1_server_pid" ]; then
-    kill "$s1_server_pid" >/dev/null 2>&1 || true
-    wait "$s1_server_pid" >/dev/null 2>&1 || true
-  fi
-  if [ -n "$s1_server_log" ]; then
-    rm -f "$s1_server_log"
-  fi
+  stop_exact_dist_server
   docker rm -fv "$container" "$oracle_container" "$activation_container" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -520,36 +504,7 @@ STORYOS_DATABASE_URL="$activation_runtime" \
 STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
   "$worker_bin" --claim-only
 
-echo "Preparing the Server-facing verify database"
-start_postgres "$container"
-container_admin=$(postgres_admin_url "$container")
-if STORYOS_DATABASE_URL="$container_admin" "$storage_bin"; then
-  echo "storyos-storage reused STORYOS_DATABASE_URL for the Server-facing database" >&2
-  exit 1
-fi
-STORYOS_STORAGE_ADMIN_URL="$container_admin" \
-  "$storage_bin"
-runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
-     FROM pg_authid WHERE rolname = 'storyos_runtime'")
-if [ "$runtime_secret_state" != "absent" ]; then
-  echo "The tracked Release 1 bootstrap installed a runtime password" >&2
-  exit 1
-fi
-set_runtime_password "$container"
-server_facing_active=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT phase FROM storyos.storage_activation_proofs WHERE proof_id = 'release-1'")
-if [ "$server_facing_active" != "active" ]; then
-  echo "The Server-facing verify database was not Activated by storyos-storage" >&2
-  exit 1
-fi
-load_controlled_fixture "$container"
-
-published=$(docker port "$container" 5432/tcp)
-port=${published##*:}
-export STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$port/postgres"
-export STORYOS_TEST_ADMIN_DATABASE_URL="postgres://postgres:admin@127.0.0.1:$port/postgres"
-export STORYOS_TEST_POSTGRES_CONTAINER="$container"
+prepare_server_database "$container"
 prove_bound_request_path_activation
 echo "Running PostgreSQL Application and RLS tests"
 # `make contracts` builds these targets with `--workspace --all-features`. The same
@@ -561,42 +516,13 @@ timed_stage postgres-challenge -- cargo test --workspace --all-features --test p
 timed_stage postgres-library -- cargo test --workspace --all-features --lib -- --ignored --nocapture
 python3 scripts/verification_shared.py run
 echo "Restoring the controlled Project fixture for S1-JRN-001"
-reload_controlled_fixture "$container"
-reset_command_challenge_rate_windows "$container"
+reset_exact_dist_fixture "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
-s1_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
-stage1_user_id="018f0000-0000-7001-8000-000000000001"
-STORYOS_WORKER=0 \
-STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
-STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
-STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$stage1_user_id\"}" \
-STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
-  "$repository_root/target/release-package/storyos-server" --bind 127.0.0.1:0 \
-  --web-root "$repository_root/target/release-package/web" \
-  >"$s1_server_log" 2>&1 &
-s1_server_pid=$!
-attempt=0
-while ! grep -q '^STORYOS_SERVER_URL=http://' "$s1_server_log"; do
-  if ! kill -0 "$s1_server_pid" >/dev/null 2>&1; then
-    cat "$s1_server_log" >&2
-    echo "The StoryOS Server exited before the exact-dist journey" >&2
-    exit 1
-  fi
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 100 ]; then
-    cat "$s1_server_log" >&2
-    echo "The StoryOS Server did not become ready for the exact-dist journey" >&2
-    exit 1
-  fi
-  sleep 0.05
-done
-STORYOS_DEV_SERVER=$(sed -n 's/^STORYOS_SERVER_URL=//p' "$s1_server_log" | head -n 1)
-export STORYOS_DEV_SERVER
+start_exact_dist_server
+# The authority oracle compares the receipts of the complete exact-dist suite.
 export STORYOS_STAGE1_AUTHORITY_ORACLE=1
 timed_stage exact-dist -- pnpm --dir apps/web exec vitest run --project browser-exact-dist
-kill "$s1_server_pid" >/dev/null 2>&1 || true
-wait "$s1_server_pid" >/dev/null 2>&1 || true
-s1_server_pid=""
+stop_exact_dist_server
 echo "Running isolated Recovery Copy restore and Recovery Visibility Proof"
 STORYOS_RECOVERY_DRILL=fixture-only timed_stage recovery-fixture -- "$repository_root/scripts/verify-recovery-hold.sh"
 echo "Running mixed empty and populated isolated Recovery Copy restore"

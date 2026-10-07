@@ -6,7 +6,7 @@ $(PUBLIC_CHECKS):
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check $@ $(VERIFY_ARGS)
 endif
 
-.PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-local-steps verify-policy verify-plan verify-changed verify-pr verify-tracker web web-foundation web-typecheck
+.PHONY: contracts generate-contracts project-scope release-package rust-literal-guard verify verify-local verify-local-steps verify-policy verify-policy-steps verify-plan verify-changed verify-pr verify-tracker web web-foundation web-typecheck
 
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
 BASE ?= origin/main
@@ -17,11 +17,22 @@ verify-plan:
 verify-changed:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py run --base "$(BASE)" $(VERIFY_ARGS)
 
+# The guard checks the Git repository of the working directory with the crate of this workspace.
+rust-literal-guard:
+	$(VERIFY_STEP) rust-literal-guard -- cargo run --quiet --locked --manifest-path "$(dir $(abspath $(firstword $(MAKEFILE_LIST))))Cargo.toml" -p storyos-literal-guard -- "$(BASE)"
+
 ifneq ($(STORYOS_VERIFICATION_RUN),)
-verify-policy:
+# The GitHub verify check runs these policy steps without a Rust toolchain.
+verify-policy-steps:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
+	$(VERIFY_STEP) diff-whitespace -- scripts/verify-diff-whitespace.sh
 	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
+	$(VERIFY_STEP) ste-text-guard -- sh -c 'if [ -n "$(STORYOS_PR_BASE_SHA)" ]; then echo "The pull-request check runs only the file mode, from the base parent to the synthetic merge."; exec python3 scripts/ste_text_guard.py files --base HEAD^1 --head HEAD; fi; \
+		python3 scripts/ste_text_guard.py files --base origin/main; files=$$?; python3 scripts/ste_text_guard.py commits --advisory --base origin/main && exit $$files'
+
+verify-policy: verify-policy-steps
+	$(MAKE) rust-literal-guard
 
 contracts: verify-policy
 	$(MAKE) verify-contract-inputs
@@ -61,7 +72,7 @@ verify-local-steps: contracts
 verify-tracker:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py
 
-verify-pr: verify-policy
+verify-pr: verify-policy-steps
 	@set -eu; \
 		if [ -z "$${STORYOS_PR_BASE_SHA:-}" ]; then \
 			printf '%s\n' "STORYOS_PR_BASE_SHA is required" >&2; \
@@ -80,17 +91,28 @@ verify-pr: verify-policy
 		merge="$$1"; \
 		base="$$2"; \
 		head="$$3"; \
-		if [ "$$base" != "$$STORYOS_PR_BASE_SHA" ]; then \
-			printf 'Expected base %s but found %s\n' "$$STORYOS_PR_BASE_SHA" "$$base" >&2; \
-			exit 1; \
+		if [ "$$base" = "$$STORYOS_PR_BASE_SHA" ]; then \
+			accepted="the event base"; \
+		else \
+			if [ -z "$${STORYOS_PR_BASE_REF:-}" ]; then \
+				printf 'Expected base %s but found %s\n' "$$STORYOS_PR_BASE_SHA" "$$base" >&2; \
+				exit 1; \
+			fi; \
+			git fetch --quiet --depth=1 origin "$$STORYOS_PR_BASE_REF"; \
+			tip="$$(git rev-parse FETCH_HEAD)"; \
+			if [ "$$base" != "$$tip" ]; then \
+				printf 'Expected base %s or remote tip %s but found %s\n' "$$STORYOS_PR_BASE_SHA" "$$tip" "$$base" >&2; \
+				exit 1; \
+			fi; \
+			accepted="the remote base tip"; \
 		fi; \
 		if [ "$$head" != "$$STORYOS_PR_HEAD_SHA" ]; then \
 			printf 'Expected head %s but found %s\n' "$$STORYOS_PR_HEAD_SHA" "$$head" >&2; \
 			exit 1; \
 		fi; \
 		tree="$$(git rev-parse "$$merge^{tree}")"; \
-		printf 'Pull request base: %s\nPull request head: %s\nSynthetic merge: %s\nSynthetic merge tree: %s\n' \
-			"$$base" "$$head" "$$merge" "$$tree"; \
+		printf 'Pull request base: %s\nBase accepted as: %s\nPull request head: %s\nSynthetic merge: %s\nSynthetic merge tree: %s\n' \
+			"$$base" "$$accepted" "$$head" "$$merge" "$$tree"; \
 		git diff --check "$$base" "$$merge" --
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	@$(MAKE) verify-tracker
@@ -119,6 +141,21 @@ verify-status:
 
 verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
+
+.PHONY: review-round
+# The verification input fingerprint reads the environment, so the recipe removes CONTEXT.
+review-round:
+	@env -u CONTEXT PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_review_round.py --pr "$(PR)" $(if $(CONTEXT),--executor-context "$(CONTEXT)")
+
+.PHONY: verify-journey
+RUNS ?= 1
+LOAD ?= 0
+verify-journey:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_journey.py --file "$(FILE)" --runs "$(RUNS)" --load "$(LOAD)"
+
+.PHONY: install-hooks
+install-hooks:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/ste_text_guard.py install-hook
 
 OBSERVE = python3 scripts/verification_observation_runtime.py
 .PHONY: observe-build observe-dashboard observe-start observe-stop observe-status observe-rebuild observe-smoke

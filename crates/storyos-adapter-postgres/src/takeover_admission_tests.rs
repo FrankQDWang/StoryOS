@@ -2,15 +2,16 @@ use std::time::Duration;
 
 use storyos_application::{
     AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId, IssueProjectCommandChallenge,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    TakeOverProjectWriterCommand, TakeOverProjectWriterEffect, TakeOverProjectWriterError,
-    TakeOverProjectWriterSettlement, UserId, create_editor_session,
-    issue_project_command_challenge, take_over_project_writer,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectCommandError,
+    ProjectId, ProjectScope, TakeOverProjectWriterInput, TakeOverProjectWriterSettlement, UserId,
+    WriterTakeover, create_editor_session, issue_project_command_challenge,
 };
+use storyos_core::{TakeOverProjectWriterNoEffect, TransitionOutcome};
 use tokio_postgres::{Client, NoTls};
 
 use super::*;
 use crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK;
+use crate::command_sequence::tests::CommandCall;
 
 const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const EMPTY_OBJECT_TAKEOVER_DIGEST: &str = "sha256:storyos.command.takeOverProjectWriter.jcs.v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
@@ -235,7 +236,7 @@ async fn prepare_takeover(
     editor_session_id: &str,
     observed_writer_generation: u64,
     id_base: u32,
-) -> TakeOverProjectWriterCommand {
+) -> CommandCall<TakeOverProjectWriterInput> {
     let binding_ref = format!("binding:takeover-admission-{}", fixture.project_id);
     let idempotency_key = test_uuid(id_base);
     let nonce_digest = format!("sha256:takeover-admission-{id_base}");
@@ -250,27 +251,40 @@ async fn prepare_takeover(
     )
     .await
     .unwrap();
-    TakeOverProjectWriterCommand {
-        project_scope: fixture.scope(),
-        client_binding: EditorClientBinding {
-            binding_ref,
-            session_generation: 1,
-            client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
-            security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
+    CommandCall {
+        envelope: ProjectCommandEnvelope {
+            project_scope: fixture.scope(),
+            client_binding: EditorClientBinding {
+                binding_ref,
+                session_generation: 1,
+                client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
+                security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
+            },
+            challenge_binding: binding,
+            nonce_digest,
+            canonical_command_bytes: br#"{}"#.to_vec(),
+            correlation_id: test_uuid(id_base + 1),
+            ids: AuthorCommandAdmissionIds {
+                command_id: test_uuid(id_base + 2),
+                author_command_admission_id: test_uuid(id_base + 3),
+                receipt_id: test_uuid(id_base + 4),
+            },
         },
-        challenge_binding: binding,
-        nonce_digest,
-        canonical_command_bytes: br#"{}"#.to_vec(),
-        correlation_id: test_uuid(id_base + 1),
-        ids: AuthorCommandAdmissionIds {
-            command_id: test_uuid(id_base + 2),
-            author_command_admission_id: test_uuid(id_base + 3),
-            receipt_id: test_uuid(id_base + 4),
+        input: TakeOverProjectWriterInput {
+            editor_session_id: EditorSessionId::new(editor_session_id),
+            observed_writer_generation,
+            editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
         },
-        editor_session_id: EditorSessionId::new(editor_session_id),
-        observed_writer_generation,
-        editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
     }
+}
+
+async fn take_over_project_writer(
+    store: &PostgresProjectReader,
+    call: &CommandCall<TakeOverProjectWriterInput>,
+) -> Result<TakeOverProjectWriterSettlement, ProjectCommandError> {
+    store
+        .take_over_project_writer(&call.envelope, &call.input)
+        .await
 }
 
 async fn idempotency_keys(admin: &Client, fixture: &TakeoverFixture, outcome: &str) -> Vec<String> {
@@ -392,12 +406,15 @@ fn assert_winner_base_handoff(
     after: &serde_json::Value,
     settlement: &TakeOverProjectWriterSettlement,
 ) {
-    let TakeOverProjectWriterEffect::TakeoverApplied {
+    let WriterTakeover {
         resulting_editor_session_id,
         resulting_snapshot_id,
         resulting_snapshot_activity_position,
         ..
-    } = &settlement.effect;
+    } = settlement
+        .zero_authority_effect
+        .as_ref()
+        .expect("a writer takeover records its writer effect");
     let base = &after[resulting_editor_session_id];
     let id = base["snapshot_id"].as_str().unwrap();
     uuid::Uuid::parse_str(id).unwrap();
@@ -434,31 +451,33 @@ fn expected_initial_state(
 
 fn assert_complete_settlement(
     settlement: &TakeOverProjectWriterSettlement,
-    command: &TakeOverProjectWriterCommand,
+    call: &CommandCall<TakeOverProjectWriterInput>,
     fixture: &TakeoverFixture,
 ) {
-    let resulting_snapshot_id = match &settlement.effect {
-        TakeOverProjectWriterEffect::TakeoverApplied {
-            resulting_snapshot_id,
-            ..
-        } => resulting_snapshot_id.clone(),
-    };
+    let resulting_snapshot_id = settlement
+        .zero_authority_effect
+        .as_ref()
+        .expect("a writer takeover records its writer effect")
+        .resulting_snapshot_id
+        .clone();
     assert_eq!(
         settlement,
         &TakeOverProjectWriterSettlement {
-            ids: command.ids.clone(),
+            ids: call.envelope.ids.clone(),
             receipt_created_at: settlement.receipt_created_at.clone(),
-            expected_heads: vec![fixture.revision_id.clone()],
-            prior_heads: vec![fixture.revision_id.clone()],
-            resulting_heads: vec![fixture.revision_id.clone()],
-            effect: TakeOverProjectWriterEffect::TakeoverApplied {
+            outcome: TransitionOutcome::NoEffect(
+                TakeOverProjectWriterNoEffect::WriterTakeoverApplied
+            ),
+            response: (),
+            zero_authority_effect: Some(WriterTakeover {
                 prior_editor_session_id: fixture.writer_session_id.clone(),
                 prior_writer_generation: 1,
-                resulting_editor_session_id: command.editor_session_id.as_ref().to_owned(),
+                resulting_editor_session_id: call.input.editor_session_id.as_ref().to_owned(),
                 resulting_writer_generation: 2,
                 resulting_snapshot_id,
                 resulting_snapshot_activity_position: 1,
-            },
+                resulting_head: fixture.revision_id.clone(),
+            }),
         }
     );
 }
@@ -477,19 +496,22 @@ async fn wait_for_generation_insert_gate(
 ) -> Result<(), String> {
     let waited = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
-            let blocked: i64 = admin
+            // The first Takeover waits for the gate. The second waits for the first Project lock.
+            let row = admin
                 .query_one(
-                    "SELECT count(DISTINCT activity.pid)
+                    "SELECT count(DISTINCT activity.pid),
+                            count(DISTINCT activity.pid) FILTER (
+                              WHERE $2::int = ANY(pg_catalog.pg_blocking_pids(activity.pid))
+                            )
                        FROM pg_catalog.pg_stat_activity AS activity
                       WHERE activity.application_name = ANY($1::text[])
-                        AND activity.wait_event_type = 'Lock'
-                        AND $2::int = ANY(pg_catalog.pg_blocking_pids(activity.pid))",
+                        AND activity.wait_event_type = 'Lock'",
                     &[&application_names, &blocker_pid],
                 )
                 .await
-                .map_err(|error| error.to_string())?
-                .get(0);
-            if blocked == application_names.len() as i64 {
+                .map_err(|error| error.to_string())?;
+            let (waiting, gated): (i64, i64) = (row.get(/*idx*/ 0), row.get(/*idx*/ 1));
+            if waiting == application_names.len() as i64 && gated >= 1 {
                 return Ok(());
             }
             tokio::task::yield_now().await;
@@ -529,8 +551,8 @@ async fn wait_for_generation_insert_gate(
     }
 }
 
-fn assert_database_race_failure(error: TakeOverProjectWriterError) {
-    let TakeOverProjectWriterError::Unavailable(source) = error else {
+fn assert_database_race_failure(error: ProjectCommandError) {
+    let ProjectCommandError::Unavailable(source) = error else {
         panic!("the losing Takeover must fail as unavailable: {error}");
     };
     let database_error = source
@@ -564,22 +586,7 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
         prepare_takeover(&store, &fixture, &fixture.writer_session_id, 1, 1010).await;
     assert!(matches!(
         take_over_project_writer(&store, &same_session).await,
-        Err(TakeOverProjectWriterError::BindingConflict)
-    ));
-    assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
-    assert_eq!(
-        durable_state(&admin, &fixture).await,
-        expected_initial_state(
-            &fixture,
-            vec![same_session.challenge_binding.idempotency_key.clone()]
-        )
-    );
-
-    let stale_generation =
-        prepare_takeover(&store, &fixture, &fixture.observer_one_session_id, 0, 1020).await;
-    assert!(matches!(
-        take_over_project_writer(&store, &stale_generation).await,
-        Err(TakeOverProjectWriterError::BindingConflict)
+        Err(ProjectCommandError::BindingConflict)
     ));
     assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
     assert_eq!(
@@ -587,8 +594,37 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
         expected_initial_state(
             &fixture,
             vec![
-                same_session.challenge_binding.idempotency_key.clone(),
-                stale_generation.challenge_binding.idempotency_key.clone(),
+                same_session
+                    .envelope
+                    .challenge_binding
+                    .idempotency_key
+                    .clone()
+            ]
+        )
+    );
+
+    let stale_generation =
+        prepare_takeover(&store, &fixture, &fixture.observer_one_session_id, 0, 1020).await;
+    assert!(matches!(
+        take_over_project_writer(&store, &stale_generation).await,
+        Err(ProjectCommandError::BindingConflict)
+    ));
+    assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
+    assert_eq!(
+        durable_state(&admin, &fixture).await,
+        expected_initial_state(
+            &fixture,
+            vec![
+                same_session
+                    .envelope
+                    .challenge_binding
+                    .idempotency_key
+                    .clone(),
+                stale_generation
+                    .envelope
+                    .challenge_binding
+                    .idempotency_key
+                    .clone(),
             ]
         )
     );
@@ -611,18 +647,50 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
                 ("1".to_owned(), fixture.writer_session_id.clone()),
                 ("2".to_owned(), fixture.observer_one_session_id.clone()),
             ],
-            admission_keys: vec![successful.challenge_binding.idempotency_key.clone()],
-            receipt_keys: vec![successful.challenge_binding.idempotency_key.clone()],
+            admission_keys: vec![
+                successful
+                    .envelope
+                    .challenge_binding
+                    .idempotency_key
+                    .clone()
+            ],
+            receipt_keys: vec![
+                successful
+                    .envelope
+                    .challenge_binding
+                    .idempotency_key
+                    .clone()
+            ],
             snapshot_count: 4,
             activity_count: 1,
             settlement_count: 1,
             activity_position: Some("1".to_owned()),
             pending_keys: vec![
-                same_session.challenge_binding.idempotency_key.clone(),
-                stale_generation.challenge_binding.idempotency_key.clone(),
+                same_session
+                    .envelope
+                    .challenge_binding
+                    .idempotency_key
+                    .clone(),
+                stale_generation
+                    .envelope
+                    .challenge_binding
+                    .idempotency_key
+                    .clone(),
             ],
-            settled_keys: vec![successful.challenge_binding.idempotency_key.clone()],
-            consumed_keys: vec![successful.challenge_binding.idempotency_key.clone()],
+            settled_keys: vec![
+                successful
+                    .envelope
+                    .challenge_binding
+                    .idempotency_key
+                    .clone()
+            ],
+            consumed_keys: vec![
+                successful
+                    .envelope
+                    .challenge_binding
+                    .idempotency_key
+                    .clone()
+            ],
         }
     );
 }
@@ -666,13 +734,21 @@ async fn two_observers_race_with_one_complete_settlement_and_one_full_rollback()
     )
     .await;
     let left_evidence = (
-        left_command.editor_session_id.as_ref().to_owned(),
-        left_command.challenge_binding.idempotency_key.clone(),
+        left_command.input.editor_session_id.as_ref().to_owned(),
+        left_command
+            .envelope
+            .challenge_binding
+            .idempotency_key
+            .clone(),
         left_command.clone(),
     );
     let right_evidence = (
-        right_command.editor_session_id.as_ref().to_owned(),
-        right_command.challenge_binding.idempotency_key.clone(),
+        right_command.input.editor_session_id.as_ref().to_owned(),
+        right_command
+            .envelope
+            .challenge_binding
+            .idempotency_key
+            .clone(),
         right_command.clone(),
     );
 

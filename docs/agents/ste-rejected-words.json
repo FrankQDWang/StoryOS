@@ -1,0 +1,18 @@
+{
+  "words": [
+    {"word": "would", "alternative": "", "note": "Use the present tense or \"will\" for a fact."},
+    {"word": "could", "alternative": "can", "note": "Use \"can\" for a possibility."},
+    {"word": "whole", "alternative": "all"},
+    {"word": "about", "alternative": "approximately", "note": "For a subject, use \"for\" or write the text again."},
+    {"word": "equals", "alternative": "is equal to"},
+    {"word": "in flight", "alternative": "in progress"},
+    {"word": "checked", "alternative": "examined", "note": "\"Check\" is not approved as a verb. The noun is approved, so the list has only the verb forms."},
+    {"word": "checking", "alternative": "examining", "note": "\"Check\" is not approved as a verb. The noun is approved, so the list has only the verb forms."},
+    {"word": "to check", "alternative": "to examine", "note": "\"Check\" is not approved as a verb."},
+    {"word": "named", "alternative": "", "note": "\"Name\" is not approved as a verb. Use \"with the name\" or \"identify\"."},
+    {"word": "naming", "alternative": "", "note": "\"Name\" is not approved as a verb. Use \"give the name\" or \"identify\"."},
+    {"word": "to name", "alternative": "to identify", "note": "\"Name\" is not approved as a verb."},
+    {"word": "slot", "alternative": "", "note": "Use a technical name for the part, or write the text again."},
+    {"word": "slots", "alternative": "", "note": "Use a technical name for the part, or write the text again."}
+  ]
+}

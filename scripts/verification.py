@@ -2,6 +2,7 @@
 """Classify verification inputs and record command results for one source tree."""
 
 import argparse
+from contextlib import nullcontext
 from datetime import datetime, timezone
 import fnmatch
 import hashlib
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import time
 import tempfile
+import threading
 import uuid
 
 sys.dont_write_bytecode = True
@@ -27,25 +29,31 @@ import verification_graph
 import verification_rust_cache
 import verification_web_overlap
 import verification_records
+import verification_failure
 
 
 def git(root, *arguments):
     return subprocess.check_output(["git", *arguments], cwd=root, text=True).strip()
 
 
-def source_identity(root):
-    stamps, contents = [], []
+def input_states(root):
+    states = {}
     for path in input_paths(root):
         source = root / path
         if source.is_file() or source.is_symlink():
-            for metadata in (source.lstat(), source.stat() if source.exists() else source.lstat()):
-                stamps.append((path, metadata.st_ino, metadata.st_size,
-                               metadata.st_mtime_ns, metadata.st_ctime_ns))
-            contents.append((path, source.lstat().st_mode, os.readlink(source) if source.is_symlink() else None,
+            states[path] = ([(path, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns)
+                             for metadata in (source.lstat(), source.stat() if source.exists() else source.lstat())],
+                            (path, source.lstat().st_mode, os.readlink(source) if source.is_symlink() else None,
                              hashlib.sha256(source.read_bytes()).hexdigest() if source.is_file() else None))
         else:
-            stamps.append((path, None))
-            contents.append((path, None))
+            states[path] = ([(path, None)], (path, None))
+    return states
+
+
+def source_identity(root, *, states=None):
+    states = input_states(root) if states is None else states
+    stamps = [stamp for path_stamps, _ in states.values() for stamp in path_stamps]
+    contents = [content for _, content in states.values()]
     return {"commit": git(root, "rev-parse", "HEAD"),
             "tree": git(root, "rev-parse", "HEAD^{tree}"),
             "write_stamps_sha256": hashlib.sha256(json.dumps(stamps).encode()).hexdigest(),
@@ -79,6 +87,11 @@ def inventory(root, revision=None):
     if (not isinstance(profiles, dict) or set(profiles) - {"node-contract", "cargo"}
             or any(not isinstance(value, str) or not value for value in profiles.values())):
         raise ValueError("Unsupported file execution profile")
+    ignored = policy.get("dependency_ignore", [])
+    if (not isinstance(ignored, list) or len(ignored) != len(set(ignored)) or any(
+            not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9._-]+", name) or name in {".", ".."}
+            for name in ignored)):
+        raise ValueError("Each dependency_ignore entry must be one unique directory name")
     if (policy.get("result_cache_profiles", []) not in ([], ["node-contract"])
             or type(policy.get("daily_workers", 2)) is not int or not 1 <= policy.get("daily_workers", 2) <= 2):
         raise ValueError("Unsupported cache profile or daily worker budget")
@@ -123,6 +136,11 @@ def inventory(root, revision=None):
                 or any(item["group"].split(":")[0] not in groups for item in files
                        if item["kind"].endswith("-test") and item["kind"] not in {"historical-test", "prototype-test"})):
             raise ValueError("Incomplete verification stage or test group policy")
+        queued = policy["complete"].get("host_queue", [])
+        if (not isinstance(queued, list) or not all(isinstance(stage, str) for stage in queued)
+                or len(queued) != len(set(queued))
+                or not set(queued) <= set(stages)):
+            raise ValueError("Each complete host_queue entry must be one unique complete stage")
     if "shared_phases" in policy:
         verification_shared.plan(root, policy, files, revision)
     return {"version": 1, "files": files}
@@ -185,31 +203,60 @@ def write_json(path, value):
         print(f"Observation publication failed: {error}", file=sys.stderr)
 
 
-def execute(command, environment, new_group, observation=None, stdout=None, timeout=None):
+def execute(command, environment, new_group, observation=None, stdout=None, timeout=None, log=None):
     interrupted = 0
-    try:
-        child = subprocess.Popen(command, env=environment, start_new_session=new_group, stdout=stdout)
-    except OSError as error:
-        if observation:
-            observation({"launch_error": type(error).__name__})
-        print(str(error), file=sys.stderr)
-        return 127, interrupted
-
-    if observation:
-        observation({"child_group": child.pid})
+    pending = 0
+    child = None
+    pumps = []
 
     def interrupt(signum, _frame):
-        nonlocal interrupted
+        nonlocal interrupted, pending
         interrupted = signum
-        if new_group:
+        if not new_group:
+            return
+        if child is None:
+            pending = signum
+            return
+        try:
+            os.killpg(child.pid, signum)
+        except ProcessLookupError:
+            pass
+
+    # Install the handler before the launch so that an early interruption cannot orphan the child session.
+    previous = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        try:
+            streams = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE} if log else {"stdout": stdout}
+            child = subprocess.Popen(command, env=environment, start_new_session=new_group, **streams)
+        except OSError as error:
+            if observation:
+                observation({"launch_error": type(error).__name__})
+            print(str(error), file=sys.stderr)
+            return 127, interrupted
+        if log:
+            sink, lock = log.open("ab"), threading.Lock()
+
+            def pump(source, target):
+                while chunk := os.read(source.fileno(), 65536):
+                    with lock:
+                        sink.write(chunk)
+                        sink.flush()
+                    target.write(chunk)
+                    target.flush()
+            pumps = [threading.Thread(target=pump, args=pair, daemon=True)
+                     for pair in ((child.stdout, sys.stdout.buffer), (child.stderr, sys.stderr.buffer))]
+            for thread in pumps:
+                thread.start()
+        if pending:
             try:
-                os.killpg(child.pid, signum)
+                os.killpg(child.pid, pending)
             except ProcessLookupError:
                 pass
 
-    deadline = time.monotonic() + timeout if timeout else None
-    previous = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGINT, signal.SIGTERM)}
-    try:
+        if observation:
+            observation({"child_group": child.pid})
+
+        deadline = time.monotonic() + timeout if timeout else None
         while True:
             try:
                 remaining = deadline - time.monotonic() if deadline else 5
@@ -251,6 +298,11 @@ def execute(command, environment, new_group, observation=None, stdout=None, time
                 time.sleep(0.05)
             except ProcessLookupError:
                 break
+        # A detached descendant can keep a pipe open, so the wait for the copied output is bounded.
+        for thread in pumps:
+            thread.join(timeout=5)
+        if pumps and not any(thread.is_alive() for thread in pumps):
+            sink.close()
     finally:
         for sig, handler in previous.items():
             signal.signal(sig, handler)
@@ -274,11 +326,24 @@ def step(root, stage, command, *, node_id=None, stdout=None, node_only=False):
     result = {"id": identifier, "stage": stage, "command": command,
               "parent": os.environ.get("STORYOS_VERIFICATION_PARENT"),
               "started_monotonic": started, "started_at": datetime.now(timezone.utc).isoformat(), "status": "running"}
+    if stdout is None:
+        result["log"] = str(path.with_suffix(".log"))
     retained = json.loads((directory / "report.json").read_text())
     if node_id is None and not result["parent"] and (retained.get("plan") or {}).get("check") == stage:
         node_id = "targeted:" + stage
     result.update(verification_graph.bind_attempt(retained, stage, node_id))
     result["attempt_started"] = False
+    if stage == "verification-tests" and not node_only and not retained.get("no_cache") and not any(
+            name in os.environ for name in verification_cache.DIAGNOSTIC):
+        result["reuse_key"] = verification_cache.tool_key(root)
+        reused = verification_cache.tool_result(root, result["reuse_key"])
+        if reused:
+            result.update(reused, status="cached", exit_code=0, duration_seconds=0, command=[],
+                          ended_at=result["started_at"], ended_monotonic=started)
+            write_json(path, result)
+            print(f"Reused the verification-tests result of {reused['producer']}; key {result['reuse_key']}",
+                  flush=True)
+            return 0
     write_json(path, result)
     def observation(fields):
         result.update(fields)
@@ -287,11 +352,14 @@ def step(root, stage, command, *, node_id=None, stdout=None, node_only=False):
                           started_monotonic=time.monotonic())
         write_json(path, result)
     observation({"heartbeat_at": result["started_at"]})
-    budgets = json.loads((root / "docs/agents/verification-policy.json").read_text()).get("stage_budgets_seconds", {})
-    timeout = budgets.get(stage)
+    policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
+    timeout = policy.get("stage_budgets_seconds", {}).get(stage)
     result["budget_seconds"] = timeout
-    code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_PARENT": identifier},
-                                os.name == "posix", observation, stdout, timeout)
+    queued = stage in policy.get("complete", {}).get("host_queue", [])
+    with verification_cache.host_queue(root, stage) if queued else nullcontext():
+        code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_PARENT": identifier},
+                                    os.name == "posix", observation, stdout, timeout,
+                                    log=Path(result["log"]) if "log" in result else None)
     result.update(ended_at=datetime.now(timezone.utc).isoformat(), ended_monotonic=time.monotonic(),
                   duration_seconds=time.monotonic() - result["started_monotonic"], exit_code=code,
                   status="interrupted" if interrupted else ("passed" if code == 0 else "failed"))
@@ -308,7 +376,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     (directory / "steps").mkdir(parents=True)
     report_path = directory / "report.json"
     report = {"version": 1, "started_at": datetime.now(timezone.utc).isoformat(), "command": command, "status": "running",
-              "profile": "daily" if plan else "complete",
+              "profile": "daily" if plan else "complete", "no_cache": no_cache,
               "environment": {"system": platform.system(), "machine": platform.machine(),
                               "python": platform.python_version()}}
     import verification_candidate
@@ -329,13 +397,21 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
             report["actual_started_at"] = report["heartbeat_at"]
         write_json(report_path, report)
 
+    def source_end(start_states):
+        end_states = input_states(root)
+        report["source_end"] = source_identity(root, states=end_states)
+        if report["source_end"] != report["source_start"]:
+            report.update(status="source-changed",
+                          changed_paths=verification_failure.changed(start_states, end_states))
+
     write_json(report_path, report)
     code, interrupted = 1, 0
     print('Observation: ' + json.dumps(verification_records.supervision(report_path)), file=sys.stderr, flush=True)
     cache = None
     has_verification_file_workers = False
     try:
-        report["source_start"] = source_identity(root)
+        start_states = input_states(root)
+        report["source_start"] = source_identity(root, states=start_states)
         rust_target = Path(os.environ.get("CARGO_TARGET_DIR", root / "target"))
         report["build_inputs"] = {
             "rust_debug": any((rust_target / "debug/.fingerprint").glob("*/*")),
@@ -348,8 +424,6 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
             report["plan"] = plan
             if plan["source"] != report["source_start"]:
                 raise ValueError("The verification plan is stale")
-        if report["source_start"]["dirty"] and report["profile"] == "complete" and not plan:
-            raise ValueError("Complete verification requires a clean tracked and untracked worktree")
         report["inventory"] = inventory(root)
         policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
         has_verification_file_workers = "verification_test_workers" in policy
@@ -378,13 +452,12 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
             code = 0
         else:
             cache.discard()
+            report["log"] = str(directory / "run.log")
             code, interrupted = execute(command, {**verification_candidate.environment(),
                                                   "STORYOS_VERIFICATION_RUN": str(directory)},
-                                        os.name == "posix", process_observation)
-        report["source_end"] = source_identity(root)
+                                        os.name == "posix", process_observation, log=Path(report["log"]))
         report["status"] = "passed" if code == 0 else "failed"
-        if report["source_end"] != report["source_start"]:
-            report["status"] = "source-changed"
+        source_end(start_states)
         if interrupted:
             report["status"] = "interrupted"
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
@@ -392,7 +465,12 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         print(str(error), file=sys.stderr)
     steps = [json.loads(path.read_text()) for path in (directory / "steps").glob("*.json")]
     report["steps"] = sorted(steps, key=lambda item: item["started_monotonic"])
-    if (has_verification_file_workers and any(item["stage"] == "verification-tests" for item in steps)):
+    queued = [json.loads(path.read_text()) for path in sorted((directory / "host-queue").glob("*.json"))]
+    if queued or report.get("host_queue"):
+        report["host_queue"] = [*report.get("host_queue", []), *queued]
+    tools = [item for item in steps if item["stage"] == "verification-tests" and item["status"] != "cached"]
+    tested = True
+    if has_verification_file_workers and tools:
         attempts = [json.loads(path.read_text()) for path in (directory / "nodes").glob("*.json")]
         report["verification_test_file_attempts"] = sorted(
             (item for item in attempts if item.get("node_id", "").startswith("file:verification-tools:")),
@@ -400,9 +478,9 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         expected = {"file:verification-tools:" + item["path"] for item in report["inventory"]["files"]
                     if item["kind"] == "verification-test" and item["group"] == "verification-tools"}
         actual = report["verification_test_file_attempts"]
-        if (report["status"] == "passed" and (len(actual) != len(expected)
-                or {item["node_id"] for item in actual} != expected
-                or any(item["status"] != "passed" or not item["attempt_started"] for item in actual))):
+        tested = (len(actual) == len(expected) and {item["node_id"] for item in actual} == expected
+                  and all(item["status"] == "passed" and item["attempt_started"] for item in actual))
+        if report["status"] == "passed" and not tested:
             report["status"] = "incomplete"
     if (plan and code == 2 and report["status"] == "failed" and steps
             and all(item["status"] == "passed" for item in steps)
@@ -411,7 +489,8 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     if (directory / "rust-test-files.json").is_file():
         report["rust_test_files"] = json.loads((directory / "rust-test-files.json").read_text())
     allowed = {"cached"} if cache and cache.observation["status"] == "hit" else {"passed"}
-    if report["status"] == "passed" and (not steps or any(item["status"] not in allowed for item in steps)):
+    if report["status"] == "passed" and (not steps or any(item["status"] not in allowed and not (
+            item["status"] == "cached" and item.get("producer")) for item in steps)):
         report["status"] = "incomplete"
     if report["status"] == "passed" and report["profile"] == "complete" and "plan" in report:
         try:
@@ -423,9 +502,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
             cache_started = time.monotonic()
             cache.prepare(report_path)
             report["cache_output_check_seconds"] = time.monotonic() - cache_started
-            report["source_end"] = source_identity(root)
-            if report["source_end"] != report["source_start"]:
-                report["status"] = "source-changed"
+            source_end(start_states)
         except (OSError, ValueError) as error:
             report.update(status="failed", error=str(error))
     report["rust_cache_after"] = verification_rust_cache.finish(
@@ -435,10 +512,20 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     report.update(ended_at=datetime.now(timezone.utc).isoformat(), ended_monotonic=time.monotonic())
     if report["process"].get("launch_error"):
         report["status"] = "infrastructure-failed"
+    verification_failure.describe(report, directory)
     write_json(report_path, report)
     if cache:
         cache.publish(report_path)
-    print(f"Verification {report['status']}: {report['duration_seconds']:.2f}s; report: {report_path}", flush=True)
+    if tested and report.get("source_start") and report.get("source_end") == report["source_start"]:
+        for item in tools:
+            if item["status"] == "passed" and item.get("reuse_key"):
+                verification_cache.publish_tool_result(root, report_path, item)
+    failure = ("" if report["status"] == "passed" else
+               f"; failed step: {', '.join(report['failed_steps']) or 'none'}"
+               f"; reason: {report['failure_reason'].removesuffix('.')}; log: {report['failure_log'] or 'none'}"
+               f"{verification_failure.flake_note(report)}")
+    print(f"Verification {report['status']}: {report['duration_seconds']:.2f}s{failure}; report: {report_path}",
+          flush=True)
     print('Observation: ' + json.dumps(verification_records.supervision(report_path)), file=sys.stderr, flush=True)
     if report["status"] == "passed":
         return 0
@@ -450,7 +537,10 @@ def run(root, command, *, plan=None, no_cache=False, context=None, locked=False)
         if not plan and command == ["make", "verify-local-steps"]:
             import verification_candidate
             return verification_candidate.run(root, command, context or {"base": "origin/main"})
-        from contextlib import nullcontext
+        if not plan and not (context or {}).get("profile"):
+            unmet = verification_status.refusal(verification_status.clean_tree(root, True, "Complete verification"))
+            if unmet:
+                raise ValueError(unmet)
         with nullcontext() if locked else verification_cache.budget(root):
             rust_cache = verification_rust_cache.prepare(root)
             import verification_candidate

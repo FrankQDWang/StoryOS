@@ -71,6 +71,8 @@ export function decisionDigestProfile(kind: DecisionFlight["command_kind"]): str
   return kind === "acceptProposal" ? "storyos.command.acceptProposal.jcs.v1"
     : "storyos.command.rejectProposalOperations.jcs.v1";
 }
+const MAX_ACCEPTANCE_RECORDS = 2400;
+
 export function decisionPrefix(flight: DecisionFlight): string {
   return flight.command_kind === "acceptProposal" ? "acceptance" : "rejection";
 }
@@ -111,35 +113,70 @@ export function parsePreAdmissionAcceptanceProblem(status: number,
   return { status, code: problem.code, message: problem.message, responseBody };
 }
 
+type JournalRow = Record<string, unknown>;
+type AcceptanceJournal = { records: JournalRow[]; groups: JournalRow[] };
+
+function readRows<T>(request: IDBRequest): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result as T);
+    request.onerror = () => reject(request.error ?? new Error("Acceptance Journal read failed"));
+  });
+}
+
 export async function readAcceptanceJournal(workspace: EditorWorkspace,
-  snapshotTransaction?: IDBTransaction): Promise<{
-  records: Record<string, unknown>[];
-  groups: Record<string, unknown>[];
-}> {
+  snapshotTransaction?: IDBTransaction): Promise<AcceptanceJournal> {
   const partitionId = workspace.partition.journal_partition_id;
   const transaction = snapshotTransaction ?? workspace.database.transaction(
     ["intents", "submission_groups", "transport_capsules", "transport_attempts"], "readonly");
-  const intentsRequest = transaction.objectStore("intents").index("partition").getAll(partitionId);
-  const groupsRequest = transaction.objectStore("submission_groups").index("partition")
-    .getAll(partitionId);
-  const capsulesRequest = transaction.objectStore("transport_capsules").getAll();
-  const attemptsRequest = transaction.objectStore("transport_attempts").getAll();
-  const read = (request: IDBRequest) => new Promise<Record<string, unknown>[]>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result as Record<string, unknown>[]);
-    request.onerror = () => reject(request.error ?? new Error("Acceptance Journal read failed"));
-  });
-  const [allRecords, allGroups, allCapsules, allAttempts] = await Promise.all([
-    read(intentsRequest), read(groupsRequest), read(capsulesRequest), read(attemptsRequest),
+  const [allRecords, allGroups] = await Promise.all([
+    readRows<JournalRow[]>(transaction.objectStore("intents").index("partition").getAll(partitionId)),
+    readRows<JournalRow[]>(transaction.objectStore("submission_groups").index("partition")
+      .getAll(partitionId)),
   ]);
   const records = allRecords.filter((record) => record.completed_intent_record_id === undefined);
   const explicitIds = new Set(records.map((record) => record.explicit_command_record_id));
   const groups = allGroups.filter((group) => group.action_class !== "direct_editor_action"
     || explicitIds.has((group.ordered_coverage as { intent_record_ref?: string }[] | undefined)?.[
       0]?.intent_record_ref));
-  if (records.length !== groups.length || records.length > 2400) {
+  return validateAcceptanceJournal(workspace, transaction, { records, groups });
+}
+
+/** Reads only the decisions that still have a flight, so the lifetime history of the partition stays out of each input read. */
+export async function readUnsettledAcceptanceJournal(workspace: EditorWorkspace,
+  transaction: IDBTransaction): Promise<AcceptanceJournal> {
+  const partitionId = workspace.partition.journal_partition_id;
+  const flights = (await Promise.all(["acceptance", "rejection"].map((prefix) =>
+    readRows<DecisionFlight[]>(transaction.objectStore("metadata").getAll(IDBKeyRange.bound(
+      `${prefix}:${partitionId}:`, `${prefix}:${partitionId}:\uffff`), MAX_ACCEPTANCE_RECORDS + 1))))).flat();
+  const [records, groups] = await Promise.all([
+    Promise.all(flights.map((flight) => readRows<JournalRow | undefined>(transaction
+      .objectStore("intents").get([partitionId, flight.local_intent_sequence])))),
+    Promise.all(flights.map((flight) => readRows<JournalRow | undefined>(transaction
+      .objectStore("submission_groups").get(flight.journal_submission_group_id)))),
+  ]);
+  if ([...records, ...groups].some((row) => row === undefined)) {
     throw new Error("Acceptance Journal is corrupt");
   }
-  for (const group of groups) {
+  return validateAcceptanceJournal(workspace, transaction,
+    { records: records as JournalRow[], groups: groups as JournalRow[] });
+}
+
+async function validateAcceptanceJournal(workspace: EditorWorkspace, transaction: IDBTransaction,
+  { records, groups }: AcceptanceJournal): Promise<AcceptanceJournal> {
+  const partitionId = workspace.partition.journal_partition_id;
+  if (records.length !== groups.length || records.length > MAX_ACCEPTANCE_RECORDS) {
+    throw new Error("Acceptance Journal is corrupt");
+  }
+  const transport = (store: string, group: JournalRow) =>
+    typeof group.journal_submission_group_id === "string"
+      ? readRows<JournalRow[]>(transaction.objectStore(store).index("group")
+        .getAll(group.journal_submission_group_id))
+      : Promise.resolve([]);
+  const transports = await Promise.all(groups.map((group) => Promise.all([
+    transport("transport_capsules", group), transport("transport_attempts", group),
+  ])));
+  for (const [index, group] of groups.entries()) {
+    const [capsule, groupAttempts] = transports[index]!;
     const coverage = group.ordered_coverage as { local_intent_sequence?: number;
       intent_record_ref?: string; payload_digest?: DigestValue }[] | undefined;
     const record = records.find((item) => item.explicit_command_record_id
@@ -161,10 +198,7 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
       profile: "storyos.local-edit-journal.submission-coverage.sha256.v1",
       value_hex_lowercase: [...coverageHash]
         .map((byte) => byte.toString(16).padStart(2, "0")).join("") };
-    const capsule = allCapsules.filter((item) => item.journal_submission_group_id
-      === group.journal_submission_group_id);
-    const attempts = allAttempts.filter((item) => item.journal_submission_group_id
-      === group.journal_submission_group_id).sort((left, right) =>
+    const attempts = groupAttempts.sort((left, right) =>
         (left.attempt_ordinal as number) - (right.attempt_ordinal as number));
     const settlement = group.settlement as AcceptanceSettlement | RejectionSettlement
       | { kind: "unsettled" };

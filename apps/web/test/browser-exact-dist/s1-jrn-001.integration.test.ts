@@ -4,6 +4,7 @@ import { activityStream } from "../../../../generated/typescript/storyos-public-
 import { JOURNAL_DATABASE_VERSION } from "../../src/local-edit-journal.ts";
 import {
   applyTrustedInput,
+  updateAuthorEditSubmissionHold,
   updateClientSessionCookie,
   updateClipboardPermission,
 } from "../support/browser-command-client.ts";
@@ -295,6 +296,7 @@ async function destroyApplicationFrame(frame: HTMLIFrameElement): Promise<void> 
 }
 
 afterEach(async () => {
+  await updateAuthorEditSubmissionHold({ action: "release" });
   if (applicationFrame !== undefined) await destroyApplicationFrame(applicationFrame);
   applicationFrame = undefined;
   await updateClientSessionCookie({ action: "clear" });
@@ -324,6 +326,8 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
   const open = { ...readSurface(frame), pending: pendingWithLiveBody(frame) };
   expect(open.pending.body).toBe(OPEN_BODY);
 
+  // A held Author Edit command keeps each saving projection until the journey observes it.
+  await updateAuthorEditSubmissionHold({ action: "hold" });
   focusAtEnd(frame);
   await applyTrustedInput({ operation: "insert_text", text: " Hello" });
   let input = pendingWithLiveBody(frame);
@@ -332,6 +336,7 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
     return input.body === AFTER_TYPE && input.save_state === "saving"
       && input.unsettled_intent_count === 1;
   });
+  await updateAuthorEditSubmissionHold({ action: "release" });
   await waitFor("the first collected Journal group", async () =>
     collectedGroups(await readJourneyJournal(applicationWindow(frame)), 1));
   await waitFor("the first saved projection", () => {
@@ -340,6 +345,7 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
   });
   const afterType = pendingWithLiveBody(frame);
 
+  await updateAuthorEditSubmissionHold({ action: "hold" });
   focusAtEnd(frame);
   await applyTrustedInput({ operation: "insert_text", text: "中文" });
   let afterImeInput = pendingWithLiveBody(frame);
@@ -348,6 +354,7 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
     return afterImeInput.body === AFTER_IME && afterImeInput.save_state === "saving"
       && afterImeInput.unsettled_intent_count === 1;
   });
+  await updateAuthorEditSubmissionHold({ action: "release" });
   await waitFor("the second collected Journal group", async () =>
     collectedGroups(await readJourneyJournal(applicationWindow(frame)), 2));
   await waitFor("the IME saved projection", () => {
@@ -357,6 +364,7 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
   const afterIme = pendingWithLiveBody(frame);
 
   await applicationWindow(frame).navigator.clipboard.writeText(" EN");
+  await updateAuthorEditSubmissionHold({ action: "hold" });
   focusAtEnd(frame);
   await applyTrustedInput({ operation: "paste" });
   let afterPasteInput = pendingWithLiveBody(frame);
@@ -365,6 +373,7 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
     return afterPasteInput.body === AFTER_PASTE && afterPasteInput.save_state === "saving"
       && afterPasteInput.unsettled_intent_count === 1;
   });
+  await updateAuthorEditSubmissionHold({ action: "release" });
   await waitFor("the third collected Journal group", async () =>
     collectedGroups(await readJourneyJournal(applicationWindow(frame)), 3));
   await waitFor("the paste saved projection", () => {
@@ -374,6 +383,8 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
   const settlePending = pendingWithLiveBody(frame);
   const settledJournal = await readJourneyJournal(applicationWindow(frame));
 
+  // The hold stays through the reload, so the recovered projection is still saving when observed.
+  await updateAuthorEditSubmissionHold({ action: "hold" });
   focusAtEnd(frame);
   await applyTrustedInput({ operation: "insert_text", text: "!" });
   await waitFor("the retained fourth intent", async () => {
@@ -396,6 +407,7 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
   await waitFor("the recovered pending projection", () =>
     pendingWithLiveBody(frame).body === AFTER_UNSETTLED);
   const recoveredPending = pendingWithLiveBody(frame);
+  await updateAuthorEditSubmissionHold({ action: "release" });
   await waitFor("the recovered saved projection", () => {
     const pending = pendingWithLiveBody(frame);
     return pending.body === AFTER_UNSETTLED

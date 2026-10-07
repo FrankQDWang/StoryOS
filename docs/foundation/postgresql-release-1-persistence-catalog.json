@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:ab718bf14c6ec818e19a7f63280e982d1bb774da5524be575c37d3ab6d455d7e"
+    "digest": "sha256:a709b5678ccc063f1a2d413b28e5e9e7ba5fa3364c8f801d11701ec53107e115"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:49e8455f662d8982805e540988c5c62b875f7fcde391bb48867df493c90339b9",
+    "migration_chain_digest": "sha256:4ca0f963942089d13225a0bb75f9545bf03c8832a3b4c132ce1b32759d05a9b9",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:6ea1c5dcc6b3e531fded7788ce7eee6bda3b08fddb71ce81bab5df7ee1215fe9",
+      "manifest_sha256": "sha256:e04b0977ab6352f1fb9103e5de1143d4fe47026b3add3438074793266300aed1",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -563,6 +563,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0082_abort_and_rejected_create.sql",
           "lf_sha256": "sha256:a8f0c8873e1453562b8700900901ecb37db8e8ca483ccffb027f4f0bf04ede31"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0083_proposal_decision_preserved_values.sql",
+          "lf_sha256": "sha256:9e954906c32cd9449a9ab392a819108149d72c762d1b47b2f7a386192db31b2d"
         }
       ]
     },
@@ -692,7 +696,7 @@
     },
     {
       "family_id": "artifact-proposal-draft",
-      "table_families": ["artifacts", "artifact_revisions", "artifact_payloads", "artifact_heads", "artifact_provenance_edges", "proposals", "proposal_revisions", "proposal_heads", "proposal_operations", "proposal_anchors", "proposal_operation_reopenings", "proposal_replans", "proposal_withdrawals", "proposal_operation_resolutions", "proposal_validation_conditions", "proposal_generations", "proposal_generation_heads", "proposal_generation_transitions", "proposal_stream_events", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events", "draft_reopen_events", "research_claims", "research_evidence_edges", "source_snapshots"],
+      "table_families": ["artifacts", "artifact_revisions", "artifact_payloads", "artifact_heads", "artifact_provenance_edges", "proposals", "proposal_revisions", "proposal_heads", "proposal_operations", "proposal_anchors", "proposal_operation_reopenings", "proposal_replans", "proposal_withdrawals", "proposal_withdrawal_reopenings", "proposal_operation_resolutions", "proposal_validation_conditions", "proposal_generations", "proposal_generation_heads", "proposal_generation_transitions", "proposal_stream_events", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events", "draft_reopen_events", "research_claims", "research_evidence_edges", "source_snapshots"],
       "owner": "artifact",
       "authority_class": "artifact",
       "durability_class": "immutable_revisions_with_heads",

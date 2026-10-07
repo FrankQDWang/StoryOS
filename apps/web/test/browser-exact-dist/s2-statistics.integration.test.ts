@@ -63,25 +63,32 @@ function chapterButton(root: Element, title: string): HTMLButtonElement | undefi
   )].find((button) => button.textContent === title);
 }
 
-async function waitSaved(root: Element): Promise<void> {
-  await expect.poll(() =>
-    root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
-    { timeout: 10_000 },
-  ).toBe("saved");
-}
-
 async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<void> {
   const root = appRoot(frame);
   const editor = manuscriptEditor(root, applicationWindow(frame));
+  const previousRevision = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id");
+  if (previousRevision === null || previousRevision === undefined) {
+    throw new Error("the authoritative revision is missing");
+  }
   editor.focus();
   focusManuscriptEnd(editor, applicationWindow(frame));
   await applyTrustedInput({ operation: "insert_text", text });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(text);
-  await expect.poll(() =>
-    root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
-    { timeout: 10_000 },
-  ).toBe("saving");
-  await waitSaved(root);
+  // A new authoritative revision proves that the input reached the saved manuscript.
+  await expect.poll(() => {
+    const save = root.querySelector("[data-save-state]");
+    return {
+      body: manuscriptBody(editor),
+      saveState: save?.getAttribute("data-save-state"),
+      unsettledIntentCount: save?.getAttribute("data-unsettled-intent-count"),
+      revisionChanged: save?.getAttribute("data-authoritative-revision-id") !== previousRevision,
+    };
+  }, { timeout: 10_000 }).toEqual({
+    body: text,
+    saveState: "saved",
+    unsettledIntentCount: "0",
+    revisionChanged: true,
+  });
 }
 
 async function waitStatistics(

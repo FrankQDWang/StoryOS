@@ -1,5 +1,8 @@
 //! Classify one explicit reopen of a withdrawn Proposal.
 
+use super::TransitionOutcome;
+use crate::transition_outcome::reason_codes;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReopenWithdrawnProposal {
     pub scope_matches: bool,
@@ -11,19 +14,12 @@ pub struct ReopenWithdrawnProposal {
     pub expected_target_matches_head: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ReopenWithdrawnProposalResult {
-    Resolved,
-    Conflicted {
-        reason: ReopenWithdrawnProposalConflict,
-    },
-    Refused {
-        reason: ReopenWithdrawnProposalRefusal,
-    },
-    NoEffect {
-        reason: ReopenWithdrawnProposalNoEffect,
-    },
-}
+pub type ReopenWithdrawnProposalResult = TransitionOutcome<
+    (),
+    ReopenWithdrawnProposalNoEffect,
+    ReopenWithdrawnProposalConflict,
+    ReopenWithdrawnProposalRefusal,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReopenWithdrawnProposalConflict {
@@ -44,46 +40,46 @@ pub enum ReopenWithdrawnProposalNoEffect {
     WithdrawalEventMismatch,
 }
 
+reason_codes!(ReopenWithdrawnProposalConflict { ChangedHead => "changed_head" });
+reason_codes!(ReopenWithdrawnProposalRefusal {
+    WrongScope => "wrong_scope",
+    WrongAdmission => "wrong_admission",
+    StaleProposalRevision => "stale_proposal_revision",
+});
+reason_codes!(ReopenWithdrawnProposalNoEffect {
+    TerminalSupersession => "terminal_supersession",
+    ClosureNotWithdrawn => "closure_not_withdrawn",
+    WithdrawalEventMismatch => "withdrawal_event_mismatch",
+});
+
 /// Classify one permitted reopen of a withdrawn Proposal.
 pub fn reopen_withdrawn_proposal(
     command: &ReopenWithdrawnProposal,
 ) -> ReopenWithdrawnProposalResult {
     if !command.scope_matches {
-        return ReopenWithdrawnProposalResult::Refused {
-            reason: ReopenWithdrawnProposalRefusal::WrongScope,
-        };
+        return TransitionOutcome::Refused(ReopenWithdrawnProposalRefusal::WrongScope);
     }
     if command.terminal_supersession {
-        return ReopenWithdrawnProposalResult::NoEffect {
-            reason: ReopenWithdrawnProposalNoEffect::TerminalSupersession,
-        };
+        return TransitionOutcome::NoEffect(ReopenWithdrawnProposalNoEffect::TerminalSupersession);
     }
     if !command.proposal_revision_current {
-        return ReopenWithdrawnProposalResult::Refused {
-            reason: ReopenWithdrawnProposalRefusal::StaleProposalRevision,
-        };
+        return TransitionOutcome::Refused(ReopenWithdrawnProposalRefusal::StaleProposalRevision);
     }
     if !command.admission_valid {
-        return ReopenWithdrawnProposalResult::Refused {
-            reason: ReopenWithdrawnProposalRefusal::WrongAdmission,
-        };
+        return TransitionOutcome::Refused(ReopenWithdrawnProposalRefusal::WrongAdmission);
     }
     if !command.withdrawal_event_matches {
-        return ReopenWithdrawnProposalResult::NoEffect {
-            reason: ReopenWithdrawnProposalNoEffect::WithdrawalEventMismatch,
-        };
+        return TransitionOutcome::NoEffect(
+            ReopenWithdrawnProposalNoEffect::WithdrawalEventMismatch,
+        );
     }
     if !command.closure_withdrawn {
-        return ReopenWithdrawnProposalResult::NoEffect {
-            reason: ReopenWithdrawnProposalNoEffect::ClosureNotWithdrawn,
-        };
+        return TransitionOutcome::NoEffect(ReopenWithdrawnProposalNoEffect::ClosureNotWithdrawn);
     }
     if !command.expected_target_matches_head {
-        return ReopenWithdrawnProposalResult::Conflicted {
-            reason: ReopenWithdrawnProposalConflict::ChangedHead,
-        };
+        return TransitionOutcome::Conflicted(ReopenWithdrawnProposalConflict::ChangedHead);
     }
-    ReopenWithdrawnProposalResult::Resolved
+    TransitionOutcome::Applied(())
 }
 
 #[cfg(test)]

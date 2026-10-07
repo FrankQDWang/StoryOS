@@ -1,51 +1,91 @@
+//! Classify one author expansion of a Refused Edit Draft to an inline edit Proposal.
+
+use std::convert::Infallible;
+
+use crate::transition_outcome::reason_codes;
 use crate::{
-    AuthorEditPrimitive, CloseEditorFlowDraftResult, DraftCloseSource, OpenInlineProposal,
-    OpenInlineProposalResult, RefusedEditPayload, ReplacementBlock, close_editor_flow_draft,
-    open_inline_proposal,
+    AuthorEditPrimitive, CloseEditorFlowDraftRefusal, DraftCloseSource, OpenInlineProposal,
+    OpenInlineProposalResult, RefusedEditPayload, ReplacementBlock, TransitionOutcome,
+    close_editor_flow_draft, open_inline_proposal,
 };
 
+/// The applied value is the replacement that the new Proposal Revision proposes.
+pub type ExpandRefusedEditDraftResult = TransitionOutcome<
+    Vec<ReplacementBlock>,
+    Infallible,
+    ExpandRefusedEditDraftConflict,
+    ExpandRefusedEditDraftRefusal,
+>;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ExpandRefusedEditDraftResult {
-    ProposalCreated { replacement: Vec<ReplacementBlock> },
-    Conflicted,
+pub enum ExpandRefusedEditDraftConflict {
+    SourceOrTargetChanged,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ExpandRefusedEditDraftRefusal {
     SourceDraftNotOpen,
     SourceUnavailable,
     UnsupportedPayload,
     TargetUnavailable,
 }
 
+reason_codes!(ExpandRefusedEditDraftConflict {
+    SourceOrTargetChanged => "source_or_target_changed",
+});
+reason_codes!(ExpandRefusedEditDraftRefusal {
+    SourceDraftNotOpen => "source_draft_not_open",
+    SourceUnavailable => "source_unavailable",
+    UnsupportedPayload => "unsupported_payload",
+    TargetUnavailable => "target_unavailable",
+});
+
 /// Classify the complete retained input and an explicitly selected current target.
-pub fn expand_refused_edit_draft(
+///
+/// `retained_payload` is read only when the source Draft binding applies.
+pub fn expand_refused_edit_draft<E>(
     expected: &DraftCloseSource<'_>,
     current: &DraftCloseSource<'_>,
     closure: &str,
     retention: &str,
-    payload: &RefusedEditPayload,
+    retained_payload: impl FnOnce() -> Result<RefusedEditPayload, E>,
     target: &OpenInlineProposal,
-) -> ExpandRefusedEditDraftResult {
-    use ExpandRefusedEditDraftResult as Result;
+) -> Result<ExpandRefusedEditDraftResult, E> {
+    use ExpandRefusedEditDraftRefusal as Refusal;
+    let conflicted =
+        TransitionOutcome::Conflicted(ExpandRefusedEditDraftConflict::SourceOrTargetChanged);
     match close_editor_flow_draft(expected, current, closure, retention) {
-        CloseEditorFlowDraftResult::Conflicted => return Result::Conflicted,
-        CloseEditorFlowDraftResult::SourceDraftNotOpen => return Result::SourceDraftNotOpen,
-        CloseEditorFlowDraftResult::SourceUnavailable => return Result::SourceUnavailable,
-        CloseEditorFlowDraftResult::DraftClosureChanged => {}
+        TransitionOutcome::NoEffect(reason) => match reason {},
+        TransitionOutcome::Conflicted(_) => return Ok(conflicted),
+        TransitionOutcome::Refused(CloseEditorFlowDraftRefusal::SourceDraftNotOpen) => {
+            return Ok(TransitionOutcome::Refused(Refusal::SourceDraftNotOpen));
+        }
+        TransitionOutcome::Refused(CloseEditorFlowDraftRefusal::SourceUnavailable) => {
+            return Ok(TransitionOutcome::Refused(Refusal::SourceUnavailable));
+        }
+        TransitionOutcome::Applied(()) => {}
     }
+    let payload = retained_payload()?;
     let [unit] = payload.author_edit_units.as_slice() else {
-        return Result::UnsupportedPayload;
+        return Ok(TransitionOutcome::Refused(Refusal::UnsupportedPayload));
     };
     let [AuthorEditPrimitive::ReplaceStructuredSelection { replacement }] =
         unit.normalized_primitives.as_slice()
     else {
-        return Result::UnsupportedPayload;
+        return Ok(TransitionOutcome::Refused(Refusal::UnsupportedPayload));
     };
     if replacement.is_empty() {
-        return Result::UnsupportedPayload;
+        return Ok(TransitionOutcome::Refused(Refusal::UnsupportedPayload));
     }
-    match open_inline_proposal(target) {
-        OpenInlineProposalResult::Applied => Result::ProposalCreated {
-            replacement: replacement.clone(),
-        },
-        OpenInlineProposalResult::Conflicted { .. } => Result::Conflicted,
-        OpenInlineProposalResult::Refused { .. } => Result::TargetUnavailable,
-    }
+    Ok(match open_inline_proposal(target) {
+        OpenInlineProposalResult::Applied => TransitionOutcome::Applied(replacement.clone()),
+        OpenInlineProposalResult::Conflicted { .. } => conflicted,
+        OpenInlineProposalResult::Refused { .. } => {
+            TransitionOutcome::Refused(Refusal::TargetUnavailable)
+        }
+    })
 }
+
+#[cfg(test)]
+#[path = "expand_refused_edit_draft_tests.rs"]
+mod tests;
