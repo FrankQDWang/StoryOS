@@ -1,21 +1,29 @@
 use storyos_application::{UndoLatestAuthorActionCommand, UndoLatestAuthorActionError};
 use storyos_core::AuthorUndoFrontierKind;
 
+use crate::author_edit_proposal::{ObservedProposalFrontier, ProposalEditCompensation};
+use crate::close_editor_flow_draft::{DraftCompensation, ObservedDraftClose};
+use crate::proposal_decision_compensation::ObservedProposalDecision;
+use crate::reopen_rejected_operations::{ObservedOperationReopening, ReopenRejectedCompensation};
+use crate::reopen_withdrawn_proposal::ReopenWithdrawnCompensation;
+use crate::replan_proposal::ReplanCompensation;
+use crate::set_current_chapter::{CurrentChapterCompensation, ObservedCurrentChapterFrontier};
+use crate::structural_authority_settlement::{ObservedStructureFrontier, StructureCompensation};
+use crate::undo_compensation::{CompensationAdapter, ForwardCommand, UndoDisposition};
+use crate::withdraw_proposal::{AuthorWithdrawalCompensation, ObservedAuthorWithdrawal};
+
 pub(super) enum ObservedFrontier {
     Acceptance(crate::undo_acceptance::LoadedAcceptance),
     Prose(ObservedProseFrontier),
     Structure(ObservedStructureFrontier),
     CurrentChapter(ObservedCurrentChapterFrontier),
-    Proposal(crate::author_edit_proposal::ObservedProposalFrontier),
-    AuthorWithdrawal(crate::undo_withdrawal::ObservedAuthorWithdrawal),
-    DraftClose(crate::undo_draft_close::ObservedDraftClose),
+    Proposal(ObservedProposalFrontier),
+    Replan(ObservedProposalDecision),
+    ReopenRejectedOperations(ObservedOperationReopening),
+    ReopenWithdrawnProposal(ObservedProposalDecision),
+    AuthorWithdrawal(ObservedAuthorWithdrawal),
+    DraftClose(ObservedDraftClose),
     Barrier { sequence: u64 },
-}
-
-pub(super) struct ObservedCurrentChapterFrontier {
-    pub sequence: u64,
-    pub prior_chapter_id: String,
-    pub resulting_chapter_id: String,
 }
 
 pub(super) struct ObservedProseFrontier {
@@ -25,39 +33,6 @@ pub(super) struct ObservedProseFrontier {
     pub prior_revision_id: String,
     pub prior_payload: String,
     pub current_head_revision_id: String,
-}
-
-pub(super) enum ObservedStructureIdentity {
-    Volume {
-        volume_id: String,
-    },
-    VolumeDelete {
-        volume_id: String,
-    },
-    VolumeUpdate {
-        volume_id: String,
-        prior_title: String,
-        prior_order: u64,
-    },
-    Chapter {
-        chapter_id: String,
-    },
-    ChapterDelete {
-        chapter_id: String,
-        prior_current_chapter_id: Option<String>,
-    },
-    ChapterUpdate {
-        chapter_id: String,
-        prior_title: String,
-        prior_order: u64,
-    },
-}
-
-pub(super) struct ObservedStructureFrontier {
-    pub sequence: u64,
-    pub prior_manuscript_tree_revision: u64,
-    pub resulting_manuscript_tree_revision: u64,
-    pub identity: ObservedStructureIdentity,
 }
 
 pub(super) struct LoadedUndoFrontier {
@@ -78,32 +53,16 @@ pub(super) async fn load_observed_frontier(
                     frontier.prior_revision_id::text,
                     convert_from(prior_payload.canonical_bytes, 'UTF8'),
                     head.current_revision_id::text,
-                    frontier.prior_manuscript_tree_revision::text,
-                    frontier.resulting_manuscript_tree_revision::text,
-                    frontier.affected_volume_id::text,
-                    frontier.affected_chapter_id::text,
                     frontier.command_kind,
-                    frontier.prior_title,
-                    frontier.prior_order,
-                    frontier.prior_current_chapter_id,
-                    frontier.prior_chapter_id,
-                    frontier.resulting_chapter_id
+                    frontier.result_kind
                FROM storyos.projects AS project
           LEFT JOIN LATERAL (
                 SELECT action.author_action_sequence,
                        commit.manuscript_object_id,
                        commit.resulting_revision_id,
                        commit.prior_revision_id,
-                       commit.prior_manuscript_tree_revision,
-                       commit.resulting_manuscript_tree_revision,
-                       commit.affected_volume_id,
-                       commit.affected_chapter_id,
                        receipt.command_kind,
-                       payload.payload->>'prior_title' AS prior_title,
-                       payload.payload->>'prior_order' AS prior_order,
-                       payload.payload->>'prior_current_chapter_id' AS prior_current_chapter_id,
-                       payload.payload->>'prior_chapter_id' AS prior_chapter_id,
-                       payload.payload->>'current_chapter_id' AS resulting_chapter_id
+                       receipt.result_kind
                   FROM storyos.author_action_entries AS action
                   JOIN storyos.domain_receipts AS receipt
                     ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
@@ -113,9 +72,6 @@ pub(super) async fn load_observed_frontier(
                         commit.receipt_result_kind, commit.authoritative_commit_id) =
                        (action.owner_user_id, action.project_id, action.receipt_id,
                         action.receipt_result_kind, action.authoritative_commit_id)
-             LEFT JOIN storyos.project_activity_event_payloads AS payload
-                    ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-                       (action.owner_user_id, action.project_id, action.receipt_id)
              LEFT JOIN storyos.author_action_entries AS compensation
                     ON compensation.owner_user_id = action.owner_user_id
                    AND compensation.project_id = action.project_id
@@ -154,303 +110,127 @@ pub(super) async fn load_observed_frontier(
     let Some(row) = row else {
         return Err(UndoLatestAuthorActionError::MissingProject);
     };
-    let observed = observed_frontier(&row)?;
-    if let Some(ObservedFrontier::Acceptance(pending)) = observed {
+    let lifecycle_state = row.get(/*idx*/ 0);
+    let Some(sequence) = row.get::<_, Option<String>>(/*idx*/ 1) else {
         return Ok(LoadedUndoFrontier {
-            lifecycle_state: row.get(0),
-            observed: Some(ObservedFrontier::Acceptance(
+            lifecycle_state,
+            observed: None,
+        });
+    };
+    let sequence = sequence.parse().map_err(undo_parse_error)?;
+    let forward = match (
+        row.get::<_, Option<String>>(/*idx*/ 7),
+        row.get::<_, Option<String>>(/*idx*/ 8),
+    ) {
+        (Some(command_kind), Some(result_kind)) => {
+            ForwardCommand::from_receipt(&command_kind, &result_kind)
+        }
+        (None, _) | (_, None) => None,
+    };
+    let disposition = forward.map_or(UndoDisposition::Barrier, ForwardCommand::disposition);
+    let observed = match disposition {
+        UndoDisposition::Prose => prose_frontier(&row, sequence).map(ObservedFrontier::Prose),
+        UndoDisposition::Acceptance => match acceptance_frontier(&row, sequence) {
+            Some(pending) => Some(ObservedFrontier::Acceptance(
                 crate::undo_acceptance::enrich(client, command, pending).await?,
             )),
-        });
-    }
-    let observed = match observed {
-        Some(ObservedFrontier::Barrier { sequence }) => {
-            if matches!(
-                row.get::<_, Option<String>>(11).as_deref(),
-                Some("closeEditorFlowDraft" | "expandRefusedEditDraftToProposal")
-            ) && let Some(frontier) =
-                crate::undo_draft_close::load_frontier(client, command, sequence).await?
-            {
-                return Ok(LoadedUndoFrontier {
-                    lifecycle_state: row.get(0),
-                    observed: Some(ObservedFrontier::DraftClose(frontier)),
-                });
-            }
-            if row.get::<_, Option<String>>(11).as_deref() == Some("withdrawProposal")
-                && let Some(frontier) =
-                    crate::undo_withdrawal::load_author_withdrawal(client, command, sequence)
-                        .await?
-            {
-                return Ok(LoadedUndoFrontier {
-                    lifecycle_state: row.get(0),
-                    observed: Some(ObservedFrontier::AuthorWithdrawal(frontier)),
-                });
-            }
-            match crate::author_edit_proposal::load_proposal_frontier(
-                client,
-                &command.project_scope,
-                sequence,
-            )
-            .await
-            .map_err(|error| match error {
-                storyos_application::AuthorEditError::Unavailable(source) => {
-                    UndoLatestAuthorActionError::Unavailable(source)
-                }
-                _ => UndoLatestAuthorActionError::BindingConflict,
-            })? {
-                Some(frontier) => Some(ObservedFrontier::Proposal(frontier)),
-                None => Some(ObservedFrontier::Barrier { sequence }),
-            }
+            None => None,
+        },
+        UndoDisposition::ProposalEdit => {
+            ProposalEditCompensation::load(client, command, (), sequence)
+                .await?
+                .map(ObservedFrontier::Proposal)
         }
-        other => other,
+        UndoDisposition::Replan => ReplanCompensation::load(client, command, (), sequence)
+            .await?
+            .map(ObservedFrontier::Replan),
+        UndoDisposition::ReopenRejectedOperations => {
+            ReopenRejectedCompensation::load(client, command, (), sequence)
+                .await?
+                .map(ObservedFrontier::ReopenRejectedOperations)
+        }
+        UndoDisposition::ReopenWithdrawnProposal => {
+            ReopenWithdrawnCompensation::load(client, command, (), sequence)
+                .await?
+                .map(ObservedFrontier::ReopenWithdrawnProposal)
+        }
+        UndoDisposition::Structure(forward) => {
+            StructureCompensation::load(client, command, forward, sequence)
+                .await?
+                .map(ObservedFrontier::Structure)
+        }
+        UndoDisposition::CurrentChapter => {
+            CurrentChapterCompensation::load(client, command, (), sequence)
+                .await?
+                .map(ObservedFrontier::CurrentChapter)
+        }
+        UndoDisposition::AuthorWithdrawal => {
+            AuthorWithdrawalCompensation::load(client, command, (), sequence)
+                .await?
+                .map(ObservedFrontier::AuthorWithdrawal)
+        }
+        UndoDisposition::Draft => DraftCompensation::load(client, command, (), sequence)
+            .await?
+            .map(ObservedFrontier::DraftClose),
+        UndoDisposition::Barrier => None,
     };
     Ok(LoadedUndoFrontier {
-        lifecycle_state: row.get(0),
-        observed,
+        lifecycle_state,
+        observed: Some(observed.unwrap_or(ObservedFrontier::Barrier { sequence })),
     })
 }
 
-fn observed_frontier(
+fn prose_frontier(row: &tokio_postgres::Row, sequence: u64) -> Option<ObservedProseFrontier> {
+    match (
+        row.get(/*idx*/ 2),
+        row.get(/*idx*/ 3),
+        row.get(/*idx*/ 4),
+        row.get(/*idx*/ 5),
+        row.get(/*idx*/ 6),
+    ) {
+        (
+            Some(chapter_id),
+            Some(resulting_revision_id),
+            Some(prior_revision_id),
+            Some(prior_payload),
+            Some(current_head_revision_id),
+        ) => Some(ObservedProseFrontier {
+            sequence,
+            chapter_id,
+            resulting_revision_id,
+            prior_revision_id,
+            prior_payload,
+            current_head_revision_id,
+        }),
+        _ => None,
+    }
+}
+
+fn acceptance_frontier(
     row: &tokio_postgres::Row,
-) -> Result<Option<ObservedFrontier>, UndoLatestAuthorActionError> {
-    let Some(sequence) = row.get::<_, Option<String>>(1) else {
-        return Ok(None);
-    };
-    let sequence = sequence.parse().map_err(undo_parse_error)?;
-    Ok(Some(
-        match (
-            row.get::<_, Option<String>>(2),
-            row.get::<_, Option<String>>(3),
-            row.get::<_, Option<String>>(4),
-            row.get::<_, Option<String>>(5),
-            row.get::<_, Option<String>>(6),
-            row.get::<_, Option<String>>(7),
-            row.get::<_, Option<String>>(8),
-            row.get::<_, Option<String>>(9),
-            row.get::<_, Option<String>>(10),
-            row.get::<_, Option<String>>(11),
-            row.get::<_, Option<String>>(12),
-            row.get::<_, Option<String>>(13),
-        ) {
-            (
-                Some(chapter_id),
-                Some(resulting_revision_id),
-                Some(prior_revision_id),
-                prior_payload,
-                Some(current_head_revision_id),
-                _,
-                _,
-                _,
-                _,
-                Some(command_kind),
-                _,
-                _,
-            ) if command_kind == "acceptProposal" => {
-                ObservedFrontier::Acceptance(crate::undo_acceptance::LoadedAcceptance::pending(
-                    sequence,
-                    chapter_id,
-                    resulting_revision_id,
-                    prior_revision_id,
-                    prior_payload,
-                    current_head_revision_id,
-                ))
-            }
-            (
-                Some(chapter_id),
-                Some(resulting_revision_id),
-                Some(prior_revision_id),
-                Some(prior_payload),
-                Some(current_head_revision_id),
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-            ) => ObservedFrontier::Prose(ObservedProseFrontier {
-                sequence,
-                chapter_id,
-                resulting_revision_id,
-                prior_revision_id,
-                prior_payload,
-                current_head_revision_id,
-            }),
-            (
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(prior_tree),
-                Some(resulting_tree),
-                Some(affected_volume_id),
-                None,
-                Some(command_kind),
-                _,
-                _,
-            ) if command_kind == "createVolume" => {
-                ObservedFrontier::Structure(ObservedStructureFrontier {
-                    sequence,
-                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
-                    resulting_manuscript_tree_revision: resulting_tree
-                        .parse()
-                        .map_err(undo_parse_error)?,
-                    identity: ObservedStructureIdentity::Volume {
-                        volume_id: affected_volume_id,
-                    },
-                })
-            }
-            (
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(prior_tree),
-                Some(resulting_tree),
-                Some(affected_volume_id),
-                None,
-                Some(command_kind),
-                _,
-                _,
-            ) if command_kind == "deleteVolume" => {
-                ObservedFrontier::Structure(ObservedStructureFrontier {
-                    sequence,
-                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
-                    resulting_manuscript_tree_revision: resulting_tree
-                        .parse()
-                        .map_err(undo_parse_error)?,
-                    identity: ObservedStructureIdentity::VolumeDelete {
-                        volume_id: affected_volume_id,
-                    },
-                })
-            }
-            (
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(prior_tree),
-                Some(resulting_tree),
-                Some(affected_volume_id),
-                None,
-                Some(command_kind),
-                Some(prior_title),
-                Some(prior_order),
-            ) if command_kind == "updateVolume" => {
-                ObservedFrontier::Structure(ObservedStructureFrontier {
-                    sequence,
-                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
-                    resulting_manuscript_tree_revision: resulting_tree
-                        .parse()
-                        .map_err(undo_parse_error)?,
-                    identity: ObservedStructureIdentity::VolumeUpdate {
-                        volume_id: affected_volume_id,
-                        prior_title,
-                        prior_order: prior_order.parse().map_err(undo_parse_error)?,
-                    },
-                })
-            }
-            (
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(prior_tree),
-                Some(resulting_tree),
-                None,
-                Some(affected_chapter_id),
-                Some(command_kind),
-                Some(prior_title),
-                Some(prior_order),
-            ) if command_kind == "updateChapter" => {
-                ObservedFrontier::Structure(ObservedStructureFrontier {
-                    sequence,
-                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
-                    resulting_manuscript_tree_revision: resulting_tree
-                        .parse()
-                        .map_err(undo_parse_error)?,
-                    identity: ObservedStructureIdentity::ChapterUpdate {
-                        chapter_id: affected_chapter_id,
-                        prior_title,
-                        prior_order: prior_order.parse().map_err(undo_parse_error)?,
-                    },
-                })
-            }
-            (
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(prior_tree),
-                Some(resulting_tree),
-                None,
-                Some(affected_chapter_id),
-                Some(command_kind),
-                _,
-                _,
-            ) if command_kind == "deleteChapter" => {
-                ObservedFrontier::Structure(ObservedStructureFrontier {
-                    sequence,
-                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
-                    resulting_manuscript_tree_revision: resulting_tree
-                        .parse()
-                        .map_err(undo_parse_error)?,
-                    identity: ObservedStructureIdentity::ChapterDelete {
-                        chapter_id: affected_chapter_id,
-                        prior_current_chapter_id: row.get(14),
-                    },
-                })
-            }
-            (
-                Some(object_id),
-                Some(_resulting_revision_id),
-                None,
-                None,
-                Some(_current_head),
-                Some(prior_tree),
-                Some(resulting_tree),
-                None,
-                Some(affected_chapter_id),
-                _,
-                _,
-                _,
-            ) if object_id == affected_chapter_id => {
-                ObservedFrontier::Structure(ObservedStructureFrontier {
-                    sequence,
-                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
-                    resulting_manuscript_tree_revision: resulting_tree
-                        .parse()
-                        .map_err(undo_parse_error)?,
-                    identity: ObservedStructureIdentity::Chapter {
-                        chapter_id: affected_chapter_id,
-                    },
-                })
-            }
-            (None, None, None, None, None, None, None, None, None, Some(command_kind), _, _)
-                if command_kind == "setCurrentChapter" =>
-            {
-                match (
-                    row.get::<_, Option<String>>(15),
-                    row.get::<_, Option<String>>(16),
-                ) {
-                    (Some(prior_chapter_id), Some(resulting_chapter_id)) => {
-                        ObservedFrontier::CurrentChapter(ObservedCurrentChapterFrontier {
-                            sequence,
-                            prior_chapter_id,
-                            resulting_chapter_id,
-                        })
-                    }
-                    _ => ObservedFrontier::Barrier { sequence },
-                }
-            }
-            _ => ObservedFrontier::Barrier { sequence },
-        },
-    ))
+    sequence: u64,
+) -> Option<crate::undo_acceptance::LoadedAcceptance> {
+    match (
+        row.get(/*idx*/ 2),
+        row.get(/*idx*/ 3),
+        row.get(/*idx*/ 4),
+        row.get(/*idx*/ 6),
+    ) {
+        (
+            Some(chapter_id),
+            Some(resulting_revision_id),
+            Some(prior_revision_id),
+            Some(current_head_revision_id),
+        ) => Some(crate::undo_acceptance::LoadedAcceptance::pending(
+            sequence,
+            chapter_id,
+            resulting_revision_id,
+            prior_revision_id,
+            row.get(/*idx*/ 5),
+            current_head_revision_id,
+        )),
+        _ => None,
+    }
 }
 
 impl ObservedFrontier {
@@ -461,6 +241,8 @@ impl ObservedFrontier {
             Self::Structure(frontier) => frontier.sequence,
             Self::CurrentChapter(frontier) => frontier.sequence,
             Self::Proposal(frontier) => frontier.sequence,
+            Self::Replan(frontier) | Self::ReopenWithdrawnProposal(frontier) => frontier.sequence,
+            Self::ReopenRejectedOperations(frontier) => frontier.decision.sequence,
             Self::AuthorWithdrawal(frontier) => frontier.sequence,
             Self::DraftClose(frontier) => frontier.sequence,
             Self::Barrier { sequence } => *sequence,
@@ -476,11 +258,20 @@ impl ObservedFrontier {
             Self::Prose(frontier) => AuthorUndoFrontierKind::ReversibleDirectAuthorAction {
                 resulting_revision_id: frontier.resulting_revision_id.clone(),
             },
-            Self::Structure(_)
-            | Self::CurrentChapter(_)
-            | Self::Proposal(_)
-            | Self::AuthorWithdrawal(_) => AuthorUndoFrontierKind::ReversibleStructureTransition,
-            Self::DraftClose(frontier) => frontier.kind.clone(),
+            Self::Structure(frontier) => StructureCompensation::frontier_kind(frontier),
+            Self::CurrentChapter(frontier) => CurrentChapterCompensation::frontier_kind(frontier),
+            Self::Proposal(frontier) => ProposalEditCompensation::frontier_kind(frontier),
+            Self::Replan(frontier) => ReplanCompensation::frontier_kind(frontier),
+            Self::ReopenRejectedOperations(frontier) => {
+                ReopenRejectedCompensation::frontier_kind(frontier)
+            }
+            Self::ReopenWithdrawnProposal(frontier) => {
+                ReopenWithdrawnCompensation::frontier_kind(frontier)
+            }
+            Self::AuthorWithdrawal(frontier) => {
+                AuthorWithdrawalCompensation::frontier_kind(frontier)
+            }
+            Self::DraftClose(frontier) => DraftCompensation::frontier_kind(frontier),
             Self::Barrier { .. } => AuthorUndoFrontierKind::Barrier,
         }
     }
@@ -492,6 +283,9 @@ impl ObservedFrontier {
             Self::Structure(_)
             | Self::CurrentChapter(_)
             | Self::Proposal(_)
+            | Self::Replan(_)
+            | Self::ReopenRejectedOperations(_)
+            | Self::ReopenWithdrawnProposal(_)
             | Self::AuthorWithdrawal(_)
             | Self::Barrier { .. } => None,
             Self::DraftClose(frontier) => Some(frontier.current_head_revision_id.as_str()),
@@ -507,4 +301,26 @@ fn undo_parse_error(
     error: impl std::error::Error + Send + Sync + 'static,
 ) -> UndoLatestAuthorActionError {
     UndoLatestAuthorActionError::Unavailable(Box::new(error))
+}
+
+pub(super) async fn editor_session_chapter(
+    client: &tokio_postgres::Client,
+    command: &UndoLatestAuthorActionCommand,
+) -> Result<Option<String>, UndoLatestAuthorActionError> {
+    let row = client
+        .query_opt(
+            "SELECT snapshot.chapter_object_id::text
+               FROM storyos.editor_session_base_snapshots AS snapshot
+              WHERE snapshot.owner_user_id = $1::text::uuid
+                AND snapshot.project_id = $2::text::uuid
+                AND snapshot.editor_session_id = $3::text::uuid",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.editor_session_id.as_ref(),
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    Ok(row.map(|row| row.get(/*idx*/ 0)))
 }

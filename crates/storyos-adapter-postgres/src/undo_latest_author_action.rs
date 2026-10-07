@@ -16,7 +16,18 @@ use uuid::Uuid;
 
 use super::*;
 use crate::author_edit::{parse_u64, sha256_hex};
+use crate::author_edit_proposal::ProposalEditCompensation;
+use crate::close_editor_flow_draft::DraftCompensation;
+use crate::reopen_rejected_operations::ReopenRejectedCompensation;
+use crate::reopen_withdrawn_proposal::ReopenWithdrawnCompensation;
+use crate::replan_proposal::ReplanCompensation;
+use crate::set_current_chapter::CurrentChapterCompensation;
+use crate::structural_authority_settlement::StructureCompensation;
+use crate::undo_compensation::{
+    CompensationAdapter, CompensationReplay, ForwardCommand, UndoDisposition,
+};
 use crate::undo_frontier::{LoadedUndoFrontier, ObservedFrontier, ObservedProseFrontier};
+use crate::withdraw_proposal::AuthorWithdrawalCompensation;
 
 impl UndoLatestAuthorActionStore for PostgresProjectReader {
     async fn undo_latest_author_action(
@@ -82,27 +93,9 @@ async fn persist_undo(
     if lifecycle_state != "active" {
         return Err(UndoLatestAuthorActionError::BindingConflict);
     }
-    let observed = match observed {
-        Some(ObservedFrontier::CurrentChapter(frontier)) => {
-            if crate::undo_current_chapter::live_chapter_is_lawful_target(
-                client,
-                command,
-                &frontier.prior_chapter_id,
-            )
-            .await?
-            {
-                Some(ObservedFrontier::CurrentChapter(frontier))
-            } else {
-                Some(ObservedFrontier::Barrier {
-                    sequence: frontier.sequence,
-                })
-            }
-        }
-        other => other,
-    };
     let retry_source = match &observed {
         Some(ObservedFrontier::Prose(_) | ObservedFrontier::Proposal(_)) => {
-            crate::undo_draft_close::load_frontier(
+            crate::close_editor_flow_draft::load_frontier(
                 client,
                 command,
                 observed.as_ref().expect("observed frontier").sequence(),
@@ -129,7 +122,7 @@ async fn persist_undo(
             .unwrap_or_default()
             .to_owned(),
     });
-    let session_chapter = crate::undo_structure::editor_session_chapter(client, command).await?;
+    let session_chapter = crate::undo_frontier::editor_session_chapter(client, command).await?;
     let (admission_chapter, admission_expected) = match &observed {
         Some(ObservedFrontier::Acceptance(frontier)) => (
             Some(frontier.chapter_id.as_str()),
@@ -145,6 +138,17 @@ async fn persist_undo(
         ),
         Some(ObservedFrontier::AuthorWithdrawal(frontier)) => (
             Some(frontier.chapter_id.as_str()),
+            Some(command.expected_authoritative_revision_id.as_str()),
+        ),
+        Some(
+            ObservedFrontier::Replan(decision)
+            | ObservedFrontier::ReopenWithdrawnProposal(decision),
+        ) => (
+            Some(decision.chapter_id.as_str()),
+            Some(command.expected_authoritative_revision_id.as_str()),
+        ),
+        Some(ObservedFrontier::ReopenRejectedOperations(frontier)) => (
+            Some(frontier.decision.chapter_id.as_str()),
             Some(command.expected_authoritative_revision_id.as_str()),
         ),
         Some(
@@ -222,43 +226,33 @@ async fn persist_undo(
                 persist_compensation(client, command, frontier, source_sequence).await
             }
             Some(ObservedFrontier::Structure(frontier)) => {
-                crate::undo_structure::persist_structure_compensation(
-                    client,
-                    command,
-                    frontier,
-                    source_sequence,
-                )
-                .await
+                StructureCompensation::compensate(client, command, frontier, source_sequence).await
             }
             Some(ObservedFrontier::CurrentChapter(frontier)) => {
-                crate::undo_current_chapter::persist_current_chapter_compensation(
-                    client,
-                    command,
-                    frontier,
-                    source_sequence,
-                )
-                .await
+                CurrentChapterCompensation::compensate(client, command, frontier, source_sequence)
+                    .await
             }
             Some(ObservedFrontier::Proposal(frontier)) => {
-                crate::undo_proposal::persist_proposal_compensation(
-                    client,
-                    command,
-                    frontier,
-                    source_sequence,
-                )
-                .await
+                ProposalEditCompensation::compensate(client, command, frontier, source_sequence)
+                    .await
             }
             Some(ObservedFrontier::AuthorWithdrawal(frontier)) => {
-                crate::undo_withdrawal::persist_withdrawal_compensation(
-                    client,
-                    command,
-                    frontier,
-                    source_sequence,
-                )
-                .await
+                AuthorWithdrawalCompensation::compensate(client, command, frontier, source_sequence)
+                    .await
+            }
+            Some(ObservedFrontier::Replan(frontier)) => {
+                ReplanCompensation::compensate(client, command, frontier, source_sequence).await
+            }
+            Some(ObservedFrontier::ReopenRejectedOperations(frontier)) => {
+                ReopenRejectedCompensation::compensate(client, command, frontier, source_sequence)
+                    .await
+            }
+            Some(ObservedFrontier::ReopenWithdrawnProposal(frontier)) => {
+                ReopenWithdrawnCompensation::compensate(client, command, frontier, source_sequence)
+                    .await
             }
             Some(ObservedFrontier::DraftClose(frontier)) => {
-                crate::undo_draft_close::persist_compensation(client, command, frontier).await
+                DraftCompensation::compensate(client, command, frontier, source_sequence).await
             }
             Some(ObservedFrontier::Barrier { .. }) | None => {
                 Err(UndoLatestAuthorActionError::BindingConflict)
@@ -300,6 +294,9 @@ async fn persist_undo(
                 | ObservedFrontier::Structure(_)
                 | ObservedFrontier::CurrentChapter(_)
                 | ObservedFrontier::Proposal(_)
+                | ObservedFrontier::Replan(_)
+                | ObservedFrontier::ReopenRejectedOperations(_)
+                | ObservedFrontier::ReopenWithdrawnProposal(_)
                 | ObservedFrontier::AuthorWithdrawal(_)
                 | ObservedFrontier::DraftClose(_)
                 | ObservedFrontier::Barrier { .. },
@@ -929,7 +926,8 @@ async fn read_undo_settlement(
                         compensation_snapshot.project_activity_position,
                         idempotency.acknowledgement_format,
                         idempotency.response_project::text, receipt.result_payload::text,
-                        source_receipt.result_kind, restored_proposal.revision_id::text
+                        source_receipt.result_kind, restored_proposal.revision_id::text,
+                        source_receipt.command_kind
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -1041,6 +1039,16 @@ async fn read_undo_settlement(
             receipt_id,
         )
         .await?;
+        let disposition = match (
+            row.get::<_, Option<String>>(/*idx*/ 20),
+            row.get::<_, Option<String>>(/*idx*/ 18),
+        ) {
+            (Some(command_kind), Some(result_kind)) => {
+                ForwardCommand::from_receipt(&command_kind, &result_kind)
+                    .map(ForwardCommand::disposition)
+            }
+            (None, _) | (_, None) => None,
+        };
         let mut effect = if let Some(retry) = acceptance_retry
             .as_ref()
             .filter(|retry| retry.outcome == "reversal_required")
@@ -1064,122 +1072,55 @@ async fn read_undo_settlement(
             }
         } else {
             match (result_kind.as_str(), reason.as_deref()) {
-            ("draft_closure_changed", None) => {
-                let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
-                    .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
-                let event_id = payload["event_id"]
-                    .as_str()
-                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-                UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
-                    event: Box::new(
-                        crate::undo_draft_close::read_event(
-                            &client,
-                            &command.project_scope,
-                            event_id,
-                        )
-                        .await?,
-                    ),
-                    author_undo_frontier_sequence: payload["author_undo_frontier_sequence"]
-                        .as_str()
-                        .map(str::parse)
-                        .transpose()
+            ("draft_closure_changed" | "authoritative_applied", None) => {
+                let replay = CompensationReplay {
+                    source_sequence: row
+                        .get::<_, Option<String>>(/*idx*/ 6)
+                        .ok_or(UndoLatestAuthorActionError::BindingConflict)?
+                        .parse()
                         .map_err(undo_parse_error)?,
-                }
-            }
-            ("authoritative_applied", None) => {
-                let source_sequence = row
-                    .get::<_, Option<String>>(6)
-                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?
-                    .parse()
-                    .map_err(undo_parse_error)?;
-                let author_action_sequence = row
-                    .get::<_, Option<String>>(7)
-                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?
-                    .parse()
-                    .map_err(undo_parse_error)?;
-                let authoritative_commit_id = row.get::<_, Option<String>>(8);
-                let source_result_kind = row.get::<_, Option<String>>(18);
-                if source_result_kind.as_deref() == Some("proposal_closure_changed") {
-                    let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
-                        .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
-                    let proposal_revision_id = payload["proposal_revision_id"]
-                        .as_str()
-                        .map(str::to_owned);
-                    if proposal_revision_id.is_none() {
-                        return Err(UndoLatestAuthorActionError::BindingConflict);
+                    author_action_sequence: row
+                        .get::<_, Option<String>>(/*idx*/ 7)
+                        .ok_or(UndoLatestAuthorActionError::BindingConflict)?
+                        .parse()
+                        .map_err(undo_parse_error)?,
+                    authoritative_commit_id: row.get(/*idx*/ 8),
+                    snapshot_id: row.get(/*idx*/ 13),
+                    result_payload: row.get(/*idx*/ 17),
+                    restored_proposal_revision_id: row.get(/*idx*/ 19),
+                    author_undo_frontier_sequence: current_frontier,
+                };
+                match disposition {
+                    Some(UndoDisposition::Structure(_)) => {
+                        StructureCompensation::decode(&client, command, &replay).await?
                     }
-                    UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
-                        source_sequence,
-                        author_action_sequence,
-                        proposal_revision_id,
-                        author_undo_frontier_sequence: current_frontier,
+                    Some(UndoDisposition::CurrentChapter) => {
+                        CurrentChapterCompensation::decode(&client, command, &replay).await?
                     }
-                } else if source_result_kind.as_deref() == Some("proposal_revised") {
-                    let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
-                        .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
-                    let proposal_revision_id = row.get::<_, Option<String>>(19);
-                    if payload.get("proposal_revision_id").is_some() && proposal_revision_id.is_none() {
-                        return Err(UndoLatestAuthorActionError::BindingConflict);
+                    Some(UndoDisposition::ProposalEdit) => {
+                        ProposalEditCompensation::decode(&client, command, &replay).await?
                     }
-                    UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
-                        source_sequence,
-                        author_action_sequence,
-                        proposal_revision_id,
-                        author_undo_frontier_sequence: current_frontier,
+                    Some(UndoDisposition::Replan) => {
+                        ReplanCompensation::decode(&client, command, &replay).await?
                     }
-                } else if let Some(revision_id) = row.get::<_, Option<String>>(9) {
-                    let stored = row
-                        .get::<_, Option<String>>(10)
-                        .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-                    let chapter_id = row
-                        .get::<_, Option<String>>(12)
-                        .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-                    let blocks = crate::manuscript_block::load_revision_blocks(
-                        &*client,
-                        command.project_scope.owner_user_id.as_ref(),
-                        command.project_scope.project_id.as_ref(),
-                        &chapter_id,
-                        &revision_id,
-                        &stored,
+                    Some(UndoDisposition::ReopenRejectedOperations) => {
+                        ReopenRejectedCompensation::decode(&client, command, &replay).await?
+                    }
+                    Some(UndoDisposition::ReopenWithdrawnProposal) => {
+                        ReopenWithdrawnCompensation::decode(&client, command, &replay).await?
+                    }
+                    Some(UndoDisposition::AuthorWithdrawal) => {
+                        AuthorWithdrawalCompensation::decode(&client, command, &replay).await?
+                    }
+                    Some(UndoDisposition::Draft) => {
+                        DraftCompensation::decode(&client, command, &replay).await?
+                    }
+                    Some(
+                        UndoDisposition::Prose
+                        | UndoDisposition::Acceptance
+                        | UndoDisposition::Barrier,
                     )
-                    .await
-                    .map_err(undo_database_error)?;
-                    UndoLatestAuthorActionSettlementEffect::Compensated {
-                        source_sequence,
-                        author_action_sequence,
-                        authoritative_commit_id: authoritative_commit_id
-                            .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-                        revision_id: revision_id.clone(),
-                        body: crate::manuscript_block::display_body_from_stored(&stored, &blocks),
-                        blocks,
-                        author_undo_frontier_sequence: current_frontier,
-                        proposal_id: None,
-                        proposal_revision_id: None,
-                    }
-                } else if let Some(authoritative_commit_id) = authoritative_commit_id {
-                    UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
-                        source_sequence,
-                        author_action_sequence,
-                        authoritative_commit_id,
-                        snapshot_id: row
-                            .get::<_, Option<String>>(13)
-                            .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-                        author_undo_frontier_sequence: current_frontier,
-                    }
-                } else if let Some(snapshot_id) = row.get::<_, Option<String>>(13) {
-                    UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
-                        source_sequence,
-                        author_action_sequence,
-                        snapshot_id,
-                        author_undo_frontier_sequence: current_frontier,
-                    }
-                } else {
-                    UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
-                        source_sequence,
-                        author_action_sequence,
-                        proposal_revision_id: None,
-                        author_undo_frontier_sequence: current_frontier,
-                    }
+                    | None => decode_prose_compensation(&client, command, &row, replay).await?,
                 }
             }
             ("conflicted", Some("frontier_mismatch")) => {
@@ -1234,7 +1175,13 @@ async fn read_undo_settlement(
             .transpose()
             .map_err(undo_parse_error)?
             .unwrap_or(0);
-        let project_activity_position = if row.get::<_, Option<String>>(18).as_deref() == Some("proposal_revised") {
+        let project_activity_position = if let Some(
+            UndoDisposition::ProposalEdit
+            | UndoDisposition::Replan
+            | UndoDisposition::ReopenRejectedOperations
+            | UndoDisposition::ReopenWithdrawnProposal,
+        ) = disposition
+        {
             let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
                 .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
             match payload.get("project_activity_position") {
@@ -1266,6 +1213,54 @@ async fn read_undo_settlement(
     .await;
     let _ = client.batch_execute("ROLLBACK").await;
     result
+}
+
+/// Decodes a prose or Acceptance Compensation, which the Undo command adapter still settles.
+async fn decode_prose_compensation(
+    client: &tokio_postgres::Client,
+    command: &UndoLatestAuthorActionCommand,
+    row: &tokio_postgres::Row,
+    replay: CompensationReplay,
+) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
+    let Some(revision_id) = row.get::<_, Option<String>>(/*idx*/ 9) else {
+        return Ok(
+            UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
+                source_sequence: replay.source_sequence,
+                author_action_sequence: replay.author_action_sequence,
+                proposal_revision_id: None,
+                author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
+            },
+        );
+    };
+    let stored = row
+        .get::<_, Option<String>>(/*idx*/ 10)
+        .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
+    let chapter_id = row
+        .get::<_, Option<String>>(/*idx*/ 12)
+        .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
+    let blocks = crate::manuscript_block::load_revision_blocks(
+        client,
+        command.project_scope.owner_user_id.as_ref(),
+        command.project_scope.project_id.as_ref(),
+        &chapter_id,
+        &revision_id,
+        &stored,
+    )
+    .await
+    .map_err(undo_database_error)?;
+    Ok(UndoLatestAuthorActionSettlementEffect::Compensated {
+        source_sequence: replay.source_sequence,
+        author_action_sequence: replay.author_action_sequence,
+        authoritative_commit_id: replay
+            .authoritative_commit_id
+            .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
+        body: crate::manuscript_block::display_body_from_stored(&stored, &blocks),
+        revision_id,
+        blocks,
+        author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
+        proposal_id: None,
+        proposal_revision_id: None,
+    })
 }
 
 fn undo_challenge_error(error: ProjectCommandChallengeError) -> UndoLatestAuthorActionError {

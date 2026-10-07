@@ -18,6 +18,9 @@ use crate::command_sequence::{
     settle_project_command, unavailable,
 };
 
+mod compensation;
+pub(crate) use compensation::{AuthorWithdrawalCompensation, ObservedAuthorWithdrawal};
+
 impl PostgresProjectReader {
     /// Settles one author Withdrawal of an open Proposal.
     pub async fn withdraw_proposal(

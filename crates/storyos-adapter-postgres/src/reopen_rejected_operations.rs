@@ -20,6 +20,9 @@ use crate::command_sequence::{
     ZeroReceipt, settle_project_command, unavailable,
 };
 
+mod compensation;
+pub(crate) use compensation::{ObservedOperationReopening, ReopenRejectedCompensation};
+
 impl PostgresProjectReader {
     /// Settles one author reopen of a rejected Proposal Operation.
     pub async fn reopen_rejected_operations(

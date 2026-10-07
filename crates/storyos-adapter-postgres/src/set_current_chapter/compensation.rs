@@ -1,15 +1,108 @@
+//! The Current Chapter Compensation of Author Undo (ADR 0026, ADR 0044).
+
 use storyos_application::{
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
     UndoLatestAuthorActionSettlementEffect,
 };
+use storyos_core::AuthorUndoFrontierKind;
+use tokio_postgres::Client;
 
-use super::undo_frontier::ObservedCurrentChapterFrontier;
-use super::undo_latest_author_action::{
+use crate::undo_compensation::{CompensationAdapter, CompensationReplay};
+use crate::undo_latest_author_action::{
     UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
     undo_from_session,
 };
 
-pub(super) async fn live_chapter_is_lawful_target(
+/// Returns the writer to the Chapter that was current before a Current Chapter change.
+pub(crate) struct CurrentChapterCompensation;
+
+pub(crate) struct ObservedCurrentChapterFrontier {
+    pub sequence: u64,
+    pub prior_chapter_id: String,
+    pub resulting_chapter_id: String,
+}
+
+impl CompensationAdapter for CurrentChapterCompensation {
+    type Forward = ();
+    type Evidence = ObservedCurrentChapterFrontier;
+
+    /// A prior Chapter that is not a lawful target makes the change a Barrier.
+    async fn load(
+        client: &Client,
+        command: &UndoLatestAuthorActionCommand,
+        _forward: (),
+        sequence: u64,
+    ) -> Result<Option<ObservedCurrentChapterFrontier>, UndoLatestAuthorActionError> {
+        let Some(row) = client
+            .query_opt(
+                "SELECT payload.payload->>'prior_chapter_id', payload.payload->>'current_chapter_id'
+                   FROM storyos.author_action_entries AS action
+                   JOIN storyos.project_activity_event_payloads AS payload
+                     ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
+                        (action.owner_user_id, action.project_id, action.receipt_id)
+                  WHERE action.owner_user_id = $1::text::uuid
+                    AND action.project_id = $2::text::uuid
+                    AND action.author_action_sequence = $3::text::numeric",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &sequence.to_string(),
+                ],
+            )
+            .await
+            .map_err(undo_database_error)?
+        else {
+            return Ok(None);
+        };
+        let (Some(prior_chapter_id), Some(resulting_chapter_id)) = (
+            row.get::<_, Option<String>>(/*idx*/ 0),
+            row.get::<_, Option<String>>(/*idx*/ 1),
+        ) else {
+            return Ok(None);
+        };
+        if !live_chapter_is_lawful_target(client, command, &prior_chapter_id).await? {
+            return Ok(None);
+        }
+        Ok(Some(ObservedCurrentChapterFrontier {
+            sequence,
+            prior_chapter_id,
+            resulting_chapter_id,
+        }))
+    }
+
+    fn frontier_kind(_evidence: &ObservedCurrentChapterFrontier) -> AuthorUndoFrontierKind {
+        AuthorUndoFrontierKind::ReversibleStructureTransition
+    }
+
+    async fn compensate(
+        client: &Client,
+        command: &UndoLatestAuthorActionCommand,
+        evidence: &ObservedCurrentChapterFrontier,
+        source_sequence: u64,
+    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
+        persist_current_chapter_compensation(client, command, evidence, source_sequence).await
+    }
+
+    async fn decode(
+        _client: &Client,
+        _command: &UndoLatestAuthorActionCommand,
+        replay: &CompensationReplay,
+    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
+        Ok(
+            UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
+                source_sequence: replay.source_sequence,
+                author_action_sequence: replay.author_action_sequence,
+                snapshot_id: replay
+                    .snapshot_id
+                    .clone()
+                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
+                author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
+            },
+        )
+    }
+}
+
+async fn live_chapter_is_lawful_target(
     client: &tokio_postgres::Client,
     command: &UndoLatestAuthorActionCommand,
     chapter_id: &str,
@@ -39,7 +132,7 @@ pub(super) async fn live_chapter_is_lawful_target(
     Ok(row.is_some())
 }
 
-pub(super) async fn persist_current_chapter_compensation(
+async fn persist_current_chapter_compensation(
     client: &tokio_postgres::Client,
     command: &UndoLatestAuthorActionCommand,
     frontier: &ObservedCurrentChapterFrontier,

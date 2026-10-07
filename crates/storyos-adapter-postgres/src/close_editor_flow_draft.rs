@@ -20,6 +20,12 @@ use crate::command_sequence::{
     settle_project_command, unavailable,
 };
 
+mod compensation;
+pub(crate) use compensation::{
+    DraftCompensation, DraftReopenWrite, ObservedDraftClose, load_frontier, persist_reopen,
+    read_event,
+};
+
 impl PostgresProjectReader {
     /// Settles one author Discard of a Refused Edit Draft.
     pub async fn close_editor_flow_draft(

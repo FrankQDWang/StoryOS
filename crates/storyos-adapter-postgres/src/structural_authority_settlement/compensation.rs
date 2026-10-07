@@ -1,20 +1,80 @@
+//! The structure Compensation of Author Undo (ADR 0029, ADR 0030, ADR 0044).
+
 use storyos_application::{
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
     UndoLatestAuthorActionSettlementEffect,
 };
+use storyos_core::AuthorUndoFrontierKind;
+use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::structural_authority_settlement::{
+mod frontier;
+use frontier::load_structure_frontier;
+pub(crate) use frontier::{ObservedStructureFrontier, ObservedStructureIdentity};
+
+use super::{
     StructureAffectedIdentity, StructureCommitBinding, persist_compensation_author_action,
     persist_structure_commit,
 };
-use super::undo_frontier::{ObservedStructureFrontier, ObservedStructureIdentity};
-use super::undo_latest_author_action::{
+use crate::undo_compensation::{CompensationAdapter, CompensationReplay, StructureCommand};
+use crate::undo_latest_author_action::{
     UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
     undo_from_session,
 };
 
-pub(super) async fn persist_structure_compensation(
+/// Restores the prior manuscript tree and identities of one Volume or Chapter change.
+pub(crate) struct StructureCompensation;
+
+impl CompensationAdapter for StructureCompensation {
+    type Forward = StructureCommand;
+    type Evidence = ObservedStructureFrontier;
+
+    async fn load(
+        client: &Client,
+        command: &UndoLatestAuthorActionCommand,
+        forward: StructureCommand,
+        sequence: u64,
+    ) -> Result<Option<ObservedStructureFrontier>, UndoLatestAuthorActionError> {
+        load_structure_frontier(client, command, forward, sequence).await
+    }
+
+    fn frontier_kind(_evidence: &ObservedStructureFrontier) -> AuthorUndoFrontierKind {
+        AuthorUndoFrontierKind::ReversibleStructureTransition
+    }
+
+    async fn compensate(
+        client: &Client,
+        command: &UndoLatestAuthorActionCommand,
+        evidence: &ObservedStructureFrontier,
+        source_sequence: u64,
+    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
+        persist_structure_compensation(client, command, evidence, source_sequence).await
+    }
+
+    async fn decode(
+        _client: &Client,
+        _command: &UndoLatestAuthorActionCommand,
+        replay: &CompensationReplay,
+    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
+        Ok(
+            UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
+                source_sequence: replay.source_sequence,
+                author_action_sequence: replay.author_action_sequence,
+                authoritative_commit_id: replay
+                    .authoritative_commit_id
+                    .clone()
+                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
+                snapshot_id: replay
+                    .snapshot_id
+                    .clone()
+                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
+                author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
+            },
+        )
+    }
+}
+
+async fn persist_structure_compensation(
     client: &tokio_postgres::Client,
     command: &UndoLatestAuthorActionCommand,
     frontier: &ObservedStructureFrontier,
@@ -494,26 +554,4 @@ fn compensation_commit_binding(frontier: &ObservedStructureFrontier) -> Structur
             }
         },
     }
-}
-
-pub(super) async fn editor_session_chapter(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-) -> Result<Option<String>, UndoLatestAuthorActionError> {
-    let row = client
-        .query_opt(
-            "SELECT snapshot.chapter_object_id::text
-               FROM storyos.editor_session_base_snapshots AS snapshot
-              WHERE snapshot.owner_user_id = $1::text::uuid
-                AND snapshot.project_id = $2::text::uuid
-                AND snapshot.editor_session_id = $3::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.editor_session_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    Ok(row.map(|row| row.get(0)))
 }

@@ -20,6 +20,9 @@ use crate::command_sequence::{
     ZeroReceipt, settle_project_command, unavailable,
 };
 
+mod compensation;
+pub(crate) use compensation::ReplanCompensation;
+
 impl PostgresProjectReader {
     /// Settles one author Replan of a conflicted Proposal.
     pub async fn replan_proposal(

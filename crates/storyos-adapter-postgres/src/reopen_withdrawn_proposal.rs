@@ -18,6 +18,9 @@ use crate::command_sequence::{
     ZeroReceipt, settle_project_command, unavailable,
 };
 
+mod compensation;
+pub(crate) use compensation::ReopenWithdrawnCompensation;
+
 impl PostgresProjectReader {
     /// Settles one author reopen of a withdrawn Proposal.
     pub async fn reopen_withdrawn_proposal(
