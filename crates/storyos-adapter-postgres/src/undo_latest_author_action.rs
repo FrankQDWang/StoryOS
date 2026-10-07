@@ -18,6 +18,9 @@ use super::*;
 use crate::author_edit::{parse_u64, sha256_hex};
 use crate::author_edit_proposal::ProposalEditCompensation;
 use crate::close_editor_flow_draft::DraftCompensation;
+use crate::reopen_rejected_operations::ReopenRejectedCompensation;
+use crate::reopen_withdrawn_proposal::ReopenWithdrawnCompensation;
+use crate::replan_proposal::ReplanCompensation;
 use crate::set_current_chapter::CurrentChapterCompensation;
 use crate::structural_authority_settlement::StructureCompensation;
 use crate::undo_compensation::{
@@ -138,6 +141,17 @@ async fn persist_undo(
             Some(command.expected_authoritative_revision_id.as_str()),
         ),
         Some(
+            ObservedFrontier::Replan(decision)
+            | ObservedFrontier::ReopenWithdrawnProposal(decision),
+        ) => (
+            Some(decision.chapter_id.as_str()),
+            Some(command.expected_authoritative_revision_id.as_str()),
+        ),
+        Some(ObservedFrontier::ReopenRejectedOperations(frontier)) => (
+            Some(frontier.decision.chapter_id.as_str()),
+            Some(command.expected_authoritative_revision_id.as_str()),
+        ),
+        Some(
             ObservedFrontier::Structure(_)
             | ObservedFrontier::CurrentChapter(_)
             | ObservedFrontier::DraftClose(_)
@@ -226,6 +240,17 @@ async fn persist_undo(
                 AuthorWithdrawalCompensation::compensate(client, command, frontier, source_sequence)
                     .await
             }
+            Some(ObservedFrontier::Replan(frontier)) => {
+                ReplanCompensation::compensate(client, command, frontier, source_sequence).await
+            }
+            Some(ObservedFrontier::ReopenRejectedOperations(frontier)) => {
+                ReopenRejectedCompensation::compensate(client, command, frontier, source_sequence)
+                    .await
+            }
+            Some(ObservedFrontier::ReopenWithdrawnProposal(frontier)) => {
+                ReopenWithdrawnCompensation::compensate(client, command, frontier, source_sequence)
+                    .await
+            }
             Some(ObservedFrontier::DraftClose(frontier)) => {
                 DraftCompensation::compensate(client, command, frontier, source_sequence).await
             }
@@ -269,6 +294,9 @@ async fn persist_undo(
                 | ObservedFrontier::Structure(_)
                 | ObservedFrontier::CurrentChapter(_)
                 | ObservedFrontier::Proposal(_)
+                | ObservedFrontier::Replan(_)
+                | ObservedFrontier::ReopenRejectedOperations(_)
+                | ObservedFrontier::ReopenWithdrawnProposal(_)
                 | ObservedFrontier::AuthorWithdrawal(_)
                 | ObservedFrontier::DraftClose(_)
                 | ObservedFrontier::Barrier { .. },
@@ -1072,6 +1100,15 @@ async fn read_undo_settlement(
                     Some(UndoDisposition::ProposalEdit) => {
                         ProposalEditCompensation::decode(&client, command, &replay).await?
                     }
+                    Some(UndoDisposition::Replan) => {
+                        ReplanCompensation::decode(&client, command, &replay).await?
+                    }
+                    Some(UndoDisposition::ReopenRejectedOperations) => {
+                        ReopenRejectedCompensation::decode(&client, command, &replay).await?
+                    }
+                    Some(UndoDisposition::ReopenWithdrawnProposal) => {
+                        ReopenWithdrawnCompensation::decode(&client, command, &replay).await?
+                    }
                     Some(UndoDisposition::AuthorWithdrawal) => {
                         AuthorWithdrawalCompensation::decode(&client, command, &replay).await?
                     }
@@ -1138,7 +1175,13 @@ async fn read_undo_settlement(
             .transpose()
             .map_err(undo_parse_error)?
             .unwrap_or(0);
-        let project_activity_position = if let Some(UndoDisposition::ProposalEdit) = disposition {
+        let project_activity_position = if let Some(
+            UndoDisposition::ProposalEdit
+            | UndoDisposition::Replan
+            | UndoDisposition::ReopenRejectedOperations
+            | UndoDisposition::ReopenWithdrawnProposal,
+        ) = disposition
+        {
             let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
                 .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
             match payload.get("project_activity_position") {
