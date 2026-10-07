@@ -1,6 +1,7 @@
 """Reuse complete isolated daily results within the local execution trust boundary."""
 
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
@@ -10,6 +11,13 @@ import platform
 import shutil
 import subprocess
 import sys
+import threading
+import time
+import uuid
+
+import verification_failure
+
+QUEUE_HELD = "STORYOS_VERIFICATION_HOST_QUEUE"
 
 
 def digest(value):
@@ -33,17 +41,119 @@ def budget(root):
             fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-def outputs(root, producer=None):
-    directories = [root / name for name in ("node_modules", "apps/web/node_modules")]
-    if not all(path.is_dir() for path in directories):
+def queue_path(root):
+    common = subprocess.check_output(["git", "rev-parse", "--git-common-dir"], cwd=root, text=True).strip()
+    return (Path(root) / common).resolve() / "storyos-host-queue.lock"
+
+
+def holder_alive(holder):
+    try:
+        os.kill(int(holder["pid"]), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    return True
+
+
+def read_holder(handle):
+    handle.seek(0)
+    try:
+        holder = json.loads(handle.read() or "null")
+    except ValueError:
         return None
+    return holder if isinstance(holder, dict) else None
+
+
+def queue_state(root):
+    """Return the holder of the host queue, or "free" when no live process holds it."""
+    try:
+        with queue_path(root).open() as handle:
+            holder = read_holder(handle)
+    except FileNotFoundError:
+        return "free"
+    return holder if holder and holder_alive(holder) else "free"
+
+
+def describe(holder):
+    return (f"stage {holder.get('stage')} of worktree {holder.get('worktree')}, "
+            f"started {holder.get('started_at')}, process {holder.get('pid')}")
+
+
+@contextmanager
+def host_queue(root, stage, *, report_seconds=120.0):
+    """Hold the host queue that all worktrees of the repository share, and wait while another run holds it."""
+    if os.environ.get(QUEUE_HELD):
+        yield None
+        return
+    path = queue_path(root)
+    record = {"stage": stage, "lock": str(path), "waited_seconds": 0.0, "released": None}
+    started = time.monotonic()
+    handle = path.open("a+")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        done = threading.Event()
+
+        def report():
+            while True:
+                print(f"Host queue: waiting {time.monotonic() - started:.0f}s for "
+                      f"{describe(read_holder(handle) or {})}", flush=True)
+                if done.wait(report_seconds):
+                    return
+
+        reporter = threading.Thread(target=report, daemon=True)
+        reporter.start()
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        finally:
+            done.set()
+            reporter.join()
+    previous = read_holder(handle)
+    if previous:
+        record["released"] = previous
+        print(f"Host queue: released the lock of {describe(previous)}; that process ended without a release",
+              flush=True)
+    holder = {"pid": os.getpid(), "worktree": str(Path(root).resolve()), "stage": stage,
+              "started_at": datetime.now(timezone.utc).isoformat()}
+    handle.seek(0)
+    handle.truncate()
+    handle.write(json.dumps(holder))
+    handle.flush()
+    record.update(holder=holder, waited_seconds=round(time.monotonic() - started, 3))
+    run_path = os.environ.get("STORYOS_VERIFICATION_RUN")
+    if run_path:
+        directory = Path(run_path) / "host-queue"
+        directory.mkdir(exist_ok=True)
+        (directory / f"{uuid.uuid4().hex}.json").write_text(json.dumps(record))
+    os.environ[QUEUE_HELD] = str(path)
+    try:
+        yield record
+    finally:
+        os.environ.pop(QUEUE_HELD, None)
+        handle.seek(0)
+        handle.truncate()
+        handle.flush()
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        handle.close()
+
+
+def scan(root):
+    """Return the identity of each present dependency file and whether the installation is reusable."""
+    directories = [root / name for name in ("node_modules", "apps/web/node_modules")]
+    reusable = all(path.is_dir() for path in directories)
+    ignored = set(json.loads((root / "docs/agents/verification-policy.json").read_text()).get("dependency_ignore", []))
     identities = []
     for directory in directories:
         for path in sorted(directory.rglob("*")):
+            if ignored.intersection(path.relative_to(directory).parts):
+                continue
             if path.is_symlink():
                 if (path.resolve() != (root / "apps/web").resolve()
                         and not any(path.resolve().is_relative_to(base.resolve()) for base in directories)):
-                    return None
+                    reusable = False
                 content = ("link", os.readlink(path))
             elif path.is_file():
                 content = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -52,11 +162,83 @@ def outputs(root, producer=None):
             state = path.lstat()
             identities.append((str(path.relative_to(root)), state.st_mode, state.st_ino,
                                state.st_mtime_ns, state.st_ctime_ns, content))
+    return identities, reusable
+
+
+def installed(root):
+    """Return the identity of each installed dependency file, or None when the installation is not reusable."""
+    identities, reusable = scan(root)
+    return identities if reusable else None
+
+
+def changed_dependencies(before, root):
+    """Return the sorted dependency paths whose identity differs from an earlier installed() result."""
+    def index(entries):
+        return {entry[0]: json.dumps(entry) for entry in entries or []}
+    return verification_failure.changed(index(before), index(scan(root)[0]))
+
+
+def outputs(root, producer=None):
+    identities = installed(root)
+    if identities is None:
+        return None
     if producer:
         return {"dependencies": digest(identities), "artifacts": {
             name: hashlib.sha256((producer / name).read_bytes()).hexdigest()
             for name in ("vitest.json", "dependencies.json")}}
     return digest(identities)
+
+
+TOOL_RESULTS = "target/verification-cache/verification-tests"
+DIAGNOSTIC = ("STORYOS_VERIFICATION_TEST_WORKERS", "STORYOS_VERIFICATION_COMPARE")
+
+
+def tool_key(root):
+    """Return the digest of the inputs that the verification-tool self-tests read."""
+    import verification
+    contents = []
+    for path in verification.input_paths(root):
+        if path == "Makefile" or path.startswith(("scripts/", "docs/agents/", ".github/")):
+            source = root / path
+            contents.append((path, source.lstat().st_mode, os.readlink(source) if source.is_symlink() else None,
+                             hashlib.sha256(source.read_bytes()).hexdigest() if source.is_file() else None)
+                            if source.is_file() or source.is_symlink() else (path, None))
+    tests = sorted((item["path"], item["kind"], item["group"]) for item in verification.inventory(root)["files"]
+                   if item["kind"].endswith("-test"))
+    node = shutil.which("node")
+    versions = [sys.version, subprocess.check_output([node, "--version"], text=True).strip() if node else None]
+    return digest({"version": 1, "inputs": contents, "tests": tests, "versions": versions})
+
+
+def tool_result(root, key):
+    """Return the producer of a passed verification-tool self-test result with this key, or None."""
+    try:
+        entry = json.loads((root / TOOL_RESULTS / f"{key}.json").read_text())
+        producer = (root / entry["report"]).resolve()
+        if not producer.is_relative_to((root / "target/verification").resolve()):
+            return None
+        report = json.loads(producer.read_text())
+        step = next(item for item in report["steps"] if item.get("id") == entry["step"])
+        if (step["stage"] != "verification-tests" or step["status"] != "passed" or step.get("reuse_key") != key
+                or report["source_start"] != report["source_end"]
+                or any(item["status"] != "passed" for item in report.get("verification_test_file_attempts", []))):
+            return None
+        return {"producer": entry["report"], "producer_step": step["id"]}
+    except (OSError, ValueError, KeyError, TypeError, StopIteration):
+        return None
+
+
+def publish_tool_result(root, report_path, step):
+    """Record a passed verification-tool self-test step as the reusable result of its key."""
+    path = root / TOOL_RESULTS / f"{step['reuse_key']}.json"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps({"key": step["reuse_key"], "report": str(report_path.relative_to(root)),
+                                         "step": step["id"]}, indent=2) + "\n")
+        temporary.replace(path)
+    except OSError:
+        pass
 
 
 class DailyCache:
@@ -119,12 +301,24 @@ class DailyCache:
     def prepare(self, report_path):
         if self.path is not None and not self.no_cache and self.observation["status"] == "miss":
             self.required = outputs(self.root, report_path.parent)
-            if self.required and self.required["dependencies"] != json.loads(
+            if (self.required or {}).get("dependencies") != json.loads(
                     (report_path.parent / "dependencies.json").read_text()):
-                raise ValueError("Installed dependencies changed before cache publication")
+                reason = "Installed dependencies changed before cache publication"
+                (report_path.parent / "failure.json").write_text(json.dumps({
+                    "reason": reason, "changed_paths": changed_dependencies(
+                        json.loads((report_path.parent / "installed.json").read_text()), self.root)}))
+                raise ValueError(reason)
         elif self.observation["status"] == "hit":
             producer = self.root / self.observation["producer"]
-            if (self.required != outputs(self.root, producer.parent)
+            current = outputs(self.root, producer.parent)
+            recorded = producer.parent / "installed.json"
+            if (current or {}).get("dependencies") != self.required["dependencies"] and recorded.is_file():
+                reason = "Installed dependencies changed during cache reuse"
+                (report_path.parent / "failure.json").write_text(json.dumps({
+                    "reason": reason,
+                    "changed_paths": changed_dependencies(json.loads(recorded.read_text()), self.root)}))
+                raise ValueError(reason)
+            if (self.required != current
                     or self.observation["report_sha256"] != hashlib.sha256(producer.read_bytes()).hexdigest()):
                 raise ValueError("Cached verification outputs changed during reuse")
 

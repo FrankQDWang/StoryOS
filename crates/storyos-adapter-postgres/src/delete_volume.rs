@@ -12,11 +12,13 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
-use crate::structure_command::{
-    Classified, CommandIsolation, CommandSpec, CurrentChapterChange, LockedProject,
-    StructureCommand, StructureIdentity, StructureWrite, WriterBase, settle_structure_command,
-    unavailable,
+use crate::command_sequence::{
+    AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
+    LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, RateLimitedChallenge,
+    ReplayEffect, Structural, StructureIdentity, StructureWrite, WriterBase,
+    settle_project_command, unavailable,
 };
+use crate::structural_authority_settlement::StructureTransitionSequences;
 
 impl PostgresProjectReader {
     /// Settles one author-initiated Volume removal as a Manuscript Structure Transition.
@@ -25,16 +27,23 @@ impl PostgresProjectReader {
         envelope: &ProjectCommandEnvelope,
         input: &DeleteVolumeInput,
     ) -> Result<DeleteVolumeSettlement, ProjectCommandError> {
-        settle_structure_command(self, envelope, input).await
+        settle_project_command(self, envelope, input).await
     }
 }
 
-impl StructureCommand for DeleteVolumeInput {
+impl ProjectCommand for DeleteVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "deleteVolume",
+        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
         isolation: CommandIsolation::Serializable,
+        missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::Unavailable,
         activity_kind: "volume_deleted",
+        replay_effect: ReplayEffect::NoQuery,
     };
+    type Profile = Structural;
+    type Response = ProjectResponse;
+    type ZeroEffect = ();
     type Applied = DeleteVolumeApplied;
     type Plan = ();
     type Effect = VolumeDeleted;
@@ -47,7 +56,7 @@ impl StructureCommand for DeleteVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classified<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, ProjectCommandError> {
         let scope = &envelope.project_scope;
         let target = client
             .query_opt(
@@ -116,7 +125,9 @@ impl StructureCommand for DeleteVolumeInput {
             current_tree_revision: project.tree_revision,
             current_lifecycle: project.lifecycle,
         });
-        Ok(classified.map_applied(|applied| (applied, ())))
+        Ok(Classification::project_command(
+            classified.map_applied(|applied| (applied, ())),
+        ))
     }
 
     async fn apply(
@@ -124,6 +135,7 @@ impl StructureCommand for DeleteVolumeInput {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
+        _sequences: &StructureTransitionSequences,
         _plan: (),
         applied: DeleteVolumeApplied,
     ) -> Result<StructureWrite<VolumeDeleted>, ProjectCommandError> {
@@ -162,7 +174,7 @@ impl StructureCommand for DeleteVolumeInput {
     fn decode(&self, replay: &CommandReplay) -> Result<VolumeDeleted, ReplayFault> {
         let tree_revision = replay.activity_u64("tree_revision")?;
         Ok(VolumeDeleted {
-            volume_id: replay.activity_text("volume_id")?,
+            volume_id: replay.activity_uuid("volume_id")?,
             tree_revision,
         })
     }

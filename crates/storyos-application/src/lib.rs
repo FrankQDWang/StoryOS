@@ -34,7 +34,6 @@ pub use acceptance_refusal::{
 mod accept_proposal;
 mod agent_run_control;
 mod agent_run_work;
-mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_wire;
@@ -66,6 +65,7 @@ mod project_activity;
 mod project_command;
 mod project_export;
 mod project_export_work;
+mod project_settings;
 mod proposal_generation_decision;
 mod readable_export;
 mod readable_export_work;
@@ -77,7 +77,6 @@ mod set_current_chapter;
 mod snapshot;
 mod takeover;
 mod undo_latest_author_action;
-mod update_project;
 mod update_project_assistance;
 mod withdraw_proposal;
 
@@ -117,10 +116,6 @@ pub use agent_run_control::{
 pub use agent_run_work::{
     AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
     claim_next_agent_run,
-};
-pub use archive_project::{
-    ArchiveProjectCommand, ArchiveProjectError, ArchiveProjectSettlement,
-    ArchiveProjectSettlementEffect, ArchiveProjectStore, archive_project,
 };
 pub use chapter_query::{ChapterQueryFacts, ChapterQueryReader, OpenChapter, open_chapter};
 pub use create_agent_run::{
@@ -187,8 +182,10 @@ pub use pinned_export_source::{
     render_readable_manuscript_from_pinned_source,
 };
 pub use project_command::{
-    ProjectCommandEnvelope, ProjectCommandError, StructureApplied, StructureAuthority,
-    StructureAuthorityEvidence, StructureSettlement,
+    ActionApplied, ActivityApplied, AuthorityEvidence, ChapterSelectionApplied,
+    ChapterSelectionAuthority, ProjectCommandEnvelope, ProjectCommandError,
+    ProjectCommandSettlement, StructureApplied, StructureAuthority, StructureAuthorityEvidence,
+    StructureSettlement,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,
@@ -203,11 +200,13 @@ pub use project_export_work::{
     ArchiveExportWorkStore, ClaimedArchiveExport, CompleteArchiveExport,
     CompleteArchiveExportError, claim_next_archive_export, complete_archive_export,
 };
+pub use project_settings::{
+    ArchiveProjectInput, ArchiveProjectSettlement, UpdateProjectInput, UpdateProjectSettlement,
+};
 pub use proposal_generation_decision::{
-    CompleteReadyPartialProposalCommand, CompleteReadyPartialProposalEffect,
-    ContinueProposalGenerationCommand, ContinueProposalGenerationEffect,
-    ProposalGenerationDecisionError, ProposalGenerationDecisionStore, ProposalGenerationSettlement,
-    complete_ready_partial_proposal, continue_proposal_generation,
+    CompleteReadyPartialProposalInput, CompleteReadyPartialProposalSettlement,
+    ContinueProposalGenerationInput, ContinueProposalGenerationSettlement,
+    ProposalGenerationCompleted, ProposalGenerationStarted,
 };
 pub use readable_export::{
     ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptAdmissionEffect,
@@ -225,46 +224,30 @@ pub use readable_export_work::{
     ReadableExportWorkStore, claim_next_readable_export, complete_readable_export,
 };
 pub use reject_proposal_operations::{
-    RejectProposalOperationsCommand, RejectProposalOperationsError,
-    RejectProposalOperationsSettlement, RejectProposalOperationsSettlementEffect,
-    RejectProposalOperationsStore, RejectionNote, reject_proposal_operations,
+    ProposalOperationsRejected, RejectProposalOperationsInput, RejectProposalOperationsSettlement,
+    RejectionNote,
 };
 pub use reopen_rejected_operations::{
-    ReopenRejectedOperationsCommand, ReopenRejectedOperationsError,
-    ReopenRejectedOperationsSettlement, ReopenRejectedOperationsSettlementEffect,
-    ReopenRejectedOperationsStore, reopen_rejected_operations,
+    RejectedOperationsReopened, ReopenRejectedOperationsInput, ReopenRejectedOperationsSettlement,
 };
 pub use reopen_withdrawn_proposal::{
-    ReopenWithdrawnProposalCommand, ReopenWithdrawnProposalError,
-    ReopenWithdrawnProposalSettlement, ReopenWithdrawnProposalSettlementEffect,
-    ReopenWithdrawnProposalStore, reopen_withdrawn_proposal,
+    ProposalReopened, ReopenWithdrawnProposalInput, ReopenWithdrawnProposalSettlement,
 };
-pub use replan_proposal::{
-    ReplanProposalCommand, ReplanProposalError, ReplanProposalSettlement,
-    ReplanProposalSettlementEffect, ReplanProposalStore, replan_proposal,
-};
+pub use replan_proposal::{ProposalReplanned, ReplanProposalInput, ReplanProposalSettlement};
 pub use set_current_chapter::{
-    SetCurrentChapterAuthority, SetCurrentChapterCommand, SetCurrentChapterError,
-    SetCurrentChapterSettlement, SetCurrentChapterSettlementEffect, SetCurrentChapterStore,
-    set_current_chapter,
+    CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };
 pub use undo_latest_author_action::{
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
     UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore, undo_latest_author_action,
 };
-pub use update_project::{
-    UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,
-    UpdateProjectSettlementEffect, UpdateProjectStore, update_project,
-};
 pub use update_project_assistance::{
-    ProjectAssistanceRecord, UpdateProjectAssistanceCommand, UpdateProjectAssistanceError,
-    UpdateProjectAssistanceSettlement, UpdateProjectAssistanceSettlementEffect,
-    UpdateProjectAssistanceStore, update_project_assistance,
+    ProjectAssistanceAcknowledgement, ProjectAssistanceRecord, UpdateProjectAssistanceInput,
+    UpdateProjectAssistanceSettlement,
 };
 pub use withdraw_proposal::{
-    ResolvedWithdrawal, WithdrawProposalCommand, WithdrawProposalError, WithdrawProposalSettlement,
-    WithdrawProposalSettlementEffect, WithdrawProposalStore, WithdrawalActor, WithdrawalNote,
-    withdraw_proposal,
+    CurrentProducerWithdrawal, CurrentProducerWithdrawalSettlement, ProposalWithdrawn,
+    WithdrawProposalInput, WithdrawProposalSettlement, WithdrawalNote,
 };
 
 pub use editor_session::{
@@ -273,10 +256,7 @@ pub use editor_session::{
     OpenEditorSession, create_editor_session, get_editor_session,
 };
 
-pub use takeover::{
-    TakeOverProjectWriterCommand, TakeOverProjectWriterEffect, TakeOverProjectWriterError,
-    TakeOverProjectWriterSettlement, TakeOverProjectWriterStore, take_over_project_writer,
-};
+pub use takeover::{TakeOverProjectWriterInput, TakeOverProjectWriterSettlement, WriterTakeover};
 
 pub use project_activity::{ActivityAggregateRef, ProjectActivityEvent, ProjectActivityKind};
 pub use snapshot::{
@@ -566,10 +546,9 @@ mod tests;
 mod close_editor_flow_draft;
 mod expand_refused_edit_draft;
 pub use close_editor_flow_draft::{
-    CloseEditorFlowDraftCommand, CloseEditorFlowDraftStore, DraftCloseError, DraftCloseSettlement,
-    close_editor_flow_draft,
+    CloseEditorFlowDraftInput, CloseEditorFlowDraftSettlement, DraftCloseObservation, DraftClosed,
 };
 pub use expand_refused_edit_draft::{
-    DraftExpansionSettlement, ExpandRefusedEditDraftCommand, ExpandRefusedEditDraftStore,
-    expand_refused_edit_draft,
+    DraftExpanded, DraftExpansionObservation, ExpandRefusedEditDraftSettlement,
+    ExpandRefusedEditDraftToProposalInput,
 };

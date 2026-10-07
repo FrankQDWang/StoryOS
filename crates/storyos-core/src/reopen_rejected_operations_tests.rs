@@ -1,6 +1,6 @@
 use super::{
     ReopenRejectedOperations, ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
-    ReopenRejectedOperationsResult, reopen_rejected_operations,
+    TransitionOutcome, reopen_rejected_operations,
 };
 
 fn exact_rejected() -> ReopenRejectedOperations {
@@ -20,7 +20,7 @@ fn exact_rejected() -> ReopenRejectedOperations {
 fn resolves_one_rejected_operation_without_authority() {
     assert_eq!(
         reopen_rejected_operations(&exact_rejected()),
-        ReopenRejectedOperationsResult::Resolved
+        TransitionOutcome::Applied(())
     );
 }
 
@@ -30,57 +30,43 @@ fn refuses_stale_lineage_unavailable_proof_and_non_rejected_work() {
     wrong_scope.scope_matches = false;
     assert_eq!(
         reopen_rejected_operations(&wrong_scope),
-        ReopenRejectedOperationsResult::Refused {
-            reason: ReopenRejectedOperationsRefusal::WrongScope,
-        }
+        TransitionOutcome::Refused(ReopenRejectedOperationsRefusal::WrongScope)
     );
     let mut wrong_admission = exact_rejected();
     wrong_admission.admission_valid = false;
     assert_eq!(
         reopen_rejected_operations(&wrong_admission),
-        ReopenRejectedOperationsResult::Refused {
-            reason: ReopenRejectedOperationsRefusal::WrongAdmission,
-        }
+        TransitionOutcome::Refused(ReopenRejectedOperationsRefusal::WrongAdmission)
     );
     let mut stale = exact_rejected();
     stale.proposal_revision_current = false;
     assert_eq!(
         reopen_rejected_operations(&stale),
-        ReopenRejectedOperationsResult::Refused {
-            reason: ReopenRejectedOperationsRefusal::StaleProposalRevision,
-        }
+        TransitionOutcome::Refused(ReopenRejectedOperationsRefusal::StaleProposalRevision)
     );
     let mut closed = exact_rejected();
     closed.closure_open = false;
     assert_eq!(
         reopen_rejected_operations(&closed),
-        ReopenRejectedOperationsResult::Refused {
-            reason: ReopenRejectedOperationsRefusal::NotEligible,
-        }
+        TransitionOutcome::Refused(ReopenRejectedOperationsRefusal::NotEligible)
     );
     let mut reserved = exact_rejected();
     reserved.reservation_available = false;
     assert_eq!(
         reopen_rejected_operations(&reserved),
-        ReopenRejectedOperationsResult::Refused {
-            reason: ReopenRejectedOperationsRefusal::NotEligible,
-        }
+        TransitionOutcome::Refused(ReopenRejectedOperationsRefusal::NotEligible)
     );
     let mut not_rejected = exact_rejected();
     not_rejected.selected_operations_rejected = false;
     assert_eq!(
         reopen_rejected_operations(&not_rejected),
-        ReopenRejectedOperationsResult::Refused {
-            reason: ReopenRejectedOperationsRefusal::OperationNotRejected,
-        }
+        TransitionOutcome::Refused(ReopenRejectedOperationsRefusal::OperationNotRejected)
     );
     let mut unavailable = exact_rejected();
     unavailable.rejection_event_matches = false;
     assert_eq!(
         reopen_rejected_operations(&unavailable),
-        ReopenRejectedOperationsResult::Refused {
-            reason: ReopenRejectedOperationsRefusal::UnavailableProof,
-        }
+        TransitionOutcome::Refused(ReopenRejectedOperationsRefusal::UnavailableProof)
     );
 }
 
@@ -90,8 +76,6 @@ fn conflicts_a_changed_target_head() {
     changed.expected_target_matches_head = false;
     assert_eq!(
         reopen_rejected_operations(&changed),
-        ReopenRejectedOperationsResult::Conflicted {
-            reason: ReopenRejectedOperationsConflict::ChangedHead,
-        }
+        TransitionOutcome::Conflicted(ReopenRejectedOperationsConflict::ChangedHead)
     );
 }

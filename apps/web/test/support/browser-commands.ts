@@ -1,7 +1,9 @@
 import { defineBrowserCommand } from "@vitest/browser-playwright";
+import type { Request, Route } from "playwright";
 import type { BrowserCommandContext } from "vitest/node";
 
 import {
+  parseAuthorEditSubmissionHoldRequest,
   parseClientSessionCookieRequest,
   parseClipboardPermissionRequest,
   parseCommandChallengeRateWindowsRequest,
@@ -24,6 +26,16 @@ import { verifyProductionComposerControls } from "./production-composer-controls
 import { verifyProductionMultiProposal } from "./production-multi-proposal-command.ts";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
+const AUTHOR_EDIT_COMMAND_PATH = /^\/api\/v1\/projects\/[^/]+\/manuscript\/author-edits$/u;
+
+function authorEditCommand(url: URL): boolean {
+  return AUTHOR_EDIT_COMMAND_PATH.test(url.pathname);
+}
+
+let authorEditHold: {
+  readonly release: () => void;
+  readonly handler: (route: Route, request: Request) => Promise<void>;
+} | undefined;
 
 async function focusedApplicationFrame(context: BrowserCommandContext) {
   const testFrame = await context.frame();
@@ -36,6 +48,34 @@ async function focusedApplicationFrame(context: BrowserCommandContext) {
 }
 
 export const storyOSBrowserCommands = {
+  [storyOSBrowserCommandNames.authorEditSubmissionHold]: defineBrowserCommand<[request: unknown]>(
+    async (context, value) => {
+      const request = parseAuthorEditSubmissionHoldRequest(value);
+      if (request.action === "hold") {
+        if (authorEditHold !== undefined) throw new Error("Author Edit submissions are already held");
+        let release = (): void => undefined;
+        const released = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const orchestrator = context.page.mainFrame();
+        const handler = async (route: Route, held: Request): Promise<void> => {
+          if (held.method() === "POST" && held.frame() !== orchestrator) await released;
+          // A reload aborts a held request, and Playwright then refuses to continue it.
+          await route.continue().catch(() => undefined);
+        };
+        authorEditHold = { release, handler };
+        await context.page.route(authorEditCommand, handler);
+        return { kind: "author_edit_submission_hold_updated" } as const;
+      }
+      const hold = authorEditHold;
+      authorEditHold = undefined;
+      if (hold !== undefined) {
+        hold.release();
+        await context.page.unroute(authorEditCommand, hold.handler);
+      }
+      return { kind: "author_edit_submission_hold_updated" } as const;
+    },
+  ),
   [storyOSBrowserCommandNames.settleWorkerOnce]: defineBrowserCommand<[request: unknown]>(
     async (_context, value) => {
       parseSettleWorkerOnceRequest(value);

@@ -13,6 +13,7 @@ import verification_status
 
 
 POLICY = 'docs/agents/verification-policy.json'
+GUARDS = ('ste-text-guard', 'rust-literal-guard', 'diff-whitespace')
 
 
 def api(path):
@@ -27,21 +28,26 @@ def binding(root, revision, base, head, pr, purpose):
 
 
 def sentinel(route, head, base, tree):
-    checks = api(f'{route}/commits/{head}/check-runs?per_page=100')['check_runs']
-    checks = [c for c in checks if c['name'] == 'verify' and c['head_sha'] == head]
-    check = max(checks, key=lambda c: c['id']) if checks else {}
-    if check.get('status') != 'completed' or check.get('conclusion') != 'success':
-        raise ValueError('Current synthetic-merge verify success is required')
-    logs = subprocess.check_output(['gh', 'api', f"{route}/actions/jobs/{check['id']}/logs", "--allow-escape-sequences"], text=True)
-    if tree is None:
-        trees = re.findall(r'Synthetic merge tree: ([0-9a-f]{40})(?:\r?\n|$)', logs)
-        if len(set(trees)) != 1:
-            raise ValueError('Verify must record one synthetic tree')
-        tree = trees[0]
-    for label, value in [('Pull request base', base), ('Pull request head', head), ('Synthetic merge tree', tree)]:
-        if not any(line.endswith(f'{label}: {value}') for line in logs.splitlines()):
-            raise ValueError('Verify sentinel does not cover the current synthetic merge')
-    return {'head': head, 'base': base, 'tree': tree, 'check_id': check['id'], 'result': 'PASS'}
+    checks, page = [], 1
+    while len(checks) == 100 * (page - 1):
+        checks += api(f'{route}/commits/{head}/check-runs?filter=all&per_page=100&page={page}')['check_runs']
+        page += 1
+    passed = [c for c in checks if c['name'] == 'verify' and c['head_sha'] == head
+              and c.get('status') == 'completed' and c.get('conclusion') == 'success']
+    if not passed:
+        raise ValueError('A successful synthetic-merge verify run on the head is required')
+    for check in sorted(passed, key=lambda c: c['id'], reverse=True):
+        logs = subprocess.check_output(['gh', 'api', f"{route}/actions/jobs/{check['id']}/logs", "--allow-escape-sequences"], text=True)
+        run_tree = tree
+        if run_tree is None:
+            trees = set(re.findall(r'Synthetic merge tree: ([0-9a-f]{40})(?:\r?\n|$)', logs))
+            if len(trees) != 1:
+                continue
+            run_tree = trees.pop()
+        if all(any(line.endswith(f'{label}: {value}') for line in logs.splitlines())
+               for label, value in [('Pull request base', base), ('Pull request head', head), ('Synthetic merge tree', run_tree)]):
+            return {'head': head, 'base': base, 'tree': run_tree, 'check_id': check['id'], 'result': 'PASS'}
+    raise ValueError('No successful verify run covers the current synthetic merge')
 
 
 def current(root, pr, purpose):
@@ -70,6 +76,17 @@ def current(root, pr, purpose):
     if source['dirty'] or source['tree'] != candidate['tree']:
         raise ValueError('Review requires a clean source matching the candidate tree')
     return candidate, verify
+
+
+def guards(root):
+    """Return passed, failed, or missing for each guard step of the current verify-policy result."""
+    steps = {}
+    if 'verify-policy' in json.loads((root / POLICY).read_text()).get('targeted', {}):
+        state = verification_status.status(root, verification_status.targeted_plan(root, 'verify-policy'))
+        if state['status'] in {'passed', 'failed'}:
+            steps = {s['stage']: s['status'] for s in json.loads(Path(state['report']).read_text())['steps']}
+    return {guard: 'missing' if guard not in steps else 'passed' if steps[guard] in {'passed', 'cached'} else 'failed'
+            for guard in GUARDS}
 
 
 def validate(request, reviews, expected):
@@ -172,7 +189,7 @@ def main():
         if args.action == 'request':
             candidate, verify = current(root, args.pr, args.purpose)
             value = {'version': 1, 'candidate': candidate, 'verify': {k: v for k, v in verify.items() if k != 'check_id'},
-                     'executor_context': args.executor_context}
+                     'executor_context': args.executor_context, 'guards': guards(root)}
             value['digest'] = verification_cache.digest(value)
             path = root / 'target/verification/reviews' / value['digest'] / 'request.json'
         else:

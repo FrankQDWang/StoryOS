@@ -53,15 +53,16 @@ class WorkflowQueryTests(unittest.TestCase):
         self.assertEqual(value['checks'][0]['status'], 'pending')
         self.assertEqual(value['counts'], {'pending': 7, 'ready': 4})
         self.assertEqual(sum(r['checks'] for r in value['blockedReasons']), 7)
-        self.assertEqual(value['nextAction']['argv'], ['make', 'verify-changed', 'BASE=' + fixture.base,
-                         f"VERIFY_ARGS=--workers {plan['workers']}"])
+        clean_tree = {'argv': ['git', 'status', '--short', '--untracked-files=all'], 'prerequisite': 'cleanTree'}
+        self.assertEqual(value['nextAction'], clean_tree)
         page2 = json.loads(fixture.cli('summary', '--page', '2').stdout)
         self.assertEqual(len(value['checks']) + len(page2['checks']), len(plan['checks']))
         for check in value['checks'] + page2['checks']:
             detail = fixture.cli('summary', '--index', str(check['index']), '--details')
             self.assertEqual(json.loads(detail.stdout), plan['checks'][check['index']])
         single = json.loads(fixture.cli('summary', '--workers', '1').stdout)
-        self.assertEqual(single['nextAction']['argv'][-1], 'VERIFY_ARGS=--workers 1')
+        self.assertEqual(single['nextAction'], clean_tree)
+        self.assertIn('--workers 1', single['inspect']['checks'])
         for name in ('checks', 'nextPage', 'check', 'export'):
             command = single['inspect'][name].replace('<index>', '0')
             followed = subprocess.run(shlex.split(command), cwd=fixture.root,

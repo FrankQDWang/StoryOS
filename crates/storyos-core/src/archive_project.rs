@@ -1,6 +1,9 @@
 //! Pure Core classification for Archive Project.
 
-use super::ProjectPresence;
+use std::convert::Infallible;
+
+use super::TransitionOutcome;
+use crate::transition_outcome::reason_codes;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProjectLifecycle {
@@ -10,19 +13,22 @@ pub enum ProjectLifecycle {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ArchiveProject {
-    pub presence: ProjectPresence,
     pub expected_revision: u64,
     pub current_revision: u64,
     pub current_lifecycle: ProjectLifecycle,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ArchiveProjectResult {
-    Applied { revision: u64 },
-    NoEffect { reason: ArchiveProjectNoEffect },
-    Conflicted { reason: ArchiveProjectConflict },
-    Refused { reason: ArchiveProjectRefusal },
+pub struct ArchiveProjectApplied {
+    pub revision: u64,
 }
+
+pub type ArchiveProjectResult = TransitionOutcome<
+    ArchiveProjectApplied,
+    ArchiveProjectNoEffect,
+    ArchiveProjectConflict,
+    Infallible,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ArchiveProjectNoEffect {
@@ -34,29 +40,18 @@ pub enum ArchiveProjectConflict {
     StaleProjectRevision,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ArchiveProjectRefusal {
-    MissingProject,
-}
+reason_codes!(ArchiveProjectNoEffect { AlreadyArchived => "already_archived" });
+reason_codes!(ArchiveProjectConflict { StaleProjectRevision => "stale_project_revision" });
 
-/// Classify one Archive Project against exact Scope presence, expected revision, and lifecycle.
+/// Classify one Archive Project against expected revision and lifecycle.
 pub fn archive_project(command: &ArchiveProject) -> ArchiveProjectResult {
-    if command.presence == ProjectPresence::Absent {
-        return ArchiveProjectResult::Refused {
-            reason: ArchiveProjectRefusal::MissingProject,
-        };
-    }
     if command.expected_revision != command.current_revision {
-        return ArchiveProjectResult::Conflicted {
-            reason: ArchiveProjectConflict::StaleProjectRevision,
-        };
+        return ArchiveProjectResult::Conflicted(ArchiveProjectConflict::StaleProjectRevision);
     }
     if command.current_lifecycle == ProjectLifecycle::Archived {
-        return ArchiveProjectResult::NoEffect {
-            reason: ArchiveProjectNoEffect::AlreadyArchived,
-        };
+        return ArchiveProjectResult::NoEffect(ArchiveProjectNoEffect::AlreadyArchived);
     }
-    ArchiveProjectResult::Applied {
+    ArchiveProjectResult::Applied(ArchiveProjectApplied {
         revision: command.current_revision + 1,
-    }
+    })
 }

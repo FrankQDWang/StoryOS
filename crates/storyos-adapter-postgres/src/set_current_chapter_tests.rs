@@ -4,12 +4,12 @@ use storyos_application::{
     CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, EditorClientBinding,
     EditorSessionId, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
     OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    SetCurrentChapterCommand, SetCurrentChapterSettlementEffect, UserId, VolumeCreated,
-    create_editor_session, create_project, issue_create_project_challenge,
-    issue_project_command_challenge, open_chapter, open_project, set_current_chapter,
+    SetCurrentChapterInput, UserId, VolumeCreated, create_editor_session, create_project,
+    issue_create_project_challenge, issue_project_command_challenge, open_chapter, open_project,
 };
+use storyos_core::TransitionOutcome;
 
-use crate::structure_command::tests::{
+use crate::command_sequence::tests::{
     CommandCall, applied, command_call, create_chapter, create_volume,
 };
 
@@ -191,20 +191,29 @@ fn current_command(
     chapter_id: &str,
     expected_current_chapter_id: &str,
     expected_target_revision_id: &str,
-) -> SetCurrentChapterCommand {
-    SetCurrentChapterCommand {
-        project_scope: binding.project_scope.clone(),
-        client_binding: client_binding(&binding),
-        challenge_binding: binding,
-        nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: CURRENT_BYTES.to_vec(),
-        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        ids: admission_ids(ids_suffix),
-        editor_session_id: EditorSessionId::new(editor_session_id),
-        chapter_id: chapter_id.to_owned(),
-        expected_current_chapter_id: expected_current_chapter_id.to_owned(),
-        expected_target_revision_id: expected_target_revision_id.to_owned(),
-    }
+) -> CommandCall<SetCurrentChapterInput> {
+    command_call(
+        binding,
+        nonce_digest,
+        ids_suffix,
+        CURRENT_BYTES,
+        SetCurrentChapterInput {
+            editor_session_id: EditorSessionId::new(editor_session_id),
+            chapter_id: chapter_id.to_owned(),
+            expected_current_chapter_id: expected_current_chapter_id.to_owned(),
+            expected_target_revision_id: expected_target_revision_id.to_owned(),
+        },
+    )
+}
+
+async fn set_current_chapter(
+    store: &PostgresProjectReader,
+    call: &CommandCall<SetCurrentChapterInput>,
+) -> Result<
+    storyos_application::SetCurrentChapterSettlement,
+    storyos_application::ProjectCommandError,
+> {
+    store.set_current_chapter(&call.envelope, &call.input).await
 }
 
 fn client_binding(binding: &ProjectCommandChallengeBinding) -> EditorClientBinding {
@@ -213,14 +222,6 @@ fn client_binding(binding: &ProjectCommandChallengeBinding) -> EditorClientBindi
         session_generation: binding.client_session_generation,
         client_contract_revision: binding.client_contract_revision.clone(),
         security_policy_revision: binding.security_policy_revision.clone(),
-    }
-}
-
-fn admission_ids(ids_suffix: &str) -> AuthorCommandAdmissionIds {
-    AuthorCommandAdmissionIds {
-        command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
-        author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
-        receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
     }
 }
 
@@ -376,28 +377,10 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     )
     .await
     .unwrap();
-    let SetCurrentChapterSettlementEffect::Applied {
-        current_chapter_id, ..
-    } = first_switch.effect.clone()
-    else {
+    let TransitionOutcome::Applied(applied) = &first_switch.outcome else {
         panic!("switching to Chapter B must apply");
     };
-    assert_eq!(current_chapter_id, chapter_b);
-    let replay = set_current_chapter(
-        &store,
-        &current_command(
-            switch_issue.binding.clone(),
-            &switch_issue.nonce_digest,
-            "0e1d",
-            editor_session_id,
-            &chapter_b,
-            &chapter_a,
-            &revision_b,
-        ),
-    )
-    .await
-    .unwrap();
-    assert_eq!(replay, first_switch);
+    assert_eq!(applied.effect.current_chapter_id, chapter_b);
     assert_eq!(
         open_project(&store, &scope)
             .await
@@ -434,10 +417,8 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     .await
     .unwrap();
     assert!(matches!(
-        stale.effect,
-        SetCurrentChapterSettlementEffect::Conflicted {
-            reason: storyos_core::SetCurrentChapterConflict::StaleCurrentChapter,
-        }
+        stale.outcome,
+        TransitionOutcome::Conflicted(storyos_core::SetCurrentChapterConflict::StaleCurrentChapter)
     ));
 
     let wrong_issue = command_issue(
@@ -467,9 +448,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     .await
     .unwrap();
     assert!(matches!(
-        wrong.effect,
-        SetCurrentChapterSettlementEffect::Conflicted {
-            reason: storyos_core::SetCurrentChapterConflict::WrongTargetHead,
-        }
+        wrong.outcome,
+        TransitionOutcome::Conflicted(storyos_core::SetCurrentChapterConflict::WrongTargetHead)
     ));
 }

@@ -32,11 +32,11 @@ export function CreateVolumeForm({
 }) {
   const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
   const pending = useRef(false);
-  const cancelled = useRef(false);
+  const closed = useRef(false);
   const [saving, setSaving] = useState(false);
   const submit = (value: string) => {
     const title = value.trim();
-    if (!title || pending.current || cancelled.current) return;
+    if (!title || pending.current || closed.current) return;
     pending.current = true; onPendingChanged(true); setSaving(true);
     void createOwnedVolume({
       baseUrl,
@@ -48,6 +48,7 @@ export function CreateVolumeForm({
     }).then((created) => {
       setHistoricalUnavailable(false);
       if (created.effect.kind !== "authoritative_applied") return;
+      closed.current = true;
       onCreated();
     }).catch((error: unknown) => {
       if (historicalAcknowledgementUnavailable(error)) {
@@ -62,7 +63,7 @@ export function CreateVolumeForm({
     >
       <input autoFocus name="volume-title" aria-label="卷标题" placeholder="卷标题" required maxLength={1024}
         readOnly={saving} onBlur={(event) => submit(event.currentTarget.value)} onKeyDown={(event) => {
-          if (event.key === "Escape" && !pending.current) { cancelled.current = true; onCancel(); }
+          if (event.key === "Escape" && !pending.current) { closed.current = true; onCancel(); }
         }} />
       {historicalUnavailable
         ? <p data-create-volume-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>

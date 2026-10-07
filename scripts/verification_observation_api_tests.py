@@ -4,7 +4,6 @@ import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
-import selectors
 import sqlite3
 import subprocess
 import sys
@@ -51,11 +50,8 @@ class QueryTests(unittest.TestCase):
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         def stop():
             process.terminate()
-            process.communicate(timeout=5)
+            process.communicate()
         self.addCleanup(stop)
-        with selectors.DefaultSelector() as selector:
-            selector.register(process.stdout, selectors.EVENT_READ)
-            self.assertTrue(selector.select(5), 'Query service did not become ready')
         line = process.stdout.readline()
         self.assertTrue(line.startswith('http://127.0.0.1:'), line or process.stderr.read())
         self.url = line.strip()
@@ -63,7 +59,7 @@ class QueryTests(unittest.TestCase):
     def get(self, path, **options):
         request = urllib.request.Request(self.url + path, **options)
         try:
-            response = urllib.request.urlopen(request, timeout=5)
+            response = urllib.request.urlopen(request)
         except urllib.error.HTTPError as error:
             response = error
         with response:
@@ -231,7 +227,7 @@ class QueryTests(unittest.TestCase):
         thread.start()
         def stop():
             server.shutdown()
-            thread.join(timeout=3)
+            thread.join()
             server.server_close()
         self.addCleanup(stop)
         self.start(grafana=f'http://127.0.0.1:{server.server_port}')

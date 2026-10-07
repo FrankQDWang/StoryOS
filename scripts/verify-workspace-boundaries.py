@@ -13,6 +13,7 @@ expected = [
     root / "crates/storyos-application/Cargo.toml",
     root / "crates/storyos-contracts/Cargo.toml",
     root / "crates/storyos-core/Cargo.toml",
+    root / "crates/storyos-literal-guard/Cargo.toml",
     root / "crates/storyos-server/Cargo.toml",
     root / "crates/storyos-worker/Cargo.toml",
     root / "crates/storyos-worker-bin/Cargo.toml",
@@ -45,6 +46,9 @@ def closure(name):
     return seen
 
 
+# A tool crate checks the repository. It stays out of every product crate and the release package.
+tool_crates = {"storyos-literal-guard"}
+
 problems = []
 if "storyos-adapter-volcengine-responses" in closure("storyos-server"):
     problems.append("storyos-server links the Volcengine Responses adapter")
@@ -52,6 +56,8 @@ if any(name.startswith("storyos-adapter-") for name in dependencies["storyos-wor
     problems.append("the storyos-worker library depends on an adapter")
 if any("storyos-worker-bin" in names for names in dependencies.values()):
     problems.append("a package depends on the storyos-worker-bin composition root")
+if any(tool_crates & names for names in dependencies.values()):
+    problems.append("a package depends on a repository tool crate")
 transport = {"reqwest", "hyper", "rustls", "native-tls", "openssl"}
 if transport & closure("storyos-adapter-postgres"):
     problems.append("storyos-adapter-postgres depends on an HTTP or TLS client")

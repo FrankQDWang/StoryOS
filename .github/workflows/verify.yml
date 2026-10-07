@@ -2,7 +2,7 @@ name: Verify pull request
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, edited]
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
@@ -40,4 +40,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STORYOS_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          STORYOS_PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           STORYOS_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
