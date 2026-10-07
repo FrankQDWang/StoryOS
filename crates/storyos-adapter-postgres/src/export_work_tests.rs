@@ -407,7 +407,10 @@ fn export_claim_postgres_trace(since: u64) -> ExportClaimPostgresTrace {
     }
 }
 
-async fn admit_readable_export(store: &PostgresProjectReader, scope: &ProjectScope) -> String {
+pub(crate) async fn admit_readable_export(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+) -> String {
     let command = readable_export_command(scope);
     issue_project_command_challenge(
         store,
@@ -556,7 +559,7 @@ fn command_digest(profile: &str, canonical_command_bytes: &[u8]) -> String {
     format!("sha256:{profile}:{value}")
 }
 
-async fn remove_export_work_rows(admin: &tokio_postgres::Client) {
+pub(crate) async fn remove_export_work_rows(admin: &tokio_postgres::Client) {
     admin
         .batch_execute(
             "DELETE FROM storyos.human_readable_manuscript_exports;

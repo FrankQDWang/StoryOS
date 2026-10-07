@@ -45,4 +45,4 @@ pub(crate) async fn set_worker_scope(
 
 #[cfg(test)]
 #[path = "export_work_tests.rs"]
-mod tests;
+pub(crate) mod tests;

@@ -68,9 +68,11 @@ pub(crate) async fn load_live_tree_facts(
         .get::<_, String>(0)
         .parse()
         .map_err(ProjectReadError::unavailable)?;
+    // Order by the numeric storage column. A text cast with the same output
+    // name changes ORDER BY to text order, and rank 10 comes before rank 2.
     let volume_rows = client
         .query(
-            "SELECT manuscript_object_id::text, title, tree_order::text
+            "SELECT manuscript_object_id::text, title
                FROM storyos.manuscript_objects AS volume
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -81,14 +83,14 @@ pub(crate) async fn load_live_tree_facts(
                      AND removal.project_id = volume.project_id
                      AND removal.volume_id = volume.manuscript_object_id
                 )
-              ORDER BY tree_order",
+              ORDER BY volume.tree_order",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
         .await
         .map_err(read_error)?;
     let chapter_rows = client
         .query(
-            "SELECT parent_volume_id::text, manuscript_object_id::text, title, tree_order::text
+            "SELECT parent_volume_id::text, manuscript_object_id::text, title
                FROM storyos.manuscript_objects AS chapter
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -100,7 +102,7 @@ pub(crate) async fn load_live_tree_facts(
                      AND removal.project_id = chapter.project_id
                      AND removal.chapter_id = chapter.manuscript_object_id
                 )
-              ORDER BY parent_volume_id, tree_order",
+              ORDER BY chapter.parent_volume_id, chapter.tree_order",
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
         .await
