@@ -1,9 +1,8 @@
 use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    AgentRunControlCommand, AgentRunControlConflict, AgentRunControlEffect, AgentRunControlError,
-    AgentRunControlIntent, AgentRunControlNoEffect, AgentRunControlSettlement,
-    AgentRunControlStatus, AuthorCommandAdmissionIds, EditorClientBinding,
+    AgentRunControlCommand, AgentRunControlEffect, AgentRunControlError, AgentRunControlIntent,
+    AgentRunControlSettlement, AuthorCommandAdmissionIds, EditorClientBinding,
     ProjectCommandChallengeBinding, control_agent_run,
 };
 
@@ -45,9 +44,6 @@ pub(super) async fn steer_agent_run(
             },
             contracts::DomainReceiptResult::Conflicted,
         ),
-        AgentRunControlEffect::Applied { .. } | AgentRunControlEffect::NoEffect { .. } => {
-            return Err(invalid_request());
-        }
     };
     Ok(Json(contracts::SteerAgentRunResponse {
         schema_id: contracts::STEER_AGENT_RUN_RESPONSE_SCHEMA_ID.to_owned(),
@@ -69,64 +65,12 @@ pub(super) async fn steer_agent_run(
     }))
 }
 
-pub(super) async fn cancel_agent_run(
-    State(state): State<Arc<ServerState>>,
-    Path((project_id, run_id)): Path<(String, String)>,
-    request: Request,
-) -> Result<Json<contracts::CancelAgentRunResponse>, ApiError> {
-    let settlement = settle_control(
-        &state,
-        &project_id,
-        &run_id,
-        request,
-        AgentRunControlIntent::Cancel,
-    )
-    .await?;
-    let CancelWire {
-        schema_id,
-        command_kind,
-        digest_profile,
-        effect,
-        receipt_result,
-    } = cancel_wire(&settlement)?;
-    Ok(Json(contracts::CancelAgentRunResponse {
-        schema_id: schema_id.to_owned(),
-        correlation_id: settlement.correlation_id,
-        project_scope: contract_scope(&settlement.scope),
-        command_id: settlement.settlement.ids.command_id.clone(),
-        author_command_admission_id: settlement
-            .settlement
-            .ids
-            .author_command_admission_id
-            .clone(),
-        receipt: control_receipt(
-            &settlement.scope,
-            command_kind,
-            digest_profile,
-            &settlement.digest_hex,
-            &settlement.idempotency_key,
-            receipt_result,
-            &settlement.settlement,
-        ),
-        project: contract_project(&settlement.settlement.response_project),
-        effect,
-    }))
-}
-
 struct SettledControl {
     scope: ApplicationScope,
     correlation_id: String,
     digest_hex: String,
     idempotency_key: String,
     settlement: AgentRunControlSettlement,
-}
-
-struct CancelWire {
-    schema_id: &'static str,
-    command_kind: contracts::DomainReceiptCommandKind,
-    digest_profile: &'static str,
-    effect: contracts::CancelAgentRunEffect,
-    receipt_result: contracts::DomainReceiptResult,
 }
 
 async fn settle_control(
@@ -175,19 +119,6 @@ async fn settle_control(
                 }),
             )
         }
-        AgentRunControlIntent::Cancel => {
-            let body = serde_json::from_slice::<contracts::CancelAgentRunRequest>(&bytes)
-                .map_err(|_| invalid_request_shape())?;
-            let canonical_command_bytes = canonical_body_bytes(&body)?;
-            (
-                body.command_schema,
-                body.cancel_agent_run_input.correlation_id,
-                body.cancel_agent_run_input.client_contract_revision,
-                body.cancel_agent_run_input.security_policy_revision,
-                canonical_command_bytes,
-                None,
-            )
-        }
     };
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session = state
@@ -195,7 +126,6 @@ async fn settle_control(
         .ok_or_else(authentication_required)?;
     let expected_schema = match intent {
         AgentRunControlIntent::Steer => contracts::STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
-        AgentRunControlIntent::Cancel => contracts::CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
     };
     if command_schema != expected_schema
         || client_contract_revision != session.client_contract_revision
@@ -228,12 +158,6 @@ async fn settle_control(
             "POST",
             contracts::STEER_AGENT_RUN_PATH,
             contracts::STEER_AGENT_RUN_DIGEST_PROFILE,
-        ),
-        AgentRunControlIntent::Cancel => (
-            "cancelAgentRun",
-            contracts::CANCEL_AGENT_RUN_METHOD,
-            contracts::CANCEL_AGENT_RUN_PATH,
-            contracts::CANCEL_AGENT_RUN_DIGEST_PROFILE,
         ),
     };
     let store = project_reader(state).await?;
@@ -287,50 +211,6 @@ async fn settle_control(
     })
 }
 
-fn cancel_wire(settled: &SettledControl) -> Result<CancelWire, ApiError> {
-    let (receipt_result, effect) = match &settled.settlement.effect {
-        AgentRunControlEffect::Applied {
-            run_id,
-            status,
-            fence_generation,
-        } => (
-            contracts::DomainReceiptResult::AuthoritativeApplied,
-            contracts::CancelAgentRunEffect::Applied {
-                run_id: run_id.clone(),
-                status: contract_status(*status)?,
-                fence_generation: fence_generation.to_string(),
-                project_activity_position: settled.settlement.project_activity_position.to_string(),
-            },
-        ),
-        AgentRunControlEffect::NoEffect {
-            reason: AgentRunControlNoEffect::AlreadyCancelled,
-        } => (
-            contracts::DomainReceiptResult::NoEffect,
-            contracts::CancelAgentRunEffect::NoEffect {
-                reason: contracts::CancelAgentRunNoEffectReason::AlreadyCancelled,
-            },
-        ),
-        AgentRunControlEffect::Conflicted {
-            reason: AgentRunControlConflict::TerminalRun,
-        } => (
-            contracts::DomainReceiptResult::Conflicted,
-            contracts::CancelAgentRunEffect::Conflicted {
-                reason: contracts::CancelAgentRunConflictReason::TerminalRun,
-            },
-        ),
-        AgentRunControlEffect::Retained { .. } => {
-            return Err(control_error(AgentRunControlError::BindingConflict));
-        }
-    };
-    Ok(CancelWire {
-        schema_id: contracts::CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
-        command_kind: contracts::DomainReceiptCommandKind::CancelAgentRun,
-        digest_profile: contracts::CANCEL_AGENT_RUN_DIGEST_PROFILE,
-        effect,
-        receipt_result,
-    })
-}
-
 fn control_receipt(
     scope: &ApplicationScope,
     command_kind: contracts::DomainReceiptCommandKind,
@@ -377,12 +257,6 @@ fn contract_project(project: &storyos_application::Project) -> contracts::Contro
             },
             None => contracts::ProjectOpenState::Empty,
         },
-    }
-}
-
-fn contract_status(status: AgentRunControlStatus) -> Result<contracts::AgentRunStatus, ApiError> {
-    match status {
-        AgentRunControlStatus::Cancelled => Ok(contracts::AgentRunStatus::Cancelled),
     }
 }
 

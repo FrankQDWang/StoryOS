@@ -110,10 +110,10 @@ pub use accept_proposal::{
 };
 pub use agent_run_control::{
     AgentRunControlCommand, AgentRunControlConflict, AgentRunControlEffect, AgentRunControlError,
-    AgentRunControlIntent, AgentRunControlNoEffect, AgentRunControlRefusal,
-    AgentRunControlSettlement, AgentRunControlStatus, AgentRunControlStore, AgentRunSteeringInput,
-    PauseAgentRunApplied, PauseAgentRunError, PauseAgentRunInput, PauseAgentRunSettlement,
-    control_agent_run,
+    AgentRunControlIntent, AgentRunControlRefusal, AgentRunControlSettlement, AgentRunControlStore,
+    AgentRunSteeringInput, CancelAgentRunApplied, CancelAgentRunError, CancelAgentRunInput,
+    CancelAgentRunSettlement, PauseAgentRunApplied, PauseAgentRunError, PauseAgentRunInput,
+    PauseAgentRunSettlement, control_agent_run,
 };
 pub use agent_run_work::{
     AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,

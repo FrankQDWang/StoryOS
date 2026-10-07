@@ -1,7 +1,6 @@
 use storyos_application::{
     AgentRunControlCommand, AgentRunControlConflict, AgentRunControlEffect, AgentRunControlError,
-    AgentRunControlIntent, AgentRunControlNoEffect, AgentRunControlSettlement,
-    AgentRunControlStatus, AuthorCommandAdmissionIds,
+    AgentRunControlIntent, AgentRunControlSettlement, AuthorCommandAdmissionIds,
 };
 
 use crate::command_response_project::{
@@ -38,7 +37,6 @@ pub(super) async fn read_control_settlement(
                         receipt.result_kind,
                         receipt.result_payload->>'reason',
                         payload.payload->>'run_id',
-                        payload.payload->>'fence_generation',
                         payload.project_activity_position::text,
                         idempotency.acknowledgement_format,
                         idempotency.response_project::text,
@@ -81,40 +79,19 @@ pub(super) async fn read_control_settlement(
         let result_kind = row.get::<_, String>(4);
         let reason = row.get::<_, Option<String>>(5);
         let effect = match (result_kind.as_str(), reason.as_deref(), command.intent) {
-            ("authoritative_applied", None, intent) => AgentRunControlEffect::Applied {
-                run_id: row
-                    .get::<_, Option<String>>(6)
-                    .ok_or(AgentRunControlError::BindingConflict)?,
-                status: match intent {
-                    AgentRunControlIntent::Steer => {
-                        return Err(AgentRunControlError::BindingConflict);
-                    }
-                    AgentRunControlIntent::Cancel => AgentRunControlStatus::Cancelled,
-                },
-                fence_generation: row
-                    .get::<_, Option<String>>(7)
-                    .ok_or(AgentRunControlError::BindingConflict)?
-                    .parse::<u64>()
-                    .map_err(control_parse_error)?,
-            },
             ("no_effect", Some("steering_retained"), AgentRunControlIntent::Steer) => {
                 AgentRunControlEffect::Retained {
                     run_id: row
                         .get::<_, Option<String>>(6)
                         .ok_or(AgentRunControlError::BindingConflict)?,
                     steering_input_id: row
-                        .get::<_, Option<String>>(11)
+                        .get::<_, Option<String>>(10)
                         .ok_or(AgentRunControlError::BindingConflict)?,
                     input_position: row
-                        .get::<_, Option<String>>(12)
+                        .get::<_, Option<String>>(11)
                         .ok_or(AgentRunControlError::BindingConflict)?
                         .parse()
                         .map_err(control_parse_error)?,
-                }
-            }
-            ("no_effect", Some("already_cancelled"), AgentRunControlIntent::Cancel) => {
-                AgentRunControlEffect::NoEffect {
-                    reason: AgentRunControlNoEffect::AlreadyCancelled,
                 }
             }
             ("conflicted", Some("terminal_run"), _) => AgentRunControlEffect::Conflicted {
@@ -123,8 +100,8 @@ pub(super) async fn read_control_settlement(
             _ => return Err(AgentRunControlError::BindingConflict),
         };
         let response_project = match read_command_response_project(
+            row.get::<_, Option<String>>(8).as_deref(),
             row.get::<_, Option<String>>(9).as_deref(),
-            row.get::<_, Option<String>>(10).as_deref(),
         ) {
             Ok(CommandResponseProjectEvidence::Captured(project)) => project,
             Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
@@ -140,7 +117,7 @@ pub(super) async fn read_control_settlement(
             },
             receipt_created_at: row.get(3),
             project_activity_position: row
-                .get::<_, Option<String>>(8)
+                .get::<_, Option<String>>(7)
                 .unwrap_or_else(|| "0".to_owned())
                 .parse::<u64>()
                 .map_err(control_parse_error)?,

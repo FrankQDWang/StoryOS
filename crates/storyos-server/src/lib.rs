@@ -22,6 +22,7 @@ mod agent_run_control;
 mod archive_project;
 mod author_edit;
 mod author_edit_outcome;
+mod cancel_agent_run;
 mod chapter;
 mod close_editor_flow_draft;
 mod command_admission;
@@ -80,12 +81,13 @@ pub use web_assets::WebAssetSet;
 pub use web_host::router_with_web;
 
 use accept_proposal::accept_proposal;
-use agent_run_control::{cancel_agent_run, steer_agent_run};
+use agent_run_control::steer_agent_run;
 use archive_project::archive_project;
 use author_edit::apply_author_edit;
 use author_edit_outcome::{
     apply_author_edit_outcome_method_not_allowed, get_apply_author_edit_outcome,
 };
+use cancel_agent_run::cancel_agent_run;
 use chapter::get_chapter;
 use create_agent_run::{create_agent_run, get_agent_run};
 use create_chapter::create_chapter;
