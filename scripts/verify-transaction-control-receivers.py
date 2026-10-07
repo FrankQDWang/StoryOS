@@ -85,10 +85,10 @@ def check(source_dir: Path) -> tuple[list[str], int]:
     violations: list[str] = []
     checked = 0
     for path in sorted(source_dir.rglob("*.rs")):
-        if path.name.endswith("_tests.rs"):
+        relative = path.relative_to(source_dir)
+        if path.name.endswith("_tests.rs") or any(part.endswith("_tests") for part in relative.parts[:-1]):
             continue
         text = path.read_text(encoding="utf-8")
-        relative = path.relative_to(source_dir)
         if path.name in CONNECT_OWNERS:
             continue
         if "tokio_postgres::connect" in text:
@@ -204,6 +204,12 @@ async fn raw(client: &tokio_postgres::Client) {
     client.batch_execute("BEGIN").await.unwrap();
 }
 """,
+    "ignored_tests/support.rs": """
+async fn stores() {
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    admin.batch_execute(&format!("BEGIN {}", 1)).await.unwrap();
+}
+""",
     "storage_activation.rs": """
 async fn apply(client: &tokio_postgres::Client) -> Result<(), tokio_postgres::Error> {
     let (client, connection) = tokio_postgres::connect(admin_url, NoTls).await?;
@@ -217,6 +223,7 @@ def self_test() -> None:
     with tempfile.TemporaryDirectory() as directory:
         source_dir = Path(directory)
         for name, body in SAMPLES.items():
+            (source_dir / name).parent.mkdir(parents=True, exist_ok=True)
             (source_dir / name).write_text(body, encoding="utf-8")
         violations, checked = check(source_dir)
     assert checked == 7, checked
