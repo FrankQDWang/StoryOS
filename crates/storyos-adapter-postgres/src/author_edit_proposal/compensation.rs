@@ -98,6 +98,24 @@ async fn persist_proposal_compensation(
         }
         other => undo_from_author_edit(other),
     })?;
+    settle_proposal_compensation(
+        client,
+        command,
+        source_sequence,
+        &frontier.current_revision_id,
+        proposal_revision_id,
+    )
+    .await
+}
+
+/// Records a Proposal Compensation that appended `proposal_revision_id` to the source head.
+pub(crate) async fn settle_proposal_compensation(
+    client: &Client,
+    command: &UndoLatestAuthorActionCommand,
+    source_sequence: u64,
+    source_proposal_revision_id: &str,
+    proposal_revision_id: String,
+) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
     let counter_row = client
         .query_one(
             "UPDATE storyos.scope_counters
@@ -117,7 +135,7 @@ async fn persist_proposal_compensation(
         parse_u64(counter_row.get(/*idx*/ 1)).map_err(undo_from_author_edit)?;
     let payload = serde_json::json!({
         "proposal_revision_id": proposal_revision_id,
-        "source_proposal_revision_id": frontier.current_revision_id,
+        "source_proposal_revision_id": source_proposal_revision_id,
         "project_activity_position": project_activity_position.to_string(),
     })
     .to_string();

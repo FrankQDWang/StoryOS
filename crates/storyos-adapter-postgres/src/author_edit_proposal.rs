@@ -10,7 +10,9 @@ use uuid::Uuid;
 use super::author_edit::author_edit_database_error;
 
 mod compensation;
-pub(crate) use compensation::{ObservedProposalFrontier, ProposalEditCompensation};
+pub(crate) use compensation::{
+    ObservedProposalFrontier, ProposalEditCompensation, settle_proposal_compensation,
+};
 
 #[derive(Clone, Debug)]
 pub(super) struct ProposalEditContext {

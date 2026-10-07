@@ -101,6 +101,9 @@ pub(crate) enum UndoDisposition {
     Prose,
     Acceptance,
     ProposalEdit,
+    Replan,
+    ReopenRejectedOperations,
+    ReopenWithdrawnProposal,
     Structure(StructureCommand),
     CurrentChapter,
     AuthorWithdrawal,
@@ -142,10 +145,10 @@ impl ForwardCommand {
     pub(crate) fn disposition(self) -> UndoDisposition {
         match self {
             Self::AuthorEdit(AuthorEditVariant::AuthoritativeApplied) => UndoDisposition::Prose,
-            Self::AuthorEdit(AuthorEditVariant::ProposalRevised)
-            | Self::ReplanProposal
-            | Self::ReopenRejectedOperations
-            | Self::ReopenWithdrawnProposal => UndoDisposition::ProposalEdit,
+            Self::AuthorEdit(AuthorEditVariant::ProposalRevised) => UndoDisposition::ProposalEdit,
+            Self::ReplanProposal => UndoDisposition::Replan,
+            Self::ReopenRejectedOperations => UndoDisposition::ReopenRejectedOperations,
+            Self::ReopenWithdrawnProposal => UndoDisposition::ReopenWithdrawnProposal,
             Self::AcceptProposal => UndoDisposition::Acceptance,
             Self::Structure(command) => UndoDisposition::Structure(command),
             Self::SetCurrentChapter => UndoDisposition::CurrentChapter,

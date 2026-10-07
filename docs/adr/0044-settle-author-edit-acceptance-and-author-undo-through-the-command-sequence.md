@@ -73,6 +73,8 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 
 - Each existing compensation keeps the binding checks and the outcomes of its family. A moved binding gives the same Barrier, conflict, unavailable, or reversal-required outcome as on `main`. For the three new compensations, a Proposal head that moved after the Forward action makes the Forward action a Barrier.
 - The compensations of `replanProposal`, `reopenRejectedOperations`, and `reopenWithdrawnProposal` are the only behavior changes of Author Undo in this decision. The `proposal_replans` and `proposal_operation_reopenings` rows stay, because they are history.
+- On 2026-10-07 the author decided two details of these three compensations. The appended Proposal Revision also gets a copy of the validation receipt of the earlier revision. An Acceptance conflict condition stays on the earlier revision, because its identity and its Acceptance Receipt bind it to that revision. Thus after an Undo of a Replan, the Proposal shows the validation of the earlier revision without the conflict. A new Acceptance finds the conflict again.
+- After an Undo of a reopen, the author cannot reopen the same withdrawal or rejection again, because the reopen records stay. [Decide if Author Undo of a Proposal Reopen Lets the Author Reopen Again](https://github.com/FrankQDWang/StoryOS/issues/1051) owns this question.
 - A Barrier stops Author Undo, and Author Undo never skips it. Thus a Barrier frontier also stops Author Undo of all earlier Forward actions. A later decision can change a Barrier to a Compensation.
 
 ## Relation to other decisions
