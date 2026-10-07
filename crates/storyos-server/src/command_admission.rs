@@ -143,6 +143,7 @@ project_command_request!(
     contracts::ExpandRefusedEditDraftRequest,
     nested expand_refused_edit_draft_to_proposal_input
 );
+project_command_request!(contracts::PauseAgentRunRequest, nested pause_agent_run_input);
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
     fn command_schema(&self) -> &str {

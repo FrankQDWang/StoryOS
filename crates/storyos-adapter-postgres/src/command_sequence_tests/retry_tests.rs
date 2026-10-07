@@ -11,6 +11,7 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use crate::set_current_chapter_authority_tests::open_session;
 use crate::update_volume_tests::seed_project;
 
+use super::agent_run::pause_agent_run_call;
 use super::draft::{close_editor_flow_draft_call, expand_refused_edit_draft_call};
 use super::project_session::{
     TAKE_OVER_PROJECT_WRITER, UPDATE_PROJECT, archive_project_call, take_over_project_writer,
@@ -29,14 +30,14 @@ use super::structure::{
     update_chapter_call, update_volume_call,
 };
 use super::support::{
-    CommandCall, issued, replayed_outcome, settlement_rows, stores, two_chapter_writer,
-    with_new_request_ids,
+    CommandCall, SequenceError, issued, replayed_outcome, settlement_rows, stores,
+    two_chapter_writer, with_new_request_ids,
 };
 
 /// Marks the Command Challenge consumed and the Command Idempotency Fence in progress, then retries.
 ///
 /// Returns whether the retry is a binding conflict and the rows of the retry Receipt.
-async fn in_progress_retry<C: ProjectCommand>(
+async fn in_progress_retry<C: ProjectCommand<Error: SequenceError>>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
@@ -51,7 +52,9 @@ async fn in_progress_retry<C: ProjectCommand>(
         ))
         .await
         .unwrap();
-    let retry = settle_project_command(store, &call.envelope, &call.input).await;
+    let retry = settle_project_command(store, &call.envelope, &call.input)
+        .await
+        .map_err(SequenceError::sequence);
     (
         matches!(retry, Err(ProjectCommandError::BindingConflict)),
         settlement_rows(admin, &call.envelope.ids.receipt_id).await,
@@ -186,8 +189,14 @@ async fn every_in_progress_exact_retry_conflicts_and_writes_no_row() {
             &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e20).await,
         )
         .await,
+        in_progress_retry(
+            &store,
+            &admin,
+            &pause_agent_run_call(&store, &admin, /*base*/ 0xb220).await,
+        )
+        .await,
     ];
-    assert_eq!(observed, vec![(true, [0; 5]); 20]);
+    assert_eq!(observed, vec![(true, [0; 5]); 21]);
 }
 
 #[tokio::test]

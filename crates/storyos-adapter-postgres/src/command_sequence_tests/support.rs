@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use storyos_application::{
     AuthorCommandAdmissionIds, EditorClientBinding, ProjectCommandChallengeBinding,
     ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
-    StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+    RefusableCommandError, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
     issue_project_command_challenge,
 };
 use storyos_application::{ChapterId, IssueProjectCommandChallenge, OpenChapter, open_chapter};
@@ -13,6 +13,29 @@ use uuid::Uuid;
 
 use crate::PostgresProjectReader;
 use crate::set_current_chapter_authority_tests::{open_session, seed_two_chapters};
+
+/// The sequence error of a settlement that a contract row expects.
+pub(crate) trait SequenceError {
+    /// Panics on a refusal before Admission.
+    fn sequence(self) -> ProjectCommandError;
+}
+
+impl SequenceError for ProjectCommandError {
+    fn sequence(self) -> Self {
+        self
+    }
+}
+
+impl<R: Debug> SequenceError for RefusableCommandError<R> {
+    fn sequence(self) -> ProjectCommandError {
+        match self {
+            Self::Command(error) => error,
+            Self::RefusedBeforeAdmission(refusal) => {
+                panic!("the command refused before its Admission: {refusal:?}")
+            }
+        }
+    }
+}
 
 /// One admitted command envelope and its typed Manuscript Structure input.
 #[derive(Clone)]

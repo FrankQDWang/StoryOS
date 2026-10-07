@@ -152,6 +152,7 @@ mod open_block_proposal;
 mod open_inline_proposal;
 mod ordinary_passage_targets;
 mod passage_collection;
+mod pause_agent_run;
 mod pinned_export_source;
 mod project_archive_build;
 mod project_archive_draft;

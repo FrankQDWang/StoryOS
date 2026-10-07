@@ -1,11 +1,43 @@
+use std::convert::Infallible;
 use std::future::Future;
 
+use storyos_core::{PauseAgentRunConflict, PauseAgentRunNoEffect};
+
 use crate::{
-    AuthorCommandAdmissionIds, EditorClientBinding, Project, ProjectCommandChallengeBinding,
-    ProjectScope,
+    ActivityApplied, AuthorCommandAdmissionIds, EditorClientBinding, Project,
+    ProjectCommandChallengeBinding, ProjectCommandSettlement, ProjectScope, RefusableCommandError,
 };
 
-/// One admitted pause or cancel command for an existing AgentRun.
+/// One pauseAgentRun of an existing AgentRun.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PauseAgentRunInput {
+    pub run_id: String,
+}
+
+/// The applied effect of one pauseAgentRun: the Run is paused at a new fence generation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PauseAgentRunApplied {
+    pub run_id: String,
+    pub fence_generation: u64,
+}
+
+/// The refusal of an AgentRun control command before its Admission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AgentRunControlRefusal {
+    /// The AgentRun is not in exact Scope.
+    MissingRun,
+}
+
+pub type PauseAgentRunSettlement = ProjectCommandSettlement<
+    ActivityApplied<PauseAgentRunApplied>,
+    PauseAgentRunNoEffect,
+    PauseAgentRunConflict,
+    Infallible,
+>;
+
+pub type PauseAgentRunError = RefusableCommandError<AgentRunControlRefusal>;
+
+/// One admitted cancel or steering command for an existing AgentRun.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunControlCommand {
     pub project_scope: ProjectScope,
@@ -20,10 +52,9 @@ pub struct AgentRunControlCommand {
     pub steering_input: Option<AgentRunSteeringInput>,
 }
 
-/// Distinguishes pause from cancel at the Application boundary.
+/// Distinguishes cancel from steering at the Application boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentRunControlIntent {
-    Pause,
     Cancel,
     Steer,
 }
@@ -34,7 +65,7 @@ pub struct AgentRunSteeringInput {
     pub author_message: String,
 }
 
-/// Settlement of one pause or cancel command.
+/// Settlement of one cancel or steering command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunControlSettlement {
     pub ids: AuthorCommandAdmissionIds,
@@ -44,7 +75,7 @@ pub struct AgentRunControlSettlement {
     pub effect: AgentRunControlEffect,
 }
 
-/// Observable effect of one pause or cancel command.
+/// Observable effect of one cancel or steering command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AgentRunControlEffect {
     Retained {
@@ -65,17 +96,15 @@ pub enum AgentRunControlEffect {
     },
 }
 
-/// Terminal or paused status written by a control command.
+/// Terminal status written by a control command.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentRunControlStatus {
-    Paused,
     Cancelled,
 }
 
 /// Zero-effect reason that is not a terminal conflict.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentRunControlNoEffect {
-    AlreadyPaused,
     AlreadyCancelled,
 }
 
@@ -85,7 +114,7 @@ pub enum AgentRunControlConflict {
     TerminalRun,
 }
 
-/// Failure while admitting pause or cancel.
+/// Failure while admitting cancel or steering.
 #[derive(Debug)]
 pub enum AgentRunControlError {
     BindingConflict,
@@ -132,7 +161,7 @@ impl std::error::Error for AgentRunControlError {
     }
 }
 
-/// Owns one admitted pause or cancel and its durable fence.
+/// Owns one admitted cancel or steering command and its durable fence.
 pub trait AgentRunControlStore: Sync {
     fn control_agent_run(
         &self,
@@ -146,13 +175,6 @@ pub async fn control_agent_run(
 ) -> Result<AgentRunControlSettlement, AgentRunControlError> {
     let challenge = &command.challenge_binding;
     let (command_kind, method, route, schema, digest_profile) = match command.intent {
-        AgentRunControlIntent::Pause => (
-            "pauseAgentRun",
-            "POST",
-            "/api/v1/projects/{project_id}/agent-runs/{run_id}/pause",
-            "storyos.command.pause-agent-run.request.v1",
-            "storyos.command.pauseAgentRun.jcs.v1",
-        ),
         AgentRunControlIntent::Steer => (
             "steerAgentRun",
             "POST",

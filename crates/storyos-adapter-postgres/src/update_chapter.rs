@@ -48,6 +48,7 @@ impl ProjectCommand for UpdateChapterInput {
         activity_kind: "chapter_updated",
         replay_effect: ReplayEffect::NoQuery,
     };
+    type Error = ProjectCommandError;
     type Profile = Structural;
     type Response = ProjectResponse;
     type ZeroEffect = ();

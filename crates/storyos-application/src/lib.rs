@@ -110,8 +110,10 @@ pub use accept_proposal::{
 };
 pub use agent_run_control::{
     AgentRunControlCommand, AgentRunControlConflict, AgentRunControlEffect, AgentRunControlError,
-    AgentRunControlIntent, AgentRunControlNoEffect, AgentRunControlSettlement,
-    AgentRunControlStatus, AgentRunControlStore, AgentRunSteeringInput, control_agent_run,
+    AgentRunControlIntent, AgentRunControlNoEffect, AgentRunControlRefusal,
+    AgentRunControlSettlement, AgentRunControlStatus, AgentRunControlStore, AgentRunSteeringInput,
+    PauseAgentRunApplied, PauseAgentRunError, PauseAgentRunInput, PauseAgentRunSettlement,
+    control_agent_run,
 };
 pub use agent_run_work::{
     AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
@@ -184,8 +186,8 @@ pub use pinned_export_source::{
 pub use project_command::{
     ActionApplied, ActivityApplied, AuthorityEvidence, ChapterSelectionApplied,
     ChapterSelectionAuthority, ProjectCommandEnvelope, ProjectCommandError,
-    ProjectCommandSettlement, StructureApplied, StructureAuthority, StructureAuthorityEvidence,
-    StructureSettlement,
+    ProjectCommandSettlement, RefusableCommandError, StructureApplied, StructureAuthority,
+    StructureAuthorityEvidence, StructureSettlement,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,

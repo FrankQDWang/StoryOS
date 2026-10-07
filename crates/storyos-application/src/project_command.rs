@@ -60,6 +60,21 @@ impl std::error::Error for ProjectCommandError {
     }
 }
 
+/// The error of a project command that declares a refusal before its Admission (ADR 0043).
+#[derive(Debug)]
+pub enum RefusableCommandError<R> {
+    /// The command refused before its Admission. It wrote no row, and the Command Challenge
+    /// stays unused.
+    RefusedBeforeAdmission(R),
+    Command(ProjectCommandError),
+}
+
+impl<R> From<ProjectCommandError> for RefusableCommandError<R> {
+    fn from(error: ProjectCommandError) -> Self {
+        Self::Command(error)
+    }
+}
+
 /// The settled outcome of one project command, equal on first delivery and replay.
 ///
 /// `A` is the applied record of the command's settlement profile (ADR 0043). `P` is the

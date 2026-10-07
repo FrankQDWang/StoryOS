@@ -44,6 +44,7 @@ impl ProjectCommand for DeleteChapterInput {
         activity_kind: "chapter_deleted",
         replay_effect: ReplayEffect::NoQuery,
     };
+    type Error = ProjectCommandError;
     type Profile = Structural;
     type Response = ProjectResponse;
     type ZeroEffect = ();

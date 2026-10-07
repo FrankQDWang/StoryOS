@@ -44,6 +44,7 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
         activity_kind: "project_assistance_updated",
         replay_effect: ReplayEffect::NoQuery,
     };
+    type Error = ProjectCommandError;
     type Profile = ActivityOnly;
     type Response = ProjectAssistanceResponse;
     type ZeroEffect = ();

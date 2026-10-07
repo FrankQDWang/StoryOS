@@ -97,6 +97,7 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
         activity_kind: "",
         replay_effect: TRANSITION_REPLAY,
     };
+    type Error = ProjectCommandError;
     type Profile = ActionOnly;
     type Response = ProjectResponse;
     type ZeroEffect = ();
@@ -221,6 +222,7 @@ impl ProjectCommand for ContinueProposalGenerationInput {
         activity_kind: "",
         replay_effect: TRANSITION_REPLAY,
     };
+    type Error = ProjectCommandError;
     type Profile = ActionOnly;
     type Response = ProjectResponse;
     type ZeroEffect = ();

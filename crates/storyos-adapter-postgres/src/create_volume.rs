@@ -45,6 +45,7 @@ impl ProjectCommand for CreateVolumeInput {
         activity_kind: "volume_created",
         replay_effect: ReplayEffect::NoQuery,
     };
+    type Error = ProjectCommandError;
     type Profile = Structural;
     type Response = ProjectResponse;
     type ZeroEffect = ();
