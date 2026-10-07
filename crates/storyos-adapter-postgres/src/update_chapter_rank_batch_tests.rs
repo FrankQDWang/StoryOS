@@ -130,7 +130,7 @@ fn chapter_nodes(ids: &[String], titles: &[&str]) -> Vec<ChapterNode> {
         .collect()
 }
 
-async fn connect_admin() -> tokio_postgres::Client {
+pub(crate) async fn connect_admin() -> tokio_postgres::Client {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
@@ -140,7 +140,7 @@ async fn connect_admin() -> tokio_postgres::Client {
     admin
 }
 
-fn runtime_store() -> PostgresProjectReader {
+pub(crate) fn runtime_store() -> PostgresProjectReader {
     PostgresProjectReader::new(
         std::env::var("STORYOS_TEST_DATABASE_URL")
             .expect("run through scripts/verify-project-scope.sh"),
