@@ -1,7 +1,9 @@
 use serde_json::{Value, json};
-use storyos_application::{ExportProjectArchiveError, ProjectScope};
+use storyos_application::ProjectScope;
 use storyos_core::{ArchiveEntrySource, ProjectArchiveBuildRefusal};
 use storyos_core::{canonical_json, hex_sha256};
+
+use crate::project_archive_build::ArchiveBuildError;
 
 pub(super) fn export_row_expression(table: &str) -> String {
     match table {
@@ -320,7 +322,7 @@ pub(super) fn text<'a>(row: &'a Value, field: &str) -> Result<&'a str, ProjectAr
 pub(super) async fn validate_withheld_payloads(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
-) -> Result<(), ExportProjectArchiveError> {
+) -> Result<(), ArchiveBuildError> {
     let rows = client.query(
         "SELECT revision.payload::text, revision.payload_digest,
                 admission.command_payload::text, admission.canonical_command_digest,
@@ -343,11 +345,9 @@ pub(super) async fn validate_withheld_payloads(
           WHERE draft.owner_user_id=$1::text::uuid AND draft.project_id=$2::text::uuid
             AND draft.retention_state='tombstoned'",
         &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-    ).await.map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
+    ).await.map_err(|error| ArchiveBuildError::Unavailable(Box::new(error)))?;
     for row in rows {
-        let invalid = || {
-            ExportProjectArchiveError::ArchiveBuild(ProjectArchiveBuildRefusal::InvalidProvenance)
-        };
+        let invalid = || ArchiveBuildError::Refused(ProjectArchiveBuildRefusal::InvalidProvenance);
         let payload: Value =
             serde_json::from_str(&row.get::<_, Option<String>>(0).ok_or_else(invalid)?)
                 .map_err(|_| invalid())?;

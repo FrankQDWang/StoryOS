@@ -16,7 +16,7 @@ use crate::command_sequence::{ProjectCommand, settle_project_command};
 use super::damaged_evidence::{ReplayError, damaged_replay};
 use super::draft::compensation_action;
 use super::support::{
-    CommandCall, Route, issued, replayed_outcome, run_without_foreign_keys, stores,
+    CommandCall, Route, SequenceError, issued, replayed_outcome, run_without_foreign_keys, stores,
     two_chapter_writer, with_new_request_ids,
 };
 
@@ -455,7 +455,7 @@ struct PreservedEffect {
 
 /// Settles the call and clears one preserved value, which the all-or-none check refuses. Then
 /// replays the call once without its preserved values and once without its effect row.
-async fn effect_replays<C: ProjectCommand + Clone>(
+async fn effect_replays<C: ProjectCommand<Error: SequenceError> + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
@@ -496,7 +496,7 @@ async fn effect_replays<C: ProjectCommand + Clone>(
         let Err(error) = settle_project_command(store, &retry.envelope, &retry.input).await else {
             panic!("a replay without its preserved values must fail");
         };
-        errors.push(error.into());
+        errors.push(error.sequence().into());
     }
     (partial, errors.try_into().unwrap())
 }

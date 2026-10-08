@@ -1,13 +1,12 @@
 use storyos_application::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds,
-    EditorClientBinding, EditorSessionId, ExportProjectArchiveCommand,
-    IssueProjectCommandChallenge, OpenEditorSession, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
-    PROJECT_EXPORT_ARCHIVE_PROFILE, PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE,
-    PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, RequiresReconfirmationApplyAuthorEdit, ResolveApplyAuthorEditOutcome, UserId,
-    VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
-    create_editor_session, get_apply_author_edit_outcome, get_verified_export_archive,
-    issue_project_command_challenge, request_export_project_archive,
+    EditorClientBinding, EditorSessionId, ExportProjectArchiveInput, IssueProjectCommandChallenge,
+    OpenEditorSession, PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE,
+    PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE, ProjectCommandChallengeBinding,
+    ProjectCommandEnvelope, ProjectId, ProjectScope, RequiresReconfirmationApplyAuthorEdit,
+    ResolveApplyAuthorEditOutcome, UserId, VerifiedExportArchive, claim_next_archive_export,
+    complete_archive_export, create_editor_session, get_apply_author_edit_outcome,
+    get_verified_export_archive, issue_project_command_challenge,
 };
 use tokio_postgres::NoTls;
 
@@ -42,7 +41,7 @@ fn zip_store_files(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
     files
 }
 
-fn export_command(scope: &ProjectScope) -> ExportProjectArchiveCommand {
+fn export_command(scope: &ProjectScope) -> (ProjectCommandEnvelope, ExportProjectArchiveInput) {
     let client_binding = EditorClientBinding {
         binding_ref: "binding:author-edit".to_owned(),
         session_generation: 1,
@@ -63,7 +62,7 @@ fn export_command(scope: &ProjectScope) -> ExportProjectArchiveCommand {
         );
         format!("sha256:{PROJECT_EXPORT_DIGEST_PROFILE}:{value}")
     };
-    ExportProjectArchiveCommand {
+    let envelope = ProjectCommandEnvelope {
         project_scope: scope.clone(),
         client_binding: client_binding.clone(),
         challenge_binding: ProjectCommandChallengeBinding {
@@ -90,10 +89,11 @@ fn export_command(scope: &ProjectScope) -> ExportProjectArchiveCommand {
             author_command_admission_id: "018f0000-0000-7001-8000-0000000009e2".to_owned(),
             receipt_id: "018f0000-0000-7001-8000-0000000009e3".to_owned(),
         },
+    };
+    let input = ExportProjectArchiveInput {
         export_id: "018f0000-0000-7001-8000-0000000009e6".to_owned(),
-        archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
-        archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
-    }
+    };
+    (envelope, input)
 }
 
 #[tokio::test]
@@ -204,7 +204,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
         });
     assert_eq!(queried, expected);
 
-    let export = export_command(&scope);
+    let (export, input) = export_command(&scope);
     issue_project_command_challenge(
         &store,
         &IssueProjectCommandChallenge {
@@ -215,16 +215,14 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
     )
     .await
     .unwrap();
-    request_export_project_archive(&store, &export)
-        .await
-        .unwrap();
+    store.export_project_archive(&export, &input).await.unwrap();
     let claimed = claim_next_archive_export(&store)
         .await
         .unwrap()
         .expect("the admitted archive must be claimable");
     complete_archive_export(&store, &claimed).await.unwrap();
     let VerifiedExportArchive::Ready(zip_bytes) =
-        get_verified_export_archive(&store, &scope, &export.export_id)
+        get_verified_export_archive(&store, &scope, &input.export_id)
             .await
             .unwrap()
     else {

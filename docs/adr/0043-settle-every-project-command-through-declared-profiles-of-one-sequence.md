@@ -94,6 +94,132 @@ A specification that moves commands can also fix a defect of those commands. Eac
   - A settled effect row whose `preserved_*` columns are NULL is a pre-capture record and gives `409 historical_acknowledgement_unavailable`. An applied Receipt without its effect row or its Forward Author Action is damaged evidence and gives `503 project_store_unavailable`. Before, a missing effect row gave `409 historical_acknowledgement_unavailable` for four of the five commands, and a missing Forward Author Action gave it for all five.
   - A preserved value that its Proposal State Axis does not have is damaged evidence and gives `503 project_store_unavailable`. The checks of migration 0083 already prevent such a value in the five effect tables.
 
+### Amendment for Specification C: AgentRun commands and export admissions
+
+Specification C ([#1043](https://github.com/FrankQDWang/StoryOS/issues/1043)) moves `createAgentRun`, `pauseAgentRun`, `cancelAgentRun`, `steerAgentRun`, and the admissions of the two exports into the sequence. Each ticket adds its sequence changes and the observable changes of its commands to this section.
+
+#### Refusal before Admission
+
+- Each command declares its settlement error. A command that refuses before its Admission declares `RefusableCommandError` with its own refusal type. The other commands declare `ProjectCommandError`, and their errors and problems do not change.
+- The fact load returns the refusal as a typed error. The sequence rolls back the transaction, so it writes no Admission, Receipt, or Command Idempotency Fence row, and the Command Challenge stays unused. A rollback that fails gives a store fault.
+- The Server maps the refusal to the problem code of the command on `main`.
+- The same typed error can carry the missing-Admission diagnosis of `acceptProposal` (ADR 0044).
+
+#### AgentRun Admission forms
+
+- An Admission without an Editor Session declares one action class: `explicit_project_command`, `agent_run_start`, or `agent_run_control`. The three forms write the same columns. Only the action class differs.
+- A missing Admission gives `InvalidChallenge`, as on `main`.
+
+#### `pauseAgentRun`
+
+- `pauseAgentRun` uses the `agent_run_control` Admission form, the `ActivityOnly` profile with the Activity kind `agent_run_paused`, and the Command-response Project. It locks the Project row and then the AgentRun row. It does not refuse an archived Project.
+- A missing AgentRun is a refusal before Admission. It gives `404 resource_unavailable`, as on `main`.
+- The route uses the generic project command admission with the problem order of `main`. The problem texts use the name "AgentRun control", as on `main`.
+- The applied outcome, `already_paused`, `terminal_run`, the Run update, and the rows do not change.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - Damaged replay evidence gives `503 project_store_unavailable` instead of `409 idempotency_binding_conflict`. Such evidence is a damaged Command-response Project record or an applied Receipt without its Activity record. It is also an Activity `run_id` or `fence_generation` value that is absent, null, or not a string. The receipt relation trigger and the Activity payload checks already prevent the Activity faults.
+  - An Activity `run_id` that is not UUID text, or a `fence_generation` that is not unsigned decimal text, gives `503 project_store_unavailable`. Before, replay returned the `run_id` text and parsed a `fence_generation` with leading zeros.
+  - A zero-authority Receipt with an Author Action gives a store fault. Before, replay ignored the Author Action. The receipt relation trigger already prevents such a record.
+  - An applied Receipt with a `reason` payload value replays as applied. Before, it gave `409 idempotency_binding_conflict`. The Receipt shape checks already require an empty applied payload, so this change is not observable.
+
+#### `cancelAgentRun`
+
+- `cancelAgentRun` uses the `agent_run_control` Admission form, the `ActivityOnly` profile with the Activity kind `agent_run_cancelled`, and the Command-response Project. It locks the Project row and then the AgentRun row. It does not refuse an archived Project.
+- A missing AgentRun is a refusal before Admission. It gives `404 resource_unavailable`, as on `main`.
+- The route uses the generic project command admission with the problem order of `main`, as `pauseAgentRun` does.
+- The applied outcome keeps its order of effects. It reads the in-flight Model Attempt before the status update. It sets the wakeup only for an in-flight Model Attempt. It prohibits the automatic successor. The fence token, lease, and wakeup values of each update do not change. Thus the Worker sends one Abort and fences late output as before (ADR 0039).
+- The applied outcome, `already_cancelled`, `terminal_run`, and the rows do not change. The zero-authority outcomes write no Activity record, as on `main`.
+- The Core classifier returns a Core Transition Outcome with the reasons `already_cancelled` and `terminal_run`.
+- The observable changes of `pauseAgentRun` in the list above also apply to `cancelAgentRun`, with the same causes. The behavior-equivalence review against `main` found no other difference.
+
+#### Contention refusal
+
+- A command can declare the refusal for a serialization failure, a unique violation, or a deadlock of its first-use transaction. This includes the commit. The sequence finds such a failure in the source chain of a store fault. It rolls back, so no row stays and the Command Challenge stays unused.
+- Only `createAgentRun` declares a contention refusal: `conversation_busy`. For the other commands, such a failure stays a store fault.
+- A failure to begin the transaction, a failure of the Challenge consumption, and a failure of a rollback keep their own errors.
+
+#### `createAgentRun`
+
+- `createAgentRun` uses the `agent_run_start` Admission form, the `ActivityOnly` profile with the Activity kind `agent_run_created`, and the Command-response Project. Its Core classifier returns a Core Transition Outcome that has only the applied outcome.
+- An archived Project, unavailable assistance, an invalid Chapter join, an inaccessible conversation, and a busy conversation are refusals before Admission. Their problems do not change: `422 archived_project`, `422 assistance_unavailable`, `422 invalid_chapter_join`, `404 resource_unavailable`, and `422 conversation_busy`. A missing candidate target stays `409 idempotency_binding_conflict`.
+- The `apply` step writes the Project Agent, the conversation, the memory settings, and the AgentRun with status `queued`. It also writes the Context Assembly rows at decision position 0. The captured grant, Model Use Binding revision, and memory settings revision do not change.
+- The route uses the generic project command admission. A new body validation option keeps the problem order of `main`. The revision, the correlation identity, the challenge headers, and the challenge secret come first. The conversation and Working Target identities come after them. The message limit of 8000 characters is a route check after the Project store check, with `409 idempotency_binding_conflict`, as on `main`.
+- Replay decodes the applied effect from the Activity record and requires the AgentRun row of the Receipt.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - An applied Receipt without its Activity record or its AgentRun row gives `503 project_store_unavailable`. Before, it gave `409 idempotency_binding_conflict`. The receipt relation trigger already prevents a missing Activity record.
+  - An Activity identity field that is absent, null, not a string, or not UUID text gives `503 project_store_unavailable`. An Activity `run_id` that is not the `run_id` of the AgentRun row of the Receipt gives the same store fault. Before, replay read the identities from the AgentRun row and ignored the Activity fields. The Activity payload checks already prevent a field that is absent, null, or not a string.
+  - Replay returns the conversation identity text of the first acknowledgement. Before, it returned the canonical UUID text of the stored row. The two texts are different when the client sends a UUID in another form, for example in uppercase.
+  - A stored Receipt of another result kind gives `409 idempotency_binding_conflict`. Before, replay ignored the result kind.
+  - A Project lifecycle value other than `active` or `archived` gives a store fault. Before, the command used the value as `active`. The Project lifecycle check already prevents such a value.
+  - A serialization failure, a unique violation, or a deadlock in an AgentRun read or in a Worker Context Assembly is now a store fault. Before, the read error was the busy conversation error. A read-only Repeatable Read transaction cannot have such a failure, and the Worker reported both errors as a store fault.
+
+#### Admit step
+
+- A command of the admit step declares its kind, isolation level, missing-Admission error, rate-limited Challenge error, and one work query. The work query takes the owner, Project, and Admission identities and gives one JSON object.
+- The step runs these steps in this order in one transaction:
+  1. Begin at the declared isolation level and set Project Scope.
+  2. Consume the Command Challenge.
+  3. Lock the Project row.
+  4. Load the command facts.
+  5. Insert the Admission.
+  6. Write the work rows.
+  7. Record the response record on the fence.
+  8. Commit. The fence stays `in_progress`.
+- The step writes no Domain Receipt and no Activity record.
+- The fact load can refuse before Admission. The command declares its Admission form for its facts, so `applyAuthorEdit` can declare its own form (ADR 0044).
+- An exact retry in progress calls the admitted replay of the command. The default replay reads the fence, the Admission, and the work query in one read-only transaction. A fence that is not `in_progress` with the command digest is a binding conflict. A fence without its Admission, or an Admission without its work rows, is damaged evidence. A pre-capture response record gives `historical_acknowledgement_unavailable`. A command can replace this replay, for example `applyAuthorEdit` (ADR 0044).
+- An exact retry of a settled command reads the one replay query and the work query by the Admission of the Receipt. The command accepts only the result kinds and reasons that its later settlement writes. Another result kind or reason is a binding conflict. Then the work and the response record are decoded. Damaged evidence is a store fault.
+- Every path returns the first admission: the command and Admission identities, the admitted work, and the response record. It has no Receipt identity, because the admit step writes no Receipt.
+
+#### `exportHumanReadableManuscript`
+
+- `exportHumanReadableManuscript` uses the admit step with the explicit project command Admission form and the Command-response Project. A rate-limited Challenge gives a store fault, as on `main`. The work rows are the export operation row and the Pinned Export Source row. Their columns do not change. The Worker settlement does not change.
+- An archived Project is a refusal before Admission. It gives `422 archived_project`, as on `main`.
+- The route uses the generic project command admission with the problem order of `main`. The problem texts use the name "human-readable export", as on `main`. The `202` response body does not change.
+- The application binding self-check and the Store trait of the command are removed.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - An exact retry in progress whose operation row or pinned Snapshot is missing gives `503 project_store_unavailable`. Before, it gave `409 idempotency_binding_conflict`. An in-progress fence without its Admission also gives the store fault. Foreign keys already prevent a missing Admission or Snapshot.
+  - A settled Receipt whose operation row or pinned Snapshot is missing gives `503 project_store_unavailable`. Before, a refused Receipt gave `409 idempotency_binding_conflict` for such a record.
+  - An applied Receipt with its readable export row but without its operation row gives `503 project_store_unavailable`. Before, replay read the export identity and the pinned Snapshot from the export row and returned the admitted operation. The Worker never deletes an operation row, so only a manual change makes such a record.
+  - A settled retry reads the pinned Snapshot of the operation row. Before, an applied Receipt read the pinned Snapshot of the export row. The Worker writes the same Snapshot in the two rows.
+  - A settled Receipt with a result kind other than `authoritative_applied` or `refused`, or with a refusal reason other than `archived_project` or `pinned_export_source_unavailable`, gives `409 idempotency_binding_conflict`. Before, each `refused` reason replayed as admitted. The Receipt shape check already prevents such a record.
+  - A Receipt field with the wrong JSON type is damaged evidence and gives a store fault. A numeric work field that is not unsigned decimal text is also damaged evidence.
+
+#### `steerAgentRun`
+
+- `steerAgentRun` uses the `agent_run_control` Admission form, the `ActivityOnly` profile with the Activity kind `agent_run_steering_retained`, and the Command-response Project. It locks the Project row and then the AgentRun row. It does not refuse an archived Project.
+- The Core classifier returns a Core Transition Outcome with no applied outcome. A Run that is not terminal gives `no_effect` with the reason `steering_retained`. A terminal Run gives `conflicted` with the reason `terminal_run`.
+- A missing AgentRun and a conversation that is not the conversation of the Run are refusals before Admission. Each gives `404 resource_unavailable`, as on `main`. An input that makes the effective author input exceed the Context item bound is a refusal before Admission. It gives `413 steering_input_limit`, as on `main`.
+- The retained outcome declares `EffectWithActivity`. It resumes a paused Run without a change to its fence token, and it writes the `agent_run_steering_retained` Activity record at the next input position. The payload keys and their string types do not change, because the Worker reads them. The `terminal_run` outcome writes no Activity record, as on `main`.
+- The route uses the generic project command admission. It checks the conversation identity before the session. It checks the message limit of 8000 characters after the session, header, and Command Challenge secret checks. Thus the problem order of `main` does not change. A message that is empty or above the limit gives `409 idempotency_binding_conflict`, as on `main`.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - Damaged replay evidence gives `503 project_store_unavailable` instead of `409 idempotency_binding_conflict`. Such evidence is a damaged Command-response Project record or a `steering_retained` Receipt without its Activity record. It is also an Activity `run_id`, `steering_input_id`, or `input_position` value that is absent, null, or not a string. The receipt relation trigger and the Activity payload checks already prevent the Activity faults.
+  - An Activity `run_id` or `steering_input_id` that is not UUID text gives `503 project_store_unavailable`. Before, replay returned that text. The Activity payload checks already require an `input_position` of unsigned decimal text without leading zeros.
+  - A zero-authority Receipt with an Author Action gives a store fault. Before, replay ignored the Author Action. The receipt relation trigger already prevents such a record.
+- The behavior-equivalence review against `main` found no other difference.
+
+#### `exportProjectArchive`
+
+- `exportProjectArchive` uses the admit step with the explicit project command Admission form and the Command-response Project. A rate-limited Challenge gives a store fault, as on `main`. The work rows are the export operation row with its two archive profiles and the Pinned Export Source row. Their columns do not change. The Worker settlement does not change.
+- The fact load reads the latest canonical Snapshot and collects the exportable families before the Admission. An archived Project gives `422 archived_project`, and each archive build refusal gives its `422` problem code, as on `main`. Each is a refusal before Admission.
+- The Pinned Export Source keeps the Admission row and the operation row of the export, as on `main`. The command reads these two families again after it writes the two rows.
+- The route uses the generic project command admission with the problem order of `main`. The route refuses an archive profile or an archive path profile that is not the current profile with `400 invalid_request`, as on `main`. The problem texts use the name "Project Export Archive", as on `main`. The `202` response body does not change.
+- The application binding self-check, the Store trait, and the error type of the command are removed. The archive build steps use an adapter error that only the adapter sees.
+- These observable changes follow from the sequence:
+  - A failed rollback after a failed first use or a refusal gives `503 project_store_unavailable`. Before, it was ignored.
+  - An archive build refusal comes before a store fault of the Admission insert or the operation insert. Before, the store fault came first. After the Challenge consumption, these two inserts fail only on a store fault.
+  - An exact retry in progress whose operation row or pinned Snapshot is missing gives `503 project_store_unavailable`. Before, it gave `409 idempotency_binding_conflict`. An in-progress fence without its Admission also gives the store fault. Foreign keys already prevent a missing Admission or Snapshot.
+  - A settled Receipt whose operation row or pinned Snapshot is missing gives `503 project_store_unavailable`. Before, a refused Receipt, or an applied Receipt without its export manifest row, gave `409 idempotency_binding_conflict` for such a record.
+  - An applied Receipt with its export manifest row but without its operation row gives `503 project_store_unavailable`. Before, replay read the export identity and the pinned Snapshot from the manifest row and returned the admitted operation. The Worker never deletes an operation row, so only a manual change makes such a record.
+  - A settled retry reads the pinned Snapshot of the operation row. Before, an applied Receipt read the pinned Snapshot of the manifest row. The Worker writes the same Snapshot in the two rows.
+  - Replay reads the two archive profiles from the operation row. Before, replay returned the current profiles. The checks of the operation row allow only the current profiles, so this change is not observable.
+  - A settled Receipt with a result kind other than `authoritative_applied` or `refused`, or with a refusal reason other than `archived_project` or `pinned_export_source_unavailable`, gives `409 idempotency_binding_conflict`. Before, each `refused` reason replayed as admitted. The Receipt shape check already prevents such a record.
+  - A Receipt field with the wrong JSON type is damaged evidence and gives a store fault. A numeric work field that is not unsigned decimal text is also damaged evidence.
+
 ## Relation to ADR 0041 and the glossary
 
 ADR 0041 stays in force. ADR 0041 lets the sequence allocate authority records for an `Applied` outcome only in the `Structural` shape. This decision replaces that statement: the settlement profile now fixes the authority records of an `Applied` outcome. The glossary term Core Transition Outcome changes in the same way. Only Applied changes the target of the command, and its settlement profile fixes which authority records it allocates.

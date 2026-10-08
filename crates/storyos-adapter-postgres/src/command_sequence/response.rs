@@ -135,7 +135,7 @@ impl ResponseRecord for ProjectAssistanceResponse {
     }
 }
 
-async fn read_response_project(
+pub(super) async fn read_response_project(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
 ) -> Result<Project, ProjectCommandError> {

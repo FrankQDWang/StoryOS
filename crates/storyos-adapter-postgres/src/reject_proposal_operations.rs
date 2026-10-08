@@ -124,6 +124,7 @@ impl ProjectCommand for RejectProposalOperationsInput {
                 AND rejection.rejection_receipt_id = $3::text::uuid",
         ),
     };
+    type Error = ProjectCommandError;
     type Profile = ActionOnly;
     type Response = ProjectResponse;
     type ZeroEffect = ();

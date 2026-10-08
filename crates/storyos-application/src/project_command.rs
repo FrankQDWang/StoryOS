@@ -60,6 +60,21 @@ impl std::error::Error for ProjectCommandError {
     }
 }
 
+/// The error of a project command that declares a refusal before its Admission (ADR 0043).
+#[derive(Debug)]
+pub enum RefusableCommandError<R> {
+    /// The command refused before its Admission. It wrote no row, and the Command Challenge
+    /// stays unused.
+    RefusedBeforeAdmission(R),
+    Command(ProjectCommandError),
+}
+
+impl<R> From<ProjectCommandError> for RefusableCommandError<R> {
+    fn from(error: ProjectCommandError) -> Self {
+        Self::Command(error)
+    }
+}
+
 /// The settled outcome of one project command, equal on first delivery and replay.
 ///
 /// `A` is the applied record of the command's settlement profile (ADR 0043). `P` is the
@@ -73,6 +88,19 @@ pub struct ProjectCommandSettlement<A, N, C, R, P = Project, Z = ()> {
     pub response: P,
     /// Present only for a zero-authority outcome that wrote effect rows.
     pub zero_authority_effect: Option<Z>,
+}
+
+/// The first admission of a command that the admit step commits (ADR 0043).
+///
+/// It is equal on first use and on each exact retry, also after a later settlement.
+///
+/// `W` is the admitted work of the command. `P` is the acknowledgement record on the fence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdmittedProjectCommand<W, P = Project> {
+    pub command_id: String,
+    pub author_command_admission_id: String,
+    pub work: W,
+    pub response: P,
 }
 
 /// The applied value of an `ActivityOnly` command: its effect and its one Activity record.

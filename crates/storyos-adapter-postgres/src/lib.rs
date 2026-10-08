@@ -103,7 +103,6 @@ mod agent_run_abort;
 mod agent_run_attempt;
 mod agent_run_compaction;
 mod agent_run_continuation;
-mod agent_run_control;
 mod agent_run_create_dispatch;
 mod agent_run_dispatch;
 mod agent_run_expiry;
@@ -124,6 +123,7 @@ mod author_edit_outcome;
 mod author_edit_proposal;
 mod author_edit_replay;
 mod author_edit_settlement;
+mod cancel_agent_run;
 mod chapter_query;
 mod close_editor_flow_draft;
 mod command_replay;
@@ -152,6 +152,7 @@ mod open_block_proposal;
 mod open_inline_proposal;
 mod ordinary_passage_targets;
 mod passage_collection;
+mod pause_agent_run;
 mod pinned_export_source;
 mod project_archive_build;
 mod project_archive_draft;
@@ -172,6 +173,7 @@ mod reopen_withdrawn_proposal;
 mod replan_proposal;
 mod set_current_chapter;
 mod snapshot;
+mod steer_agent_run;
 mod storage_activation;
 mod storage_activation_proof;
 mod stream_proposal_generation;
@@ -366,10 +368,6 @@ impl PostgresProjectCommandTransaction {
             .batch_execute("COMMIT")
             .await
             .map_err(challenge_error)
-    }
-
-    pub(crate) async fn commit_sql(self) -> Result<(), tokio_postgres::Error> {
-        self.client.batch_execute("COMMIT").await
     }
 
     pub async fn rollback(self) -> Result<(), ProjectCommandChallengeError> {

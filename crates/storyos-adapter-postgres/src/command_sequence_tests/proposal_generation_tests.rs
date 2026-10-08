@@ -15,7 +15,7 @@ use super::proposal_decision::{
     reject_proposal_operations_call, reopen_rejected_operations_call,
     reopen_withdrawn_proposal_call, replan_proposal_call, withdraw_proposal_call,
 };
-use super::support::{CommandCall, Route, issued, stores, two_chapter_writer};
+use super::support::{CommandCall, Route, SequenceError, issued, stores, two_chapter_writer};
 
 pub(super) const COMPLETE_READY_PARTIAL_PROPOSAL: Route = Route {
     kind: "completeReadyPartialProposal",
@@ -235,7 +235,7 @@ async fn a_generation_decision_without_its_transition_record_is_damaged_evidence
 
 /// Settles the call and replays it once with an unknown value in one preserved column of its
 /// effect row, which `receipt_column` binds to the Receipt.
-async fn replay_with_unknown_preserved_value<C: ProjectCommand + Clone>(
+async fn replay_with_unknown_preserved_value<C: ProjectCommand<Error: SequenceError> + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,

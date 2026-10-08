@@ -503,7 +503,7 @@ fn complete_read_error(error: ProjectReadError) -> CompleteArchiveExportError {
 }
 
 fn complete_pack_error(
-    error: storyos_application::ExportProjectArchiveError,
+    error: crate::project_archive_build::ArchiveBuildError,
 ) -> CompleteArchiveExportError {
     CompleteArchiveExportError::unavailable(error)
 }

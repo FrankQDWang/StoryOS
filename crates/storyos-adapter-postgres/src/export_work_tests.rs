@@ -1,15 +1,13 @@
 use storyos_application::{
     AuthorCommandAdmissionIds, ClaimedExportWork, CompleteArchiveExport, CompleteReadableExport,
-    EditorClientBinding, ExportHumanReadableManuscriptCommand, ExportOperationReader,
-    ExportProjectArchiveCommand, GetExportOperation, GetHumanReadableManuscriptExport,
+    EditorClientBinding, ExportHumanReadableManuscriptInput, ExportOperationReader,
+    ExportProjectArchiveInput, GetExportOperation, GetHumanReadableManuscriptExport,
     HUMAN_READABLE_EXPORT_COMMAND_KIND, HUMAN_READABLE_EXPORT_DIGEST_PROFILE,
     HUMAN_READABLE_EXPORT_REQUEST_SCHEMA, HUMAN_READABLE_EXPORT_ROUTE,
-    HumanReadableManuscriptExportReader, IssueProjectCommandChallenge,
-    PROJECT_EXPORT_ARCHIVE_PATH_PROFILE, PROJECT_EXPORT_ARCHIVE_PROFILE,
-    PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE, PROJECT_EXPORT_REQUEST_SCHEMA,
-    PROJECT_EXPORT_ROUTE, ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId,
-    claim_next_export_work, issue_project_command_challenge, request_export_project_archive,
-    request_human_readable_manuscript_export,
+    HumanReadableManuscriptExportReader, IssueProjectCommandChallenge, PROJECT_EXPORT_COMMAND_KIND,
+    PROJECT_EXPORT_DIGEST_PROFILE, PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE,
+    ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectId, ProjectScope, UserId,
+    claim_next_export_work, issue_project_command_challenge,
 };
 use tokio_postgres::NoTls;
 
@@ -411,52 +409,56 @@ pub(crate) async fn admit_readable_export(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
 ) -> String {
-    let command = readable_export_command(scope);
+    let (envelope, input) = readable_export_command(scope);
     issue_project_command_challenge(
         store,
         &IssueProjectCommandChallenge {
-            binding: command.challenge_binding.clone(),
-            nonce: command
+            binding: envelope.challenge_binding.clone(),
+            nonce: envelope
                 .nonce_digest
                 .trim_start_matches("sha256:")
                 .to_owned(),
-            nonce_digest: command.nonce_digest.clone(),
+            nonce_digest: envelope.nonce_digest.clone(),
         },
     )
     .await
     .unwrap();
-    request_human_readable_manuscript_export(store, &command)
+    store
+        .export_human_readable_manuscript(&envelope, &input)
         .await
         .unwrap();
-    command.export_id
+    input.export_id
 }
 
 async fn admit_archive_export(store: &PostgresProjectReader, scope: &ProjectScope) -> String {
-    let command = archive_export_command(scope);
+    let (envelope, input) = archive_export_command(scope);
     issue_project_command_challenge(
         store,
         &IssueProjectCommandChallenge {
-            binding: command.challenge_binding.clone(),
-            nonce: command
+            binding: envelope.challenge_binding.clone(),
+            nonce: envelope
                 .nonce_digest
                 .trim_start_matches("sha256:")
                 .to_owned(),
-            nonce_digest: command.nonce_digest.clone(),
+            nonce_digest: envelope.nonce_digest.clone(),
         },
     )
     .await
     .unwrap();
-    request_export_project_archive(store, &command)
+    store
+        .export_project_archive(&envelope, &input)
         .await
         .unwrap();
-    command.export_id
+    input.export_id
 }
 
 fn fresh_id() -> String {
     uuid::Uuid::now_v7().to_string()
 }
 
-fn readable_export_command(scope: &ProjectScope) -> ExportHumanReadableManuscriptCommand {
+fn readable_export_command(
+    scope: &ProjectScope,
+) -> (ProjectCommandEnvelope, ExportHumanReadableManuscriptInput) {
     let client_binding = EditorClientBinding {
         binding_ref: "binding:author-edit".to_owned(),
         session_generation: 1,
@@ -471,7 +473,7 @@ fn readable_export_command(scope: &ProjectScope) -> ExportHumanReadableManuscrip
         &canonical_command_bytes,
     );
     let export_id = fresh_id();
-    ExportHumanReadableManuscriptCommand {
+    let envelope = ProjectCommandEnvelope {
         project_scope: scope.clone(),
         client_binding: client_binding.clone(),
         challenge_binding: ProjectCommandChallengeBinding {
@@ -498,11 +500,13 @@ fn readable_export_command(scope: &ProjectScope) -> ExportHumanReadableManuscrip
             author_command_admission_id: fresh_id(),
             receipt_id: fresh_id(),
         },
-        export_id,
-    }
+    };
+    (envelope, ExportHumanReadableManuscriptInput { export_id })
 }
 
-fn archive_export_command(scope: &ProjectScope) -> ExportProjectArchiveCommand {
+fn archive_export_command(
+    scope: &ProjectScope,
+) -> (ProjectCommandEnvelope, ExportProjectArchiveInput) {
     let client_binding = EditorClientBinding {
         binding_ref: "binding:author-edit".to_owned(),
         session_generation: 1,
@@ -513,7 +517,7 @@ fn archive_export_command(scope: &ProjectScope) -> ExportProjectArchiveCommand {
         br#"{"command_schema":"storyos.command.export-project-archive.request.v1"}"#.to_vec();
     let command_digest = command_digest(PROJECT_EXPORT_DIGEST_PROFILE, &canonical_command_bytes);
     let export_id = fresh_id();
-    ExportProjectArchiveCommand {
+    let envelope = ProjectCommandEnvelope {
         project_scope: scope.clone(),
         client_binding: client_binding.clone(),
         challenge_binding: ProjectCommandChallengeBinding {
@@ -540,10 +544,8 @@ fn archive_export_command(scope: &ProjectScope) -> ExportProjectArchiveCommand {
             author_command_admission_id: fresh_id(),
             receipt_id: fresh_id(),
         },
-        export_id,
-        archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
-        archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
-    }
+    };
+    (envelope, ExportProjectArchiveInput { export_id })
 }
 
 fn command_digest(profile: &str, canonical_command_bytes: &[u8]) -> String {

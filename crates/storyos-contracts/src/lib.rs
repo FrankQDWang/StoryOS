@@ -159,9 +159,9 @@ pub use release1_agent_run_control::{
     PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID, PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
     PauseAgentRunConflictReason, PauseAgentRunEffect, PauseAgentRunInput,
     PauseAgentRunNoEffectReason, PauseAgentRunRequest, PauseAgentRunResponse,
-    STEER_AGENT_RUN_DIGEST_PROFILE, STEER_AGENT_RUN_PATH, STEER_AGENT_RUN_REQUEST_SCHEMA_ID,
-    STEER_AGENT_RUN_RESPONSE_SCHEMA_ID, SteerAgentRunEffect, SteerAgentRunInput,
-    SteerAgentRunRequest, SteerAgentRunResponse,
+    STEER_AGENT_RUN_DIGEST_PROFILE, STEER_AGENT_RUN_METHOD, STEER_AGENT_RUN_PATH,
+    STEER_AGENT_RUN_REQUEST_SCHEMA_ID, STEER_AGENT_RUN_RESPONSE_SCHEMA_ID, SteerAgentRunEffect,
+    SteerAgentRunInput, SteerAgentRunRequest, SteerAgentRunResponse,
 };
 pub use release1_archive_project::{
     ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,

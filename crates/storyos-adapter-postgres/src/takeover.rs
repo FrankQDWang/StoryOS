@@ -90,6 +90,7 @@ impl ProjectCommand for TakeOverProjectWriterInput {
         activity_kind: "writer_takeover_applied",
         replay_effect: ReplayEffect::NoQuery,
     };
+    type Error = ProjectCommandError;
     type Profile = ActivityOnly;
     type Response = NoResponse;
     type ZeroEffect = WriterTakeover;

@@ -39,6 +39,7 @@ impl ProjectCommand for ArchiveProjectInput {
         activity_kind: "project_archival_changed",
         replay_effect: ReplayEffect::NoQuery,
     };
+    type Error = ProjectCommandError;
     type Profile = ActivityOnly;
     type Response = ProjectResponse;
     type ZeroEffect = ();

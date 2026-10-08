@@ -60,6 +60,7 @@ impl ProjectCommand for ReopenWithdrawnProposalInput {
                 AND reopen_receipt_id = $3::text::uuid",
         ),
     };
+    type Error = ProjectCommandError;
     type Profile = ActionOnly;
     type Response = ProjectResponse;
     type ZeroEffect = ();

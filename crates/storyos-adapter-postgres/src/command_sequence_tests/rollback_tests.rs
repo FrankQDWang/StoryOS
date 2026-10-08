@@ -13,6 +13,9 @@ use crate::command_sequence::{
     ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
 };
 
+use super::agent_run::{
+    cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
+};
 use super::draft::{close_editor_flow_draft_call, expand_refused_edit_draft_call};
 use super::project_session::{
     archive_project_call, take_over_project_writer_call, update_project_assistance_call,
@@ -25,11 +28,12 @@ use super::proposal_decision::{
 use super::proposal_generation::{
     complete_ready_partial_proposal_call, continue_proposal_generation_call,
 };
+use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
     create_chapter_call, create_volume_call, delete_chapter_call, delete_volume_call,
     set_current_chapter_call, update_chapter_call, update_volume_call,
 };
-use super::support::{CommandCall, settlement_rows, stores};
+use super::support::{CommandCall, SequenceError, settlement_rows, stores};
 
 #[derive(Clone, Copy, Debug)]
 enum FailurePoint {
@@ -58,6 +62,7 @@ struct Failing<C> {
 
 impl<C: ProjectCommand> ProjectCommand for Failing<C> {
     const SPEC: CommandSpec = C::SPEC;
+    type Error = C::Error;
     type Profile = C::Profile;
     type Response = C::Response;
     type ZeroEffect = C::ZeroEffect;
@@ -73,10 +78,10 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> Result<Classification<Self>, ProjectCommandError> {
+    ) -> Result<Classification<Self>, Self::Error> {
         let classified = self.command.classify(client, envelope, project).await?;
         match self.at {
-            FailurePoint::Classify => Err(unavailable(Injected("classify"))),
+            FailurePoint::Classify => Err(unavailable(Injected("classify")).into()),
             FailurePoint::Apply | FailurePoint::AfterAuthority => Ok(Classification {
                 outcome: classified.outcome,
                 admission: classified.admission,
@@ -192,7 +197,7 @@ fn inner_outcome<'a, C: ProjectCommand>(
 ///
 /// Returns, for each failure, the step of the injected failure and the rows of its Receipt, then
 /// the Receipt result kind of the real settlement.
-async fn failed_then_settled<C: ProjectCommand + Clone>(
+async fn failed_then_settled<C: ProjectCommand<Error: SequenceError> + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
@@ -207,7 +212,10 @@ async fn failed_then_settled<C: ProjectCommand + Clone>(
             command: call.input.clone(),
             at,
         };
-        let injected = match settle_project_command(store, &call.envelope, &failing).await {
+        let injected = match settle_project_command(store, &call.envelope, &failing)
+            .await
+            .map_err(SequenceError::sequence)
+        {
             Err(ProjectCommandError::Unavailable(source)) => source
                 .downcast_ref::<Injected>()
                 .map(|Injected(step)| *step),
@@ -238,6 +246,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
         .lock()
         .await;
     let (store, admin) = stores().await;
+    let create = create_agent_run_call(&store, /*base*/ 0xb340).await;
     let observed = vec![
         failed_then_settled(
             &store,
@@ -365,7 +374,27 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &expand_refused_edit_draft_call(&store, &admin, /*base*/ 0x8e30).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &pause_agent_run_call(&store, &admin, /*base*/ 0xb230).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &cancel_agent_run_call(&store, &admin, /*base*/ 0xd530).await,
+        )
+        .await,
+        failed_then_settled(&store, &admin, &create).await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &steer_agent_run_call(&store, &admin, /*base*/ 0xc730).await,
+        )
+        .await,
     ];
+    park_run(&admin, &create).await;
     let rolled_back = |result| {
         let after_classify = match result {
             ReceiptResult::AuthoritativeApplied => ["apply", "after authority"],
@@ -383,6 +412,7 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.push(rolled_back(ReceiptResult::NoEffect));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::Refused));
-    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 7]);
+    expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10]);
+    expected.push(rolled_back(ReceiptResult::NoEffect));
     assert_eq!(observed, expected);
 }

@@ -15,7 +15,9 @@ use crate::PostgresProjectReader;
 mod action_only;
 mod activity_only;
 mod admission;
+mod admit;
 mod chapter_selection;
+mod contention;
 mod records;
 mod response;
 mod structural;
@@ -23,7 +25,10 @@ use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
 pub(crate) use action_only::{ActionOnly, ActionSequence};
 pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
+pub(crate) use admit::{AdmitCommand, AdmitSpec, admit_project_command};
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
+pub(crate) use contention::CommandError;
+use contention::contended;
 use records::{ReceiptRecord, insert_activity_payload, insert_receipt, lock_project};
 pub(crate) use response::{NoResponse, ProjectAssistanceResponse, ProjectResponse, ResponseRecord};
 pub(crate) use structural::{
@@ -36,11 +41,19 @@ pub(crate) enum CommandIsolation {
 
 /// The action class and Editor Session binding that the Author Command Admission records.
 pub(crate) enum Admission {
-    ExplicitProjectCommand,
+    /// A command without an Editor Session.
+    Project(ProjectActionClass),
     /// A command of the current writer Editor Session. The insert requires its writer generation.
     ExplicitEditorCommand(EditorAdmission),
     /// A writer takeover. The insert requires the observed writer generation of another session.
     WriterTakeover(TakeoverAdmission),
+}
+
+/// The action class of an Admission without an Editor Session. Each class writes the same columns.
+pub(crate) enum ProjectActionClass {
+    ExplicitProjectCommand,
+    AgentRunStart,
+    AgentRunControl,
 }
 
 pub(crate) struct TakeoverAdmission {
@@ -122,6 +135,9 @@ pub(crate) enum ReplayEffect {
     /// One query that takes the owner, Project, and Receipt identities as `$1`, `$2`, and `$3`.
     /// Its optional row holds one JSON object text.
     Query(&'static str),
+    /// One query that takes the owner, Project, and Admission identities as `$1`, `$2`, and
+    /// `$3`. Its optional row holds one JSON object text.
+    AdmissionQuery(&'static str),
 }
 
 pub(crate) struct CommandSpec {
@@ -200,7 +216,7 @@ impl<C: ProjectCommand + ?Sized> Classification<C> {
     pub(crate) fn project_command(outcome: Classified<C>) -> Self {
         Self {
             outcome,
-            admission: Admission::ExplicitProjectCommand,
+            admission: Admission::Project(ProjectActionClass::ExplicitProjectCommand),
             heads: ReceiptHeads::default(),
             zero_receipt: ZeroReceipt::Reason,
         }
@@ -264,6 +280,10 @@ pub(crate) type ProfileApplied<C> =
 /// those rows in one fixed order.
 pub(crate) trait ProjectCommand: Sync {
     const SPEC: CommandSpec;
+    /// The settlement error. A command that refuses before its Admission declares
+    /// `RefusableCommandError` with its refusal type. The other commands declare
+    /// `ProjectCommandError`.
+    type Error: CommandError;
     type Profile: SettlementProfile;
     type Response: ResponseRecord;
     /// The effect of a zero-authority outcome that writes effect rows. Other commands use `()`.
@@ -275,13 +295,20 @@ pub(crate) trait ProjectCommand: Sync {
     type Conflict: ReasonCode + Send + Sync;
     type Refusal: ReasonCode + Send + Sync;
 
-    /// Locks the command facts and classifies them through Core.
+    /// Locks the command facts and classifies them through Core. A refusal before Admission
+    /// rolls back the transaction.
     fn classify(
         &self,
         client: &Client,
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
-    ) -> impl Future<Output = Result<Classification<Self>, ProjectCommandError>> + Send;
+    ) -> impl Future<Output = Result<Classification<Self>, Self::Error>> + Send;
+
+    /// The refusal of a serialization failure, a unique violation, or a deadlock of the first-use
+    /// transaction, including its commit. `None` keeps such a failure a store fault.
+    fn contention_refusal() -> Option<Self::Error> {
+        None
+    }
 
     /// The Domain Receipt payload of an applied outcome.
     fn applied_receipt_payload(&self, _applied: &Self::Applied, _plan: &Self::Plan) -> String {
@@ -375,7 +402,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
-) -> Result<SettledCommand<C>, ProjectCommandError> {
+) -> Result<SettledCommand<C>, C::Error> {
     let challenge_error = |error| challenge_problem(C::SPEC.rate_limited, error);
     let mut transaction = match C::SPEC.isolation {
         CommandIsolation::Serializable => {
@@ -401,29 +428,31 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
             )
             .await
             .and_then(|replay| replay_command(command, &replay))
-            .map_err(|fault| match fault {
-                ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
-                ReplayFault::HistoricalAcknowledgementUnavailable => {
-                    ProjectCommandError::HistoricalAcknowledgementUnavailable
-                }
-                ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
-            })
+            .map_err(|fault| replay_problem(fault).into())
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
             transaction.rollback().await.map_err(challenge_error)?;
-            Err(ProjectCommandError::BindingConflict)
+            Err(ProjectCommandError::BindingConflict.into())
         }
         ProjectCommandChallengeUse::FirstUse => {
-            match first_use(&transaction.client, envelope, command).await {
-                Ok(settlement) => {
-                    transaction.commit().await.map_err(challenge_error)?;
-                    Ok(settlement)
-                }
+            let settled = match first_use(&transaction.client, envelope, command).await {
+                Ok(settlement) => transaction
+                    .commit()
+                    .await
+                    .map(|()| settlement)
+                    .map_err(|error| challenge_error(error).into()),
                 Err(error) => {
                     transaction.rollback().await.map_err(challenge_error)?;
                     Err(error)
                 }
-            }
+            };
+            settled.map_err(|error| {
+                let contention = error.sequence_error().is_some_and(contended);
+                match C::contention_refusal() {
+                    Some(refusal) if contention => refusal,
+                    Some(_) | None => error,
+                }
+            })
         }
     }
 }
@@ -432,7 +461,7 @@ async fn first_use<C: ProjectCommand>(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
     command: &C,
-) -> Result<SettledCommand<C>, ProjectCommandError> {
+) -> Result<SettledCommand<C>, C::Error> {
     let project = lock_project(client, envelope).await?;
     let Classification {
         outcome: classified,
@@ -440,7 +469,14 @@ async fn first_use<C: ProjectCommand>(
         heads,
         zero_receipt,
     } = command.classify(client, envelope, &project).await?;
-    insert_admission(client, envelope, &C::SPEC, &admission).await?;
+    insert_admission(
+        client,
+        envelope,
+        C::SPEC.kind,
+        &C::SPEC.missing_admission,
+        &admission,
+    )
+    .await?;
     let (mut zero_fields, zero_refs, observed_effect) = match zero_receipt {
         ZeroReceipt::Reason => (serde_json::Map::new(), ReceiptRefs::default(), None),
         ZeroReceipt::Observed {
@@ -590,6 +626,16 @@ pub(crate) fn unavailable(
     error: impl Into<Box<dyn std::error::Error + Send + Sync>>,
 ) -> ProjectCommandError {
     ProjectCommandError::Unavailable(error.into())
+}
+
+fn replay_problem(fault: ReplayFault) -> ProjectCommandError {
+    match fault {
+        ReplayFault::BindingConflict => ProjectCommandError::BindingConflict,
+        ReplayFault::HistoricalAcknowledgementUnavailable => {
+            ProjectCommandError::HistoricalAcknowledgementUnavailable
+        }
+        ReplayFault::Unavailable(source) => ProjectCommandError::Unavailable(source),
+    }
 }
 
 fn challenge_problem(

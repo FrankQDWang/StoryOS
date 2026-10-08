@@ -1,8 +1,9 @@
 use serde_json::{Value, json};
-use storyos_application::{ExportProjectArchiveError, ProjectScope};
+use storyos_application::ProjectScope;
 use storyos_core::{ArchiveEntrySource, ProjectArchiveBuildRefusal, canonical_json, hex_sha256};
 
 use super::project_archive_draft::text;
+use crate::project_archive_build::ArchiveBuildError;
 
 struct RestrictedDraftSource {
     draft_id: String,
@@ -155,10 +156,10 @@ pub(super) async fn withhold_pinned_source_copies(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     rows: &mut [Value],
-) -> Result<(), ExportProjectArchiveError> {
+) -> Result<(), ArchiveBuildError> {
     let restricted = restricted_sources(client, scope)
         .await
-        .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
+        .map_err(|error| ArchiveBuildError::Unavailable(Box::new(error)))?;
     if restricted.is_empty() {
         return Ok(());
     }
@@ -167,28 +168,28 @@ pub(super) async fn withhold_pinned_source_copies(
             continue;
         }
         let facts = row.get("facts").ok_or_else(|| {
-            ExportProjectArchiveError::ArchiveBuild(ProjectArchiveBuildRefusal::InvalidProvenance)
+            ArchiveBuildError::Refused(ProjectArchiveBuildRefusal::InvalidProvenance)
         })?;
         if hex_sha256(canonical_json(facts).as_bytes())
-            != text(row, "facts_sha256").map_err(ExportProjectArchiveError::ArchiveBuild)?
+            != text(row, "facts_sha256").map_err(ArchiveBuildError::Refused)?
         {
-            return Err(ExportProjectArchiveError::ArchiveBuild(
+            return Err(ArchiveBuildError::Refused(
                 ProjectArchiveBuildRefusal::CorruptDigest,
             ));
         }
         let restricted_draft_ids = copied_restricted_drafts(facts, &restricted, scope)
-            .map_err(ExportProjectArchiveError::ArchiveBuild)?;
+            .map_err(ArchiveBuildError::Refused)?;
         if restricted_draft_ids.is_empty() {
             continue;
         }
         let facts_sha256 = text(row, "facts_sha256")
-            .map_err(ExportProjectArchiveError::ArchiveBuild)?
+            .map_err(ArchiveBuildError::Refused)?
             .to_owned();
         let gap = json!({"kind":"refused_edit_pinned_export_source_facts", "reason":"withheld_due_to_tombstone",
-            "entry_path":"canonical/pinned_export_sources.json", "record_id":text(row,"export_id").map_err(ExportProjectArchiveError::ArchiveBuild)?,
+            "entry_path":"canonical/pinned_export_sources.json", "record_id":text(row,"export_id").map_err(ArchiveBuildError::Refused)?,
             "payload_field":"facts", "restricted_draft_ids":restricted_draft_ids, "facts_sha256":facts_sha256});
         let object = row.as_object_mut().ok_or_else(|| {
-            ExportProjectArchiveError::ArchiveBuild(ProjectArchiveBuildRefusal::InvalidProvenance)
+            ArchiveBuildError::Refused(ProjectArchiveBuildRefusal::InvalidProvenance)
         })?;
         object.remove("facts");
         object.insert("payload_availability".to_owned(), gap);

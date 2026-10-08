@@ -65,8 +65,9 @@ pub use accept_proposal::{
     ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
 pub use agent_run_control::{
-    AgentRunLifecycle, CancelAgentRunResult, PauseAgentRunResult, classify_cancel_agent_run,
-    classify_pause_agent_run,
+    AgentRunLifecycle, CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict,
+    PauseAgentRunNoEffect, SteerAgentRunConflict, SteerAgentRunNoEffect, classify_cancel_agent_run,
+    classify_pause_agent_run, classify_steer_agent_run,
 };
 pub use append_proposal_generation_batch::{
     AppendProposalGenerationBatch, AppendProposalGenerationBatchConflict,
@@ -99,7 +100,7 @@ pub use continuation_input::{
 };
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
-    CreateAgentRunRefusal, CreateAgentRunResult, create_agent_run,
+    CreateAgentRunOutcome, CreateAgentRunRefusal, create_agent_run,
 };
 pub use create_chapter::{
     CreateChapter, CreateChapterApplied, CreateChapterConflict, CreateChapterCurrent,

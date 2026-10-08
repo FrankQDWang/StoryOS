@@ -3,20 +3,21 @@ use std::fmt::Debug;
 use serde::de::DeserializeOwned;
 use storyos_contracts as contracts;
 use storyos_core::{
-    ArchiveProjectConflict, ArchiveProjectNoEffect, CloseEditorFlowDraftConflict,
-    CloseEditorFlowDraftRefusal, CreateChapterConflict, CreateChapterRefusal, CreateVolumeConflict,
-    CreateVolumeRefusal, DeleteChapterConflict, DeleteChapterNoEffect, DeleteChapterRefusal,
-    DeleteVolumeConflict, DeleteVolumeNoEffect, DeleteVolumeRefusal,
-    ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal, ReasonCode,
-    RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
-    ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
-    ReopenWithdrawnProposalConflict, ReopenWithdrawnProposalNoEffect,
-    ReopenWithdrawnProposalRefusal, ReplanProposalConflict, ReplanProposalRefusal,
-    SetCurrentChapterConflict, SetCurrentChapterNoEffect, SetCurrentChapterRefusal,
-    UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
-    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, UpdateProjectConflict,
-    UpdateProjectNoEffect, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
-    WithdrawProposalConflict, WithdrawProposalNoEffect, WithdrawProposalRefusal,
+    ArchiveProjectConflict, ArchiveProjectNoEffect, CancelAgentRunConflict, CancelAgentRunNoEffect,
+    CloseEditorFlowDraftConflict, CloseEditorFlowDraftRefusal, CreateChapterConflict,
+    CreateChapterRefusal, CreateVolumeConflict, CreateVolumeRefusal, DeleteChapterConflict,
+    DeleteChapterNoEffect, DeleteChapterRefusal, DeleteVolumeConflict, DeleteVolumeNoEffect,
+    DeleteVolumeRefusal, ExpandRefusedEditDraftConflict, ExpandRefusedEditDraftRefusal,
+    PauseAgentRunConflict, PauseAgentRunNoEffect, ReasonCode, RejectProposalOperationsConflict,
+    RejectProposalOperationsRefusal, ReopenRejectedOperationsConflict,
+    ReopenRejectedOperationsRefusal, ReopenWithdrawnProposalConflict,
+    ReopenWithdrawnProposalNoEffect, ReopenWithdrawnProposalRefusal, ReplanProposalConflict,
+    ReplanProposalRefusal, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
+    SetCurrentChapterRefusal, SteerAgentRunConflict, SteerAgentRunNoEffect, UpdateChapterConflict,
+    UpdateChapterNoEffect, UpdateChapterRefusal, UpdateProjectAssistanceConflict,
+    UpdateProjectAssistanceNoEffect, UpdateProjectConflict, UpdateProjectNoEffect,
+    UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal, WithdrawProposalConflict,
+    WithdrawProposalNoEffect, WithdrawProposalRefusal,
 };
 
 use storyos_core::{
@@ -507,4 +508,40 @@ fn every_draft_expansion_reason_maps_to_its_public_or_persisted_reason() {
             "target_unavailable".to_owned(),
         ),
     ]);
+}
+
+#[test]
+fn every_agent_run_pause_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        PauseAgentRunNoEffect::AlreadyPaused,
+        contracts::PauseAgentRunNoEffectReason::AlreadyPaused,
+    )]);
+    assert_maps(vec![(
+        PauseAgentRunConflict::TerminalRun,
+        contracts::PauseAgentRunConflictReason::TerminalRun,
+    )]);
+}
+
+#[test]
+fn every_agent_run_cancel_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        CancelAgentRunNoEffect::AlreadyCancelled,
+        contracts::CancelAgentRunNoEffectReason::AlreadyCancelled,
+    )]);
+    assert_maps(vec![(
+        CancelAgentRunConflict::TerminalRun,
+        contracts::CancelAgentRunConflictReason::TerminalRun,
+    )]);
+}
+
+#[test]
+fn every_agent_run_steering_reason_maps_to_its_public_reason() {
+    assert_maps(vec![(
+        SteerAgentRunNoEffect::SteeringRetained,
+        "steering_retained".to_owned(),
+    )]);
+    assert_maps(vec![(
+        SteerAgentRunConflict::TerminalRun,
+        contracts::PauseAgentRunConflictReason::TerminalRun,
+    )]);
 }

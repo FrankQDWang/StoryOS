@@ -45,6 +45,9 @@ pub(super) enum BodyValidation {
     /// The session, the challenge headers, and the challenge secret are checked before the body
     /// is parsed. The body fields are validated after the revision check.
     AfterChallengeHeaders,
+    /// The revision, the correlation identity, the challenge headers, and the challenge secret
+    /// are examined before the body fields.
+    AfterChallengeSecret,
 }
 
 /// When the path identities after the Project are validated, relative to the content type.
@@ -142,6 +145,17 @@ project_command_request!(
 project_command_request!(
     contracts::ExpandRefusedEditDraftRequest,
     nested expand_refused_edit_draft_to_proposal_input
+);
+project_command_request!(contracts::PauseAgentRunRequest, nested pause_agent_run_input);
+project_command_request!(contracts::CancelAgentRunRequest, nested cancel_agent_run_input);
+project_command_request!(contracts::CreateAgentRunRequest, nested create_agent_run_input);
+project_command_request!(
+    contracts::ExportHumanReadableManuscriptRequest,
+    nested export_human_readable_manuscript_input
+);
+project_command_request!(
+    contracts::ExportProjectArchiveRequest,
+    nested export_project_archive_input
 );
 
 impl ProjectCommandRequest for contracts::TakeOverProjectWriterRequest {
@@ -288,7 +302,9 @@ pub(super) async fn read_body<R: DeserializeOwned>(
         .await
         .map_err(|_| payload_too_large())?;
     match route.body_validation {
-        BodyValidation::AfterRevisionCheck | BodyValidation::BeforeRevisionCheck => {}
+        BodyValidation::AfterRevisionCheck
+        | BodyValidation::BeforeRevisionCheck
+        | BodyValidation::AfterChallengeSecret => {}
         BodyValidation::AfterChallengeHeaders => {
             bound_session(state, &headers)?;
             challenge_headers(state, &headers, &AntiForgery::Required)?;
@@ -397,6 +413,12 @@ pub(super) async fn admit_body<
             let input = validate_body(input)?;
             check_revision()?;
             input
+        }
+        BodyValidation::AfterChallengeSecret => {
+            check_revision()?;
+            valid_uuid(body.correlation_id())?;
+            challenge_headers(state, &headers, &anti_forgery)?;
+            input(&body)?
         }
     };
     let (idempotency_key, nonce, secret) = challenge_headers(state, &headers, &anti_forgery)?;

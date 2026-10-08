@@ -15,7 +15,7 @@ use crate::command_sequence::ProjectCommand;
 
 use super::damaged_evidence::{ReplayError, damaged_replay, replay_with_receipt_payload};
 use super::support::{
-    CommandCall, Route, issued, run_without_foreign_keys, settlement_rows, stores,
+    CommandCall, Route, SequenceError, issued, run_without_foreign_keys, settlement_rows, stores,
     two_chapter_writer, with_new_request_ids,
 };
 
@@ -612,7 +612,7 @@ async fn a_draft_replay_binds_its_admission_and_draft_and_requires_its_author_ac
 
 /// Sets one Receipt payload field of `call` to the JSON text `value`, replays the call, and
 /// returns the replay error.
-async fn replay_with_receipt_field<C: ProjectCommand + Clone>(
+async fn replay_with_receipt_field<C: ProjectCommand<Error: SequenceError> + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,
