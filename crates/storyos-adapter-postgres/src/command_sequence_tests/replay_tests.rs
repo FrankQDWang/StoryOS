@@ -1,9 +1,9 @@
 use storyos_application::{
-    ArchiveProjectInput, CloseEditorFlowDraftInput, CreateChapterInput, CreateVolumeInput,
-    DeleteChapterInput, DeleteVolumeInput, ExpandRefusedEditDraftToProposalInput,
-    RejectProposalOperationsInput, ReopenWithdrawnProposalInput, SetCurrentChapterInput,
-    UpdateChapterInput, UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput,
-    WithdrawProposalInput,
+    AcceptProposalInput, ArchiveProjectInput, CloseEditorFlowDraftInput, CreateChapterInput,
+    CreateVolumeInput, DeleteChapterInput, DeleteVolumeInput,
+    ExpandRefusedEditDraftToProposalInput, RejectProposalOperationsInput,
+    ReopenWithdrawnProposalInput, SetCurrentChapterInput, UpdateChapterInput,
+    UpdateProjectAssistanceInput, UpdateProjectInput, UpdateVolumeInput, WithdrawProposalInput,
 };
 use storyos_application::{
     CancelAgentRunInput, ChapterId, EditorSessionId, PauseAgentRunInput, VolumeId,
@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::update_volume_tests::seed_project;
 
+use super::acceptance::{ACCEPT_PROPOSAL, accept_proposal, acceptable_proposal, acceptance_rows};
 use super::agent_run::{
     CANCEL_AGENT_RUN, PAUSE_AGENT_RUN, cancel_agent_run, create_agent_run, create_agent_run_call,
     park_run, pause_agent_run, seed_run,
@@ -623,6 +624,36 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
         observed.push((STEER_AGENT_RUN.kind, outcome));
     }
 
+    // An invalid or conflicted Acceptance makes its Proposal ineligible, so each one has its own
+    // Proposal.
+    let mut acceptance_records = Vec::new();
+    for base in [0xa800, 0xa810, 0xa860] {
+        let (scope, acceptance, chapter_a_head) = acceptable_proposal(&store, &admin, base).await;
+        let inputs = match base {
+            0xa800 => vec![AcceptProposalInput {
+                validation_receipt_id: Uuid::now_v7().to_string(),
+                ..acceptance
+            }],
+            0xa810 => vec![AcceptProposalInput {
+                expected_authoritative_revision_id: chapter_a_head,
+                ..acceptance
+            }],
+            _ => vec![
+                AcceptProposalInput {
+                    proposal_revision_id: Uuid::now_v7().to_string(),
+                    ..acceptance.clone()
+                },
+                acceptance,
+            ],
+        };
+        for (offset, input) in (9..).zip(inputs) {
+            let call = issued(&store, &scope, base + offset, &ACCEPT_PROPOSAL, input).await;
+            let outcome = replayed_outcome(&store, &admin, &call, accept_proposal).await;
+            acceptance_records.push(acceptance_rows(&admin, &call.envelope.ids.receipt_id).await);
+            observed.push((ACCEPT_PROPOSAL.kind, outcome));
+        }
+    }
+
     // Receipt, Author Action, Activity, Commit, and Snapshot rows of each outcome.
     let structural_applied = ("authoritative_applied", [1, 1, 1, 1, 1]);
     let chapter_selection_applied = ("authoritative_applied", [1, 1, 1, 0, 1]);
@@ -635,6 +666,7 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
     let draft_closure_changed = ("draft_closure_changed", [1, 1, 0, 0, 0]);
     let proposal_created_from_draft = ("proposal_created_from_draft", [1, 1, 0, 0, 0]);
     let no_effect = ("no_effect", [1, 0, 0, 0, 0]);
+    let invalid = ("invalid", [1, 0, 0, 0, 0]);
     let writer_takeover = ("no_effect", [1, 0, 1, 0, 1]);
     let steering_retained = ("no_effect", [1, 0, 1, 0, 0]);
     let conflicted = ("conflicted", [1, 0, 0, 0, 0]);
@@ -727,8 +759,14 @@ async fn every_outcome_replays_its_first_settlement_and_writes_only_its_profile_
             ("steerAgentRun", steering_retained),
             ("steerAgentRun", steering_retained),
             ("steerAgentRun", conflicted),
+            ("acceptProposal", invalid),
+            ("acceptProposal", conflicted),
+            ("acceptProposal", refused),
+            ("acceptProposal", structural_applied),
         ]
     );
+    // The child Receipt and validation condition rows of each Acceptance outcome.
+    assert_eq!(acceptance_records, vec![[1, 1], [1, 1], [1, 0], [1, 0]]);
     assert_eq!(rejection_records, vec![1; 4]);
     assert_eq!(withdrawal_records, vec![1, 0, 0, 0]);
     assert_eq!(expansion_records, vec![[1, 1, 1], [0; 3], [0; 3], [0; 3]]);

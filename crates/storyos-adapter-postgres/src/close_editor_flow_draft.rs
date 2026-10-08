@@ -14,11 +14,12 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActionOnly, ActionSequence, Admission, AppliedResult, Classification, CommandIsolation,
+    ActionOnly, ActionSequence, Admission, AppliedVariant, Classification, CommandIsolation,
     CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission, NoResponse,
     ProjectCommand, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, ZeroReceipt,
     settle_project_command, unavailable,
 };
+use crate::undo_compensation::ForwardCommand;
 
 mod compensation;
 pub(crate) use compensation::{
@@ -111,7 +112,7 @@ pub(crate) fn replayed_draft_observation(
 impl ProjectCommand for CloseEditorFlowDraftInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "closeEditorFlowDraft",
-        applied_result: AppliedResult::command("draft_closure_changed"),
+        applied: AppliedVariant::Forward(ForwardCommand::CloseEditorFlowDraft),
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidWriter,
         rate_limited: RateLimitedChallenge::InvalidChallenge,

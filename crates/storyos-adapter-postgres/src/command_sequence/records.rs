@@ -4,7 +4,7 @@ use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_core::ProjectLifecycle;
 use tokio_postgres::Client;
 
-use super::{LockedProject, ReceiptHeads, ReceiptRefs, unavailable};
+use super::{LockedProject, ProjectCommand, ReceiptHeads, ReceiptRefs, unavailable};
 
 pub(super) struct ReceiptRecord {
     pub(super) result: &'static str,
@@ -12,6 +12,7 @@ pub(super) struct ReceiptRecord {
     pub(super) command_kind: &'static str,
     pub(super) heads: ReceiptHeads,
     pub(super) refs: ReceiptRefs,
+    pub(super) revision_ids: Vec<String>,
 }
 
 /// Inserts the Domain Receipt and its Admission settlement link.
@@ -33,9 +34,9 @@ pub(super) async fn insert_receipt(
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $11, $6, $7::text::uuid,
                      'author_command_admission', $12::text[]::uuid[], $13::text[]::uuid[],
-                     $14::text[]::uuid[], '{}'::uuid[], $15::text[]::uuid[], $10::text[]::uuid[],
-                     $16::text[], $17::text[], '{}'::text[], $8, $9::text::jsonb,
-                     $18::text::jsonb)
+                     $14::text[]::uuid[], $19::text[]::uuid[], $15::text[]::uuid[],
+                     $10::text[]::uuid[], $16::text[], $17::text[], $20::text[], $8,
+                     $9::text::jsonb, $18::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
             &[
@@ -57,6 +58,8 @@ pub(super) async fn insert_receipt(
                 &receipt.refs.draft_artifact_refs,
                 &receipt.refs.artifact_lifecycle_event_refs,
                 &receipt.refs.source_draft_disposition,
+                &receipt.revision_ids,
+                &receipt.refs.condition_refs,
             ],
         )
         .await
@@ -77,6 +80,20 @@ pub(super) async fn insert_receipt(
         )
         .await
         .map_err(unavailable)?;
+    Ok(receipt_created_at)
+}
+
+/// Inserts the Domain Receipt and the child Receipt of a zero-authority outcome.
+pub(super) async fn insert_zero_receipt<C: ProjectCommand>(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+    receipt: &ReceiptRecord,
+) -> Result<String, ProjectCommandError> {
+    let receipt_created_at = insert_receipt(client, envelope, receipt, &[]).await?;
+    command
+        .write_child_receipt(client, envelope, receipt.result)
+        .await?;
     Ok(receipt_created_at)
 }
 

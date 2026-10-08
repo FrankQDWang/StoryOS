@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_sequence::{ProjectCommand, settle_project_command};
 
+use super::acceptance::accept_proposal_call;
 use super::agent_run::{
     cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
 };
@@ -223,6 +224,12 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
             &steer_agent_run_call(&store, &admin, /*base*/ 0xc740).await,
         )
         .await,
+        evidence_replays(
+            &store,
+            &admin,
+            &accept_proposal_call(&store, &admin, /*base*/ 0xa850).await,
+        )
+        .await,
     ];
     park_run(&admin, &create).await;
     let separated = |result| {
@@ -236,6 +243,7 @@ async fn every_replay_separates_pre_capture_from_damaged_evidence() {
     };
     let mut expected = vec![separated(ReceiptResult::AuthoritativeApplied); 20];
     expected.push(separated(ReceiptResult::NoEffect));
+    expected.push(separated(ReceiptResult::AuthoritativeApplied));
     assert_eq!(observed, expected);
 }
 

@@ -63,7 +63,7 @@ impl SettlementProfile for ActionOnly {
                     &envelope.project_scope.project_id.as_ref(),
                     &sequence.to_string(),
                     &envelope.ids.receipt_id,
-                    &spec.applied_result.code(),
+                    &spec.applied.result_kind(),
                 ],
             )
             .await

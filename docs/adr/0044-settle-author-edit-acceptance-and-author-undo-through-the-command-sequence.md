@@ -86,6 +86,33 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 - [ADR 0029](0029-own-structural-authority-settlement-beside-author-edit.md) and ADR 0030 stay in force. A compensation adapter is next to its forward command, and the inverse public command is not invoked.
 - [ADR 0038](0038-separate-author-edit-challenge-admission-from-shared-command-admission.md) stays in force. `applyAuthorEdit` and `undoLatestAuthorAction` stay in the `author_edit` Challenge Rate Class.
 
+## Behavior-equivalence record
+
+Each ticket that moves a command records here every observable difference from `main`. An unlisted difference is a defect.
+
+### Sequence capabilities
+
+- The `AuthoritativeRevision` profile writes the records of the Decision section after the Domain Receipt. The command supplies the payload, the source of the members, the prior Revision, and the Editor Session of the writer base.
+- A command declares its applied variant. `AppliedVariant::Forward` names the `ForwardCommand` entry of the command, which gives the Receipt result kind and the Author Undo Disposition. A command that writes no Author Action declares `AppliedVariant::NoAuthorAction`. The sequence does not compile when a Forward variant names the entry of another command kind. The commands of Specifications A, B, and C declare their variant with the result kind that they recorded before, so their rows do not change.
+- A reason type can give the Receipt result kind of its outcome. `AcceptProposalInvalid` gives `invalid`.
+- A command can write one child Receipt row after the Domain Receipt of each outcome, and the Domain Receipt can record condition references.
+- A command can declare `MissingAdmission::Diagnosed`. Then its diagnosis gives the error of an Admission insert that inserts no row.
+
+### `acceptProposal`
+
+- `acceptProposal` uses the explicit editor command Admission form, the `AuthoritativeRevision` profile with a Forward Author Action, the Command-response Project, and the `acceptance_receipts` child row. The `invalid` and `conflicted` outcomes write their validation condition row, and they write no Activity record. The `refused` outcome writes no effect row.
+- The route uses the generic project command admission with the problem order of `main`. The problem texts use the name "Acceptance", as on `main`.
+- The Pre-Admission Refusal Record, its Serializable transaction, its fields, and its problems `422 challenge_invalid` and `409 acceptance_session_ineligible` do not change.
+- The application binding self-check, the Store trait, the command type, and the error type of the command are removed.
+- These observable changes follow from the sequence:
+  - The command locks the Project row first. It inserts its Admission after the Core classification.
+  - When the Admission insert fails and the composition of the accepted text also fails, the command gives `503 project_store_unavailable` and retains no refusal record. Before, it retained the refusal record and gave the refusal problem. The composition fails only for an inline Proposal without its exact Anchors or its canonical Block.
+  - A missing settled record, an unknown result kind, or an unknown reason gives `409 idempotency_binding_conflict`. Before, it gave `409 historical_acknowledgement_unavailable`.
+  - An applied Receipt without its Authoritative Commit, its Revision, its payload, its Author Action, or its `project_activity_events` record gives `503 project_store_unavailable`. An applied Receipt whose Author Action is not Forward gives the same store fault. Before, a missing Commit or Revision stopped the Server process with a panic ([issue 930](https://github.com/FrankQDWang/StoryOS/issues/930)), and replay ignored the disposition. Foreign keys and the receipt relation trigger already prevent such a record.
+  - A zero-authority Receipt with an Author Action gives a store fault. Before, replay ignored the Author Action. The receipt relation trigger already prevents such a record.
+  - A Receipt `reason` field with the wrong JSON type gives a store fault. Before, replay read the value as text.
+- The behavior-equivalence review against `main` found no other difference.
+
 ## Considered options
 
 - Each of the three commands writes the Authoritative Revision records as its own effect rows. This was rejected. It keeps three copies of the same write path.

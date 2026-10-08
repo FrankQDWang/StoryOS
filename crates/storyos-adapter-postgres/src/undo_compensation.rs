@@ -142,6 +142,52 @@ impl ForwardCommand {
         })
     }
 
+    /// The command kind of the Forward Author Action.
+    pub(crate) const fn command_kind(self) -> &'static str {
+        match self {
+            Self::AuthorEdit(_) => "applyAuthorEdit",
+            Self::AcceptProposal => "acceptProposal",
+            Self::Structure(StructureCommand::CreateVolume) => "createVolume",
+            Self::Structure(StructureCommand::UpdateVolume) => "updateVolume",
+            Self::Structure(StructureCommand::DeleteVolume) => "deleteVolume",
+            Self::Structure(StructureCommand::CreateChapter) => "createChapter",
+            Self::Structure(StructureCommand::UpdateChapter) => "updateChapter",
+            Self::Structure(StructureCommand::DeleteChapter) => "deleteChapter",
+            Self::SetCurrentChapter => "setCurrentChapter",
+            Self::WithdrawProposal => "withdrawProposal",
+            Self::CloseEditorFlowDraft => "closeEditorFlowDraft",
+            Self::ExpandRefusedEditDraftToProposal => "expandRefusedEditDraftToProposal",
+            Self::ReplanProposal => "replanProposal",
+            Self::ReopenRejectedOperations => "reopenRejectedOperations",
+            Self::ReopenWithdrawnProposal => "reopenWithdrawnProposal",
+            Self::RejectProposalOperations => "rejectProposalOperations",
+            Self::CompleteReadyPartialProposal => "completeReadyPartialProposal",
+            Self::ContinueProposalGeneration => "continueProposalGeneration",
+            Self::UndoReversalRequired => "undoLatestAuthorAction",
+        }
+    }
+
+    /// The Domain Receipt result kind of the Forward Author Action.
+    pub(crate) const fn result_kind(self) -> &'static str {
+        match self {
+            Self::AuthorEdit(AuthorEditVariant::AuthoritativeApplied)
+            | Self::AcceptProposal
+            | Self::Structure(_)
+            | Self::SetCurrentChapter
+            | Self::UndoReversalRequired => "authoritative_applied",
+            Self::AuthorEdit(AuthorEditVariant::ProposalRevised)
+            | Self::ReplanProposal
+            | Self::ReopenRejectedOperations
+            | Self::ReopenWithdrawnProposal => "proposal_revised",
+            Self::WithdrawProposal => "proposal_closure_changed",
+            Self::CloseEditorFlowDraft => "draft_closure_changed",
+            Self::ExpandRefusedEditDraftToProposal => "proposal_created_from_draft",
+            Self::RejectProposalOperations => "proposal_operations_resolved",
+            Self::CompleteReadyPartialProposal => "proposal_generation_completed",
+            Self::ContinueProposalGeneration => "proposal_generation_started",
+        }
+    }
+
     pub(crate) fn disposition(self) -> UndoDisposition {
         match self {
             Self::AuthorEdit(AuthorEditVariant::AuthoritativeApplied) => UndoDisposition::Prose,

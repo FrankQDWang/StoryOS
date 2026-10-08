@@ -1,5 +1,8 @@
 //! Classify one Acceptance Attempt without changing Authoritative State.
 
+use crate::TransitionOutcome;
+use crate::transition_outcome::reason_codes;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcceptProposal {
     pub scope_matches: bool,
@@ -19,13 +22,10 @@ pub struct AcceptProposal {
     pub candidate_unaltered: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum AcceptProposalResult {
-    Applied,
-    Invalid { reason: AcceptProposalInvalid },
-    Conflicted { reason: AcceptProposalConflict },
-    Refused { reason: AcceptProposalRefusal },
-}
+/// The Core Transition Outcome of one Acceptance. An invalid Acceptance has no effect, and its
+/// reason records the Receipt result kind `invalid`.
+pub type AcceptProposalOutcome =
+    TransitionOutcome<(), AcceptProposalInvalid, AcceptProposalConflict, AcceptProposalRefusal>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AcceptProposalRefusal {
@@ -49,6 +49,22 @@ pub enum AcceptProposalInvalid {
 pub enum AcceptProposalConflict {
     ChangedHead,
 }
+
+reason_codes!(AcceptProposalRefusal {
+    WrongScope => "wrong_scope",
+    WrongAdmission => "wrong_admission",
+    StaleProposalRevision => "stale_proposal_revision",
+    NotEligible => "not_eligible",
+    OperationNotPending => "operation_not_pending",
+    DuplicateIdentities => "duplicate_identities",
+    MissingRequiredDependencies => "missing_required_dependencies",
+    IncompleteBundleClosure => "incomplete_bundle_closure",
+});
+reason_codes!(AcceptProposalInvalid, result "invalid" {
+    InvalidValidation => "invalid_validation",
+    AlteredCandidate => "altered_candidate",
+});
+reason_codes!(AcceptProposalConflict { ChangedHead => "changed_head" });
 
 /// One durable Operation used to classify a declared selection set.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -146,67 +162,45 @@ pub fn classify_proposal_selection(
 }
 
 /// Classify one exact Operation Acceptance against Scope, Admission, eligibility, and current Head.
-pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalResult {
+pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalOutcome {
     if !command.scope_matches {
-        return AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::WrongScope,
-        };
+        return TransitionOutcome::Refused(AcceptProposalRefusal::WrongScope);
     }
     if !command.admission_valid {
-        return AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::WrongAdmission,
-        };
+        return TransitionOutcome::Refused(AcceptProposalRefusal::WrongAdmission);
     }
     if !command.proposal_revision_current {
-        return AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::StaleProposalRevision,
-        };
+        return TransitionOutcome::Refused(AcceptProposalRefusal::StaleProposalRevision);
     }
     if !command.retention_retained
         || !command.generation_ready
         || !command.closure_open
         || !command.validation_current
     {
-        return AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::NotEligible,
-        };
+        return TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible);
     }
     if !command.validation_receipt_valid || !command.validation_receipt_matches_revision {
-        return AcceptProposalResult::Invalid {
-            reason: AcceptProposalInvalid::InvalidValidation,
-        };
+        return TransitionOutcome::NoEffect(AcceptProposalInvalid::InvalidValidation);
     }
     if !command.selection_duplicate_free {
-        return AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::DuplicateIdentities,
-        };
+        return TransitionOutcome::Refused(AcceptProposalRefusal::DuplicateIdentities);
     }
     if !command.selected_operation_pending {
-        return AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::OperationNotPending,
-        };
+        return TransitionOutcome::Refused(AcceptProposalRefusal::OperationNotPending);
     }
     if !command.required_dependencies_met {
-        return AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::MissingRequiredDependencies,
-        };
+        return TransitionOutcome::Refused(AcceptProposalRefusal::MissingRequiredDependencies);
     }
     if !command.bundle_closure_complete {
-        return AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::IncompleteBundleClosure,
-        };
+        return TransitionOutcome::Refused(AcceptProposalRefusal::IncompleteBundleClosure);
     }
     if !command.expected_target_matches_head {
-        return AcceptProposalResult::Conflicted {
-            reason: AcceptProposalConflict::ChangedHead,
-        };
+        return TransitionOutcome::Conflicted(AcceptProposalConflict::ChangedHead);
     }
     if !command.candidate_unaltered {
-        return AcceptProposalResult::Invalid {
-            reason: AcceptProposalInvalid::AlteredCandidate,
-        };
+        return TransitionOutcome::NoEffect(AcceptProposalInvalid::AlteredCandidate);
     }
-    AcceptProposalResult::Applied
+    TransitionOutcome::Applied(())
 }
 
 #[cfg(test)]
