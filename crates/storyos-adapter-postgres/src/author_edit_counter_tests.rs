@@ -344,9 +344,7 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
     first_command.expected_authoritative_revision_id = initial_revision_id.clone();
     bind_canonical_payload(&mut first_command);
     issue_command_challenge(&store, &first_command, "counter-first-nonce").await;
-    let first = storyos_application::apply_author_edit(&store, &first_command)
-        .await
-        .unwrap();
+    let first = store.apply_author_edit(&first_command).await.unwrap();
     let (first_ids, first_blocks) = match &first.effect {
         AuthorEditSettlementEffect::AuthoritativeApplied { ids, blocks, .. } => {
             (ids.clone(), blocks.clone())
@@ -431,9 +429,7 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
         "?",
     );
     issue_command_challenge(&store, &existing_command, "counter-existing-nonce").await;
-    let existing = storyos_application::apply_author_edit(&store, &existing_command)
-        .await
-        .unwrap();
+    let existing = store.apply_author_edit(&existing_command).await.unwrap();
     let (existing_ids, existing_blocks) = match &existing.effect {
         AuthorEditSettlementEffect::AuthoritativeApplied { ids, blocks, .. } => {
             (ids.clone(), blocks.clone())
@@ -455,9 +451,7 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
         }
     );
     assert_eq!(
-        storyos_application::apply_author_edit(&store, &existing_command)
-            .await
-            .unwrap(),
+        store.apply_author_edit(&existing_command).await.unwrap(),
         existing
     );
     assert_eq!(
@@ -504,7 +498,8 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
         ".",
     );
     issue_command_challenge(&store, &limit_command, "counter-limit-nonce").await;
-    let limit_error = storyos_application::apply_author_edit(&store, &limit_command)
+    let limit_error = store
+        .apply_author_edit(&limit_command)
         .await
         .expect_err("the counter limit must reject settlement");
     assert!(matches!(limit_error, AuthorEditError::Unavailable(_)));

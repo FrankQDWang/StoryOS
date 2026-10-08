@@ -118,7 +118,7 @@ async fn latest_forward(admin: &Client, scope: &ProjectScope) -> u64 {
 }
 
 /// The resulting Manuscript Revision of the Authoritative Commit of one Receipt.
-async fn resulting_revision(admin: &Client, receipt_id: &str) -> String {
+pub(super) async fn resulting_revision(admin: &Client, receipt_id: &str) -> String {
     admin
         .query_one(
             "SELECT resulting_revision_id::text FROM storyos.authoritative_commits
@@ -131,7 +131,7 @@ async fn resulting_revision(admin: &Client, receipt_id: &str) -> String {
 }
 
 /// The head of the Chapter of the base snapshot of one Editor Session.
-async fn session_chapter_head(admin: &Client, editor_session_id: &str) -> String {
+pub(super) async fn session_chapter_head(admin: &Client, editor_session_id: &str) -> String {
     admin
         .query_one(
             "SELECT head.current_revision_id::text
@@ -148,7 +148,7 @@ async fn session_chapter_head(admin: &Client, editor_session_id: &str) -> String
 }
 
 /// Moves the base snapshot of one Editor Session to the Chapter and Revision of `revision_id`.
-async fn edit_in_chapter_of(admin: &Client, editor_session_id: &str, revision_id: &str) {
+pub(super) async fn edit_in_chapter_of(admin: &Client, editor_session_id: &str, revision_id: &str) {
     admin
         .execute(
             "UPDATE storyos.editor_session_base_snapshots AS snapshot

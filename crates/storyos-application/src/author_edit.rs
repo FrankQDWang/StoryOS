@@ -1,5 +1,3 @@
-use std::future::Future;
-
 use storyos_core::{AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal, AuthorEditUnit};
 
 use crate::{EditorClientBinding, EditorSessionId, ProjectCommandChallengeBinding, ProjectScope};
@@ -126,48 +124,3 @@ impl std::error::Error for AuthorEditError {
         }
     }
 }
-
-/// Owns one admitted Author Edit and its atomic Core settlement.
-pub trait AuthorEditStore: Sync {
-    fn apply_author_edit(
-        &self,
-        command: &ApplyAuthorEditCommand,
-    ) -> impl Future<Output = Result<AuthorEditSettlement, AuthorEditError>> + Send;
-}
-
-pub async fn apply_author_edit(
-    store: &impl AuthorEditStore,
-    command: &ApplyAuthorEditCommand,
-) -> Result<AuthorEditSettlement, AuthorEditError> {
-    let challenge = &command.challenge_binding;
-    let command_digest = {
-        use sha2::{Digest as _, Sha256};
-        let value = Sha256::digest(&command.canonical_command_bytes)
-            .iter()
-            .fold(String::with_capacity(64), |mut value, byte| {
-                use std::fmt::Write as _;
-                write!(value, "{byte:02x}").expect("writing to String cannot fail");
-                value
-            });
-        format!("sha256:storyos.command.applyAuthorEdit.jcs.v1:{value}")
-    };
-    if challenge.project_scope != command.project_scope
-        || challenge.client_session_binding_digest != command.client_binding.binding_ref
-        || challenge.client_session_generation != command.client_binding.session_generation
-        || challenge.client_contract_revision != command.client_binding.client_contract_revision
-        || challenge.security_policy_revision != command.client_binding.security_policy_revision
-        || challenge.command_kind != "applyAuthorEdit"
-        || challenge.canonical_command_digest != command_digest
-        || challenge.method != "POST"
-        || challenge.route_template != "/api/v1/projects/{project_id}/manuscript/author-edits"
-        || challenge.command_schema != "storyos.command.apply-author-edit.request.v1"
-        || command.editor_contract_revision != "storyos.editor-contract.release-1.v3"
-    {
-        return Err(AuthorEditError::BindingConflict);
-    }
-    store.apply_author_edit(command).await
-}
-
-#[cfg(test)]
-#[path = "author_edit_tests.rs"]
-mod tests;

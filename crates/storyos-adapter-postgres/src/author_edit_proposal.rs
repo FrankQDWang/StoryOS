@@ -376,25 +376,6 @@ fn remap_units(
         .collect()
 }
 
-pub(super) async fn append_proposal_revision(
-    client: &Client,
-    scope: &ProjectScope,
-    context: &ProposalEditContext,
-    current_authoritative_revision_id: &str,
-    candidate_text: &str,
-) -> Result<String, AuthorEditError> {
-    append_proposal_revision_as(
-        client,
-        scope,
-        context,
-        current_authoritative_revision_id,
-        candidate_text,
-        Uuid::now_v7().to_string(),
-    )
-    .await
-}
-
-/// Appends the Proposal Revision `revision_id` of one Proposal edit and moves the Proposal head.
 pub(super) async fn append_proposal_revision_as(
     client: &Client,
     scope: &ProjectScope,

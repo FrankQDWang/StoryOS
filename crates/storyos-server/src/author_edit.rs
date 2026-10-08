@@ -140,7 +140,8 @@ pub(super) async fn apply_author_edit(
             .map_err(|_| invalid_request())?,
         author_edit_units,
     };
-    let settlement = storyos_application::apply_author_edit(&store, &command)
+    let settlement = store
+        .apply_author_edit(&command)
         .await
         .map_err(author_edit_error)?;
     Ok(Json(author_edit_response(

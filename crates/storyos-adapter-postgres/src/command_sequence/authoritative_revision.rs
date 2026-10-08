@@ -15,7 +15,7 @@ use super::{
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::manuscript_block::{
     blocks_from_stored_payload, copy_or_upgrade_revision_members, display_body_from_stored,
-    load_revision_blocks,
+    load_revision_blocks, persist_revision_members_from_blocks,
 };
 
 /// The scope sequences and identities that one new Authoritative Revision uses.
@@ -47,6 +47,8 @@ pub(crate) enum RevisionBase {
 pub(crate) enum RevisionMembers {
     /// The members of this earlier Revision of the Chapter.
     CopyFrom(String),
+    /// These Blocks of a versioned edit.
+    Blocks(Vec<storyos_core::ManuscriptBlock>),
 }
 
 /// The applied writes of one command of the profile. The profile writes every authority record.
@@ -228,6 +230,17 @@ pub(crate) async fn write_revision<E>(
                 &write.chapter_id,
                 source_revision_id,
                 &revision.revision_id,
+            )
+            .await
+        }
+        RevisionMembers::Blocks(blocks) => {
+            persist_revision_members_from_blocks(
+                client,
+                owner_user_id,
+                project_id,
+                &write.chapter_id,
+                &revision.revision_id,
+                blocks,
             )
             .await
         }

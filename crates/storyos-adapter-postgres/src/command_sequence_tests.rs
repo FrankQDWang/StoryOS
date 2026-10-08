@@ -43,6 +43,9 @@ mod damaged_evidence;
 #[path = "command_sequence_tests/undo_tests.rs"]
 mod undo;
 
+#[path = "command_sequence_tests/author_edit_tests.rs"]
+mod author_edit;
+
 pub(crate) use structure::{
     create_chapter, create_volume, delete_chapter, delete_volume, update_chapter, update_volume,
 };

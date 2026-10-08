@@ -4,7 +4,6 @@ use storyos_contracts::{
 };
 use storyos_core::{AuthorEditPrimitive, RefusedEditPayload, canonical_json, hex_sha256};
 use tokio_postgres::Client;
-use uuid::Uuid;
 
 use crate::author_edit::author_edit_database_error;
 
@@ -113,21 +112,30 @@ pub(super) async fn load_source(
     }))
 }
 
-pub(super) async fn supersede_source(
-    client: &Client,
-    command: &ApplyAuthorEditCommand,
+/// The supersede of the source Refused Edit Draft that one settlement writes.
+pub(super) struct SupersedeWrite {
+    source_draft_id: String,
+    revision_id: String,
+    payload_digest: String,
+    event_id: String,
+}
+
+/// The source Draft disposition that the Receipt of an outcome with `result_kind` records, and
+/// the supersede write of an outcome that supersedes the source. `event_id` identifies the close
+/// event of that write.
+pub(super) fn plan_disposition(
     disposition: Option<SourceDraftDisposition>,
     result_kind: &str,
-    action_sequence: Option<u64>,
-) -> Result<Option<SourceDraftDisposition>, AuthorEditError> {
+    event_id: String,
+) -> Result<(Option<SourceDraftDisposition>, Option<SupersedeWrite>), AuthorEditError> {
     let Some(disposition) = disposition else {
-        return Ok(None);
+        return Ok((None, None));
     };
     if !matches!(
         result_kind,
         "authoritative_applied" | "proposal_revised" | "refused_to_draft"
     ) {
-        return Ok(Some(disposition));
+        return Ok((Some(disposition), None));
     }
     let SourceDraftDisposition::Unchanged {
         source_draft_id,
@@ -139,32 +147,51 @@ pub(super) async fn supersede_source(
     else {
         return Err(AuthorEditError::BindingConflict);
     };
-    let event = Uuid::now_v7().to_string();
-    let scope = &command.project_scope;
+    let recorded = SourceDraftDisposition::ClosedSuperseded {
+        source_draft_kind: RetryDraftKind::RefusedEdit,
+        source_draft_id: source_draft_id.clone(),
+        source_draft_revision_id: current_source_draft_revision_id.clone(),
+        source_draft_payload_digest: current_source_draft_payload_digest.clone(),
+        prior_closure: RetryDraftClosure::Open,
+        resulting_closure: "closed".to_owned(),
+        close_reason: "superseded".to_owned(),
+        closure_event_ref: event_id.clone(),
+    };
+    Ok((
+        Some(recorded),
+        Some(SupersedeWrite {
+            source_draft_id,
+            revision_id: current_source_draft_revision_id,
+            payload_digest: current_source_draft_payload_digest,
+            event_id,
+        }),
+    ))
+}
+
+/// Closes the source Draft as superseded by the Receipt `receipt_id`.
+pub(super) async fn write_supersede(
+    client: &Client,
+    scope: &storyos_application::ProjectScope,
+    receipt_id: &str,
+    write: &SupersedeWrite,
+    result_kind: &str,
+    action_sequence: Option<u64>,
+) -> Result<(), AuthorEditError> {
     client.execute("INSERT INTO storyos.draft_close_events
         (owner_user_id,project_id,event_id,draft_id,revision_id,payload_digest,receipt_id,receipt_result_kind,author_action_sequence,close_reason)
         VALUES($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6,$7::text::uuid,$8,$9::text::numeric,'superseded')",
-        &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&event,&source_draft_id,
-          &current_source_draft_revision_id,&current_source_draft_payload_digest,&command.ids.receipt_id,
+        &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&write.event_id,&write.source_draft_id,
+          &write.revision_id,&write.payload_digest,&receipt_id,
           &result_kind,&action_sequence.map(|value| value.to_string())]).await.map_err(author_edit_database_error)?;
     let updated = client.execute("UPDATE storyos.draft_artifacts SET closure='closed',close_event_id=$4::text::uuid,reopen_event_id=NULL
         WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND draft_id=$3::text::uuid
         AND closure='open' AND retention_state='retained' AND current_revision_id=$5::text::uuid",
-        &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&source_draft_id,&event,&current_source_draft_revision_id])
+        &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&write.source_draft_id,&write.event_id,&write.revision_id])
         .await.map_err(author_edit_database_error)?;
     if updated != 1 {
         return Err(AuthorEditError::BindingConflict);
     }
-    Ok(Some(SourceDraftDisposition::ClosedSuperseded {
-        source_draft_kind: RetryDraftKind::RefusedEdit,
-        source_draft_id,
-        source_draft_revision_id: current_source_draft_revision_id,
-        source_draft_payload_digest: current_source_draft_payload_digest,
-        prior_closure: RetryDraftClosure::Open,
-        resulting_closure: "closed".to_owned(),
-        close_reason: "superseded".to_owned(),
-        closure_event_ref: event,
-    }))
+    Ok(())
 }
 
 pub(super) fn replacement_provenance(

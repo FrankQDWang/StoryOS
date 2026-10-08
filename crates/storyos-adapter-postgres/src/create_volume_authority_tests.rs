@@ -6,7 +6,7 @@ use storyos_application::{
     EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
     OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope,
     ProjectId, ProjectScope, UndoApplied, UndoLatestAuthorActionInput, UndoRecords, UserId,
-    VolumeCreated, VolumeId, VolumeNode, apply_author_edit, create_editor_session, create_project,
+    VolumeCreated, VolumeId, VolumeNode, create_editor_session, create_project,
     get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
     open_chapter,
 };
@@ -525,6 +525,27 @@ pub(crate) async fn apply_named_edit(
     scope: &ProjectScope,
     edit: NamedEdit<'_>,
 ) -> storyos_application::AuthorEditSettlement {
+    let command = named_edit_command(store, scope, edit).await;
+    store.apply_author_edit(&command).await.unwrap()
+}
+
+/// The Author Edit command of `edit` with its issued Command Challenge.
+pub(crate) async fn named_edit_command(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    edit: NamedEdit<'_>,
+) -> ApplyAuthorEditCommand {
+    adjusted_edit_command(store, scope, edit, |_command| {}).await
+}
+
+/// The Author Edit command of `edit` after `adjust`, with its canonical payload and its issued
+/// Command Challenge.
+pub(crate) async fn adjusted_edit_command(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    edit: NamedEdit<'_>,
+    adjust: impl FnOnce(&mut ApplyAuthorEditCommand),
+) -> ApplyAuthorEditCommand {
     let NamedEdit {
         editor_session_id,
         chapter_id,
@@ -601,6 +622,7 @@ pub(crate) async fn apply_named_edit(
             },
         }],
     };
+    adjust(&mut command);
     let payload = serde_json::json!({
         "command_schema": command.challenge_binding.command_schema,
         "client_contract_revision": command.client_binding.client_contract_revision,
@@ -617,19 +639,7 @@ pub(crate) async fn apply_named_edit(
         "undo_group_id": command.undo_group_id,
         "completed_intent_record_id": command.completed_intent_record_id,
         "local_intent_sequence": local_intent_sequence.to_string(),
-        "author_edit_units": [{
-            "normalized_primitives": [{
-                "kind": "replace_selection",
-                "from": 0,
-                "to": 0,
-                "text": text,
-            }],
-            "selection_snapshot": {
-                "coordinate_profile": "storyos.editor.utf16-code-unit.v1",
-                "from": 0,
-                "to": 0,
-            },
-        }],
+        "author_edit_units": serde_json::to_value(&command.author_edit_units).unwrap(),
     });
     let mut payload = payload;
     if let Some(target) = &command.proposal_target {
@@ -655,7 +665,7 @@ pub(crate) async fn apply_named_edit(
     )
     .await
     .unwrap();
-    apply_author_edit(store, &command).await.unwrap()
+    command
 }
 
 async fn undo_named(

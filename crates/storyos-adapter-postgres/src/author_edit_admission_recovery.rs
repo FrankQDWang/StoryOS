@@ -81,6 +81,29 @@ impl PostgresProjectReader {
         }
     }
 
+    /// Replays the settled Author Edit of `admission` through the command sequence.
+    pub(super) async fn replay_committed_apply_author_edit(
+        &self,
+        query: &ResolveApplyAuthorEditOutcome,
+        admission: &OpenAdmission,
+        receipt_id: &str,
+    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
+        let command = reconstruct_command(query, admission).ok_or_else(outcome_unavailable)?;
+        let settled = crate::command_sequence::replay_settled_command(
+            self,
+            &super::author_edit::author_edit_envelope(&command),
+            &super::author_edit::AuthorEdit::new(&command, AuthorEditFault::None),
+            receipt_id,
+        )
+        .await
+        .map_err(|super::author_edit::AuthorEditFailure(error)| {
+            ApplyAuthorEditOutcomeResolveError::unavailable(error)
+        })?;
+        let settlement = super::author_edit::author_edit_settlement(settled)
+            .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
+        Ok(committed_outcome(&command, settlement))
+    }
+
     pub(super) async fn read_requires_reconfirmation(
         &self,
         query: &ResolveApplyAuthorEditOutcome,

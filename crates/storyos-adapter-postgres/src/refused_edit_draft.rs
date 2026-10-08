@@ -10,15 +10,21 @@ use uuid::Uuid;
 use crate::author_edit::author_edit_database_error;
 use crate::{PostgresProjectReader, read_error, set_challenge_scope_on_client};
 
-pub(super) async fn persist(
-    client: &Client,
-    command: &ApplyAuthorEditCommand,
-) -> Result<RefusedEditDraftIdentity, AuthorEditError> {
-    let identity = RefusedEditDraftIdentity {
+/// New identities for one Refused Edit Draft.
+pub(super) fn new_identity() -> RefusedEditDraftIdentity {
+    RefusedEditDraftIdentity {
         draft_id: Uuid::now_v7().to_string(),
         draft_revision_id: Uuid::now_v7().to_string(),
         creation_event_id: Uuid::now_v7().to_string(),
-    };
+    }
+}
+
+/// Writes the Refused Edit Draft of `command` with the identities of `identity`.
+pub(super) async fn persist(
+    client: &Client,
+    command: &ApplyAuthorEditCommand,
+    identity: RefusedEditDraftIdentity,
+) -> Result<RefusedEditDraftIdentity, AuthorEditError> {
     let payload = serde_json::to_value(RefusedEditPayload {
         schema_revision: "storyos.refused-edit-payload.v1".to_owned(),
         chapter_id: command.chapter_id.clone(),
@@ -66,35 +72,6 @@ pub(super) async fn persist(
         .await
         .map_err(author_edit_database_error)?;
     Ok(identity)
-}
-
-pub(super) async fn read_settled_identity(
-    client: &Client,
-    scope: &ProjectScope,
-    receipt_id: &str,
-) -> Result<RefusedEditDraftIdentity, AuthorEditError> {
-    let row = client.query_opt(
-        "SELECT event.draft_id::text, event.revision_id::text, event.creation_event_id::text
-           FROM storyos.draft_lifecycle_events AS event
-           JOIN storyos.draft_artifact_revisions AS revision
-             ON (revision.owner_user_id, revision.project_id, revision.draft_id, revision.revision_id) =
-                (event.owner_user_id, event.project_id, event.draft_id, event.revision_id)
-           JOIN storyos.domain_receipts AS receipt
-             ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id,
-                 receipt.command_id, receipt.author_command_admission_id) =
-                (event.owner_user_id, event.project_id, event.receipt_id,
-                 event.command_id, event.author_command_admission_id)
-          WHERE event.owner_user_id = $1::text::uuid AND event.project_id = $2::text::uuid
-            AND event.receipt_id = $3::text::uuid AND receipt.result_kind = 'refused_to_draft'
-            AND receipt.draft_artifact_refs[1] = event.draft_id::text
-            AND receipt.artifact_lifecycle_event_refs[1] = event.creation_event_id::text",
-        &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref(), &receipt_id],
-    ).await.map_err(author_edit_database_error)?.ok_or(AuthorEditError::BindingConflict)?;
-    Ok(RefusedEditDraftIdentity {
-        draft_id: row.get(0),
-        draft_revision_id: row.get(1),
-        creation_event_id: row.get(2),
-    })
 }
 
 impl RefusedEditDraftReader for PostgresProjectReader {
