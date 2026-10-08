@@ -16,6 +16,7 @@ mod action_only;
 mod activity_only;
 mod admission;
 mod admit;
+mod authoritative_revision;
 mod chapter_selection;
 mod contention;
 mod records;
@@ -26,6 +27,9 @@ pub(crate) use action_only::{ActionOnly, ActionSequence};
 pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
 pub(crate) use admit::{AdmitCommand, AdmitSpec, admit_project_command};
+pub(crate) use authoritative_revision::{
+    ActionDisposition, AuthoritativeRevision, RevisionMembers, RevisionWrite, write_revision,
+};
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
 pub(crate) use contention::CommandError;
 use contention::contended;

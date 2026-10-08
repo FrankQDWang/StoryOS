@@ -43,6 +43,9 @@ pub(crate) struct CommandReplay {
     pub(crate) admission_matches: bool,
     /// The Draft references of the Domain Receipt.
     pub(crate) draft_artifact_refs: Vec<String>,
+    /// The Authoritative Revision that the Commit of the Receipt binds, with its Activity record
+    /// in `project_activity_events`.
+    pub(crate) revision: Option<ReplayedRevision>,
     result_kind: String,
     receipt: JsonFields,
     activity: JsonFields,
@@ -60,6 +63,19 @@ pub(crate) struct ReplayedAuthority {
     pub(crate) prior_manuscript_tree_revision: u64,
     pub(crate) resulting_manuscript_tree_revision: u64,
     pub(crate) resulting_revision_id: Option<String>,
+}
+
+/// The records of one new Authoritative Revision that the `AuthoritativeRevision` profile wrote.
+pub(crate) struct ReplayedRevision {
+    pub(crate) revision_id: String,
+    pub(crate) payload_id: String,
+    pub(crate) payload: String,
+    /// The Manuscript Block identities of the Revision members, in order.
+    pub(crate) member_block_ids: Vec<String>,
+    pub(crate) authoritative_commit_id: String,
+    pub(crate) author_action_sequence: String,
+    pub(crate) project_activity_position: String,
+    pub(crate) project_activity_event_id: String,
 }
 
 pub(crate) enum ReplayFault {
@@ -517,6 +533,35 @@ pub(crate) async fn read_command_replay(
         author_action_disposition: row.get(/*idx*/ 21),
         draft_artifact_refs: row.get(/*idx*/ 22),
         admission_matches: row.get::<_, Option<bool>>(/*idx*/ 23).unwrap_or_default(),
+        revision: match (
+            row.get::<_, Option<String>>(/*idx*/ 24),
+            row.get::<_, Option<String>>(/*idx*/ 25),
+            row.get::<_, Option<String>>(/*idx*/ 26),
+            row.get::<_, Option<String>>(/*idx*/ 27),
+            row.get::<_, Option<String>>(/*idx*/ 28),
+            row.get::<_, Option<String>>(/*idx*/ 29),
+            row.get::<_, Option<String>>(/*idx*/ 30),
+        ) {
+            (
+                Some(revision_id),
+                Some(payload_id),
+                Some(payload),
+                Some(authoritative_commit_id),
+                Some(author_action_sequence),
+                Some(project_activity_position),
+                Some(project_activity_event_id),
+            ) => Some(ReplayedRevision {
+                revision_id,
+                payload_id,
+                payload,
+                member_block_ids: row.get(/*idx*/ 31),
+                authoritative_commit_id,
+                author_action_sequence,
+                project_activity_position,
+                project_activity_event_id,
+            }),
+            _ => None,
+        },
     })
 }
 
@@ -579,7 +624,24 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
         (admission.command_kind, admission.canonical_command_digest, admission.idempotency_key,
          admission.command_payload) =
         (receipt.command_kind, receipt.command_digest, receipt.idempotency_key,
-         convert_from($7::bytea, 'UTF8')::jsonb)
+         convert_from($7::bytea, 'UTF8')::jsonb),
+        revision.revision_id::text,
+        revision.payload_id::text,
+        convert_from(revision_payload.canonical_bytes, 'UTF8'),
+        revision_activity.authoritative_commit_id::text,
+        revision_activity.author_action_sequence::text,
+        revision_activity.project_activity_position::text,
+        revision_activity.project_activity_event_id::text,
+        ARRAY(SELECT member.manuscript_block_id::text
+                FROM storyos.manuscript_revision_members AS member
+                JOIN storyos.manuscript_blocks AS block
+                  ON (block.owner_user_id, block.project_id, block.manuscript_block_id) =
+                     (member.owner_user_id, member.project_id, member.manuscript_block_id)
+               WHERE (member.owner_user_id, member.project_id, member.manuscript_object_id,
+                      member.revision_id) =
+                     (revision.owner_user_id, revision.project_id,
+                      revision.manuscript_object_id, revision.revision_id)
+               ORDER BY member.block_order)
    FROM storyos.domain_receipts AS receipt
    JOIN storyos.author_command_admission_settlements AS settlement
      ON (settlement.owner_user_id, settlement.project_id,
@@ -607,6 +669,19 @@ LEFT JOIN storyos.authoritative_commits AS authoritative_commit
 LEFT JOIN storyos.author_action_entries AS action
      ON (action.owner_user_id, action.project_id, action.receipt_id) =
         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+LEFT JOIN storyos.project_activity_events AS revision_activity
+     ON (revision_activity.owner_user_id, revision_activity.project_id,
+         revision_activity.receipt_id) =
+        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+LEFT JOIN storyos.authoritative_revisions AS revision
+     ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+         revision.revision_id) =
+        (authoritative_commit.owner_user_id, authoritative_commit.project_id,
+         authoritative_commit.manuscript_object_id, revision_activity.resulting_revision_id)
+LEFT JOIN storyos.authoritative_payloads AS revision_payload
+     ON (revision_payload.owner_user_id, revision_payload.project_id,
+         revision_payload.payload_id) =
+        (revision.owner_user_id, revision.project_id, revision.payload_id)
 LEFT JOIN LATERAL (
          SELECT canonical.snapshot_id
            FROM storyos.project_snapshots AS canonical
