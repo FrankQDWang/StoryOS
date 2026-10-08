@@ -356,6 +356,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
             suffix: "f62a",
             local_intent_sequence: 1,
             text: "x",
+            proposal_target: None,
         },
     )
     .await;
@@ -392,6 +393,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
             suffix: "f62e",
             local_intent_sequence: 2,
             text: "y",
+            proposal_target: None,
         },
     )
     .await;
@@ -514,6 +516,8 @@ pub(crate) struct NamedEdit<'a> {
     pub(crate) suffix: &'a str,
     pub(crate) local_intent_sequence: u64,
     pub(crate) text: &'a str,
+    /// The Proposal Operation whose candidate the edit changes, or `None` for a prose edit.
+    pub(crate) proposal_target: Option<storyos_application::AuthorEditProposalTarget>,
 }
 
 pub(crate) async fn apply_named_edit(
@@ -528,6 +532,7 @@ pub(crate) async fn apply_named_edit(
         suffix,
         local_intent_sequence,
         text,
+        proposal_target,
     } = edit;
     let mut command = ApplyAuthorEditCommand {
         retry_source: None,
@@ -566,10 +571,18 @@ pub(crate) async fn apply_named_edit(
         writer_generation: 1,
         chapter_id: chapter_id.to_owned(),
         expected_authoritative_revision_id: expected_revision_id.to_owned(),
-        expected_proposal_head_revision_ids: Vec::new(),
-        proposal_target: None,
+        expected_proposal_head_revision_ids: proposal_target
+            .iter()
+            .map(|target| target.revision_id.clone())
+            .collect(),
         target_refs: vec![format!("manuscript:{chapter_id}")],
-        observed_ownership_partition: "authoritative".to_owned(),
+        observed_ownership_partition: if proposal_target.is_some() {
+            "mixed"
+        } else {
+            "authoritative"
+        }
+        .to_owned(),
+        proposal_target,
         editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
         undo_group_id: format!("018f0000-0000-7001-8000-00000004{suffix}"),
         completed_intent_record_id: format!("018f0000-0000-7001-8000-00000005{suffix}"),
@@ -618,6 +631,15 @@ pub(crate) async fn apply_named_edit(
             },
         }],
     });
+    let mut payload = payload;
+    if let Some(target) = &command.proposal_target {
+        payload["proposal_target"] = serde_json::json!({
+            "proposal_id": target.proposal_id,
+            "operation_id": target.operation_id,
+            "revision_id": target.revision_id,
+            "manuscript_block_id": target.manuscript_block_id,
+        });
+    }
     command.canonical_command_bytes = serde_json::to_vec(&payload).unwrap();
     command.challenge_binding.canonical_command_digest = format!(
         "sha256:storyos.command.applyAuthorEdit.jcs.v1:{}",

@@ -1,6 +1,6 @@
 use storyos_application::{
-    CreateVolumeInput, EditorSessionId, ProjectCommandError, ProjectScope,
-    UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
+    AuthorEditProposalTarget, CreateVolumeInput, EditorSessionId, ProjectCommandError,
+    ProjectScope, UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
 };
 use storyos_core::ReceiptResult;
 use tokio_postgres::Client;
@@ -49,6 +49,8 @@ enum Case {
     CloseEditorFlowDraft,
     ExpandRefusedEditDraft,
     ApplyAuthorEdit,
+    /// An Author Edit of the candidate of a Proposal Operation.
+    EditProposalCandidate,
     AcceptProposal,
     /// An Acceptance whose Chapter head moved back to the prior Revision.
     AcceptanceReversal,
@@ -65,7 +67,7 @@ enum Case {
 }
 
 /// The cases whose Author Undo applies, in the order of their result rows.
-const APPLIED: [Case; 11] = [
+const APPLIED: [Case; 12] = [
     Case::CreateVolume,
     Case::SetCurrentChapter,
     Case::WithdrawProposal,
@@ -75,6 +77,7 @@ const APPLIED: [Case; 11] = [
     Case::CloseEditorFlowDraft,
     Case::ExpandRefusedEditDraft,
     Case::ApplyAuthorEdit,
+    Case::EditProposalCandidate,
     Case::AcceptProposal,
     Case::AcceptanceReversal,
 ];
@@ -297,6 +300,7 @@ async fn undo_call(
                     suffix: &suffix,
                     local_intent_sequence: 1,
                     text: "x",
+                    proposal_target: None,
                 },
             )
             .await;
@@ -304,6 +308,51 @@ async fn undo_call(
                 resulting_revision(admin, &format!("018f0000-0000-7001-8000-00000003{suffix}"))
                     .await;
             (scope, editor_session_id, resulting)
+        }
+        Case::EditProposalCandidate => {
+            let (scope, input, _chapter_a_head) = acceptable_proposal(store, admin, base).await;
+            let (chapter_b, block_id): (String, String) = admin
+                .query_one(
+                    "SELECT chapter_id::text, manuscript_block_id::text FROM storyos.proposals
+                      WHERE proposal_id = $1::text::uuid",
+                    &[&input.proposal_id],
+                )
+                .await
+                .map(|row| (row.get(/*idx*/ 0), row.get(/*idx*/ 1)))
+                .unwrap();
+            let editor_session_id = input.editor_session_id.as_ref().to_owned();
+            // The writer Editor Session edits Chapter B, the Chapter of the Proposal.
+            edit_in_chapter_of(
+                admin,
+                &editor_session_id,
+                &input.expected_authoritative_revision_id,
+            )
+            .await;
+            let suffix = format!("{:04x}", base + 9);
+            apply_named_edit(
+                store,
+                &scope,
+                NamedEdit {
+                    editor_session_id: &editor_session_id,
+                    chapter_id: &chapter_b,
+                    expected_revision_id: &input.expected_authoritative_revision_id,
+                    suffix: &suffix,
+                    local_intent_sequence: 1,
+                    text: "x",
+                    proposal_target: Some(AuthorEditProposalTarget {
+                        proposal_id: input.proposal_id.clone(),
+                        operation_id: input.selected_operation_ids[0].clone(),
+                        revision_id: input.proposal_revision_id.clone(),
+                        manuscript_block_id: block_id,
+                    }),
+                },
+            )
+            .await;
+            (
+                scope,
+                editor_session_id,
+                input.expected_authoritative_revision_id,
+            )
         }
         Case::AcceptProposal
         | Case::AcceptanceReversal
@@ -459,7 +508,7 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
     let mut acceptance_children = Vec::new();
-    for (case, base) in all_cases().zip((0x3a00..).step_by(/*step*/ 0x10)) {
+    for (case, base) in all_cases().zip((0x3000..).step_by(/*step*/ 0x10)) {
         let call = plain(&undo_call(&store, &admin, case, base).await);
         observed.push(replayed_outcome(&store, &admin, &call, undo).await);
         acceptance_children.push(undo_acceptance_rows(&admin, &call.envelope.ids.receipt_id).await);
@@ -493,6 +542,7 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
             draft,
             draft,
             revision,
+            proposal,
             revision,
             reversal,
             conflicted,
@@ -506,7 +556,7 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
     // on `main`.
     assert_eq!(
         acceptance_children,
-        vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1]
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1]
     );
 }
 
@@ -518,7 +568,7 @@ async fn every_failing_undo_step_rolls_back_every_row_and_keeps_the_challenge_un
         .await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
-    for (case, base) in all_cases().zip((0x3b00..).step_by(/*step*/ 0x10)) {
+    for (case, base) in all_cases().zip((0x3200..).step_by(/*step*/ 0x10)) {
         let call = undo_call(&store, &admin, case, base).await;
         observed.push(failed_then_settled(&store, &admin, &call).await);
     }
@@ -566,7 +616,7 @@ async fn every_in_progress_undo_retry_conflicts_and_writes_no_row() {
         .await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
-    for (case, base) in all_cases().zip((0x3c00..).step_by(/*step*/ 0x10)) {
+    for (case, base) in all_cases().zip((0x3400..).step_by(/*step*/ 0x10)) {
         let call = undo_call(&store, &admin, case, base).await;
         observed.push(in_progress_retry(&store, &admin, &call).await);
     }
@@ -584,7 +634,7 @@ async fn every_undo_replay_separates_pre_capture_from_damaged_evidence() {
         .await;
     let (store, admin) = stores().await;
     let mut observed = Vec::new();
-    for (case, base) in all_cases().zip((0x3d00..).step_by(/*step*/ 0x10)) {
+    for (case, base) in all_cases().zip((0x3600..).step_by(/*step*/ 0x10)) {
         let call = undo_call(&store, &admin, case, base).await;
         observed.push(evidence_replays(&store, &admin, &call).await);
     }
