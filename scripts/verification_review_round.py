@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 import verification
+import verification_github
 
 SCRIPTS = Path(__file__).resolve().parent
 TEMPLATE = SCRIPTS.parent / 'docs/agents/review-prompt.md'
@@ -15,10 +16,7 @@ VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
 ROUNDS = 3
 WAIT_MS = 600000
 WAITS = 6
-
-
-def gh(*args):
-    return subprocess.check_output(['gh', *args], text=True)
+gh = verification_github.gh
 
 
 def codex(*args):
@@ -106,7 +104,7 @@ def run(root, pr, executor):
         if not stored:
             raise ValueError(f'Round {number} has no {missing[0]} comment and no retained verdict; ask the coordinator session')
         print(f'Round {number}: posted the retained {missing[0]} verdict:',
-              gh('pr', 'comment', str(pr), '--body-file', str(max(stored, key=lambda b: b.stat().st_mtime))).strip())
+              verification_github.comment(pr, max(stored, key=lambda b: b.stat().st_mtime)).strip())
         return
     if number > ROUNDS:
         raise ValueError(f'PR {pr} had {ROUNDS} review rounds. Send the open findings to the coordinator session; '
@@ -133,7 +131,7 @@ def run(root, pr, executor):
     for axis, verdict in verdicts.items():
         body = path.parent / f'{axis}-comment.md'
         body.write_text(comment(axis, number, verdict, verdict['context'], request))
-        results[axis] = (verdict['result'], gh('pr', 'comment', str(pr), '--body-file', str(body)).strip())
+        results[axis] = (verdict['result'], verification_github.comment(pr, body).strip())
     print(f'Round {number} of {ROUNDS} for PR {pr}. Request: {path}')
     for axis, (result, url) in results.items():
         print(f'{axis.capitalize()}: {result} {url}')
