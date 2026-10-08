@@ -9,6 +9,7 @@ import time
 
 import verification
 import verification_cache
+import verification_github
 import verification_status
 
 
@@ -17,7 +18,7 @@ GUARDS = ('ste-text-guard', 'rust-literal-guard', 'diff-whitespace')
 
 
 def api(path):
-    return json.loads(subprocess.check_output(['gh', 'api', path]))
+    return json.loads(verification_github.gh('api', path))
 
 
 def binding(root, revision, base, head, pr, purpose):
@@ -37,7 +38,7 @@ def sentinel(route, head, base, tree):
     if not passed:
         raise ValueError('A successful synthetic-merge verify run on the head is required')
     for check in sorted(passed, key=lambda c: c['id'], reverse=True):
-        logs = subprocess.check_output(['gh', 'api', f"{route}/actions/jobs/{check['id']}/logs", "--allow-escape-sequences"], text=True)
+        logs = verification_github.gh('api', f"{route}/actions/jobs/{check['id']}/logs", '--allow-escape-sequences')
         run_tree = tree
         if run_tree is None:
             trees = set(re.findall(r'Synthetic merge tree: ([0-9a-f]{40})(?:\r?\n|$)', logs))
@@ -53,7 +54,7 @@ def sentinel(route, head, base, tree):
 def current(root, pr, purpose):
     if not pr or purpose not in {'candidate', 'post-merge-different-tree', 'manual-linux'}:
         raise ValueError('Use a PR and an explicit candidate, post-merge-different-tree, or manual-linux purpose')
-    repository = json.loads(subprocess.check_output(['gh', 'repo', 'view', '--json', 'nameWithOwner'], cwd=root))['nameWithOwner']
+    repository = json.loads(verification_github.gh('repo', 'view', '--json', 'nameWithOwner', cwd=root))['nameWithOwner']
     route = f'repos/{repository}'
     pull = api(f'{route}/pulls/{pr}')
     ref = 'refs/storyos/review-candidate'
