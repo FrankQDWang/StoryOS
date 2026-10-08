@@ -416,14 +416,6 @@ pub async fn issue_project_command_challenge(
     store.issue(request).await
 }
 
-pub async fn consume_project_command_challenge(
-    transaction: &mut impl ProjectCommandChallengeTransaction,
-    binding: &ProjectCommandChallengeBinding,
-    nonce_digest: &str,
-) -> Result<ProjectCommandChallengeUse, ProjectCommandChallengeError> {
-    transaction.consume(binding, nonce_digest).await
-}
-
 impl ProjectScope {
     pub fn new(owner_user_id: UserId, project_id: ProjectId) -> Self {
         Self {
