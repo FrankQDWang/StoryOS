@@ -250,14 +250,19 @@ impl CommandReplay {
         {
             return Ok(TransitionOutcome::Applied(()));
         }
-        // A missing or unknown reason is a binding conflict (ADR 0043).
-        match self.receipt.field("reason")? {
-            Field::Text(reason) => {
-                TransitionOutcome::from_zero_authority_codes(&self.result_kind, reason)
-            }
+        // A missing or unknown reason is a binding conflict (ADR 0043), unless the recorded
+        // result kind gives an outcome that records no reason.
+        let reason = match self.receipt.field("reason")? {
+            Field::Text(reason) => Some(reason),
             Field::Absent | Field::Null => None,
-        }
-        .ok_or(ReplayFault::BindingConflict)
+        };
+        TransitionOutcome::from_zero_authority_codes(&self.result_kind, reason)
+            .ok_or(ReplayFault::BindingConflict)
+    }
+
+    /// The Domain Receipt result kind.
+    pub(crate) fn result_kind(&self) -> &str {
+        &self.result_kind
     }
 
     /// The top-level fields of the Receipt payload.
@@ -551,12 +556,13 @@ pub(crate) async fn read_command_replay(
         acknowledgement_format: row.get(15),
         response_project: row.get(16),
         response_assistance: row.get(/*idx*/ 18),
-        resulting_heads: row.get(/*idx*/ 19),
+        // A NULL element is damaged evidence, not a panic.
+        resulting_heads: row.try_get(/*idx*/ 19).map_err(unavailable)?,
         fence_digest_matches: row.get(/*idx*/ 20),
         author_action_disposition: row.get(/*idx*/ 21),
-        draft_artifact_refs: row.get(/*idx*/ 22),
+        draft_artifact_refs: row.try_get(/*idx*/ 22).map_err(unavailable)?,
         admission_matches: row.get::<_, Option<bool>>(/*idx*/ 23).unwrap_or_default(),
-        condition_refs: row.get(/*idx*/ 33),
+        condition_refs: row.try_get(/*idx*/ 33).map_err(unavailable)?,
         revision: match (
             row.get::<_, Option<String>>(/*idx*/ 24),
             row.get::<_, Option<String>>(/*idx*/ 25),

@@ -1,12 +1,9 @@
 use storyos_application::{
-    AppendAuthorCommandOutcomeUnknown, ApplyAuthorEditCommand, ApplyAuthorEditOutcome,
-    ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds,
-    AuthorCommandOutcomeUnknownBoundary, AuthorCommandOutcomeUnknownError,
-    AuthorCommandOutcomeUnknownReason, CommittedApplyAuthorEdit, EditorClientBinding,
-    EditorSessionId, EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    RequiresReconfirmationApplyAuthorEdit, ResolveApplyAuthorEditOutcome, UserId,
-    append_author_command_outcome_unknown, create_editor_session, get_apply_author_edit_outcome,
+    ApplyAuthorEditCommand, ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason,
+    AuthorCommandAdmissionIds, CommittedApplyAuthorEdit, EditorClientBinding, EditorSessionId,
+    EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge, OpenEditorSession,
+    ProjectCommandChallengeBinding, ProjectId, ProjectScope, RequiresReconfirmationApplyAuthorEdit,
+    ResolveApplyAuthorEditOutcome, UserId, create_editor_session, get_apply_author_edit_outcome,
     get_editor_session, issue_project_command_challenge,
 };
 use storyos_core::{
@@ -274,27 +271,6 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             AuthorEditFault::None => unreachable!(),
         };
         assert!(format!("{error:?}").contains(expected_point), "{error:?}");
-        let unknown = append_author_command_outcome_unknown(
-            &store,
-            &AppendAuthorCommandOutcomeUnknown {
-                project_scope: scope.clone(),
-                author_command_admission_id: command.ids.author_command_admission_id.clone(),
-                observation_id: format!("018f0000-0000-7001-8000-0000000008{suffix}"),
-                last_provable_boundary: AuthorCommandOutcomeUnknownBoundary::AdmissionCommitted,
-                reason: AuthorCommandOutcomeUnknownReason::AcknowledgementMissing,
-            },
-        )
-        .await;
-        assert!(match (fault, unknown) {
-            (
-                AuthorEditFault::CoreAfterCommitBeforeAcknowledgement,
-                Err(AuthorCommandOutcomeUnknownError::BindingConflict),
-            ) => true,
-            (_, Ok(observation)) => {
-                observation.author_command_admission_id == command.ids.author_command_admission_id
-            }
-            _ => false,
-        });
         if fault == AuthorEditFault::CoreAfterCommitBeforeAcknowledgement {
             committed_command = Some(command);
         }
@@ -312,9 +288,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     )
     .await
     .unwrap();
-    let replay = storyos_application::apply_author_edit(&store, &command)
-        .await
-        .unwrap();
+    let replay = store.apply_author_edit(&command).await.unwrap();
     assert_eq!(
         committed_outcome,
         ApplyAuthorEditOutcome::Committed(Box::new(CommittedApplyAuthorEdit {
@@ -435,9 +409,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-        let settlement = storyos_application::apply_author_edit(&store, &outcome_command)
-            .await
-            .unwrap();
+        let settlement = store.apply_author_edit(&outcome_command).await.unwrap();
         let queried_outcome = get_apply_author_edit_outcome(
             &store,
             &ResolveApplyAuthorEditOutcome {
@@ -457,9 +429,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             panic!("a settled zero-authority Receipt must read as Committed")
         };
         assert_eq!(queried.settlement, settlement);
-        let exact_retry = storyos_application::apply_author_edit(&store, &outcome_command)
-            .await
-            .unwrap();
+        let exact_retry = store.apply_author_edit(&outcome_command).await.unwrap();
         assert_eq!(exact_retry, settlement);
         outcomes.push(settlement);
         outcome_commands.push(outcome_command);
@@ -659,9 +629,10 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
+    // A replay without its Activity record is damaged evidence (ADR 0043).
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &command).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
+        store.apply_author_edit(&command).await,
+        Err(storyos_application::AuthorEditError::Unavailable(_))
     ));
     admin
         .execute(
@@ -861,7 +832,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             .await
             .unwrap();
         assert!(matches!(
-            storyos_application::apply_author_edit(&store, case_command).await,
+            store.apply_author_edit(case_command).await,
             Err(storyos_application::AuthorEditError::BindingConflict)
         ));
         admin
@@ -945,9 +916,10 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
+    // Zero-based head arrays are damaged evidence (ADR 0043).
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &outcome_commands[1]).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
+        store.apply_author_edit(&outcome_commands[1]).await,
+        Err(storyos_application::AuthorEditError::Unavailable(_))
     ));
     admin
         .execute(
@@ -979,9 +951,10 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
+    // A zero-based Commit array is damaged evidence (ADR 0043).
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &command).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
+        store.apply_author_edit(&command).await,
+        Err(storyos_application::AuthorEditError::Unavailable(_))
     ));
     admin
         .execute(
@@ -1006,9 +979,10 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
+    // NULL heads are damaged evidence (ADR 0043).
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &outcome_commands[1]).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
+        store.apply_author_edit(&outcome_commands[1]).await,
+        Err(storyos_application::AuthorEditError::Unavailable(_))
     ));
     admin
         .execute(
@@ -1036,7 +1010,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .await
         .unwrap();
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &outcome_commands[0]).await,
+        store.apply_author_edit(&outcome_commands[0]).await,
         Err(storyos_application::AuthorEditError::BindingConflict)
     ));
     admin
@@ -1065,7 +1039,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .await
         .unwrap();
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &outcome_commands[2]).await,
+        store.apply_author_edit(&outcome_commands[2]).await,
         Err(storyos_application::AuthorEditError::BindingConflict)
     ));
     admin
@@ -1086,9 +1060,10 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
+    // An impossible stale conflict is damaged evidence (ADR 0043).
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &outcome_commands[0]).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
+        store.apply_author_edit(&outcome_commands[0]).await,
+        Err(storyos_application::AuthorEditError::Unavailable(_))
     ));
     admin
         .execute(
@@ -1135,7 +1110,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .await
         .unwrap();
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &command).await,
+        store.apply_author_edit(&command).await,
         Err(storyos_application::AuthorEditError::BindingConflict)
     ));
     admin
@@ -1186,9 +1161,10 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .await
         .unwrap();
     prior_corruption.commit().await.unwrap();
+    // A Commit and Envelope of another prior Revision are damaged evidence (ADR 0043).
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &command).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
+        store.apply_author_edit(&command).await,
+        Err(storyos_application::AuthorEditError::Unavailable(_))
     ));
     let corrupt_outcome_error = get_apply_author_edit_outcome(
         &store,
@@ -1258,9 +1234,10 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .batch_execute("ALTER TABLE storyos.authoritative_commits ENABLE TRIGGER ALL")
         .await
         .unwrap();
+    // A Commit of another Admission is damaged evidence (ADR 0043).
     assert!(matches!(
-        storyos_application::apply_author_edit(&store, &outcome_commands[0]).await,
-        Err(storyos_application::AuthorEditError::BindingConflict)
+        store.apply_author_edit(&outcome_commands[0]).await,
+        Err(storyos_application::AuthorEditError::Unavailable(_))
     ));
     admin
         .batch_execute("ALTER TABLE storyos.authoritative_commits DISABLE TRIGGER ALL")

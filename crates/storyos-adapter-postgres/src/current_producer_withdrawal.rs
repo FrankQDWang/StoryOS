@@ -356,7 +356,7 @@ async fn read_producer_receipt(
                     WithdrawProposalNoEffect,
                     WithdrawProposalConflict,
                     WithdrawProposalRefusal,
-                >::from_zero_authority_codes(&result_kind, &reason)
+                >::from_zero_authority_codes(&result_kind, Some(&reason))
             })
             .ok_or(ProjectCommandError::HistoricalAcknowledgementUnavailable)?
     };

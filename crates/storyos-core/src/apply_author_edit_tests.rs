@@ -36,9 +36,9 @@ fn command() -> ApplyAuthorEdit {
 fn one_replace_selection_is_classified_as_one_authoritative_result() {
     assert_eq!(
         apply_author_edit(&command()),
-        ApplyAuthorEditResult::AuthoritativeApplied {
+        TransitionOutcome::Applied(AuthorEditApplied::AuthoritativeApplied {
             body: "A!B".to_owned()
-        }
+        })
     );
 }
 
@@ -76,9 +76,9 @@ fn ordered_units_apply_against_one_transient_body() {
 
     assert_eq!(
         apply_author_edit(&batch),
-        ApplyAuthorEditResult::AuthoritativeApplied {
+        TransitionOutcome::Applied(AuthorEditApplied::AuthoritativeApplied {
             body: "Axy!B".to_owned()
-        }
+        })
     );
 }
 
@@ -99,9 +99,9 @@ fn invalid_later_unit_refuses_the_complete_batch() {
 
     assert_eq!(
         apply_author_edit(&batch),
-        ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection
-        }
+        TransitionOutcome::Refused(AuthorEditRefused::Refused(
+            AuthorEditRefusal::InvalidSelection
+        ))
     );
 }
 
@@ -111,9 +111,7 @@ fn stale_head_and_invalid_selections_fail_without_a_partial_result() {
     stale.expected_authoritative_revision_id = "revision-0".to_owned();
     assert_eq!(
         apply_author_edit(&stale),
-        ApplyAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::StaleAuthoritativeHead
-        }
+        TransitionOutcome::Conflicted(AuthorEditConflict::StaleAuthoritativeHead)
     );
 
     for (start, end) in [(1, 2), (2, 2), (5, 5), (3, 1), (2, 3), (1, 5)] {
@@ -130,9 +128,9 @@ fn stale_head_and_invalid_selections_fail_without_a_partial_result() {
         *to = end;
         assert_eq!(
             apply_author_edit(&invalid),
-            ApplyAuthorEditResult::Refused {
-                reason: AuthorEditRefusal::InvalidSelection
-            }
+            TransitionOutcome::Refused(AuthorEditRefused::Refused(
+                AuthorEditRefusal::InvalidSelection
+            ))
         );
     }
 }
@@ -143,9 +141,7 @@ fn current_proposal_fact_conflicts_with_a_stale_authoritative_observation() {
     stale.current_ownership.proposal_head_revision_ids = vec!["proposal-revision".to_owned()];
     assert_eq!(
         apply_author_edit(&stale),
-        ApplyAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::ProposalHeadPresent
-        }
+        TransitionOutcome::Conflicted(AuthorEditConflict::ProposalHeadPresent)
     );
 }
 
@@ -170,9 +166,9 @@ fn matching_proposal_heads_revise_the_candidate_without_authority() {
 
     assert_eq!(
         apply_author_edit(&revise),
-        ApplyAuthorEditResult::ProposalRevised {
+        TransitionOutcome::Applied(AuthorEditApplied::ProposalRevised {
             candidate_text: "Keep the narrator voice in this passage.".to_owned()
-        }
+        })
     );
 }
 
@@ -198,9 +194,9 @@ fn exclusive_edge_input_applies_to_authority_without_revising_the_candidate() {
 
     assert_eq!(
         apply_author_edit(&edge),
-        ApplyAuthorEditResult::AuthoritativeApplied {
+        TransitionOutcome::Applied(AuthorEditApplied::AuthoritativeApplied {
             body: "Keep the narrator voice in this passage.".to_owned()
-        }
+        })
     );
 }
 
@@ -222,9 +218,76 @@ fn unchanged_content_is_a_no_effect_core_result() {
 
         assert_eq!(
             apply_author_edit(&unchanged),
-            ApplyAuthorEditResult::NoEffect {
-                reason: AuthorEditNoEffect::ContentUnchanged
-            }
+            TransitionOutcome::NoEffect(AuthorEditNoEffect::ContentUnchanged)
         );
     }
+}
+
+#[test]
+fn every_zero_authority_author_edit_outcome_round_trips_through_its_receipt_codes() {
+    let outcomes: [ApplyAuthorEditOutcome; 8] = [
+        TransitionOutcome::NoEffect(AuthorEditNoEffect::ContentUnchanged),
+        TransitionOutcome::Conflicted(AuthorEditConflict::StaleAuthoritativeHead),
+        TransitionOutcome::Conflicted(AuthorEditConflict::ProposalHeadPresent),
+        TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged),
+        TransitionOutcome::Refused(AuthorEditRefused::Refused(
+            AuthorEditRefusal::UnsupportedIntentShape,
+        )),
+        TransitionOutcome::Refused(AuthorEditRefused::Refused(
+            AuthorEditRefusal::InvalidSelection,
+        )),
+        TransitionOutcome::Refused(AuthorEditRefused::Refused(
+            AuthorEditRefusal::TargetMismatch,
+        )),
+        TransitionOutcome::Refused(AuthorEditRefused::RefusedToDraft),
+    ];
+    let recorded = outcomes
+        .iter()
+        .map(|outcome| (outcome.receipt_result_kind(), outcome.reason_code()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recorded,
+        [
+            ("no_effect", Some("content_unchanged")),
+            ("conflicted", Some("stale_authoritative_head")),
+            ("conflicted", Some("proposal_head_present")),
+            ("conflicted", Some("ownership_changed")),
+            ("refused", Some("unsupported_intent_shape")),
+            ("refused", Some("invalid_selection")),
+            ("refused", Some("target_mismatch")),
+            ("refused_to_draft", None),
+        ]
+    );
+    for (outcome, (result, reason)) in outcomes.into_iter().zip(recorded) {
+        assert_eq!(
+            ApplyAuthorEditOutcome::from_zero_authority_codes(result, reason),
+            Some(outcome)
+        );
+    }
+    // A Refused Edit Draft records no reason, and a refusal needs its reason.
+    assert_eq!(
+        ApplyAuthorEditOutcome::from_zero_authority_codes("refused_to_draft", Some("x")),
+        None
+    );
+    assert_eq!(
+        ApplyAuthorEditOutcome::from_zero_authority_codes("refused", None),
+        None
+    );
+}
+
+#[test]
+fn each_applied_author_edit_variant_gives_its_receipt_result_kind() {
+    assert_eq!(
+        [
+            AuthorEditApplied::AuthoritativeApplied {
+                body: String::new()
+            }
+            .result_kind(),
+            AuthorEditApplied::ProposalRevised {
+                candidate_text: String::new()
+            }
+            .result_kind(),
+        ],
+        ["authoritative_applied", "proposal_revised"]
+    );
 }

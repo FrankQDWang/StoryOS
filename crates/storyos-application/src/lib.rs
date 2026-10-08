@@ -34,7 +34,6 @@ pub use acceptance_refusal::{
 mod accept_proposal;
 mod agent_run_control;
 mod agent_run_work;
-mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_wire;
 mod model_gateway;
@@ -80,21 +79,9 @@ mod undo_latest_author_action;
 mod update_project_assistance;
 mod withdraw_proposal;
 
-#[cfg(test)]
-#[path = "author_command_outcome_unknown_tests.rs"]
-mod author_command_outcome_unknown_tests;
-
-pub use author_command_outcome_unknown::{
-    AppendAuthorCommandOutcomeUnknown, AuthorCommandOutcomeUnknownBoundary,
-    AuthorCommandOutcomeUnknownError, AuthorCommandOutcomeUnknownObservation,
-    AuthorCommandOutcomeUnknownReason, AuthorCommandOutcomeUnknownStore, ReconciliationRequired,
-    append_author_command_outcome_unknown,
-};
-
 pub use author_edit::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditProposalTarget,
-    AuthorEditSettlement, AuthorEditSettlementEffect, AuthorEditStore, AuthoritativeAppliedIds,
-    apply_author_edit,
+    AuthorEditSettlement, AuthorEditSettlementEffect, AuthoritativeAppliedIds,
 };
 pub use author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError, ApplyAuthorEditOutcomeResolver,
