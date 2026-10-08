@@ -60,9 +60,9 @@ mod update_volume;
 mod withdraw_proposal;
 
 pub use accept_proposal::{
-    AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalRefusal,
-    AcceptProposalResult, ProposalBundlePolicy, ProposalOperationSelection, ProposalSelectionFacts,
-    ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
+    AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalOutcome,
+    AcceptProposalRefusal, ProposalBundlePolicy, ProposalOperationSelection,
+    ProposalSelectionFacts, ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
 pub use agent_run_control::{
     AgentRunLifecycle, CancelAgentRunConflict, CancelAgentRunNoEffect, PauseAgentRunConflict,

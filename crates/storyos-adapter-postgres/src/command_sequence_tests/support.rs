@@ -105,23 +105,32 @@ pub(super) async fn stores() -> (PostgresProjectReader, Client) {
 }
 
 /// Counts the Receipt, Author Action, Activity, Commit, and Snapshot rows of one Receipt.
+///
+/// The Activity count includes both Project Activity tables.
 pub(super) async fn settlement_rows(admin: &Client, receipt_id: &str) -> [i64; 5] {
     let row = admin
         .query_one(
-            "SELECT (SELECT count(*) FROM storyos.domain_receipts WHERE receipt_id = $1::text::uuid),
+            "WITH activity AS (
+               SELECT owner_user_id, project_id, project_activity_position
+                 FROM storyos.project_activity_event_payloads
+                WHERE receipt_id = $1::text::uuid
+               UNION ALL
+               SELECT owner_user_id, project_id, project_activity_position
+                 FROM storyos.project_activity_events
+                WHERE receipt_id = $1::text::uuid
+             )
+             SELECT (SELECT count(*) FROM storyos.domain_receipts WHERE receipt_id = $1::text::uuid),
                     (SELECT count(*) FROM storyos.author_action_entries
                       WHERE receipt_id = $1::text::uuid),
-                    (SELECT count(*) FROM storyos.project_activity_event_payloads
-                      WHERE receipt_id = $1::text::uuid),
+                    (SELECT count(*) FROM activity),
                     (SELECT count(*) FROM storyos.authoritative_commits
                       WHERE receipt_id = $1::text::uuid),
                     (SELECT count(*) FROM storyos.project_snapshots AS snapshot
-                       JOIN storyos.project_activity_event_payloads AS payload
-                         ON (payload.owner_user_id, payload.project_id,
-                             payload.project_activity_position) =
+                       JOIN activity
+                         ON (activity.owner_user_id, activity.project_id,
+                             activity.project_activity_position) =
                             (snapshot.owner_user_id, snapshot.project_id,
-                             snapshot.project_activity_position)
-                      WHERE payload.receipt_id = $1::text::uuid)",
+                             snapshot.project_activity_position))",
             &[&receipt_id],
         )
         .await

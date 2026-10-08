@@ -98,6 +98,10 @@ impl SettlementProfile for AuthoritativeRevision {
         vec![sequences.ids.authoritative_commit_id.clone()]
     }
 
+    fn revision_ids(sequences: &RevisionSequences) -> Vec<String> {
+        vec![sequences.ids.revision_id.clone()]
+    }
+
     async fn persist<E: Send>(
         client: &Client,
         envelope: &ProjectCommandEnvelope,
@@ -122,14 +126,14 @@ impl SettlementProfile for AuthoritativeRevision {
     ) -> Result<RevisionApplied<E>, ReplayFault> {
         let damaged = || ReplayFault::Unavailable("the Authoritative Revision is damaged".into());
         let revision = replay.revision.as_ref().ok_or_else(damaged)?;
+        let activity = revision.activity.as_ref().ok_or_else(damaged)?;
         let author_action_sequence = replay
             .author_action_sequence
             .as_deref()
             .ok_or_else(damaged)?;
-        let authority = replay.authority.as_ref().ok_or_else(damaged)?;
-        if revision.author_action_sequence != author_action_sequence
-            || revision.authoritative_commit_id != authority.authoritative_commit_id
-            || authority.resulting_revision_id.as_deref() != Some(revision.revision_id.as_str())
+        if activity.author_action_sequence != author_action_sequence
+            || activity.authoritative_commit_id != revision.authoritative_commit_id
+            || activity.resulting_revision_id != revision.revision_id
         {
             return Err(damaged());
         }
@@ -140,10 +144,10 @@ impl SettlementProfile for AuthoritativeRevision {
                 revision_id: revision.revision_id.clone(),
                 payload_id: revision.payload_id.clone(),
                 authoritative_commit_id: revision.authoritative_commit_id.clone(),
-                project_activity_event_id: revision.project_activity_event_id.clone(),
+                project_activity_event_id: activity.project_activity_event_id.clone(),
             },
             author_action_sequence: author_action_sequence.parse().map_err(|_| damaged())?,
-            project_activity_position: revision
+            project_activity_position: activity
                 .project_activity_position
                 .parse()
                 .map_err(|_| damaged())?,
@@ -154,7 +158,7 @@ impl SettlementProfile for AuthoritativeRevision {
 }
 
 /// Writes the new Revision and its authority records after the Domain Receipt.
-pub(crate) async fn write_revision<E>(
+async fn write_revision<E>(
     client: &Client,
     scope: &ProjectScope,
     ids: &AuthorCommandAdmissionIds,

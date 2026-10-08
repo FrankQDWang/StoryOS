@@ -12,7 +12,7 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedResult, Classification,
+    ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
     CommandIsolation, CommandSpec, LockedProject, MissingAdmission, ProjectActionClass,
     ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroReceipt,
     settle_project_command, unavailable,
@@ -32,7 +32,7 @@ impl PostgresProjectReader {
 impl ProjectCommand for PauseAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "pauseAgentRun",
-        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
+        applied: AppliedVariant::NoAuthorAction,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

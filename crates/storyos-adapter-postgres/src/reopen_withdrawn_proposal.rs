@@ -12,11 +12,12 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, Admission, AppliedResult, Classification, CommandIsolation, CommandSpec,
+    ActionOnly, Admission, AppliedVariant, Classification, CommandIsolation, CommandSpec,
     EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProfileSequences,
     ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect,
     ZeroReceipt, settle_project_command, unavailable,
 };
+use crate::undo_compensation::ForwardCommand;
 
 mod compensation;
 pub(crate) use compensation::ReopenWithdrawnCompensation;
@@ -44,7 +45,7 @@ pub(crate) struct WithdrawnRevision {
 impl ProjectCommand for ReopenWithdrawnProposalInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "reopenWithdrawnProposal",
-        applied_result: AppliedResult::command("proposal_revised"),
+        applied: AppliedVariant::Forward(ForwardCommand::ReopenWithdrawnProposal),
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,

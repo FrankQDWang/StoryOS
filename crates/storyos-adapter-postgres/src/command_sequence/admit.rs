@@ -214,14 +214,9 @@ async fn first_admission<C: AdmitCommand>(
 ) -> Result<Admitted<C>, C::Error> {
     let project = lock_project(client, envelope).await?;
     let facts = command.load_facts(client, envelope, &project).await?;
-    insert_admission(
-        client,
-        envelope,
-        C::SPEC.kind,
-        &C::SPEC.missing_admission,
-        &command.admission(&facts),
-    )
-    .await?;
+    if !insert_admission(client, envelope, C::SPEC.kind, &command.admission(&facts)).await? {
+        return Err(C::SPEC.missing_admission.error().into());
+    }
     let work = command.write_work(client, envelope, facts).await?;
     let response = C::Response::record(client, envelope, C::SPEC.kind).await?;
     Ok(AdmittedProjectCommand {

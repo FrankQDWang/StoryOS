@@ -104,10 +104,7 @@ pub use author_edit_outcome::{
     get_apply_author_edit_outcome,
 };
 
-pub use accept_proposal::{
-    AcceptProposalCommand, AcceptProposalError, AcceptProposalSettlement,
-    AcceptProposalSettlementEffect, AcceptProposalStore, accept_proposal,
-};
+pub use accept_proposal::{AcceptProposalInput, AcceptProposalSettlement};
 pub use agent_run_control::{
     AgentRunControlRefusal, CancelAgentRunApplied, CancelAgentRunError, CancelAgentRunInput,
     CancelAgentRunSettlement, PauseAgentRunApplied, PauseAgentRunError, PauseAgentRunInput,

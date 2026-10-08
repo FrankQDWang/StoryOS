@@ -13,7 +13,7 @@ use tokio_postgres::Client;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedResult, Classification,
+    ActivityOnly, ActivitySequences, ActivityWrite, Admission, AppliedVariant, Classification,
     CommandIsolation, CommandSpec, LockedProject, MissingAdmission, ProjectActionClass,
     ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect,
     ZeroAuthorityRows, ZeroAuthorityWrite, ZeroOutcome, ZeroReceipt, settle_project_command,
@@ -37,7 +37,7 @@ impl PostgresProjectReader {
 impl ProjectCommand for SteerAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "steerAgentRun",
-        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
+        applied: AppliedVariant::NoAuthorAction,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,
@@ -212,7 +212,7 @@ impl ProjectCommand for SteerAgentRunInput {
         replay: &CommandReplay,
     ) -> Result<Option<SteeringRetained>, ReplayFault> {
         match replay.outcome::<SteerAgentRunNoEffect, SteerAgentRunConflict, Infallible>(
-            Self::SPEC.applied_result.code(),
+            Self::SPEC.applied.result_kind(),
         )? {
             TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained) => {
                 Ok(Some(SteeringRetained {

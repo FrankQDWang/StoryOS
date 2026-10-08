@@ -43,6 +43,8 @@ pub(crate) struct CommandReplay {
     pub(crate) admission_matches: bool,
     /// The Draft references of the Domain Receipt.
     pub(crate) draft_artifact_refs: Vec<String>,
+    /// The condition references of the Domain Receipt.
+    pub(crate) condition_refs: Vec<String>,
     /// The Authoritative Revision that the Commit of the Receipt binds, with its Activity record
     /// in `project_activity_events`.
     pub(crate) revision: Option<ReplayedRevision>,
@@ -66,6 +68,7 @@ pub(crate) struct ReplayedAuthority {
 }
 
 /// The records of one new Authoritative Revision that the `AuthoritativeRevision` profile wrote.
+/// They are the Revision of the Commit of the Receipt and its `project_activity_events` record.
 pub(crate) struct ReplayedRevision {
     pub(crate) revision_id: String,
     pub(crate) payload_id: String,
@@ -73,6 +76,13 @@ pub(crate) struct ReplayedRevision {
     /// The Manuscript Block identities of the Revision members, in order.
     pub(crate) member_block_ids: Vec<String>,
     pub(crate) authoritative_commit_id: String,
+    pub(crate) activity: Option<ReplayedRevisionActivity>,
+}
+
+/// The `project_activity_events` record of one Receipt.
+pub(crate) struct ReplayedRevisionActivity {
+    pub(crate) authoritative_commit_id: String,
+    pub(crate) resulting_revision_id: String,
     pub(crate) author_action_sequence: String,
     pub(crate) project_activity_position: String,
     pub(crate) project_activity_event_id: String,
@@ -533,33 +543,44 @@ pub(crate) async fn read_command_replay(
         author_action_disposition: row.get(/*idx*/ 21),
         draft_artifact_refs: row.get(/*idx*/ 22),
         admission_matches: row.get::<_, Option<bool>>(/*idx*/ 23).unwrap_or_default(),
+        condition_refs: row.get(/*idx*/ 33),
         revision: match (
             row.get::<_, Option<String>>(/*idx*/ 24),
             row.get::<_, Option<String>>(/*idx*/ 25),
             row.get::<_, Option<String>>(/*idx*/ 26),
             row.get::<_, Option<String>>(/*idx*/ 27),
-            row.get::<_, Option<String>>(/*idx*/ 28),
-            row.get::<_, Option<String>>(/*idx*/ 29),
-            row.get::<_, Option<String>>(/*idx*/ 30),
         ) {
-            (
-                Some(revision_id),
-                Some(payload_id),
-                Some(payload),
-                Some(authoritative_commit_id),
-                Some(author_action_sequence),
-                Some(project_activity_position),
-                Some(project_activity_event_id),
-            ) => Some(ReplayedRevision {
-                revision_id,
-                payload_id,
-                payload,
-                member_block_ids: row.get(/*idx*/ 31),
-                authoritative_commit_id,
-                author_action_sequence,
-                project_activity_position,
-                project_activity_event_id,
-            }),
+            (Some(revision_id), Some(payload_id), Some(payload), Some(authoritative_commit_id)) => {
+                Some(ReplayedRevision {
+                    revision_id,
+                    payload_id,
+                    payload,
+                    member_block_ids: row.get(/*idx*/ 34),
+                    authoritative_commit_id,
+                    activity: match (
+                        row.get::<_, Option<String>>(/*idx*/ 28),
+                        row.get::<_, Option<String>>(/*idx*/ 29),
+                        row.get::<_, Option<String>>(/*idx*/ 30),
+                        row.get::<_, Option<String>>(/*idx*/ 31),
+                        row.get::<_, Option<String>>(/*idx*/ 32),
+                    ) {
+                        (
+                            Some(authoritative_commit_id),
+                            Some(resulting_revision_id),
+                            Some(author_action_sequence),
+                            Some(project_activity_position),
+                            Some(project_activity_event_id),
+                        ) => Some(ReplayedRevisionActivity {
+                            authoritative_commit_id,
+                            resulting_revision_id,
+                            author_action_sequence,
+                            project_activity_position,
+                            project_activity_event_id,
+                        }),
+                        _ => None,
+                    },
+                })
+            }
             _ => None,
         },
     })
@@ -628,10 +649,13 @@ const REPLAY_SQL: &str = "SELECT receipt.command_id::text,
         revision.revision_id::text,
         revision.payload_id::text,
         convert_from(revision_payload.canonical_bytes, 'UTF8'),
+        authoritative_commit.authoritative_commit_id::text,
         revision_activity.authoritative_commit_id::text,
+        revision_activity.resulting_revision_id::text,
         revision_activity.author_action_sequence::text,
         revision_activity.project_activity_position::text,
         revision_activity.project_activity_event_id::text,
+        receipt.condition_refs,
         ARRAY(SELECT member.manuscript_block_id::text
                 FROM storyos.manuscript_revision_members AS member
                 JOIN storyos.manuscript_blocks AS block
@@ -677,7 +701,7 @@ LEFT JOIN storyos.authoritative_revisions AS revision
      ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
          revision.revision_id) =
         (authoritative_commit.owner_user_id, authoritative_commit.project_id,
-         authoritative_commit.manuscript_object_id, revision_activity.resulting_revision_id)
+         authoritative_commit.manuscript_object_id, authoritative_commit.resulting_revision_id)
 LEFT JOIN storyos.authoritative_payloads AS revision_payload
      ON (revision_payload.owner_user_id, revision_payload.project_id,
          revision_payload.payload_id) =

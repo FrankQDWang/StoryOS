@@ -14,12 +14,13 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    AppliedResult, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
+    AppliedVariant, Classification, CommandIsolation, CommandSpec, CurrentChapterChange,
     LockedProject, MissingAdmission, ProjectCommand, ProjectResponse, RateLimitedChallenge,
     ReplayEffect, Structural, StructureIdentity, StructureWrite, WriterBase,
     settle_project_command, unavailable,
 };
 use crate::structural_authority_settlement::StructureTransitionSequences;
+use crate::undo_compensation::{ForwardCommand, StructureCommand};
 
 impl PostgresProjectReader {
     /// Settles one Create Volume as a Manuscript Structure Transition.
@@ -38,7 +39,7 @@ pub(crate) struct NewVolumeOrder(u64);
 impl ProjectCommand for CreateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createVolume",
-        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
+        applied: AppliedVariant::Forward(ForwardCommand::Structure(StructureCommand::CreateVolume)),
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

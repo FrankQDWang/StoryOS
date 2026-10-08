@@ -104,6 +104,7 @@ macro_rules! project_command_request {
     };
 }
 
+project_command_request!(contracts::AcceptProposalRequest, nested accept_proposal_input);
 project_command_request!(contracts::CreateVolumeRequest, nested create_volume_input);
 project_command_request!(contracts::UpdateVolumeRequest, nested update_volume_input);
 project_command_request!(contracts::DeleteVolumeRequest, nested delete_volume_input);

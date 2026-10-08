@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivityOnly, ActivitySequences, ActivityWrite, AppliedResult, Classification,
+    ActivityOnly, ActivitySequences, ActivityWrite, AppliedVariant, Classification,
     CommandIsolation, CommandSpec, LockedProject, MissingAdmission, ProjectAssistanceResponse,
     ProjectCommand, RateLimitedChallenge, ReplayEffect, settle_project_command, unavailable,
 };
@@ -37,7 +37,7 @@ impl PostgresProjectReader {
 impl ProjectCommand for UpdateProjectAssistanceInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "updateProjectAssistance",
-        applied_result: AppliedResult::AUTHORITATIVE_APPLIED,
+        applied: AppliedVariant::NoAuthorAction,
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,
