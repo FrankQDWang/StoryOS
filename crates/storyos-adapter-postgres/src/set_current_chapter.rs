@@ -40,7 +40,7 @@ pub(crate) struct ChapterHead(String);
 impl ProjectCommand for SetCurrentChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "setCurrentChapter",
-        applied: AppliedVariant::Forward(ForwardCommand::SetCurrentChapter),
+        applied: &[AppliedVariant::Forward(ForwardCommand::SetCurrentChapter)],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

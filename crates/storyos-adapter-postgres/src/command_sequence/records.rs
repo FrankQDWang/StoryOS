@@ -4,7 +4,7 @@ use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use storyos_core::ProjectLifecycle;
 use tokio_postgres::Client;
 
-use super::{LockedProject, ProjectCommand, ReceiptHeads, ReceiptRefs, unavailable};
+use super::{LockedProject, ProjectCommand, ReceiptHeads, ReceiptRefs, ReceiptTime, unavailable};
 
 pub(super) struct ReceiptRecord {
     pub(super) result: &'static str,
@@ -30,13 +30,14 @@ pub(super) async fn insert_receipt(
                 expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
                 proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
                 artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload,
-                source_draft_disposition)
+                source_draft_disposition, created_at)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $11, $6, $7::text::uuid,
                      'author_command_admission', $12::text[]::uuid[], $13::text[]::uuid[],
                      $14::text[]::uuid[], $19::text[]::uuid[], $15::text[]::uuid[],
                      $10::text[]::uuid[], $16::text[], $17::text[], $20::text[], $8,
-                     $9::text::jsonb, $18::text::jsonb)
+                     $9::text::jsonb, $18::text::jsonb,
+                     CASE WHEN $21 THEN transaction_timestamp() ELSE clock_timestamp() END)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
             &[
@@ -60,6 +61,7 @@ pub(super) async fn insert_receipt(
                 &receipt.refs.source_draft_disposition,
                 &receipt.revision_ids,
                 &receipt.refs.condition_refs,
+                &matches!(receipt.refs.created_at, ReceiptTime::Transaction),
             ],
         )
         .await

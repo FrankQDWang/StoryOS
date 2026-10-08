@@ -1,6 +1,8 @@
 //! The Proposal that an Undo Acceptance reopens, derives, or places for a Reversal (ADR 0044).
 
-use storyos_application::{UndoLatestAuthorActionCommand, UndoLatestAuthorActionError};
+use storyos_application::ProjectCommandError;
+
+use crate::undo_compensation::UndoRequest;
 use storyos_core::ManuscriptBlock;
 use uuid::Uuid;
 
@@ -15,13 +17,13 @@ pub(super) enum LinkMode<'a> {
 
 pub(super) async fn evidence_usable(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     loaded: &LoadedAcceptance,
     facts: &AcceptanceFacts,
     current_envelope: Option<String>,
     prior_envelope: Option<String>,
     current_payload: Option<String>,
-) -> Result<bool, UndoLatestAuthorActionError> {
+) -> Result<bool, ProjectCommandError> {
     // A stored empty Chapter payload is usable prior evidence.
     if !loaded.prior_payload_present || facts.block_ids.is_empty() {
         return Ok(false);
@@ -71,9 +73,9 @@ pub(super) async fn evidence_usable(
 
 pub(super) async fn reservation_blocked(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     block_ids: &[String],
-) -> Result<bool, UndoLatestAuthorActionError> {
+) -> Result<bool, ProjectCommandError> {
     if block_ids.is_empty() {
         return Ok(true);
     }
@@ -99,11 +101,11 @@ pub(super) async fn reservation_blocked(
 
 pub(super) async fn place_proposal(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     facts: &AcceptanceFacts,
     base_revision_id: &str,
     mode: LinkMode<'_>,
-) -> Result<(String, String), UndoLatestAuthorActionError> {
+) -> Result<(String, String), ProjectCommandError> {
     let owner = command.project_scope.owner_user_id.as_ref();
     let project = command.project_scope.project_id.as_ref();
     let revision_id = Uuid::now_v7().to_string();
@@ -120,7 +122,7 @@ pub(super) async fn place_proposal(
                 .iter()
                 .find(|block| block.manuscript_block_id == facts.manuscript_block_id)
                 .map(|block| block.text.clone())
-                .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
+                .ok_or(ProjectCommandError::BindingConflict)?;
             (
                 Uuid::now_v7().to_string(),
                 None,
@@ -155,7 +157,7 @@ pub(super) async fn place_proposal(
             .await
             .map_err(database_error)?;
         if inserted != 1 {
-            return Err(UndoLatestAuthorActionError::BindingConflict);
+            return Err(ProjectCommandError::BindingConflict);
         }
     }
     let candidate = candidate_override
@@ -190,7 +192,7 @@ pub(super) async fn place_proposal(
         .await
         .map_err(database_error)?;
     if inserted != 1 {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
+        return Err(ProjectCommandError::BindingConflict);
     }
     if matches!(mode, LinkMode::Reopen) {
         let updated = client
@@ -212,7 +214,7 @@ pub(super) async fn place_proposal(
             .await
             .map_err(database_error)?;
         if updated != 1 {
-            return Err(UndoLatestAuthorActionError::BindingConflict);
+            return Err(ProjectCommandError::BindingConflict);
         }
         let updated = client
             .execute(
@@ -233,7 +235,7 @@ pub(super) async fn place_proposal(
             .await
             .map_err(database_error)?;
         if updated != facts.selected_operation_ids.len() as u64 {
-            return Err(UndoLatestAuthorActionError::BindingConflict);
+            return Err(ProjectCommandError::BindingConflict);
         }
     } else {
         client
@@ -270,7 +272,7 @@ pub(super) async fn place_proposal(
             .await
             .map_err(database_error)?;
         if inserted != facts.selected_operation_ids.len() as u64 {
-            return Err(UndoLatestAuthorActionError::BindingConflict);
+            return Err(ProjectCommandError::BindingConflict);
         }
         if let LinkMode::Reversal { blocks } = &mode {
             for block in blocks.iter().filter(|block| {

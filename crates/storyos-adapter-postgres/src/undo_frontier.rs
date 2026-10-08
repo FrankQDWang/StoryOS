@@ -1,4 +1,4 @@
-use storyos_application::{UndoLatestAuthorActionCommand, UndoLatestAuthorActionError};
+use storyos_application::ProjectCommandError;
 use storyos_core::AuthorUndoFrontierKind;
 
 use crate::accept_proposal::{AcceptanceCompensation, LoadedAcceptance};
@@ -11,10 +11,10 @@ use crate::reopen_withdrawn_proposal::ReopenWithdrawnCompensation;
 use crate::replan_proposal::ReplanCompensation;
 use crate::set_current_chapter::{CurrentChapterCompensation, ObservedCurrentChapterFrontier};
 use crate::structural_authority_settlement::{ObservedStructureFrontier, StructureCompensation};
-use crate::undo_compensation::{CompensationAdapter, ForwardCommand, UndoDisposition};
+use crate::undo_compensation::{CompensationAdapter, ForwardCommand, UndoDisposition, UndoRequest};
 use crate::withdraw_proposal::{AuthorWithdrawalCompensation, ObservedAuthorWithdrawal};
 
-pub(super) enum ObservedFrontier {
+pub(crate) enum ObservedFrontier {
     Acceptance(LoadedAcceptance),
     Prose(ObservedProseFrontier),
     Structure(ObservedStructureFrontier),
@@ -28,19 +28,13 @@ pub(super) enum ObservedFrontier {
     Barrier { sequence: u64 },
 }
 
-pub(super) struct LoadedUndoFrontier {
-    pub lifecycle_state: String,
-    pub observed: Option<ObservedFrontier>,
-}
-
-pub(super) async fn load_observed_frontier(
+pub(crate) async fn load_observed_frontier(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-) -> Result<LoadedUndoFrontier, UndoLatestAuthorActionError> {
+    command: &UndoRequest,
+) -> Result<Option<ObservedFrontier>, ProjectCommandError> {
     let row = client
         .query_opt(
-            "SELECT project.lifecycle_state,
-                    frontier.author_action_sequence::text,
+            "SELECT frontier.author_action_sequence::text,
                     frontier.command_kind,
                     frontier.result_kind
                FROM storyos.projects AS project
@@ -75,19 +69,15 @@ pub(super) async fn load_observed_frontier(
         .await
         .map_err(undo_database_error)?;
     let Some(row) = row else {
-        return Err(UndoLatestAuthorActionError::MissingProject);
+        return Err(ProjectCommandError::MissingProject);
     };
-    let lifecycle_state = row.get(/*idx*/ 0);
-    let Some(sequence) = row.get::<_, Option<String>>(/*idx*/ 1) else {
-        return Ok(LoadedUndoFrontier {
-            lifecycle_state,
-            observed: None,
-        });
+    let Some(sequence) = row.get::<_, Option<String>>(/*idx*/ 0) else {
+        return Ok(None);
     };
     let sequence = sequence.parse().map_err(undo_parse_error)?;
     let forward = match (
+        row.get::<_, Option<String>>(/*idx*/ 1),
         row.get::<_, Option<String>>(/*idx*/ 2),
-        row.get::<_, Option<String>>(/*idx*/ 3),
     ) {
         (Some(command_kind), Some(result_kind)) => {
             ForwardCommand::from_receipt(&command_kind, &result_kind)
@@ -140,14 +130,13 @@ pub(super) async fn load_observed_frontier(
             .map(ObservedFrontier::DraftClose),
         UndoDisposition::Barrier => None,
     };
-    Ok(LoadedUndoFrontier {
-        lifecycle_state,
-        observed: Some(observed.unwrap_or(ObservedFrontier::Barrier { sequence })),
-    })
+    Ok(Some(
+        observed.unwrap_or(ObservedFrontier::Barrier { sequence }),
+    ))
 }
 
 impl ObservedFrontier {
-    pub(super) fn sequence(&self) -> u64 {
+    pub(crate) fn sequence(&self) -> u64 {
         match self {
             Self::Acceptance(frontier) => frontier.sequence,
             Self::Prose(frontier) => frontier.sequence,
@@ -162,7 +151,7 @@ impl ObservedFrontier {
         }
     }
 
-    pub(super) fn kind(&self) -> AuthorUndoFrontierKind {
+    pub(crate) fn kind(&self) -> AuthorUndoFrontierKind {
         match self {
             Self::Acceptance(frontier) => AcceptanceCompensation::frontier_kind(frontier),
             Self::Prose(frontier) => ProseCompensation::frontier_kind(frontier),
@@ -184,7 +173,7 @@ impl ObservedFrontier {
         }
     }
 
-    pub(super) fn prose_head(&self) -> Option<&str> {
+    pub(crate) fn prose_head(&self) -> Option<&str> {
         match self {
             Self::Acceptance(frontier) => Some(frontier.current_head_revision_id.as_str()),
             Self::Prose(frontier) => Some(frontier.current_head_revision_id.as_str()),
@@ -201,20 +190,18 @@ impl ObservedFrontier {
     }
 }
 
-fn undo_database_error(error: tokio_postgres::Error) -> UndoLatestAuthorActionError {
-    UndoLatestAuthorActionError::Unavailable(Box::new(error))
+fn undo_database_error(error: tokio_postgres::Error) -> ProjectCommandError {
+    ProjectCommandError::Unavailable(Box::new(error))
 }
 
-fn undo_parse_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> UndoLatestAuthorActionError {
-    UndoLatestAuthorActionError::Unavailable(Box::new(error))
+fn undo_parse_error(error: impl std::error::Error + Send + Sync + 'static) -> ProjectCommandError {
+    ProjectCommandError::Unavailable(Box::new(error))
 }
 
-pub(super) async fn editor_session_chapter(
+pub(crate) async fn editor_session_chapter(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-) -> Result<Option<String>, UndoLatestAuthorActionError> {
+    command: &UndoRequest,
+) -> Result<Option<String>, ProjectCommandError> {
     let row = client
         .query_opt(
             "SELECT snapshot.chapter_object_id::text

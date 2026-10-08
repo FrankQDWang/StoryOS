@@ -4,12 +4,13 @@ use storyos_application::{
     ChapterId, ChapterNode, CreateChapterInput, CreateProjectChallengeBinding,
     CreateProjectCommand, CreateVolumeInput, CreateVolumePublicOrder, EditorClientBinding,
     EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
-    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeCreated,
-    VolumeId, VolumeNode, apply_author_edit, create_editor_session, create_project,
+    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope,
+    ProjectId, ProjectScope, UndoApplied, UndoLatestAuthorActionInput, UndoRecords, UserId,
+    VolumeCreated, VolumeId, VolumeNode, apply_author_edit, create_editor_session, create_project,
     get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
-    open_chapter, undo_latest_author_action,
+    open_chapter,
 };
+use storyos_core::TransitionOutcome;
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
 use tokio_postgres::NoTls;
 
@@ -412,8 +413,8 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     )
     .await;
     assert!(matches!(
-        edit_undo.effect,
-        UndoLatestAuthorActionSettlementEffect::Compensated { source_sequence, .. }
+        edit_undo.outcome,
+        TransitionOutcome::Applied(UndoApplied { source_sequence, records: UndoRecords::Revision { .. }, .. })
             if source_sequence == later_action
     ));
     let GetManuscriptTree::Found(tree_after_edit_undo) =
@@ -435,11 +436,11 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
         "f632",
     )
     .await;
-    let UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
+    let TransitionOutcome::Applied(UndoApplied {
         source_sequence,
-        snapshot_id,
+        records: UndoRecords::Structure { snapshot_id, .. },
         ..
-    } = volume_undo.effect.clone()
+    }) = volume_undo.outcome.clone()
     else {
         panic!("Create Volume Undo must write structure Compensation");
     };
@@ -672,30 +673,34 @@ async fn undo_named(
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
-    undo_latest_author_action(
-        store,
-        &UndoLatestAuthorActionCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+    store
+        .undo_latest_author_action(
+            &ProjectCommandEnvelope {
+                project_scope: scope.clone(),
+                client_binding: EditorClientBinding {
+                    binding_ref: issue.binding.client_session_binding_digest.clone(),
+                    session_generation: issue.binding.client_session_generation,
+                    client_contract_revision: issue.binding.client_contract_revision.clone(),
+                    security_policy_revision: issue.binding.security_policy_revision.clone(),
+                },
+                challenge_binding: issue.binding,
+                nonce_digest: issue.nonce_digest,
+                canonical_command_bytes: bytes,
+                correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
+                ids: AuthorCommandAdmissionIds {
+                    command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
+                    author_command_admission_id: format!(
+                        "018f0000-0000-7001-8000-00000002{suffix}"
+                    ),
+                    receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
+                },
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes,
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
+            &UndoLatestAuthorActionInput {
+                editor_session_id: EditorSessionId::new(editor_session_id),
+                expected_author_undo_frontier_sequence: expected_frontier,
+                expected_authoritative_revision_id: expected_revision_id.to_owned(),
             },
-            editor_session_id: EditorSessionId::new(editor_session_id),
-            expected_author_undo_frontier_sequence: expected_frontier,
-            expected_authoritative_revision_id: expected_revision_id.to_owned(),
-        },
-    )
-    .await
-    .unwrap()
+        )
+        .await
+        .unwrap()
 }

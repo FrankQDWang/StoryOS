@@ -1,461 +1,270 @@
-use axum::body::to_bytes;
-use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId,
-    ProjectCommandChallengeBinding, UndoLatestAuthorActionCommand, UndoLatestAuthorActionError,
-    UndoLatestAuthorActionSettlementEffect,
+    EditorSessionId, UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement, UndoRecords,
 };
+use storyos_core::{TransitionOutcome, UndoLatestAuthorActionConflict};
 
-use super::editor_session::{exact_header, session_binding_ref};
-use super::project_command_challenge::{
-    hex_bytes, plain_digest, valid_uuid_v7, validate_json_content_type,
+use super::command_admission::{
+    Admitted, BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch,
+    SchemaMismatch, TargetValidation, admit, controlled_project,
 };
+use super::contract_reason::contract_reason;
 use super::*;
 
-const UNDO_COMMAND_KIND: &str = "undoLatestAuthorAction";
+const UNDO_LATEST_AUTHOR_ACTION: ProjectCommandRoute = ProjectCommandRoute {
+    display_name: "Undo Latest Author Action",
+    command_kind: "undoLatestAuthorAction",
+    method: contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD,
+    path: contracts::UNDO_LATEST_AUTHOR_ACTION_PATH,
+    schema_id: contracts::UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID,
+    digest_profile: contracts::UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE,
+    revision_mismatch: RevisionMismatch::InvalidRequest,
+    schema_mismatch: SchemaMismatch::InvalidRequest,
+    body_validation: BodyValidation::AfterRevisionCheck,
+    target_validation: TargetValidation::AfterContentType,
+    problem_mapping: ProblemMapping::Standard,
+};
 
 pub(super) async fn undo_latest_author_action(
     State(state): State<Arc<ServerState>>,
     Path(project_id): Path<String>,
     request: Request,
 ) -> Result<Json<contracts::UndoLatestAuthorActionResponse>, ApiError> {
-    let (parts, body_stream) = request.into_parts();
-    let headers = parts.headers;
-    let scope = authenticate_scope(
+    let admitted = admit(
         &state,
-        &headers,
         &project_id,
-        RequestOriginPolicy::StateChanging,
-    )?;
-    validate_json_content_type(&headers)?;
-    let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
+        &[],
+        request,
+        &UNDO_LATEST_AUTHOR_ACTION,
+        |body: &contracts::UndoLatestAuthorActionRequest| {
+            let input = &body.undo_latest_author_action_input;
+            let Some(expected_frontier) = input
+                .expected_author_undo_frontier_sequence
+                .parse::<u64>()
+                .ok()
+                .filter(|sequence| *sequence >= 1)
+            else {
+                return Err(invalid_request());
+            };
+            // The correlation identity precedes the other identities in the problem order.
+            valid_uuid(&input.correlation_id)?;
+            valid_uuid(&input.expected_authoritative_revision_id)?;
+            valid_uuid(&input.editor_session_id)?;
+            Ok(UndoLatestAuthorActionInput {
+                editor_session_id: EditorSessionId::new(input.editor_session_id.clone()),
+                expected_author_undo_frontier_sequence: expected_frontier,
+                expected_authoritative_revision_id: input
+                    .expected_authoritative_revision_id
+                    .clone(),
+            })
+        },
+    )
+    .await?;
+    let settlement = admitted
+        .store
+        .undo_latest_author_action(&admitted.envelope, &admitted.input)
         .await
-        .map_err(|_| payload_too_large())?;
-    let body = serde_json::from_slice::<contracts::UndoLatestAuthorActionRequest>(&bytes)
-        .map_err(|_| invalid_request_shape())?;
-    let input = &body.undo_latest_author_action_input;
-    let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
-    let session = state
-        .client_session_binding(session_handle)
-        .ok_or_else(authentication_required)?;
-    let Some(expected_frontier) = input
-        .expected_author_undo_frontier_sequence
-        .parse::<u64>()
-        .ok()
-        .filter(|sequence| *sequence >= 1)
-    else {
-        return Err(invalid_request());
-    };
-    if body.command_schema != contracts::UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID
-        || input.client_contract_revision != session.client_contract_revision
-        || input.security_policy_revision != session.security_policy_revision
-    {
-        return Err(invalid_request());
-    }
-    valid_uuid(&input.correlation_id)?;
-    valid_uuid(&input.expected_authoritative_revision_id)?;
-    valid_uuid(&input.editor_session_id)?;
-    let idempotency_key = exact_header(&headers, "idempotency-key")?;
-    let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
-    if !valid_uuid_v7(idempotency_key)
-        || nonce.len() != 64
-        || !nonce
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err(invalid_request());
-    }
-    let secret = state
-        .config
-        .project_command_challenge_secret
-        .as_deref()
-        .filter(|secret| secret.len() >= 32)
-        .ok_or_else(challenge_store_unavailable)?;
-    let binding_ref = session_binding_ref(secret, session_handle);
-    let canonical_command_bytes = canonical_body_bytes(&body)?;
-    let digest_hex = hex_bytes(&Sha256::digest(&canonical_command_bytes));
-    let canonical_command_digest = format!(
-        "sha256:{}:{digest_hex}",
-        contracts::UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE
-    );
-    let store = project_reader(&state).await?;
-    let command = UndoLatestAuthorActionCommand {
-        project_scope: scope.clone(),
-        client_binding: EditorClientBinding {
-            binding_ref: binding_ref.clone(),
-            session_generation: session.session_generation,
-            client_contract_revision: session.client_contract_revision.clone(),
-            security_policy_revision: session.security_policy_revision.clone(),
-        },
-        challenge_binding: ProjectCommandChallengeBinding {
-            project_scope: scope.clone(),
-            client_session_binding_digest: binding_ref,
-            client_session_generation: session.session_generation,
-            client_contract_revision: session.client_contract_revision.clone(),
-            security_policy_revision: session.security_policy_revision.clone(),
-            limit_profile_revision: contracts::LIMIT_PROFILE_REVISION.to_owned(),
-            challenge_rate_policy_revision:
-                storyos_application::ChallengeRateClass::for_command_kind(UNDO_COMMAND_KIND)
-                    .policy_revision()
-                    .to_owned(),
-            method: contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD.to_owned(),
-            route_template: contracts::UNDO_LATEST_AUTHOR_ACTION_PATH.to_owned(),
-            command_schema: body.command_schema.clone(),
-            command_kind: UNDO_COMMAND_KIND.to_owned(),
-            canonical_command_digest: canonical_command_digest.clone(),
-            idempotency_key: idempotency_key.to_owned(),
-        },
-        nonce_digest: plain_digest(nonce.as_bytes()),
-        canonical_command_bytes,
-        correlation_id: input.correlation_id.clone(),
-        ids: AuthorCommandAdmissionIds {
-            command_id: Uuid::now_v7().to_string(),
-            author_command_admission_id: Uuid::now_v7().to_string(),
-            receipt_id: Uuid::now_v7().to_string(),
-        },
-        editor_session_id: EditorSessionId::new(input.editor_session_id.clone()),
-        expected_author_undo_frontier_sequence: expected_frontier,
-        expected_authoritative_revision_id: input.expected_authoritative_revision_id.clone(),
-    };
-    let settlement = storyos_application::undo_latest_author_action(&store, &command)
-        .await
-        .map_err(undo_error)?;
-    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
-    undo_response(&command, &digest_hex, settlement)
+        .map_err(|error| UNDO_LATEST_AUTHOR_ACTION.problem(error))?;
+    admitted.hold_first_acknowledgement().await;
+    undo_response(&admitted, settlement)
 }
 
 fn undo_response(
-    command: &UndoLatestAuthorActionCommand,
-    digest_hex: &str,
-    settlement: storyos_application::UndoLatestAuthorActionSettlement,
+    admitted: &Admitted<UndoLatestAuthorActionInput>,
+    settlement: UndoLatestAuthorActionSettlement,
 ) -> Result<Json<contracts::UndoLatestAuthorActionResponse>, ApiError> {
-    let project = settlement.response_project;
-    let (proposal_id, proposal_revision_id) = match &settlement.effect {
-        UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
-            proposal_revision_id,
-            ..
-        } => (None, proposal_revision_id.clone()),
-        UndoLatestAuthorActionSettlementEffect::Compensated {
-            proposal_id,
-            proposal_revision_id,
-            ..
-        } => (proposal_id.clone(), proposal_revision_id.clone()),
-        UndoLatestAuthorActionSettlementEffect::ReversalRequired {
-            proposal_id,
-            proposal_revision_id,
-            ..
-        } => (
-            Some(proposal_id.clone()),
-            Some(proposal_revision_id.clone()),
-        ),
-        UndoLatestAuthorActionSettlementEffect::CompensatedDraft { .. }
-        | UndoLatestAuthorActionSettlementEffect::CompensatedStructure { .. }
-        | UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter { .. }
-        | UndoLatestAuthorActionSettlementEffect::Conflicted { .. }
-        | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => (None, None),
+    let envelope = &admitted.envelope;
+    let expected = admitted.input.expected_authoritative_revision_id.clone();
+    let mut source_reopen_event = None;
+    let empty_revision = || contract_chapter_revision(expected.clone(), String::new(), &[]);
+    let mut acknowledgement = UndoAcknowledgement {
+        proposal_id: None,
+        proposal_revision_id: None,
+        draft_refs: Vec::new(),
+        lifecycle_refs: Vec::new(),
+        revision_ids: Vec::new(),
+        commit_ids: Vec::new(),
+        resulting_head: expected.clone(),
+        action_sequence: None,
     };
-    let (mut draft_refs, mut lifecycle_refs) = match &settlement.effect {
-        UndoLatestAuthorActionSettlementEffect::CompensatedDraft { event, .. } => {
-            (vec![event.draft_id.clone()], vec![event.event_id.clone()])
-        }
-        UndoLatestAuthorActionSettlementEffect::Compensated { .. }
-        | UndoLatestAuthorActionSettlementEffect::ReversalRequired { .. }
-        | UndoLatestAuthorActionSettlementEffect::CompensatedProposal { .. }
-        | UndoLatestAuthorActionSettlementEffect::CompensatedStructure { .. }
-        | UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter { .. }
-        | UndoLatestAuthorActionSettlementEffect::Conflicted { .. }
-        | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => (Vec::new(), Vec::new()),
-    };
-    if let Some(event) = &settlement.source_reopen_event {
-        draft_refs.push(event.draft_id.clone());
-        lifecycle_refs.push(event.event_id.clone());
-    }
-    let (receipt_result, effect, revision_ids, commit_ids, resulting_head, action_sequence) =
-        match settlement.effect {
-            UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
-                event,
-                author_undo_frontier_sequence,
-            } => (
-                contracts::DomainReceiptResult::DraftClosureChanged,
-                contracts::UndoLatestAuthorActionEffect::DraftCompensated {
-                    event: event.clone(),
-                    author_undo_frontier_sequence: author_undo_frontier_sequence
-                        .map(|value| value.to_string()),
-                },
-                Vec::new(),
-                Vec::new(),
-                command.expected_authoritative_revision_id.clone(),
-                Some(event.author_action_sequence),
-            ),
-            UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
-                source_sequence,
-                author_action_sequence,
-                proposal_revision_id: _,
-                author_undo_frontier_sequence,
-            } => (
-                contracts::DomainReceiptResult::AuthoritativeApplied,
+    let (receipt_result, effect) = match settlement.outcome {
+        TransitionOutcome::Applied(applied) => {
+            source_reopen_event = applied.source_reopen_event;
+            acknowledgement.action_sequence = Some(applied.author_action_sequence.to_string());
+            let frontier = applied
+                .author_undo_frontier_sequence
+                .map(|sequence| sequence.to_string());
+            let compensated = |commit_id: String, revision, position: u64| {
                 contracts::UndoLatestAuthorActionEffect::Compensated {
-                    source_sequence: source_sequence.to_string(),
-                    author_action_sequence: author_action_sequence.to_string(),
-                    authoritative_commit_id: String::new(),
-                    authoritative_revision: contract_chapter_revision(
-                        command.expected_authoritative_revision_id.clone(),
-                        String::new(),
-                        &[],
-                    ),
-                    project_activity_position: settlement.project_activity_position.to_string(),
-                    author_undo_frontier_sequence: author_undo_frontier_sequence
-                        .map(|sequence| sequence.to_string()),
-                },
-                Vec::new(),
-                Vec::new(),
-                command.expected_authoritative_revision_id.clone(),
-                Some(author_action_sequence.to_string()),
-            ),
-            UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
-                source_sequence,
-                author_action_sequence,
-                snapshot_id: _,
-                author_undo_frontier_sequence,
-            } => (
-                contracts::DomainReceiptResult::AuthoritativeApplied,
-                contracts::UndoLatestAuthorActionEffect::Compensated {
-                    source_sequence: source_sequence.to_string(),
-                    author_action_sequence: author_action_sequence.to_string(),
-                    authoritative_commit_id: String::new(),
-                    authoritative_revision: contract_chapter_revision(
-                        command.expected_authoritative_revision_id.clone(),
-                        String::new(),
-                        &[],
-                    ),
-                    project_activity_position: settlement.project_activity_position.to_string(),
-                    author_undo_frontier_sequence: author_undo_frontier_sequence
-                        .map(|sequence| sequence.to_string()),
-                },
-                Vec::new(),
-                Vec::new(),
-                command.expected_authoritative_revision_id.clone(),
-                Some(author_action_sequence.to_string()),
-            ),
-            UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
-                source_sequence,
-                author_action_sequence,
-                authoritative_commit_id,
-                snapshot_id: _,
-                author_undo_frontier_sequence,
-            } => (
-                contracts::DomainReceiptResult::AuthoritativeApplied,
-                contracts::UndoLatestAuthorActionEffect::Compensated {
-                    source_sequence: source_sequence.to_string(),
-                    author_action_sequence: author_action_sequence.to_string(),
-                    authoritative_commit_id: authoritative_commit_id.clone(),
-                    authoritative_revision: contract_chapter_revision(
-                        command.expected_authoritative_revision_id.clone(),
-                        String::new(),
-                        &[],
-                    ),
-                    project_activity_position: settlement.project_activity_position.to_string(),
-                    author_undo_frontier_sequence: author_undo_frontier_sequence
-                        .map(|sequence| sequence.to_string()),
-                },
-                Vec::new(),
-                vec![authoritative_commit_id],
-                command.expected_authoritative_revision_id.clone(),
-                Some(author_action_sequence.to_string()),
-            ),
-            UndoLatestAuthorActionSettlementEffect::ReversalRequired {
-                source_sequence,
-                author_action_sequence,
-                proposal_id,
-                proposal_revision_id,
-            } => (
-                // The wire result names the reversal. Storage keeps the zero-commit undo shape.
-                contracts::DomainReceiptResult::ProposalRevised,
-                contracts::UndoLatestAuthorActionEffect::ReversalRequired {
+                    source_sequence: applied.source_sequence.to_string(),
+                    author_action_sequence: applied.author_action_sequence.to_string(),
+                    authoritative_commit_id: commit_id,
+                    authoritative_revision: revision,
+                    project_activity_position: position.to_string(),
+                    author_undo_frontier_sequence: frontier.clone(),
+                }
+            };
+            match applied.records {
+                UndoRecords::Revision {
+                    authoritative_commit_id,
+                    revision_id,
+                    body,
+                    blocks,
+                    project_activity_position,
                     proposal_id,
                     proposal_revision_id,
-                    author_action_sequence: author_action_sequence.to_string(),
-                    source_sequence: source_sequence.to_string(),
-                },
-                Vec::new(),
-                Vec::new(),
-                command.expected_authoritative_revision_id.clone(),
-                Some(author_action_sequence.to_string()),
-            ),
-            UndoLatestAuthorActionSettlementEffect::Compensated {
-                source_sequence,
-                author_action_sequence,
-                authoritative_commit_id,
-                revision_id,
-                body,
-                blocks,
-                author_undo_frontier_sequence,
-                ..
-            } => (
-                contracts::DomainReceiptResult::AuthoritativeApplied,
-                contracts::UndoLatestAuthorActionEffect::Compensated {
-                    source_sequence: source_sequence.to_string(),
-                    author_action_sequence: author_action_sequence.to_string(),
-                    authoritative_commit_id: authoritative_commit_id.clone(),
-                    authoritative_revision: contract_chapter_revision(
-                        revision_id.clone(),
-                        body,
-                        &blocks,
-                    ),
-                    project_activity_position: settlement.project_activity_position.to_string(),
-                    author_undo_frontier_sequence: author_undo_frontier_sequence
+                } => {
+                    acknowledgement.proposal_id = proposal_id;
+                    acknowledgement.proposal_revision_id = proposal_revision_id;
+                    acknowledgement.revision_ids = vec![revision_id.clone()];
+                    acknowledgement.commit_ids = vec![authoritative_commit_id.clone()];
+                    acknowledgement.resulting_head.clone_from(&revision_id);
+                    (
+                        contracts::DomainReceiptResult::AuthoritativeApplied,
+                        compensated(
+                            authoritative_commit_id,
+                            contract_chapter_revision(revision_id, body, &blocks),
+                            project_activity_position,
+                        ),
+                    )
+                }
+                UndoRecords::Structure {
+                    authoritative_commit_id,
+                    snapshot_id: _,
+                    project_activity_position,
+                } => {
+                    acknowledgement.commit_ids = vec![authoritative_commit_id.clone()];
+                    (
+                        contracts::DomainReceiptResult::AuthoritativeApplied,
+                        compensated(
+                            authoritative_commit_id,
+                            empty_revision(),
+                            project_activity_position,
+                        ),
+                    )
+                }
+                UndoRecords::CurrentChapter {
+                    snapshot_id: _,
+                    project_activity_position,
+                } => (
+                    contracts::DomainReceiptResult::AuthoritativeApplied,
+                    compensated(String::new(), empty_revision(), project_activity_position),
+                ),
+                UndoRecords::Proposal {
+                    proposal_revision_id,
+                    project_activity_position,
+                } => {
+                    acknowledgement.proposal_revision_id = proposal_revision_id;
+                    (
+                        contracts::DomainReceiptResult::AuthoritativeApplied,
+                        compensated(String::new(), empty_revision(), project_activity_position),
+                    )
+                }
+                UndoRecords::Draft { event } => {
+                    acknowledgement.draft_refs = vec![event.draft_id.clone()];
+                    acknowledgement.lifecycle_refs = vec![event.event_id.clone()];
+                    acknowledgement.action_sequence = Some(event.author_action_sequence.clone());
+                    (
+                        contracts::DomainReceiptResult::DraftClosureChanged,
+                        contracts::UndoLatestAuthorActionEffect::DraftCompensated {
+                            event,
+                            author_undo_frontier_sequence: frontier,
+                        },
+                    )
+                }
+                UndoRecords::ReversalRequired {
+                    proposal_id,
+                    proposal_revision_id,
+                } => {
+                    acknowledgement.proposal_id = Some(proposal_id.clone());
+                    acknowledgement.proposal_revision_id = Some(proposal_revision_id.clone());
+                    (
+                        // The wire result names the reversal. Storage keeps the zero-commit undo shape.
+                        contracts::DomainReceiptResult::ProposalRevised,
+                        contracts::UndoLatestAuthorActionEffect::ReversalRequired {
+                            proposal_id,
+                            proposal_revision_id,
+                            author_action_sequence: applied.author_action_sequence.to_string(),
+                            source_sequence: applied.source_sequence.to_string(),
+                        },
+                    )
+                }
+            }
+        }
+        TransitionOutcome::NoEffect(reason) => match reason {},
+        TransitionOutcome::Conflicted(reason) => (
+            contracts::DomainReceiptResult::Conflicted,
+            contracts::UndoLatestAuthorActionEffect::Conflicted {
+                current_author_undo_frontier_sequence: match reason {
+                    UndoLatestAuthorActionConflict::FrontierMismatch => settlement
+                        .zero_authority_effect
+                        .and_then(|frontier| frontier.current_author_undo_frontier_sequence)
                         .map(|sequence| sequence.to_string()),
+                    UndoLatestAuthorActionConflict::WrongTargetHead
+                    | UndoLatestAuthorActionConflict::SourceBindingChanged => None,
                 },
-                vec![revision_id.clone()],
-                vec![authoritative_commit_id],
-                revision_id,
-                Some(author_action_sequence.to_string()),
-            ),
-            UndoLatestAuthorActionSettlementEffect::Conflicted { reason } => (
-                contracts::DomainReceiptResult::Conflicted,
-                contracts::UndoLatestAuthorActionEffect::Conflicted {
-                    reason: match &reason {
-                        storyos_core::UndoLatestAuthorActionConflict::FrontierMismatch {
-                            ..
-                        } => contracts::UndoLatestAuthorActionConflictReason::FrontierMismatch,
-                        storyos_core::UndoLatestAuthorActionConflict::WrongTargetHead => {
-                            contracts::UndoLatestAuthorActionConflictReason::WrongTargetHead
-                        }
-                        storyos_core::UndoLatestAuthorActionConflict::SourceBindingChanged => {
-                            contracts::UndoLatestAuthorActionConflictReason::SourceBindingChanged
-                        }
-                    },
-                    current_author_undo_frontier_sequence: match reason {
-                        storyos_core::UndoLatestAuthorActionConflict::FrontierMismatch {
-                            current_author_undo_frontier_sequence,
-                        } => current_author_undo_frontier_sequence
-                            .map(|sequence| sequence.to_string()),
-                        storyos_core::UndoLatestAuthorActionConflict::WrongTargetHead
-                        | storyos_core::UndoLatestAuthorActionConflict::SourceBindingChanged => {
-                            None
-                        }
-                    },
-                },
-                Vec::new(),
-                Vec::new(),
-                command.expected_authoritative_revision_id.clone(),
-                None,
-            ),
-            UndoLatestAuthorActionSettlementEffect::Unavailable { reason } => (
-                contracts::DomainReceiptResult::Refused,
-                contracts::UndoLatestAuthorActionEffect::Unavailable {
-                    reason: match reason {
-                        storyos_core::UndoLatestAuthorActionUnavailable::NoFrontier => {
-                            contracts::UndoLatestAuthorActionUnavailableReason::NoFrontier
-                        }
-                        storyos_core::UndoLatestAuthorActionUnavailable::Barrier => {
-                            contracts::UndoLatestAuthorActionUnavailableReason::Barrier
-                        }
-                        storyos_core::UndoLatestAuthorActionUnavailable::SourceUnavailable => {
-                            contracts::UndoLatestAuthorActionUnavailableReason::SourceUnavailable
-                        }
-                    },
-                },
-                Vec::new(),
-                Vec::new(),
-                command.expected_authoritative_revision_id.clone(),
-                None,
-            ),
-        };
-    let contract_project_scope = contract_scope(&command.project_scope);
-    let expected = vec![command.expected_authoritative_revision_id.clone()];
+                reason: contract_reason(&reason)?,
+            },
+        ),
+        TransitionOutcome::Refused(reason) => (
+            contracts::DomainReceiptResult::Refused,
+            contracts::UndoLatestAuthorActionEffect::Unavailable {
+                reason: contract_reason(&reason)?,
+            },
+        ),
+    };
+    if let Some(event) = &source_reopen_event {
+        acknowledgement.draft_refs.push(event.draft_id.clone());
+        acknowledgement.lifecycle_refs.push(event.event_id.clone());
+    }
+    let project_scope = contract_scope(&envelope.project_scope);
+    let expected_heads = vec![expected];
     Ok(Json(contracts::UndoLatestAuthorActionResponse {
-        proposal_id,
-        proposal_revision_id,
-        source_reopen_event: settlement.source_reopen_event,
+        proposal_id: acknowledgement.proposal_id,
+        proposal_revision_id: acknowledgement.proposal_revision_id,
+        source_reopen_event,
         schema_id: contracts::UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID.to_owned(),
-        correlation_id: command.correlation_id.clone(),
-        project_scope: contract_project_scope.clone(),
+        correlation_id: envelope.correlation_id.clone(),
+        project_scope: project_scope.clone(),
         command_id: settlement.ids.command_id,
         author_command_admission_id: settlement.ids.author_command_admission_id.clone(),
         receipt: contracts::DomainReceipt {
-            receipt_id: settlement.ids.receipt_id.clone(),
-            project_scope: contract_project_scope,
+            receipt_id: settlement.ids.receipt_id,
+            project_scope,
             command_kind: contracts::DomainReceiptCommandKind::UndoLatestAuthorAction,
             command_digest: contracts::DigestValue {
                 algorithm: contracts::DigestAlgorithm::Sha256,
                 profile: contracts::UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE.to_owned(),
-                value_hex_lowercase: digest_hex.to_owned(),
+                value_hex_lowercase: admitted.digest_hex.clone(),
             },
-            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            idempotency_key: envelope.challenge_binding.idempotency_key.clone(),
             producer_cause: contracts::DomainReceiptProducerCause::AuthorCommandAdmission,
             author_command_admission_id: settlement.ids.author_command_admission_id,
-            expected_heads: expected.clone(),
-            prior_heads: expected.clone(),
-            resulting_heads: vec![resulting_head],
-            authoritative_revision_ids: revision_ids,
+            expected_heads: expected_heads.clone(),
+            prior_heads: expected_heads,
+            resulting_heads: vec![acknowledgement.resulting_head],
+            authoritative_revision_ids: acknowledgement.revision_ids,
             proposal_revision_ids: Vec::new(),
-            authoritative_commit_ids: commit_ids,
-            author_action_sequence: action_sequence,
-            draft_artifact_refs: draft_refs,
-            artifact_lifecycle_event_refs: lifecycle_refs,
+            authoritative_commit_ids: acknowledgement.commit_ids,
+            author_action_sequence: acknowledgement.action_sequence,
+            draft_artifact_refs: acknowledgement.draft_refs,
+            artifact_lifecycle_event_refs: acknowledgement.lifecycle_refs,
             condition_refs: Vec::new(),
             result: receipt_result,
             created_at: settlement.receipt_created_at,
         },
-        project: contracts::ControlledProject {
-            project_id: project.project_id.as_ref().to_owned(),
-            title: project.title,
-            open: match project.current_chapter_id {
-                Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {
-                    current_chapter_id: chapter_id.as_ref().to_owned(),
-                },
-                None => contracts::ProjectOpenState::Empty,
-            },
-        },
+        project: controlled_project(settlement.response),
         effect,
     }))
 }
 
-fn canonical_body_bytes(
-    body: &contracts::UndoLatestAuthorActionRequest,
-) -> Result<Vec<u8>, ApiError> {
-    let canonical =
-        canonical_json(serde_json::to_value(body).map_err(|_| invalid_request_shape())?);
-    serde_json::to_vec(&canonical).map_err(|_| invalid_request_shape())
-}
-
-fn canonical_json(value: serde_json::Value) -> serde_json::Value {
-    match value {
-        serde_json::Value::Object(map) => serde_json::Value::Object(
-            map.into_iter()
-                .map(|(key, nested)| (key, canonical_json(nested)))
-                .collect(),
-        ),
-        serde_json::Value::Array(values) => {
-            serde_json::Value::Array(values.into_iter().map(canonical_json).collect())
-        }
-        scalar => scalar,
-    }
-}
-
-fn undo_error(error: UndoLatestAuthorActionError) -> ApiError {
-    match error {
-        UndoLatestAuthorActionError::BindingConflict => problem(
-            StatusCode::CONFLICT,
-            "idempotency_binding_conflict",
-            "The Undo Latest Author Action binding conflicts.",
-        ),
-        UndoLatestAuthorActionError::HistoricalAcknowledgementUnavailable => problem(
-            StatusCode::CONFLICT,
-            "historical_acknowledgement_unavailable",
-            "The original Undo Latest Author Action acknowledgement cannot be recovered. Refresh to inspect the current Project.",
-        ),
-        UndoLatestAuthorActionError::InvalidChallenge => problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "challenge_invalid",
-            "The Undo Latest Author Action challenge is invalid.",
-        ),
-        UndoLatestAuthorActionError::MissingProject => resource_unavailable(),
-        UndoLatestAuthorActionError::Unavailable(_) => problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "project_store_unavailable",
-            "The Project store is unavailable.",
-        ),
-    }
+/// The receipt fields of an Undo response that depend on the outcome.
+struct UndoAcknowledgement {
+    proposal_id: Option<String>,
+    proposal_revision_id: Option<String>,
+    draft_refs: Vec<String>,
+    lifecycle_refs: Vec<String>,
+    revision_ids: Vec<String>,
+    commit_ids: Vec<String>,
+    resulting_head: String,
+    action_sequence: Option<String>,
 }

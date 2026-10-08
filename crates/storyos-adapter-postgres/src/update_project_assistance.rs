@@ -37,7 +37,7 @@ impl PostgresProjectReader {
 impl ProjectCommand for UpdateProjectAssistanceInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "updateProjectAssistance",
-        applied: AppliedVariant::NoAuthorAction,
+        applied: &[AppliedVariant::NoAuthorAction],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

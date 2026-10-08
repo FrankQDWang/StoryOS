@@ -8,7 +8,9 @@ use storyos_application::{
 use tokio_postgres::Client;
 
 use super::records::insert_applied_activity;
-use super::{CommandSpec, LockedProject, SettlementProfile, unavailable};
+use super::{
+    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
+};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structural_authority_settlement::{
     StructureAffectedIdentity, StructureCommitBinding, StructureTransitionSequences,
@@ -53,7 +55,12 @@ pub(crate) struct StructureWrite<E> {
 /// Manuscript Tree Revision advance of one applied Manuscript Structure Transition.
 pub(crate) struct Structural;
 
+impl<T> SelectsRecords<Structural> for T {
+    fn selector(&self) {}
+}
+
 impl SettlementProfile for Structural {
+    type Selector = ();
     type Sequences = StructureTransitionSequences;
     type Write<E: Send> = StructureWrite<E>;
     type Applied<E: Send> = StructureApplied<E>;
@@ -61,6 +68,7 @@ impl SettlementProfile for Structural {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
+        (): &(),
     ) -> Result<StructureTransitionSequences, ProjectCommandError> {
         allocate_structure_transition_sequences(client, scope)
             .await
@@ -76,6 +84,7 @@ impl SettlementProfile for Structural {
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
         spec: &CommandSpec,
+        _variant: AppliedVariant,
         sequences: StructureTransitionSequences,
         write: StructureWrite<E>,
     ) -> Result<StructureApplied<E>, ProjectCommandError> {

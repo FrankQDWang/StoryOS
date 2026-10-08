@@ -1,17 +1,18 @@
 //! The rejected operations reopen Compensation of Author Undo (ADR 0044).
 
-use storyos_application::{
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
-    UndoLatestAuthorActionSettlementEffect,
-};
+use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
 use tokio_postgres::Client;
 
-use crate::author_edit_proposal::ProposalEditCompensation;
+use crate::author_edit_proposal::decode_proposal_compensation;
+use crate::command_replay::ReplayFault;
 use crate::proposal_decision_compensation::{
-    ObservedProposalDecision, compensate_proposal_decision,
+    ObservedProposalDecision, compensate_proposal_decision, decision_receipt_payload,
 };
-use crate::undo_compensation::{CompensationAdapter, CompensationReplay};
+use crate::undo_compensation::{
+    CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
+    allocate_compensation_action,
+};
 use crate::undo_latest_author_action::undo_database_error;
 
 /// Puts reopened operations back to `rejected` with the Proposal Revision before the reopen.
@@ -25,14 +26,15 @@ pub(crate) struct ObservedOperationReopening {
 impl CompensationAdapter for ReopenRejectedCompensation {
     type Forward = ();
     type Evidence = ObservedOperationReopening;
+    type Sequences = CompensationAction;
 
     /// A Proposal head or a reopened operation that changed after the reopen makes it a Barrier.
     async fn load(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
+        command: &UndoRequest,
         _forward: (),
         sequence: u64,
-    ) -> Result<Option<ObservedOperationReopening>, UndoLatestAuthorActionError> {
+    ) -> Result<Option<ObservedOperationReopening>, ProjectCommandError> {
         let rows = client
             .query(
                 "SELECT reopening.proposal_id::text, proposal.chapter_id::text,
@@ -91,12 +93,27 @@ impl CompensationAdapter for ReopenRejectedCompensation {
         AuthorUndoFrontierKind::ReversibleStructureTransition
     }
 
+    async fn allocate(
+        client: &Client,
+        scope: &ProjectScope,
+    ) -> Result<CompensationAction, ProjectCommandError> {
+        allocate_compensation_action(client, scope).await
+    }
+
+    fn receipt_payload(
+        evidence: &ObservedOperationReopening,
+        project_activity_position: u64,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        decision_receipt_payload(&evidence.decision, project_activity_position)
+    }
+
     async fn compensate(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
+        command: &UndoRequest,
         evidence: &ObservedOperationReopening,
+        sequences: CompensationAction,
         source_sequence: u64,
-    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
+    ) -> Result<UndoRecords, ProjectCommandError> {
         let rejected = client
             .execute(
                 "UPDATE storyos.proposal_operations
@@ -115,16 +132,19 @@ impl CompensationAdapter for ReopenRejectedCompensation {
             .await
             .map_err(undo_database_error)?;
         if rejected != evidence.operation_ids.len() as u64 {
-            return Err(UndoLatestAuthorActionError::BindingConflict);
+            return Err(ProjectCommandError::BindingConflict);
         }
-        compensate_proposal_decision(client, command, &evidence.decision, source_sequence).await
+        compensate_proposal_decision(
+            client,
+            command,
+            &evidence.decision,
+            sequences,
+            source_sequence,
+        )
+        .await
     }
 
-    async fn decode(
-        client: &Client,
-        command: &UndoLatestAuthorActionCommand,
-        replay: &CompensationReplay,
-    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
-        ProposalEditCompensation::decode(client, command, replay).await
+    fn decode(replay: &CompensationReplay) -> Result<UndoRecords, ReplayFault> {
+        decode_proposal_compensation(replay, replay.restored_proposal_revision_id.clone())
     }
 }

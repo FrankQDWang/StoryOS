@@ -2,10 +2,7 @@
 //! `AuthoritativeRevision` profile and reopens or derives the Proposal. Otherwise it requires a
 //! Reversal Proposal or reports the source unavailable.
 
-use storyos_application::{
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
-    UndoLatestAuthorActionSettlementEffect,
-};
+use storyos_application::{ManuscriptBlock, ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -14,7 +11,11 @@ use crate::author_edit::{
     ObservedProseFrontier, compensate_revision, decode_revision_compensation,
     load_revision_evidence,
 };
-use crate::undo_compensation::{CompensationAdapter, CompensationReplay};
+use crate::command_replay::ReplayFault;
+use crate::command_sequence::{AuthoritativeRevision, RevisionSequences, SettlementProfile};
+use crate::undo_compensation::{
+    CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
+};
 
 mod proposal_placement;
 use proposal_placement::{LinkMode, evidence_usable, place_proposal, reservation_blocked};
@@ -25,13 +26,14 @@ pub(crate) struct AcceptanceCompensation;
 impl CompensationAdapter for AcceptanceCompensation {
     type Forward = ();
     type Evidence = LoadedAcceptance;
+    type Sequences = RevisionSequences;
 
     async fn load(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
+        command: &UndoRequest,
         (): (),
         sequence: u64,
-    ) -> Result<Option<LoadedAcceptance>, UndoLatestAuthorActionError> {
+    ) -> Result<Option<LoadedAcceptance>, ProjectCommandError> {
         let Some(row) = load_revision_evidence(client, command, sequence).await? else {
             return Ok(None);
         };
@@ -65,12 +67,24 @@ impl CompensationAdapter for AcceptanceCompensation {
         }
     }
 
+    async fn allocate(
+        client: &Client,
+        scope: &ProjectScope,
+    ) -> Result<RevisionSequences, ProjectCommandError> {
+        AuthoritativeRevision::allocate(client, scope, &()).await
+    }
+
+    fn commit_ids(sequences: &RevisionSequences) -> Vec<String> {
+        AuthoritativeRevision::commit_ids(sequences)
+    }
+
     async fn compensate(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
+        command: &UndoRequest,
         evidence: &LoadedAcceptance,
+        sequences: RevisionSequences,
         source_sequence: u64,
-    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
+    ) -> Result<UndoRecords, ProjectCommandError> {
         let prose = ObservedProseFrontier {
             sequence: evidence.sequence,
             chapter_id: evidence.chapter_id.clone(),
@@ -79,16 +93,18 @@ impl CompensationAdapter for AcceptanceCompensation {
             prior_payload: evidence.prior_payload.clone(),
             current_head_revision_id: evidence.current_head_revision_id.clone(),
         };
-        let mut settlement = compensate_revision(client, command, &prose, source_sequence).await?;
-        let UndoLatestAuthorActionSettlementEffect::Compensated {
+        let mut records =
+            compensate_revision(client, command, &prose, sequences, source_sequence).await?;
+        let UndoRecords::Revision {
             authoritative_commit_id,
             revision_id,
+            project_activity_position,
             proposal_id,
             proposal_revision_id,
             ..
-        } = &mut settlement.effect
+        } = &mut records
         else {
-            return Err(UndoLatestAuthorActionError::BindingConflict);
+            return Err(ProjectCommandError::BindingConflict);
         };
         (*proposal_id, *proposal_revision_id) = link_after_compensation(
             client,
@@ -96,18 +112,28 @@ impl CompensationAdapter for AcceptanceCompensation {
             evidence,
             authoritative_commit_id,
             revision_id,
-            settlement.project_activity_position,
+            *project_activity_position,
         )
         .await?;
-        Ok(settlement)
+        Ok(records)
     }
 
-    async fn decode(
-        client: &Client,
-        command: &UndoLatestAuthorActionCommand,
-        replay: &CompensationReplay,
-    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
-        decode_revision_compensation(client, command, replay).await
+    fn decode(replay: &CompensationReplay) -> Result<UndoRecords, ReplayFault> {
+        let mut records = decode_revision_compensation(replay)?;
+        if let (
+            UndoRecords::Revision {
+                proposal_id,
+                proposal_revision_id,
+                ..
+            },
+            Some(child),
+        ) = (&mut records, replay.acceptance.as_ref())
+            && child.outcome == "compensated"
+        {
+            proposal_id.clone_from(&child.proposal_id);
+            proposal_revision_id.clone_from(&child.proposal_revision_id);
+        }
+        Ok(records)
     }
 }
 
@@ -134,19 +160,11 @@ struct AcceptanceFacts {
     block_ids: Vec<String>,
 }
 
-pub(crate) struct AcceptanceRetry {
-    pub outcome: String,
-    pub proposal_id: Option<String>,
-    pub proposal_revision_id: Option<String>,
-    pub source_sequence: u64,
-    pub project_activity_position: u64,
-}
-
 async fn enrich(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     mut loaded: LoadedAcceptance,
-) -> Result<LoadedAcceptance, UndoLatestAuthorActionError> {
+) -> Result<LoadedAcceptance, ProjectCommandError> {
     let Some(row) = client
         .query_opt(
             "SELECT acceptance.acceptance_receipt_id::text,
@@ -227,18 +245,18 @@ async fn enrich(
         return Ok(loaded);
     };
     let facts = AcceptanceFacts {
-        acceptance_receipt_id: row.get(0),
-        proposal_id: row.get(1),
-        proposal_revision_id: row.get(2),
-        candidate_text: row.get(3),
-        manuscript_block_id: row.get(4),
-        lineage_drifted: row.get(5),
-        selected_operation_ids: row.get(6),
-        block_ids: row.get(7),
+        acceptance_receipt_id: row.get(/*idx*/ 0),
+        proposal_id: row.get(/*idx*/ 1),
+        proposal_revision_id: row.get(/*idx*/ 2),
+        candidate_text: row.get(/*idx*/ 3),
+        manuscript_block_id: row.get(/*idx*/ 4),
+        lineage_drifted: row.get(/*idx*/ 5),
+        selected_operation_ids: row.get(/*idx*/ 6),
+        block_ids: row.get(/*idx*/ 7),
     };
-    let current_envelope = row.get::<_, Option<String>>(8);
-    let current_payload = row.get::<_, Option<String>>(9);
-    let prior_envelope = row.get::<_, Option<String>>(10);
+    let current_envelope = row.get::<_, Option<String>>(/*idx*/ 8);
+    let current_payload = row.get::<_, Option<String>>(/*idx*/ 9);
+    let prior_envelope = row.get::<_, Option<String>>(/*idx*/ 10);
     loaded.prior_evidence_usable = evidence_usable(
         client,
         command,
@@ -255,14 +273,14 @@ async fn enrich(
 
 async fn link_after_compensation(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     loaded: &LoadedAcceptance,
     authoritative_commit_id: &str,
     base_revision_id: &str,
     activity_position: u64,
-) -> Result<(Option<String>, Option<String>), UndoLatestAuthorActionError> {
+) -> Result<(Option<String>, Option<String>), ProjectCommandError> {
     let Some(facts) = loaded.facts.as_ref() else {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
+        return Err(ProjectCommandError::BindingConflict);
     };
     let linked = if reservation_blocked(client, command, &facts.block_ids).await? {
         None
@@ -295,12 +313,13 @@ async fn link_after_compensation(
     })
 }
 
-pub(crate) async fn persist_reversal(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+/// The prior Revision Blocks of a Reversal Proposal, or `None` when the Undo Acceptance can only
+/// report the source unavailable.
+pub(crate) async fn reversal_blocks(
+    client: &Client,
+    command: &UndoRequest,
     loaded: &LoadedAcceptance,
-    source_sequence: u64,
-) -> Result<Option<UndoLatestAuthorActionSettlement>, UndoLatestAuthorActionError> {
+) -> Result<Option<Vec<ManuscriptBlock>>, ProjectCommandError> {
     let Some(facts) = loaded.facts.as_ref() else {
         return Ok(None);
     };
@@ -324,38 +343,29 @@ pub(crate) async fn persist_reversal(
     }) {
         return Ok(None);
     }
+    Ok(Some(blocks))
+}
+
+/// Places the Reversal Proposal and records the Forward Author Action of an Undo Acceptance
+/// that requires a reversal.
+pub(crate) async fn persist_reversal(
+    client: &Client,
+    command: &UndoRequest,
+    loaded: &LoadedAcceptance,
+    blocks: &[ManuscriptBlock],
+    sequences: CompensationAction,
+    source_sequence: u64,
+) -> Result<UndoRecords, ProjectCommandError> {
+    let facts = loaded
+        .facts
+        .as_ref()
+        .ok_or(ProjectCommandError::BindingConflict)?;
     let (proposal_id, proposal_revision_id) = place_proposal(
         client,
         command,
         facts,
         &loaded.current_head_revision_id,
-        LinkMode::Reversal { blocks: &blocks },
-    )
-    .await?;
-    let counter_row = client
-        .query_one(
-            "UPDATE storyos.scope_counters
-                SET author_action_sequence = author_action_sequence + 1
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-          RETURNING author_action_sequence::text, project_activity_position::text",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(database_error)?;
-    let author_action_sequence = parse_u64(counter_row.get(0))?;
-    let project_activity_position = parse_u64(counter_row.get(1))?;
-    // The relation trigger accepts one forward action and zero commits only for authoritative_applied.
-    let receipt_created_at = crate::undo_latest_author_action::insert_undo_receipt(
-        client,
-        command,
-        "authoritative_applied",
-        "{}",
-        &loaded.current_head_revision_id,
-        &loaded.current_head_revision_id,
-        crate::undo_latest_author_action::UndoReceiptAuthority::None,
+        LinkMode::Reversal { blocks },
     )
     .await?;
     client
@@ -368,7 +378,7 @@ pub(crate) async fn persist_reversal(
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
-                &author_action_sequence.to_string(),
+                &sequences.author_action_sequence.to_string(),
                 &command.ids.receipt_id,
             ],
         )
@@ -385,32 +395,22 @@ pub(crate) async fn persist_reversal(
             proposal_id: Some(proposal_id.as_str()),
             proposal_revision_id: Some(proposal_revision_id.as_str()),
             reason: None,
-            activity_position: project_activity_position,
+            activity_position: sequences.project_activity_position,
         },
     )
     .await?;
-    let response_project =
-        crate::undo_latest_author_action::settle_idempotency(client, command).await?;
-    Ok(Some(UndoLatestAuthorActionSettlement {
-        source_reopen_event: None,
-        ids: command.ids.clone(),
-        effect: UndoLatestAuthorActionSettlementEffect::ReversalRequired {
-            source_sequence,
-            author_action_sequence,
-            proposal_id,
-            proposal_revision_id,
-        },
-        receipt_created_at,
-        project_activity_position,
-        response_project,
-    }))
+    Ok(UndoRecords::ReversalRequired {
+        proposal_id,
+        proposal_revision_id,
+    })
 }
 
+/// Records the child Receipt of an unavailable Undo Acceptance.
 pub(crate) async fn record_unavailable(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    client: &Client,
+    command: &UndoRequest,
     loaded: &LoadedAcceptance,
-) -> Result<(), UndoLatestAuthorActionError> {
+) -> Result<(), ProjectCommandError> {
     let Some(facts) = loaded.facts.as_ref() else {
         return Ok(());
     };
@@ -431,36 +431,6 @@ pub(crate) async fn record_unavailable(
     .await
 }
 
-pub(crate) async fn read_retry(
-    client: &tokio_postgres::Client,
-    owner_user_id: &str,
-    project_id: &str,
-    receipt_id: &str,
-) -> Result<Option<AcceptanceRetry>, UndoLatestAuthorActionError> {
-    let Some(row) = client
-        .query_opt(
-            "SELECT outcome, proposal_id::text, proposal_revision_id::text,
-                    source_author_action_sequence::text, reported_activity_position::text
-               FROM storyos.undo_acceptance_receipts
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND author_undo_receipt_id = $3::text::uuid",
-            &[&owner_user_id, &project_id, &receipt_id],
-        )
-        .await
-        .map_err(database_error)?
-    else {
-        return Ok(None);
-    };
-    Ok(Some(AcceptanceRetry {
-        outcome: row.get(0),
-        proposal_id: row.get(1),
-        proposal_revision_id: row.get(2),
-        source_sequence: parse_u64(row.get(3))?,
-        project_activity_position: parse_u64(row.get(4))?,
-    }))
-}
-
 struct ChildReceipt<'a> {
     source_sequence: u64,
     outcome: &'a str,
@@ -473,10 +443,10 @@ struct ChildReceipt<'a> {
 
 async fn insert_child(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     facts: &AcceptanceFacts,
     child: ChildReceipt<'_>,
-) -> Result<(), UndoLatestAuthorActionError> {
+) -> Result<(), ProjectCommandError> {
     client
         .execute(
             "INSERT INTO storyos.undo_acceptance_receipts
@@ -507,12 +477,6 @@ async fn insert_child(
     Ok(())
 }
 
-fn database_error(error: tokio_postgres::Error) -> UndoLatestAuthorActionError {
-    UndoLatestAuthorActionError::Unavailable(Box::new(error))
-}
-
-fn parse_u64(value: String) -> Result<u64, UndoLatestAuthorActionError> {
-    value
-        .parse()
-        .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))
+fn database_error(error: tokio_postgres::Error) -> ProjectCommandError {
+    ProjectCommandError::Unavailable(Box::new(error))
 }

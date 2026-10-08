@@ -30,7 +30,7 @@ mod compensation;
 #[path = "accept_proposal_facts.rs"]
 mod facts;
 pub(crate) use compensation::{
-    AcceptanceCompensation, LoadedAcceptance, persist_reversal, read_retry, record_unavailable,
+    AcceptanceCompensation, LoadedAcceptance, persist_reversal, record_unavailable, reversal_blocks,
 };
 use facts::load_proposal;
 
@@ -88,7 +88,7 @@ pub(crate) struct AcceptedRevision {
 impl ProjectCommand for AcceptProposal {
     const SPEC: CommandSpec = CommandSpec {
         kind: "acceptProposal",
-        applied: AppliedVariant::Forward(ForwardCommand::AcceptProposal),
+        applied: &[AppliedVariant::Forward(ForwardCommand::AcceptProposal)],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::Diagnosed,
         rate_limited: RateLimitedChallenge::InvalidChallenge,

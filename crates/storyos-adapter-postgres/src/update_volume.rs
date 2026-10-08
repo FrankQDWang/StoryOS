@@ -39,7 +39,9 @@ pub(crate) struct LiveVolumes {
 impl ProjectCommand for UpdateVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "updateVolume",
-        applied: AppliedVariant::Forward(ForwardCommand::Structure(StructureCommand::UpdateVolume)),
+        applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
+            StructureCommand::UpdateVolume,
+        ))],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

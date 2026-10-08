@@ -24,7 +24,6 @@ use crate::undo_compensation::ForwardCommand;
 mod compensation;
 pub(crate) use compensation::{
     DraftCompensation, DraftReopenWrite, ObservedDraftClose, load_frontier, persist_reopen,
-    read_event,
 };
 
 impl PostgresProjectReader {
@@ -112,7 +111,9 @@ pub(crate) fn replayed_draft_observation(
 impl ProjectCommand for CloseEditorFlowDraftInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "closeEditorFlowDraft",
-        applied: AppliedVariant::Forward(ForwardCommand::CloseEditorFlowDraft),
+        applied: &[AppliedVariant::Forward(
+            ForwardCommand::CloseEditorFlowDraft,
+        )],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidWriter,
         rate_limited: RateLimitedChallenge::InvalidChallenge,
