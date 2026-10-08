@@ -201,7 +201,31 @@ class ReviewAdmissionTests(unittest.TestCase):
         accepted = self.review_cli('request', '--pr', '745', '--executor-context', 'executor')
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
-    def review_round(self, verdicts, comments=(), checks=None):
+    def fault_gh(self, failures, error, after=False):
+        """Put a gh before the fake gh. Each new command fails `failures` times with `error`, after its effect when `after` is true."""
+        tools = self.root / 'target/tools'
+        if not (tools / 'gh-inner').exists():
+            (tools / 'gh').rename(tools / 'gh-inner')
+        (self.root / 'target/gh-calls.json').unlink(missing_ok=True)
+        (tools / 'gh').write_text(f'''#!{sys.executable}
+import json, os, subprocess, sys
+from pathlib import Path
+log, args, inner = Path("target/gh-calls.json"), sys.argv[1:], str(Path(sys.argv[0]).with_name("gh-inner"))
+calls = json.loads(log.read_text()) if log.exists() else []
+log.write_text(json.dumps(calls + [args]))
+if calls.count(args) >= {failures}:
+    os.execv(inner, [inner, *args])
+if {after}:
+    subprocess.run([inner, *args], capture_output=True)
+sys.exit({error!r})
+''')
+        (tools / 'gh').chmod(0o755)
+        self.repo.environment['STORYOS_GH_RETRY_SECONDS'] = '0'
+
+    def gh_calls(self):
+        return json.loads((self.root / 'target/gh-calls.json').read_text())
+
+    def review_round(self, verdicts, comments=(), checks=None, faults=None):
         """Run the review round command with a mocked gh and a mocked Codex plugin."""
         import os
         import subprocess
@@ -209,7 +233,8 @@ class ReviewAdmissionTests(unittest.TestCase):
         tools = self.root / 'target/tools'
         (tools / 'gh').rename(tools / 'gh-api')
         state = self.root / 'target/round.json'
-        state.write_text(json.dumps({'comments': [{'body': body} for body in comments], 'verdicts': verdicts, 'node': []}))
+        state.write_text(json.dumps({'comments': [{'body': body, 'url': f'https://example.invalid/pull/745#comment-{n}'}
+                                                 for n, body in enumerate(comments, 1)], 'verdicts': verdicts, 'node': []}))
         if checks is not None:
             checks = [{**check, 'head_sha': self.head} for check in checks]
             self.live.write_text(json.dumps({**json.loads(self.live.read_text()), 'checks': checks}))
@@ -223,9 +248,10 @@ if args[:2] == ["pr", "view"]:
 elif args[:2] == ["issue", "view"]:
     print(json.dumps({{"number": 1008, "title": "Ticket", "body": "- [ ] Criterion"}}))
 elif args[:2] == ["pr", "comment"]:
-    s["comments"].append({{"body": Path(args[4]).read_text()}})
+    url = f"https://example.invalid/pull/745#comment-{{len(s['comments']) + 1}}"
+    s["comments"].append({{"body": Path(args[4]).read_text(), "url": url}})
     state.write_text(json.dumps(s))
-    print(f"https://example.invalid/pull/745#comment-{{len(s['comments'])}}")
+    print(url)
 else:
     os.execv(str(Path(sys.argv[0]).with_name("gh-api")), sys.argv)
 ''')
@@ -245,6 +271,8 @@ else:
     print(json.dumps({{"job": {{"id": args[0]}}, "storedJob": {{"threadId": "thread-" + args[0], "result": {{"rawOutput": "Done.\\n```json\\n" + json.dumps(s["verdicts"][args[0]]) + "\\n```"}}}}}}))
 ''')
         (tools / 'node').chmod(0o755)
+        if faults:
+            self.fault_gh(*faults)
         home = self.root / 'target/home'
         for version in ('1.0.9', '1.0.10'):
             plugin = home / f'.claude/plugins/cache/openai-codex/codex/{version}/scripts'
@@ -326,3 +354,36 @@ else:
 
     def test_round_after_pass_pass_is_refused_with_the_coordinator(self):
         self.refused_round(['## Standards review, round 1: PASS\n', '## Spec review, round 1: PASS\n'])
+
+    def test_round_and_request_complete_when_each_gh_command_fails_two_times(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        result, state = self.review_round({'standards': clean, 'spec': clean},
+                                          faults=(2, 'Post "https://api.github.com/graphql": EOF'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c['url'] for c in state['comments']], ['https://example.invalid/pull/745#comment-1',
+                                                                 'https://example.invalid/pull/745#comment-2'])
+        calls = self.gh_calls()
+        self.assertEqual(({c[0] for c in calls}, min(calls.count(c) for c in calls)), ({'api', 'issue', 'pr', 'repo'}, 3))
+        self.assertIn('gh repo view: transient failure, retry 2 of 3 in 0 s: Post "https://api.github.com/graphql": EOF\n', result.stderr)
+
+    def test_comment_that_the_server_accepted_before_a_transient_failure_posts_one_time(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        result, state = self.review_round({'standards': clean, 'spec': clean}, faults=(1, 'unexpected EOF', True))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c['body'].splitlines()[0] for c in state['comments']],
+                         ['## Standards review, round 1: PASS', '## Spec review, round 1: PASS'])
+        self.assertEqual(len([c for c in self.gh_calls() if c[:2] == ['pr', 'comment']]), 2)
+        self.assertIn('Standards: PASS https://example.invalid/pull/745#comment-1\nSpec: PASS https://example.invalid/pull/745#comment-2\n',
+                      result.stdout)
+
+    def test_permanent_gh_failure_stops_with_the_original_error(self):
+        self.prepare_reviews()
+        for error, attempts in (('HTTP 502: Bad Gateway (https://api.github.com/graphql)', 4),
+                                ('HTTP 404: Not Found (https://api.github.com/repos/fixture/repo/pulls/745)', 1),
+                                ('HTTP 401: Bad credentials (https://api.github.com/graphql)', 1)):
+            self.fault_gh(99, error)
+            result = self.review_cli('request', '--pr', '745', '--executor-context', 'executor')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f'{error}\nReview refused: Command ', result.stderr)
+            self.assertEqual(self.gh_calls(), [['repo', 'view', '--json', 'nameWithOwner']] * attempts)
+            self.assertEqual(result.stderr.count('transient failure'), attempts - 1)
