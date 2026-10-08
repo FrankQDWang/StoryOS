@@ -115,7 +115,6 @@ mod agent_run_successor;
 mod agent_run_successor_dispatch;
 mod agent_run_work;
 mod archive_project;
-mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_admission_recovery;
 mod author_edit_inline;

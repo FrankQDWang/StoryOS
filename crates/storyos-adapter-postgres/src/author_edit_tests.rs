@@ -1,12 +1,9 @@
 use storyos_application::{
-    AppendAuthorCommandOutcomeUnknown, ApplyAuthorEditCommand, ApplyAuthorEditOutcome,
-    ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds,
-    AuthorCommandOutcomeUnknownBoundary, AuthorCommandOutcomeUnknownError,
-    AuthorCommandOutcomeUnknownReason, CommittedApplyAuthorEdit, EditorClientBinding,
-    EditorSessionId, EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    RequiresReconfirmationApplyAuthorEdit, ResolveApplyAuthorEditOutcome, UserId,
-    append_author_command_outcome_unknown, create_editor_session, get_apply_author_edit_outcome,
+    ApplyAuthorEditCommand, ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason,
+    AuthorCommandAdmissionIds, CommittedApplyAuthorEdit, EditorClientBinding, EditorSessionId,
+    EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge, OpenEditorSession,
+    ProjectCommandChallengeBinding, ProjectId, ProjectScope, RequiresReconfirmationApplyAuthorEdit,
+    ResolveApplyAuthorEditOutcome, UserId, create_editor_session, get_apply_author_edit_outcome,
     get_editor_session, issue_project_command_challenge,
 };
 use storyos_core::{
@@ -274,27 +271,6 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             AuthorEditFault::None => unreachable!(),
         };
         assert!(format!("{error:?}").contains(expected_point), "{error:?}");
-        let unknown = append_author_command_outcome_unknown(
-            &store,
-            &AppendAuthorCommandOutcomeUnknown {
-                project_scope: scope.clone(),
-                author_command_admission_id: command.ids.author_command_admission_id.clone(),
-                observation_id: format!("018f0000-0000-7001-8000-0000000008{suffix}"),
-                last_provable_boundary: AuthorCommandOutcomeUnknownBoundary::AdmissionCommitted,
-                reason: AuthorCommandOutcomeUnknownReason::AcknowledgementMissing,
-            },
-        )
-        .await;
-        assert!(match (fault, unknown) {
-            (
-                AuthorEditFault::CoreAfterCommitBeforeAcknowledgement,
-                Err(AuthorCommandOutcomeUnknownError::BindingConflict),
-            ) => true,
-            (_, Ok(observation)) => {
-                observation.author_command_admission_id == command.ids.author_command_admission_id
-            }
-            _ => false,
-        });
         if fault == AuthorEditFault::CoreAfterCommitBeforeAcknowledgement {
             committed_command = Some(command);
         }

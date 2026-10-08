@@ -580,3 +580,136 @@ async fn an_author_edit_replay_needs_no_response_record_and_damaged_evidence_is_
     }
     assert_eq!(observed, vec![true; 5]);
 }
+
+/// The outcome query of one Author Edit, as the Server sends it after a cut.
+async fn outcome(
+    store: &PostgresProjectReader,
+    command: &ApplyAuthorEditCommand,
+) -> storyos_application::ApplyAuthorEditOutcome {
+    storyos_application::get_apply_author_edit_outcome(
+        store,
+        &storyos_application::ResolveApplyAuthorEditOutcome {
+            project_scope: command.project_scope.clone(),
+            client_binding: command.client_binding.clone(),
+            limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
+            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            nonce_digest: command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .unwrap()
+}
+
+/// The Receipt facts of one settlement that do not depend on its identities.
+async fn receipt_facts(
+    admin: &Client,
+    settlement: &AuthorEditSettlement,
+) -> (String, [i64; 5], Option<String>) {
+    let body = match &settlement.effect {
+        storyos_application::AuthorEditSettlementEffect::AuthoritativeApplied { body, .. } => {
+            Some(body.clone())
+        }
+        _ => None,
+    };
+    (
+        result_kind(admin, &settlement.ids.receipt_id).await,
+        settlement_rows(admin, &settlement.ids.receipt_id).await,
+        body,
+    )
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_outcome_query_settles_a_cut_admission_with_the_receipt_of_an_uninterrupted_edit() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let mut recovered = Vec::new();
+    let mut uninterrupted = Vec::new();
+    for ((edit, cut_base), direct_base) in EDITS
+        .into_iter()
+        .zip((0x3a00..).step_by(/*step*/ 0x10))
+        .zip((0x3b00..).step_by(/*step*/ 0x10))
+    {
+        let command = edit_command(&store, &admin, edit, cut_base).await;
+        store
+            .apply_author_edit_with_fault(&command, AuthorEditFault::AfterAdmissionBeforeCore)
+            .await
+            .expect_err("the cut must stop after the admit step");
+        let storyos_application::ApplyAuthorEditOutcome::Committed(committed) =
+            outcome(&store, &command).await
+        else {
+            panic!("the outcome query must settle the open Admission of {edit:?}");
+        };
+        // A second outcome query replays the same settlement.
+        assert_eq!(
+            outcome(&store, &command).await,
+            storyos_application::ApplyAuthorEditOutcome::Committed(committed.clone()),
+            "{edit:?}"
+        );
+        recovered.push(receipt_facts(&admin, &committed.settlement).await);
+
+        let direct = edit_command(&store, &admin, edit, direct_base).await;
+        let settled = store.apply_author_edit(&direct).await.unwrap();
+        uninterrupted.push(receipt_facts(&admin, &settled).await);
+    }
+    assert_eq!(recovered, uninterrupted);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_outcome_query_settles_an_expired_admission_as_requires_reconfirmation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let command = edit_command(&store, &admin, Edit::Prose, /*base*/ 0x3c00).await;
+    store
+        .apply_author_edit_with_fault(&command, AuthorEditFault::AfterAdmissionBeforeCore)
+        .await
+        .expect_err("the cut must stop after the admit step");
+    run_without_foreign_keys(
+        &admin,
+        &format!(
+            "UPDATE storyos.author_command_admissions
+                SET challenge_expires_at = challenge_consumed_at
+              WHERE author_command_admission_id = '{admission}';
+             UPDATE storyos.project_command_challenges SET expires_at = consumed_at
+              WHERE command_kind = 'applyAuthorEdit' AND idempotency_key = '{key}'",
+            admission = command.ids.author_command_admission_id,
+            key = command.challenge_binding.idempotency_key,
+        ),
+    )
+    .await;
+    let expected = storyos_application::ApplyAuthorEditOutcome::RequiresReconfirmation(
+        storyos_application::RequiresReconfirmationApplyAuthorEdit {
+            command_id: command.ids.command_id.clone(),
+            author_command_admission_id: command.ids.author_command_admission_id.clone(),
+            reconfirmation_reason:
+                storyos_application::ApplyAuthorEditReconfirmationReason::AdmissionExpired,
+            recovery_draft_ref: None,
+        },
+    );
+    assert_eq!(outcome(&store, &command).await, expected);
+    assert_eq!(outcome(&store, &command).await, expected);
+    // The Admission has one reconfirmation, no Receipt, and no Receipt settlement.
+    let row = admin
+        .query_one(
+            "SELECT (SELECT count(*) FROM storyos.domain_receipts
+                      WHERE author_command_admission_id = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.author_command_admission_reconfirmations
+                      WHERE author_command_admission_id = $1::text::uuid)",
+            &[&command.ids.author_command_admission_id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            row.get::<_, i64>(/*idx*/ 0),
+            row.get::<_, i64>(/*idx*/ 1),
+            admission_state(&admin, &command).await
+        ),
+        (0, 1, (1, 0, "settled".to_owned()))
+    );
+}
