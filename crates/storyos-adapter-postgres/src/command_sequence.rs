@@ -30,7 +30,8 @@ use admission::insert_admission;
 pub(crate) use admit::{AdmitCommand, AdmitSpec, admit_project_command};
 pub(crate) use applied_variant::AppliedVariant;
 pub(crate) use authoritative_revision::{
-    ActionDisposition, AuthoritativeRevision, RevisionMembers, RevisionWrite,
+    ActionDisposition, AuthoritativeRevision, RevisionBase, RevisionMembers, RevisionWrite,
+    write_revision,
 };
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
 pub(crate) use contention::CommandError;

@@ -58,6 +58,12 @@ pub(crate) struct CompensationReplay {
     /// The Proposal Revision that a Proposal Compensation appended to the source head.
     pub(crate) restored_proposal_revision_id: Option<String>,
     pub(crate) author_undo_frontier_sequence: Option<u64>,
+    /// The Revision that the Commit of a prose or Acceptance Compensation binds.
+    pub(crate) resulting_revision_id: Option<String>,
+    /// The payload text of that Revision.
+    pub(crate) resulting_payload: Option<String>,
+    /// The Chapter of that Revision.
+    pub(crate) chapter_id: Option<String>,
 }
 
 /// The command kind and applied variant of one Forward Author Action.
