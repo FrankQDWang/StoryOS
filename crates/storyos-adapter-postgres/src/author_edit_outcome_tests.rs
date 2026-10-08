@@ -1,8 +1,8 @@
 use storyos_application::{
     ApplyAuthorEditOutcome, ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation,
     EditorClientBinding, IssueProjectCommandChallenge, ProjectCommandChallengeBinding,
-    ProjectCommandChallengeUse, ProjectId, ProjectScope, ResolveApplyAuthorEditOutcome, UserId,
-    consume_project_command_challenge, get_apply_author_edit_outcome,
+    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectId, ProjectScope,
+    ResolveApplyAuthorEditOutcome, UserId, get_apply_author_edit_outcome,
     issue_project_command_challenge,
 };
 
@@ -93,7 +93,8 @@ async fn unexpired_challenge_is_unknown_and_the_query_does_not_consume_it() {
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(&mut command_transaction, &binding, nonce_digest)
+        command_transaction
+            .consume(&binding, nonce_digest)
             .await
             .unwrap(),
         ProjectCommandChallengeUse::FirstUse
@@ -250,7 +251,8 @@ async fn outcome_resolution_waits_for_consume_and_cannot_report_a_false_rejectio
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(&mut command_transaction, &binding, nonce_digest)
+        command_transaction
+            .consume(&binding, nonce_digest)
             .await
             .unwrap(),
         ProjectCommandChallengeUse::FirstUse

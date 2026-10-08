@@ -31,6 +31,7 @@ This file is the operating-rule source for every agent client. Codex reads it di
 ## Code change
 
 - **Coding standards:** read [CODING_STANDARDS.md](CODING_STANDARDS.md) before you change Rust code, a test, a generated artifact, or a contract, and before a Standards review.
+- **Project commands:** a new project command must settle through the command sequence and declare its profiles (ADR 0043). A new Forward command kind must declare its Author Undo Disposition (ADR 0044). [Project commands](CODING_STANDARDS.md#project-commands) tells how.
 
 ## Reference material
 

@@ -61,6 +61,13 @@ A uniform Rust style keeps boundaries, call sites, and reviews legible across th
 
 - This applies only to a new test module. Keep an existing inline `#[cfg(test)] mod tests { ... }` module where it is when this convention is the only reason to move it.
 
+## Project commands
+
+- A project command consumes one Project Command Challenge and settles one Author Command Admission. It settles through `command_sequence` in `storyos-adapter-postgres`. Do not write its transaction, its replay query, an application Store trait, or a binding self-check. ADR 0043 lists the operations that stay outside the sequence.
+- Implement `ProjectCommand` for a command that settles in one transaction. Implement `AdmittedCommand` for a command that has an admit step and a settle step. Declare its `SettlementProfile`, its applied variants, and its zero-authority outcomes.
+- An applied variant that writes a Forward Author Action names its own `ForwardCommand` entry. Give that entry its Author Undo Disposition in `ForwardCommand::disposition`: a compensation in the module of the forward command, or a Barrier. Record the disposition in an ADR.
+- Add rows to the table-driven contract suite (`command_sequence_tests/`) for each applied variant and zero-authority outcome. The rows prove replay equality, the declared records only, rollback, an in-progress exact retry, and pre-capture versus damaged evidence.
+
 ## Comments and documentation
 
 - Prefer no comment. A comment that stays gives one non-obvious reason in one line. Code changes later, and comments do not.
