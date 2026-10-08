@@ -1,12 +1,11 @@
 use storyos_application::{
     ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError, ApplyAuthorEditOutcomeResolver,
-    ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation, AuthorEditError,
-    CommittedApplyAuthorEdit, ResolveApplyAuthorEditOutcome,
+    ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation,
+    ResolveApplyAuthorEditOutcome,
 };
 
 use super::author_edit::sha256_hex;
 use super::author_edit_admission_recovery::OpenAdmission;
-use super::author_edit_replay::AuthorEditReplayIdentity;
 use super::*;
 
 impl ApplyAuthorEditOutcomeResolver for PostgresProjectReader {
@@ -117,48 +116,32 @@ impl ApplyAuthorEditOutcomeResolver for PostgresProjectReader {
             && relation.get::<_, Option<bool>>(11) == Some(true)
             && payload_digest_exact;
         if clean_settlement {
-            let canonical_command_digest = relation
-                .get::<_, Option<String>>(5)
-                .ok_or_else(outcome_unavailable)?;
-            let idempotency_key = relation
-                .get::<_, Option<String>>(6)
-                .ok_or_else(outcome_unavailable)?;
-            let expected_authoritative_revision_id = relation
-                .get::<_, Option<String>>(8)
-                .ok_or_else(outcome_unavailable)?;
-            let identity = AuthorEditReplayIdentity {
-                project_scope: query.project_scope.clone(),
-                canonical_command_digest: canonical_command_digest.clone(),
-                idempotency_key: idempotency_key.clone(),
-                chapter_id: relation
-                    .get::<_, Option<String>>(7)
+            let admission = OpenAdmission {
+                command_id: relation
+                    .get::<_, Option<String>>(/*idx*/ 2)
                     .ok_or_else(outcome_unavailable)?,
-                expected_authoritative_revision_id: expected_authoritative_revision_id.clone(),
-                target_refs: relation
-                    .get::<_, Option<Vec<String>>>(9)
+                author_command_admission_id: relation
+                    .get::<_, Option<String>>(/*idx*/ 3)
                     .ok_or_else(outcome_unavailable)?,
+                canonical_command_digest: arbiter.get(/*idx*/ 9),
+                method: arbiter.get(/*idx*/ 6),
+                route_template: arbiter.get(/*idx*/ 7),
+                command_schema: arbiter.get(/*idx*/ 8),
+                payload: relation
+                    .get::<_, Option<String>>(/*idx*/ 12)
+                    .ok_or_else(outcome_unavailable)?,
+                payload_complete: true,
+                bindings_match: true,
+                unexpired,
             };
-            let correlation_id = relation
-                .get::<_, Option<String>>(4)
-                .ok_or_else(outcome_unavailable)?;
             let receipt_id = result_reference.ok_or_else(outcome_unavailable)?;
             client
                 .batch_execute("COMMIT")
                 .await
                 .map_err(outcome_database_error)?;
-            let settlement = self
-                .read_author_edit_settlement_by_identity(&identity, &receipt_id)
-                .await
-                .map_err(outcome_settlement_error)?;
-            return Ok(ApplyAuthorEditOutcome::Committed(Box::new(
-                CommittedApplyAuthorEdit {
-                    correlation_id,
-                    canonical_command_digest,
-                    idempotency_key,
-                    expected_authoritative_revision_id,
-                    settlement,
-                },
-            )));
+            return self
+                .replay_committed_apply_author_edit(query, &admission, &receipt_id)
+                .await;
         }
         let outcome = if clean_pre_admission && unexpired {
             ApplyAuthorEditOutcome::StillUnknown {
@@ -399,10 +382,6 @@ fn outcome_store_error(
 }
 
 fn outcome_database_error(error: tokio_postgres::Error) -> ApplyAuthorEditOutcomeResolveError {
-    ApplyAuthorEditOutcomeResolveError::unavailable(error)
-}
-
-fn outcome_settlement_error(error: AuthorEditError) -> ApplyAuthorEditOutcomeResolveError {
     ApplyAuthorEditOutcomeResolveError::unavailable(error)
 }
 

@@ -22,6 +22,7 @@ mod chapter_selection;
 mod contention;
 mod records;
 mod response;
+mod settle;
 mod structural;
 use crate::command_replay::{CommandReplay, ReplayFault, read_command_replay};
 pub(crate) use action_only::{ActionOnly, ActionSequence};
@@ -40,6 +41,10 @@ use records::{
     ReceiptRecord, insert_activity_payload, insert_receipt, insert_zero_receipt, lock_project,
 };
 pub(crate) use response::{NoResponse, ProjectAssistanceResponse, ProjectResponse, ResponseRecord};
+pub(crate) use settle::{
+    AdmittedCommand, AdmittedRefusal, admit_and_settle, replay_settled as replay_settled_command,
+    settle_admitted_command,
+};
 pub(crate) use structural::{
     CurrentChapterChange, Structural, StructureIdentity, StructureWrite, WriterBase,
 };
@@ -56,6 +61,25 @@ pub(crate) enum Admission {
     ExplicitEditorCommand(EditorAdmission),
     /// A writer takeover. The insert requires the observed writer generation of another session.
     WriterTakeover(TakeoverAdmission),
+    /// A direct editor action of the current writer, for example an Author Edit. The insert
+    /// requires the client writer generation, the expected Revision and head of the Chapter, and an
+    /// active Project.
+    DirectEditorAction(DirectEditorAdmission),
+}
+
+/// The Author Edit columns of a direct editor action Admission.
+pub(crate) struct DirectEditorAdmission {
+    pub(crate) editor_session_id: String,
+    pub(crate) writer_generation: u64,
+    pub(crate) chapter_object_id: String,
+    pub(crate) expected_authoritative_revision_id: String,
+    pub(crate) expected_proposal_head_revision_ids: Vec<String>,
+    pub(crate) target_refs: Vec<String>,
+    pub(crate) observed_ownership_partition: String,
+    pub(crate) editor_contract_revision: String,
+    pub(crate) undo_group_id: String,
+    pub(crate) completed_intent_record_id: String,
+    pub(crate) local_intent_sequence: u64,
 }
 
 /// The action class of an Admission without an Editor Session. Each class writes the same columns.
@@ -532,13 +556,8 @@ async fn first_use<C: ProjectCommand>(
     command: &C,
 ) -> Result<SettledCommand<C>, C::Error> {
     let project = lock_project(client, envelope).await?;
-    let Classification {
-        outcome: classified,
-        admission,
-        heads,
-        zero_receipt,
-    } = command.classify(client, envelope, &project).await?;
-    if !insert_admission(client, envelope, C::SPEC.kind, &admission).await? {
+    let classification = command.classify(client, envelope, &project).await?;
+    if !insert_admission(client, envelope, C::SPEC.kind, &classification.admission).await? {
         return Err(match C::SPEC.missing_admission {
             MissingAdmission::Diagnosed => {
                 command.diagnose_missing_admission(client, envelope).await
@@ -548,6 +567,24 @@ async fn first_use<C: ProjectCommand>(
             | MissingAdmission::InvalidWriter => C::SPEC.missing_admission.error().into(),
         });
     }
+    settle_classified(client, envelope, command, &project, classification).await
+}
+
+/// Writes the Domain Receipt, the profile or zero-authority records, and the fence of one
+/// classified command whose Admission exists.
+async fn settle_classified<C: ProjectCommand>(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+    project: &LockedProject,
+    classification: Classification<C>,
+) -> Result<SettledCommand<C>, C::Error> {
+    let Classification {
+        outcome: classified,
+        admission: _,
+        heads,
+        zero_receipt,
+    } = classification;
     let (mut zero_fields, zero_refs, observed_effect) = match zero_receipt {
         ZeroReceipt::Reason => (serde_json::Map::new(), ReceiptRefs::default(), None),
         ZeroReceipt::Observed {
@@ -565,12 +602,12 @@ async fn first_use<C: ProjectCommand>(
             | TransitionOutcome::Conflicted(_)
             | TransitionOutcome::Refused(_) => classified.receipt_result_kind(),
         },
-        payload: match classified.reason_code() {
-            Some(code) => {
+        // A reason value that records no code keeps only the observed fields.
+        payload: {
+            if let Some(code) = classified.reason_code() {
                 zero_fields.insert("reason".to_owned(), code.into());
-                serde_json::Value::Object(zero_fields).to_string()
             }
-            None => "{}".to_owned(),
+            serde_json::Value::Object(zero_fields).to_string()
         },
         command_kind: C::SPEC.kind,
         heads,
@@ -603,12 +640,12 @@ async fn first_use<C: ProjectCommand>(
                 .write_child_receipt(client, envelope, receipt.result)
                 .await?;
             let write = command
-                .apply(client, envelope, &project, &sequences, plan, applied)
+                .apply(client, envelope, project, &sequences, plan, applied)
                 .await?;
             let applied = C::Profile::persist(
                 client,
                 envelope,
-                &project,
+                project,
                 &C::SPEC,
                 variant,
                 sequences,
@@ -651,7 +688,7 @@ async fn first_use<C: ProjectCommand>(
             ZeroAuthorityRows::EffectWithActivity => {
                 let activity = ActivityOnly::allocate(client, &envelope.project_scope, &()).await?;
                 let write = command
-                    .write_zero_authority_activity(client, envelope, &project, &activity)
+                    .write_zero_authority_activity(client, envelope, project, &activity)
                     .await?;
                 insert_activity_payload(
                     client,

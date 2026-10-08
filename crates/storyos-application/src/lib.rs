@@ -93,8 +93,7 @@ pub use author_command_outcome_unknown::{
 
 pub use author_edit::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditProposalTarget,
-    AuthorEditSettlement, AuthorEditSettlementEffect, AuthorEditStore, AuthoritativeAppliedIds,
-    apply_author_edit,
+    AuthorEditSettlement, AuthorEditSettlementEffect, AuthoritativeAppliedIds,
 };
 pub use author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError, ApplyAuthorEditOutcomeResolver,

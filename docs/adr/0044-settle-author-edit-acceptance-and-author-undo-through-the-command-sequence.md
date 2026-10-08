@@ -101,6 +101,11 @@ Each ticket that moves a command records here every observable difference from `
 - A command can declare more than one applied variant. The command selects the variant of each applied outcome. `AppliedVariant::Compensation` gives the Receipt result kind of a Compensation. The compensation adapter gives the compensated source sequence.
 - A settlement profile can take a selector from the plan of the command. The selector chooses the sequences that the profile allocates. A profile with one write path takes no selector.
 - A command can record the time of the Domain Receipt as the transaction time. Author Undo does this when it reopens a Draft, as on `main`. All other Receipts record the clock time, as before.
+- The sequence has the admit step and the settle step of a direct editor action (`command_sequence/settle.rs`). The admit step locks the Project row, inserts the `direct_editor_action` Admission, and commits.
+  - The settle step runs in a new transaction. It reads the Project row without a lock. It requires an Admission without settlement that is not expired and whose Editor Session is the current writer. The command locks its own facts when it classifies. Then the step writes the Receipt, the profile records, the Admission settlement, and the fence.
+  - A settled Admission replays its Receipt. After a failed settle step, a read-only transaction reads the settlement again, and a settlement of a concurrent settle step replays.
+- The `AuthoritativeRevision` profile can write the members of a versioned edit from its Blocks (`RevisionMembers::Blocks`).
+- A zero-authority Receipt keeps the observed payload fields also when its reason value records no code. Before, the sequence wrote `{}` for such a value. No earlier command had such a value.
 
 ### `acceptProposal`
 
@@ -131,6 +136,18 @@ Each ticket that moves a command records here every observable difference from `
   - The command locks the Project row before it uses the Command Challenge. It inserts its Admission after the Core classification, as on `main`.
   - An applied Receipt whose Compensation records are missing or damaged gives `503 project_store_unavailable`. Examples are a missing Authoritative Commit, canonical Snapshot, Draft reopen event, or Receipt payload field, and an Author Action that is not a Compensation. Before, most of these gave `409 idempotency_binding_conflict`. Foreign keys and the receipt relation triggers already prevent such records.
   - An exact retry of the Undo of an author Withdrawal returns the Project Activity position of the first acknowledgement. The Receipt payload records this position. Before, the retry returned the position zero ([issue 1031](https://github.com/FrankQDWang/StoryOS/issues/1031)).
+- The behavior-equivalence review against `main` found no other difference.
+
+### `applyAuthorEdit`
+
+- `applyAuthorEdit` runs the transaction that pauses Proposal generation, then the admit step, and then the settle step. Its profile `AuthorEditProfile` selects the `AuthoritativeRevision` records for `authoritative_applied` and the `ActionOnly` records for `proposal_revised`. An applied edit of an Inline Proposal also appends its Proposal Revision. Each outcome that supersedes the source Refused Edit Draft writes its close event after the Receipt.
+- The zero-authority outcomes write the rows and payloads of `main`. `refused_to_draft` writes the Refused Edit Draft and records no reason. The response record is `NoResponse`, as on `main`.
+- The outcome query keeps its code. It completes an open Admission through the settle step, and it replays a settled Admission through the sequence.
+- The hand-written settlement transaction and replay query (`author_edit_settlement.rs`, `author_edit_replay.rs`), the application Store trait, and the binding self-check are removed. The Server builds the command and calls the adapter.
+- These observable changes follow from the sequence:
+  - The admit step locks the Project row. Before, the Admission insert locked no row. The settle step locks only the Chapter head with the Admission and its current writer, as on `main`. Thus a writer takeover can still settle while an admitted edit waits for that head.
+  - A replay keeps the binding conflicts of `main` for the request facts. These facts are the canonical payload, the digest, the Chapter, the expected Revision, the target references, and the expected head of the Receipt. A missing or unknown reason also gives a binding conflict.
+  - Damaged evidence gives `503 author_edit_store_unavailable`. Before, it gave `409 idempotency_binding_conflict`. Examples are a missing Activity record, Author Action, Commit, or Draft lifecycle event, and damaged head arrays. Other examples are a zero-authority Receipt with authority records, a Commit or Envelope of another prior Revision, and an impossible conflict. Foreign keys, CHECK constraints, and the receipt relation triggers already prevent such records.
 - The behavior-equivalence review against `main` found no other difference.
 
 ## Considered options

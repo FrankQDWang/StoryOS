@@ -4,7 +4,8 @@ use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use tokio_postgres::Client;
 
 use super::{
-    Admission, EditorAdmission, EditorWriter, ProjectActionClass, TakeoverAdmission, unavailable,
+    Admission, DirectEditorAdmission, EditorAdmission, EditorWriter, ProjectActionClass,
+    TakeoverAdmission, unavailable,
 };
 
 /// Inserts the Admission after the consumed Command Challenge. Returns `false` when the insert
@@ -224,6 +225,115 @@ pub(super) async fn insert_admission(
                         &binding.binding_ref,
                         &binding.client_contract_revision,
                         &binding.security_policy_revision,
+                        &command_kind,
+                    ],
+                )
+                .await
+        }
+        Admission::DirectEditorAction(DirectEditorAdmission {
+            editor_session_id,
+            writer_generation,
+            chapter_object_id,
+            expected_authoritative_revision_id,
+            expected_proposal_head_revision_ids,
+            target_refs,
+            observed_ownership_partition,
+            editor_contract_revision,
+            undo_group_id,
+            completed_intent_record_id,
+            local_intent_sequence,
+        }) => {
+            client
+                .execute(
+                    "INSERT INTO storyos.author_command_admissions
+                       (owner_user_id, project_id, author_command_admission_id, command_id,
+                        editor_session_id, writer_generation, client_session_binding_ref,
+                        client_session_generation, client_contract_revision,
+                        security_policy_revision, action_class, method, route_template,
+                        command_schema, command_kind, canonical_command_digest, idempotency_key,
+                        challenge_consumed_at, challenge_expires_at, correlation_id,
+                        chapter_object_id, expected_authoritative_revision_id,
+                        expected_proposal_head_revision_ids, target_refs,
+                        observed_ownership_partition, editor_contract_revision, undo_group_id,
+                        completed_intent_record_id, local_intent_sequence, command_payload)
+                     SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                            session.editor_session_id, $6::text::numeric,
+                            session.client_session_binding_ref, $7::text::numeric,
+                            session.client_contract_revision, session.security_policy_revision,
+                            'direct_editor_action', $8, $9, $10, $27, $11,
+                            $12::text::uuid, challenge.consumed_at, challenge.expires_at,
+                            $25::text::uuid, $13::text::uuid, $14::text::uuid,
+                            $15::text[]::uuid[], $16::text[], $17, $18, $19::text::uuid,
+                            $20::text::uuid, $21::text::numeric,
+                            convert_from($26::bytea, 'UTF8')::jsonb
+                       FROM storyos.editor_sessions AS session
+                       JOIN storyos.project_writer_generations AS writer
+                         ON (writer.owner_user_id, writer.project_id,
+                             writer.current_editor_session_id, writer.writer_generation) =
+                            (session.owner_user_id, session.project_id,
+                             session.editor_session_id, $6::text::numeric)
+                        AND writer.writer_generation = (
+                          SELECT max(current_writer.writer_generation)
+                            FROM storyos.project_writer_generations AS current_writer
+                           WHERE current_writer.owner_user_id = session.owner_user_id
+                             AND current_writer.project_id = session.project_id
+                        )
+                       JOIN storyos.authoritative_revisions AS expected_revision
+                         ON (expected_revision.owner_user_id, expected_revision.project_id,
+                             expected_revision.manuscript_object_id,
+                             expected_revision.revision_id) =
+                            (session.owner_user_id, session.project_id,
+                             $13::text::uuid, $14::text::uuid)
+                       JOIN storyos.authoritative_heads AS head
+                         ON (head.owner_user_id, head.project_id,
+                             head.manuscript_object_id) =
+                            (session.owner_user_id, session.project_id, $13::text::uuid)
+                       JOIN storyos.project_command_challenges AS challenge
+                         ON (challenge.owner_user_id, challenge.project_id,
+                             challenge.command_kind, challenge.idempotency_key) =
+                            (session.owner_user_id, session.project_id,
+                             $27, $12::text::uuid)
+                      WHERE session.owner_user_id = $1::text::uuid
+                        AND session.project_id = $2::text::uuid
+                        AND session.editor_session_id = $5::text::uuid
+                        AND session.client_session_binding_ref = $22
+                        AND session.client_session_generation = $7::text::numeric
+                        AND session.client_contract_revision = $23
+                        AND session.security_policy_revision = $24
+                        AND challenge.consumed_at IS NOT NULL
+                        AND EXISTS (
+                          SELECT 1 FROM storyos.projects AS project
+                           WHERE project.owner_user_id = session.owner_user_id
+                             AND project.project_id = session.project_id
+                             AND project.lifecycle_state = 'active'
+                        )",
+                    &[
+                        &owner_user_id,
+                        &project_id,
+                        &envelope.ids.author_command_admission_id,
+                        &envelope.ids.command_id,
+                        editor_session_id,
+                        &writer_generation.to_string(),
+                        &session_generation,
+                        &challenge.method,
+                        &challenge.route_template,
+                        &challenge.command_schema,
+                        &challenge.canonical_command_digest,
+                        &challenge.idempotency_key,
+                        chapter_object_id,
+                        expected_authoritative_revision_id,
+                        expected_proposal_head_revision_ids,
+                        target_refs,
+                        observed_ownership_partition,
+                        editor_contract_revision,
+                        undo_group_id,
+                        completed_intent_record_id,
+                        &local_intent_sequence.to_string(),
+                        &binding.binding_ref,
+                        &binding.client_contract_revision,
+                        &binding.security_policy_revision,
+                        &envelope.correlation_id,
+                        &command_bytes,
                         &command_kind,
                     ],
                 )

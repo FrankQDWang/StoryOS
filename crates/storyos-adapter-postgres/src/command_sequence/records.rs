@@ -168,12 +168,31 @@ pub(super) async fn lock_project(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
 ) -> Result<LockedProject, ProjectCommandError> {
+    project_row(client, envelope, "FOR UPDATE").await
+}
+
+/// Reads the Project row without a lock, for the settle step of a direct editor action. A writer
+/// takeover can then settle while an admitted edit waits for its Chapter head.
+pub(super) async fn read_project(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+) -> Result<LockedProject, ProjectCommandError> {
+    project_row(client, envelope, "").await
+}
+
+async fn project_row(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    lock: &str,
+) -> Result<LockedProject, ProjectCommandError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text
-               FROM storyos.projects
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-              FOR UPDATE",
+            &format!(
+                "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text
+                   FROM storyos.projects
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                  {lock}"
+            ),
             &[
                 &envelope.project_scope.owner_user_id.as_ref(),
                 &envelope.project_scope.project_id.as_ref(),
