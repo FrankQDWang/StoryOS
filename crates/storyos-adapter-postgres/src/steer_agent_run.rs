@@ -37,7 +37,7 @@ impl PostgresProjectReader {
 impl ProjectCommand for SteerAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "steerAgentRun",
-        applied: AppliedVariant::NoAuthorAction,
+        applied: &[AppliedVariant::NoAuthorAction],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,
@@ -212,7 +212,7 @@ impl ProjectCommand for SteerAgentRunInput {
         replay: &CommandReplay,
     ) -> Result<Option<SteeringRetained>, ReplayFault> {
         match replay.outcome::<SteerAgentRunNoEffect, SteerAgentRunConflict, Infallible>(
-            Self::SPEC.applied.result_kind(),
+            Self::SPEC.applied,
         )? {
             TransitionOutcome::NoEffect(SteerAgentRunNoEffect::SteeringRetained) => {
                 Ok(Some(SteeringRetained {

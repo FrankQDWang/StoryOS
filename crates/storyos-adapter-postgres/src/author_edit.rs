@@ -11,6 +11,12 @@ use storyos_core::{
 
 use super::*;
 
+mod compensation;
+pub(crate) use compensation::{
+    ObservedProseFrontier, ProseCompensation, compensate_revision, decode_revision_compensation,
+    load_revision_evidence,
+};
+
 #[derive(Debug)]
 pub(crate) struct ClassifiedAuthorEdit {
     pub result: ApplyAuthorEditResult,

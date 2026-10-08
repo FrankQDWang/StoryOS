@@ -19,8 +19,8 @@ use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
     ActionOnly, ActionSequence, Admission, AppliedVariant, Classification, CommandIsolation,
     CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission, NoResponse,
-    ProjectCommand, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, ZeroReceipt,
-    settle_project_command, unavailable,
+    ProjectCommand, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReceiptTime, ReplayEffect,
+    ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::undo_compensation::ForwardCommand;
 
@@ -68,7 +68,9 @@ fn observation_fields(
 impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "expandRefusedEditDraftToProposal",
-        applied: AppliedVariant::Forward(ForwardCommand::ExpandRefusedEditDraftToProposal),
+        applied: &[AppliedVariant::Forward(
+            ForwardCommand::ExpandRefusedEditDraftToProposal,
+        )],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidWriter,
         rate_limited: RateLimitedChallenge::InvalidChallenge,
@@ -328,6 +330,7 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
         ReceiptRefs {
             proposal_revision_ids: vec![expanded.proposal_revision_id.clone()],
             condition_refs: Vec::new(),
+            created_at: ReceiptTime::Clock,
             draft_artifact_refs: vec![self.draft_id.clone()],
             artifact_lifecycle_event_refs: vec![expanded.event_id.clone()],
             source_draft_disposition: Some(

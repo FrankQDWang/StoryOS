@@ -1,5 +1,10 @@
 //! Pure Core classification for Undo Latest Author Action.
 
+use std::convert::Infallible;
+
+use crate::TransitionOutcome;
+use crate::transition_outcome::reason_codes;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UndoLatestAuthorAction {
     pub expected_author_undo_frontier_sequence: u64,
@@ -30,27 +35,24 @@ pub enum AuthorUndoFrontierKind {
     Barrier,
 }
 
+/// The applied variant of one Author Undo.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UndoLatestAuthorActionResult {
-    Compensated {
-        source_sequence: u64,
-    },
-    ReversalRequired {
-        source_sequence: u64,
-    },
-    Conflicted {
-        reason: UndoLatestAuthorActionConflict,
-    },
-    Unavailable {
-        reason: UndoLatestAuthorActionUnavailable,
-    },
+pub enum UndoLatestAuthorActionApplied {
+    Compensated { source_sequence: u64 },
+    ReversalRequired { source_sequence: u64 },
 }
+
+/// The Core Transition Outcome of one Author Undo. An unavailable Undo records `refused`.
+pub type UndoLatestAuthorActionOutcome = TransitionOutcome<
+    UndoLatestAuthorActionApplied,
+    Infallible,
+    UndoLatestAuthorActionConflict,
+    UndoLatestAuthorActionUnavailable,
+>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UndoLatestAuthorActionConflict {
-    FrontierMismatch {
-        current_author_undo_frontier_sequence: Option<u64>,
-    },
+    FrontierMismatch,
     WrongTargetHead,
     SourceBindingChanged,
 }
@@ -62,71 +64,74 @@ pub enum UndoLatestAuthorActionUnavailable {
     SourceUnavailable,
 }
 
+reason_codes!(UndoLatestAuthorActionConflict {
+    FrontierMismatch => "frontier_mismatch",
+    WrongTargetHead => "wrong_target_head",
+    SourceBindingChanged => "source_binding_changed",
+});
+reason_codes!(UndoLatestAuthorActionUnavailable {
+    NoFrontier => "no_frontier",
+    Barrier => "barrier",
+    SourceUnavailable => "source_unavailable",
+});
+
 /// Classify one Undo Latest Author Action against the derived Author Undo Frontier.
-pub fn undo_latest_author_action(command: &UndoLatestAuthorAction) -> UndoLatestAuthorActionResult {
+pub fn undo_latest_author_action(
+    command: &UndoLatestAuthorAction,
+) -> UndoLatestAuthorActionOutcome {
     let Some(frontier) = command.current_author_undo_frontier.as_ref() else {
-        return UndoLatestAuthorActionResult::Unavailable {
-            reason: UndoLatestAuthorActionUnavailable::NoFrontier,
-        };
+        return TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::NoFrontier);
     };
     if frontier.sequence != command.expected_author_undo_frontier_sequence {
-        return UndoLatestAuthorActionResult::Conflicted {
-            reason: UndoLatestAuthorActionConflict::FrontierMismatch {
-                current_author_undo_frontier_sequence: Some(frontier.sequence),
-            },
-        };
+        return TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::FrontierMismatch);
     }
     match &frontier.kind {
-        AuthorUndoFrontierKind::Barrier => UndoLatestAuthorActionResult::Unavailable {
-            reason: UndoLatestAuthorActionUnavailable::Barrier,
-        },
-        AuthorUndoFrontierKind::DraftSourceUnavailable => {
-            UndoLatestAuthorActionResult::Unavailable {
-                reason: UndoLatestAuthorActionUnavailable::SourceUnavailable,
-            }
+        AuthorUndoFrontierKind::Barrier => {
+            TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::Barrier)
         }
-        AuthorUndoFrontierKind::DraftBindingChanged => UndoLatestAuthorActionResult::Conflicted {
-            reason: UndoLatestAuthorActionConflict::SourceBindingChanged,
-        },
+        AuthorUndoFrontierKind::DraftSourceUnavailable => {
+            TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::SourceUnavailable)
+        }
+        AuthorUndoFrontierKind::DraftBindingChanged => {
+            TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::SourceBindingChanged)
+        }
         AuthorUndoFrontierKind::ReversibleDraftClose => {
             if command.current_head_revision_id != command.expected_head_revision_id {
-                return UndoLatestAuthorActionResult::Conflicted {
-                    reason: UndoLatestAuthorActionConflict::WrongTargetHead,
-                };
+                return TransitionOutcome::Conflicted(
+                    UndoLatestAuthorActionConflict::WrongTargetHead,
+                );
             }
-            UndoLatestAuthorActionResult::Compensated {
+            TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
                 source_sequence: frontier.sequence,
-            }
+            })
         }
         AuthorUndoFrontierKind::ReversibleStructureTransition => {
-            UndoLatestAuthorActionResult::Compensated {
+            TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
                 source_sequence: frontier.sequence,
-            }
+            })
         }
         AuthorUndoFrontierKind::ReversibleAcceptance {
             resulting_revision_id,
             prior_evidence_usable,
         } => {
             if command.current_head_revision_id != command.expected_head_revision_id {
-                return UndoLatestAuthorActionResult::Conflicted {
-                    reason: UndoLatestAuthorActionConflict::WrongTargetHead,
-                };
+                return TransitionOutcome::Conflicted(
+                    UndoLatestAuthorActionConflict::WrongTargetHead,
+                );
             }
             if command.current_head_revision_id == *resulting_revision_id && *prior_evidence_usable
             {
-                UndoLatestAuthorActionResult::Compensated {
+                TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
                     source_sequence: frontier.sequence,
-                }
+                })
             } else if command.current_head_revision_id != *resulting_revision_id
                 && *prior_evidence_usable
             {
-                UndoLatestAuthorActionResult::ReversalRequired {
+                TransitionOutcome::Applied(UndoLatestAuthorActionApplied::ReversalRequired {
                     source_sequence: frontier.sequence,
-                }
+                })
             } else {
-                UndoLatestAuthorActionResult::Unavailable {
-                    reason: UndoLatestAuthorActionUnavailable::SourceUnavailable,
-                }
+                TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::SourceUnavailable)
             }
         }
         AuthorUndoFrontierKind::ReversibleDirectAuthorAction {
@@ -135,13 +140,13 @@ pub fn undo_latest_author_action(command: &UndoLatestAuthorAction) -> UndoLatest
             if &command.expected_head_revision_id != resulting_revision_id
                 || command.current_head_revision_id != command.expected_head_revision_id
             {
-                return UndoLatestAuthorActionResult::Conflicted {
-                    reason: UndoLatestAuthorActionConflict::WrongTargetHead,
-                };
+                return TransitionOutcome::Conflicted(
+                    UndoLatestAuthorActionConflict::WrongTargetHead,
+                );
             }
-            UndoLatestAuthorActionResult::Compensated {
+            TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
                 source_sequence: frontier.sequence,
-            }
+            })
         }
     }
 }

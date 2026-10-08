@@ -9,7 +9,9 @@ use storyos_application::{
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::{CommandSpec, LockedProject, SettlementProfile, unavailable};
+use super::{
+    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
+};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::manuscript_block::{
     blocks_from_stored_payload, copy_or_upgrade_revision_members, display_body_from_stored,
@@ -27,6 +29,18 @@ pub(crate) struct RevisionSequences {
 /// The Author Action disposition of one applied outcome (ADR 0044).
 pub(crate) enum ActionDisposition {
     Forward,
+    /// The Compensation of the Forward Author Action at `source_sequence`.
+    Compensation {
+        source_sequence: u64,
+    },
+}
+
+/// The move of the writer base Snapshot of the Editor Session to the new Revision.
+pub(crate) enum RevisionBase {
+    /// Moves the base when it is on the prior Revision. Another base stays.
+    WhenOnPrior,
+    /// Moves the base. A base that is not on the prior Revision is a binding conflict.
+    Required,
 }
 
 /// The Manuscript Blocks of the new Revision, in order.
@@ -46,14 +60,19 @@ pub(crate) struct RevisionWrite<E> {
     pub(crate) payload: String,
     pub(crate) members: RevisionMembers,
     pub(crate) disposition: ActionDisposition,
-    /// The writer Editor Session whose base Snapshot moves to the new Revision when the base is
-    /// on the prior Revision.
+    /// The writer Editor Session whose base Snapshot moves to the new Revision.
     pub(crate) editor_session_id: String,
+    pub(crate) writer_base: RevisionBase,
 }
 
 pub(crate) struct AuthoritativeRevision;
 
+impl<T> SelectsRecords<AuthoritativeRevision> for T {
+    fn selector(&self) {}
+}
+
 impl SettlementProfile for AuthoritativeRevision {
+    type Selector = ();
     type Sequences = RevisionSequences;
     type Write<E: Send> = RevisionWrite<E>;
     type Applied<E: Send> = RevisionApplied<E>;
@@ -61,6 +80,7 @@ impl SettlementProfile for AuthoritativeRevision {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
+        (): &(),
     ) -> Result<RevisionSequences, ProjectCommandError> {
         let row = client
             .query_one(
@@ -107,6 +127,7 @@ impl SettlementProfile for AuthoritativeRevision {
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
         _spec: &CommandSpec,
+        _variant: AppliedVariant,
         sequences: RevisionSequences,
         write: RevisionWrite<E>,
     ) -> Result<RevisionApplied<E>, ProjectCommandError> {
@@ -158,7 +179,7 @@ impl SettlementProfile for AuthoritativeRevision {
 }
 
 /// Writes the new Revision and its authority records after the Domain Receipt.
-async fn write_revision<E>(
+pub(crate) async fn write_revision<E>(
     client: &Client,
     scope: &ProjectScope,
     ids: &AuthorCommandAdmissionIds,
@@ -282,7 +303,10 @@ async fn write_revision<E>(
         .map_err(unavailable)?;
     let author_action_sequence = sequences.author_action_sequence.to_string();
     let (disposition, source_sequence) = match write.disposition {
-        ActionDisposition::Forward => ("forward", None::<String>),
+        ActionDisposition::Forward => ("forward", None),
+        ActionDisposition::Compensation { source_sequence } => {
+            ("compensation", Some(source_sequence.to_string()))
+        }
     };
     client
         .execute(
@@ -330,7 +354,7 @@ async fn write_revision<E>(
         .await
         .map_err(unavailable)?;
     let base_snapshot_id = Uuid::now_v7().to_string();
-    client
+    let base_updates = client
         .execute(
             "UPDATE storyos.editor_session_base_snapshots AS snapshot
                 SET snapshot_id = $4::text::uuid,
@@ -357,6 +381,14 @@ async fn write_revision<E>(
         )
         .await
         .map_err(unavailable)?;
+    match write.writer_base {
+        RevisionBase::WhenOnPrior => {}
+        RevisionBase::Required => {
+            if base_updates != 1 {
+                return Err(ProjectCommandError::BindingConflict);
+            }
+        }
+    }
     crate::snapshot::persist_canonical_snapshot(
         client,
         scope,

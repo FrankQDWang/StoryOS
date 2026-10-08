@@ -11,6 +11,9 @@ pub(crate) enum AppliedVariant {
     /// The applied outcome writes a Forward Author Action of this Forward command kind. The kind
     /// gives the Receipt result kind and the Author Undo Disposition.
     Forward(ForwardCommand),
+    /// The applied outcome writes a Compensation Author Action, and its Receipt records this
+    /// result kind.
+    Compensation(&'static str),
 }
 
 impl AppliedVariant {
@@ -18,13 +21,26 @@ impl AppliedVariant {
         match self {
             Self::NoAuthorAction => "authoritative_applied",
             Self::Forward(forward) => forward.result_kind(),
+            Self::Compensation(result_kind) => result_kind,
         }
     }
 
-    /// Whether the variant agrees with the command kind of its command declaration.
-    pub(super) const fn names_kind(self, kind: &str) -> bool {
+    /// Whether each Forward variant of a command declaration names the Forward command of its
+    /// command kind.
+    pub(super) const fn all_name_kind(variants: &[Self], kind: &str) -> bool {
+        let mut index = 0;
+        while index < variants.len() {
+            if !variants[index].names_kind(kind) {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+
+    const fn names_kind(self, kind: &str) -> bool {
         match self {
-            Self::NoAuthorAction => true,
+            Self::NoAuthorAction | Self::Compensation(_) => true,
             Self::Forward(forward) => {
                 let (expected, actual) = (forward.command_kind().as_bytes(), kind.as_bytes());
                 if expected.len() != actual.len() {

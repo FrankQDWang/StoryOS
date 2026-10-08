@@ -8,7 +8,9 @@ use storyos_application::{
 use tokio_postgres::Client;
 
 use super::records::insert_applied_activity;
-use super::{CommandSpec, LockedProject, SettlementProfile, unavailable};
+use super::{
+    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
+};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::structural_authority_settlement::{
     CurrentChapterSequences, allocate_current_chapter_sequences,
@@ -30,7 +32,12 @@ pub(crate) struct ChapterSelectionWrite<E> {
 /// Forward Author Action of one applied Current Chapter change.
 pub(crate) struct ChapterSelection;
 
+impl<T> SelectsRecords<ChapterSelection> for T {
+    fn selector(&self) {}
+}
+
 impl SettlementProfile for ChapterSelection {
+    type Selector = ();
     type Sequences = CurrentChapterSequences;
     type Write<E: Send> = ChapterSelectionWrite<E>;
     type Applied<E: Send> = ChapterSelectionApplied<E>;
@@ -38,6 +45,7 @@ impl SettlementProfile for ChapterSelection {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
+        (): &(),
     ) -> Result<CurrentChapterSequences, ProjectCommandError> {
         allocate_current_chapter_sequences(client, scope)
             .await
@@ -53,6 +61,7 @@ impl SettlementProfile for ChapterSelection {
         envelope: &ProjectCommandEnvelope,
         project: &LockedProject,
         spec: &CommandSpec,
+        _variant: AppliedVariant,
         sequences: CurrentChapterSequences,
         write: ChapterSelectionWrite<E>,
     ) -> Result<ChapterSelectionApplied<E>, ProjectCommandError> {

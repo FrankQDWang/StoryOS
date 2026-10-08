@@ -21,13 +21,17 @@ use crate::command_sequence::{
     ActionDisposition, Admission, AppliedVariant, AuthoritativeRevision, Classification,
     CommandIsolation, CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission,
     ProfileSequences, ProjectCommand, ProjectResponse, RateLimitedChallenge, ReceiptHeads,
-    ReceiptRefs, ReplayEffect, RevisionMembers, RevisionWrite, ZeroAuthorityRows, ZeroOutcome,
-    ZeroReceipt, settle_project_command, unavailable,
+    ReceiptRefs, ReplayEffect, RevisionBase, RevisionMembers, RevisionWrite, ZeroAuthorityRows,
+    ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
 use crate::undo_compensation::ForwardCommand;
 
+mod compensation;
 #[path = "accept_proposal_facts.rs"]
 mod facts;
+pub(crate) use compensation::{
+    AcceptanceCompensation, LoadedAcceptance, persist_reversal, record_unavailable, reversal_blocks,
+};
 use facts::load_proposal;
 
 impl PostgresProjectReader {
@@ -84,7 +88,7 @@ pub(crate) struct AcceptedRevision {
 impl ProjectCommand for AcceptProposal {
     const SPEC: CommandSpec = CommandSpec {
         kind: "acceptProposal",
-        applied: AppliedVariant::Forward(ForwardCommand::AcceptProposal),
+        applied: &[AppliedVariant::Forward(ForwardCommand::AcceptProposal)],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::Diagnosed,
         rate_limited: RateLimitedChallenge::InvalidChallenge,
@@ -307,6 +311,7 @@ impl ProjectCommand for AcceptProposal {
             members: RevisionMembers::CopyFrom(input.expected_authoritative_revision_id.clone()),
             disposition: ActionDisposition::Forward,
             editor_session_id: input.editor_session_id.as_ref().to_owned(),
+            writer_base: RevisionBase::WhenOnPrior,
         })
     }
 

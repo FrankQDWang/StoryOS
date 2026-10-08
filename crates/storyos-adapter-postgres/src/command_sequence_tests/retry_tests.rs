@@ -39,7 +39,7 @@ use super::support::{
 /// Marks the Command Challenge consumed and the Command Idempotency Fence in progress, then retries.
 ///
 /// Returns whether the retry is a binding conflict and the rows of the retry Receipt.
-async fn in_progress_retry<C: ProjectCommand<Error: SequenceError>>(
+pub(super) async fn in_progress_retry<C: ProjectCommand<Error: SequenceError>>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,

@@ -97,6 +97,9 @@ Each ticket that moves a command records here every observable difference from `
 - A reason type can give the Receipt result kind of its outcome. `AcceptProposalInvalid` gives `invalid`.
 - A command can write one child Receipt row after the Domain Receipt of each outcome, and the Domain Receipt can record condition references.
 - A command can declare `MissingAdmission::Diagnosed`. Then its diagnosis gives the error of an Admission insert that inserts no row.
+- A command can declare more than one applied variant. The command selects the variant of each applied outcome. `AppliedVariant::Compensation` gives the Receipt result kind of a Compensation. The compensation adapter gives the compensated source sequence.
+- A settlement profile can take a selector from the plan of the command. The selector chooses the sequences that the profile allocates. A profile with one write path takes no selector.
+- A command can record the time of the Domain Receipt as the transaction time. Author Undo does this when it reopens a Draft, as on `main`. All other Receipts record the clock time, as before.
 
 ### `acceptProposal`
 
@@ -111,6 +114,22 @@ Each ticket that moves a command records here every observable difference from `
   - An applied Receipt without its Authoritative Commit, its Revision, its payload, its Author Action, or its `project_activity_events` record gives `503 project_store_unavailable`. An applied Receipt whose Author Action is not Forward gives the same store fault. Before, a missing Commit or Revision stopped the Server process with a panic ([issue 930](https://github.com/FrankQDWang/StoryOS/issues/930)), and replay ignored the disposition. Foreign keys and the receipt relation trigger already prevent such a record.
   - A zero-authority Receipt with an Author Action gives a store fault. Before, replay ignored the Author Action. The receipt relation trigger already prevents such a record.
   - A Receipt `reason` field with the wrong JSON type gives a store fault. Before, replay read the value as text.
+- The behavior-equivalence review against `main` found no other difference.
+
+### `undoLatestAuthorAction`
+
+- `undoLatestAuthorAction` uses the explicit editor command Admission form, the `UndoCompensation` profile, and the Command-response Project. The profile sends the write and the replay to the compensation adapter of the Forward family.
+- The applied variants are `Compensation` with `authoritative_applied`, `Compensation` with `draft_closure_changed`, and `Forward` with `reversal_required`. The Receipt of a Reversal records the result kind `authoritative_applied`, as on `main`.
+- The `conflicted` and `refused` outcomes write only the Domain Receipt. When the frontier is an Acceptance, the `refused` outcome also writes the `undo_acceptance_receipts` child row with the outcome `unavailable`, as on `main`.
+- An Acceptance `conflicted` outcome writes no child row, as on `main`. The ticket text of [Settle undoLatestAuthorAction Through the Command Sequence](https://github.com/FrankQDWang/StoryOS/issues/965) says that a conflict writes the child row. But the `outcome` check of `undo_acceptance_receipts` has no conflict value, and the ticket also requires the rows of `main` without a migration. Thus the rows of `main` apply.
+- Each compensation adapter writes the same rows as on `main`. A Structure or Current Chapter Compensation writes a canonical Snapshot and no `project_activity_events` record, as on `main`.
+- Core gives the outcome as a `TransitionOutcome`. The reason code texts do not change.
+- The route uses the generic project command admission with the problem order of `main`.
+- The application Store trait, the command type, and the error type of the command are removed.
+- These observable changes follow from the sequence:
+  - The command locks the Project row before it uses the Command Challenge. It inserts its Admission after the Core classification, as on `main`.
+  - An applied Receipt whose Compensation records are missing or damaged gives `503 project_store_unavailable`. Examples are a missing Authoritative Commit, canonical Snapshot, Draft reopen event, or Receipt payload field, and an Author Action that is not a Compensation. Before, most of these gave `409 idempotency_binding_conflict`. Foreign keys and the receipt relation triggers already prevent such records.
+  - An exact retry of the Undo of an author Withdrawal returns the Project Activity position of the first acknowledgement. The Receipt payload records this position. Before, the retry returned the position zero ([issue 1031](https://github.com/FrankQDWang/StoryOS/issues/1031)).
 - The behavior-equivalence review against `main` found no other difference.
 
 ## Considered options

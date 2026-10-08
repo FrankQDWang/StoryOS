@@ -1,1304 +1,337 @@
-use crate::command_response_project::{
-    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
-    encode_command_response_project, read_command_response_project,
-};
+//! `undoLatestAuthorAction`: one Author Undo through the command sequence (ADR 0044). The
+//! compensation adapter of the Forward command kind writes its Compensation records.
+
+use std::convert::Infallible;
+
 use storyos_application::{
-    AuthorCommandAdmissionIds, ChapterId, EditorSessionError, Project,
-    ProjectCommandChallengeError, ProjectCommandChallengeUse, UndoLatestAuthorActionCommand,
-    UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
-    UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore,
+    AuthorUndoFrontierPosition, EditorSessionError, ProjectCommandEnvelope, ProjectCommandError,
+    UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
 };
 use storyos_core::{
-    AuthorUndoFrontier, UndoLatestAuthorAction as CoreUndo, UndoLatestAuthorActionConflict,
-    UndoLatestAuthorActionResult, undo_latest_author_action as classify_undo,
+    AuthorUndoFrontier, AuthorUndoFrontierKind, ProjectLifecycle, TransitionOutcome,
+    UndoLatestAuthorAction as CoreUndo, UndoLatestAuthorActionConflict,
+    UndoLatestAuthorActionUnavailable, undo_latest_author_action as classify_undo,
 };
-use uuid::Uuid;
+use tokio_postgres::Client;
 
-use super::*;
-use crate::author_edit::{parse_u64, sha256_hex};
-use crate::author_edit_proposal::ProposalEditCompensation;
-use crate::close_editor_flow_draft::DraftCompensation;
-use crate::reopen_rejected_operations::ReopenRejectedCompensation;
-use crate::reopen_withdrawn_proposal::ReopenWithdrawnCompensation;
-use crate::replan_proposal::ReplanCompensation;
-use crate::set_current_chapter::CurrentChapterCompensation;
-use crate::structural_authority_settlement::StructureCompensation;
-use crate::undo_compensation::{
-    CompensationAdapter, CompensationReplay, ForwardCommand, UndoDisposition,
+use crate::PostgresProjectReader;
+use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_sequence::{
+    Admission, AppliedVariant, Classification, CommandIsolation, CommandSpec, EditorAdmission,
+    EditorWriter, LockedProject, MissingAdmission, ProfileSequences, ProjectCommand,
+    ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReceiptTime, ReplayEffect,
+    ZeroAuthorityRows, ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
-use crate::undo_frontier::{LoadedUndoFrontier, ObservedFrontier, ObservedProseFrontier};
-use crate::withdraw_proposal::AuthorWithdrawalCompensation;
+use crate::undo_compensation::{ForwardCommand, UndoRequest};
+use crate::undo_frontier::{ObservedFrontier, load_observed_frontier};
 
-impl UndoLatestAuthorActionStore for PostgresProjectReader {
-    async fn undo_latest_author_action(
+mod profile;
+mod replay;
+pub(crate) use profile::{UndoCompensation, UndoPlan, UndoWrite};
+
+impl PostgresProjectReader {
+    /// Settles one Undo Latest Author Action.
+    pub async fn undo_latest_author_action(
         &self,
-        command: &UndoLatestAuthorActionCommand,
-    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-        let mut transaction = self
-            .begin_serializable_project_command_transaction(&command.project_scope)
-            .await
-            .map_err(undo_challenge_error)?;
-        let challenge_use = transaction
-            .consume(&command.challenge_binding, &command.nonce_digest)
-            .await
-            .map_err(undo_challenge_error)?;
-        match challenge_use {
-            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
-                transaction.rollback().await.map_err(undo_challenge_error)?;
-                read_undo_settlement(self, command, &result_reference).await
-            }
-            ProjectCommandChallengeUse::ExactRetryInProgress => {
-                transaction.rollback().await.map_err(undo_challenge_error)?;
-                Err(UndoLatestAuthorActionError::BindingConflict)
-            }
-            ProjectCommandChallengeUse::FirstUse => {
-                match persist_undo(&transaction.client, command).await {
-                    Ok(settlement) => {
-                        transaction.commit().await.map_err(undo_challenge_error)?;
-                        Ok(settlement)
-                    }
-                    Err(error) => {
-                        let _rollback = transaction.rollback().await;
-                        Err(error)
-                    }
-                }
-            }
-        }
+        envelope: &ProjectCommandEnvelope,
+        input: &UndoLatestAuthorActionInput,
+    ) -> Result<UndoLatestAuthorActionSettlement, ProjectCommandError> {
+        settle_project_command(
+            self,
+            envelope,
+            &UndoLatestAuthorAction {
+                input: input.clone(),
+            },
+        )
+        .await
     }
 }
 
-pub(super) enum UndoReceiptAuthority {
-    Prose {
-        revision_id: String,
-        commit_id: String,
-    },
-    Structure {
-        commit_id: String,
-    },
-    Draft {
-        draft_id: String,
-        event_id: String,
-    },
-    None,
+/// One Author Undo of the latest Forward Author Action.
+#[derive(Clone)]
+pub(crate) struct UndoLatestAuthorAction {
+    pub(crate) input: UndoLatestAuthorActionInput,
 }
 
-async fn persist_undo(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-    let LoadedUndoFrontier {
-        lifecycle_state,
-        observed,
-    } = crate::undo_frontier::load_observed_frontier(client, command).await?;
-    if lifecycle_state != "active" {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
-    }
-    let retry_source = match &observed {
-        Some(ObservedFrontier::Prose(_) | ObservedFrontier::Proposal(_)) => {
-            crate::close_editor_flow_draft::load_frontier(
-                client,
-                command,
-                observed.as_ref().expect("observed frontier").sequence(),
-            )
-            .await?
-        }
-        _ => None,
+impl ProjectCommand for UndoLatestAuthorAction {
+    const SPEC: CommandSpec = CommandSpec {
+        kind: "undoLatestAuthorAction",
+        applied: &[
+            AppliedVariant::Compensation("authoritative_applied"),
+            AppliedVariant::Compensation("draft_closure_changed"),
+            AppliedVariant::Forward(ForwardCommand::UndoReversalRequired),
+        ],
+        isolation: CommandIsolation::Serializable,
+        missing_admission: MissingAdmission::InvalidChallenge,
+        rate_limited: RateLimitedChallenge::InvalidChallenge,
+        // The compensation adapters write their own Activity records.
+        activity_kind: "",
+        replay_effect: ReplayEffect::Query(replay::UNDO_REPLAY_EFFECT),
     };
-    let classified = classify_undo(&CoreUndo {
-        expected_author_undo_frontier_sequence: command.expected_author_undo_frontier_sequence,
-        current_author_undo_frontier: observed.as_ref().map(|frontier| AuthorUndoFrontier {
-            sequence: frontier.sequence(),
-            kind: retry_source
+    type Error = ProjectCommandError;
+    type Profile = UndoCompensation;
+    type Response = ProjectResponse;
+    type ZeroEffect = AuthorUndoFrontierPosition;
+    type Applied = ();
+    type Plan = UndoPlan;
+    type Effect = ();
+    type NoEffect = Infallible;
+    type Conflict = UndoLatestAuthorActionConflict;
+    type Refusal = UndoLatestAuthorActionUnavailable;
+
+    async fn classify(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        project: &LockedProject,
+    ) -> Result<Classification<Self>, ProjectCommandError> {
+        match project.lifecycle {
+            ProjectLifecycle::Active => {}
+            ProjectLifecycle::Archived => return Err(ProjectCommandError::BindingConflict),
+        }
+        let request = UndoRequest::new(envelope, &self.input);
+        let observed = load_observed_frontier(client, &request).await?;
+        let retry_source = match &observed {
+            Some(frontier @ (ObservedFrontier::Prose(_) | ObservedFrontier::Proposal(_))) => {
+                crate::close_editor_flow_draft::load_frontier(client, &request, frontier.sequence())
+                    .await?
+            }
+            _ => None,
+        };
+        let outcome = classify_undo(&CoreUndo {
+            expected_author_undo_frontier_sequence: request.expected_author_undo_frontier_sequence,
+            current_author_undo_frontier: observed.as_ref().map(|frontier| AuthorUndoFrontier {
+                sequence: frontier.sequence(),
+                kind: retry_source
+                    .as_ref()
+                    .filter(|source| source.kind != AuthorUndoFrontierKind::ReversibleDraftClose)
+                    .map_or_else(|| frontier.kind(), |source| source.kind.clone()),
+            }),
+            expected_head_revision_id: request.expected_authoritative_revision_id.clone(),
+            current_head_revision_id: observed
                 .as_ref()
-                .filter(|source| {
-                    source.kind != storyos_core::AuthorUndoFrontierKind::ReversibleDraftClose
-                })
-                .map_or_else(|| frontier.kind(), |source| source.kind.clone()),
-        }),
-        expected_head_revision_id: command.expected_authoritative_revision_id.clone(),
-        current_head_revision_id: observed
+                .and_then(ObservedFrontier::prose_head)
+                .unwrap_or_default()
+                .to_owned(),
+        });
+        let admission = undo_admission(client, &request, observed.as_ref()).await?;
+        let expected = request.expected_authoritative_revision_id.clone();
+        let head = observed
             .as_ref()
             .and_then(ObservedFrontier::prose_head)
-            .unwrap_or_default()
-            .to_owned(),
-    });
-    let session_chapter = crate::undo_frontier::editor_session_chapter(client, command).await?;
-    let (admission_chapter, admission_expected) = match &observed {
-        Some(ObservedFrontier::Acceptance(frontier)) => (
-            Some(frontier.chapter_id.as_str()),
-            Some(command.expected_authoritative_revision_id.as_str()),
-        ),
+            .unwrap_or(expected.as_str())
+            .to_owned();
+        let zero_heads = ReceiptHeads {
+            expected: vec![expected.clone()],
+            prior: vec![head.clone()],
+            resulting: vec![head],
+        };
+        let frontier = AuthorUndoFrontierPosition {
+            current_author_undo_frontier_sequence: observed
+                .as_ref()
+                .map(ObservedFrontier::sequence),
+        };
+        let outcome = match outcome {
+            TransitionOutcome::Applied(applied) => {
+                match UndoPlan::new(client, &request, applied, observed).await? {
+                    Some(plan) => TransitionOutcome::Applied(((), plan)),
+                    None => TransitionOutcome::Refused(
+                        UndoLatestAuthorActionUnavailable::SourceUnavailable,
+                    ),
+                }
+            }
+            TransitionOutcome::NoEffect(reason) => match reason {},
+            TransitionOutcome::Conflicted(reason) => TransitionOutcome::Conflicted(reason),
+            TransitionOutcome::Refused(reason) => TransitionOutcome::Refused(reason),
+        };
+        let heads = match &outcome {
+            TransitionOutcome::Applied(((), plan)) => plan.heads(&expected),
+            TransitionOutcome::NoEffect(_)
+            | TransitionOutcome::Conflicted(_)
+            | TransitionOutcome::Refused(_) => zero_heads,
+        };
+        Ok(Classification {
+            outcome,
+            admission,
+            heads,
+            zero_receipt: ZeroReceipt::Observed {
+                fields: serde_json::Map::new(),
+                refs: ReceiptRefs::default(),
+                effect: frontier,
+            },
+        })
+    }
+
+    fn applied_variant(&self, (): &(), plan: &UndoPlan) -> AppliedVariant {
+        plan.variant()
+    }
+
+    fn applied_receipt_payload(&self, (): &(), plan: &UndoPlan) -> String {
+        serde_json::Value::Object(plan.receipt_payload()).to_string()
+    }
+
+    fn applied_receipt_refs(&self, (): &(), plan: &UndoPlan) -> ReceiptRefs {
+        let (mut draft_artifact_refs, mut artifact_lifecycle_event_refs): (Vec<_>, Vec<_>) =
+            plan.receipt_draft().into_iter().unzip();
+        let created_at = match &plan.source_reopen {
+            Some(source) => {
+                draft_artifact_refs.push(source.draft_id.clone());
+                artifact_lifecycle_event_refs.push(source.reopen_event_id.clone());
+                ReceiptTime::Transaction
+            }
+            None => ReceiptTime::Clock,
+        };
+        ReceiptRefs {
+            draft_artifact_refs,
+            artifact_lifecycle_event_refs,
+            created_at,
+            ..ReceiptRefs::default()
+        }
+    }
+
+    async fn apply(
+        &self,
+        _client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        _project: &LockedProject,
+        _sequences: &ProfileSequences<Self>,
+        plan: UndoPlan,
+        (): (),
+    ) -> Result<UndoWrite<()>, ProjectCommandError> {
+        Ok(UndoWrite {
+            effect: (),
+            request: UndoRequest::new(envelope, &self.input),
+            plan,
+        })
+    }
+
+    fn decode(&self, _replay: &CommandReplay) -> Result<(), ReplayFault> {
+        Ok(())
+    }
+
+    fn zero_authority_rows(&self, outcome: &ZeroOutcome<'_, Self>) -> ZeroAuthorityRows {
+        match outcome {
+            ZeroOutcome::Refused(_) => ZeroAuthorityRows::Effect,
+            ZeroOutcome::NoEffect(_) | ZeroOutcome::Conflicted(_) => ZeroAuthorityRows::None,
+        }
+    }
+
+    /// An unavailable Undo of an Acceptance writes its child Receipt. The frontier is the one
+    /// that classification observed, because the transaction holds the Project lock.
+    async fn write_zero_authority_effect(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        _outcome: &ZeroOutcome<'_, Self>,
+    ) -> Result<AuthorUndoFrontierPosition, ProjectCommandError> {
+        let request = UndoRequest::new(envelope, &self.input);
+        let observed = load_observed_frontier(client, &request).await?;
+        if let Some(ObservedFrontier::Acceptance(loaded)) = &observed {
+            crate::accept_proposal::record_unavailable(client, &request, loaded).await?;
+        }
+        Ok(AuthorUndoFrontierPosition {
+            current_author_undo_frontier_sequence: observed
+                .as_ref()
+                .map(ObservedFrontier::sequence),
+        })
+    }
+
+    fn decode_zero_authority_effect(
+        &self,
+        replay: &CommandReplay,
+    ) -> Result<Option<AuthorUndoFrontierPosition>, ReplayFault> {
+        Ok(Some(AuthorUndoFrontierPosition {
+            current_author_undo_frontier_sequence: replay::frontier_as_of_receipt(replay)?,
+        }))
+    }
+}
+
+/// The Admission of an Author Undo: the Chapter and the expected Revision of its frontier.
+async fn undo_admission(
+    client: &Client,
+    request: &UndoRequest,
+    observed: Option<&ObservedFrontier>,
+) -> Result<Admission, ProjectCommandError> {
+    let expected = request.expected_authoritative_revision_id.as_str();
+    let session_chapter = crate::undo_frontier::editor_session_chapter(client, request).await?;
+    let (chapter, expected_revision) = match observed {
+        Some(ObservedFrontier::Acceptance(frontier)) => {
+            (Some(frontier.chapter_id.as_str()), Some(expected))
+        }
         Some(ObservedFrontier::Prose(frontier)) => (
             Some(frontier.chapter_id.as_str()),
             Some(frontier.resulting_revision_id.as_str()),
         ),
-        Some(ObservedFrontier::Proposal(frontier)) => (
-            Some(frontier.chapter_id.as_str()),
-            Some(command.expected_authoritative_revision_id.as_str()),
-        ),
-        Some(ObservedFrontier::AuthorWithdrawal(frontier)) => (
-            Some(frontier.chapter_id.as_str()),
-            Some(command.expected_authoritative_revision_id.as_str()),
-        ),
+        Some(ObservedFrontier::Proposal(frontier)) => {
+            (Some(frontier.chapter_id.as_str()), Some(expected))
+        }
+        Some(ObservedFrontier::AuthorWithdrawal(frontier)) => {
+            (Some(frontier.chapter_id.as_str()), Some(expected))
+        }
         Some(
             ObservedFrontier::Replan(decision)
             | ObservedFrontier::ReopenWithdrawnProposal(decision),
-        ) => (
-            Some(decision.chapter_id.as_str()),
-            Some(command.expected_authoritative_revision_id.as_str()),
-        ),
-        Some(ObservedFrontier::ReopenRejectedOperations(frontier)) => (
-            Some(frontier.decision.chapter_id.as_str()),
-            Some(command.expected_authoritative_revision_id.as_str()),
-        ),
+        ) => (Some(decision.chapter_id.as_str()), Some(expected)),
+        Some(ObservedFrontier::ReopenRejectedOperations(frontier)) => {
+            (Some(frontier.decision.chapter_id.as_str()), Some(expected))
+        }
         Some(
             ObservedFrontier::Structure(_)
             | ObservedFrontier::CurrentChapter(_)
             | ObservedFrontier::DraftClose(_)
             | ObservedFrontier::Barrier { .. },
         )
-        | None => {
-            match (
-                session_chapter.as_deref(),
-                command.expected_authoritative_revision_id.as_str(),
-            ) {
-                (Some(chapter), expected) if !expected.is_empty() => {
-                    (Some(chapter), Some(expected))
-                }
-                _ => (None, None),
-            }
-        }
+        | None => match session_chapter.as_deref() {
+            Some(chapter) if !expected.is_empty() => (Some(chapter), Some(expected)),
+            Some(_) | None => (None, None),
+        },
     };
-    insert_undo_admission(client, command, admission_chapter, admission_expected).await?;
-    let mut settlement = match classified {
-        UndoLatestAuthorActionResult::Compensated { source_sequence } => match &observed {
-            Some(ObservedFrontier::Acceptance(loaded)) => {
-                let prose = ObservedProseFrontier {
-                    sequence: loaded.sequence,
-                    chapter_id: loaded.chapter_id.clone(),
-                    resulting_revision_id: loaded.resulting_revision_id.clone(),
-                    prior_revision_id: loaded.prior_revision_id.clone(),
-                    prior_payload: loaded.prior_payload.clone(),
-                    current_head_revision_id: loaded.current_head_revision_id.clone(),
-                };
-                let mut settlement =
-                    persist_compensation(client, command, &prose, source_sequence).await?;
-                let (commit_id, revision_id) = match &settlement.effect {
-                    UndoLatestAuthorActionSettlementEffect::Compensated {
-                        authoritative_commit_id,
-                        revision_id,
-                        ..
-                    } => (authoritative_commit_id.clone(), revision_id.clone()),
-                    UndoLatestAuthorActionSettlementEffect::CompensatedDraft { .. }
-                    | UndoLatestAuthorActionSettlementEffect::ReversalRequired { .. }
-                    | UndoLatestAuthorActionSettlementEffect::CompensatedStructure { .. }
-                    | UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
-                        ..
-                    }
-                    | UndoLatestAuthorActionSettlementEffect::CompensatedProposal { .. }
-                    | UndoLatestAuthorActionSettlementEffect::Conflicted { .. }
-                    | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => {
-                        return Err(UndoLatestAuthorActionError::BindingConflict);
-                    }
-                };
-                let (proposal_id, proposal_revision_id) =
-                    crate::undo_acceptance::link_after_compensation(
-                        client,
-                        command,
-                        loaded,
-                        &commit_id,
-                        &revision_id,
-                        settlement.project_activity_position,
-                    )
-                    .await?;
-                if let UndoLatestAuthorActionSettlementEffect::Compensated {
-                    proposal_id: linked_proposal,
-                    proposal_revision_id: linked_revision,
-                    ..
-                } = &mut settlement.effect
-                {
-                    *linked_proposal = proposal_id;
-                    *linked_revision = proposal_revision_id;
-                }
-                Ok(settlement)
-            }
-            Some(ObservedFrontier::Prose(frontier)) => {
-                persist_compensation(client, command, frontier, source_sequence).await
-            }
-            Some(ObservedFrontier::Structure(frontier)) => {
-                StructureCompensation::compensate(client, command, frontier, source_sequence).await
-            }
-            Some(ObservedFrontier::CurrentChapter(frontier)) => {
-                CurrentChapterCompensation::compensate(client, command, frontier, source_sequence)
-                    .await
-            }
-            Some(ObservedFrontier::Proposal(frontier)) => {
-                ProposalEditCompensation::compensate(client, command, frontier, source_sequence)
-                    .await
-            }
-            Some(ObservedFrontier::AuthorWithdrawal(frontier)) => {
-                AuthorWithdrawalCompensation::compensate(client, command, frontier, source_sequence)
-                    .await
-            }
-            Some(ObservedFrontier::Replan(frontier)) => {
-                ReplanCompensation::compensate(client, command, frontier, source_sequence).await
-            }
-            Some(ObservedFrontier::ReopenRejectedOperations(frontier)) => {
-                ReopenRejectedCompensation::compensate(client, command, frontier, source_sequence)
-                    .await
-            }
-            Some(ObservedFrontier::ReopenWithdrawnProposal(frontier)) => {
-                ReopenWithdrawnCompensation::compensate(client, command, frontier, source_sequence)
-                    .await
-            }
-            Some(ObservedFrontier::DraftClose(frontier)) => {
-                DraftCompensation::compensate(client, command, frontier, source_sequence).await
-            }
-            Some(ObservedFrontier::Barrier { .. }) | None => {
-                Err(UndoLatestAuthorActionError::BindingConflict)
-            }
-        },
-        UndoLatestAuthorActionResult::ReversalRequired { source_sequence } => match &observed {
-            Some(ObservedFrontier::Acceptance(loaded)) => {
-                match crate::undo_acceptance::persist_reversal(
-                    client,
-                    command,
-                    loaded,
-                    source_sequence,
-                )
-                .await?
-                {
-                    Some(settlement) => Ok(settlement),
-                    None => {
-                        let settlement = persist_zero_authority(
-                            client,
-                            command,
-                            observed.as_ref(),
-                            (
-                                "refused",
-                                "source_unavailable",
-                                UndoLatestAuthorActionSettlementEffect::Unavailable {
-                                    reason:
-                                        storyos_core::UndoLatestAuthorActionUnavailable::SourceUnavailable,
-                                },
-                            ),
-                        )
-                        .await?;
-                        crate::undo_acceptance::record_unavailable(client, command, loaded).await?;
-                        Ok(settlement)
-                    }
-                }
-            }
-            Some(
-                ObservedFrontier::Prose(_)
-                | ObservedFrontier::Structure(_)
-                | ObservedFrontier::CurrentChapter(_)
-                | ObservedFrontier::Proposal(_)
-                | ObservedFrontier::Replan(_)
-                | ObservedFrontier::ReopenRejectedOperations(_)
-                | ObservedFrontier::ReopenWithdrawnProposal(_)
-                | ObservedFrontier::AuthorWithdrawal(_)
-                | ObservedFrontier::DraftClose(_)
-                | ObservedFrontier::Barrier { .. },
-            )
-            | None => Err(UndoLatestAuthorActionError::BindingConflict),
-        },
-        UndoLatestAuthorActionResult::Conflicted { reason } => {
-            persist_zero_authority(
-                client,
-                command,
-                observed.as_ref(),
-                (
-                    "conflicted",
-                    match &reason {
-                        UndoLatestAuthorActionConflict::FrontierMismatch { .. } => {
-                            "frontier_mismatch"
-                        }
-                        UndoLatestAuthorActionConflict::WrongTargetHead => "wrong_target_head",
-                        UndoLatestAuthorActionConflict::SourceBindingChanged => {
-                            "source_binding_changed"
-                        }
-                    },
-                    UndoLatestAuthorActionSettlementEffect::Conflicted { reason },
-                ),
-            )
-            .await
-        }
-        UndoLatestAuthorActionResult::Unavailable { reason } => {
-            let settlement = persist_zero_authority(
-                client,
-                command,
-                observed.as_ref(),
-                (
-                    "refused",
-                    match reason {
-                        storyos_core::UndoLatestAuthorActionUnavailable::NoFrontier => {
-                            "no_frontier"
-                        }
-                        storyos_core::UndoLatestAuthorActionUnavailable::Barrier => "barrier",
-                        storyos_core::UndoLatestAuthorActionUnavailable::SourceUnavailable => {
-                            "source_unavailable"
-                        }
-                    },
-                    UndoLatestAuthorActionSettlementEffect::Unavailable { reason },
-                ),
-            )
-            .await?;
-            if let Some(ObservedFrontier::Acceptance(loaded)) = &observed {
-                crate::undo_acceptance::record_unavailable(client, command, loaded).await?;
-            }
-            Ok(settlement)
-        }
-    }?;
-    settlement.source_reopen_event =
-        crate::undo_draft_retry::read_reopen(client, command, &command.ids.receipt_id).await?;
-    Ok(settlement)
+    Ok(Admission::ExplicitEditorCommand(EditorAdmission {
+        editor_session_id: request.editor_session_id.as_ref().to_owned(),
+        chapter_object_id: chapter.map(str::to_owned),
+        expected_authoritative_revision_id: expected_revision.map(str::to_owned),
+        target_refs: Vec::new(),
+        writer: EditorWriter::Current,
+    }))
 }
 
-async fn persist_compensation(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-    frontier: &ObservedProseFrontier,
-    source_sequence: u64,
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-    let counter_row = client
+/// The `created_at` text of the Undo Receipt of `command`, as the Receipt records it.
+pub(crate) async fn receipt_created_at(
+    client: &Client,
+    command: &UndoRequest,
+) -> Result<String, ProjectCommandError> {
+    Ok(client
         .query_one(
-            "INSERT INTO storyos.scope_counters AS counters
-               (owner_user_id, project_id, author_action_sequence,
-                authoritative_commit_sequence, project_activity_position)
-             VALUES ($1::text::uuid, $2::text::uuid, 1, 1, 1)
-             ON CONFLICT (owner_user_id, project_id)
-             DO UPDATE SET
-               author_action_sequence = counters.author_action_sequence + 1,
-               authoritative_commit_sequence = counters.authoritative_commit_sequence + 1,
-               project_activity_position = counters.project_activity_position + 1
-             RETURNING counters.author_action_sequence::text,
-                       counters.authoritative_commit_sequence::text,
-                       counters.project_activity_position::text",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    let author_action_sequence = parse_u64(counter_row.get(0)).map_err(undo_from_author_edit)?;
-    let authoritative_commit_sequence =
-        parse_u64(counter_row.get(1)).map_err(undo_from_author_edit)?;
-    let project_activity_position = parse_u64(counter_row.get(2)).map_err(undo_from_author_edit)?;
-    let revision_id = Uuid::now_v7().to_string();
-    let payload_id = Uuid::now_v7().to_string();
-    let authoritative_commit_id = Uuid::now_v7().to_string();
-    let project_activity_event_id = Uuid::now_v7().to_string();
-    client
-        .execute(
-            "INSERT INTO storyos.authoritative_payloads
-               (owner_user_id, project_id, payload_id, canonical_bytes)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, convert_to($4, 'UTF8'))",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &payload_id,
-                &frontier.prior_payload,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    client
-        .execute(
-            "INSERT INTO storyos.authoritative_revisions
-               (owner_user_id, project_id, manuscript_object_id, revision_id, payload_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5::text::uuid)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &frontier.chapter_id,
-                &revision_id,
-                &payload_id,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    let copied = crate::manuscript_block::copy_or_upgrade_revision_members(
-        client,
-        command.project_scope.owner_user_id.as_ref(),
-        command.project_scope.project_id.as_ref(),
-        &frontier.chapter_id,
-        &frontier.prior_revision_id,
-        &revision_id,
-    )
-    .await
-    .map_err(undo_database_error)?;
-    if copied == 0 {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
-            std::io::Error::other("compensating revision members were not copied"),
-        )));
-    }
-    let blocks = crate::manuscript_block::load_revision_blocks(
-        client,
-        command.project_scope.owner_user_id.as_ref(),
-        command.project_scope.project_id.as_ref(),
-        &frontier.chapter_id,
-        &revision_id,
-        &frontier.prior_payload,
-    )
-    .await
-    .map_err(undo_database_error)?;
-    let body = crate::manuscript_block::display_body_from_stored(&frontier.prior_payload, &blocks);
-    client
-        .execute(
-            "INSERT INTO storyos.authoritative_revision_envelopes
-               (owner_user_id, project_id, manuscript_object_id, revision_id, parent_revision_id,
-                schema_revision, creator_kind, creator_ref, receipt_id, receipt_result_kind,
-                cause_kind, payload_digest)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'storyos.authoritative-revision-envelope.v1',
-                     'author_command_admission', $6::text::uuid, $7::text::uuid,
-                     'authoritative_applied', 'direct_author_action', $8)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &frontier.chapter_id,
-                &revision_id,
-                &frontier.current_head_revision_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-                &sha256_hex(frontier.prior_payload.as_bytes()),
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    let head_updates = client
-        .execute(
-            "UPDATE storyos.authoritative_heads SET current_revision_id = $4::text::uuid
+            "SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+               FROM storyos.domain_receipts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND manuscript_object_id = $3::text::uuid AND current_revision_id = $5::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &frontier.chapter_id,
-                &revision_id,
-                &frontier.current_head_revision_id,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    if head_updates != 1 {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
-    }
-    client
-        .execute(
-            "INSERT INTO storyos.authoritative_commits
-               (owner_user_id, project_id, authoritative_commit_id, authoritative_commit_sequence,
-                manuscript_object_id, prior_revision_id, resulting_revision_id,
-                author_command_admission_id, receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::numeric,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, 'authoritative_applied')",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &authoritative_commit_id,
-                &authoritative_commit_sequence.to_string(),
-                &frontier.chapter_id,
-                &frontier.current_head_revision_id,
-                &revision_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    let receipt_created_at = insert_undo_receipt(
-        client,
-        command,
-        "authoritative_applied",
-        "{}",
-        &frontier.current_head_revision_id,
-        &revision_id,
-        UndoReceiptAuthority::Prose {
-            revision_id: revision_id.clone(),
-            commit_id: authoritative_commit_id.clone(),
-        },
-    )
-    .await?;
-    client
-        .execute(
-            "INSERT INTO storyos.author_action_entries
-               (owner_user_id, project_id, author_action_sequence, disposition,
-                compensated_source_sequence, authoritative_commit_id, receipt_id,
-                receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'compensation',
-                     $4::text::numeric, $5::text::uuid, $6::text::uuid, 'authoritative_applied')",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &author_action_sequence.to_string(),
-                &source_sequence.to_string(),
-                &authoritative_commit_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    client
-        .execute(
-            "INSERT INTO storyos.project_activity_events
-               (owner_user_id, project_id, project_activity_position,
-                project_activity_event_id, event_kind, receipt_id,
-                receipt_result_kind, authoritative_commit_id,
-                resulting_revision_id, author_action_sequence)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric,
-                     $4::text::uuid, 'authoritative_author_edit_applied',
-                     $5::text::uuid, 'authoritative_applied', $6::text::uuid,
-                     $7::text::uuid, $8::text::numeric)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &project_activity_position.to_string(),
-                &project_activity_event_id,
-                &command.ids.receipt_id,
-                &authoritative_commit_id,
-                &revision_id,
-                &author_action_sequence.to_string(),
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    let base_snapshot_id = Uuid::now_v7().to_string();
-    let base_updates = client
-        .execute(
-            "UPDATE storyos.editor_session_base_snapshots AS snapshot
-                SET snapshot_id = $4::text::uuid,
-                    authoritative_revision_id = $5::text::uuid,
-                    project_activity_position = $6::text::numeric,
-                    created_at = clock_timestamp()
-               FROM storyos.project_writer_generations AS writer
-              WHERE snapshot.owner_user_id = $1::text::uuid
-                AND snapshot.project_id = $2::text::uuid
-                AND snapshot.editor_session_id = $3::text::uuid
-                AND snapshot.authoritative_revision_id = $7::text::uuid
-                AND (writer.owner_user_id, writer.project_id,
-                     writer.current_editor_session_id) =
-                    (snapshot.owner_user_id, snapshot.project_id,
-                     snapshot.editor_session_id)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.editor_session_id.as_ref(),
-                &base_snapshot_id,
-                &revision_id,
-                &project_activity_position.to_string(),
-                &frontier.current_head_revision_id,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    if base_updates != 1 {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
-    }
-    crate::snapshot::persist_canonical_snapshot(
-        client,
-        &command.project_scope,
-        &base_snapshot_id,
-        project_activity_position,
-    )
-    .await
-    .map_err(undo_database_error)?;
-    let response_project = settle_idempotency(client, command).await?;
-    let author_undo_frontier_sequence =
-        crate::editor_session::current_author_undo_frontier_sequence(
-            client,
-            command.project_scope.owner_user_id.as_ref(),
-            command.project_scope.project_id.as_ref(),
-        )
-        .await
-        .map_err(undo_from_session)?;
-    Ok(UndoLatestAuthorActionSettlement {
-        source_reopen_event: None,
-        ids: command.ids.clone(),
-        effect: UndoLatestAuthorActionSettlementEffect::Compensated {
-            source_sequence,
-            author_action_sequence,
-            authoritative_commit_id,
-            revision_id,
-            body,
-            blocks,
-            author_undo_frontier_sequence,
-            proposal_id: None,
-            proposal_revision_id: None,
-        },
-        receipt_created_at,
-        project_activity_position,
-        response_project,
-    })
-}
-
-pub(super) async fn persist_zero_authority(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-    frontier: Option<&ObservedFrontier>,
-    classified: (
-        &'static str,
-        &'static str,
-        UndoLatestAuthorActionSettlementEffect,
-    ),
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-    let (result_kind, payload_reason, effect) = classified;
-    let head = frontier
-        .and_then(ObservedFrontier::prose_head)
-        .unwrap_or(command.expected_authoritative_revision_id.as_str());
-    let result_payload = format!(r#"{{"reason":"{payload_reason}"}}"#);
-    let receipt_created_at = insert_undo_receipt(
-        client,
-        command,
-        result_kind,
-        &result_payload,
-        head,
-        head,
-        UndoReceiptAuthority::None,
-    )
-    .await?;
-    let response_project = settle_idempotency(client, command).await?;
-    Ok(UndoLatestAuthorActionSettlement {
-        source_reopen_event: None,
-        ids: command.ids.clone(),
-        effect,
-        receipt_created_at,
-        project_activity_position: 0,
-        response_project,
-    })
-}
-
-async fn insert_undo_admission(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-    chapter_object_id: Option<&str>,
-    expected_authoritative_revision_id: Option<&str>,
-) -> Result<(), UndoLatestAuthorActionError> {
-    let client_session_generation = command.client_binding.session_generation.to_string();
-    let inserted = client
-        .execute(
-            "INSERT INTO storyos.author_command_admissions
-               (owner_user_id, project_id, author_command_admission_id, command_id,
-                editor_session_id, writer_generation, client_session_binding_ref,
-                client_session_generation, client_contract_revision, security_policy_revision,
-                action_class, method, route_template, command_schema, command_kind,
-                canonical_command_digest, idempotency_key, challenge_consumed_at,
-                challenge_expires_at, correlation_id, chapter_object_id,
-                expected_authoritative_revision_id, expected_proposal_head_revision_ids,
-                target_refs, observed_ownership_partition, editor_contract_revision,
-                undo_group_id, completed_intent_record_id, local_intent_sequence, command_payload)
-             SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                    session.editor_session_id, writer.writer_generation,
-                    session.client_session_binding_ref, $6::text::numeric,
-                    session.client_contract_revision, session.security_policy_revision,
-                    'explicit_editor_command', $7, $8, $9, 'undoLatestAuthorAction',
-                    $10, $11::text::uuid, challenge.consumed_at, challenge.expires_at,
-                    $12::text::uuid, $13::text::uuid, $14::text::uuid, '{}'::uuid[], '{}'::text[],
-                    NULL, session.client_contract_revision, NULL, NULL, NULL,
-                    convert_from($15::bytea, 'UTF8')::jsonb
-               FROM storyos.editor_sessions AS session
-               JOIN storyos.project_writer_generations AS writer
-                 ON (writer.owner_user_id, writer.project_id,
-                     writer.current_editor_session_id) =
-                    (session.owner_user_id, session.project_id, session.editor_session_id)
-                AND writer.writer_generation = (
-                  SELECT max(current_writer.writer_generation)
-                    FROM storyos.project_writer_generations AS current_writer
-                   WHERE current_writer.owner_user_id = session.owner_user_id
-                     AND current_writer.project_id = session.project_id
-                )
-               JOIN storyos.project_command_challenges AS challenge
-                 ON (challenge.owner_user_id, challenge.project_id,
-                     challenge.command_kind, challenge.idempotency_key) =
-                    (session.owner_user_id, session.project_id,
-                     'undoLatestAuthorAction', $11::text::uuid)
-              WHERE session.owner_user_id = $1::text::uuid
-                AND session.project_id = $2::text::uuid
-                AND session.editor_session_id = $5::text::uuid
-                AND session.client_session_binding_ref = $16
-                AND session.client_session_generation = $6::text::numeric
-                AND session.client_contract_revision = $17
-                AND session.security_policy_revision = $18
-                AND challenge.consumed_at IS NOT NULL",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.author_command_admission_id,
-                &command.ids.command_id,
-                &command.editor_session_id.as_ref(),
-                &client_session_generation,
-                &command.challenge_binding.method,
-                &command.challenge_binding.route_template,
-                &command.challenge_binding.command_schema,
-                &command.challenge_binding.canonical_command_digest,
-                &command.challenge_binding.idempotency_key,
-                &command.correlation_id,
-                &chapter_object_id,
-                &expected_authoritative_revision_id,
-                &command.canonical_command_bytes.as_slice(),
-                &command.client_binding.binding_ref,
-                &command.client_binding.client_contract_revision,
-                &command.client_binding.security_policy_revision,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    if inserted != 1 {
-        return Err(UndoLatestAuthorActionError::InvalidChallenge);
-    }
-    Ok(())
-}
-
-pub(super) async fn insert_undo_receipt(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-    result_kind: &str,
-    result_payload: &str,
-    prior_head: &str,
-    resulting_head: &str,
-    authority: UndoReceiptAuthority,
-) -> Result<String, UndoLatestAuthorActionError> {
-    let (revision_ids, commit_ids) = match &authority {
-        UndoReceiptAuthority::Prose {
-            revision_id,
-            commit_id,
-        } => (vec![revision_id.clone()], vec![commit_id.clone()]),
-        UndoReceiptAuthority::Structure { commit_id } => (Vec::new(), vec![commit_id.clone()]),
-        UndoReceiptAuthority::None | UndoReceiptAuthority::Draft { .. } => (Vec::new(), Vec::new()),
-    };
-    let (mut draft_refs, mut event_refs) = match &authority {
-        UndoReceiptAuthority::Draft { draft_id, event_id } => {
-            (vec![draft_id.clone()], vec![event_id.clone()])
-        }
-        UndoReceiptAuthority::None
-        | UndoReceiptAuthority::Prose { .. }
-        | UndoReceiptAuthority::Structure { .. } => (Vec::new(), Vec::new()),
-    };
-    if result_kind == "authoritative_applied"
-        && let Some(event) = crate::undo_draft_retry::persist_reopen(client, command).await?
-    {
-        draft_refs.push(event.draft_id);
-        event_refs.push(event.event_id);
-    }
-    let created_at = client
-        .query_one(
-            "INSERT INTO storyos.domain_receipts
-               (owner_user_id, project_id, receipt_id, author_command_admission_id,
-                command_id, command_kind, command_digest, idempotency_key, producer_cause,
-                expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
-                proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
-                artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload, created_at)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'undoLatestAuthorAction', $6, $7::text::uuid,
-                     'author_command_admission', ARRAY[$8::text::uuid], ARRAY[$9::text::uuid],
-                     ARRAY[$10::text::uuid], $11::text[]::uuid[], '{}'::uuid[],
-                     $12::text[]::uuid[], $15::text[], $16::text[], '{}'::text[],
-                     $13, $14::text::jsonb,
-                     CASE WHEN $13='authoritative_applied' AND cardinality($15::text[])>0
-                       THEN transaction_timestamp() ELSE clock_timestamp() END)
-          RETURNING to_char(created_at AT TIME ZONE 'UTC',
-                            'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
+                AND receipt_id = $3::text::uuid",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.command_id,
-                &command.challenge_binding.canonical_command_digest,
-                &command.challenge_binding.idempotency_key,
-                &command.expected_authoritative_revision_id,
-                &prior_head,
-                &resulting_head,
-                &revision_ids,
-                &commit_ids,
-                &result_kind,
-                &result_payload,
-                &draft_refs,
-                &event_refs,
             ],
         )
         .await
-        .map_err(undo_database_error)?
-        .get::<_, String>(0);
-    client
-        .execute(
-            "INSERT INTO storyos.author_command_admission_settlements
-               (owner_user_id, project_id, author_command_admission_id, settlement_kind, receipt_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
-                     'receipt_settled', $4::text::uuid)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    Ok(created_at)
+        .map_err(unavailable)?
+        .get(/*idx*/ 0))
 }
 
-pub(super) async fn settle_idempotency(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-) -> Result<Project, UndoLatestAuthorActionError> {
-    let row = client
-        .query_opt(
-            "SELECT title, current_chapter_id::text
-               FROM storyos.projects
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    let Some(row) = row else {
-        return Err(UndoLatestAuthorActionError::MissingProject);
-    };
-    let response_project = Project {
-        project_id: command.project_scope.project_id.clone(),
-        title: row.get(0),
-        current_chapter_id: row.get::<_, Option<String>>(1).map(ChapterId::new),
-    };
-    let encoded_project = encode_command_response_project(&response_project);
-    client
-        .execute(
-            "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled',
-                    result_reference = $3,
-                    acknowledgement_format = $5,
-                    response_project = $6::text::jsonb
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'undoLatestAuthorAction'
-                AND idempotency_key = $4::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.challenge_binding.idempotency_key,
-                &COMMAND_RESPONSE_PROJECT_FORMAT,
-                &encoded_project,
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    Ok(response_project)
+pub(crate) fn undo_database_error(error: tokio_postgres::Error) -> ProjectCommandError {
+    unavailable(error)
 }
 
-async fn read_undo_settlement(
-    store: &PostgresProjectReader,
-    command: &UndoLatestAuthorActionCommand,
-    receipt_id: &str,
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-    let client = store
-        .connect_challenge()
-        .await
-        .map_err(undo_challenge_error)?;
-    client
-        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(undo_database_error)?;
-    let result = async {
-        set_challenge_scope_on_client(&client, &command.project_scope)
-            .await
-            .map_err(undo_challenge_error)?;
-        let row = client
-            .query_opt(
-                "SELECT receipt.command_id::text,
-                        receipt.author_command_admission_id::text,
-                        receipt.receipt_id::text,
-                        receipt.result_kind,
-                        receipt.result_payload->>'reason',
-                        to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                        action.compensated_source_sequence::text,
-                        action.author_action_sequence::text,
-                        commit.authoritative_commit_id::text,
-                        commit.resulting_revision_id::text,
-                        convert_from(payload.canonical_bytes, 'UTF8'),
-                        activity.project_activity_position::text,
-                        commit.manuscript_object_id::text,
-                        compensation_snapshot.snapshot_id,
-                        compensation_snapshot.project_activity_position,
-                        idempotency.acknowledgement_format,
-                        idempotency.response_project::text, receipt.result_payload::text,
-                        source_receipt.result_kind, restored_proposal.revision_id::text,
-                        source_receipt.command_kind
-                   FROM storyos.domain_receipts AS receipt
-                   JOIN storyos.author_command_admission_settlements AS settlement
-                     ON (settlement.owner_user_id, settlement.project_id,
-                         settlement.author_command_admission_id, settlement.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id,
-                         receipt.author_command_admission_id, receipt.receipt_id)
-                   JOIN storyos.command_idempotency AS idempotency
-                     ON (idempotency.owner_user_id, idempotency.project_id,
-                         idempotency.command_kind, idempotency.idempotency_key,
-                         idempotency.result_reference) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
-                         receipt.idempotency_key, receipt.receipt_id::text)
-              LEFT JOIN storyos.author_action_entries AS action
-                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.authoritative_commits AS commit
-                     ON (commit.owner_user_id, commit.project_id, commit.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.author_action_entries AS source_action
-                     ON (source_action.owner_user_id, source_action.project_id,
-                         source_action.author_action_sequence) =
-                        (action.owner_user_id, action.project_id, action.compensated_source_sequence)
-                    AND source_action.disposition = 'forward'
-              LEFT JOIN storyos.domain_receipts AS source_receipt
-                     ON (source_receipt.owner_user_id, source_receipt.project_id, source_receipt.receipt_id) =
-                        (source_action.owner_user_id, source_action.project_id, source_action.receipt_id)
-              LEFT JOIN storyos.proposal_revisions AS source_proposal
-                     ON (source_proposal.owner_user_id, source_proposal.project_id, source_proposal.revision_id) =
-                        (source_receipt.owner_user_id, source_receipt.project_id, source_receipt.proposal_revision_ids[1])
-              LEFT JOIN storyos.proposal_revisions AS restored_proposal
-                     ON (restored_proposal.owner_user_id, restored_proposal.project_id,
-                         restored_proposal.proposal_id, restored_proposal.parent_revision_id) =
-                        (source_proposal.owner_user_id, source_proposal.project_id,
-                         source_proposal.proposal_id, source_proposal.revision_id)
-                    AND restored_proposal.revision_id::text = receipt.result_payload->>'proposal_revision_id'
-                    AND source_proposal.revision_id::text = receipt.result_payload->>'source_proposal_revision_id'
-              LEFT JOIN storyos.authoritative_revisions AS revision
-                     ON (revision.owner_user_id, revision.project_id,
-                         revision.manuscript_object_id, revision.revision_id) =
-                        (commit.owner_user_id, commit.project_id,
-                         commit.manuscript_object_id, commit.resulting_revision_id)
-              LEFT JOIN storyos.authoritative_payloads AS payload
-                     ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
-                        (revision.owner_user_id, revision.project_id, revision.payload_id)
-              LEFT JOIN storyos.project_activity_events AS activity
-                     ON (activity.owner_user_id, activity.project_id, activity.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN LATERAL (
-                    SELECT snapshot.snapshot_id::text,
-                           snapshot.project_activity_position::text
-                      FROM storyos.project_snapshots AS snapshot
-                     WHERE snapshot.owner_user_id = receipt.owner_user_id
-                       AND snapshot.project_id = receipt.project_id
-                       AND snapshot.snapshot_kind = 'canonical'
-                       AND snapshot.created_at >= receipt.created_at
-                  ORDER BY snapshot.project_activity_position ASC, snapshot.created_at ASC
-                     LIMIT 1
-              ) AS compensation_snapshot ON true
-                  WHERE receipt.owner_user_id = $1::text::uuid
-                    AND receipt.project_id = $2::text::uuid
-                    AND receipt.receipt_id = $3::text::uuid
-                    AND receipt.command_kind = 'undoLatestAuthorAction'
-                    AND receipt.command_digest = $4
-                    AND receipt.idempotency_key = $5::text::uuid
-                    AND settlement.settlement_kind = 'receipt_settled'
-                    AND idempotency.outcome_kind = 'settled'",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &receipt_id,
-                    &command.challenge_binding.canonical_command_digest,
-                    &command.challenge_binding.idempotency_key,
-                ],
-            )
-            .await
-            .map_err(undo_database_error)?
-            .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-        let receipt_created_at = row.get::<_, String>(5);
-        let current_frontier = crate::editor_session::author_undo_frontier_as_of_receipt(
-            &client,
-            command.project_scope.owner_user_id.as_ref(),
-            command.project_scope.project_id.as_ref(),
-            receipt_id,
-        )
-        .await
-        .map_err(undo_from_session)?;
-        let response_project = match read_command_response_project(
-            row.get::<_, Option<String>>(15).as_deref(),
-            row.get::<_, Option<String>>(16).as_deref(),
-        ) {
-            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
-            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
-                return Err(UndoLatestAuthorActionError::HistoricalAcknowledgementUnavailable);
-            }
-            Err(()) => {
-                return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
-                    std::io::Error::other(
-                        "Undo Latest Author Action acknowledgement evidence is damaged",
-                    ),
-                )));
-            }
-        };
-        let result_kind = row.get::<_, String>(3);
-        let reason = row.get::<_, Option<String>>(4);
-        let acceptance_retry = crate::undo_acceptance::read_retry(
-            &client,
-            command.project_scope.owner_user_id.as_ref(),
-            command.project_scope.project_id.as_ref(),
-            receipt_id,
-        )
-        .await?;
-        let disposition = match (
-            row.get::<_, Option<String>>(/*idx*/ 20),
-            row.get::<_, Option<String>>(/*idx*/ 18),
-        ) {
-            (Some(command_kind), Some(result_kind)) => {
-                ForwardCommand::from_receipt(&command_kind, &result_kind)
-                    .map(ForwardCommand::disposition)
-            }
-            (None, _) | (_, None) => None,
-        };
-        let mut effect = if let Some(retry) = acceptance_retry
-            .as_ref()
-            .filter(|retry| retry.outcome == "reversal_required")
-        {
-            let author_action_sequence = row
-                .get::<_, Option<String>>(7)
-                .ok_or(UndoLatestAuthorActionError::BindingConflict)?
-                .parse()
-                .map_err(undo_parse_error)?;
-            UndoLatestAuthorActionSettlementEffect::ReversalRequired {
-                source_sequence: retry.source_sequence,
-                author_action_sequence,
-                proposal_id: retry
-                    .proposal_id
-                    .clone()
-                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-                proposal_revision_id: retry
-                    .proposal_revision_id
-                    .clone()
-                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-            }
-        } else {
-            match (result_kind.as_str(), reason.as_deref()) {
-            ("draft_closure_changed" | "authoritative_applied", None) => {
-                let replay = CompensationReplay {
-                    source_sequence: row
-                        .get::<_, Option<String>>(/*idx*/ 6)
-                        .ok_or(UndoLatestAuthorActionError::BindingConflict)?
-                        .parse()
-                        .map_err(undo_parse_error)?,
-                    author_action_sequence: row
-                        .get::<_, Option<String>>(/*idx*/ 7)
-                        .ok_or(UndoLatestAuthorActionError::BindingConflict)?
-                        .parse()
-                        .map_err(undo_parse_error)?,
-                    authoritative_commit_id: row.get(/*idx*/ 8),
-                    snapshot_id: row.get(/*idx*/ 13),
-                    result_payload: row.get(/*idx*/ 17),
-                    restored_proposal_revision_id: row.get(/*idx*/ 19),
-                    author_undo_frontier_sequence: current_frontier,
-                };
-                match disposition {
-                    Some(UndoDisposition::Structure(_)) => {
-                        StructureCompensation::decode(&client, command, &replay).await?
-                    }
-                    Some(UndoDisposition::CurrentChapter) => {
-                        CurrentChapterCompensation::decode(&client, command, &replay).await?
-                    }
-                    Some(UndoDisposition::ProposalEdit) => {
-                        ProposalEditCompensation::decode(&client, command, &replay).await?
-                    }
-                    Some(UndoDisposition::Replan) => {
-                        ReplanCompensation::decode(&client, command, &replay).await?
-                    }
-                    Some(UndoDisposition::ReopenRejectedOperations) => {
-                        ReopenRejectedCompensation::decode(&client, command, &replay).await?
-                    }
-                    Some(UndoDisposition::ReopenWithdrawnProposal) => {
-                        ReopenWithdrawnCompensation::decode(&client, command, &replay).await?
-                    }
-                    Some(UndoDisposition::AuthorWithdrawal) => {
-                        AuthorWithdrawalCompensation::decode(&client, command, &replay).await?
-                    }
-                    Some(UndoDisposition::Draft) => {
-                        DraftCompensation::decode(&client, command, &replay).await?
-                    }
-                    Some(
-                        UndoDisposition::Prose
-                        | UndoDisposition::Acceptance
-                        | UndoDisposition::Barrier,
-                    )
-                    | None => decode_prose_compensation(&client, command, &row, replay).await?,
-                }
-            }
-            ("conflicted", Some("frontier_mismatch")) => {
-                UndoLatestAuthorActionSettlementEffect::Conflicted {
-                    reason: UndoLatestAuthorActionConflict::FrontierMismatch {
-                        current_author_undo_frontier_sequence: current_frontier,
-                    },
-                }
-            }
-            ("conflicted", Some("wrong_target_head")) => {
-                UndoLatestAuthorActionSettlementEffect::Conflicted {
-                    reason: UndoLatestAuthorActionConflict::WrongTargetHead,
-                }
-            }
-            ("conflicted", Some("source_binding_changed")) => {
-                UndoLatestAuthorActionSettlementEffect::Conflicted {
-                    reason: UndoLatestAuthorActionConflict::SourceBindingChanged,
-                }
-            }
-            ("refused", Some("source_unavailable")) => {
-                UndoLatestAuthorActionSettlementEffect::Unavailable {
-                    reason: storyos_core::UndoLatestAuthorActionUnavailable::SourceUnavailable,
-                }
-            }
-            ("refused", Some("no_frontier")) => {
-                UndoLatestAuthorActionSettlementEffect::Unavailable {
-                    reason: storyos_core::UndoLatestAuthorActionUnavailable::NoFrontier,
-                }
-            }
-            ("refused", Some("barrier")) => UndoLatestAuthorActionSettlementEffect::Unavailable {
-                reason: storyos_core::UndoLatestAuthorActionUnavailable::Barrier,
-            },
-            _ => return Err(UndoLatestAuthorActionError::BindingConflict),
-            }
-        };
-        if let Some(retry) = acceptance_retry
-            .as_ref()
-            .filter(|retry| retry.outcome == "compensated")
-            && let UndoLatestAuthorActionSettlementEffect::Compensated {
-                proposal_id,
-                proposal_revision_id,
-                ..
-            } = &mut effect
-        {
-            *proposal_id = retry.proposal_id.clone();
-            *proposal_revision_id = retry.proposal_revision_id.clone();
-        }
-        let project_activity_position = row
-            .get::<_, Option<String>>(11)
-            .or_else(|| row.get::<_, Option<String>>(14))
-            .map(|value| value.parse::<u64>())
-            .transpose()
-            .map_err(undo_parse_error)?
-            .unwrap_or(0);
-        let project_activity_position = if let Some(
-            UndoDisposition::ProposalEdit
-            | UndoDisposition::Replan
-            | UndoDisposition::ReopenRejectedOperations
-            | UndoDisposition::ReopenWithdrawnProposal,
-        ) = disposition
-        {
-            let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
-                .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
-            match payload.get("project_activity_position") {
-                Some(value) => value.as_str().ok_or(UndoLatestAuthorActionError::BindingConflict)?
-                    .parse().map_err(undo_parse_error)?,
-                None if payload == serde_json::json!({}) => 0,
-                None => return Err(UndoLatestAuthorActionError::BindingConflict),
-            }
-        } else { project_activity_position };
-        let project_activity_position = acceptance_retry
-            .as_ref()
-            .filter(|retry| retry.outcome == "reversal_required")
-            .map(|retry| retry.project_activity_position)
-            .unwrap_or(project_activity_position);
-        Ok(UndoLatestAuthorActionSettlement {
-            source_reopen_event: crate::undo_draft_retry::read_reopen(&client, command, receipt_id)
-                .await?,
-            ids: AuthorCommandAdmissionIds {
-                command_id: row.get(0),
-                author_command_admission_id: row.get(1),
-                receipt_id: row.get(2),
-            },
-            effect,
-            receipt_created_at,
-            project_activity_position,
-            response_project,
-        })
-    }
-    .await;
-    let _ = client.batch_execute("ROLLBACK").await;
-    result
-}
-
-/// Decodes a prose or Acceptance Compensation, which the Undo command adapter still settles.
-async fn decode_prose_compensation(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-    row: &tokio_postgres::Row,
-    replay: CompensationReplay,
-) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
-    let Some(revision_id) = row.get::<_, Option<String>>(/*idx*/ 9) else {
-        return Ok(
-            UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
-                source_sequence: replay.source_sequence,
-                author_action_sequence: replay.author_action_sequence,
-                proposal_revision_id: None,
-                author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
-            },
-        );
-    };
-    let stored = row
-        .get::<_, Option<String>>(/*idx*/ 10)
-        .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-    let chapter_id = row
-        .get::<_, Option<String>>(/*idx*/ 12)
-        .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-    let blocks = crate::manuscript_block::load_revision_blocks(
-        client,
-        command.project_scope.owner_user_id.as_ref(),
-        command.project_scope.project_id.as_ref(),
-        &chapter_id,
-        &revision_id,
-        &stored,
-    )
-    .await
-    .map_err(undo_database_error)?;
-    Ok(UndoLatestAuthorActionSettlementEffect::Compensated {
-        source_sequence: replay.source_sequence,
-        author_action_sequence: replay.author_action_sequence,
-        authoritative_commit_id: replay
-            .authoritative_commit_id
-            .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-        body: crate::manuscript_block::display_body_from_stored(&stored, &blocks),
-        revision_id,
-        blocks,
-        author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
-        proposal_id: None,
-        proposal_revision_id: None,
-    })
-}
-
-fn undo_challenge_error(error: ProjectCommandChallengeError) -> UndoLatestAuthorActionError {
-    match error {
-        ProjectCommandChallengeError::BindingConflict => {
-            UndoLatestAuthorActionError::BindingConflict
-        }
-        ProjectCommandChallengeError::InvalidOrExpired
-        | ProjectCommandChallengeError::RateLimited { .. } => {
-            UndoLatestAuthorActionError::InvalidChallenge
-        }
-        ProjectCommandChallengeError::Unavailable(source) => {
-            UndoLatestAuthorActionError::Unavailable(source)
-        }
-    }
-}
-
-pub(super) fn undo_database_error(error: tokio_postgres::Error) -> UndoLatestAuthorActionError {
-    UndoLatestAuthorActionError::Unavailable(Box::new(error))
-}
-
-fn undo_parse_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> UndoLatestAuthorActionError {
-    UndoLatestAuthorActionError::Unavailable(Box::new(error))
-}
-
-pub(super) fn undo_from_author_edit(
+pub(crate) fn undo_from_author_edit(
     error: storyos_application::AuthorEditError,
-) -> UndoLatestAuthorActionError {
-    UndoLatestAuthorActionError::Unavailable(Box::new(error))
+) -> ProjectCommandError {
+    unavailable(error)
 }
 
-pub(super) fn undo_from_session(error: EditorSessionError) -> UndoLatestAuthorActionError {
+pub(crate) fn undo_from_session(error: EditorSessionError) -> ProjectCommandError {
     match error {
         EditorSessionError::BindingConflict | EditorSessionError::InvalidChallenge => {
-            UndoLatestAuthorActionError::BindingConflict
+            ProjectCommandError::BindingConflict
         }
-        EditorSessionError::Unavailable(source) => UndoLatestAuthorActionError::Unavailable(source),
+        EditorSessionError::Unavailable(source) => ProjectCommandError::Unavailable(source),
     }
 }

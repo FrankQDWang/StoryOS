@@ -8,7 +8,9 @@ use tokio_postgres::Client;
 use uuid::Uuid;
 
 use super::records::insert_applied_activity;
-use super::{CommandSpec, LockedProject, SettlementProfile, unavailable};
+use super::{
+    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
+};
 use crate::command_replay::{CommandReplay, ReplayFault};
 
 /// The applied writes that one `ActivityOnly` command returns.
@@ -26,7 +28,12 @@ pub(crate) struct ActivitySequences {
 
 pub(crate) struct ActivityOnly;
 
+impl<T> SelectsRecords<ActivityOnly> for T {
+    fn selector(&self) {}
+}
+
 impl SettlementProfile for ActivityOnly {
+    type Selector = ();
     type Sequences = ActivitySequences;
     type Write<E: Send> = ActivityWrite<E>;
     type Applied<E: Send> = ActivityApplied<E>;
@@ -34,6 +41,7 @@ impl SettlementProfile for ActivityOnly {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
+        (): &(),
     ) -> Result<ActivitySequences, ProjectCommandError> {
         let position = client
             .query_one(
@@ -64,6 +72,7 @@ impl SettlementProfile for ActivityOnly {
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
         spec: &CommandSpec,
+        _variant: AppliedVariant,
         sequences: ActivitySequences,
         write: ActivityWrite<E>,
     ) -> Result<ActivityApplied<E>, ProjectCommandError> {

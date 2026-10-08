@@ -61,7 +61,7 @@ fn source_condition_parts(condition: &ReplanSourceCondition) -> (&'static str, &
 impl ProjectCommand for ReplanProposalInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "replanProposal",
-        applied: AppliedVariant::Forward(ForwardCommand::ReplanProposal),
+        applied: &[AppliedVariant::Forward(ForwardCommand::ReplanProposal)],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,

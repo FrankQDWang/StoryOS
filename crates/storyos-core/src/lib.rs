@@ -220,7 +220,7 @@ pub use take_over_project_writer::{
 pub use transition_outcome::{ReasonCode, ReceiptResult, TransitionOutcome};
 pub use undo_latest_author_action::{
     AuthorUndoFrontier, AuthorUndoFrontierKind, UndoLatestAuthorAction,
-    UndoLatestAuthorActionConflict, UndoLatestAuthorActionResult,
+    UndoLatestAuthorActionApplied, UndoLatestAuthorActionConflict, UndoLatestAuthorActionOutcome,
     UndoLatestAuthorActionUnavailable, undo_latest_author_action,
 };
 pub use unknown_create_successor::{

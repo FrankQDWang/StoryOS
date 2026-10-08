@@ -32,7 +32,7 @@ impl PostgresProjectReader {
 impl ProjectCommand for PauseAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "pauseAgentRun",
-        applied: AppliedVariant::NoAuthorAction,
+        applied: &[AppliedVariant::NoAuthorAction],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

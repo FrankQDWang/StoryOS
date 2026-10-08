@@ -1,8 +1,9 @@
 use super::{
     AuthorUndoFrontier, AuthorUndoFrontierKind, UndoLatestAuthorAction,
-    UndoLatestAuthorActionConflict, UndoLatestAuthorActionResult,
+    UndoLatestAuthorActionApplied, UndoLatestAuthorActionConflict,
     UndoLatestAuthorActionUnavailable, undo_latest_author_action,
 };
+use crate::TransitionOutcome;
 
 const HEAD: &str = "018f0000-0000-7001-8000-000000000805";
 const OTHER: &str = "018f0000-0000-7001-8000-000000000806";
@@ -37,7 +38,9 @@ fn command() -> UndoLatestAuthorAction {
 fn a_matching_reversible_frontier_classifies_as_compensated() {
     assert_eq!(
         undo_latest_author_action(&command()),
-        UndoLatestAuthorActionResult::Compensated { source_sequence: 1 }
+        TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
+            source_sequence: 1
+        })
     );
 }
 
@@ -47,11 +50,7 @@ fn a_frontier_mismatch_classifies_as_conflicted_with_zero_authority_effect() {
     stale.expected_author_undo_frontier_sequence = 2;
     assert_eq!(
         undo_latest_author_action(&stale),
-        UndoLatestAuthorActionResult::Conflicted {
-            reason: UndoLatestAuthorActionConflict::FrontierMismatch {
-                current_author_undo_frontier_sequence: Some(1),
-            },
-        }
+        TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::FrontierMismatch)
     );
 }
 
@@ -61,9 +60,7 @@ fn a_missing_frontier_classifies_as_unavailable() {
     empty.current_author_undo_frontier = None;
     assert_eq!(
         undo_latest_author_action(&empty),
-        UndoLatestAuthorActionResult::Unavailable {
-            reason: UndoLatestAuthorActionUnavailable::NoFrontier,
-        }
+        TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::NoFrontier)
     );
 }
 
@@ -76,9 +73,7 @@ fn a_barrier_frontier_classifies_as_unavailable_and_cannot_be_skipped() {
     });
     assert_eq!(
         undo_latest_author_action(&barrier),
-        UndoLatestAuthorActionResult::Unavailable {
-            reason: UndoLatestAuthorActionUnavailable::Barrier,
-        }
+        TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::Barrier)
     );
 }
 
@@ -88,9 +83,7 @@ fn a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect() {
     wrong.current_head_revision_id = "018f0000-0000-7001-8000-000000000999".to_owned();
     assert_eq!(
         undo_latest_author_action(&wrong),
-        UndoLatestAuthorActionResult::Conflicted {
-            reason: UndoLatestAuthorActionConflict::WrongTargetHead,
-        }
+        TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::WrongTargetHead)
     );
 }
 
@@ -98,7 +91,9 @@ fn a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect() {
 fn a_matching_acceptance_frontier_classifies_as_compensated() {
     assert_eq!(
         undo_latest_author_action(&acceptance(HEAD, /*prior_evidence_usable*/ true)),
-        UndoLatestAuthorActionResult::Compensated { source_sequence: 1 }
+        TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
+            source_sequence: 1
+        })
     );
 }
 
@@ -109,7 +104,9 @@ fn a_drifted_acceptance_head_with_usable_evidence_requires_reversal() {
     drifted.expected_head_revision_id = OTHER.to_owned();
     assert_eq!(
         undo_latest_author_action(&drifted),
-        UndoLatestAuthorActionResult::ReversalRequired { source_sequence: 1 }
+        TransitionOutcome::Applied(UndoLatestAuthorActionApplied::ReversalRequired {
+            source_sequence: 1
+        })
     );
 }
 
@@ -120,15 +117,11 @@ fn unusable_acceptance_evidence_is_unavailable() {
     drifted.expected_head_revision_id = OTHER.to_owned();
     assert_eq!(
         undo_latest_author_action(&drifted),
-        UndoLatestAuthorActionResult::Unavailable {
-            reason: UndoLatestAuthorActionUnavailable::SourceUnavailable,
-        }
+        TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::SourceUnavailable)
     );
     assert_eq!(
         undo_latest_author_action(&acceptance(HEAD, /*prior_evidence_usable*/ false)),
-        UndoLatestAuthorActionResult::Unavailable {
-            reason: UndoLatestAuthorActionUnavailable::SourceUnavailable,
-        }
+        TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::SourceUnavailable)
     );
 }
 
@@ -138,9 +131,7 @@ fn a_stale_expected_acceptance_head_stays_conflicted() {
     stale.expected_head_revision_id = OTHER.to_owned();
     assert_eq!(
         undo_latest_author_action(&stale),
-        UndoLatestAuthorActionResult::Conflicted {
-            reason: UndoLatestAuthorActionConflict::WrongTargetHead,
-        }
+        TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::WrongTargetHead)
     );
 }
 
@@ -150,11 +141,7 @@ fn an_acceptance_frontier_mismatch_stays_conflicted() {
     stale.expected_author_undo_frontier_sequence = 9;
     assert_eq!(
         undo_latest_author_action(&stale),
-        UndoLatestAuthorActionResult::Conflicted {
-            reason: UndoLatestAuthorActionConflict::FrontierMismatch {
-                current_author_undo_frontier_sequence: Some(1),
-            },
-        }
+        TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::FrontierMismatch)
     );
 }
 
@@ -169,6 +156,30 @@ fn a_matching_structure_frontier_classifies_as_compensated_without_head_proof() 
     structure.current_head_revision_id = "018f0000-0000-7001-8000-000000000999".to_owned();
     assert_eq!(
         undo_latest_author_action(&structure),
-        UndoLatestAuthorActionResult::Compensated { source_sequence: 1 }
+        TransitionOutcome::Applied(UndoLatestAuthorActionApplied::Compensated {
+            source_sequence: 1
+        })
     );
+}
+
+#[test]
+fn every_zero_authority_undo_outcome_round_trips_through_its_receipt_codes() {
+    let outcomes = [
+        TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::FrontierMismatch),
+        TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::WrongTargetHead),
+        TransitionOutcome::Conflicted(UndoLatestAuthorActionConflict::SourceBindingChanged),
+        TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::NoFrontier),
+        TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::Barrier),
+        TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::SourceUnavailable),
+    ];
+    for outcome in outcomes {
+        let reason = outcome.reason_code().unwrap();
+        assert_eq!(
+            crate::UndoLatestAuthorActionOutcome::from_zero_authority_codes(
+                outcome.receipt_result_kind(),
+                reason
+            ),
+            Some(outcome)
+        );
+    }
 }

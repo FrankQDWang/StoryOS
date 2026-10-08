@@ -47,7 +47,9 @@ pub(crate) struct RejectedRevision {
 impl ProjectCommand for ReopenRejectedOperationsInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "reopenRejectedOperations",
-        applied: AppliedVariant::Forward(ForwardCommand::ReopenRejectedOperations),
+        applied: &[AppliedVariant::Forward(
+            ForwardCommand::ReopenRejectedOperations,
+        )],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,

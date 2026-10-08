@@ -4,12 +4,13 @@ use storyos_application::{
     ChapterId, ChapterNode, CreateChapterInput, CreateProjectChallengeBinding,
     CreateProjectCommand, CreateVolumeInput, CreateVolumePublicOrder, EditorClientBinding,
     EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
-    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeCreated,
-    VolumeId, VolumeNode, apply_author_edit, create_editor_session, create_project,
+    OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope,
+    ProjectId, ProjectScope, UndoApplied, UndoLatestAuthorActionInput, UndoRecords, UserId,
+    VolumeCreated, VolumeId, VolumeNode, apply_author_edit, create_editor_session, create_project,
     get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
-    open_chapter, undo_latest_author_action,
+    open_chapter,
 };
+use storyos_core::TransitionOutcome;
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
 use tokio_postgres::NoTls;
 
@@ -355,6 +356,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
             suffix: "f62a",
             local_intent_sequence: 1,
             text: "x",
+            proposal_target: None,
         },
     )
     .await;
@@ -391,6 +393,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
             suffix: "f62e",
             local_intent_sequence: 2,
             text: "y",
+            proposal_target: None,
         },
     )
     .await;
@@ -412,8 +415,8 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     )
     .await;
     assert!(matches!(
-        edit_undo.effect,
-        UndoLatestAuthorActionSettlementEffect::Compensated { source_sequence, .. }
+        edit_undo.outcome,
+        TransitionOutcome::Applied(UndoApplied { source_sequence, records: UndoRecords::Revision { .. }, .. })
             if source_sequence == later_action
     ));
     let GetManuscriptTree::Found(tree_after_edit_undo) =
@@ -435,11 +438,11 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
         "f632",
     )
     .await;
-    let UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
+    let TransitionOutcome::Applied(UndoApplied {
         source_sequence,
-        snapshot_id,
+        records: UndoRecords::Structure { snapshot_id, .. },
         ..
-    } = volume_undo.effect.clone()
+    }) = volume_undo.outcome.clone()
     else {
         panic!("Create Volume Undo must write structure Compensation");
     };
@@ -506,16 +509,18 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     );
 }
 
-struct NamedEdit<'a> {
-    editor_session_id: &'a str,
-    chapter_id: &'a str,
-    expected_revision_id: &'a str,
-    suffix: &'a str,
-    local_intent_sequence: u64,
-    text: &'a str,
+pub(crate) struct NamedEdit<'a> {
+    pub(crate) editor_session_id: &'a str,
+    pub(crate) chapter_id: &'a str,
+    pub(crate) expected_revision_id: &'a str,
+    pub(crate) suffix: &'a str,
+    pub(crate) local_intent_sequence: u64,
+    pub(crate) text: &'a str,
+    /// The Proposal Operation whose candidate the edit changes, or `None` for a prose edit.
+    pub(crate) proposal_target: Option<storyos_application::AuthorEditProposalTarget>,
 }
 
-async fn apply_named_edit(
+pub(crate) async fn apply_named_edit(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     edit: NamedEdit<'_>,
@@ -527,6 +532,7 @@ async fn apply_named_edit(
         suffix,
         local_intent_sequence,
         text,
+        proposal_target,
     } = edit;
     let mut command = ApplyAuthorEditCommand {
         retry_source: None,
@@ -565,10 +571,18 @@ async fn apply_named_edit(
         writer_generation: 1,
         chapter_id: chapter_id.to_owned(),
         expected_authoritative_revision_id: expected_revision_id.to_owned(),
-        expected_proposal_head_revision_ids: Vec::new(),
-        proposal_target: None,
+        expected_proposal_head_revision_ids: proposal_target
+            .iter()
+            .map(|target| target.revision_id.clone())
+            .collect(),
         target_refs: vec![format!("manuscript:{chapter_id}")],
-        observed_ownership_partition: "authoritative".to_owned(),
+        observed_ownership_partition: if proposal_target.is_some() {
+            "mixed"
+        } else {
+            "authoritative"
+        }
+        .to_owned(),
+        proposal_target,
         editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
         undo_group_id: format!("018f0000-0000-7001-8000-00000004{suffix}"),
         completed_intent_record_id: format!("018f0000-0000-7001-8000-00000005{suffix}"),
@@ -617,6 +631,15 @@ async fn apply_named_edit(
             },
         }],
     });
+    let mut payload = payload;
+    if let Some(target) = &command.proposal_target {
+        payload["proposal_target"] = serde_json::json!({
+            "proposal_id": target.proposal_id,
+            "operation_id": target.operation_id,
+            "revision_id": target.revision_id,
+            "manuscript_block_id": target.manuscript_block_id,
+        });
+    }
     command.canonical_command_bytes = serde_json::to_vec(&payload).unwrap();
     command.challenge_binding.canonical_command_digest = format!(
         "sha256:storyos.command.applyAuthorEdit.jcs.v1:{}",
@@ -672,30 +695,34 @@ async fn undo_named(
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
-    undo_latest_author_action(
-        store,
-        &UndoLatestAuthorActionCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+    store
+        .undo_latest_author_action(
+            &ProjectCommandEnvelope {
+                project_scope: scope.clone(),
+                client_binding: EditorClientBinding {
+                    binding_ref: issue.binding.client_session_binding_digest.clone(),
+                    session_generation: issue.binding.client_session_generation,
+                    client_contract_revision: issue.binding.client_contract_revision.clone(),
+                    security_policy_revision: issue.binding.security_policy_revision.clone(),
+                },
+                challenge_binding: issue.binding,
+                nonce_digest: issue.nonce_digest,
+                canonical_command_bytes: bytes,
+                correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
+                ids: AuthorCommandAdmissionIds {
+                    command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
+                    author_command_admission_id: format!(
+                        "018f0000-0000-7001-8000-00000002{suffix}"
+                    ),
+                    receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
+                },
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes,
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
+            &UndoLatestAuthorActionInput {
+                editor_session_id: EditorSessionId::new(editor_session_id),
+                expected_author_undo_frontier_sequence: expected_frontier,
+                expected_authoritative_revision_id: expected_revision_id.to_owned(),
             },
-            editor_session_id: EditorSessionId::new(editor_session_id),
-            expected_author_undo_frontier_sequence: expected_frontier,
-            expected_authoritative_revision_id: expected_revision_id.to_owned(),
-        },
-    )
-    .await
-    .unwrap()
+        )
+        .await
+        .unwrap()
 }

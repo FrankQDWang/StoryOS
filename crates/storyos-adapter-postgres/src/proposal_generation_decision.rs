@@ -90,7 +90,9 @@ const TRANSITION_REPLAY: ReplayEffect = ReplayEffect::Query(
 impl ProjectCommand for CompleteReadyPartialProposalInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "completeReadyPartialProposal",
-        applied: AppliedVariant::Forward(ForwardCommand::CompleteReadyPartialProposal),
+        applied: &[AppliedVariant::Forward(
+            ForwardCommand::CompleteReadyPartialProposal,
+        )],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,
@@ -215,7 +217,9 @@ impl ProjectCommand for CompleteReadyPartialProposalInput {
 impl ProjectCommand for ContinueProposalGenerationInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "continueProposalGeneration",
-        applied: AppliedVariant::Forward(ForwardCommand::ContinueProposalGeneration),
+        applied: &[AppliedVariant::Forward(
+            ForwardCommand::ContinueProposalGeneration,
+        )],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,

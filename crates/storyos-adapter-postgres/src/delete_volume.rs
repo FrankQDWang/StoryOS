@@ -35,7 +35,9 @@ impl PostgresProjectReader {
 impl ProjectCommand for DeleteVolumeInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "deleteVolume",
-        applied: AppliedVariant::Forward(ForwardCommand::Structure(StructureCommand::DeleteVolume)),
+        applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
+            StructureCommand::DeleteVolume,
+        ))],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

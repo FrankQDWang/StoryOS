@@ -1,3 +1,6 @@
+use storyos_application::{UndoApplied, UndoRecords};
+use storyos_core::TransitionOutcome;
+
 use super::*;
 use crate::delete_volume_tests::apply_delete;
 use crate::set_current_chapter_authority_tests::{open_session, undo_named};
@@ -104,11 +107,11 @@ async fn undo_volume_reorders_then_delete_restores_the_original_tree() {
             &suffix,
         )
         .await;
-        let UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
+        let TransitionOutcome::Applied(UndoApplied {
             source_sequence,
-            snapshot_id,
+            records: UndoRecords::Structure { snapshot_id, .. },
             ..
-        } = undone.effect
+        }) = undone.outcome
         else {
             panic!("Undo must compensate the structural action");
         };

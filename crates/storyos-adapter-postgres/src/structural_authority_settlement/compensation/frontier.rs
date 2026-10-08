@@ -1,9 +1,9 @@
 //! The structure Forward evidence that Author Undo loads under the Project lock.
 
-use storyos_application::{UndoLatestAuthorActionCommand, UndoLatestAuthorActionError};
+use storyos_application::ProjectCommandError;
 use tokio_postgres::Client;
 
-use crate::undo_compensation::StructureCommand;
+use crate::undo_compensation::{StructureCommand, UndoRequest};
 use crate::undo_latest_author_action::undo_database_error;
 
 pub(crate) struct ObservedStructureFrontier {
@@ -41,10 +41,10 @@ pub(crate) enum ObservedStructureIdentity {
 
 pub(super) async fn load_structure_frontier(
     client: &Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     forward: StructureCommand,
     sequence: u64,
-) -> Result<Option<ObservedStructureFrontier>, UndoLatestAuthorActionError> {
+) -> Result<Option<ObservedStructureFrontier>, ProjectCommandError> {
     let Some(row) = client
         .query_opt(
             "SELECT commit.manuscript_object_id::text, commit.resulting_revision_id::text,
@@ -94,7 +94,7 @@ pub(super) async fn load_structure_frontier(
     };
     let tree_only =
         object_id.is_none() && resulting_revision_id.is_none() && prior_revision_id.is_none();
-    let prior_title_order = || -> Result<Option<(String, u64)>, UndoLatestAuthorActionError> {
+    let prior_title_order = || -> Result<Option<(String, u64)>, ProjectCommandError> {
         match (
             row.get::<_, Option<String>>(/*idx*/ 8),
             row.get::<_, Option<String>>(/*idx*/ 9),
@@ -158,6 +158,6 @@ pub(super) async fn load_structure_frontier(
     }))
 }
 
-fn parse_error(error: std::num::ParseIntError) -> UndoLatestAuthorActionError {
-    UndoLatestAuthorActionError::Unavailable(Box::new(error))
+fn parse_error(error: std::num::ParseIntError) -> ProjectCommandError {
+    ProjectCommandError::Unavailable(Box::new(error))
 }

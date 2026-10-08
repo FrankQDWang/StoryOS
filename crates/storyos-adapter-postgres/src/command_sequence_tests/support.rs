@@ -154,6 +154,21 @@ pub(super) async fn issued<I>(
     route: &Route,
     input: I,
 ) -> CommandCall<I> {
+    let digest = format!("sha256:{}:{suffix:04x}", route.kind);
+    issued_with_bytes(store, scope, suffix, route, input, b"{}", digest).await
+}
+
+/// Issues one Command Challenge for `route` whose canonical bytes and digest are `bytes` and
+/// `digest`, and binds `input` to it.
+pub(super) async fn issued_with_bytes<I>(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: u16,
+    route: &Route,
+    input: I,
+    bytes: &[u8],
+    digest: String,
+) -> CommandCall<I> {
     let suffix = format!("{suffix:04x}");
     let issue = IssueProjectCommandChallenge {
         binding: ProjectCommandChallengeBinding {
@@ -169,7 +184,7 @@ pub(super) async fn issued<I>(
             route_template: route.path.to_owned(),
             command_schema: route.schema.to_owned(),
             command_kind: route.kind.to_owned(),
-            canonical_command_digest: format!("sha256:{}:{suffix}", route.kind),
+            canonical_command_digest: digest,
             idempotency_key: format!("018f0000-0000-7001-8000-00000000{suffix}"),
         },
         nonce: format!("opaque-nonce-{suffix}"),
@@ -178,7 +193,7 @@ pub(super) async fn issued<I>(
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
-    command_call(issue.binding, &issue.nonce_digest, &suffix, b"{}", input)
+    command_call(issue.binding, &issue.nonce_digest, &suffix, bytes, input)
 }
 
 /// Settles one call, replays it with new request identities, and requires an equal settlement.

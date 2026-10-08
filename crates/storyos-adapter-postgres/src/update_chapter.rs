@@ -42,9 +42,9 @@ pub(crate) struct LiveSiblings {
 impl ProjectCommand for UpdateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "updateChapter",
-        applied: AppliedVariant::Forward(ForwardCommand::Structure(
+        applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::UpdateChapter,
-        )),
+        ))],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,
