@@ -119,7 +119,9 @@ Each ticket that moves a command records here every observable difference from `
 ### `undoLatestAuthorAction`
 
 - `undoLatestAuthorAction` uses the explicit editor command Admission form, the `UndoCompensation` profile, and the Command-response Project. The profile sends the write and the replay to the compensation adapter of the Forward family.
-- The applied variants are `Compensation` with `authoritative_applied`, `Compensation` with `draft_closure_changed`, and `Forward` with `reversal_required`. The `conflicted` and `refused` outcomes write only the Domain Receipt. When the frontier is an Acceptance, they also write the `undo_acceptance_receipts` child row, as on `main`.
+- The applied variants are `Compensation` with `authoritative_applied`, `Compensation` with `draft_closure_changed`, and `Forward` with `reversal_required`. The Receipt of a Reversal records the result kind `authoritative_applied`, as on `main`.
+- The `conflicted` and `refused` outcomes write only the Domain Receipt. When the frontier is an Acceptance, the `refused` outcome also writes the `undo_acceptance_receipts` child row with the outcome `unavailable`, as on `main`.
+- An Acceptance `conflicted` outcome writes no child row, as on `main`. The ticket text of [Settle undoLatestAuthorAction Through the Command Sequence](https://github.com/FrankQDWang/StoryOS/issues/965) says that a conflict writes the child row. But the `outcome` check of `undo_acceptance_receipts` has no conflict value, and the ticket also requires the rows of `main` without a migration. Thus the rows of `main` apply.
 - Each compensation adapter writes the same rows as on `main`. A Structure or Current Chapter Compensation writes a canonical Snapshot and no `project_activity_events` record, as on `main`.
 - Core gives the outcome as a `TransitionOutcome`. The reason code texts do not change.
 - The route uses the generic project command admission with the problem order of `main`.

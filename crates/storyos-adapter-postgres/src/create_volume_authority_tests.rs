@@ -507,16 +507,16 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     );
 }
 
-struct NamedEdit<'a> {
-    editor_session_id: &'a str,
-    chapter_id: &'a str,
-    expected_revision_id: &'a str,
-    suffix: &'a str,
-    local_intent_sequence: u64,
-    text: &'a str,
+pub(crate) struct NamedEdit<'a> {
+    pub(crate) editor_session_id: &'a str,
+    pub(crate) chapter_id: &'a str,
+    pub(crate) expected_revision_id: &'a str,
+    pub(crate) suffix: &'a str,
+    pub(crate) local_intent_sequence: u64,
+    pub(crate) text: &'a str,
 }
 
-async fn apply_named_edit(
+pub(crate) async fn apply_named_edit(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     edit: NamedEdit<'_>,
