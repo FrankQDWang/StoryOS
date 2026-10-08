@@ -10,7 +10,7 @@ use storyos_application::{
 use tokio_postgres::Client;
 
 use super::admission::insert_admission;
-use super::records::{lock_project, read_project};
+use super::records::read_project;
 use super::{
     Admission, CommandIsolation, MissingAdmission, ProjectCommand, SettledCommand,
     challenge_problem, replay_command, replay_problem, settle_classified, unavailable,
@@ -103,7 +103,9 @@ async fn admit<C: AdmittedCommand>(
     envelope: &ProjectCommandEnvelope,
     command: &C,
 ) -> Result<(), C::Error> {
-    lock_project(client, envelope).await?;
+    // The Admission insert requires an active Project. As on `main`, the admit step locks no
+    // Project row, so a concurrent transaction that holds a key share of it does not stop it.
+    read_project(client, envelope).await?;
     if insert_admission(client, envelope, C::SPEC.kind, &command.admission(envelope)).await? {
         return Ok(());
     }
