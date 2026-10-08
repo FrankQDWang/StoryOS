@@ -128,9 +128,9 @@ pub use host_fake_profile::{
     STREAM_SECOND_TEXT, requested_execution_capability, stream_batch_plan,
 };
 pub use manuscript_payload::{
-    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, BlockReservation, COORDINATE_VERSION,
-    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
-    VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
+    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditOutcome, BlockReservation,
+    COORDINATE_VERSION, MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind,
+    ManuscriptPayload, VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
     upgrade_legacy_manuscript,
 };
 pub use model_output::{
@@ -393,14 +393,27 @@ pub struct RefusedEditPayload {
     pub local_intent_sequence: String,
 }
 
+/// The Core classification of one Author Edit.
+pub type ApplyAuthorEditOutcome =
+    TransitionOutcome<AuthorEditApplied, AuthorEditNoEffect, AuthorEditConflict, AuthorEditRefused>;
+
+/// The applied variants of an Author Edit.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ApplyAuthorEditResult {
-    RefusedToDraft,
+pub enum AuthorEditApplied {
+    /// The edit changes the Authoritative Revision to `body`.
     AuthoritativeApplied { body: String },
+    /// The edit changes the candidate of one Proposal to `candidate_text`.
     ProposalRevised { candidate_text: String },
-    Conflicted { reason: AuthorEditConflict },
-    NoEffect { reason: AuthorEditNoEffect },
-    Refused { reason: AuthorEditRefusal },
+}
+
+impl AuthorEditApplied {
+    /// The Domain Receipt result kind of this applied variant.
+    pub fn result_kind(&self) -> &'static str {
+        match self {
+            Self::AuthoritativeApplied { .. } => "authoritative_applied",
+            Self::ProposalRevised { .. } => "proposal_revised",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -422,20 +435,87 @@ pub enum AuthorEditRefusal {
     TargetMismatch,
 }
 
+transition_outcome::reason_codes!(AuthorEditNoEffect {
+    ContentUnchanged => "content_unchanged",
+});
+transition_outcome::reason_codes!(AuthorEditConflict {
+    StaleAuthoritativeHead => "stale_authoritative_head",
+    ProposalHeadPresent => "proposal_head_present",
+    OwnershipChanged => "ownership_changed",
+});
+transition_outcome::reason_codes!(AuthorEditRefusal {
+    UnsupportedIntentShape => "unsupported_intent_shape",
+    InvalidSelection => "invalid_selection",
+    TargetMismatch => "target_mismatch",
+});
+
+/// A refused Author Edit. The edit is refused for a reason, or it is kept as a Refused Edit
+/// Draft.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AuthorEditRefused {
+    /// The Receipt result kind is `refused` with the reason.
+    Refused(AuthorEditRefusal),
+    /// The Receipt result kind is `refused_to_draft`, and the Receipt records no reason.
+    RefusedToDraft,
+}
+
+impl AuthorEditRefused {
+    const TO_DRAFT: &'static str = "refused_to_draft";
+}
+
+impl From<AuthorEditRefusal> for AuthorEditRefused {
+    fn from(reason: AuthorEditRefusal) -> Self {
+        Self::Refused(reason)
+    }
+}
+
+impl ReasonCode for AuthorEditRefused {
+    fn code(&self) -> &'static str {
+        match self {
+            Self::Refused(reason) => reason.code(),
+            Self::RefusedToDraft => Self::TO_DRAFT,
+        }
+    }
+
+    fn from_code(code: &str) -> Option<Self> {
+        if code == Self::TO_DRAFT {
+            return Some(Self::RefusedToDraft);
+        }
+        AuthorEditRefusal::from_code(code).map(Self::Refused)
+    }
+
+    fn receipt_result(&self) -> Option<&'static str> {
+        match self {
+            Self::Refused(_) => None,
+            Self::RefusedToDraft => Some(Self::TO_DRAFT),
+        }
+    }
+
+    fn recorded_code(&self) -> Option<&'static str> {
+        match self {
+            Self::Refused(reason) => Some(reason.code()),
+            Self::RefusedToDraft => None,
+        }
+    }
+
+    fn from_receipt(result: &str, outcome: &'static str, code: Option<&str>) -> Option<Self> {
+        if result == Self::TO_DRAFT {
+            return code.is_none().then_some(Self::RefusedToDraft);
+        }
+        AuthorEditRefusal::from_receipt(result, outcome, code).map(Self::Refused)
+    }
+}
+
 pub const UTF16_COORDINATE_PROFILE: &str = "storyos.editor.utf16-code-unit.v1";
 
-pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
+pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditOutcome {
     if command.expected_authoritative_revision_id != command.current_authoritative_revision_id {
-        return ApplyAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::StaleAuthoritativeHead,
-        };
+        return TransitionOutcome::Conflicted(AuthorEditConflict::StaleAuthoritativeHead);
     }
     if command.expected_proposal_head_revision_ids
         != command.current_ownership.proposal_head_revision_ids
     {
-        return ApplyAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::ProposalHeadPresent,
-        };
+        return TransitionOutcome::Conflicted(AuthorEditConflict::ProposalHeadPresent);
     }
     let current_partition = if command
         .current_ownership
@@ -452,18 +532,14 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
         "mixed"
     };
     if command.observed_ownership_partition != current_partition {
-        return ApplyAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::OwnershipChanged,
-        };
+        return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
     }
     if command.ordered_source_facts.is_some() {
         return refused_edit::classify(command);
     }
     if command.inline_edit_disposition == InlineEditDisposition::AuthoritativeDespiteReservation {
         if current_partition != "mixed" || command.expected_proposal_head_revision_ids.is_empty() {
-            return ApplyAuthorEditResult::Conflicted {
-                reason: AuthorEditConflict::OwnershipChanged,
-            };
+            return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
         }
         return apply_author_edit_body(command, AuthorEditAppliedKind::Authoritative);
     }
@@ -471,9 +547,7 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
         return apply_author_edit_body(command, AuthorEditAppliedKind::Authoritative);
     }
     if command.expected_proposal_head_revision_ids.is_empty() {
-        return ApplyAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::OwnershipChanged,
-        };
+        return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
     }
     apply_author_edit_body(command, AuthorEditAppliedKind::Proposal)
 }
@@ -486,50 +560,50 @@ enum AuthorEditAppliedKind {
 fn apply_author_edit_body(
     command: &ApplyAuthorEdit,
     kind: AuthorEditAppliedKind,
-) -> ApplyAuthorEditResult {
+) -> ApplyAuthorEditOutcome {
     if command.target_refs != [format!("manuscript:{}", command.chapter_id)] {
-        return ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::TargetMismatch,
-        };
+        return TransitionOutcome::Refused(AuthorEditRefused::Refused(
+            AuthorEditRefusal::TargetMismatch,
+        ));
     }
     if command.author_edit_units.is_empty() {
-        return ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::UnsupportedIntentShape,
-        };
+        return TransitionOutcome::Refused(AuthorEditRefused::Refused(
+            AuthorEditRefusal::UnsupportedIntentShape,
+        ));
     }
     let mut body = command.current_body.clone();
     for unit in &command.author_edit_units {
         let [AuthorEditPrimitive::ReplaceSelection { from, to, text }] =
             unit.normalized_primitives.as_slice()
         else {
-            return ApplyAuthorEditResult::Refused {
-                reason: AuthorEditRefusal::UnsupportedIntentShape,
-            };
+            return TransitionOutcome::Refused(AuthorEditRefused::Refused(
+                AuthorEditRefusal::UnsupportedIntentShape,
+            ));
         };
         if unit.selection_snapshot.coordinate_profile != UTF16_COORDINATE_PROFILE
             || unit.selection_snapshot.from != *from
             || unit.selection_snapshot.to != *to
         {
-            return ApplyAuthorEditResult::Refused {
-                reason: AuthorEditRefusal::InvalidSelection,
-            };
+            return TransitionOutcome::Refused(AuthorEditRefused::Refused(
+                AuthorEditRefusal::InvalidSelection,
+            ));
         }
         if let Err(reason) = replace_checked_utf16_range(&mut body, *from, *to, text) {
-            return ApplyAuthorEditResult::Refused { reason };
+            return TransitionOutcome::Refused(AuthorEditRefused::Refused(reason));
         }
     }
     if body == command.current_body {
-        ApplyAuthorEditResult::NoEffect {
-            reason: AuthorEditNoEffect::ContentUnchanged,
-        }
+        TransitionOutcome::NoEffect(AuthorEditNoEffect::ContentUnchanged)
     } else {
         match kind {
             AuthorEditAppliedKind::Authoritative => {
-                ApplyAuthorEditResult::AuthoritativeApplied { body }
+                TransitionOutcome::Applied(AuthorEditApplied::AuthoritativeApplied { body })
             }
-            AuthorEditAppliedKind::Proposal => ApplyAuthorEditResult::ProposalRevised {
-                candidate_text: body,
-            },
+            AuthorEditAppliedKind::Proposal => {
+                TransitionOutcome::Applied(AuthorEditApplied::ProposalRevised {
+                    candidate_text: body,
+                })
+            }
         }
     }
 }

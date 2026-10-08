@@ -2,8 +2,8 @@
 
 use crate::{
     AuthorEditConflict, AuthorEditNoEffect, AuthorEditPrimitive, AuthorEditRefusal, AuthorEditUnit,
-    CurrentOwnershipFacts, InlineInputOwner, UTF16_COORDINATE_PROFILE, classify_inline_input_owner,
-    replace_checked_utf16_range, utf16_offset_to_byte,
+    CurrentOwnershipFacts, InlineInputOwner, TransitionOutcome, UTF16_COORDINATE_PROFILE,
+    classify_inline_input_owner, replace_checked_utf16_range, utf16_offset_to_byte,
 };
 
 pub const MANUSCRIPT_SCHEMA_VERSION: u32 = 1;
@@ -44,13 +44,8 @@ pub struct ApplyVersionedAuthorEdit {
     pub author_edit_units: Vec<AuthorEditUnit>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ApplyVersionedAuthorEditResult {
-    AuthoritativeApplied { payload: ManuscriptPayload },
-    Conflicted { reason: AuthorEditConflict },
-    NoEffect { reason: AuthorEditNoEffect },
-    Refused { reason: AuthorEditRefusal },
-}
+pub type ApplyVersionedAuthorEditOutcome =
+    TransitionOutcome<ManuscriptPayload, AuthorEditNoEffect, AuthorEditConflict, AuthorEditRefusal>;
 
 /// Current reservation facts for one versioned edit target.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -89,18 +84,14 @@ pub fn upgrade_legacy_manuscript(text: &str, manuscript_block_id: &str) -> Manus
 
 pub fn apply_versioned_author_edit(
     command: &ApplyVersionedAuthorEdit,
-) -> ApplyVersionedAuthorEditResult {
+) -> ApplyVersionedAuthorEditOutcome {
     if command.expected_authoritative_revision_id != command.current_authoritative_revision_id {
-        return ApplyVersionedAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::StaleAuthoritativeHead,
-        };
+        return TransitionOutcome::Conflicted(AuthorEditConflict::StaleAuthoritativeHead);
     }
     if command.expected_proposal_head_revision_ids
         != command.current_ownership.proposal_head_revision_ids
     {
-        return ApplyVersionedAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::ProposalHeadPresent,
-        };
+        return TransitionOutcome::Conflicted(AuthorEditConflict::ProposalHeadPresent);
     }
     let current_partition = if command
         .current_ownership
@@ -124,9 +115,7 @@ pub fn apply_versioned_author_edit(
             reserved_ranges,
         } => {
             let [unit] = command.author_edit_units.as_slice() else {
-                return ApplyVersionedAuthorEditResult::Conflicted {
-                    reason: AuthorEditConflict::OwnershipChanged,
-                };
+                return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
             };
             let [
                 AuthorEditPrimitive::ReplaceBlockSelection {
@@ -137,14 +126,10 @@ pub fn apply_versioned_author_edit(
                 },
             ] = unit.normalized_primitives.as_slice()
             else {
-                return ApplyVersionedAuthorEditResult::Conflicted {
-                    reason: AuthorEditConflict::OwnershipChanged,
-                };
+                return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
             };
             let [range] = reserved_ranges.as_slice() else {
-                return ApplyVersionedAuthorEditResult::Conflicted {
-                    reason: AuthorEditConflict::OwnershipChanged,
-                };
+                return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
             };
             current_partition == "mixed"
                 && command.current_ownership.proposal_head_revision_ids
@@ -176,9 +161,7 @@ pub fn apply_versioned_author_edit(
             reservation,
         } => {
             let [unit] = command.author_edit_units.as_slice() else {
-                return ApplyVersionedAuthorEditResult::Conflicted {
-                    reason: AuthorEditConflict::OwnershipChanged,
-                };
+                return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
             };
             *reservation == BlockReservation::Absent
                 && unit.selection_snapshot.ordered_selection.is_none()
@@ -199,42 +182,30 @@ pub fn apply_versioned_author_edit(
         }
     };
     if command.observed_ownership_partition != current_partition || !owns_target {
-        return ApplyVersionedAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::OwnershipChanged,
-        };
+        return TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
     }
     if command.target_refs != [format!("manuscript:{}", command.chapter_id)] {
-        return ApplyVersionedAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::TargetMismatch,
-        };
+        return TransitionOutcome::Refused(AuthorEditRefusal::TargetMismatch);
     }
     if !payload_is_supported(&command.current_payload) {
-        return ApplyVersionedAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::UnsupportedIntentShape,
-        };
+        return TransitionOutcome::Refused(AuthorEditRefusal::UnsupportedIntentShape);
     }
     if command.author_edit_units.is_empty() {
-        return ApplyVersionedAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::UnsupportedIntentShape,
-        };
+        return TransitionOutcome::Refused(AuthorEditRefusal::UnsupportedIntentShape);
     }
     let mut payload = command.current_payload.clone();
     for unit in &command.author_edit_units {
         if unit.selection_snapshot.coordinate_profile != UTF16_COORDINATE_PROFILE {
-            return ApplyVersionedAuthorEditResult::Refused {
-                reason: AuthorEditRefusal::InvalidSelection,
-            };
+            return TransitionOutcome::Refused(AuthorEditRefusal::InvalidSelection);
         }
         if let Err(reason) = apply_unit(&mut payload, unit) {
-            return ApplyVersionedAuthorEditResult::Refused { reason };
+            return TransitionOutcome::Refused(reason);
         }
     }
     if payload == command.current_payload {
-        ApplyVersionedAuthorEditResult::NoEffect {
-            reason: AuthorEditNoEffect::ContentUnchanged,
-        }
+        TransitionOutcome::NoEffect(AuthorEditNoEffect::ContentUnchanged)
     } else {
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied { payload }
+        TransitionOutcome::Applied(payload)
     }
 }
 

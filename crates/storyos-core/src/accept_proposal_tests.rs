@@ -214,7 +214,7 @@ fn every_acceptance_outcome_round_trips_through_its_receipt_codes() {
         TransitionOutcome::Refused(AcceptProposalRefusal::IncompleteBundleClosure),
     ];
     for outcome in outcomes {
-        let reason = outcome.reason_code().unwrap();
+        let reason = outcome.reason_code();
         assert_eq!(
             AcceptProposalOutcome::from_zero_authority_codes(outcome.receipt_result_kind(), reason),
             Some(outcome)

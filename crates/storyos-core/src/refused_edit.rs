@@ -1,10 +1,10 @@
 //! Prove one complete ordered-source replacement before preserving it.
 
 use crate::{
-    ApplyAuthorEdit, ApplyAuthorEditResult, AuthorEditConflict, AuthorEditPrimitive,
-    AuthorEditRefusal, EditSourceOwner, InlineTargetBlock, ManuscriptBlock, ManuscriptBlockKind,
-    OpenInlineProposal, OpenInlineProposalAnchor, OpenInlineProposalResult,
-    UTF16_COORDINATE_PROFILE, open_inline_proposal, utf16_offset_to_byte,
+    ApplyAuthorEdit, ApplyAuthorEditOutcome, AuthorEditConflict, AuthorEditPrimitive,
+    AuthorEditRefusal, AuthorEditRefused, EditSourceOwner, InlineTargetBlock, ManuscriptBlock,
+    ManuscriptBlockKind, OpenInlineProposal, OpenInlineProposalAnchor, OpenInlineProposalResult,
+    TransitionOutcome, UTF16_COORDINATE_PROFILE, open_inline_proposal, utf16_offset_to_byte,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,12 +28,12 @@ pub struct ProposalEditSourceFacts {
     pub anchors: Vec<OpenInlineProposalAnchor>,
 }
 
-pub(super) fn classify(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
-    let conflict = || ApplyAuthorEditResult::Conflicted {
-        reason: AuthorEditConflict::OwnershipChanged,
-    };
-    let invalid = || ApplyAuthorEditResult::Refused {
-        reason: AuthorEditRefusal::InvalidSelection,
+pub(super) fn classify(command: &ApplyAuthorEdit) -> ApplyAuthorEditOutcome {
+    let conflict = || TransitionOutcome::Conflicted(AuthorEditConflict::OwnershipChanged);
+    let invalid = || {
+        TransitionOutcome::Refused(AuthorEditRefused::Refused(
+            AuthorEditRefusal::InvalidSelection,
+        ))
     };
     let Some(facts) = command.ordered_source_facts.as_ref() else {
         return conflict();
@@ -267,5 +267,5 @@ pub(super) fn classify(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
     if (!forward && !backward) || owners.len() < 2 {
         return invalid();
     }
-    ApplyAuthorEditResult::RefusedToDraft
+    TransitionOutcome::Refused(AuthorEditRefused::RefusedToDraft)
 }
