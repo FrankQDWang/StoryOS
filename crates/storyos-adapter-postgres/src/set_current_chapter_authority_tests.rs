@@ -4,11 +4,11 @@ use storyos_application::{
     CreateChapterInput, CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput,
     EditorClientBinding, EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge,
     IssueProjectCommandChallenge, OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding,
-    ProjectId, ProjectScope, SetCurrentChapterInput, SetCurrentChapterSettlement,
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeCreated,
-    VolumeId, VolumeNode, create_editor_session, create_project, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter, open_project,
-    undo_latest_author_action,
+    ProjectCommandEnvelope, ProjectId, ProjectScope, SetCurrentChapterInput,
+    SetCurrentChapterSettlement, UndoApplied, UndoLatestAuthorActionInput, UndoRecords, UserId,
+    VolumeCreated, VolumeId, VolumeNode, create_editor_session, create_project,
+    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
+    open_chapter, open_project,
 };
 use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
@@ -361,32 +361,36 @@ pub(super) async fn undo_named(
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
-    undo_latest_author_action(
-        store,
-        &UndoLatestAuthorActionCommand {
-            project_scope: scope.clone(),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
+    store
+        .undo_latest_author_action(
+            &ProjectCommandEnvelope {
+                project_scope: scope.clone(),
+                client_binding: EditorClientBinding {
+                    binding_ref: issue.binding.client_session_binding_digest.clone(),
+                    session_generation: issue.binding.client_session_generation,
+                    client_contract_revision: issue.binding.client_contract_revision.clone(),
+                    security_policy_revision: issue.binding.security_policy_revision.clone(),
+                },
+                challenge_binding: issue.binding,
+                nonce_digest: issue.nonce_digest,
+                canonical_command_bytes: bytes,
+                correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
+                ids: AuthorCommandAdmissionIds {
+                    command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
+                    author_command_admission_id: format!(
+                        "018f0000-0000-7001-8000-00000002{suffix}"
+                    ),
+                    receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
+                },
             },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
-            canonical_command_bytes: bytes,
-            correlation_id: format!("018f0000-0000-7001-8000-00000000{suffix}"),
-            ids: AuthorCommandAdmissionIds {
-                command_id: format!("018f0000-0000-7001-8000-00000001{suffix}"),
-                author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-                receipt_id: format!("018f0000-0000-7001-8000-00000003{suffix}"),
+            &UndoLatestAuthorActionInput {
+                editor_session_id: EditorSessionId::new(editor_session_id),
+                expected_author_undo_frontier_sequence: expected_frontier,
+                expected_authoritative_revision_id: expected_revision_id.to_owned(),
             },
-            editor_session_id: EditorSessionId::new(editor_session_id),
-            expected_author_undo_frontier_sequence: expected_frontier,
-            expected_authoritative_revision_id: expected_revision_id.to_owned(),
-        },
-    )
-    .await
-    .unwrap()
+        )
+        .await
+        .unwrap()
 }
 
 pub(super) async fn seed_two_chapters(
@@ -662,11 +666,11 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
         "f83c",
     )
     .await;
-    let UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
+    let TransitionOutcome::Applied(UndoApplied {
         source_sequence,
-        snapshot_id,
+        records: UndoRecords::CurrentChapter { snapshot_id, .. },
         ..
-    } = compensated.effect.clone()
+    }) = compensated.outcome.clone()
     else {
         panic!("Set Current Chapter Undo must write Current Chapter Compensation");
     };
@@ -798,10 +802,8 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
     )
     .await;
     assert!(matches!(
-        blocked.effect,
-        UndoLatestAuthorActionSettlementEffect::Unavailable {
-            reason: storyos_core::UndoLatestAuthorActionUnavailable::Barrier,
-        }
+        blocked.outcome,
+        TransitionOutcome::Refused(storyos_core::UndoLatestAuthorActionUnavailable::Barrier)
     ));
     assert_eq!(
         open_project(&store, &blocked_scope)

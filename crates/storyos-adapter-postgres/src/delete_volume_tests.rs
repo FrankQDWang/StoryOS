@@ -4,10 +4,10 @@ use storyos_application::{
     CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeInput, DeleteVolumeInput,
     EditorClientBinding, EditorSessionId, GetManuscriptTree, IssueCreateProjectChallenge,
     IssueProjectCommandChallenge, OpenChapter, OpenEditorSession, ProjectCommandChallengeBinding,
-    ProjectId, ProjectScope, UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect,
-    UserId, VolumeCreated, VolumeDeleted, VolumeId, VolumeNode, create_editor_session,
+    ProjectCommandEnvelope, ProjectId, ProjectScope, UndoApplied, UndoLatestAuthorActionInput,
+    UndoRecords, UserId, VolumeCreated, VolumeDeleted, VolumeId, VolumeNode, create_editor_session,
     create_project, get_manuscript_tree, issue_create_project_challenge,
-    issue_project_command_challenge, open_chapter, undo_latest_author_action,
+    issue_project_command_challenge, open_chapter,
 };
 use storyos_core::TransitionOutcome;
 use tokio_postgres::NoTls;
@@ -593,28 +593,30 @@ async fn author_undo_compensates_delete_volume_and_restores_prior_volume_identit
     issue_project_command_challenge(&store, &undo_issue)
         .await
         .unwrap();
-    let undone = undo_latest_author_action(
-        &store,
-        &UndoLatestAuthorActionCommand {
-            project_scope: scope.clone(),
-            client_binding: client_binding(&undo_issue.binding),
-            challenge_binding: undo_issue.binding,
-            nonce_digest: undo_issue.nonce_digest,
-            canonical_command_bytes: undo_bytes,
-            correlation_id: "018f0000-0000-7001-8000-00000000e47d".to_owned(),
-            ids: ids("e47d"),
-            editor_session_id: EditorSessionId::new(editor_session_id),
-            expected_author_undo_frontier_sequence: authority.author_action_sequence,
-            expected_authoritative_revision_id: opened.chapter.revision_id.as_ref().to_owned(),
-        },
-    )
-    .await
-    .unwrap();
-    let UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
+    let undone = store
+        .undo_latest_author_action(
+            &ProjectCommandEnvelope {
+                project_scope: scope.clone(),
+                client_binding: client_binding(&undo_issue.binding),
+                challenge_binding: undo_issue.binding,
+                nonce_digest: undo_issue.nonce_digest,
+                canonical_command_bytes: undo_bytes,
+                correlation_id: "018f0000-0000-7001-8000-00000000e47d".to_owned(),
+                ids: ids("e47d"),
+            },
+            &UndoLatestAuthorActionInput {
+                editor_session_id: EditorSessionId::new(editor_session_id),
+                expected_author_undo_frontier_sequence: authority.author_action_sequence,
+                expected_authoritative_revision_id: opened.chapter.revision_id.as_ref().to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+    let TransitionOutcome::Applied(UndoApplied {
         source_sequence,
-        snapshot_id,
+        records: UndoRecords::Structure { snapshot_id, .. },
         ..
-    } = undone.effect.clone()
+    }) = undone.outcome.clone()
     else {
         panic!("Delete Volume Undo must write structure Compensation");
     };

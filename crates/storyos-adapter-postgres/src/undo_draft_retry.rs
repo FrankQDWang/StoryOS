@@ -1,14 +1,18 @@
-use storyos_application::{UndoLatestAuthorActionCommand, UndoLatestAuthorActionError};
-use storyos_core::AuthorUndoFrontierKind;
-use uuid::Uuid;
+//! The reopen of a Refused Edit Draft that the undone Forward action superseded (ADR 0044).
 
-use crate::close_editor_flow_draft::{DraftReopenWrite, load_frontier};
+use storyos_application::ProjectCommandError;
+use storyos_core::AuthorUndoFrontierKind;
+
+use crate::close_editor_flow_draft::{DraftReopenWrite, ObservedDraftClose, load_frontier};
+use crate::undo_compensation::UndoRequest;
 use crate::undo_latest_author_action::undo_database_error;
 
-pub(super) async fn persist_reopen(
+/// The Draft that the expected Author Undo Frontier superseded, which a Compensation reopens.
+/// A source whose binding changed is a binding conflict.
+pub(super) async fn load_source_reopen(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-) -> Result<Option<storyos_contracts::EditorFlowDraftReopened>, UndoLatestAuthorActionError> {
+    command: &UndoRequest,
+) -> Result<Option<ObservedDraftClose>, ProjectCommandError> {
     let Some(source) = load_frontier(
         client,
         command,
@@ -19,55 +23,37 @@ pub(super) async fn persist_reopen(
         return Ok(None);
     };
     if source.kind != AuthorUndoFrontierKind::ReversibleDraftClose {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
+        return Err(ProjectCommandError::BindingConflict);
     }
-    let scope = &command.project_scope;
-    let row = client.query_one("SELECT author_action_sequence::text,
-        to_char(transaction_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
-        FROM storyos.scope_counters WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid",
-        &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref()]).await.map_err(undo_database_error)?;
-    let event = crate::close_editor_flow_draft::persist_reopen(
-        client,
-        command,
-        &source,
-        DraftReopenWrite {
-            event_id: Uuid::now_v7().to_string(),
-            handler_receipt_id: Uuid::now_v7().to_string(),
-            sequence: row.get(0),
-            created_at: row.get(1),
-        },
-    )
-    .await?;
-    Ok(Some(event))
+    Ok(Some(source))
 }
 
-pub(super) async fn read_reopen(
+/// Reopens `source` with the Compensation Author Action at `author_action_sequence`.
+pub(super) async fn persist_source_reopen(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-    receipt_id: &str,
-) -> Result<Option<storyos_contracts::EditorFlowDraftReopened>, UndoLatestAuthorActionError> {
-    let scope = &command.project_scope;
-    let row = client.query_opt("SELECT event.event_id::text FROM storyos.domain_receipts AS receipt
-      JOIN storyos.draft_reopen_receipts AS handler ON (handler.owner_user_id,handler.project_id,handler.author_undo_receipt_id)=
-        (receipt.owner_user_id,receipt.project_id,receipt.receipt_id)
-      JOIN storyos.draft_reopen_events AS event ON (event.owner_user_id,event.project_id,event.handler_receipt_id)=
-        (handler.owner_user_id,handler.project_id,handler.receipt_id)
-      JOIN storyos.draft_close_events AS source ON (source.owner_user_id,source.project_id,source.event_id)=
-        (event.owner_user_id,event.project_id,event.source_close_event_id)
-      WHERE receipt.owner_user_id=$1::text::uuid AND receipt.project_id=$2::text::uuid AND receipt.receipt_id=$3::text::uuid
-        AND receipt.result_kind='authoritative_applied' AND source.close_reason='superseded'
-        AND receipt.draft_artifact_refs=ARRAY[event.draft_id::text] AND receipt.artifact_lifecycle_event_refs=ARRAY[event.event_id::text]",
-      &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&receipt_id]).await.map_err(undo_database_error)?;
-    match row {
-        Some(row) => {
-            crate::close_editor_flow_draft::read_event(
-                client,
-                scope,
-                &row.get::<_, String>(/*idx*/ 0),
-            )
-            .await
-            .map(Some)
-        }
-        None => Ok(None),
-    }
+    command: &UndoRequest,
+    source: &ObservedDraftClose,
+    author_action_sequence: u64,
+) -> Result<storyos_contracts::EditorFlowDraftReopened, ProjectCommandError> {
+    let created_at = client
+        .query_one(
+            "SELECT to_char(transaction_timestamp() AT TIME ZONE 'UTC',
+                            'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
+            &[],
+        )
+        .await
+        .map_err(undo_database_error)?
+        .get(/*idx*/ 0);
+    crate::close_editor_flow_draft::persist_reopen(
+        client,
+        command,
+        source,
+        DraftReopenWrite {
+            event_id: source.reopen_event_id.clone(),
+            handler_receipt_id: source.handler_receipt_id.clone(),
+            sequence: author_action_sequence.to_string(),
+            created_at,
+        },
+    )
+    .await
 }

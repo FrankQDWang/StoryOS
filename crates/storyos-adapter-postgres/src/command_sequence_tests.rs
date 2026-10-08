@@ -40,6 +40,9 @@ mod rollback;
 #[path = "command_sequence_tests/damaged_evidence_tests.rs"]
 mod damaged_evidence;
 
+#[path = "command_sequence_tests/undo_tests.rs"]
+mod undo;
+
 pub(crate) use structure::{
     create_chapter, create_volume, delete_chapter, delete_volume, update_chapter, update_volume,
 };

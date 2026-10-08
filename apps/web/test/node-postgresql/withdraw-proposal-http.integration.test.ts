@@ -564,6 +564,52 @@ test("root undo of an author withdrawal reopens the Proposal under the existing 
   }
 });
 
+test("an exact retry of the undo of an author withdrawal returns the first acknowledgement", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const opened = await withdrawOpenedProposal(started.baseUrl, "e8f00611", "e8f6");
+    const undoRequest: UndoLatestAuthorActionRequest = {
+      command_schema: "storyos.command.undo-latest-author-action.request.v1",
+      undo_latest_author_action_input: {
+        expected_author_undo_frontier_sequence: opened.authorActionSequence,
+        expected_authoritative_revision_id: opened.chapterRevisionId,
+        editor_session_id: opened.editorSessionId,
+        ...BINDING,
+        correlation_id: id("e8f00671"),
+      },
+    };
+    let nonce = "";
+    const send = (antiForgery: string) => {
+      nonce = antiForgery;
+      return undoLatestAuthorAction({
+        baseUrl: started.baseUrl,
+        projectId: opened.projectId,
+        fetchImpl: opened.fetchImpl,
+        idempotencyKey: id("e8f00672"),
+        antiForgery,
+        request: undoRequest,
+      });
+    };
+    const undone = await challenged(
+      started.baseUrl,
+      opened.fetchImpl,
+      opened.projectId,
+      "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo",
+      undoRequest.command_schema,
+      await digestUndoLatestAuthorAction(undoRequest),
+      id("e8f00672"),
+      send,
+    );
+    assert.equal(undone.effect.kind, "compensated");
+    const retried = await send(nonce);
+    assert.deepEqual(retried, undone);
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
 async function withdrawOpenedProposal(baseUrl: string, projectKey: string, ns: string) {
   const prepared = await prepare(baseUrl, id(projectKey), "Reopen Withdrawn Proposal Novel", ns);
   const before = await getChapter({

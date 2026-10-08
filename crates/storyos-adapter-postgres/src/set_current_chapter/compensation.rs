@@ -1,17 +1,15 @@
 //! The Current Chapter Compensation of Author Undo (ADR 0026, ADR 0044).
 
-use storyos_application::{
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
-    UndoLatestAuthorActionSettlementEffect,
-};
+use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
 use tokio_postgres::Client;
 
-use crate::undo_compensation::{CompensationAdapter, CompensationReplay};
-use crate::undo_latest_author_action::{
-    UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
-    undo_from_session,
+use crate::command_replay::ReplayFault;
+use crate::structural_authority_settlement::{
+    CurrentChapterSequences, allocate_current_chapter_sequences,
 };
+use crate::undo_compensation::{CompensationAdapter, CompensationReplay, UndoRequest};
+use crate::undo_latest_author_action::undo_database_error;
 
 /// Returns the writer to the Chapter that was current before a Current Chapter change.
 pub(crate) struct CurrentChapterCompensation;
@@ -25,14 +23,15 @@ pub(crate) struct ObservedCurrentChapterFrontier {
 impl CompensationAdapter for CurrentChapterCompensation {
     type Forward = ();
     type Evidence = ObservedCurrentChapterFrontier;
+    type Sequences = CurrentChapterSequences;
 
     /// A prior Chapter that is not a lawful target makes the change a Barrier.
     async fn load(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
+        command: &UndoRequest,
         _forward: (),
         sequence: u64,
-    ) -> Result<Option<ObservedCurrentChapterFrontier>, UndoLatestAuthorActionError> {
+    ) -> Result<Option<ObservedCurrentChapterFrontier>, ProjectCommandError> {
         let Some(row) = client
             .query_opt(
                 "SELECT payload.payload->>'prior_chapter_id', payload.payload->>'current_chapter_id'
@@ -74,39 +73,44 @@ impl CompensationAdapter for CurrentChapterCompensation {
         AuthorUndoFrontierKind::ReversibleStructureTransition
     }
 
-    async fn compensate(
+    async fn allocate(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
-        evidence: &ObservedCurrentChapterFrontier,
-        source_sequence: u64,
-    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-        persist_current_chapter_compensation(client, command, evidence, source_sequence).await
+        scope: &ProjectScope,
+    ) -> Result<CurrentChapterSequences, ProjectCommandError> {
+        allocate_current_chapter_sequences(client, scope)
+            .await
+            .map_err(ProjectCommandError::Unavailable)
     }
 
-    async fn decode(
-        _client: &Client,
-        _command: &UndoLatestAuthorActionCommand,
-        replay: &CompensationReplay,
-    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
-        Ok(
-            UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
-                source_sequence: replay.source_sequence,
-                author_action_sequence: replay.author_action_sequence,
-                snapshot_id: replay
-                    .snapshot_id
-                    .clone()
-                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-                author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
-            },
-        )
+    async fn compensate(
+        client: &Client,
+        command: &UndoRequest,
+        evidence: &ObservedCurrentChapterFrontier,
+        sequences: CurrentChapterSequences,
+        source_sequence: u64,
+    ) -> Result<UndoRecords, ProjectCommandError> {
+        persist_current_chapter_compensation(client, command, evidence, sequences, source_sequence)
+            .await
+    }
+
+    fn decode(replay: &CompensationReplay) -> Result<UndoRecords, ReplayFault> {
+        let Some((snapshot_id, project_activity_position)) = replay.snapshot.clone() else {
+            return Err(ReplayFault::Unavailable(
+                "a Current Chapter Compensation has no Snapshot".into(),
+            ));
+        };
+        Ok(UndoRecords::CurrentChapter {
+            snapshot_id,
+            project_activity_position,
+        })
     }
 }
 
 async fn live_chapter_is_lawful_target(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     chapter_id: &str,
-) -> Result<bool, UndoLatestAuthorActionError> {
+) -> Result<bool, ProjectCommandError> {
     let row = client
         .query_opt(
             "SELECT chapter.manuscript_object_id
@@ -134,16 +138,11 @@ async fn live_chapter_is_lawful_target(
 
 async fn persist_current_chapter_compensation(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     frontier: &ObservedCurrentChapterFrontier,
+    sequences: CurrentChapterSequences,
     source_sequence: u64,
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-    let sequences = crate::structural_authority_settlement::allocate_current_chapter_sequences(
-        client,
-        &command.project_scope,
-    )
-    .await
-    .map_err(UndoLatestAuthorActionError::Unavailable)?;
+) -> Result<UndoRecords, ProjectCommandError> {
     let updated = client
         .execute(
             "UPDATE storyos.projects
@@ -161,7 +160,7 @@ async fn persist_current_chapter_compensation(
         .await
         .map_err(undo_database_error)?;
     if updated != 1 {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+        return Err(ProjectCommandError::Unavailable(Box::new(
             std::io::Error::other("current Chapter changed under FOR UPDATE"),
         )));
     }
@@ -181,16 +180,6 @@ async fn persist_current_chapter_compensation(
         .await
         .map_err(undo_database_error)?
         .get::<_, String>(0);
-    let receipt_created_at = insert_undo_receipt(
-        client,
-        command,
-        "authoritative_applied",
-        "{}",
-        &command.expected_authoritative_revision_id,
-        &command.expected_authoritative_revision_id,
-        UndoReceiptAuthority::None,
-    )
-    .await?;
     crate::structural_authority_settlement::persist_current_chapter_compensation_author_action(
         client,
         &command.project_scope,
@@ -244,28 +233,10 @@ async fn persist_current_chapter_compensation(
         .await
         .map_err(undo_database_error)?;
     if base_updates != 1 {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
+        return Err(ProjectCommandError::BindingConflict);
     }
-    let response_project = settle_idempotency(client, command).await?;
-    let author_undo_frontier_sequence =
-        crate::editor_session::current_author_undo_frontier_sequence(
-            client,
-            command.project_scope.owner_user_id.as_ref(),
-            command.project_scope.project_id.as_ref(),
-        )
-        .await
-        .map_err(undo_from_session)?;
-    Ok(UndoLatestAuthorActionSettlement {
-        source_reopen_event: None,
-        ids: command.ids.clone(),
-        effect: UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
-            source_sequence,
-            author_action_sequence: sequences.author_action_sequence,
-            snapshot_id: sequences.snapshot_id,
-            author_undo_frontier_sequence,
-        },
-        receipt_created_at,
+    Ok(UndoRecords::CurrentChapter {
+        snapshot_id: sequences.snapshot_id,
         project_activity_position: sequences.project_activity_position,
-        response_project,
     })
 }

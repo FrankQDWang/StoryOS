@@ -13,7 +13,7 @@ use crate::command_response_assistance::{
 use crate::command_response_project::{
     COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence, read_command_response_project,
 };
-use crate::command_sequence::ReplayEffect;
+use crate::command_sequence::{AppliedVariant, ReplayEffect};
 use crate::{PostgresProjectReader, set_challenge_scope_on_client};
 use uuid::Uuid;
 
@@ -196,6 +196,11 @@ impl EffectRecord {
         })
     }
 
+    /// The top-level fields of the row. An absent row has no fields.
+    pub(crate) fn fields(&self) -> &serde_json::Map<String, serde_json::Value> {
+        &self.0.0
+    }
+
     /// The string of `key`. An absent row or a null column is damaged evidence.
     pub(crate) fn required(&self, key: &str) -> Result<String, ReplayFault> {
         self.0.required(key).map(str::to_owned)
@@ -231,15 +236,18 @@ fn decimal(key: &str, text: &str) -> Result<u64, ReplayFault> {
 }
 
 impl CommandReplay {
-    /// The recorded outcome, classified from the stored Receipt result kind. `applied_result`
-    /// is the result kind of the command's applied outcome.
+    /// The recorded outcome, classified from the stored Receipt result kind. `applied` holds the
+    /// applied variants of the command.
     ///
     /// `Applied` carries no value. The command decodes its applied effect.
     pub(crate) fn outcome<N: ReasonCode, C: ReasonCode, R: ReasonCode>(
         &self,
-        applied_result: &str,
+        applied: &[AppliedVariant],
     ) -> Result<TransitionOutcome<(), N, C, R>, ReplayFault> {
-        if self.result_kind == applied_result {
+        if applied
+            .iter()
+            .any(|variant| variant.result_kind() == self.result_kind)
+        {
             return Ok(TransitionOutcome::Applied(()));
         }
         // A missing or unknown reason is a binding conflict (ADR 0043).
@@ -250,6 +258,11 @@ impl CommandReplay {
             Field::Absent | Field::Null => None,
         }
         .ok_or(ReplayFault::BindingConflict)
+    }
+
+    /// The top-level fields of the Receipt payload.
+    pub(crate) fn receipt_fields(&self) -> &serde_json::Map<String, serde_json::Value> {
+        &self.receipt.0
     }
 
     /// One required string field of the Receipt payload.

@@ -42,7 +42,7 @@ pub(crate) struct OpenRevision {
 impl ProjectCommand for WithdrawProposalInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "withdrawProposal",
-        applied: AppliedVariant::Forward(ForwardCommand::WithdrawProposal),
+        applied: &[AppliedVariant::Forward(ForwardCommand::WithdrawProposal)],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,

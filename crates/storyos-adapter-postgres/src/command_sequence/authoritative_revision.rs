@@ -9,7 +9,9 @@ use storyos_application::{
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::{CommandSpec, LockedProject, SettlementProfile, unavailable};
+use super::{
+    AppliedVariant, CommandSpec, LockedProject, SelectsRecords, SettlementProfile, unavailable,
+};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::manuscript_block::{
     blocks_from_stored_payload, copy_or_upgrade_revision_members, display_body_from_stored,
@@ -65,7 +67,12 @@ pub(crate) struct RevisionWrite<E> {
 
 pub(crate) struct AuthoritativeRevision;
 
+impl<T> SelectsRecords<AuthoritativeRevision> for T {
+    fn selector(&self) {}
+}
+
 impl SettlementProfile for AuthoritativeRevision {
+    type Selector = ();
     type Sequences = RevisionSequences;
     type Write<E: Send> = RevisionWrite<E>;
     type Applied<E: Send> = RevisionApplied<E>;
@@ -73,6 +80,7 @@ impl SettlementProfile for AuthoritativeRevision {
     async fn allocate(
         client: &Client,
         scope: &ProjectScope,
+        (): &(),
     ) -> Result<RevisionSequences, ProjectCommandError> {
         let row = client
             .query_one(
@@ -119,6 +127,7 @@ impl SettlementProfile for AuthoritativeRevision {
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
         _spec: &CommandSpec,
+        _variant: AppliedVariant,
         sequences: RevisionSequences,
         write: RevisionWrite<E>,
     ) -> Result<RevisionApplied<E>, ProjectCommandError> {

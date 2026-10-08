@@ -234,8 +234,8 @@ pub use set_current_chapter::{
     CurrentChapterSelected, SetCurrentChapterInput, SetCurrentChapterSettlement,
 };
 pub use undo_latest_author_action::{
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
-    UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore, undo_latest_author_action,
+    AuthorUndoFrontierPosition, UndoApplied, UndoLatestAuthorActionInput,
+    UndoLatestAuthorActionSettlement, UndoRecords,
 };
 pub use update_project_assistance::{
     ProjectAssistanceAcknowledgement, ProjectAssistanceRecord, UpdateProjectAssistanceInput,

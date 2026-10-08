@@ -40,9 +40,9 @@ pub(crate) struct LiveChapters(Vec<String>);
 impl ProjectCommand for CreateChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createChapter",
-        applied: AppliedVariant::Forward(ForwardCommand::Structure(
+        applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::CreateChapter,
-        )),
+        ))],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

@@ -11,7 +11,8 @@ use super::author_edit::author_edit_database_error;
 
 mod compensation;
 pub(crate) use compensation::{
-    ObservedProposalFrontier, ProposalEditCompensation, settle_proposal_compensation,
+    ObservedProposalFrontier, ProposalEditCompensation, decode_proposal_compensation,
+    proposal_receipt_payload, settle_proposal_compensation,
 };
 
 #[derive(Clone, Debug)]
@@ -382,6 +383,26 @@ pub(super) async fn append_proposal_revision(
     current_authoritative_revision_id: &str,
     candidate_text: &str,
 ) -> Result<String, AuthorEditError> {
+    append_proposal_revision_as(
+        client,
+        scope,
+        context,
+        current_authoritative_revision_id,
+        candidate_text,
+        Uuid::now_v7().to_string(),
+    )
+    .await
+}
+
+/// Appends the Proposal Revision `revision_id` of one Proposal edit and moves the Proposal head.
+pub(super) async fn append_proposal_revision_as(
+    client: &Client,
+    scope: &ProjectScope,
+    context: &ProposalEditContext,
+    current_authoritative_revision_id: &str,
+    candidate_text: &str,
+    revision_id: String,
+) -> Result<String, AuthorEditError> {
     let owner = scope.owner_user_id.as_ref();
     let project = scope.project_id.as_ref();
     let facts = client
@@ -430,7 +451,6 @@ pub(super) async fn append_proposal_revision(
             return Err(AuthorEditError::BindingConflict);
         }
     };
-    let revision_id = Uuid::now_v7().to_string();
     let validation_receipt_id = Uuid::now_v7().to_string();
     client
         .execute(

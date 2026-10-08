@@ -34,7 +34,7 @@ impl PostgresProjectReader {
 impl ProjectCommand for CancelAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "cancelAgentRun",
-        applied: AppliedVariant::NoAuthorAction,
+        applied: &[AppliedVariant::NoAuthorAction],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

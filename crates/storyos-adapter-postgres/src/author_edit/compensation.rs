@@ -1,22 +1,18 @@
 //! The prose Compensation of Author Undo: it restores the Revision before one applied Author
 //! Edit through the `AuthoritativeRevision` profile (ADR 0044).
 
-use storyos_application::{
-    ProjectCommandError, UndoLatestAuthorActionCommand, UndoLatestAuthorActionError,
-    UndoLatestAuthorActionSettlement, UndoLatestAuthorActionSettlementEffect,
-};
+use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
 use tokio_postgres::Client;
 
+use crate::command_replay::ReplayFault;
 use crate::command_sequence::{
-    ActionDisposition, AuthoritativeRevision, RevisionBase, RevisionMembers, RevisionWrite,
-    SettlementProfile, write_revision,
+    ActionDisposition, AuthoritativeRevision, RevisionBase, RevisionMembers, RevisionSequences,
+    RevisionWrite, SettlementProfile, write_revision,
 };
-use crate::undo_compensation::{CompensationAdapter, CompensationReplay};
-use crate::undo_latest_author_action::{
-    UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
-    undo_from_session,
-};
+use crate::manuscript_block::{blocks_from_stored_payload, display_body_from_stored};
+use crate::undo_compensation::{CompensationAdapter, CompensationReplay, UndoRequest};
+use crate::undo_latest_author_action::undo_database_error;
 
 /// The Forward evidence of one applied Author Edit or Acceptance whose Revision the Compensation
 /// reverses.
@@ -35,13 +31,14 @@ pub(crate) struct ProseCompensation;
 impl CompensationAdapter for ProseCompensation {
     type Forward = ();
     type Evidence = ObservedProseFrontier;
+    type Sequences = RevisionSequences;
 
     async fn load(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
+        command: &UndoRequest,
         (): (),
         sequence: u64,
-    ) -> Result<Option<ObservedProseFrontier>, UndoLatestAuthorActionError> {
+    ) -> Result<Option<ObservedProseFrontier>, ProjectCommandError> {
         let row = load_revision_evidence(client, command, sequence).await?;
         Ok(row.and_then(|row| {
             match (
@@ -76,21 +73,29 @@ impl CompensationAdapter for ProseCompensation {
         }
     }
 
-    async fn compensate(
+    async fn allocate(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
-        evidence: &ObservedProseFrontier,
-        source_sequence: u64,
-    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-        compensate_revision(client, command, evidence, source_sequence).await
+        scope: &ProjectScope,
+    ) -> Result<RevisionSequences, ProjectCommandError> {
+        AuthoritativeRevision::allocate(client, scope, &()).await
     }
 
-    async fn decode(
+    fn commit_ids(sequences: &RevisionSequences) -> Vec<String> {
+        AuthoritativeRevision::commit_ids(sequences)
+    }
+
+    async fn compensate(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
-        replay: &CompensationReplay,
-    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
-        decode_revision_compensation(client, command, replay).await
+        command: &UndoRequest,
+        evidence: &ObservedProseFrontier,
+        sequences: RevisionSequences,
+        source_sequence: u64,
+    ) -> Result<UndoRecords, ProjectCommandError> {
+        compensate_revision(client, command, evidence, sequences, source_sequence).await
+    }
+
+    fn decode(replay: &CompensationReplay) -> Result<UndoRecords, ReplayFault> {
+        decode_revision_compensation(replay)
     }
 }
 
@@ -98,9 +103,9 @@ impl CompensationAdapter for ProseCompensation {
 /// `sequence`. Each column is null when its record is absent.
 pub(crate) async fn load_revision_evidence(
     client: &Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     sequence: u64,
-) -> Result<Option<tokio_postgres::Row>, UndoLatestAuthorActionError> {
+) -> Result<Option<tokio_postgres::Row>, ProjectCommandError> {
     client
         .query_opt(
             "SELECT commit.manuscript_object_id::text,
@@ -142,29 +147,14 @@ pub(crate) async fn load_revision_evidence(
 }
 
 /// Restores the prior Revision of `frontier` as a new Revision with a Compensation Author
-/// Action, and settles the Undo Receipt and fence.
+/// Action through the `AuthoritativeRevision` profile.
 pub(crate) async fn compensate_revision(
     client: &Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     frontier: &ObservedProseFrontier,
+    sequences: RevisionSequences,
     source_sequence: u64,
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-    let sequences = AuthoritativeRevision::allocate(client, &command.project_scope)
-        .await
-        .map_err(undo_sequence_error)?;
-    let receipt_created_at = insert_undo_receipt(
-        client,
-        command,
-        "authoritative_applied",
-        "{}",
-        &frontier.current_head_revision_id,
-        &sequences.ids.revision_id,
-        UndoReceiptAuthority::Prose {
-            revision_id: sequences.ids.revision_id.clone(),
-            commit_id: sequences.ids.authoritative_commit_id.clone(),
-        },
-    )
-    .await?;
+) -> Result<UndoRecords, ProjectCommandError> {
     let applied = write_revision(
         client,
         &command.project_scope,
@@ -181,100 +171,41 @@ pub(crate) async fn compensate_revision(
             writer_base: RevisionBase::Required,
         },
     )
-    .await
-    .map_err(undo_sequence_error)?;
-    let response_project = settle_idempotency(client, command).await?;
-    let author_undo_frontier_sequence =
-        crate::editor_session::current_author_undo_frontier_sequence(
-            client,
-            command.project_scope.owner_user_id.as_ref(),
-            command.project_scope.project_id.as_ref(),
-        )
-        .await
-        .map_err(undo_from_session)?;
-    Ok(UndoLatestAuthorActionSettlement {
-        source_reopen_event: None,
-        ids: command.ids.clone(),
-        effect: UndoLatestAuthorActionSettlementEffect::Compensated {
-            source_sequence,
-            author_action_sequence: applied.author_action_sequence,
-            authoritative_commit_id: applied.ids.authoritative_commit_id,
-            revision_id: applied.ids.revision_id,
-            body: applied.body,
-            blocks: applied.blocks,
-            author_undo_frontier_sequence,
-            proposal_id: None,
-            proposal_revision_id: None,
-        },
-        receipt_created_at,
+    .await?;
+    Ok(UndoRecords::Revision {
+        authoritative_commit_id: applied.ids.authoritative_commit_id,
+        revision_id: applied.ids.revision_id,
+        body: applied.body,
+        blocks: applied.blocks,
         project_activity_position: applied.project_activity_position,
-        response_project,
-    })
-}
-
-/// Decodes a prose or Acceptance Compensation from the Revision that its Commit binds.
-pub(crate) async fn decode_revision_compensation(
-    client: &Client,
-    command: &UndoLatestAuthorActionCommand,
-    replay: &CompensationReplay,
-) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
-    let Some(revision_id) = replay.resulting_revision_id.clone() else {
-        return Ok(
-            UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
-                source_sequence: replay.source_sequence,
-                author_action_sequence: replay.author_action_sequence,
-                proposal_revision_id: None,
-                author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
-            },
-        );
-    };
-    let stored = replay
-        .resulting_payload
-        .clone()
-        .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-    let chapter_id = replay
-        .chapter_id
-        .clone()
-        .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-    let blocks = crate::manuscript_block::load_revision_blocks(
-        client,
-        command.project_scope.owner_user_id.as_ref(),
-        command.project_scope.project_id.as_ref(),
-        &chapter_id,
-        &revision_id,
-        &stored,
-    )
-    .await
-    .map_err(undo_database_error)?;
-    Ok(UndoLatestAuthorActionSettlementEffect::Compensated {
-        source_sequence: replay.source_sequence,
-        author_action_sequence: replay.author_action_sequence,
-        authoritative_commit_id: replay
-            .authoritative_commit_id
-            .clone()
-            .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-        body: crate::manuscript_block::display_body_from_stored(&stored, &blocks),
-        revision_id,
-        blocks,
-        author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
         proposal_id: None,
         proposal_revision_id: None,
     })
 }
 
-/// The Author Undo error of a profile write.
-fn undo_sequence_error(error: ProjectCommandError) -> UndoLatestAuthorActionError {
-    match error {
-        ProjectCommandError::BindingConflict | ProjectCommandError::WriterIneligible => {
-            UndoLatestAuthorActionError::BindingConflict
-        }
-        ProjectCommandError::HistoricalAcknowledgementUnavailable => {
-            UndoLatestAuthorActionError::HistoricalAcknowledgementUnavailable
-        }
-        ProjectCommandError::InvalidChallenge => UndoLatestAuthorActionError::InvalidChallenge,
-        ProjectCommandError::MissingProject => UndoLatestAuthorActionError::MissingProject,
-        ProjectCommandError::Unavailable(source) => {
-            UndoLatestAuthorActionError::Unavailable(source)
-        }
+/// Decodes a prose or Acceptance Compensation from the Revision that its Commit binds.
+pub(crate) fn decode_revision_compensation(
+    replay: &CompensationReplay,
+) -> Result<UndoRecords, ReplayFault> {
+    let damaged = || ReplayFault::Unavailable("a Revision Compensation is damaged".into());
+    let revision = replay.revision.ok_or_else(damaged)?;
+    let activity = revision.activity.as_ref().ok_or_else(damaged)?;
+    if activity.authoritative_commit_id != revision.authoritative_commit_id
+        || activity.resulting_revision_id != revision.revision_id
+    {
+        return Err(damaged());
     }
+    let blocks = blocks_from_stored_payload(&revision.payload, &revision.member_block_ids);
+    Ok(UndoRecords::Revision {
+        authoritative_commit_id: revision.authoritative_commit_id.clone(),
+        revision_id: revision.revision_id.clone(),
+        body: display_body_from_stored(&revision.payload, &blocks),
+        blocks,
+        project_activity_position: activity
+            .project_activity_position
+            .parse()
+            .map_err(|_| damaged())?,
+        proposal_id: None,
+        proposal_revision_id: None,
+    })
 }

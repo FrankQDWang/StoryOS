@@ -38,9 +38,9 @@ pub(crate) struct ParentVolume(String);
 impl ProjectCommand for DeleteChapterInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "deleteChapter",
-        applied: AppliedVariant::Forward(ForwardCommand::Structure(
+        applied: &[AppliedVariant::Forward(ForwardCommand::Structure(
             StructureCommand::DeleteChapter,
-        )),
+        ))],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

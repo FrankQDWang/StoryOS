@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActivitySequences, Classification, CommandSpec, LockedProject, ProfileApplied,
+    ActivitySequences, AppliedVariant, Classification, CommandSpec, LockedProject, ProfileApplied,
     ProfileSequences, ProfileWrite, ProjectCommand, ReceiptRefs, ZeroAuthorityRows,
     ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
 };
@@ -111,6 +111,10 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
         self.command
             .write_child_receipt(client, envelope, result_kind)
             .await
+    }
+
+    fn applied_variant(&self, applied: &Self::Applied, plan: &Self::Plan) -> AppliedVariant {
+        self.command.applied_variant(applied, plan)
     }
 
     fn applied_receipt_payload(&self, applied: &Self::Applied, plan: &Self::Plan) -> String {
@@ -219,7 +223,7 @@ fn inner_outcome<'a, C: ProjectCommand>(
 ///
 /// Returns, for each failure, the step of the injected failure and the rows of its Receipt, then
 /// the Receipt result kind of the real settlement.
-async fn failed_then_settled<C: ProjectCommand<Error: SequenceError> + Clone>(
+pub(super) async fn failed_then_settled<C: ProjectCommand<Error: SequenceError> + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,

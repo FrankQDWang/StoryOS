@@ -47,7 +47,7 @@ pub(super) enum ReplayError {
 }
 
 /// Settles the call, then replays it with pre-capture and then with damaged acknowledgement evidence.
-async fn evidence_replays<C: ProjectCommand<Error: SequenceError> + Clone>(
+pub(super) async fn evidence_replays<C: ProjectCommand<Error: SequenceError> + Clone>(
     store: &PostgresProjectReader,
     admin: &Client,
     call: &CommandCall<C>,

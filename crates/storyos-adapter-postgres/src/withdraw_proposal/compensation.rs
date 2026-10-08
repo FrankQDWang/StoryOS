@@ -1,19 +1,17 @@
 //! The author withdrawal Compensation of Author Undo (ADR 0044).
 
-use storyos_application::{
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
-    UndoLatestAuthorActionSettlementEffect,
-};
+use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-use crate::author_edit::parse_u64;
-use crate::undo_compensation::{CompensationAdapter, CompensationReplay};
-use crate::undo_latest_author_action::{
-    UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
-    undo_from_author_edit, undo_from_session,
+use crate::author_edit_proposal::{decode_proposal_compensation, proposal_receipt_payload};
+use crate::command_replay::ReplayFault;
+use crate::undo_compensation::{
+    CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
+    allocate_compensation_action,
 };
+use crate::undo_latest_author_action::undo_database_error;
 
 /// Reopens a Proposal that the author withdrew.
 pub(crate) struct AuthorWithdrawalCompensation;
@@ -21,13 +19,14 @@ pub(crate) struct AuthorWithdrawalCompensation;
 impl CompensationAdapter for AuthorWithdrawalCompensation {
     type Forward = ();
     type Evidence = ObservedAuthorWithdrawal;
+    type Sequences = CompensationAction;
 
     async fn load(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
+        command: &UndoRequest,
         _forward: (),
         sequence: u64,
-    ) -> Result<Option<ObservedAuthorWithdrawal>, UndoLatestAuthorActionError> {
+    ) -> Result<Option<ObservedAuthorWithdrawal>, ProjectCommandError> {
         load_author_withdrawal(client, command, sequence).await
     }
 
@@ -35,39 +34,52 @@ impl CompensationAdapter for AuthorWithdrawalCompensation {
         AuthorUndoFrontierKind::ReversibleStructureTransition
     }
 
-    async fn compensate(
+    async fn allocate(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
-        evidence: &ObservedAuthorWithdrawal,
-        source_sequence: u64,
-    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-        persist_withdrawal_compensation(client, command, evidence, source_sequence).await
+        scope: &ProjectScope,
+    ) -> Result<CompensationAction, ProjectCommandError> {
+        allocate_compensation_action(client, scope).await
     }
 
-    async fn decode(
-        _client: &Client,
-        _command: &UndoLatestAuthorActionCommand,
-        replay: &CompensationReplay,
-    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
-        let payload: serde_json::Value = serde_json::from_str(&replay.result_payload)
-            .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
-        let proposal_revision_id = payload["proposal_revision_id"]
-            .as_str()
-            .map(str::to_owned)
-            .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-        Ok(
-            UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
-                source_sequence: replay.source_sequence,
-                author_action_sequence: replay.author_action_sequence,
-                proposal_revision_id: Some(proposal_revision_id),
-                author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
-            },
+    fn receipt_payload(
+        evidence: &ObservedAuthorWithdrawal,
+        project_activity_position: u64,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        proposal_receipt_payload(
+            &evidence.compensation_revision_id,
+            &evidence.current_revision_id,
+            project_activity_position,
         )
+    }
+
+    async fn compensate(
+        client: &Client,
+        command: &UndoRequest,
+        evidence: &ObservedAuthorWithdrawal,
+        sequences: CompensationAction,
+        source_sequence: u64,
+    ) -> Result<UndoRecords, ProjectCommandError> {
+        persist_withdrawal_compensation(client, command, evidence, sequences, source_sequence).await
+    }
+
+    /// The Activity position is the one that the Receipt payload records (issue 1031).
+    fn decode(replay: &CompensationReplay) -> Result<UndoRecords, ReplayFault> {
+        let proposal_revision_id = match replay.receipt_payload.get("proposal_revision_id") {
+            Some(serde_json::Value::String(text)) => text.clone(),
+            _ => {
+                return Err(ReplayFault::Unavailable(
+                    "a withdrawal Compensation has no Proposal Revision".into(),
+                ));
+            }
+        };
+        decode_proposal_compensation(replay, Some(proposal_revision_id))
     }
 }
 
 pub(crate) struct ObservedAuthorWithdrawal {
     pub sequence: u64,
+    /// The Proposal Revision that the Compensation appends.
+    pub compensation_revision_id: String,
     pub chapter_id: String,
     pub current_revision_id: String,
     pub generation: String,
@@ -77,9 +89,9 @@ pub(crate) struct ObservedAuthorWithdrawal {
 
 async fn load_author_withdrawal(
     client: &Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     sequence: u64,
-) -> Result<Option<ObservedAuthorWithdrawal>, UndoLatestAuthorActionError> {
+) -> Result<Option<ObservedAuthorWithdrawal>, ProjectCommandError> {
     let row = client
         .query_opt(
             "SELECT proposal.chapter_id::text,
@@ -130,6 +142,7 @@ async fn load_author_withdrawal(
     };
     Ok(Some(ObservedAuthorWithdrawal {
         sequence,
+        compensation_revision_id: Uuid::now_v7().to_string(),
         chapter_id,
         current_revision_id: row.get(1),
         generation: row.get(2),
@@ -140,11 +153,12 @@ async fn load_author_withdrawal(
 
 async fn persist_withdrawal_compensation(
     client: &Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     frontier: &ObservedAuthorWithdrawal,
+    sequences: CompensationAction,
     source_sequence: u64,
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-    let proposal_revision_id = Uuid::now_v7().to_string();
+) -> Result<UndoRecords, ProjectCommandError> {
+    let proposal_revision_id = frontier.compensation_revision_id.clone();
     let inserted = client
         .execute(
             "INSERT INTO storyos.proposal_revisions
@@ -173,7 +187,7 @@ async fn persist_withdrawal_compensation(
         .await
         .map_err(undo_database_error)?;
     if inserted != 1 {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
+        return Err(ProjectCommandError::BindingConflict);
     }
     let head_updates = client
         .execute(
@@ -199,68 +213,19 @@ async fn persist_withdrawal_compensation(
         .await
         .map_err(undo_database_error)?;
     if head_updates != 1 {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
+        return Err(ProjectCommandError::BindingConflict);
     }
-    let counter_row = client
-        .query_one(
-            "UPDATE storyos.scope_counters
-                SET author_action_sequence = author_action_sequence + 1
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-          RETURNING author_action_sequence::text, project_activity_position::text",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    let author_action_sequence = parse_u64(counter_row.get(0)).map_err(undo_from_author_edit)?;
-    let project_activity_position = parse_u64(counter_row.get(1)).map_err(undo_from_author_edit)?;
-    let payload = serde_json::json!({
-        "proposal_revision_id": proposal_revision_id,
-        "source_proposal_revision_id": frontier.current_revision_id,
-        "project_activity_position": project_activity_position.to_string(),
-    })
-    .to_string();
-    let receipt_created_at = insert_undo_receipt(
-        client,
-        command,
-        "authoritative_applied",
-        &payload,
-        &command.expected_authoritative_revision_id,
-        &command.expected_authoritative_revision_id,
-        UndoReceiptAuthority::None,
-    )
-    .await?;
     crate::structural_authority_settlement::persist_current_chapter_compensation_author_action(
         client,
         &command.project_scope,
-        author_action_sequence,
+        sequences.author_action_sequence,
         &command.ids.receipt_id,
         source_sequence,
     )
     .await
     .map_err(undo_database_error)?;
-    let response_project = settle_idempotency(client, command).await?;
-    let author_undo_frontier_sequence =
-        crate::editor_session::current_author_undo_frontier_sequence(
-            client,
-            command.project_scope.owner_user_id.as_ref(),
-            command.project_scope.project_id.as_ref(),
-        )
-        .await
-        .map_err(undo_from_session)?;
-    Ok(UndoLatestAuthorActionSettlement {
-        source_reopen_event: None,
-        ids: command.ids.clone(),
-        effect: UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
-            source_sequence,
-            author_action_sequence,
-            proposal_revision_id: Some(proposal_revision_id),
-            author_undo_frontier_sequence,
-        },
-        receipt_created_at,
-        project_activity_position,
-        response_project,
+    Ok(UndoRecords::Proposal {
+        proposal_revision_id: Some(proposal_revision_id),
+        project_activity_position: sequences.project_activity_position,
     })
 }

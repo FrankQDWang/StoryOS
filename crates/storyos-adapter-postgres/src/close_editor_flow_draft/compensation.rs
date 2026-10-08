@@ -1,17 +1,16 @@
 //! The Draft close and expansion Compensation of Author Undo (ADR 0044).
 
-use storyos_application::{
-    ProjectScope, UndoLatestAuthorActionCommand, UndoLatestAuthorActionError,
-    UndoLatestAuthorActionSettlement, UndoLatestAuthorActionSettlementEffect,
-};
+use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::{AuthorUndoFrontierKind, canonical_json, hex_sha256};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-use crate::undo_compensation::{CompensationAdapter, CompensationReplay};
-use crate::undo_latest_author_action::{
-    UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
+use crate::command_replay::ReplayFault;
+use crate::undo_compensation::{
+    CompensationAction, CompensationAdapter, CompensationReplay, UndoRequest,
+    allocate_compensation_action,
 };
+use crate::undo_latest_author_action::undo_database_error;
 
 /// Reopens a Refused Edit Draft that the author closed or expanded to a Proposal.
 pub(crate) struct DraftCompensation;
@@ -19,52 +18,106 @@ pub(crate) struct DraftCompensation;
 impl CompensationAdapter for DraftCompensation {
     type Forward = ();
     type Evidence = ObservedDraftClose;
+    type Sequences = CompensationAction;
+    const RESULT_KIND: &'static str = "draft_closure_changed";
 
     async fn load(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
+        command: &UndoRequest,
         _forward: (),
         sequence: u64,
-    ) -> Result<Option<ObservedDraftClose>, UndoLatestAuthorActionError> {
-        load_frontier(client, command, sequence).await
+    ) -> Result<Option<ObservedDraftClose>, ProjectCommandError> {
+        let Some(mut frontier) = load_frontier(client, command, sequence).await? else {
+            return Ok(None);
+        };
+        let scope = &command.project_scope;
+        frontier.next_frontier = client
+            .query_one(
+                "SELECT max(action.author_action_sequence)::text
+                   FROM storyos.author_action_entries AS action
+                  WHERE action.owner_user_id = $1::text::uuid
+                    AND action.project_id = $2::text::uuid AND action.disposition = 'forward'
+                    AND action.author_action_sequence <> $3::text::numeric
+                    AND NOT EXISTS (
+                          SELECT 1 FROM storyos.author_action_entries AS compensation
+                           WHERE compensation.owner_user_id = action.owner_user_id
+                             AND compensation.project_id = action.project_id
+                             AND compensation.disposition = 'compensation'
+                             AND compensation.compensated_source_sequence =
+                                 action.author_action_sequence)",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &sequence.to_string(),
+                ],
+            )
+            .await
+            .map_err(undo_database_error)?
+            .get(/*idx*/ 0);
+        Ok(Some(frontier))
     }
 
     fn frontier_kind(evidence: &ObservedDraftClose) -> AuthorUndoFrontierKind {
         evidence.kind.clone()
     }
 
-    async fn compensate(
+    async fn allocate(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
-        evidence: &ObservedDraftClose,
-        _source_sequence: u64,
-    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-        persist_compensation(client, command, evidence).await
+        scope: &ProjectScope,
+    ) -> Result<CompensationAction, ProjectCommandError> {
+        allocate_compensation_action(client, scope).await
     }
 
-    async fn decode(
+    fn receipt_payload(
+        evidence: &ObservedDraftClose,
+        _project_activity_position: u64,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        [
+            ("event_id", evidence.reopen_event_id.clone().into()),
+            (
+                "handler_receipt_id",
+                evidence.handler_receipt_id.clone().into(),
+            ),
+            (
+                "author_undo_frontier_sequence",
+                evidence.next_frontier.clone().into(),
+            ),
+        ]
+        .into_iter()
+        .map(|(key, value): (&str, serde_json::Value)| (key.to_owned(), value))
+        .collect()
+    }
+
+    fn receipt_draft(evidence: &ObservedDraftClose) -> Option<(String, String)> {
+        Some((evidence.draft_id.clone(), evidence.reopen_event_id.clone()))
+    }
+
+    async fn compensate(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
-        replay: &CompensationReplay,
-    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
-        let payload: serde_json::Value = serde_json::from_str(&replay.result_payload)
-            .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
-        let event_id = payload["event_id"]
-            .as_str()
-            .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-        Ok(UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
-            event: Box::new(read_event(client, &command.project_scope, event_id).await?),
-            author_undo_frontier_sequence: payload["author_undo_frontier_sequence"]
-                .as_str()
-                .map(str::parse)
-                .transpose()
-                .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?,
+        command: &UndoRequest,
+        evidence: &ObservedDraftClose,
+        sequences: CompensationAction,
+        source_sequence: u64,
+    ) -> Result<UndoRecords, ProjectCommandError> {
+        persist_compensation(client, command, evidence, sequences, source_sequence).await
+    }
+
+    fn decode(replay: &CompensationReplay) -> Result<UndoRecords, ReplayFault> {
+        let damaged = || ReplayFault::Unavailable("a Draft Compensation is damaged".into());
+        let event = replay.draft_event.ok_or_else(damaged)?;
+        Ok(UndoRecords::Draft {
+            event: Box::new(serde_json::from_value(event.clone()).map_err(|_| damaged())?),
         })
     }
 }
 
 pub(crate) struct ObservedDraftClose {
     pub sequence: u64,
+    /// The reopen event and its handler Receipt that an Undo of the close writes.
+    pub reopen_event_id: String,
+    pub handler_receipt_id: String,
+    /// The Author Undo Frontier after an Undo of the close. Only `DraftCompensation` loads it.
+    pub next_frontier: Option<String>,
     pub draft_id: String,
     pub revision_id: String,
     pub digest: String,
@@ -76,9 +129,9 @@ pub(crate) struct ObservedDraftClose {
 
 pub(crate) async fn load_frontier(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     sequence: u64,
-) -> Result<Option<ObservedDraftClose>, UndoLatestAuthorActionError> {
+) -> Result<Option<ObservedDraftClose>, ProjectCommandError> {
     let scope = &command.project_scope;
     let row = client.query_opt("SELECT closed.draft_id::text, closed.revision_id::text, closed.payload_digest,
         closed.event_id::text, draft.current_revision_id::text, revision.payload_digest, draft.closure,
@@ -112,7 +165,7 @@ pub(crate) async fn load_frontier(
         AuthorUndoFrontierKind::DraftSourceUnavailable
     } else {
         let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(9))
-            .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
+            .map_err(|error| ProjectCommandError::Unavailable(Box::new(error)))?;
         if revision_id == row.get::<_, String>(4)
             && digest == row.get::<_, String>(5)
             && row.get::<_, String>(6) == "closed"
@@ -152,6 +205,9 @@ pub(crate) async fn load_frontier(
     };
     Ok(Some(ObservedDraftClose {
         sequence,
+        reopen_event_id: Uuid::now_v7().to_string(),
+        handler_receipt_id: Uuid::now_v7().to_string(),
+        next_frontier: None,
         draft_id: row.get(0),
         revision_id,
         digest,
@@ -164,9 +220,11 @@ pub(crate) async fn load_frontier(
 
 async fn persist_compensation(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     frontier: &ObservedDraftClose,
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
+    sequences: CompensationAction,
+    source_sequence: u64,
+) -> Result<UndoRecords, ProjectCommandError> {
     let scope = &command.project_scope;
     let owner = scope.owner_user_id.as_ref();
     let project = scope.project_id.as_ref();
@@ -178,75 +236,28 @@ async fn persist_compensation(
             AND project_id=$2::text::uuid AND proposal_id IN (SELECT proposal_id FROM withdrawn)",
           &[&owner,&project,&proposal,&revision]).await.map_err(undo_database_error)?;
         if count != 1 {
-            return Err(UndoLatestAuthorActionError::BindingConflict);
+            return Err(ProjectCommandError::BindingConflict);
         }
     }
-    let row = client
-        .query_one(
-            "UPDATE storyos.scope_counters SET author_action_sequence=author_action_sequence+1
-        WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
-        RETURNING author_action_sequence::text,project_activity_position::text",
-            &[&owner, &project],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    let sequence: String = row.get(0);
-    let activity: String = row.get(1);
-    let next: Option<String> = client.query_one("SELECT max(action.author_action_sequence)::text FROM storyos.author_action_entries AS action
-        WHERE action.owner_user_id=$1::text::uuid AND action.project_id=$2::text::uuid AND action.disposition='forward'
-        AND action.author_action_sequence<>$3::text::numeric AND NOT EXISTS(SELECT 1 FROM storyos.author_action_entries AS compensation
-        WHERE compensation.owner_user_id=action.owner_user_id AND compensation.project_id=action.project_id
-        AND compensation.disposition='compensation' AND compensation.compensated_source_sequence=action.author_action_sequence)",
-        &[&owner,&project,&frontier.sequence.to_string()]).await.map_err(undo_database_error)?.get(0);
-    let event_id = Uuid::now_v7().to_string();
-    let handler_receipt_id = Uuid::now_v7().to_string();
-    let payload = serde_json::json!({"event_id":event_id,"handler_receipt_id":handler_receipt_id,
-        "author_undo_frontier_sequence":next})
-    .to_string();
-    let created_at = insert_undo_receipt(
-        client,
-        command,
-        "draft_closure_changed",
-        &payload,
-        &command.expected_authoritative_revision_id,
-        &command.expected_authoritative_revision_id,
-        UndoReceiptAuthority::Draft {
-            draft_id: frontier.draft_id.clone(),
-            event_id: event_id.clone(),
-        },
-    )
-    .await?;
+    let sequence = sequences.author_action_sequence.to_string();
     client.execute("INSERT INTO storyos.author_action_entries(owner_user_id,project_id,author_action_sequence,disposition,compensated_source_sequence,receipt_id,receipt_result_kind)
         VALUES($1::text::uuid,$2::text::uuid,$3::text::numeric,'compensation',$4::text::numeric,$5::text::uuid,'draft_closure_changed')",
-        &[&owner,&project,&sequence,&frontier.sequence.to_string(),&command.ids.receipt_id]).await.map_err(undo_database_error)?;
+        &[&owner,&project,&sequence,&source_sequence.to_string(),&command.ids.receipt_id]).await.map_err(undo_database_error)?;
+    let created_at = crate::undo_latest_author_action::receipt_created_at(client, command).await?;
     let event = persist_reopen(
         client,
         command,
         frontier,
         DraftReopenWrite {
-            event_id,
-            handler_receipt_id,
+            event_id: frontier.reopen_event_id.clone(),
+            handler_receipt_id: frontier.handler_receipt_id.clone(),
             sequence,
-            created_at: created_at.clone(),
+            created_at,
         },
     )
     .await?;
-    let response_project = settle_idempotency(client, command).await?;
-    Ok(UndoLatestAuthorActionSettlement {
-        source_reopen_event: None,
-        ids: command.ids.clone(),
-        effect: UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
-            event: Box::new(event),
-            author_undo_frontier_sequence: next
-                .map(|value| value.parse())
-                .transpose()
-                .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?,
-        },
-        receipt_created_at: created_at,
-        project_activity_position: activity
-            .parse()
-            .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?,
-        response_project,
+    Ok(UndoRecords::Draft {
+        event: Box::new(event),
     })
 }
 
@@ -259,10 +270,10 @@ pub(crate) struct DraftReopenWrite {
 
 pub(crate) async fn persist_reopen(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     frontier: &ObservedDraftClose,
     write: DraftReopenWrite,
-) -> Result<storyos_contracts::EditorFlowDraftReopened, UndoLatestAuthorActionError> {
+) -> Result<storyos_contracts::EditorFlowDraftReopened, ProjectCommandError> {
     let owner = command.project_scope.owner_user_id.as_ref();
     let project = command.project_scope.project_id.as_ref();
     let contract_scope = storyos_contracts::ProjectScope {
@@ -308,32 +319,18 @@ pub(crate) async fn persist_reopen(
     client.execute("INSERT INTO storyos.draft_reopen_receipts(owner_user_id,project_id,receipt_id,author_undo_receipt_id,source_close_event_id,event_id,payload)
         VALUES($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7::text::jsonb)",
         &[&owner,&project,&write.handler_receipt_id,&command.ids.receipt_id,&frontier.close_event_id,&write.event_id,
-          &serde_json::to_string(&event.handler_receipt).map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?])
+          &serde_json::to_string(&event.handler_receipt).map_err(|error| ProjectCommandError::Unavailable(Box::new(error)))?])
         .await.map_err(undo_database_error)?;
     client.execute("INSERT INTO storyos.draft_reopen_events(owner_user_id,project_id,event_id,draft_id,revision_id,source_close_event_id,handler_receipt_id,author_action_sequence,payload)
         VALUES($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7::text::uuid,$8::text::numeric,$9::text::jsonb)",
         &[&owner,&project,&write.event_id,&frontier.draft_id,&frontier.revision_id,&frontier.close_event_id,&write.handler_receipt_id,&write.sequence,
-          &serde_json::to_string(&event).map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?]).await.map_err(undo_database_error)?;
+          &serde_json::to_string(&event).map_err(|error| ProjectCommandError::Unavailable(Box::new(error)))?]).await.map_err(undo_database_error)?;
     let updated = client.execute("UPDATE storyos.draft_artifacts SET closure='open',reopen_event_id=$4::text::uuid
         WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND draft_id=$3::text::uuid
         AND current_revision_id=$5::text::uuid AND close_event_id=$6::text::uuid AND closure='closed' AND retention_state='retained'",
         &[&owner,&project,&frontier.draft_id,&write.event_id,&frontier.revision_id,&frontier.close_event_id]).await.map_err(undo_database_error)?;
     if updated != 1 {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
+        return Err(ProjectCommandError::BindingConflict);
     }
     Ok(event)
-}
-
-pub(crate) async fn read_event(
-    client: &tokio_postgres::Client,
-    scope: &ProjectScope,
-    event_id: &str,
-) -> Result<storyos_contracts::EditorFlowDraftReopened, UndoLatestAuthorActionError> {
-    let payload: String = client.query_one("SELECT event.payload::text FROM storyos.draft_reopen_events AS event
-        JOIN storyos.draft_reopen_receipts AS receipt ON (receipt.owner_user_id,receipt.project_id,receipt.receipt_id)=
-        (event.owner_user_id,event.project_id,event.handler_receipt_id)
-        WHERE event.owner_user_id=$1::text::uuid AND event.project_id=$2::text::uuid AND event.event_id=$3::text::uuid",
-        &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&event_id]).await.map_err(undo_database_error)?.get(0);
-    serde_json::from_str(&payload)
-        .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))
 }

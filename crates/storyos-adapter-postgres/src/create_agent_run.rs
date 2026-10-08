@@ -80,7 +80,7 @@ impl AgentRunReadStore for PostgresProjectReader {
 impl ProjectCommand for CreateAgentRunInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "createAgentRun",
-        applied: AppliedVariant::NoAuthorAction,
+        applied: &[AppliedVariant::NoAuthorAction],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::Unavailable,

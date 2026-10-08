@@ -61,7 +61,7 @@ async fn insert_rejection_record(
         .ok_or(ProjectCommandError::BindingConflict)?;
     let (result, rejection_reason, preserved) = match record {
         RejectionRecord::Applied(rejected) => (
-            RejectProposalOperationsInput::SPEC.applied.result_kind(),
+            RejectProposalOperationsInput::SPEC.applied[0].result_kind(),
             Some("author_declined"),
             Some(rejected),
         ),
@@ -102,7 +102,9 @@ async fn insert_rejection_record(
 impl ProjectCommand for RejectProposalOperationsInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "rejectProposalOperations",
-        applied: AppliedVariant::Forward(ForwardCommand::RejectProposalOperations),
+        applied: &[AppliedVariant::Forward(
+            ForwardCommand::RejectProposalOperations,
+        )],
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,

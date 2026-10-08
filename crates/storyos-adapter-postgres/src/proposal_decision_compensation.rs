@@ -1,17 +1,18 @@
 //! The exact Compensation of a Proposal decision that appended one Proposal Revision (ADR 0044).
 
-use storyos_application::{
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
-};
+use storyos_application::{ProjectCommandError, UndoRecords};
 use tokio_postgres::{Client, Row};
 use uuid::Uuid;
 
-use crate::author_edit_proposal::settle_proposal_compensation;
+use crate::author_edit_proposal::{proposal_receipt_payload, settle_proposal_compensation};
+use crate::undo_compensation::{CompensationAction, UndoRequest};
 use crate::undo_latest_author_action::undo_database_error;
 
 /// A Proposal decision whose resulting Proposal Revision is still the Proposal head.
 pub(crate) struct ObservedProposalDecision {
     pub sequence: u64,
+    /// The Proposal Revision that the Compensation appends.
+    pub compensation_revision_id: String,
     pub proposal_id: String,
     pub chapter_id: String,
     /// The Proposal Revision before the decision.
@@ -25,6 +26,7 @@ impl ObservedProposalDecision {
     pub(crate) fn from_row(row: &Row, sequence: u64) -> Self {
         Self {
             sequence,
+            compensation_revision_id: Uuid::now_v7().to_string(),
             proposal_id: row.get(/*idx*/ 0),
             chapter_id: row.get(/*idx*/ 1),
             source_revision_id: row.get(/*idx*/ 2),
@@ -39,10 +41,10 @@ impl ObservedProposalDecision {
 /// each decision with the source and resulting Proposal Revisions.
 pub(crate) async fn load_proposal_decision(
     client: &Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     sequence: u64,
     history: DecisionHistory,
-) -> Result<Option<ObservedProposalDecision>, UndoLatestAuthorActionError> {
+) -> Result<Option<ObservedProposalDecision>, ProjectCommandError> {
     let query = format!(
         "SELECT history.proposal_id::text, proposal.chapter_id::text,
                 history.source_proposal_revision_id::text,
@@ -87,16 +89,29 @@ pub(crate) struct DecisionHistory {
     pub(crate) receipt_column: &'static str,
 }
 
+/// The Undo Receipt payload of the Compensation of `decision`.
+pub(crate) fn decision_receipt_payload(
+    decision: &ObservedProposalDecision,
+    project_activity_position: u64,
+) -> serde_json::Map<String, serde_json::Value> {
+    proposal_receipt_payload(
+        &decision.compensation_revision_id,
+        &decision.resulting_revision_id,
+        project_activity_position,
+    )
+}
+
 /// Appends a Proposal Revision equal to the source revision of `decision`, with a copy of its
 /// validation receipt, and records the Compensation.
 pub(crate) async fn compensate_proposal_decision(
     client: &Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     decision: &ObservedProposalDecision,
+    sequences: CompensationAction,
     source_sequence: u64,
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
+) -> Result<UndoRecords, ProjectCommandError> {
     let scope = &command.project_scope;
-    let revision_id = Uuid::now_v7().to_string();
+    let revision_id = decision.compensation_revision_id.clone();
     let inserted = client
         .execute(
             "INSERT INTO storyos.proposal_revisions
@@ -121,7 +136,7 @@ pub(crate) async fn compensate_proposal_decision(
         .await
         .map_err(undo_database_error)?;
     if inserted != 1 {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
+        return Err(ProjectCommandError::BindingConflict);
     }
     client
         .execute(
@@ -163,14 +178,7 @@ pub(crate) async fn compensate_proposal_decision(
         .await
         .map_err(undo_database_error)?;
     if head_updates != 1 {
-        return Err(UndoLatestAuthorActionError::BindingConflict);
+        return Err(ProjectCommandError::BindingConflict);
     }
-    settle_proposal_compensation(
-        client,
-        command,
-        source_sequence,
-        &decision.resulting_revision_id,
-        revision_id,
-    )
-    .await
+    settle_proposal_compensation(client, command, sequences, source_sequence, revision_id).await
 }

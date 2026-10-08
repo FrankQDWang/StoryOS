@@ -1,9 +1,6 @@
 //! The structure Compensation of Author Undo (ADR 0029, ADR 0030, ADR 0044).
 
-use storyos_application::{
-    UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
-    UndoLatestAuthorActionSettlementEffect,
-};
+use storyos_application::{ProjectCommandError, ProjectScope, UndoRecords};
 use storyos_core::AuthorUndoFrontierKind;
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -13,14 +10,15 @@ use frontier::load_structure_frontier;
 pub(crate) use frontier::{ObservedStructureFrontier, ObservedStructureIdentity};
 
 use super::{
-    StructureAffectedIdentity, StructureCommitBinding, persist_compensation_author_action,
+    StructureAffectedIdentity, StructureCommitBinding, StructureTransitionSequences,
+    allocate_structure_transition_sequences, persist_compensation_author_action,
     persist_structure_commit,
 };
-use crate::undo_compensation::{CompensationAdapter, CompensationReplay, StructureCommand};
-use crate::undo_latest_author_action::{
-    UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
-    undo_from_session,
+use crate::command_replay::ReplayFault;
+use crate::undo_compensation::{
+    CompensationAdapter, CompensationReplay, StructureCommand, UndoRequest,
 };
+use crate::undo_latest_author_action::undo_database_error;
 
 /// Restores the prior manuscript tree and identities of one Volume or Chapter change.
 pub(crate) struct StructureCompensation;
@@ -28,13 +26,14 @@ pub(crate) struct StructureCompensation;
 impl CompensationAdapter for StructureCompensation {
     type Forward = StructureCommand;
     type Evidence = ObservedStructureFrontier;
+    type Sequences = StructureTransitionSequences;
 
     async fn load(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
+        command: &UndoRequest,
         forward: StructureCommand,
         sequence: u64,
-    ) -> Result<Option<ObservedStructureFrontier>, UndoLatestAuthorActionError> {
+    ) -> Result<Option<ObservedStructureFrontier>, ProjectCommandError> {
         load_structure_frontier(client, command, forward, sequence).await
     }
 
@@ -42,124 +41,86 @@ impl CompensationAdapter for StructureCompensation {
         AuthorUndoFrontierKind::ReversibleStructureTransition
     }
 
+    async fn allocate(
+        client: &Client,
+        scope: &ProjectScope,
+    ) -> Result<StructureTransitionSequences, ProjectCommandError> {
+        allocate_structure_transition_sequences(client, scope)
+            .await
+            .map_err(ProjectCommandError::Unavailable)
+    }
+
+    fn commit_ids(sequences: &StructureTransitionSequences) -> Vec<String> {
+        vec![sequences.authoritative_commit_id.clone()]
+    }
+
     async fn compensate(
         client: &Client,
-        command: &UndoLatestAuthorActionCommand,
-        evidence: &ObservedStructureFrontier,
+        command: &UndoRequest,
+        frontier: &ObservedStructureFrontier,
+        sequences: StructureTransitionSequences,
         source_sequence: u64,
-    ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-        persist_structure_compensation(client, command, evidence, source_sequence).await
-    }
-
-    async fn decode(
-        _client: &Client,
-        _command: &UndoLatestAuthorActionCommand,
-        replay: &CompensationReplay,
-    ) -> Result<UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionError> {
-        Ok(
-            UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
-                source_sequence: replay.source_sequence,
-                author_action_sequence: replay.author_action_sequence,
-                authoritative_commit_id: replay
-                    .authoritative_commit_id
-                    .clone()
-                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-                snapshot_id: replay
-                    .snapshot_id
-                    .clone()
-                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
-                author_undo_frontier_sequence: replay.author_undo_frontier_sequence,
-            },
-        )
-    }
-}
-
-async fn persist_structure_compensation(
-    client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
-    frontier: &ObservedStructureFrontier,
-    source_sequence: u64,
-) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
-    let sequences =
-        crate::structural_authority_settlement::allocate_structure_transition_sequences(
+    ) -> Result<UndoRecords, ProjectCommandError> {
+        restore_prior_tree(client, command, frontier).await?;
+        restore_volume_update_sibling_order(client, command, frontier).await?;
+        restore_chapter_update_sibling_order(client, command, frontier).await?;
+        persist_structure_removal(client, command, frontier).await?;
+        persist_structure_commit(
             client,
             &command.project_scope,
+            &sequences,
+            &command.ids.author_command_admission_id,
+            &command.ids.receipt_id,
+            compensation_commit_binding(frontier),
         )
         .await
-        .map_err(UndoLatestAuthorActionError::Unavailable)?;
-    restore_prior_tree(client, command, frontier).await?;
-    restore_volume_update_sibling_order(client, command, frontier).await?;
-    restore_chapter_update_sibling_order(client, command, frontier).await?;
-    let receipt_created_at = insert_undo_receipt(
-        client,
-        command,
-        "authoritative_applied",
-        "{}",
-        &command.expected_authoritative_revision_id,
-        &command.expected_authoritative_revision_id,
-        UndoReceiptAuthority::Structure {
-            commit_id: sequences.authoritative_commit_id.clone(),
-        },
-    )
-    .await?;
-    persist_structure_removal(client, command, frontier).await?;
-    persist_structure_commit(
-        client,
-        &command.project_scope,
-        &sequences,
-        &command.ids.author_command_admission_id,
-        &command.ids.receipt_id,
-        compensation_commit_binding(frontier),
-    )
-    .await
-    .map_err(undo_database_error)?;
-    persist_compensation_author_action(
-        client,
-        &command.project_scope,
-        &sequences,
-        &command.ids.receipt_id,
-        source_sequence,
-    )
-    .await
-    .map_err(undo_database_error)?;
-    crate::snapshot::persist_canonical_snapshot(
-        client,
-        &command.project_scope,
-        &sequences.snapshot_id,
-        sequences.project_activity_position,
-    )
-    .await
-    .map_err(undo_database_error)?;
-    let response_project = settle_idempotency(client, command).await?;
-    let author_undo_frontier_sequence =
-        crate::editor_session::current_author_undo_frontier_sequence(
+        .map_err(undo_database_error)?;
+        persist_compensation_author_action(
             client,
-            command.project_scope.owner_user_id.as_ref(),
-            command.project_scope.project_id.as_ref(),
+            &command.project_scope,
+            &sequences,
+            &command.ids.receipt_id,
+            source_sequence,
         )
         .await
-        .map_err(undo_from_session)?;
-    Ok(UndoLatestAuthorActionSettlement {
-        source_reopen_event: None,
-        ids: command.ids.clone(),
-        effect: UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
-            source_sequence,
-            author_action_sequence: sequences.author_action_sequence,
+        .map_err(undo_database_error)?;
+        crate::snapshot::persist_canonical_snapshot(
+            client,
+            &command.project_scope,
+            &sequences.snapshot_id,
+            sequences.project_activity_position,
+        )
+        .await
+        .map_err(undo_database_error)?;
+        Ok(UndoRecords::Structure {
             authoritative_commit_id: sequences.authoritative_commit_id,
             snapshot_id: sequences.snapshot_id,
-            author_undo_frontier_sequence,
-        },
-        receipt_created_at,
-        project_activity_position: sequences.project_activity_position,
-        response_project,
-    })
+            project_activity_position: sequences.project_activity_position,
+        })
+    }
+
+    fn decode(replay: &CompensationReplay) -> Result<UndoRecords, ReplayFault> {
+        let (Some(authoritative_commit_id), Some((snapshot_id, project_activity_position))) = (
+            replay.authoritative_commit_id.clone(),
+            replay.snapshot.clone(),
+        ) else {
+            return Err(ReplayFault::Unavailable(
+                "a structure Compensation has no Commit or Snapshot".into(),
+            ));
+        };
+        Ok(UndoRecords::Structure {
+            authoritative_commit_id,
+            snapshot_id,
+            project_activity_position,
+        })
+    }
 }
 
 async fn restore_prior_tree(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     frontier: &ObservedStructureFrontier,
-) -> Result<(), UndoLatestAuthorActionError> {
+) -> Result<(), ProjectCommandError> {
     let updated = match &frontier.identity {
         ObservedStructureIdentity::Volume { .. }
         | ObservedStructureIdentity::VolumeDelete { .. }
@@ -221,7 +182,7 @@ async fn restore_prior_tree(
             .map_err(undo_database_error)?,
     };
     if updated != 1 {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+        return Err(ProjectCommandError::Unavailable(Box::new(
             std::io::Error::other("tree revision changed under FOR UPDATE"),
         )));
     }
@@ -230,9 +191,9 @@ async fn restore_prior_tree(
 
 async fn persist_structure_removal(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     frontier: &ObservedStructureFrontier,
-) -> Result<(), UndoLatestAuthorActionError> {
+) -> Result<(), ProjectCommandError> {
     let decision_id = Uuid::now_v7().to_string();
     match &frontier.identity {
         // Update Volume or Update Chapter Compensation restores title and Canonical Sibling Order.
@@ -331,9 +292,9 @@ async fn persist_structure_removal(
 
 async fn restore_volume_update_sibling_order(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     frontier: &ObservedStructureFrontier,
-) -> Result<(), UndoLatestAuthorActionError> {
+) -> Result<(), ProjectCommandError> {
     let ObservedStructureIdentity::VolumeUpdate {
         volume_id,
         prior_title,
@@ -368,7 +329,7 @@ async fn restore_volume_update_sibling_order(
         .map(|volume| volume.get::<_, String>(0))
         .collect::<Vec<_>>();
     let Some(current_index) = ordered_ids.iter().position(|id| id == volume_id) else {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+        return Err(ProjectCommandError::Unavailable(Box::new(
             std::io::Error::other("updated Volume missing under FOR UPDATE"),
         )));
     };
@@ -389,7 +350,7 @@ async fn restore_volume_update_sibling_order(
         .await
         .map_err(undo_database_error)?;
     if updated != 1 {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+        return Err(ProjectCommandError::Unavailable(Box::new(
             std::io::Error::other("Volume row changed under FOR UPDATE"),
         )));
     }
@@ -397,7 +358,7 @@ async fn restore_volume_update_sibling_order(
         return Ok(());
     }
     if *prior_order < 1 || *prior_order as usize > ordered_ids.len() {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+        return Err(ProjectCommandError::Unavailable(Box::new(
             std::io::Error::other("prior Canonical Sibling Order is outside the live Volume set"),
         )));
     }
@@ -406,15 +367,15 @@ async fn restore_volume_update_sibling_order(
     ids.insert((*prior_order - 1) as usize, moved);
     crate::volume_storage_order::persist_volume_storage_order(client, &command.project_scope, &ids)
         .await
-        .map_err(UndoLatestAuthorActionError::Unavailable)?;
+        .map_err(ProjectCommandError::Unavailable)?;
     Ok(())
 }
 
 async fn restore_chapter_update_sibling_order(
     client: &tokio_postgres::Client,
-    command: &UndoLatestAuthorActionCommand,
+    command: &UndoRequest,
     frontier: &ObservedStructureFrontier,
-) -> Result<(), UndoLatestAuthorActionError> {
+) -> Result<(), ProjectCommandError> {
     let ObservedStructureIdentity::ChapterUpdate {
         chapter_id,
         prior_title,
@@ -466,7 +427,7 @@ async fn restore_chapter_update_sibling_order(
         .map(|chapter| chapter.get::<_, String>(0))
         .collect::<Vec<_>>();
     let Some(current_index) = ordered_ids.iter().position(|id| id == chapter_id) else {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+        return Err(ProjectCommandError::Unavailable(Box::new(
             std::io::Error::other("updated Chapter missing under FOR UPDATE"),
         )));
     };
@@ -487,7 +448,7 @@ async fn restore_chapter_update_sibling_order(
         .await
         .map_err(undo_database_error)?;
     if updated != 1 {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+        return Err(ProjectCommandError::Unavailable(Box::new(
             std::io::Error::other("Chapter row changed under FOR UPDATE"),
         )));
     }
@@ -495,7 +456,7 @@ async fn restore_chapter_update_sibling_order(
         return Ok(());
     }
     if *prior_order < 1 || *prior_order as usize > ordered_ids.len() {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+        return Err(ProjectCommandError::Unavailable(Box::new(
             std::io::Error::other("prior Canonical Sibling Order is outside the live Chapter set"),
         )));
     }

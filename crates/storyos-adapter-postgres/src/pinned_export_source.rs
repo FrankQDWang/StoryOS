@@ -10,6 +10,7 @@ use tokio_postgres::GenericClient;
 use super::{ProjectReadError, read_error};
 use crate::author_edit::sha256_hex;
 use crate::command_replay::{CommandReplay, ReplayFault};
+use crate::command_sequence::AppliedVariant;
 use crate::command_sequence::unavailable;
 
 /// Receipt reason when export settlement refuses an archived Project, or when
@@ -46,7 +47,9 @@ impl ReasonCode for ExportSettlementRefusal {
 /// applied Receipt or a refusal with a reason of `ExportSettlementRefusal`.
 pub(crate) fn check_export_settlement(replay: &CommandReplay) -> Result<(), ReplayFault> {
     replay
-        .outcome::<Infallible, Infallible, ExportSettlementRefusal>("authoritative_applied")
+        .outcome::<Infallible, Infallible, ExportSettlementRefusal>(&[
+            AppliedVariant::NoAuthorAction,
+        ])
         .map(|_outcome| ())
 }
 
