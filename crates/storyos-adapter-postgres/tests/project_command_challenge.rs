@@ -1,8 +1,8 @@
 use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::{
     IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectCommandChallengeError,
-    ProjectCommandChallengeUse, ProjectId, ProjectScope, UserId, consume_project_command_challenge,
-    issue_project_command_challenge,
+    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectId, ProjectScope,
+    UserId, issue_project_command_challenge,
 };
 use tokio_postgres::NoTls;
 
@@ -72,13 +72,10 @@ async fn issue_and_consume_are_exact_retry_safe_under_forced_rls() {
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(
-            &mut first_transaction,
-            &request.binding,
-            &request.nonce_digest
-        )
-        .await
-        .unwrap(),
+        first_transaction
+            .consume(&request.binding, &request.nonce_digest)
+            .await
+            .unwrap(),
         ProjectCommandChallengeUse::FirstUse,
     );
     first_transaction.commit().await.unwrap();
@@ -87,13 +84,10 @@ async fn issue_and_consume_are_exact_retry_safe_under_forced_rls() {
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(
-            &mut retry_transaction,
-            &request.binding,
-            &request.nonce_digest
-        )
-        .await
-        .unwrap(),
+        retry_transaction
+            .consume(&request.binding, &request.nonce_digest)
+            .await
+            .unwrap(),
         ProjectCommandChallengeUse::ExactRetryInProgress,
     );
     retry_transaction.rollback().await.unwrap();
@@ -125,13 +119,10 @@ async fn issue_and_consume_are_exact_retry_safe_under_forced_rls() {
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(
-            &mut settled_transaction,
-            &request.binding,
-            &request.nonce_digest
-        )
-        .await
-        .unwrap(),
+        settled_transaction
+            .consume(&request.binding, &request.nonce_digest)
+            .await
+            .unwrap(),
         ProjectCommandChallengeUse::ExactRetrySettled {
             result_reference: "receipt:018f0000-0000-7001-8000-000000000099".to_owned(),
         },
@@ -248,13 +239,10 @@ async fn issue_and_consume_preserve_the_full_u64_client_session_generation() {
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(
-            &mut transaction,
-            &request.binding,
-            &request.nonce_digest
-        )
-        .await
-        .unwrap(),
+        transaction
+            .consume(&request.binding, &request.nonce_digest)
+            .await
+            .unwrap(),
         ProjectCommandChallengeUse::FirstUse,
     );
     transaction.rollback().await.unwrap();
@@ -320,12 +308,9 @@ async fn changed_binding_and_wrong_scope_fail_closed_without_consumption() {
             .await
             .unwrap();
         assert!(matches!(
-            consume_project_command_challenge(
-                &mut transaction,
-                &changed_binding,
-                &request.nonce_digest
-            )
-            .await,
+            transaction
+                .consume(&changed_binding, &request.nonce_digest)
+                .await,
             Err(ProjectCommandChallengeError::InvalidOrExpired)
         ));
         transaction.rollback().await.unwrap();
@@ -336,12 +321,9 @@ async fn changed_binding_and_wrong_scope_fail_closed_without_consumption() {
         .await
         .unwrap();
     assert!(matches!(
-        consume_project_command_challenge(
-            &mut wrong_nonce,
-            &request.binding,
-            "sha256:nonce-from-another-record"
-        )
-        .await,
+        wrong_nonce
+            .consume(&request.binding, "sha256:nonce-from-another-record")
+            .await,
         Err(ProjectCommandChallengeError::InvalidOrExpired)
     ));
     wrong_nonce.rollback().await.unwrap();
@@ -356,12 +338,9 @@ async fn changed_binding_and_wrong_scope_fail_closed_without_consumption() {
         .await
         .unwrap();
     assert!(matches!(
-        consume_project_command_challenge(
-            &mut wrong_scope_transaction,
-            &wrong_scope,
-            &request.nonce_digest
-        )
-        .await,
+        wrong_scope_transaction
+            .consume(&wrong_scope, &request.nonce_digest)
+            .await,
         Err(ProjectCommandChallengeError::InvalidOrExpired)
     ));
     wrong_scope_transaction.rollback().await.unwrap();
@@ -411,13 +390,10 @@ async fn consumption_rolls_back_with_the_caller_owned_transaction() {
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(
-            &mut rolled_back,
-            &request.binding,
-            &request.nonce_digest
-        )
-        .await
-        .unwrap(),
+        rolled_back
+            .consume(&request.binding, &request.nonce_digest)
+            .await
+            .unwrap(),
         ProjectCommandChallengeUse::FirstUse,
     );
     rolled_back.rollback().await.unwrap();
@@ -427,7 +403,8 @@ async fn consumption_rolls_back_with_the_caller_owned_transaction() {
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(&mut committed, &request.binding, &request.nonce_digest)
+        committed
+            .consume(&request.binding, &request.nonce_digest)
             .await
             .unwrap(),
         ProjectCommandChallengeUse::FirstUse,
@@ -469,12 +446,9 @@ async fn an_expired_unconsumed_challenge_cannot_enter_the_command_transaction() 
         .await
         .unwrap();
     assert!(matches!(
-        consume_project_command_challenge(
-            &mut transaction,
-            &request.binding,
-            &request.nonce_digest
-        )
-        .await,
+        transaction
+            .consume(&request.binding, &request.nonce_digest)
+            .await,
         Err(ProjectCommandChallengeError::InvalidOrExpired)
     ));
     transaction.rollback().await.unwrap();
@@ -508,13 +482,10 @@ async fn an_author_edit_challenge_issued_under_the_shared_revision_stays_consuma
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(
-            &mut transaction,
-            &current_binding,
-            &issued_before_deployment.nonce_digest
-        )
-        .await
-        .unwrap(),
+        transaction
+            .consume(&current_binding, &issued_before_deployment.nonce_digest)
+            .await
+            .unwrap(),
         ProjectCommandChallengeUse::FirstUse,
     );
     transaction.rollback().await.unwrap();
@@ -548,13 +519,10 @@ async fn an_author_undo_challenge_issued_under_the_shared_revision_stays_consuma
         .await
         .unwrap();
     assert_eq!(
-        consume_project_command_challenge(
-            &mut transaction,
-            &current_binding,
-            &issued_before_deployment.nonce_digest
-        )
-        .await
-        .unwrap(),
+        transaction
+            .consume(&current_binding, &issued_before_deployment.nonce_digest)
+            .await
+            .unwrap(),
         ProjectCommandChallengeUse::FirstUse,
     );
     transaction.rollback().await.unwrap();
