@@ -50,13 +50,13 @@ trait ExportInput: Clone + Sized {
         &self,
         store: &PostgresProjectReader,
         envelope: &ProjectCommandEnvelope,
-    ) -> impl Future<Output = Admit<Self>>;
+    ) -> impl Future<Output = Admit<Self>> + Send;
     /// Settles the admitted export through the Worker store. The settlement clears its wakeup.
     fn settle(
         store: &PostgresProjectReader,
         envelope: &ProjectCommandEnvelope,
         admitted: &Admitted<Self>,
-    ) -> impl Future<Output = Settled>;
+    ) -> impl Future<Output = Settled> + Send;
 }
 
 /// The Worker claim of one admitted export. Both exports have the same claim fields.
