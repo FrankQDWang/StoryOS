@@ -185,8 +185,8 @@ pub use pinned_export_source::{
 pub use project_command::{
     ActionApplied, ActivityApplied, AdmittedProjectCommand, AuthorityEvidence,
     ChapterSelectionApplied, ChapterSelectionAuthority, ProjectCommandEnvelope,
-    ProjectCommandError, ProjectCommandSettlement, RefusableCommandError, StructureApplied,
-    StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+    ProjectCommandError, ProjectCommandSettlement, RefusableCommandError, RevisionApplied,
+    StructureApplied, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
 };
 pub use project_export::{
     ArchiveExportOperation, ArchiveExportRefusal, ExportOperationPage, ExportOperationProgress,

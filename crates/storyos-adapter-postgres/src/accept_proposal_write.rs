@@ -1,13 +1,16 @@
 use storyos_application::{
     AcceptProposalCommand, AcceptProposalError, AcceptProposalSettlement,
-    AcceptProposalSettlementEffect, AuthoritativeAppliedIds, ChapterId, Project,
+    AcceptProposalSettlementEffect, ChapterId, Project, ProjectCommandError,
 };
 use uuid::Uuid;
 
-use super::{LoadedProposal, accept_database_error, accept_parse_error};
-use crate::author_edit::{parse_u64, sha256_hex};
+use super::{LoadedProposal, accept_database_error};
 use crate::command_response_project::{
     COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
+};
+use crate::command_sequence::{
+    ActionDisposition, AuthoritativeRevision, RevisionMembers, RevisionWrite, SettlementProfile,
+    write_revision,
 };
 
 pub(super) async fn persist_applied(
@@ -16,73 +19,10 @@ pub(super) async fn persist_applied(
     loaded: &LoadedProposal,
 ) -> Result<AcceptProposalSettlement, AcceptProposalError> {
     let prior_head_revision_id = command.expected_authoritative_revision_id.clone();
-    let counter_row = client
-        .query_one(
-            "INSERT INTO storyos.scope_counters AS counters
-               (owner_user_id, project_id, author_action_sequence,
-                authoritative_commit_sequence, project_activity_position)
-             VALUES ($1::text::uuid, $2::text::uuid, 1, 1, 1)
-             ON CONFLICT (owner_user_id, project_id)
-             DO UPDATE SET
-               author_action_sequence = counters.author_action_sequence + 1,
-               authoritative_commit_sequence = counters.authoritative_commit_sequence + 1,
-               project_activity_position = counters.project_activity_position + 1
-             RETURNING counters.author_action_sequence::text,
-                       counters.authoritative_commit_sequence::text,
-                       counters.project_activity_position::text",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
+    let sequences = AuthoritativeRevision::allocate(client, &command.project_scope)
         .await
-        .map_err(accept_database_error)?;
-    let author_action_sequence = parse_u64(counter_row.get(0)).map_err(accept_parse_error)?;
-    let authoritative_commit_sequence =
-        parse_u64(counter_row.get(1)).map_err(accept_parse_error)?;
-    let project_activity_position = parse_u64(counter_row.get(2)).map_err(accept_parse_error)?;
-    let ids = AuthoritativeAppliedIds {
-        revision_id: Uuid::now_v7().to_string(),
-        payload_id: Uuid::now_v7().to_string(),
-        authoritative_commit_id: Uuid::now_v7().to_string(),
-        project_activity_event_id: Uuid::now_v7().to_string(),
-    };
+        .map_err(accept_sequence_error)?;
     let accepted_body = loaded.accepted_body(&command.selected_operation_ids)?;
-    persist_authority(
-        client,
-        command,
-        &loaded.chapter_id,
-        &prior_head_revision_id,
-        &ids,
-        &accepted_body,
-        authoritative_commit_sequence,
-    )
-    .await?;
-    let copied = crate::manuscript_block::copy_or_upgrade_revision_members(
-        client,
-        command.project_scope.owner_user_id.as_ref(),
-        command.project_scope.project_id.as_ref(),
-        &loaded.chapter_id,
-        &prior_head_revision_id,
-        &ids.revision_id,
-    )
-    .await
-    .map_err(accept_database_error)?;
-    if copied == 0 {
-        return Err(AcceptProposalError::Unavailable(Box::new(
-            std::io::Error::other("successor revision members were not copied"),
-        )));
-    }
-    let blocks = crate::manuscript_block::load_revision_blocks(
-        client,
-        command.project_scope.owner_user_id.as_ref(),
-        command.project_scope.project_id.as_ref(),
-        &loaded.chapter_id,
-        &ids.revision_id,
-        &accepted_body,
-    )
-    .await
-    .map_err(accept_database_error)?;
     let updated = client
         .execute(
             "UPDATE storyos.proposal_operations
@@ -110,105 +50,60 @@ pub(super) async fn persist_applied(
             result_kind: "authoritative_applied",
             result_payload: "{}",
             prior_head: &prior_head_revision_id,
-            resulting_head: &ids.revision_id,
-            revision_ids: std::slice::from_ref(&ids.revision_id),
-            commit_ids: std::slice::from_ref(&ids.authoritative_commit_id),
+            resulting_head: &sequences.ids.revision_id,
+            revision_ids: std::slice::from_ref(&sequences.ids.revision_id),
+            commit_ids: &AuthoritativeRevision::commit_ids(&sequences),
             condition_refs: &[],
         },
     )
     .await?;
-    client
-        .execute(
-            "INSERT INTO storyos.author_action_entries
-               (owner_user_id, project_id, author_action_sequence, disposition,
-                authoritative_commit_id, receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'forward',
-                     $4::text::uuid, $5::text::uuid, 'authoritative_applied')",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &author_action_sequence.to_string(),
-                &ids.authoritative_commit_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(accept_database_error)?;
-    client
-        .execute(
-            "INSERT INTO storyos.project_activity_events
-               (owner_user_id, project_id, project_activity_position,
-                project_activity_event_id, event_kind, receipt_id,
-                receipt_result_kind, authoritative_commit_id,
-                resulting_revision_id, author_action_sequence)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric,
-                     $4::text::uuid, 'authoritative_author_edit_applied',
-                     $5::text::uuid, 'authoritative_applied', $6::text::uuid,
-                     $7::text::uuid, $8::text::numeric)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &project_activity_position.to_string(),
-                &ids.project_activity_event_id,
-                &command.ids.receipt_id,
-                &ids.authoritative_commit_id,
-                &ids.revision_id,
-                &author_action_sequence.to_string(),
-            ],
-        )
-        .await
-        .map_err(accept_database_error)?;
-    let base_snapshot_id = Uuid::now_v7().to_string();
-    client
-        .execute(
-            "UPDATE storyos.editor_session_base_snapshots AS snapshot
-                SET snapshot_id = $4::text::uuid,
-                    authoritative_revision_id = $5::text::uuid,
-                    project_activity_position = $6::text::numeric,
-                    created_at = clock_timestamp()
-               FROM storyos.project_writer_generations AS writer
-              WHERE snapshot.owner_user_id = $1::text::uuid
-                AND snapshot.project_id = $2::text::uuid
-                AND snapshot.editor_session_id = $3::text::uuid
-                AND snapshot.authoritative_revision_id = $7::text::uuid
-                AND (writer.owner_user_id, writer.project_id,
-                     writer.current_editor_session_id) =
-                    (snapshot.owner_user_id, snapshot.project_id, snapshot.editor_session_id)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.editor_session_id.as_ref(),
-                &base_snapshot_id,
-                &ids.revision_id,
-                &project_activity_position.to_string(),
-                &prior_head_revision_id,
-            ],
-        )
-        .await
-        .map_err(accept_database_error)?;
-    crate::snapshot::persist_canonical_snapshot(
+    let applied = write_revision(
         client,
         &command.project_scope,
-        &base_snapshot_id,
-        project_activity_position,
+        &command.ids,
+        sequences,
+        RevisionWrite {
+            effect: (),
+            chapter_id: loaded.chapter_id.clone(),
+            prior_revision_id: prior_head_revision_id,
+            payload: accepted_body,
+            members: RevisionMembers::CopyFrom(command.expected_authoritative_revision_id.clone()),
+            disposition: ActionDisposition::Forward,
+            editor_session_id: command.editor_session_id.as_ref().to_owned(),
+        },
     )
     .await
-    .map_err(accept_database_error)?;
+    .map_err(accept_sequence_error)?;
     let response_project = settle_idempotency(client, command).await?;
     Ok(AcceptProposalSettlement {
         ids: command.ids.clone(),
         effect: AcceptProposalSettlementEffect::Applied {
-            author_action_sequence,
-            authoritative_commit_id: ids.authoritative_commit_id,
-            revision_id: ids.revision_id,
-            body: crate::manuscript_block::display_body_from_stored(&accepted_body, &blocks),
-            blocks,
-            project_activity_position,
+            author_action_sequence: applied.author_action_sequence,
+            authoritative_commit_id: applied.ids.authoritative_commit_id,
+            revision_id: applied.ids.revision_id,
+            body: applied.body,
+            blocks: applied.blocks,
+            project_activity_position: applied.project_activity_position,
         },
         receipt_created_at: created_at,
         condition_refs: Vec::new(),
         response_project,
     })
+}
+
+/// The Acceptance error of a profile write.
+fn accept_sequence_error(error: ProjectCommandError) -> AcceptProposalError {
+    match error {
+        ProjectCommandError::BindingConflict | ProjectCommandError::WriterIneligible => {
+            AcceptProposalError::BindingConflict
+        }
+        ProjectCommandError::HistoricalAcknowledgementUnavailable => {
+            AcceptProposalError::HistoricalAcknowledgementUnavailable
+        }
+        ProjectCommandError::InvalidChallenge => AcceptProposalError::InvalidChallenge,
+        ProjectCommandError::MissingProject => AcceptProposalError::MissingProject,
+        ProjectCommandError::Unavailable(source) => AcceptProposalError::Unavailable(source),
+    }
 }
 
 pub(super) async fn persist_zero(
@@ -277,111 +172,6 @@ pub(super) async fn persist_zero(
         condition_refs,
         response_project,
     })
-}
-
-async fn persist_authority(
-    client: &tokio_postgres::Client,
-    command: &AcceptProposalCommand,
-    chapter_id: &str,
-    current_revision_id: &str,
-    ids: &AuthoritativeAppliedIds,
-    body: &str,
-    authoritative_commit_sequence: u64,
-) -> Result<(), AcceptProposalError> {
-    client
-        .execute(
-            "INSERT INTO storyos.authoritative_payloads
-               (owner_user_id, project_id, payload_id, canonical_bytes)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, convert_to($4, 'UTF8'))",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &ids.payload_id,
-                &body,
-            ],
-        )
-        .await
-        .map_err(accept_database_error)?;
-    client
-        .execute(
-            "INSERT INTO storyos.authoritative_revisions
-               (owner_user_id, project_id, manuscript_object_id, revision_id, payload_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5::text::uuid)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &chapter_id,
-                &ids.revision_id,
-                &ids.payload_id,
-            ],
-        )
-        .await
-        .map_err(accept_database_error)?;
-    client
-        .execute(
-            "INSERT INTO storyos.authoritative_revision_envelopes
-               (owner_user_id, project_id, manuscript_object_id, revision_id, parent_revision_id,
-                schema_revision, creator_kind, creator_ref, receipt_id, receipt_result_kind,
-                cause_kind, payload_digest)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'storyos.authoritative-revision-envelope.v1',
-                     'author_command_admission', $6::text::uuid, $7::text::uuid,
-                     'authoritative_applied', 'direct_author_action', $8)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &chapter_id,
-                &ids.revision_id,
-                &current_revision_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-                &sha256_hex(body.as_bytes()),
-            ],
-        )
-        .await
-        .map_err(accept_database_error)?;
-    let head_updates = client
-        .execute(
-            "UPDATE storyos.authoritative_heads SET current_revision_id = $4::text::uuid
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND manuscript_object_id = $3::text::uuid AND current_revision_id = $5::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &chapter_id,
-                &ids.revision_id,
-                &current_revision_id,
-            ],
-        )
-        .await
-        .map_err(accept_database_error)?;
-    if head_updates != 1 {
-        return Err(AcceptProposalError::BindingConflict);
-    }
-    client
-        .execute(
-            "INSERT INTO storyos.authoritative_commits
-               (owner_user_id, project_id, authoritative_commit_id, authoritative_commit_sequence,
-                manuscript_object_id, prior_revision_id, resulting_revision_id,
-                author_command_admission_id, receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::numeric,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, 'authoritative_applied')",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &ids.authoritative_commit_id,
-                &authoritative_commit_sequence.to_string(),
-                &chapter_id,
-                &current_revision_id,
-                &ids.revision_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(accept_database_error)?;
-    Ok(())
 }
 
 struct AcceptanceReceiptInsert<'a> {

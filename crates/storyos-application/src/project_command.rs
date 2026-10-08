@@ -3,8 +3,8 @@
 use storyos_core::TransitionOutcome;
 
 use crate::{
-    AuthorCommandAdmissionIds, EditorClientBinding, Project, ProjectCommandChallengeBinding,
-    ProjectScope,
+    AuthorCommandAdmissionIds, AuthoritativeAppliedIds, EditorClientBinding, ManuscriptBlock,
+    Project, ProjectCommandChallengeBinding, ProjectScope,
 };
 
 /// The admitted request facts that every project command carries into its Core Transition.
@@ -116,6 +116,19 @@ pub struct ActivityApplied<A> {
 pub struct ActionApplied<A> {
     pub effect: A,
     pub author_action_sequence: u64,
+}
+
+/// The applied value of an `AuthoritativeRevision` command: its effect, the new Authoritative
+/// Revision of one Chapter, and its Author Action and Activity record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevisionApplied<A> {
+    pub effect: A,
+    pub ids: AuthoritativeAppliedIds,
+    pub author_action_sequence: u64,
+    pub project_activity_position: u64,
+    /// The display text of the new Revision.
+    pub body: String,
+    pub blocks: Vec<ManuscriptBlock>,
 }
 
 /// The settled outcome of one Manuscript Structure Transition command.
