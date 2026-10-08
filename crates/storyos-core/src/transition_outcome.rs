@@ -31,6 +31,26 @@ pub trait ReasonCode: Sized {
 
     fn code(&self) -> &'static str;
     fn from_code(code: &str) -> Option<Self>;
+
+    /// The Domain Receipt result kind of this reason value. A reason type that has more than one
+    /// result kind gives it for each value. `None` keeps the result kind of the outcome.
+    fn receipt_result(&self) -> Option<&'static str> {
+        Self::RECEIPT_RESULT
+    }
+
+    /// The reason code that the Domain Receipt payload records. `None` records no reason.
+    fn recorded_code(&self) -> Option<&'static str> {
+        Some(self.code())
+    }
+
+    /// Decodes a reason from its recorded result kind and reason code. `outcome` is the result
+    /// kind of the outcome when the reason gives no kind of its own.
+    fn from_receipt(result: &str, outcome: &'static str, code: Option<&str>) -> Option<Self> {
+        if result != Self::RECEIPT_RESULT.unwrap_or(outcome) {
+            return None;
+        }
+        Self::from_code(code?)
+    }
 }
 
 impl ReasonCode for Infallible {
@@ -69,34 +89,40 @@ impl<A, N: ReasonCode, C: ReasonCode, R: ReasonCode> TransitionOutcome<A, N, C, 
     pub fn receipt_result_kind(&self) -> &'static str {
         match self {
             Self::Applied(_) => ReceiptResult::AuthoritativeApplied.code(),
-            Self::NoEffect(_) => N::RECEIPT_RESULT.unwrap_or(ReceiptResult::NoEffect.code()),
-            Self::Conflicted(_) => C::RECEIPT_RESULT.unwrap_or(ReceiptResult::Conflicted.code()),
-            Self::Refused(_) => R::RECEIPT_RESULT.unwrap_or(ReceiptResult::Refused.code()),
+            Self::NoEffect(reason) => reason
+                .receipt_result()
+                .unwrap_or(ReceiptResult::NoEffect.code()),
+            Self::Conflicted(reason) => reason
+                .receipt_result()
+                .unwrap_or(ReceiptResult::Conflicted.code()),
+            Self::Refused(reason) => reason
+                .receipt_result()
+                .unwrap_or(ReceiptResult::Refused.code()),
         }
     }
 
-    /// The reason code of a zero-authority outcome. `Applied` has no reason.
+    /// The reason code that the Receipt of a zero-authority outcome records. `Applied` has no
+    /// reason, and a reason value can record none.
     pub fn reason_code(&self) -> Option<&'static str> {
         match self {
             Self::Applied(_) => None,
-            Self::NoEffect(reason) => Some(reason.code()),
-            Self::Conflicted(reason) => Some(reason.code()),
-            Self::Refused(reason) => Some(reason.code()),
+            Self::NoEffect(reason) => reason.recorded_code(),
+            Self::Conflicted(reason) => reason.recorded_code(),
+            Self::Refused(reason) => reason.recorded_code(),
         }
     }
 
     /// Decodes a zero-authority outcome from its recorded result kind and reason code.
-    pub fn from_zero_authority_codes(result: &str, reason: &str) -> Option<Self> {
-        if result == N::RECEIPT_RESULT.unwrap_or(ReceiptResult::NoEffect.code()) {
-            return N::from_code(reason).map(Self::NoEffect);
-        }
-        if result == C::RECEIPT_RESULT.unwrap_or(ReceiptResult::Conflicted.code()) {
-            return C::from_code(reason).map(Self::Conflicted);
-        }
-        if result == R::RECEIPT_RESULT.unwrap_or(ReceiptResult::Refused.code()) {
-            return R::from_code(reason).map(Self::Refused);
-        }
-        None
+    pub fn from_zero_authority_codes(result: &str, reason: Option<&str>) -> Option<Self> {
+        N::from_receipt(result, ReceiptResult::NoEffect.code(), reason)
+            .map(Self::NoEffect)
+            .or_else(|| {
+                C::from_receipt(result, ReceiptResult::Conflicted.code(), reason)
+                    .map(Self::Conflicted)
+            })
+            .or_else(|| {
+                R::from_receipt(result, ReceiptResult::Refused.code(), reason).map(Self::Refused)
+            })
     }
 
     /// Replaces the applied value and keeps every other outcome.

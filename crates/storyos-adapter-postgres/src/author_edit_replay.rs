@@ -389,7 +389,12 @@ impl PostgresProjectReader {
                 }
             }
             "no_effect"
-                if result_payload == serde_json::json!({"reason": "content_unchanged"})
+                if result_payload
+                    == serde_json::json!({
+                        "reason": storyos_core::ReasonCode::code(
+                            &storyos_core::AuthorEditNoEffect::ContentUnchanged
+                        )
+                    })
                     && expected_head == prior_head
                     && prior_head == resulting_head =>
             {
@@ -405,7 +410,7 @@ impl PostgresProjectReader {
                 let current_revision_id = result_payload
                     .get("current_authoritative_revision_id")
                     .and_then(serde_json::Value::as_str);
-                let reason = parse_conflict_reason(reason)?;
+                let reason: storyos_core::AuthorEditConflict = parse_reason(reason)?;
                 if result_payload.as_object().map(serde_json::Map::len) != Some(2)
                     || current_revision_id != Some(resulting_head.as_str())
                     || prior_head != resulting_head
@@ -454,7 +459,7 @@ impl PostgresProjectReader {
                 }
                 verify_zero_authority_relations(&client, identity, receipt_id).await?;
                 AuthorEditSettlementEffect::Refused {
-                    reason: parse_refusal_reason(reason)?,
+                    reason: parse_reason(reason)?,
                 }
             }
             _ => return Err(AuthorEditError::BindingConflict),
@@ -522,28 +527,9 @@ async fn verify_zero_authority_relations(
     Ok(())
 }
 
-fn parse_conflict_reason(
-    reason: Option<&str>,
-) -> Result<storyos_core::AuthorEditConflict, AuthorEditError> {
-    match reason {
-        Some("stale_authoritative_head") => {
-            Ok(storyos_core::AuthorEditConflict::StaleAuthoritativeHead)
-        }
-        Some("proposal_head_present") => Ok(storyos_core::AuthorEditConflict::ProposalHeadPresent),
-        Some("ownership_changed") => Ok(storyos_core::AuthorEditConflict::OwnershipChanged),
-        _ => Err(AuthorEditError::BindingConflict),
-    }
-}
-
-fn parse_refusal_reason(
-    reason: Option<&str>,
-) -> Result<storyos_core::AuthorEditRefusal, AuthorEditError> {
-    match reason {
-        Some("unsupported_intent_shape") => {
-            Ok(storyos_core::AuthorEditRefusal::UnsupportedIntentShape)
-        }
-        Some("invalid_selection") => Ok(storyos_core::AuthorEditRefusal::InvalidSelection),
-        Some("target_mismatch") => Ok(storyos_core::AuthorEditRefusal::TargetMismatch),
-        _ => Err(AuthorEditError::BindingConflict),
-    }
+/// The Core reason of the stored code `reason`. A missing or unknown code is a binding conflict.
+fn parse_reason<R: storyos_core::ReasonCode>(reason: Option<&str>) -> Result<R, AuthorEditError> {
+    reason
+        .and_then(R::from_code)
+        .ok_or(AuthorEditError::BindingConflict)
 }

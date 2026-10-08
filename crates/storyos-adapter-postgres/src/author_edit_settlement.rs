@@ -3,8 +3,8 @@ use storyos_application::{
     AuthoritativeAppliedIds,
 };
 use storyos_core::{
-    ApplyAuthorEditResult, AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal,
-    ManuscriptBlock,
+    AuthorEditApplied, AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal,
+    AuthorEditRefused, ManuscriptBlock, ReasonCode, TransitionOutcome,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -19,7 +19,7 @@ pub(super) async fn persist_author_edit_settlement(
     source_disposition: Option<storyos_contracts::SourceDraftDisposition>,
 ) -> Result<AuthorEditSettlement, AuthorEditError> {
     let prepared = match classified.result {
-        ApplyAuthorEditResult::AuthoritativeApplied { body } => {
+        TransitionOutcome::Applied(AuthorEditApplied::AuthoritativeApplied { body }) => {
             let persist_body = classified
                 .successor_blocks
                 .as_ref()
@@ -100,7 +100,7 @@ pub(super) async fn persist_author_edit_settlement(
                 project_activity_position,
             }
         }
-        ApplyAuthorEditResult::ProposalRevised { candidate_text } => {
+        TransitionOutcome::Applied(AuthorEditApplied::ProposalRevised { candidate_text }) => {
             let Some(context) = classified.proposal_context.as_ref() else {
                 return Err(AuthorEditError::BindingConflict);
             };
@@ -130,15 +130,19 @@ pub(super) async fn persist_author_edit_settlement(
                 author_action_sequence: parse_u64(counter_row.get(0))?,
             }
         }
-        ApplyAuthorEditResult::RefusedToDraft => PreparedSettlement::RefusedToDraft {
-            identity: crate::refused_edit_draft::persist(client, command).await?,
-        },
-        ApplyAuthorEditResult::NoEffect { reason } => PreparedSettlement::NoEffect { reason },
-        ApplyAuthorEditResult::Conflicted { reason } => PreparedSettlement::Conflicted {
+        TransitionOutcome::Refused(AuthorEditRefused::RefusedToDraft) => {
+            PreparedSettlement::RefusedToDraft {
+                identity: crate::refused_edit_draft::persist(client, command).await?,
+            }
+        }
+        TransitionOutcome::NoEffect(reason) => PreparedSettlement::NoEffect { reason },
+        TransitionOutcome::Conflicted(reason) => PreparedSettlement::Conflicted {
             reason,
             current_authoritative_revision_id: current_revision_id.to_owned(),
         },
-        ApplyAuthorEditResult::Refused { reason } => PreparedSettlement::Refused { reason },
+        TransitionOutcome::Refused(AuthorEditRefused::Refused(reason)) => {
+            PreparedSettlement::Refused { reason }
+        }
     };
 
     let (
@@ -178,7 +182,7 @@ pub(super) async fn persist_author_edit_settlement(
         ),
         PreparedSettlement::NoEffect { reason } => (
             "no_effect",
-            serde_json::json!({"reason": no_effect_reason(reason)}),
+            serde_json::json!({"reason": reason.code()}),
             current_revision_id,
             Vec::new(),
             Vec::new(),
@@ -190,7 +194,7 @@ pub(super) async fn persist_author_edit_settlement(
         } => (
             "conflicted",
             serde_json::json!({
-                "reason": conflict_reason(reason),
+                "reason": reason.code(),
                 "current_authoritative_revision_id": current_authoritative_revision_id,
             }),
             current_revision_id,
@@ -200,7 +204,7 @@ pub(super) async fn persist_author_edit_settlement(
         ),
         PreparedSettlement::Refused { reason } => (
             "refused",
-            serde_json::json!({"reason": refusal_reason(reason)}),
+            serde_json::json!({"reason": reason.code()}),
             current_revision_id,
             Vec::new(),
             Vec::new(),
@@ -643,28 +647,6 @@ enum PreparedSettlement {
     Refused {
         reason: AuthorEditRefusal,
     },
-}
-
-fn no_effect_reason(reason: &AuthorEditNoEffect) -> &'static str {
-    match reason {
-        AuthorEditNoEffect::ContentUnchanged => "content_unchanged",
-    }
-}
-
-fn conflict_reason(reason: &AuthorEditConflict) -> &'static str {
-    match reason {
-        AuthorEditConflict::StaleAuthoritativeHead => "stale_authoritative_head",
-        AuthorEditConflict::ProposalHeadPresent => "proposal_head_present",
-        AuthorEditConflict::OwnershipChanged => "ownership_changed",
-    }
-}
-
-fn refusal_reason(reason: &AuthorEditRefusal) -> &'static str {
-    match reason {
-        AuthorEditRefusal::UnsupportedIntentShape => "unsupported_intent_shape",
-        AuthorEditRefusal::InvalidSelection => "invalid_selection",
-        AuthorEditRefusal::TargetMismatch => "target_mismatch",
-    }
 }
 
 fn persist_conflict_or_unavailable(error: tokio_postgres::Error) -> AuthorEditError {

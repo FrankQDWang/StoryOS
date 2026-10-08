@@ -173,7 +173,7 @@ fn every_zero_authority_undo_outcome_round_trips_through_its_receipt_codes() {
         TransitionOutcome::Refused(UndoLatestAuthorActionUnavailable::SourceUnavailable),
     ];
     for outcome in outcomes {
-        let reason = outcome.reason_code().unwrap();
+        let reason = outcome.reason_code();
         assert_eq!(
             crate::UndoLatestAuthorActionOutcome::from_zero_authority_codes(
                 outcome.receipt_result_kind(),

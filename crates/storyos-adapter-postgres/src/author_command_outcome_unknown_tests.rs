@@ -286,9 +286,9 @@ async fn append_is_exact_serialized_and_has_zero_authority_effect() {
         &command,
         "018f0000-0000-7001-8000-000000000005",
         crate::author_edit::ClassifiedAuthorEdit {
-            result: storyos_core::ApplyAuthorEditResult::NoEffect {
-                reason: storyos_core::AuthorEditNoEffect::ContentUnchanged,
-            },
+            result: storyos_core::TransitionOutcome::NoEffect(
+                storyos_core::AuthorEditNoEffect::ContentUnchanged,
+            ),
             successor_blocks: None,
             proposal_context: None,
         },

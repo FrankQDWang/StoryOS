@@ -3,10 +3,11 @@ use storyos_application::{
     ProjectCommandChallengeError, ProjectCommandChallengeTransaction, ProjectCommandChallengeUse,
 };
 use storyos_core::{
-    ApplyAuthorEdit, ApplyAuthorEditResult, ApplyVersionedAuthorEdit,
-    ApplyVersionedAuthorEditResult, AuthorEditPrimitive, BlockReservation, COORDINATE_VERSION,
-    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptPayload, VersionedTargetOwnership,
-    apply_author_edit as apply_core_author_edit, apply_versioned_author_edit, chapter_display_body,
+    ApplyAuthorEdit, ApplyAuthorEditOutcome, ApplyVersionedAuthorEdit, AuthorEditApplied,
+    AuthorEditPrimitive, AuthorEditRefused, BlockReservation, COORDINATE_VERSION,
+    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptPayload, TransitionOutcome,
+    VersionedTargetOwnership, apply_author_edit as apply_core_author_edit,
+    apply_versioned_author_edit, chapter_display_body,
 };
 
 use super::*;
@@ -19,7 +20,7 @@ pub(crate) use compensation::{
 
 #[derive(Debug)]
 pub(crate) struct ClassifiedAuthorEdit {
-    pub result: ApplyAuthorEditResult,
+    pub result: ApplyAuthorEditOutcome,
     pub successor_blocks: Option<Vec<ManuscriptBlock>>,
     pub proposal_context: Option<super::author_edit_proposal::ProposalEditContext>,
 }
@@ -202,9 +203,9 @@ impl PostgresProjectReader {
             .is_some_and(|source| !source.input_matches)
         {
             ClassifiedAuthorEdit {
-                result: ApplyAuthorEditResult::Conflicted {
-                    reason: storyos_core::AuthorEditConflict::OwnershipChanged,
-                },
+                result: TransitionOutcome::Conflicted(
+                    storyos_core::AuthorEditConflict::OwnershipChanged,
+                ),
                 successor_blocks: None,
                 proposal_context: None,
             }
@@ -572,13 +573,11 @@ async fn classify_author_edit(
         let result = if command.expected_proposal_head_revision_ids
             != current_ownership.proposal_head_revision_ids
         {
-            ApplyAuthorEditResult::Conflicted {
-                reason: storyos_core::AuthorEditConflict::ProposalHeadPresent,
-            }
+            TransitionOutcome::Conflicted(storyos_core::AuthorEditConflict::ProposalHeadPresent)
         } else {
-            ApplyAuthorEditResult::Refused {
-                reason: storyos_core::AuthorEditRefusal::TargetMismatch,
-            }
+            TransitionOutcome::Refused(AuthorEditRefused::Refused(
+                storyos_core::AuthorEditRefusal::TargetMismatch,
+            ))
         };
         return Ok(ClassifiedAuthorEdit {
             result,
@@ -595,7 +594,7 @@ async fn classify_author_edit(
             Ok(routed) => routed,
             Err(reason) => {
                 return Ok(ClassifiedAuthorEdit {
-                    result: ApplyAuthorEditResult::Refused { reason },
+                    result: TransitionOutcome::Refused(AuthorEditRefused::Refused(reason)),
                     successor_blocks: None,
                     proposal_context: None,
                 });
@@ -697,27 +696,25 @@ async fn classify_author_edit(
             observed_ownership_partition: command.observed_ownership_partition.clone(),
             author_edit_units: command.author_edit_units.clone(),
         }) {
-            ApplyVersionedAuthorEditResult::AuthoritativeApplied { payload } => {
-                ClassifiedAuthorEdit {
-                    result: ApplyAuthorEditResult::AuthoritativeApplied {
-                        body: chapter_display_body(&payload.blocks),
-                    },
-                    successor_blocks: Some(payload.blocks),
-                    proposal_context: None,
-                }
-            }
-            ApplyVersionedAuthorEditResult::Conflicted { reason } => ClassifiedAuthorEdit {
-                result: ApplyAuthorEditResult::Conflicted { reason },
+            TransitionOutcome::Applied(payload) => ClassifiedAuthorEdit {
+                result: TransitionOutcome::Applied(AuthorEditApplied::AuthoritativeApplied {
+                    body: chapter_display_body(&payload.blocks),
+                }),
+                successor_blocks: Some(payload.blocks),
+                proposal_context: None,
+            },
+            TransitionOutcome::Conflicted(reason) => ClassifiedAuthorEdit {
+                result: TransitionOutcome::Conflicted(reason),
                 successor_blocks: None,
                 proposal_context: None,
             },
-            ApplyVersionedAuthorEditResult::NoEffect { reason } => ClassifiedAuthorEdit {
-                result: ApplyAuthorEditResult::NoEffect { reason },
+            TransitionOutcome::NoEffect(reason) => ClassifiedAuthorEdit {
+                result: TransitionOutcome::NoEffect(reason),
                 successor_blocks: None,
                 proposal_context: None,
             },
-            ApplyVersionedAuthorEditResult::Refused { reason } => ClassifiedAuthorEdit {
-                result: ApplyAuthorEditResult::Refused { reason },
+            TransitionOutcome::Refused(reason) => ClassifiedAuthorEdit {
+                result: TransitionOutcome::Refused(AuthorEditRefused::Refused(reason)),
                 successor_blocks: None,
                 proposal_context: None,
             },

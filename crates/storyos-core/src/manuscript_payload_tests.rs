@@ -68,17 +68,15 @@ fn versioned_command() -> ApplyVersionedAuthorEdit {
 fn versioned_replace_preserves_unicode_line_breaks_and_block_identity() {
     assert_eq!(
         apply_versioned_author_edit(&versioned_command()),
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-            payload: ManuscriptPayload {
-                schema_version: MANUSCRIPT_SCHEMA_VERSION,
-                coordinate_version: COORDINATE_VERSION,
-                blocks: vec![ManuscriptBlock {
-                    manuscript_block_id: "block-1".to_owned(),
-                    block_kind: ManuscriptBlockKind::Paragraph,
-                    text: "A!B\n雨".to_owned(),
-                }],
-            }
-        }
+        TransitionOutcome::Applied(ManuscriptPayload {
+            schema_version: MANUSCRIPT_SCHEMA_VERSION,
+            coordinate_version: COORDINATE_VERSION,
+            blocks: vec![ManuscriptBlock {
+                manuscript_block_id: "block-1".to_owned(),
+                block_kind: ManuscriptBlockKind::Paragraph,
+                text: "A!B\n雨".to_owned(),
+            }],
+        })
     );
 }
 
@@ -93,9 +91,7 @@ fn legacy_replace_against_versioned_payload_is_unsupported() {
         }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::UnsupportedIntentShape
-        }
+        TransitionOutcome::Refused(AuthorEditRefusal::UnsupportedIntentShape)
     );
 }
 
@@ -112,9 +108,7 @@ fn replace_on_unknown_block_is_invalid_selection() {
     *manuscript_block_id = "block-other".to_owned();
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection
-        }
+        TransitionOutcome::Refused(AuthorEditRefusal::InvalidSelection)
     );
 }
 
@@ -172,9 +166,7 @@ fn split_command() -> ApplyVersionedAuthorEdit {
 fn split_keeps_the_starting_fragment_identity_and_assigns_the_new_right_id() {
     assert_eq!(
         apply_versioned_author_edit(&split_command()),
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-            payload: two_paragraphs()
-        }
+        TransitionOutcome::Applied(two_paragraphs())
     );
 }
 
@@ -196,9 +188,7 @@ fn join_keeps_the_left_identity_and_drops_the_right_from_current_payload() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-            payload: upgrade_legacy_manuscript("HelloWorld", "block-left")
-        }
+        TransitionOutcome::Applied(upgrade_legacy_manuscript("HelloWorld", "block-left"))
     );
 }
 
@@ -240,9 +230,7 @@ fn join_of_nonadjacent_blocks_is_invalid() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection
-        }
+        TransitionOutcome::Refused(AuthorEditRefusal::InvalidSelection)
     );
 }
 
@@ -266,24 +254,22 @@ fn replace_still_targets_one_block_inside_a_split_payload() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-            payload: ManuscriptPayload {
-                schema_version: MANUSCRIPT_SCHEMA_VERSION,
-                coordinate_version: COORDINATE_VERSION,
-                blocks: vec![
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-left".to_owned(),
-                        block_kind: ManuscriptBlockKind::Paragraph,
-                        text: "Hello".to_owned(),
-                    },
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-right".to_owned(),
-                        block_kind: ManuscriptBlockKind::Paragraph,
-                        text: "StoryOS".to_owned(),
-                    },
-                ],
-            }
-        }
+        TransitionOutcome::Applied(ManuscriptPayload {
+            schema_version: MANUSCRIPT_SCHEMA_VERSION,
+            coordinate_version: COORDINATE_VERSION,
+            blocks: vec![
+                ManuscriptBlock {
+                    manuscript_block_id: "block-left".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: "Hello".to_owned(),
+                },
+                ManuscriptBlock {
+                    manuscript_block_id: "block-right".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: "StoryOS".to_owned(),
+                },
+            ],
+        })
     );
 }
 
@@ -293,24 +279,22 @@ fn split_at_the_end_keeps_an_empty_right_block_and_the_starting_identity() {
     command.current_payload = upgrade_legacy_manuscript("Hello", "block-left");
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-            payload: ManuscriptPayload {
-                schema_version: MANUSCRIPT_SCHEMA_VERSION,
-                coordinate_version: COORDINATE_VERSION,
-                blocks: vec![
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-left".to_owned(),
-                        block_kind: ManuscriptBlockKind::Paragraph,
-                        text: "Hello".to_owned(),
-                    },
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-right".to_owned(),
-                        block_kind: ManuscriptBlockKind::Paragraph,
-                        text: String::new(),
-                    },
-                ],
-            }
-        }
+        TransitionOutcome::Applied(ManuscriptPayload {
+            schema_version: MANUSCRIPT_SCHEMA_VERSION,
+            coordinate_version: COORDINATE_VERSION,
+            blocks: vec![
+                ManuscriptBlock {
+                    manuscript_block_id: "block-left".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: "Hello".to_owned(),
+                },
+                ManuscriptBlock {
+                    manuscript_block_id: "block-right".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: String::new(),
+                },
+            ],
+        })
     );
 }
 
@@ -340,9 +324,7 @@ fn one_unit_joins_then_replaces_across_adjacent_blocks_atomically() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-            payload: upgrade_legacy_manuscript("HeXld", "block-left")
-        }
+        TransitionOutcome::Applied(upgrade_legacy_manuscript("HeXld", "block-left"))
     );
 }
 
@@ -372,9 +354,7 @@ fn a_later_invalid_primitive_in_the_same_unit_refuses_the_complete_range() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection
-        }
+        TransitionOutcome::Refused(AuthorEditRefusal::InvalidSelection)
     );
 }
 
@@ -405,24 +385,22 @@ fn one_unit_replaces_then_splits_so_pasted_paragraphs_receive_new_identities() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-            payload: ManuscriptPayload {
-                schema_version: MANUSCRIPT_SCHEMA_VERSION,
-                coordinate_version: COORDINATE_VERSION,
-                blocks: vec![
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-left".to_owned(),
-                        block_kind: ManuscriptBlockKind::Paragraph,
-                        text: "HelloX".to_owned(),
-                    },
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-pasted".to_owned(),
-                        block_kind: ManuscriptBlockKind::Paragraph,
-                        text: "Y".to_owned(),
-                    },
-                ],
-            }
-        }
+        TransitionOutcome::Applied(ManuscriptPayload {
+            schema_version: MANUSCRIPT_SCHEMA_VERSION,
+            coordinate_version: COORDINATE_VERSION,
+            blocks: vec![
+                ManuscriptBlock {
+                    manuscript_block_id: "block-left".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: "HelloX".to_owned(),
+                },
+                ManuscriptBlock {
+                    manuscript_block_id: "block-pasted".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: "Y".to_owned(),
+                },
+            ],
+        })
     );
 }
 
@@ -444,24 +422,22 @@ fn one_unit_moves_a_block_and_keeps_both_identities() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-            payload: ManuscriptPayload {
-                schema_version: MANUSCRIPT_SCHEMA_VERSION,
-                coordinate_version: COORDINATE_VERSION,
-                blocks: vec![
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-right".to_owned(),
-                        block_kind: ManuscriptBlockKind::Paragraph,
-                        text: "World".to_owned(),
-                    },
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-left".to_owned(),
-                        block_kind: ManuscriptBlockKind::Paragraph,
-                        text: "Hello".to_owned(),
-                    },
-                ],
-            }
-        }
+        TransitionOutcome::Applied(ManuscriptPayload {
+            schema_version: MANUSCRIPT_SCHEMA_VERSION,
+            coordinate_version: COORDINATE_VERSION,
+            blocks: vec![
+                ManuscriptBlock {
+                    manuscript_block_id: "block-right".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: "World".to_owned(),
+                },
+                ManuscriptBlock {
+                    manuscript_block_id: "block-left".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: "Hello".to_owned(),
+                },
+            ],
+        })
     );
 }
 
@@ -483,9 +459,7 @@ fn an_invalid_move_index_refuses_without_changing_payload_order() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection,
-        }
+        TransitionOutcome::Refused(AuthorEditRefusal::InvalidSelection)
     );
 }
 
@@ -507,24 +481,22 @@ fn one_to_one_retype_keeps_identity_and_text() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-            payload: ManuscriptPayload {
-                schema_version: MANUSCRIPT_SCHEMA_VERSION,
-                coordinate_version: COORDINATE_VERSION,
-                blocks: vec![
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-left".to_owned(),
-                        block_kind: ManuscriptBlockKind::Heading,
-                        text: "Hello".to_owned(),
-                    },
-                    ManuscriptBlock {
-                        manuscript_block_id: "block-right".to_owned(),
-                        block_kind: ManuscriptBlockKind::Paragraph,
-                        text: "World".to_owned(),
-                    },
-                ],
-            }
-        }
+        TransitionOutcome::Applied(ManuscriptPayload {
+            schema_version: MANUSCRIPT_SCHEMA_VERSION,
+            coordinate_version: COORDINATE_VERSION,
+            blocks: vec![
+                ManuscriptBlock {
+                    manuscript_block_id: "block-left".to_owned(),
+                    block_kind: ManuscriptBlockKind::Heading,
+                    text: "Hello".to_owned(),
+                },
+                ManuscriptBlock {
+                    manuscript_block_id: "block-right".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: "World".to_owned(),
+                },
+            ],
+        })
     );
 }
 
@@ -547,9 +519,7 @@ fn a_stale_head_still_has_zero_authority_effect_for_move() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::Conflicted {
-            reason: AuthorEditConflict::StaleAuthoritativeHead,
-        }
+        TransitionOutcome::Conflicted(AuthorEditConflict::StaleAuthoritativeHead)
     );
 }
 
@@ -581,9 +551,7 @@ fn two_disconnected_block_replacements_in_one_unit_are_an_unsupported_intent() {
     }];
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::UnsupportedIntentShape
-        }
+        TransitionOutcome::Refused(AuthorEditRefusal::UnsupportedIntentShape)
     );
 }
 
@@ -621,10 +589,8 @@ fn versioned_range_edits_preserve_unicode_and_reject_invalid_selections() {
             text: text.to_owned(),
         }];
         let expected = match expected {
-            Ok(text) => ApplyVersionedAuthorEditResult::AuthoritativeApplied {
-                payload: upgrade_legacy_manuscript(text, "block-1"),
-            },
-            Err(reason) => ApplyVersionedAuthorEditResult::Refused { reason },
+            Ok(text) => TransitionOutcome::Applied(upgrade_legacy_manuscript(text, "block-1")),
+            Err(reason) => TransitionOutcome::Refused(reason),
         };
         assert_eq!(apply_versioned_author_edit(&command), expected);
     }
@@ -641,8 +607,6 @@ fn a_versioned_range_replacement_with_the_same_text_has_no_effect() {
     *text = "😀".to_owned();
     assert_eq!(
         apply_versioned_author_edit(&command),
-        ApplyVersionedAuthorEditResult::NoEffect {
-            reason: AuthorEditNoEffect::ContentUnchanged,
-        }
+        TransitionOutcome::NoEffect(AuthorEditNoEffect::ContentUnchanged)
     );
 }
