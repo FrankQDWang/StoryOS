@@ -1,8 +1,9 @@
 use super::{
-    AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalRefusal,
-    AcceptProposalResult, ProposalBundlePolicy, ProposalOperationSelection,
+    AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalOutcome,
+    AcceptProposalRefusal, ProposalBundlePolicy, ProposalOperationSelection,
     ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
+use crate::TransitionOutcome;
 
 fn exact_eligible() -> AcceptProposal {
     AcceptProposal {
@@ -28,7 +29,7 @@ fn exact_eligible() -> AcceptProposal {
 fn applies_one_pending_operation_for_an_exact_eligible_revision() {
     assert_eq!(
         accept_proposal(&exact_eligible()),
-        AcceptProposalResult::Applied
+        TransitionOutcome::Applied(())
     );
 }
 
@@ -38,41 +39,31 @@ fn refuses_wrong_scope_admission_stale_revision_and_ineligible_state() {
     wrong_scope.scope_matches = false;
     assert_eq!(
         accept_proposal(&wrong_scope),
-        AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::WrongScope,
-        }
+        TransitionOutcome::Refused(AcceptProposalRefusal::WrongScope)
     );
     let mut wrong_admission = exact_eligible();
     wrong_admission.admission_valid = false;
     assert_eq!(
         accept_proposal(&wrong_admission),
-        AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::WrongAdmission,
-        }
+        TransitionOutcome::Refused(AcceptProposalRefusal::WrongAdmission)
     );
     let mut stale = exact_eligible();
     stale.proposal_revision_current = false;
     assert_eq!(
         accept_proposal(&stale),
-        AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::StaleProposalRevision,
-        }
+        TransitionOutcome::Refused(AcceptProposalRefusal::StaleProposalRevision)
     );
     let mut not_ready = exact_eligible();
     not_ready.generation_ready = false;
     assert_eq!(
         accept_proposal(&not_ready),
-        AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::NotEligible,
-        }
+        TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible)
     );
     let mut not_pending = exact_eligible();
     not_pending.selected_operation_pending = false;
     assert_eq!(
         accept_proposal(&not_pending),
-        AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::OperationNotPending,
-        }
+        TransitionOutcome::Refused(AcceptProposalRefusal::OperationNotPending)
     );
 }
 
@@ -82,25 +73,19 @@ fn refuses_duplicate_identities_missing_dependencies_and_incomplete_bundle_closu
     duplicates.selection_duplicate_free = false;
     assert_eq!(
         accept_proposal(&duplicates),
-        AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::DuplicateIdentities,
-        }
+        TransitionOutcome::Refused(AcceptProposalRefusal::DuplicateIdentities)
     );
     let mut missing = exact_eligible();
     missing.required_dependencies_met = false;
     assert_eq!(
         accept_proposal(&missing),
-        AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::MissingRequiredDependencies,
-        }
+        TransitionOutcome::Refused(AcceptProposalRefusal::MissingRequiredDependencies)
     );
     let mut incomplete = exact_eligible();
     incomplete.bundle_closure_complete = false;
     assert_eq!(
         accept_proposal(&incomplete),
-        AcceptProposalResult::Refused {
-            reason: AcceptProposalRefusal::IncompleteBundleClosure,
-        }
+        TransitionOutcome::Refused(AcceptProposalRefusal::IncompleteBundleClosure)
     );
 }
 
@@ -110,25 +95,19 @@ fn invalidates_bad_validation_and_altered_candidates() {
     invalid.validation_receipt_valid = false;
     assert_eq!(
         accept_proposal(&invalid),
-        AcceptProposalResult::Invalid {
-            reason: AcceptProposalInvalid::InvalidValidation,
-        }
+        TransitionOutcome::NoEffect(AcceptProposalInvalid::InvalidValidation)
     );
     let mut mismatched = exact_eligible();
     mismatched.validation_receipt_matches_revision = false;
     assert_eq!(
         accept_proposal(&mismatched),
-        AcceptProposalResult::Invalid {
-            reason: AcceptProposalInvalid::InvalidValidation,
-        }
+        TransitionOutcome::NoEffect(AcceptProposalInvalid::InvalidValidation)
     );
     let mut altered = exact_eligible();
     altered.candidate_unaltered = false;
     assert_eq!(
         accept_proposal(&altered),
-        AcceptProposalResult::Invalid {
-            reason: AcceptProposalInvalid::AlteredCandidate,
-        }
+        TransitionOutcome::NoEffect(AcceptProposalInvalid::AlteredCandidate)
     );
 }
 
@@ -215,8 +194,37 @@ fn conflicts_a_changed_target_head() {
     changed.expected_target_matches_head = false;
     assert_eq!(
         accept_proposal(&changed),
-        AcceptProposalResult::Conflicted {
-            reason: AcceptProposalConflict::ChangedHead,
-        }
+        TransitionOutcome::Conflicted(AcceptProposalConflict::ChangedHead)
+    );
+}
+
+#[test]
+fn every_acceptance_outcome_round_trips_through_its_receipt_codes() {
+    let outcomes = [
+        TransitionOutcome::NoEffect(AcceptProposalInvalid::InvalidValidation),
+        TransitionOutcome::NoEffect(AcceptProposalInvalid::AlteredCandidate),
+        TransitionOutcome::Conflicted(AcceptProposalConflict::ChangedHead),
+        TransitionOutcome::Refused(AcceptProposalRefusal::WrongScope),
+        TransitionOutcome::Refused(AcceptProposalRefusal::WrongAdmission),
+        TransitionOutcome::Refused(AcceptProposalRefusal::StaleProposalRevision),
+        TransitionOutcome::Refused(AcceptProposalRefusal::NotEligible),
+        TransitionOutcome::Refused(AcceptProposalRefusal::OperationNotPending),
+        TransitionOutcome::Refused(AcceptProposalRefusal::DuplicateIdentities),
+        TransitionOutcome::Refused(AcceptProposalRefusal::MissingRequiredDependencies),
+        TransitionOutcome::Refused(AcceptProposalRefusal::IncompleteBundleClosure),
+    ];
+    for outcome in outcomes {
+        let reason = outcome.reason_code().unwrap();
+        assert_eq!(
+            AcceptProposalOutcome::from_zero_authority_codes(outcome.receipt_result_kind(), reason),
+            Some(outcome)
+        );
+    }
+    assert_eq!(
+        TransitionOutcome::<(), _, AcceptProposalConflict, AcceptProposalRefusal>::NoEffect(
+            AcceptProposalInvalid::InvalidValidation
+        )
+        .receipt_result_kind(),
+        "invalid"
     );
 }

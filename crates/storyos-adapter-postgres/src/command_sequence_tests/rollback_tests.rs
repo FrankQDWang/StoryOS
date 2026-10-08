@@ -13,6 +13,7 @@ use crate::command_sequence::{
     ZeroAuthorityWrite, ZeroOutcome, settle_project_command, unavailable,
 };
 
+use super::acceptance::{accept_proposal_call, invalid_acceptance_call};
 use super::agent_run::{
     cancel_agent_run_call, create_agent_run_call, park_run, pause_agent_run_call,
 };
@@ -89,6 +90,27 @@ impl<C: ProjectCommand> ProjectCommand for Failing<C> {
                 zero_receipt: classified.zero_receipt,
             }),
         }
+    }
+
+    async fn diagnose_missing_admission(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+    ) -> Self::Error {
+        self.command
+            .diagnose_missing_admission(client, envelope)
+            .await
+    }
+
+    async fn write_child_receipt(
+        &self,
+        client: &Client,
+        envelope: &ProjectCommandEnvelope,
+        result_kind: &'static str,
+    ) -> Result<(), ProjectCommandError> {
+        self.command
+            .write_child_receipt(client, envelope, result_kind)
+            .await
     }
 
     fn applied_receipt_payload(&self, applied: &Self::Applied, plan: &Self::Plan) -> String {
@@ -393,6 +415,18 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
             &steer_agent_run_call(&store, &admin, /*base*/ 0xc730).await,
         )
         .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &accept_proposal_call(&store, &admin, /*base*/ 0xa830).await,
+        )
+        .await,
+        failed_then_settled(
+            &store,
+            &admin,
+            &invalid_acceptance_call(&store, &admin, /*base*/ 0xa840).await,
+        )
+        .await,
     ];
     park_run(&admin, &create).await;
     let rolled_back = |result| {
@@ -413,6 +447,8 @@ async fn every_failing_step_rolls_back_every_row_and_keeps_the_challenge_unused(
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 2]);
     expected.push(rolled_back(ReceiptResult::Refused));
     expected.extend(vec![rolled_back(ReceiptResult::AuthoritativeApplied); 10]);
+    expected.push(rolled_back(ReceiptResult::NoEffect));
+    expected.push(rolled_back(ReceiptResult::AuthoritativeApplied));
     expected.push(rolled_back(ReceiptResult::NoEffect));
     assert_eq!(observed, expected);
 }

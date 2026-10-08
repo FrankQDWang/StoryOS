@@ -25,6 +25,10 @@ pub enum ReceiptResult {
 
 /// A Core reason with one stable code. Persisted Receipts and public schemas use the same text.
 pub trait ReasonCode: Sized {
+    /// The Domain Receipt result kind of an outcome with this reason, when the reason type gives
+    /// its own kind, for example `invalid`. `None` keeps the result kind of the outcome.
+    const RECEIPT_RESULT: Option<&'static str> = None;
+
     fn code(&self) -> &'static str;
     fn from_code(code: &str) -> Option<Self>;
 }
@@ -60,6 +64,17 @@ impl<A, N: ReasonCode, C: ReasonCode, R: ReasonCode> TransitionOutcome<A, N, C, 
         }
     }
 
+    /// The Domain Receipt result kind of a zero-authority outcome, which its reason type can give.
+    /// `Applied` gives `authoritative_applied`. The applied variant of the command can replace it.
+    pub fn receipt_result_kind(&self) -> &'static str {
+        match self {
+            Self::Applied(_) => ReceiptResult::AuthoritativeApplied.code(),
+            Self::NoEffect(_) => N::RECEIPT_RESULT.unwrap_or(ReceiptResult::NoEffect.code()),
+            Self::Conflicted(_) => C::RECEIPT_RESULT.unwrap_or(ReceiptResult::Conflicted.code()),
+            Self::Refused(_) => R::RECEIPT_RESULT.unwrap_or(ReceiptResult::Refused.code()),
+        }
+    }
+
     /// The reason code of a zero-authority outcome. `Applied` has no reason.
     pub fn reason_code(&self) -> Option<&'static str> {
         match self {
@@ -72,12 +87,16 @@ impl<A, N: ReasonCode, C: ReasonCode, R: ReasonCode> TransitionOutcome<A, N, C, 
 
     /// Decodes a zero-authority outcome from its recorded result kind and reason code.
     pub fn from_zero_authority_codes(result: &str, reason: &str) -> Option<Self> {
-        match result {
-            "no_effect" => N::from_code(reason).map(Self::NoEffect),
-            "conflicted" => C::from_code(reason).map(Self::Conflicted),
-            "refused" => R::from_code(reason).map(Self::Refused),
-            _ => None,
+        if result == N::RECEIPT_RESULT.unwrap_or(ReceiptResult::NoEffect.code()) {
+            return N::from_code(reason).map(Self::NoEffect);
         }
+        if result == C::RECEIPT_RESULT.unwrap_or(ReceiptResult::Conflicted.code()) {
+            return C::from_code(reason).map(Self::Conflicted);
+        }
+        if result == R::RECEIPT_RESULT.unwrap_or(ReceiptResult::Refused.code()) {
+            return R::from_code(reason).map(Self::Refused);
+        }
+        None
     }
 
     /// Replaces the applied value and keeps every other outcome.
@@ -94,7 +113,15 @@ impl<A, N: ReasonCode, C: ReasonCode, R: ReasonCode> TransitionOutcome<A, N, C, 
 /// Implements `ReasonCode` for a fieldless reason enum from one variant-to-code table.
 macro_rules! reason_codes {
     ($reason:ty { $($variant:ident => $code:literal),+ $(,)? }) => {
+        $crate::transition_outcome::reason_codes!($reason, None, { $($variant => $code),+ });
+    };
+    ($reason:ty, result $result:literal { $($variant:ident => $code:literal),+ $(,)? }) => {
+        $crate::transition_outcome::reason_codes!($reason, Some($result), { $($variant => $code),+ });
+    };
+    ($reason:ty, $result:expr, { $($variant:ident => $code:literal),+ }) => {
         impl $crate::ReasonCode for $reason {
+            const RECEIPT_RESULT: Option<&'static str> = $result;
+
             fn code(&self) -> &'static str {
                 match self {
                     $(Self::$variant => $code,)+

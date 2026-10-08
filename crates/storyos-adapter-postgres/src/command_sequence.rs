@@ -16,6 +16,8 @@ mod action_only;
 mod activity_only;
 mod admission;
 mod admit;
+mod applied_variant;
+mod authoritative_revision;
 mod chapter_selection;
 mod contention;
 mod records;
@@ -26,10 +28,16 @@ pub(crate) use action_only::{ActionOnly, ActionSequence};
 pub(crate) use activity_only::{ActivityOnly, ActivitySequences, ActivityWrite};
 use admission::insert_admission;
 pub(crate) use admit::{AdmitCommand, AdmitSpec, admit_project_command};
+pub(crate) use applied_variant::AppliedVariant;
+pub(crate) use authoritative_revision::{
+    ActionDisposition, AuthoritativeRevision, RevisionMembers, RevisionWrite,
+};
 pub(crate) use chapter_selection::{ChapterSelection, ChapterSelectionWrite};
 pub(crate) use contention::CommandError;
 use contention::contended;
-use records::{ReceiptRecord, insert_activity_payload, insert_receipt, lock_project};
+use records::{
+    ReceiptRecord, insert_activity_payload, insert_receipt, insert_zero_receipt, lock_project,
+};
 pub(crate) use response::{NoResponse, ProjectAssistanceResponse, ProjectResponse, ResponseRecord};
 pub(crate) use structural::{
     CurrentChapterChange, Structural, StructureIdentity, StructureWrite, WriterBase,
@@ -87,10 +95,12 @@ pub(crate) struct ReceiptHeads {
     pub(crate) resulting: Vec<String>,
 }
 
-/// The Proposal Revision, Draft, and lifecycle references that one Domain Receipt records.
+/// The Proposal Revision, Draft, lifecycle, and condition references that one Domain Receipt
+/// records.
 #[derive(Default)]
 pub(crate) struct ReceiptRefs {
     pub(crate) proposal_revision_ids: Vec<String>,
+    pub(crate) condition_refs: Vec<String>,
     pub(crate) draft_artifact_refs: Vec<String>,
     pub(crate) artifact_lifecycle_event_refs: Vec<String>,
     /// The JSON text of the source Draft disposition, when the Receipt records one.
@@ -103,6 +113,20 @@ pub(crate) enum MissingAdmission {
     BindingConflict,
     /// The Editor Session does not hold the writer generation that the Admission requires.
     InvalidWriter,
+    /// `ProjectCommand::diagnose_missing_admission` gives a typed error of the command.
+    Diagnosed,
+}
+
+impl MissingAdmission {
+    /// The declared error. A diagnosed command that reaches this has no diagnosis.
+    fn error(&self) -> ProjectCommandError {
+        match self {
+            Self::InvalidChallenge => ProjectCommandError::InvalidChallenge,
+            Self::BindingConflict => ProjectCommandError::BindingConflict,
+            Self::InvalidWriter => ProjectCommandError::WriterIneligible,
+            Self::Diagnosed => unavailable("the command declares no missing-Admission diagnosis"),
+        }
+    }
 }
 
 /// The error of a Command Challenge that the rate limit refuses.
@@ -110,23 +134,6 @@ pub(crate) enum MissingAdmission {
 pub(crate) enum RateLimitedChallenge {
     InvalidChallenge,
     Unavailable,
-}
-
-/// The Domain Receipt result kind that an applied outcome of the command records.
-pub(crate) struct AppliedResult(&'static str);
-
-impl AppliedResult {
-    /// The result kind of a change to Authoritative State or Project state.
-    pub(crate) const AUTHORITATIVE_APPLIED: Self = Self("authoritative_applied");
-
-    /// A result kind that the command declares for itself, for example `proposal_revised`.
-    pub(crate) const fn command(code: &'static str) -> Self {
-        Self(code)
-    }
-
-    pub(crate) fn code(&self) -> &'static str {
-        self.0
-    }
 }
 
 /// The effect rows of the command that an exact retry reads in the replay transaction.
@@ -142,7 +149,7 @@ pub(crate) enum ReplayEffect {
 
 pub(crate) struct CommandSpec {
     pub(crate) kind: &'static str,
-    pub(crate) applied_result: AppliedResult,
+    pub(crate) applied: AppliedVariant,
     pub(crate) isolation: CommandIsolation,
     pub(crate) missing_admission: MissingAdmission,
     pub(crate) rate_limited: RateLimitedChallenge,
@@ -177,6 +184,12 @@ pub(crate) trait SettlementProfile {
 
     /// The Authoritative Commit identities that the Domain Receipt binds.
     fn commit_ids(sequences: &Self::Sequences) -> Vec<String>;
+
+    /// The Authoritative Revisions that the applied outcome creates. The Domain Receipt binds
+    /// them and gives them as its resulting heads.
+    fn revision_ids(_sequences: &Self::Sequences) -> Vec<String> {
+        Vec::new()
+    }
 
     fn persist<E: Send>(
         client: &Client,
@@ -310,6 +323,27 @@ pub(crate) trait ProjectCommand: Sync {
         None
     }
 
+    /// The typed error of an Admission insert that inserts no row, for a command that declares
+    /// `MissingAdmission::Diagnosed`. It runs in the first-use transaction.
+    fn diagnose_missing_admission(
+        &self,
+        _client: &Client,
+        _envelope: &ProjectCommandEnvelope,
+    ) -> impl Future<Output = Self::Error> + Send {
+        async { MissingAdmission::Diagnosed.error().into() }
+    }
+
+    /// Writes the child Receipt row of the command, for example `acceptance_receipts`, after the
+    /// Domain Receipt of every outcome.
+    fn write_child_receipt(
+        &self,
+        _client: &Client,
+        _envelope: &ProjectCommandEnvelope,
+        _result_kind: &'static str,
+    ) -> impl Future<Output = Result<(), ProjectCommandError>> + Send {
+        async { Ok(()) }
+    }
+
     /// The Domain Receipt payload of an applied outcome.
     fn applied_receipt_payload(&self, _applied: &Self::Applied, _plan: &Self::Plan) -> String {
         "{}".to_owned()
@@ -403,6 +437,12 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     envelope: &ProjectCommandEnvelope,
     command: &C,
 ) -> Result<SettledCommand<C>, C::Error> {
+    const {
+        assert!(
+            C::SPEC.applied.names_kind(C::SPEC.kind),
+            "a Forward applied variant names the Forward command of the command kind"
+        );
+    }
     let challenge_error = |error| challenge_problem(C::SPEC.rate_limited, error);
     let mut transaction = match C::SPEC.isolation {
         CommandIsolation::Serializable => {
@@ -469,14 +509,16 @@ async fn first_use<C: ProjectCommand>(
         heads,
         zero_receipt,
     } = command.classify(client, envelope, &project).await?;
-    insert_admission(
-        client,
-        envelope,
-        C::SPEC.kind,
-        &C::SPEC.missing_admission,
-        &admission,
-    )
-    .await?;
+    if !insert_admission(client, envelope, C::SPEC.kind, &admission).await? {
+        return Err(match C::SPEC.missing_admission {
+            MissingAdmission::Diagnosed => {
+                command.diagnose_missing_admission(client, envelope).await
+            }
+            MissingAdmission::InvalidChallenge
+            | MissingAdmission::BindingConflict
+            | MissingAdmission::InvalidWriter => C::SPEC.missing_admission.error().into(),
+        });
+    }
     let (mut zero_fields, zero_refs, observed_effect) = match zero_receipt {
         ZeroReceipt::Reason => (serde_json::Map::new(), ReceiptRefs::default(), None),
         ZeroReceipt::Observed {
@@ -487,10 +529,10 @@ async fn first_use<C: ProjectCommand>(
     };
     let receipt = ReceiptRecord {
         result: match &classified {
-            TransitionOutcome::Applied(_) => C::SPEC.applied_result.code(),
+            TransitionOutcome::Applied(_) => C::SPEC.applied.result_kind(),
             TransitionOutcome::NoEffect(_)
             | TransitionOutcome::Conflicted(_)
-            | TransitionOutcome::Refused(_) => classified.receipt_result().code(),
+            | TransitionOutcome::Refused(_) => classified.receipt_result_kind(),
         },
         payload: match classified.reason_code() {
             Some(code) => {
@@ -502,15 +544,21 @@ async fn first_use<C: ProjectCommand>(
         command_kind: C::SPEC.kind,
         heads,
         refs: zero_refs,
+        revision_ids: Vec::new(),
     };
     let (receipt_created_at, outcome) = match classified {
         TransitionOutcome::Applied((applied, plan)) => {
             let sequences = C::Profile::allocate(client, &envelope.project_scope).await?;
-            let receipt = ReceiptRecord {
+            let revision_ids = C::Profile::revision_ids(&sequences);
+            let mut receipt = ReceiptRecord {
                 payload: command.applied_receipt_payload(&applied, &plan),
                 refs: command.applied_receipt_refs(&applied, &plan),
                 ..receipt
             };
+            if !revision_ids.is_empty() {
+                receipt.heads.resulting.clone_from(&revision_ids);
+            }
+            receipt.revision_ids = revision_ids;
             let receipt_created_at = insert_receipt(
                 client,
                 envelope,
@@ -518,6 +566,9 @@ async fn first_use<C: ProjectCommand>(
                 &C::Profile::commit_ids(&sequences),
             )
             .await?;
+            command
+                .write_child_receipt(client, envelope, receipt.result)
+                .await?;
             let write = command
                 .apply(client, envelope, &project, &sequences, plan, applied)
                 .await?;
@@ -529,15 +580,15 @@ async fn first_use<C: ProjectCommand>(
             (receipt_created_at, TransitionOutcome::Applied(applied))
         }
         TransitionOutcome::NoEffect(reason) => (
-            insert_receipt(client, envelope, &receipt, &[]).await?,
+            insert_zero_receipt(client, envelope, command, &receipt).await?,
             TransitionOutcome::NoEffect(reason),
         ),
         TransitionOutcome::Conflicted(reason) => (
-            insert_receipt(client, envelope, &receipt, &[]).await?,
+            insert_zero_receipt(client, envelope, command, &receipt).await?,
             TransitionOutcome::Conflicted(reason),
         ),
         TransitionOutcome::Refused(reason) => (
-            insert_receipt(client, envelope, &receipt, &[]).await?,
+            insert_zero_receipt(client, envelope, command, &receipt).await?,
             TransitionOutcome::Refused(reason),
         ),
     };
@@ -564,7 +615,7 @@ async fn first_use<C: ProjectCommand>(
                 insert_activity_payload(
                     client,
                     envelope,
-                    outcome.receipt_result().code(),
+                    outcome.receipt_result_kind(),
                     C::SPEC.activity_kind,
                     activity.project_activity_position,
                     &activity.project_activity_event_id,
@@ -591,7 +642,7 @@ fn replay_command<C: ProjectCommand>(
 ) -> Result<SettledCommand<C>, ReplayFault> {
     command.check_replay_binding(replay)?;
     let outcome =
-        replay.outcome::<C::NoEffect, C::Conflict, C::Refusal>(C::SPEC.applied_result.code())?;
+        replay.outcome::<C::NoEffect, C::Conflict, C::Refusal>(C::SPEC.applied.result_kind())?;
     let zero_authority_effect = match &outcome {
         TransitionOutcome::Applied(()) => None,
         TransitionOutcome::NoEffect(_)

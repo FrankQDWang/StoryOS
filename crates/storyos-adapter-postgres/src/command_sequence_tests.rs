@@ -4,6 +4,9 @@ mod support;
 #[path = "command_sequence_tests/structure_tests.rs"]
 mod structure;
 
+#[path = "command_sequence_tests/acceptance_tests.rs"]
+mod acceptance;
+
 #[path = "command_sequence_tests/project_session_tests.rs"]
 mod project_session;
 

@@ -4,18 +4,17 @@ use storyos_application::{ProjectCommandEnvelope, ProjectCommandError};
 use tokio_postgres::Client;
 
 use super::{
-    Admission, EditorAdmission, EditorWriter, MissingAdmission, ProjectActionClass,
-    TakeoverAdmission, unavailable,
+    Admission, EditorAdmission, EditorWriter, ProjectActionClass, TakeoverAdmission, unavailable,
 };
 
-/// Inserts the Admission after the consumed Command Challenge. An insert without a row gives the command's error.
+/// Inserts the Admission after the consumed Command Challenge. Returns `false` when the insert
+/// writes no row.
 pub(super) async fn insert_admission(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
     command_kind: &str,
-    missing_admission: &MissingAdmission,
     admission: &Admission,
-) -> Result<(), ProjectCommandError> {
+) -> Result<bool, ProjectCommandError> {
     let binding = &envelope.client_binding;
     let challenge = &envelope.challenge_binding;
     let session_generation = binding.session_generation.to_string();
@@ -232,12 +231,5 @@ pub(super) async fn insert_admission(
         }
     }
     .map_err(unavailable)?;
-    if inserted != 1 {
-        return Err(match missing_admission {
-            MissingAdmission::InvalidChallenge => ProjectCommandError::InvalidChallenge,
-            MissingAdmission::BindingConflict => ProjectCommandError::BindingConflict,
-            MissingAdmission::InvalidWriter => ProjectCommandError::WriterIneligible,
-        });
-    }
-    Ok(())
+    Ok(inserted == 1)
 }

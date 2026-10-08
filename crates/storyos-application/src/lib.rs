@@ -104,10 +104,7 @@ pub use author_edit_outcome::{
     get_apply_author_edit_outcome,
 };
 
-pub use accept_proposal::{
-    AcceptProposalCommand, AcceptProposalError, AcceptProposalSettlement,
-    AcceptProposalSettlementEffect, AcceptProposalStore, accept_proposal,
-};
+pub use accept_proposal::{AcceptProposalInput, AcceptProposalSettlement};
 pub use agent_run_control::{
     AgentRunControlRefusal, CancelAgentRunApplied, CancelAgentRunError, CancelAgentRunInput,
     CancelAgentRunSettlement, PauseAgentRunApplied, PauseAgentRunError, PauseAgentRunInput,
@@ -185,8 +182,8 @@ pub use pinned_export_source::{
 pub use project_command::{
     ActionApplied, ActivityApplied, AdmittedProjectCommand, AuthorityEvidence,
     ChapterSelectionApplied, ChapterSelectionAuthority, ProjectCommandEnvelope,
-    ProjectCommandError, ProjectCommandSettlement, RefusableCommandError, StructureApplied,
-    StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
+    ProjectCommandError, ProjectCommandSettlement, RefusableCommandError, RevisionApplied,
+    StructureApplied, StructureAuthority, StructureAuthorityEvidence, StructureSettlement,
 };
 pub use project_export::{
     ArchiveExportOperation, ArchiveExportRefusal, ExportOperationPage, ExportOperationProgress,

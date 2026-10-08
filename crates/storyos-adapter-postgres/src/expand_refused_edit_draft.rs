@@ -17,11 +17,12 @@ use crate::PostgresProjectReader;
 use crate::close_editor_flow_draft::{check_draft_replay_binding, replayed_draft_observation};
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
-    ActionOnly, ActionSequence, Admission, AppliedResult, Classification, CommandIsolation,
+    ActionOnly, ActionSequence, Admission, AppliedVariant, Classification, CommandIsolation,
     CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission, NoResponse,
     ProjectCommand, RateLimitedChallenge, ReceiptHeads, ReceiptRefs, ReplayEffect, ZeroReceipt,
     settle_project_command, unavailable,
 };
+use crate::undo_compensation::ForwardCommand;
 
 impl PostgresProjectReader {
     /// Settles one author expansion of a Refused Edit Draft to an inline edit Proposal.
@@ -67,7 +68,7 @@ fn observation_fields(
 impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "expandRefusedEditDraftToProposal",
-        applied_result: AppliedResult::command("proposal_created_from_draft"),
+        applied: AppliedVariant::Forward(ForwardCommand::ExpandRefusedEditDraftToProposal),
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidWriter,
         rate_limited: RateLimitedChallenge::InvalidChallenge,
@@ -326,6 +327,7 @@ impl ProjectCommand for ExpandRefusedEditDraftToProposalInput {
         let draft = &expanded.observation.draft;
         ReceiptRefs {
             proposal_revision_ids: vec![expanded.proposal_revision_id.clone()],
+            condition_refs: Vec::new(),
             draft_artifact_refs: vec![self.draft_id.clone()],
             artifact_lifecycle_event_refs: vec![expanded.event_id.clone()],
             source_draft_disposition: Some(

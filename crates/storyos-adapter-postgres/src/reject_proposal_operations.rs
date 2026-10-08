@@ -15,11 +15,12 @@ use uuid::Uuid;
 use crate::PostgresProjectReader;
 use crate::command_replay::{CommandReplay, ReplayFault, StateAxis};
 use crate::command_sequence::{
-    ActionOnly, ActionSequence, Admission, AppliedResult, Classification, CommandIsolation,
+    ActionOnly, ActionSequence, Admission, AppliedVariant, Classification, CommandIsolation,
     CommandSpec, EditorAdmission, EditorWriter, LockedProject, MissingAdmission, ProjectCommand,
     ProjectResponse, RateLimitedChallenge, ReceiptHeads, ReplayEffect, ZeroAuthorityRows,
     ZeroOutcome, ZeroReceipt, settle_project_command, unavailable,
 };
+use crate::undo_compensation::ForwardCommand;
 
 impl PostgresProjectReader {
     /// Settles one author rejection of selected pending Proposal Operations.
@@ -60,7 +61,7 @@ async fn insert_rejection_record(
         .ok_or(ProjectCommandError::BindingConflict)?;
     let (result, rejection_reason, preserved) = match record {
         RejectionRecord::Applied(rejected) => (
-            RejectProposalOperationsInput::SPEC.applied_result.code(),
+            RejectProposalOperationsInput::SPEC.applied.result_kind(),
             Some("author_declined"),
             Some(rejected),
         ),
@@ -101,7 +102,7 @@ async fn insert_rejection_record(
 impl ProjectCommand for RejectProposalOperationsInput {
     const SPEC: CommandSpec = CommandSpec {
         kind: "rejectProposalOperations",
-        applied_result: AppliedResult::command("proposal_operations_resolved"),
+        applied: AppliedVariant::Forward(ForwardCommand::RejectProposalOperations),
         isolation: CommandIsolation::Serializable,
         missing_admission: MissingAdmission::InvalidChallenge,
         rate_limited: RateLimitedChallenge::InvalidChallenge,
