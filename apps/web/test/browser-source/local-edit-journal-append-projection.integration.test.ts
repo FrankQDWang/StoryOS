@@ -47,17 +47,17 @@ it("keeps a complete mixed intent in the immutable Journal without projecting it
     const unit = { normalized_primitives: [{ kind: "replace_structured_selection", replacement: [
       { block_kind: "heading", text: "New heading" }, { block_kind: "paragraph", text: "New paragraph" },
     ] }], selection_snapshot: { coordinate_profile: "storyos.editor.ordered-source.v1", from: 0, to: 3,
-      ordered_selection: { sources: [{ owner: { kind: "manuscript", manuscript_block_id: test.workspace.pending.blocks[0]!.manuscript_block_id },
+      ordered_selection: { sources: [{ owner: { kind: "manuscript", manuscript_block_id: test.workspace.openedProjection.blocks[0]!.manuscript_block_id },
         coordinate_profile: "prosemirror-token-utf16.v1", from: 0, to: 4, block_kind: "paragraph", source_text: "Base" },
         { owner: { kind: "proposal", proposal_id: "018f0000-0000-7001-8000-000000000090",
           operation_id: "018f0000-0000-7001-8000-000000000091", revision_id: "018f0000-0000-7001-8000-000000000092",
-          manuscript_block_id: test.workspace.pending.blocks[0]!.manuscript_block_id },
+          manuscript_block_id: test.workspace.openedProjection.blocks[0]!.manuscript_block_id },
           coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 3, block_kind: "paragraph", source_text: "Old" }],
         anchor: { source_index: 0, source_offset: 0 }, head: { source_index: 1, source_offset: 3 } } } };
     let failure: unknown;
     const idle = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: "http://localhost",
       onFailure: (error) => { failure = error; }, setTimeoutImpl: () => 1, clearTimeoutImpl: () => {} });
-    idle.setHoldSubmission(true);
+    idle.setComposing(true);
     Reflect.apply(idle.capture, idle, [{ kind: "structured_selection", authorEditUnit: unit,
       expectedProposalHeads: ["018f0000-0000-7001-8000-000000000092"] }, "typing"]);
     await idle.whenIdle();
@@ -65,7 +65,7 @@ it("keeps a complete mixed intent in the immutable Journal without projecting it
     expect(failure).toBeUndefined();
     const { readJournalSnapshot } = await import("../../src/local-edit-journal.ts");
     expect((await readJournalSnapshot(test.workspace)).records[0]?.author_edit_unit).toEqual(unit);
-    expect(await rebuildPendingProjection(test.workspace)).toEqual({ ...test.workspace.pending,
+    expect(await rebuildPendingProjection(test.workspace)).toEqual({ ...test.workspace.openedProjection,
       body: "Base", save_state: "saving", unsettled_intent_count: 1 });
     const { submitOnePendingAuthorEdit } = await import("../../src/author-edit-submission.ts");
     const { digestApplyAuthorEdit } = await import("../../../../generated/typescript/storyos-public-release-1/client.mjs");
@@ -157,7 +157,6 @@ it("freezes one complete mixed Tiptap IME intent only after confirmation and ign
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
   const id = "018f0000-0000-7001-8000-000000000090";
   const { ManuscriptEditor } = await import("../../src/manuscript-editor.tsx");
   const { applyImeComposition, applyTrustedInput } = await import("../support/browser-command-client.ts");
@@ -170,11 +169,10 @@ it("freezes one complete mixed Tiptap IME intent only after confirmation and ign
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   try {
-    await act(async () => { root.render(createElement(ManuscriptEditor, { blocks: test.workspace.pending.blocks,
-      proposals: [{ proposalId: id, operationId: id, revisionId: id, blockId: test.workspace.pending.blocks[0]!.manuscript_block_id,
+    await act(async () => { root.render(createElement(ManuscriptEditor, { blocks: test.workspace.openedProjection.blocks,
+      proposals: [{ proposalId: id, operationId: id, revisionId: id, blockId: test.workspace.openedProjection.blocks[0]!.manuscript_block_id,
         sourceRunId: id, sourceDecisionId: id, text: "Old", eligible: true, expectedHeads: [id] }],
-      editable: true, persistWorkspace: test.workspace, writing, baseUrl: location.origin,
-      fetchImpl, cryptoImpl: crypto, controllerRef: controller, onFailure: (error) => { failure = error; } })); });
+      editable: true, writing })); });
     await expect.poll(() => host.querySelector(".block-proposal-text")).not.toBeNull();
     const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
     const select = () => {
@@ -189,7 +187,7 @@ it("freezes one complete mixed Tiptap IME intent only after confirmation and ign
     expect((await readJournalSnapshot(test.workspace)).records).toEqual([]);
     expect(requests).toBe(0);
     await applyImeComposition({ operation: "cancel" });
-    await expect.poll(() => controller.current!.hasIncompleteSemanticIntent()).toBe(false);
+    await expect.poll(() => writing.hasIncompleteInput()).toBe(false);
     expect((await readJournalSnapshot(test.workspace)).records).toEqual([]);
     expect(requests).toBe(0);
     select();
@@ -203,10 +201,10 @@ it("freezes one complete mixed Tiptap IME intent only after confirmation and ign
       replacement: [{ block_kind: "paragraph", text: "Complete 中文" }] }],
       selection_snapshot: { coordinate_profile: "storyos.editor.ordered-source.v1", from: 1, to: 2,
         ordered_selection: { anchor: { source_index: 0, source_offset: 1 }, head: { source_index: 1, source_offset: 2 }, sources: [
-          { owner: { kind: "manuscript", manuscript_block_id: test.workspace.pending.blocks[0]!.manuscript_block_id },
+          { owner: { kind: "manuscript", manuscript_block_id: test.workspace.openedProjection.blocks[0]!.manuscript_block_id },
             coordinate_profile: "prosemirror-token-utf16.v1", from: 1, to: 4, block_kind: "paragraph", source_text: "Base" },
           { owner: { kind: "proposal", proposal_id: id, operation_id: id, revision_id: id,
-            manuscript_block_id: test.workspace.pending.blocks[0]!.manuscript_block_id },
+            manuscript_block_id: test.workspace.openedProjection.blocks[0]!.manuscript_block_id },
             coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 2, block_kind: "paragraph", source_text: "Old" },
         ] } } });
     expect(surface.querySelector("p")!.textContent).toBe("Base");
@@ -251,7 +249,6 @@ it("keeps newer captured input visible when an earlier Author Edit settles", asy
   };
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
-  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
   let failure: unknown, installedBody: string | null | undefined;
   const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin, fetchImpl,
     onFailure: (error) => { failure = error; } });
@@ -260,9 +257,7 @@ it("keeps newer captured input visible when an earlier Author Edit settles", asy
     if (projection.authoritative_revision_id !== scenario.session.base_snapshot.authoritative_head_revision_id) {
       queueMicrotask(() => { installedBody ??= host.querySelector("[data-manuscript-editor] p")?.textContent; });
     }
-    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, persistWorkspace: test.workspace,
-      writing, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: controller,
-      onFailure: (error) => { failure = error; } });
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, writing });
   }
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -273,11 +268,11 @@ it("keeps newer captured input visible when an earlier Author Edit settles", asy
     const text = surface.querySelector("p")!.firstChild!;
     window.getSelection()!.setBaseAndExtent(text, 4, text, 4);
     await applyTrustedInput({ operation: "insert_text", text: "!" });
-    const flushing = controller.current!.flush();
+    const flushing = writing.flush();
     await requested;
     await applyTrustedInput({ operation: "insert_text", text: "?" });
     expect(surface.querySelector("p")!.textContent).toBe("Base!?");
-    await act(async () => { release(); await flushing; await controller.current!.whenIdle(); });
+    await act(async () => { release(); await flushing; await writing.whenIdle(); });
     expect(installedBody).toBe("Base!?");
     expect(surface.querySelector("p")!.textContent).toBe("Base!?");
     expect((await rebuildPendingProjection(test.workspace)).body).toBe("Base!?");
@@ -320,9 +315,8 @@ it("keeps input that the author types before the effects of a settled projection
   };
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
-  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
   let failure: unknown, typed = false;
-  const initialRevision = test.workspace.pending.authoritative_revision_id;
+  const initialRevision = test.workspace.openedProjection.authoritative_revision_id;
   const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin, fetchImpl,
     onFailure: (error) => { failure = error; } });
   function View() {
@@ -333,9 +327,7 @@ it("keeps input that the author types before the effects of a settled projection
       typed = true;
       queueMicrotask(() => { document.execCommand("insertText", false, "?"); });
     }, [projection]);
-    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true,
-      persistWorkspace: test.workspace, writing, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
-      controllerRef: controller, onFailure: (error) => { failure = error; } });
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, writing });
   }
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false });
@@ -355,7 +347,7 @@ it("keeps input that the author types before the effects of a settled projection
       }
     });
     observer.observe(surface, { subtree: true, childList: true, characterData: true, characterDataOldValue: true });
-    await controller.current!.flush();
+    await writing.flush();
     await expect.poll(() => typed).toBe(true);
     await expect.poll(async () => (await rebuildPendingProjection(test.workspace)).body).toBe("Base!?");
     observer.disconnect();
@@ -369,7 +361,7 @@ it("keeps input that the author types before the effects of a settled projection
 it("hydrates new blocks when a new inline Proposal projects in the same render", async () => {
   const test = await openJournalAppendTestWorkspace();
   const { ManuscriptEditor } = await import("../../src/manuscript-editor.tsx");
-  const block = test.workspace.pending.blocks[0]!;
+  const block = test.workspace.openedProjection.blocks[0]!;
   const id = "018f0000-0000-7001-8000-000000000090";
   const candidate = (sourceText: string, revisionId: string) => ({ proposalId: id, operationId: id, revisionId,
     blockId: block.manuscript_block_id, sourceRunId: id, sourceDecisionId: id, text: "X", eligible: true,
@@ -377,9 +369,9 @@ it("hydrates new blocks when a new inline Proposal projects in the same render",
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
   let failure: unknown;
-  const props = { editable: true, persistWorkspace: test.workspace, baseUrl: location.origin,
-    fetchImpl: () => new Promise<Response>(() => {}), cryptoImpl: crypto, controllerRef: { current: null },
-    onFailure: (error: unknown) => { failure = error; } };
+  const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin,
+    fetchImpl: () => new Promise<Response>(() => {}), onFailure: (error) => { failure = error; } });
+  const props = { editable: true, writing };
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   try {
@@ -390,7 +382,7 @@ it("hydrates new blocks when a new inline Proposal projects in the same render",
     await act(async () => { root.render(createElement(ManuscriptEditor, { ...props,
       blocks: [{ ...block, text: "New base ending" }], proposals: [candidate("New", "018f0000-0000-7001-8000-000000000092")] })); });
     expect({ text: paragraph(), failure }).toEqual({ text: "X base ending", failure: undefined });
-  } finally { await act(async () => { root.unmount(); }); host.remove(); await test.close();
+  } finally { await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
 
@@ -402,7 +394,6 @@ it("keeps captured manuscript input during a background Draft refresh", async ()
   const paused = createPausedDigestCrypto(crypto);
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
-  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
   let refresh!: () => void, observed!: () => void;
   const refreshed = new Promise<void>((resolve) => { observed = resolve; });
   let phase = "open", failure: unknown;
@@ -421,7 +412,7 @@ it("keeps captured manuscript input during a background Draft refresh", async ()
     refresh = () => { setRefreshKey(1); };
     return createElement(BlockProposalDisplay, { blocks: projection.blocks, editable: true,
       persistWorkspace: test.workspace, writing, baseUrl: location.origin, cryptoImpl: paused.cryptoImpl,
-      fetchImpl, controllerRef: controller,
+      fetchImpl,
       scope: test.workspace.session.project_scope, chapterId: test.workspace.session.base_snapshot.chapter_id,
       authoritativeRevisionId: projection.authoritative_revision_id, locators: [], refreshKey,
       safeToProject: true, onAccepted: async () => {}, onFailure: (error) => { failure = error; } });
@@ -443,7 +434,7 @@ it("keeps captured manuscript input during a background Draft refresh", async ()
     expect(surface.querySelector("p")!.textContent).toBe("Base!");
     expect(writing.snapshot().projection).toMatchObject({ body: "Base!", save_state: "saving" });
     phase = "append";
-    await act(async () => { paused.release(); await controller.current!.whenIdle(); });
+    await act(async () => { paused.release(); await writing.whenIdle(); });
     expect((await rebuildPendingProjection(test.workspace)).body).toBe("Base!");
     expect(failure).toBeUndefined();
   } finally { paused.release(); await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
@@ -463,9 +454,7 @@ it("keeps author input when a Journal projection read before that input complete
     fetchImpl: () => new Promise<Response>(() => {}), onFailure: (error) => { failure = error; } });
   function View() {
     const { projection } = useSyncExternalStore(writing.subscribe, writing.snapshot);
-    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, persistWorkspace: test.workspace,
-      writing, baseUrl: location.origin, fetchImpl: () => new Promise<Response>(() => {}), cryptoImpl: crypto,
-      controllerRef: { current: null }, onFailure: (error) => { failure = error; } });
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, writing });
   }
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -523,9 +512,7 @@ it("shows a changed Journal projection before its install completes", async () =
     onFailure: (error) => { failure = error; } });
   function View() {
     const { projection } = useSyncExternalStore(writing.subscribe, writing.snapshot);
-    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, persistWorkspace: test.workspace,
-      writing, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: { current: null },
-      onFailure: (error) => { failure = error; } });
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, writing });
   }
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });

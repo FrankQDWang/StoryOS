@@ -1,11 +1,10 @@
 import type { GetProposalResponse, ProjectScope } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { openControlledProject } from "./boot.ts";
-import { completeJournalOrRefuse, openSelectedChapter } from "./chapter-navigation.ts";
-import { rebuildPendingProjection } from "./local-edit-journal.ts";
+import { openSelectedChapter } from "./chapter-navigation.ts";
+import type { EditorSessionWritingController } from "./editor-session-writing.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import type { ProjectReadyState, ControlledProjectState } from "./editor-types.ts";
-import type { ManualInputController } from "./manual-input.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
 
 export type ProposalFocus = { proposalId: string; operationId: string; revisionId: string; blockId: string };
@@ -29,7 +28,7 @@ export function navigateProposal(options: {
   state: ProjectReadyState;
   destination: ProposalDestination;
   navigation: ProposalNavigation;
-  controller: { current: ManualInputController | null };
+  writing: EditorSessionWritingController | undefined;
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
@@ -43,16 +42,9 @@ export function navigateProposal(options: {
   navigation.queue = navigation.queue.then(async () => {
     if (!latest()) return;
     try {
-      await options.controller.current?.flush();
-      const gate = await completeJournalOrRefuse({
-        incompleteSemanticIntent: options.controller.current?.hasIncompleteSemanticIntent() ?? false,
-        whenIdle: () => options.controller.current?.whenIdle() ?? Promise.resolve(),
-      });
+      const quiet = await options.writing?.runAfterQuiesce("settled", async () => undefined);
       if (!latest()) return;
-      if (gate.kind === "refused" || state.editor.kind !== "editor-ready"
-        || (await rebuildPendingProjection(state.editor)).unsettled_intent_count !== 0) {
-        throw new Error("请先完成当前输入。");
-      }
+      if (quiet?.kind !== "ran" || state.editor.kind !== "editor-ready") throw new Error("请先完成当前输入。");
       const scope = state.project.project_scope;
       const focus = destination.focus;
       if (focus !== undefined) {

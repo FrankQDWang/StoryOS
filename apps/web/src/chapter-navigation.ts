@@ -6,16 +6,10 @@ import type {
   GetChapterResponse,
   ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { QuietRefusal } from "./editor-session-writing.ts";
 import type { PendingEditProjection } from "./editor-types.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export type JournalSwitchGate =
-  | { kind: "ready" }
-  | {
-    kind: "refused";
-    reason: "incomplete_semantic_intent" | "journal_unavailable";
-  };
 
 export type OpenSelectedChapter =
   | { kind: "opened"; chapter: GetChapterResponse }
@@ -52,21 +46,6 @@ function problemCode(error: unknown): string | undefined {
 
 function validUuid(value: unknown): value is string {
   return typeof value === "string" && UUID.test(value);
-}
-
-export async function completeJournalOrRefuse(options: {
-  incompleteSemanticIntent: boolean;
-  whenIdle: () => Promise<void>;
-}): Promise<JournalSwitchGate> {
-  if (options.incompleteSemanticIntent) {
-    return { kind: "refused", reason: "incomplete_semantic_intent" };
-  }
-  try {
-    await options.whenIdle();
-  } catch {
-    return { kind: "refused", reason: "journal_unavailable" };
-  }
-  return { kind: "ready" };
 }
 
 export async function openSelectedChapter(options: {
@@ -146,10 +125,9 @@ export function selectedChapterSurface(options: {
 }
 
 export function chapterSwitchRecoveryMessage(
-  reason: Exclude<JournalSwitchGate, { kind: "ready" }>["reason"]
-    | Exclude<OpenSelectedChapter, { kind: "opened" }>["kind"],
+  reason: QuietRefusal | Exclude<OpenSelectedChapter, { kind: "opened" }>["kind"],
 ): string {
-  if (reason === "incomplete_semantic_intent") return "无法切换章节：请先完成当前输入。";
+  if (reason === "incomplete_semantic_intent" || reason === "unsettled_input") return "无法切换章节：请先完成当前输入。";
   if (reason === "journal_unavailable") {
     return "无法切换章节：本地编辑需要恢复。";
   }
