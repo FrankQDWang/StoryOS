@@ -114,22 +114,32 @@ export async function stopStoryOSServer(server: ChildProcess): Promise<void> {
   await exited;
 }
 
-export async function runStoryOSWorker(options: {
+interface StoryOSWorkerOptions {
   readonly repositoryRoot: string;
   readonly workerBinary: string;
   readonly args: readonly string[];
   readonly extraEnv?: Readonly<Record<string, string>>;
-}): Promise<void> {
+  readonly databaseUrl?: string;
+}
+
+export async function runStoryOSWorker(options: StoryOSWorkerOptions): Promise<void> {
+  await runStoryOSWorkerStderr(options);
+}
+
+/** Runs the Worker binary to its exit and returns its stderr. */
+export async function runStoryOSWorkerStderr(options: StoryOSWorkerOptions): Promise<string> {
   const env = childEnv(options.extraEnv ?? {});
-  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
-    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
+  const databaseUrl = options.databaseUrl ?? process.env.STORYOS_TEST_DATABASE_URL;
+  if (databaseUrl !== undefined) {
+    env.STORYOS_DATABASE_URL = databaseUrl;
   }
-  await execFileAsync(options.workerBinary, [...options.args], {
+  const { stderr } = await execFileAsync(options.workerBinary, [...options.args], {
     cwd: options.repositoryRoot,
     env,
     timeout: 15_000,
     killSignal: "SIGKILL",
   });
+  return stderr;
 }
 
 /** Creates one empty Project through the public protocol and returns its Project ID. */

@@ -15,6 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .ok()
             .as_deref(),
     )?;
+    storyos_application::register_sql_state(storyos_adapter_postgres::sql_state);
     let arguments = env::args().skip(/*n*/ 1).collect::<Vec<_>>();
     if arguments.iter().any(|argument| argument == "--check") {
         return Ok(());

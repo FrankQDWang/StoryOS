@@ -1322,6 +1322,7 @@ dependencies = [
  "serde_json",
  "storyos-application",
  "storyos-core",
+ "tracing",
 ]
 
 [[package]]
@@ -1336,6 +1337,7 @@ dependencies = [
  "storyos-core",
  "tokio",
  "tokio-postgres",
+ "tracing",
  "uuid",
 ]
 
@@ -1412,6 +1414,7 @@ version = "0.1.0"
 dependencies = [
  "storyos-application",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

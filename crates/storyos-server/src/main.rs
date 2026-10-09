@@ -5,7 +5,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_activation_proof};
-use storyos_application::UserId;
+use storyos_application::{DiagnosticField as _, UserId};
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
@@ -16,6 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .ok()
             .as_deref(),
     )?;
+    storyos_application::register_sql_state(storyos_adapter_postgres::sql_state);
     let arguments = env::args().skip(/*n*/ 1).collect::<Vec<_>>();
     if let [flag, root] = arguments.as_slice()
         && flag == "--check-web-root"
@@ -120,7 +121,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             adapter: storyos_adapter_fake_destination::FakeDestination,
             observer: storyos_application::NoContractFaults,
         };
-        let _worker = tokio::spawn(storyos_worker::run(store, destination));
+        let worker = tokio::spawn(storyos_worker::run(store, destination));
+        tokio::spawn(async move {
+            let stop = match worker.await {
+                Err(error) if error.is_panic() => "panic",
+                _ => "exit",
+            };
+            tracing::error!(
+                stop = stop.diagnostic(),
+                "the in-process Worker loop stopped"
+            );
+        });
     }
     axum::serve(listener, storyos_server::router_with_web(config, assets)).await?;
     Ok(())

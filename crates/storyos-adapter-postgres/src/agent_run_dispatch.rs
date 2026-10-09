@@ -51,6 +51,7 @@ impl ModelDispatchStore for PostgresProjectReader {
         }
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn commit_dispatch_claim(
         &self,
         claim: &ClaimedAgentRun,
@@ -146,6 +147,7 @@ impl ModelDispatchStore for PostgresProjectReader {
     }
 
     /// Appends the events in order. An event with a known item ID replaces that item.
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn append_model_stream_events(
         &self,
         claim: &ClaimedAgentRun,
@@ -230,6 +232,7 @@ impl ModelDispatchStore for PostgresProjectReader {
         }
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn record(
         &self,
         claim: &ClaimedAgentRun,
