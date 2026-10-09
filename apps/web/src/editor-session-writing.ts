@@ -488,18 +488,18 @@ export function createEditorSessionWritingController({
     },
     async runAfterQuiesce(condition, command) {
       if (hasIncompleteInput()) return { kind: "refused", reason: "incomplete_semantic_intent" };
+      const capturedBefore = captured;
       if (condition === "settled") await flush();
       await whenIdle();
       if (hasIncompleteInput()) return { kind: "refused", reason: "incomplete_semantic_intent" };
-      const capturedBefore = captured;
       let projection: PendingEditProjection;
       try {
         projection = await refresh();
       } catch {
         return { kind: "refused", reason: "journal_unavailable" };
       }
-      // Input during the read is newer than the projection, so the editor is not quiet.
-      if (hasIncompleteInput() || captured !== capturedBefore) {
+      // Input during the wait or the read is newer than the projection, so the editor is not quiet.
+      if (hasIncompleteInput() || captured !== capturedBefore || unjournaled > 0) {
         return { kind: "refused", reason: "incomplete_semantic_intent" };
       }
       if (condition === "settled" && projection.unsettled_intent_count > 0) {
