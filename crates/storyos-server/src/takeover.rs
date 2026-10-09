@@ -114,10 +114,13 @@ fn takeover_problem(error: ProjectCommandError) -> ApiError {
             "challenge_invalid",
             "The command challenge is invalid or expired.",
         ),
-        ProjectCommandError::Unavailable(_) => problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "author_edit_store_unavailable",
-            "The writer takeover store is unavailable.",
-        ),
+        ProjectCommandError::Unavailable(source) => {
+            record_unavailable(&*source);
+            problem(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "author_edit_store_unavailable",
+                "The writer takeover store is unavailable.",
+            )
+        }
     }
 }

@@ -9,6 +9,7 @@ name = "storyos-worker"
 path = "src/main.rs"
 
 [dependencies]
+storyos-adapter-diagnostics = { path = "../storyos-adapter-diagnostics" }
 storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
 storyos-adapter-postgres = { path = "../storyos-adapter-postgres" }
 storyos-application = { path = "../storyos-application" }

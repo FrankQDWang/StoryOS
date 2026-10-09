@@ -515,11 +515,14 @@ fn author_edit_error(error: AuthorEditError) -> ApiError {
             "author_command_admission_expired",
             "The Author Command Admission expired before Core settlement.",
         ),
-        AuthorEditError::Unavailable(_) => problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "author_edit_store_unavailable",
-            "The Author Edit store is unavailable.",
-        ),
+        AuthorEditError::Unavailable(source) => {
+            record_unavailable(&*source);
+            problem(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "author_edit_store_unavailable",
+                "The Author Edit store is unavailable.",
+            )
+        }
     }
 }
 

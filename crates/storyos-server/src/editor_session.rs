@@ -283,10 +283,13 @@ fn editor_session_error(error: EditorSessionError) -> ApiError {
             "challenge_invalid",
             "The command challenge is invalid or expired.",
         ),
-        EditorSessionError::Unavailable(_) => problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "editor_session_store_unavailable",
-            "The Editor Session store is unavailable.",
-        ),
+        EditorSessionError::Unavailable(source) => {
+            record_unavailable(&*source);
+            problem(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "editor_session_store_unavailable",
+                "The Editor Session store is unavailable.",
+            )
+        }
     }
 }

@@ -11,7 +11,8 @@ use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing};
 use storyos_adapter_postgres::{PostgresProjectReader, StorageActivationProofError};
 use storyos_application::{
-    ProjectCommandChallengeError, ProjectId, ProjectScope as ApplicationScope, UserId, open_project,
+    DiagnosticField as _, ProjectCommandChallengeError, ProjectId,
+    ProjectScope as ApplicationScope, SqlState, UserId, open_project,
 };
 use storyos_contracts as contracts;
 use uuid::Uuid;
@@ -53,6 +54,7 @@ mod reopen_rejected_operations;
 mod reopen_withdrawn_proposal;
 mod replan_proposal;
 mod request_origin;
+mod request_span;
 mod session_bootstrap;
 mod set_current_chapter;
 mod snapshot;
@@ -742,15 +744,35 @@ async fn project_reader(state: &ServerState) -> Result<PostgresProjectReader, Ap
     match store.require_release1_storage_activation_proof().await {
         Ok(()) => Ok(store.clone()),
         Err(StorageActivationProofError::IdentityMismatch) => Err(upgrade_required()),
-        Err(
-            StorageActivationProofError::MissingOrInactive
-            | StorageActivationProofError::Unavailable(_),
-        ) => Err(problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "project_store_unavailable",
-            "The Project store is unavailable.",
-        )),
+        Err(StorageActivationProofError::MissingOrInactive) => {
+            tracing::warn!(
+                reason = "storage_activation_missing_or_inactive",
+                "the Project store is unavailable"
+            );
+            Err(problem(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "project_store_unavailable",
+                "The Project store is unavailable.",
+            ))
+        }
+        Err(StorageActivationProofError::Unavailable(source)) => {
+            record_unavailable(&*source);
+            Err(problem(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "project_store_unavailable",
+                "The Project store is unavailable.",
+            ))
+        }
     }
+}
+
+/// Writes the SQLSTATE code of a store failure that a `503` response hides (ADR 0047).
+fn record_unavailable(source: &(dyn std::error::Error + 'static)) {
+    tracing::warn!(
+        reason = "unavailable",
+        sql_state = SqlState(source).diagnostic(),
+        "the store is unavailable"
+    );
 }
 
 fn contract_scope(scope: &ApplicationScope) -> contracts::ProjectScope {
@@ -760,7 +782,8 @@ fn contract_scope(scope: &ApplicationScope) -> contracts::ProjectScope {
     }
 }
 
-fn service_unavailable(_error: storyos_application::ProjectReadError) -> ApiError {
+fn service_unavailable(error: storyos_application::ProjectReadError) -> ApiError {
+    record_unavailable(&error);
     problem(
         StatusCode::SERVICE_UNAVAILABLE,
         "project_store_unavailable",
@@ -875,7 +898,10 @@ fn challenge_error(error: ProjectCommandChallengeError) -> ApiError {
                 )),
             )
         }
-        ProjectCommandChallengeError::Unavailable(_) => challenge_store_unavailable(),
+        ProjectCommandChallengeError::Unavailable(source) => {
+            record_unavailable(&*source);
+            challenge_store_unavailable()
+        }
     }
 }
 

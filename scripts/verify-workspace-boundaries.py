@@ -8,6 +8,7 @@ root = Path(__file__).resolve().parents[1]
 metadata = json.load(sys.stdin)
 manifests = sorted(Path(package["manifest_path"]).resolve() for package in metadata["packages"])
 expected = [
+    root / "crates/storyos-adapter-diagnostics/Cargo.toml",
     root / "crates/storyos-adapter-fake-destination/Cargo.toml",
     root / "crates/storyos-adapter-postgres/Cargo.toml",
     root / "crates/storyos-application/Cargo.toml",

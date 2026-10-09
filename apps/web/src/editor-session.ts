@@ -24,7 +24,6 @@ import type {
 import {
   JOURNAL_DATABASE_VERSION,
   JOURNAL_OBJECT_STORES,
-  persistReplaceSelection,
   rebuildPendingProjection,
 } from "./local-edit-journal.ts";
 import {
@@ -36,9 +35,7 @@ export {
   freezeOneIntentSubmission,
   submitOnePendingAuthorEdit,
 } from "./author-edit-submission.ts";
-export { persistReplaceSelection, persistSplitBlock, persistJoinBlocks,
-  persistMoveBlock, persistRetypeBlock,
-  rebuildPendingProjection, reconfirmLegacyReplaceSelection }
+export { appendAuthorEdit, rebuildPendingProjection, reconfirmLegacyReplaceSelection }
   from "./local-edit-journal.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";

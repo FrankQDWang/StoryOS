@@ -4,37 +4,27 @@ import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
 import {
   AUTHOR_EDIT_BATCH_IDLE_MS,
   AUTHOR_EDIT_MAX_UNITS,
+  appendAuthorEdit,
   candidateTextsFromJournal,
   createJournalUuid,
-  persistCandidateSelection,
-  persistStructuredSelection,
-  persistJoinBlocks,
-  persistMoveBlock,
-  persistReplaceSelection,
-  persistRetypeBlock,
-  persistSplitBlock,
-  persistContiguousReplacement,
   readJournalSnapshot,
   rebuildPendingProjection,
   reconfirmLegacyReplaceSelection,
 } from "./local-edit-journal.ts";
-import type { CandidateSelectionEdit } from "./local-edit-journal.ts";
+import type { JournalAuthorEdit } from "./local-edit-journal.ts";
 import type {
   EditorReadyState,
   EditorWorkspace,
   InputOrigin,
   PendingEditProjection,
   ProposalJournalAnchor,
-  ReplaceSelectionEdit,
 } from "./editor-types.ts";
-import { flattenChapterBody, type CapturedManuscriptEdit, type ManuscriptParagraph } from "./manuscript-doc.ts";
+import { flattenChapterBody, type ManuscriptParagraph } from "./manuscript-doc.ts";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 import { retryRefusedEdit } from "./refused-edit-retry.ts";
 
-import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
-
-export type CapturedEdit = ReplaceSelectionEdit | (CapturedManuscriptEdit & { expectedProposalHeads?: string[] })
-  | CandidateSelectionEdit | StructuredSelectionEdit;
+/** One edit that the editor captures. The controller adds the input origin, the undo group, and the time. */
+export type CapturedEdit = Exclude<JournalAuthorEdit, { kind: "draft_retry" }>;
 
 /** The text of one Proposal operation that the controller shows, and the Revisions that this text continues. */
 export interface CandidateText {
@@ -102,34 +92,6 @@ const STRUCTURAL_INPUT: readonly InputOrigin[] = ["split_block", "join_blocks", 
 function candidateKey(edit: CapturedEdit): string | undefined {
   return "kind" in edit && edit.kind === "candidate_selection"
     ? `${edit.target.proposal_id}:${edit.target.operation_id}` : undefined;
-}
-
-function persistEdit(workspace: EditorWorkspace, edit: CapturedEdit,
-  fields: { inputOrigin: InputOrigin; undoGroupId: string; createdAt: string }, cryptoImpl: Crypto) {
-  if (!("kind" in edit)) return persistReplaceSelection(workspace, { ...edit, ...fields }, cryptoImpl);
-  switch (edit.kind) {
-    case "structured_selection": return persistStructuredSelection(workspace, { ...edit, ...fields }, cryptoImpl);
-    case "candidate_selection": return persistCandidateSelection(workspace, { ...edit, ...fields }, cryptoImpl);
-    case "split_block": return persistSplitBlock(workspace, { manuscript_block_id: edit.manuscript_block_id,
-      offset: edit.offset, new_manuscript_block_id: edit.new_manuscript_block_id, resultingBody: edit.resultingBody,
-      resultingBlocks: edit.resultingBlocks, ...fields }, cryptoImpl);
-    case "join_blocks": return persistJoinBlocks(workspace, { left_manuscript_block_id: edit.left_manuscript_block_id,
-      right_manuscript_block_id: edit.right_manuscript_block_id, caret: edit.caret, resultingBody: edit.resultingBody,
-      resultingBlocks: edit.resultingBlocks, ...fields }, cryptoImpl);
-    case "move_block": return persistMoveBlock(workspace, { manuscript_block_id: edit.manuscript_block_id,
-      to_index: edit.to_index, resultingBody: edit.resultingBody, resultingBlocks: edit.resultingBlocks, ...fields },
-    cryptoImpl);
-    case "retype_block": return persistRetypeBlock(workspace, { manuscript_block_id: edit.manuscript_block_id,
-      block_kind: edit.block_kind, resultingBody: edit.resultingBody, resultingBlocks: edit.resultingBlocks, ...fields },
-    cryptoImpl);
-    case "contiguous_replacement": return persistContiguousReplacement(workspace, { primitives: edit.primitives,
-      from: edit.from, to: edit.to, resultingBody: edit.resultingBody, resultingBlocks: edit.resultingBlocks, ...fields },
-    cryptoImpl);
-    case "replace_block_selection": return persistReplaceSelection(workspace, { from: edit.from, to: edit.to,
-      text: edit.text, resultingBody: edit.resultingBody, manuscript_block_id: edit.manuscript_block_id,
-      ...(edit.expectedProposalHeads === undefined ? {} : { expectedProposalHeads: edit.expectedProposalHeads }),
-      ...fields }, cryptoImpl);
-  }
 }
 
 /** The settlement of the latest Journal group for one Proposal operation. */
@@ -341,7 +303,7 @@ export function createEditorSessionWritingController({
     const edit = rebind(capturedEdit);
     const target = targetOf(edit);
     undoGroupId ??= createJournalUuid(cryptoImpl);
-    const projection = await persistEdit(workspace, edit, { inputOrigin: origin, undoGroupId, createdAt }, cryptoImpl);
+    const projection = await appendAuthorEdit(workspace, { ...edit, inputOrigin: origin, undoGroupId, createdAt }, cryptoImpl);
     unjournaled -= 1;
     pendingIntentCount = projection.author_edit_unsettled_intent_count ?? projection.unsettled_intent_count;
     pendingTarget = target;

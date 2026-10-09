@@ -4,8 +4,9 @@
 use std::future::Future;
 
 use storyos_application::{
-    AdmittedProjectCommand, Project, ProjectCommandChallengeTransaction,
-    ProjectCommandChallengeUse, ProjectCommandEnvelope, ProjectCommandError,
+    AdmittedProjectCommand, DiagnosticField as _, DiagnosticId, Project,
+    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectCommandEnvelope,
+    ProjectCommandError,
 };
 use tokio_postgres::Client;
 
@@ -13,9 +14,9 @@ use super::admission::insert_admission;
 use super::records::lock_project;
 use super::response::read_response_project;
 use super::{
-    Admission, CommandIsolation, LockedProject, MissingAdmission, ProjectResponse,
-    RateLimitedChallenge, ReplayEffect, ResponseRecord, challenge_problem, replay_problem,
-    unavailable,
+    Admission, CommandError, CommandIsolation, LockedProject, MissingAdmission, ProjectResponse,
+    RateLimitedChallenge, ReplayEffect, ResponseRecord, challenge_problem, record_error,
+    record_ids, replay_problem, unavailable,
 };
 use crate::command_replay::{
     CommandReplay, EffectRecord, ReplayFault, read_command_replay, read_effect, response_project,
@@ -50,7 +51,7 @@ pub(crate) trait AdmitCommand: Sync {
     const SPEC: AdmitSpec;
     /// The admit error. A command that refuses before its Admission declares
     /// `RefusableCommandError` with its refusal type.
-    type Error: From<ProjectCommandError> + Send;
+    type Error: CommandError;
     type Response: AdmittedResponse;
     /// The facts that the command loads under the Project lock.
     type Facts: Send;
@@ -148,7 +149,28 @@ impl AdmittedResponse for ProjectResponse {
     }
 }
 
+#[tracing::instrument(skip_all, fields(
+    command_kind = C::SPEC.kind.diagnostic(),
+    project_id = envelope.project_scope.project_id.diagnostic(),
+    command_id = tracing::field::Empty,
+    author_command_admission_id = tracing::field::Empty,
+    correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
+    outcome = tracing::field::Empty,
+))]
 pub(crate) async fn admit_project_command<C: AdmitCommand>(
+    store: &PostgresProjectReader,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+) -> Result<Admitted<C>, C::Error> {
+    let admitted = admit_steps(store, envelope, command).await;
+    match &admitted {
+        Ok(admitted) => record_ids(&admitted.command_id, &admitted.author_command_admission_id),
+        Err(error) => record_error(error),
+    }
+    admitted
+}
+
+async fn admit_steps<C: AdmitCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
@@ -169,6 +191,7 @@ pub(crate) async fn admit_project_command<C: AdmitCommand>(
     match challenge_use {
         ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
             transaction.rollback().await.map_err(challenge_error)?;
+            tracing::Span::current().record("outcome", "replayed");
             read_command_replay(
                 store,
                 &envelope.challenge_binding,
@@ -190,12 +213,14 @@ pub(crate) async fn admit_project_command<C: AdmitCommand>(
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
             transaction.rollback().await.map_err(challenge_error)?;
+            tracing::Span::current().record("outcome", "replayed");
             command.replay_in_progress(store, envelope).await
         }
         ProjectCommandChallengeUse::FirstUse => {
             match first_admission(&transaction.client, envelope, command).await {
                 Ok(admitted) => {
                     transaction.commit().await.map_err(challenge_error)?;
+                    tracing::Span::current().record("outcome", "admitted");
                     Ok(admitted)
                 }
                 Err(error) => {

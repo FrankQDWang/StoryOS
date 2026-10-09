@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { freezeOneIntentSubmission, persistReplaceSelection } from "../../src/editor-session.ts";
+import { freezeOneIntentSubmission, appendAuthorEdit } from "../../src/editor-session.ts";
 import { readJournalSnapshot, rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import {
   FIRST_APPEND_EDIT,
@@ -13,10 +13,10 @@ it.each(["intent_payload", "project_allocator"] as const)(
   "checks partition history during an append after %s changes", async (change) => {
   const test = await openJournalAppendTestWorkspace();
   try {
-    await persistReplaceSelection(test.workspace, FIRST_APPEND_EDIT);
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
     const before = await readJournalSnapshot(test.workspace);
     const paused = createPausedDigestCrypto(crypto);
-    const append = persistReplaceSelection(
+    const append = appendAuthorEdit(
       test.workspace,
       SECOND_APPEND_EDIT,
       paused.cryptoImpl,

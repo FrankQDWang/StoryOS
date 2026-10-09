@@ -5,7 +5,7 @@ import type {
   GetSnapshotResponse,
   SnapshotDescriptor,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { persistReplaceSelection, openEditorWorkspace } from "../../src/editor-session.ts";
+import { appendAuthorEdit, openEditorWorkspace } from "../../src/editor-session.ts";
 import { readJournalSnapshot } from "../../src/local-edit-journal.ts";
 import { consumeOwnedProjectActivity } from "../../src/project-activity-sync.ts";
 import { readProjectActivityIngest } from "../../src/project-activity-ingest.ts";
@@ -90,7 +90,7 @@ async function openReadyWorkspace(fetchImpl: typeof fetch) {
     fetchImpl,
   });
   requireEditorReady(workspace);
-  await persistReplaceSelection(workspace, {
+  await appendAuthorEdit(workspace, {
     from: 4,
     to: 4,
     text: "!?",
@@ -417,7 +417,7 @@ it("ingests assistance and Run Activity without disabling manual writing or skip
     expect(cursors).toEqual([null, "cursor-1", "cursor-2", "cursor-2"]);
     expect((await readProjectActivityIngest(workspace)).events).toEqual([assistance, run]);
     const before = await readJournalSnapshot(workspace);
-    const projected = await persistReplaceSelection(workspace, {
+    const projected = await appendAuthorEdit(workspace, {
       from: 4, to: 4, text: "!", resultingBody: "Base!",
       inputOrigin: "paste", undoGroupId: "018f0000-0000-7001-8000-000000000040",
       createdAt: "2026-08-20T04:00:02.000Z",

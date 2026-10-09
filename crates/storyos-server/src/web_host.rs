@@ -30,7 +30,9 @@ pub fn router_with_web(config: ServerConfig, assets: WebAssetSet) -> Router {
             assets: Arc::new(assets),
             server: server.clone(),
         });
-    api_router(server).fallback_service(web)
+    api_router(server)
+        .fallback_service(web)
+        .layer(axum::middleware::from_fn(crate::request_span::request_span))
 }
 
 async fn web_response(
