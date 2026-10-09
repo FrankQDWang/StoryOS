@@ -331,6 +331,7 @@ else:
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('coordinator session', result.stderr)
         self.assertEqual((len(state['comments']), state['node']), (len(comments), []))
+        return result.stderr
 
     def test_round_with_one_axis_comment_posts_only_the_retained_comment(self):
         retained = '## Spec review, round 1: FAIL\n\nRetained verdict.\n'
@@ -352,8 +353,28 @@ else:
     def test_round_four_is_refused_with_the_coordinator(self):
         self.refused_round([f'## {axis} review, round {n}: FAIL\n' for n in (1, 2, 3) for axis in ('Standards', 'Spec')])
 
+    def passed(self, number, tree):
+        return [f'## {axis} review, round {number}: PASS\n\nCandidate: head `{"1" * 40}`, base `{"2" * 40}`, tree `{tree}`.\n'
+                for axis in ('Standards', 'Spec')]
+
     def test_round_after_pass_pass_is_refused_with_the_coordinator(self):
+        tree = self.repo.git('rev-parse', 'HEAD^{tree}')
+        self.assertIn(f'the candidate tree {tree} did not change', self.refused_round(self.passed(1, tree)))
+
+    def test_round_after_pass_pass_without_a_tree_is_refused_with_the_coordinator(self):
         self.refused_round(['## Standards review, round 1: PASS\n', '## Spec review, round 1: PASS\n'])
+
+    def test_round_after_pass_pass_on_a_changed_tree_starts_the_next_round(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        result, state = self.review_round({'standards': clean, 'spec': clean}, comments=self.passed(1, '0' * 40))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c['body'].splitlines()[0] for c in state['comments'][2:]],
+                         ['## Standards review, round 2: PASS', '## Spec review, round 2: PASS'])
+        self.assertIn(f"tree `{self.tree}`", state['comments'][2]['body'])
+
+    def test_round_four_after_pass_pass_on_a_changed_tree_is_refused_with_the_coordinator(self):
+        failed = [f'## {axis} review, round {n}: FAIL\n' for n in (1, 2) for axis in ('Standards', 'Spec')]
+        self.assertIn('PR 745 had 3 review rounds', self.refused_round(failed + self.passed(3, '0' * 40)))
 
     def test_round_and_request_complete_when_each_gh_command_fails_two_times(self):
         clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
