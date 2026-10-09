@@ -717,14 +717,24 @@ manifest is not a Destination Attempt and is never proof of a later submission.
 
 ### 9.3 Destination Attempt and wire evidence
 
-Every concrete planned destination execution, including an initial submission,
-physical resend, retry, repair, fallback, or destination change, owns a distinct
-Destination Attempt even when it settles before dispatch. It is durably
-established before outbound I/O and binds its exact Processing Destination
-Identity and current evidence revision, Project Scope-bound external-use
-binding, separate compatibility Decision, manifests, and semantic request.
+Every concrete planned destination execution owns a distinct Destination
+Attempt even when it settles before dispatch. Such an execution is an initial
+submission, physical resend, retry, repair, fallback, or destination change.
+The only exception is the preparation refusal in the next paragraph. A
+Destination Attempt is durably established before outbound I/O. It binds its
+exact Processing Destination Identity and current evidence revision, Project
+Scope-bound external-use binding, separate compatibility Decision, manifests,
+and semantic request.
 Model Attempt and the owning
 destination-specific Tool or service attempt refine this common boundary.
+
+ADR 0039 puts the Model Provider Adapter preparation of a new Model Gateway
+request after the ContextAssemblyManifest commits and before the dispatch
+claim. When that preparation refuses the new request, the refusal is a proven
+failure before the dispatch claim. The store records the refusal on the
+AgentRun, and the committed ContextAssemblyManifest stays. This refusal creates
+no Destination Attempt and no Outbound Disclosure Event. A request that already
+has a committed dispatch claim keeps its Destination Attempt and its evidence.
 
 When exact destination disclosure approval is required, the Host first creates
 the unsubmitted Destination Attempt in an Awaiting Approval state and prepares
@@ -1067,9 +1077,12 @@ or other destinations.
 ## 13. Failure and recovery semantics
 
 If the ContextAssemblyManifest cannot be committed, no Destination Attempt may
-start. Once it commits, any failure before submission preserves the manifest
-and records or cancels the pending Destination Attempt according to its owning
-execution contract.
+start. Once it commits, any failure before submission preserves the manifest.
+A preparation refusal of a new Model Gateway request occurs before the
+dispatch claim, as section 9.3 and ADR 0039 state. The store records it on the
+AgentRun, and no Destination Attempt exists to record or cancel. Any other
+failure before submission records or cancels the pending Destination Attempt
+according to its owning execution contract.
 
 Recovery never infers non-submission from a missing response, closed connection,
 expired lease, process crash, or absent destination record. It always

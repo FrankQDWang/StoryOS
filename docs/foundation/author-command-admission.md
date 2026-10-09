@@ -116,10 +116,13 @@ The closed Release 1 action classes are:
 | `direct_editor_action` | immediate direct manipulation in the manuscript editor | typing, paste, delete, deterministic structural edit |
 | `explicit_editor_command` | an explicit editor control over fully displayed current state | Proposal accept/reject/withdraw, retry or discard a Draft, Author Undo |
 | `explicit_project_command` | an explicit project control over fully displayed current scope | export, project settings, Project deletion request |
+| `agent_run_start` | an explicit author control that starts an AgentRun over fully displayed current scope | `createAgentRun` |
+| `agent_run_control` | an explicit author control over one fully displayed current AgentRun | `pauseAgentRun`, `cancelAgentRun`, `steerAgentRun` |
 
-Agent, Tool, MCP, extension, Worker, Provider, replay, and recovery producers
-use their own typed causes. They do not receive an
-`AuthorCommandAdmissionId`.
+The two AgentRun classes admit author commands that start or control a Run.
+They do not admit the work of the Run. Agent, Tool, MCP, extension, Worker,
+Provider, replay, and recovery producers use their own typed causes. They do
+not receive an `AuthorCommandAdmissionId`.
 
 ## 4. Lifecycle and terminal settlement
 
