@@ -22,8 +22,8 @@ import {
   readProjectActivityIngest,
   resyncProjectActivityFromSnapshot,
 } from "../../src/project-activity-ingest.ts";
-import { attachManualInput } from "../../src/manual-input.ts";
-import { applyTrustedInput } from "../support/browser-command-client.ts";
+import { createEditorSessionWritingController, type EditorSessionWritingController }
+  from "../../src/editor-session-writing.ts";
 import {
   OWNER,
   PROJECT,
@@ -304,8 +304,7 @@ it.each([
     }
     throw new Error(`unexpected request: ${path}`);
   };
-  let controller: ReturnType<typeof attachManualInput> | undefined;
-  const editor = document.createElement("textarea");
+  let controller: EditorSessionWritingController | undefined;
   await deleteJournal(scenario.journalName);
   try {
     const old = await openEditorWorkspace({ baseUrl: location.origin, project: scenario.project,
@@ -366,19 +365,15 @@ it.each([
     trackDatabase(reload.database, databases);
     expect(reload.partition).toEqual(winner.partition);
     expect(await readAll()).toEqual(installed);
-    editor.value = "Base";
-    document.body.append(editor);
-    controller = attachManualInput({ editor, workspace: reload, baseUrl: location.origin, fetchImpl,
+    controller = createEditorSessionWritingController({ workspace: reload, baseUrl: location.origin, fetchImpl,
       setTimeoutImpl: () => 1, clearTimeoutImpl: () => {},
-      nowImpl: () => Date.parse("2026-08-20T05:00:00.000Z"),
+      now: () => Date.parse("2026-08-20T05:00:00.000Z"),
       onFailure: (error) => { failures.push(error); } });
-    editor.focus();
-    editor.setSelectionRange(4, 4);
-    await applyTrustedInput({ operation: "insert_text", text: "!" });
+    controller.capture({ from: 4, to: 4, text: "!", resultingBody: "Base!" }, "typing");
     await controller.whenIdle();
     await controller.flush();
     expect(failures).toEqual([]);
-    expect(reload.pending).toMatchObject({ body: "Base!", save_state: "saved", unsettled_intent_count: 0,
+    expect(controller.snapshot().projection).toMatchObject({ body: "Base!", save_state: "saved", unsettled_intent_count: 0,
       authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id });
     expect(commands).toBe(1);
     const journal = await readJournalSnapshot(reload);
@@ -393,7 +388,7 @@ it.each([
     requireEditorReady(saved);
     trackDatabase(saved.database, databases);
     expect(saved.partition).toEqual(winner.partition);
-    expect(saved.pending).toEqual(reload.pending);
+    expect(saved.openedProjection).toEqual(controller.snapshot().projection);
     expect(await readJournalSnapshot(old)).toEqual(retained);
     expect((await readAll()).partitions).toEqual(installed.partitions);
     const beforeDowngrade = await readAll();
@@ -404,7 +399,6 @@ it.each([
     expect(await readAll()).toEqual(beforeDowngrade);
   } finally {
     controller?.close();
-    editor.remove();
     closeTrackedDatabases(databases);
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);

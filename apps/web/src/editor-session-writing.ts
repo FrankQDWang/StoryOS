@@ -16,6 +16,7 @@ import {
   persistContiguousReplacement,
   readJournalSnapshot,
   rebuildPendingProjection,
+  reconfirmLegacyReplaceSelection,
 } from "./local-edit-journal.ts";
 import type { CandidateSelectionEdit } from "./local-edit-journal.ts";
 import type {
@@ -23,9 +24,12 @@ import type {
   EditorWorkspace,
   InputOrigin,
   PendingEditProjection,
+  ProposalJournalAnchor,
   ReplaceSelectionEdit,
 } from "./editor-types.ts";
 import { flattenChapterBody, type CapturedManuscriptEdit, type ManuscriptParagraph } from "./manuscript-doc.ts";
+import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
+import { retryRefusedEdit } from "./refused-edit-retry.ts";
 
 import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
 
@@ -48,11 +52,16 @@ export interface EditorWritingSnapshot {
   readonly settlements: number;
 }
 
+/** Why the quiet entry did not run a structural command. */
+export type QuietRefusal = "incomplete_semantic_intent" | "unsettled_input" | "journal_unavailable";
+
 /** The only owner of the Pending Edit Projection of one current-writer Editor Session (ADR 0046). */
 export interface EditorSessionWritingController {
   /** Accepts one captured edit. `blocks` is the manuscript that the editor shows after the edit. */
   capture(edit: CapturedEdit, origin: InputOrigin, blocks?: readonly ManuscriptParagraph[]): void;
-  /** Shows input that is not captured yet, or a wait, as `saving`. */
+  /** Abandons an Author Undo in progress. The editor calls it at new input and when it closes (ADR 0038). */
+  abandonUndo(): void;
+  /** Shows input that is not captured yet, for example an IME composition, as `saving`. */
   showSaving(blocks?: readonly ManuscriptParagraph[]): void;
   snapshot(): EditorWritingSnapshot;
   subscribe(listener: () => void): () => void;
@@ -60,10 +69,27 @@ export interface EditorSessionWritingController {
   refresh(): Promise<PendingEditProjection>;
   flush(): Promise<void>;
   whenIdle(): Promise<void>;
-  /** True while captured input waits outside the Journal for an unknown candidate outcome. */
-  holdsInput(): boolean;
+  /**
+   * Starts one Author Undo with the rules of ADR 0038. Does nothing while an Undo is in progress.
+   * Resolves with the Proposal that the Undo changed, or `undefined` when it has no result to show.
+   */
+  undo(): Promise<{ proposalId: string | undefined } | undefined>;
+  /**
+   * Runs a structural command after the editor is quiet. `journaled` needs every captured input in the Journal.
+   * `settled` also submits and needs no unsettled input.
+   */
+  runAfterQuiesce<Result>(condition: "journaled" | "settled", command: (projection: PendingEditProjection) => Promise<Result>)
+    : Promise<{ kind: "ran"; result: Result } | { kind: "refused"; reason: QuietRefusal }>;
+  reconfirmLegacyBlocks(): Promise<void>;
+  /** Submits a Refused Edit Draft retry and installs its projection. */
+  retryDraft(retry: Omit<Parameters<typeof retryRefusedEdit>[0], "workspace" | "baseUrl" | "fetchImpl">): Promise<void>;
+  /** The inline Proposal anchors that the next frozen Author Edit binds. */
+  setInlineProposalAnchors(anchors: ProposalJournalAnchor[]): void;
+  /** True during an IME composition, and while captured input waits outside the Journal. */
+  hasIncompleteInput(): boolean;
   canAcceptInput(hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }): boolean;
-  setHoldSubmission(hold: boolean): void;
+  /** An IME composition holds submission until it ends. */
+  setComposing(composing: boolean): void;
   fail(error: unknown): void;
   close(): void;
 }
@@ -143,7 +169,9 @@ export function createEditorSessionWritingController({
   setTimeoutImpl?: (callback: () => void, timeout: number) => TimerHandle;
   clearTimeoutImpl?: (timer: TimerHandle) => void;
 }): EditorSessionWritingController {
-  let pendingIntentCount = workspace.pending.author_edit_unsettled_intent_count ?? workspace.pending.unsettled_intent_count;
+  // The latest projection that the Journal gave.
+  let journal = workspace.openedProjection;
+  let pendingIntentCount = journal.author_edit_unsettled_intent_count ?? journal.unsettled_intent_count;
   let pendingTarget = pendingIntentCount > 0 ? "recovered" : undefined;
   let submissionClosed = pendingIntentCount > 0;
   // Captured input that is not in the Journal yet.
@@ -158,16 +186,19 @@ export function createEditorSessionWritingController({
   let failed = false;
   // After a failed edit, later captured input stays visible and held. The Journal refuses appends (ADR 0046).
   let attention = false;
-  let holdSubmission = false;
+  let composing = false;
+  let abandonUndo: (() => void) | undefined;
   let queuedOperations = 0;
   let queue: Promise<void> = Promise.resolve();
   // The candidate whose latest group has an unknown outcome. Input waits in `held` until it settles.
   let unknownCandidate: string | undefined;
   let openCandidate: string | undefined;
+  // The candidate of the latest captured input. It continues before its Journal append completes.
+  let capturedCandidate: string | undefined;
   const held: Captured[] = [];
   const successors = new Map<string, string>();
   const listeners = new Set<() => void>();
-  let state: EditorWritingSnapshot = { projection: workspace.pending, local: false, candidates: new Map(), settlements: 0 };
+  let state: EditorWritingSnapshot = { projection: journal, local: false, candidates: new Map(), settlements: 0 };
 
   const publish = (next: Partial<EditorWritingSnapshot>): void => {
     state = { ...state, ...next };
@@ -175,7 +206,7 @@ export function createEditorSessionWritingController({
   };
 
   const install = (projection: PendingEditProjection, settled = false): void => {
-    workspace.pending = projection;
+    journal = projection;
     installs += 1;
     const local = unjournaled > 0;
     // Newer captured input stays visible over an older Journal projection.
@@ -234,13 +265,13 @@ export function createEditorSessionWritingController({
     attention = true;
     unknownCandidate = undefined;
     submissionClosed = true;
-    onFailure(new Error("Author Edit requires attention"));
+    // A fenced writer already reported its failure.
+    if (!failed) onFailure(new Error("Author Edit requires attention"));
   };
 
   const submitPending = async (): Promise<void> => {
     clearIdle();
-    if (pendingIntentCount === 0 || holdSubmission || attention
-      || workspace.pending.save_state === "needs_attention") return;
+    if (pendingIntentCount === 0 || composing || attention || journal.save_state === "needs_attention") return;
     submissionClosed = true;
     const submittedCandidate = openCandidate;
     // The same frozen group retries after a Challenge rate limit.
@@ -275,7 +306,7 @@ export function createEditorSessionWritingController({
     }
     // A still-unknown Outcome Query leaves the group saving. Query the same
     // identity again. Do not obtain a new challenge or send a new command.
-    if (projection.save_state === "saving" && pendingIntentCount > 0 && !holdSubmission) scheduleIdle();
+    if (projection.save_state === "saving" && pendingIntentCount > 0 && !composing) scheduleIdle();
   };
 
   const rebind = (edit: CapturedEdit): CapturedEdit => {
@@ -351,12 +382,44 @@ export function createEditorSessionWritingController({
     publish({ candidates });
   }).catch(fail);
 
+  const refresh = async (): Promise<PendingEditProjection> => {
+    const capturedBefore = captured;
+    const installsBefore = installs;
+    let projection: PendingEditProjection;
+    try {
+      projection = await rebuildPendingProjection(workspace);
+    } catch (error) {
+      // A closed controller has no reader left for the result.
+      if (stopped) return state.projection;
+      throw error;
+    }
+    // A read that started before newer input or a newer install is stale (ADR 0046).
+    if (!stopped && captured === capturedBefore && installs === installsBefore && unjournaled === 0) install(projection);
+    return state.projection;
+  };
+
+  const flush = (): Promise<void> => {
+    clearIdle();
+    if (pendingIntentCount > 0 || unjournaled > 0) submissionClosed = true;
+    return enqueue(settle);
+  };
+
+  const whenIdle = async (): Promise<void> => {
+    await Promise.resolve();
+    await queue;
+  };
+
+  const hasIncompleteInput = () => composing || held.length > 0;
+
   return {
     capture(edit, origin, blocks) {
+      // New input changes the Author Undo Frontier, so an Undo in progress can only conflict (ADR 0038).
+      abandonUndo?.();
       captured += 1;
       unjournaled += 1;
       if (HARD_INPUT.includes(origin)) submissionClosed = true;
       const key = candidateKey(edit);
+      capturedCandidate = key;
       if (key !== undefined && "kind" in edit && edit.kind === "candidate_selection") {
         setCandidate(key, [edit.target.revision_id], edit.resultingBody);
       }
@@ -368,53 +431,110 @@ export function createEditorSessionWritingController({
         await releaseHeld();
       });
     },
-    showSaving: (blocks) => { showLocal(blocks, 0); },
+    abandonUndo() { abandonUndo?.(); },
+    showSaving(blocks) { showLocal(blocks, 0); },
     snapshot: () => state,
     subscribe(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    async refresh() {
+    refresh,
+    flush,
+    whenIdle,
+    undo() {
+      if (abandonUndo !== undefined || stopped) return Promise.resolve(undefined);
+      let abandoned = false;
+      const isCurrent = () => !abandoned && !stopped;
+      const undoAdmission = createChallengeAdmissionWait({ setTimeoutImpl, clearTimeoutImpl });
+      const abandon = () => {
+        abandoned = true;
+        undoAdmission.cancel();
+        if (abandonUndo === abandon) abandonUndo = undefined;
+      };
+      abandonUndo = abandon;
+      return (async () => {
+        await flush();
+        if (!isCurrent()) return undefined;
+        let waited = false;
+        try {
+          const settled = await undoOwnedLatestAuthorAction({ workspace, projection: journal, baseUrl, fetchImpl,
+            cryptoImpl, isCurrent, challengeAdmission: undoAdmission,
+            onChallengeWait: () => {
+              if (!waited) showLocal(undefined, 0);
+              waited = true;
+            } });
+          if (!isCurrent() || settled === undefined) return undefined;
+          const proposalId = "proposal_id" in settled ? settled.proposal_id ?? undefined : undefined;
+          switch (settled.effect.kind) {
+            case "draft_compensated":
+            case "draft_reconciled":
+              await refresh();
+              return isCurrent() ? { proposalId: undefined } : undefined;
+            case "reversal_required":
+              if (waited) await refresh();
+              return { proposalId };
+            case "compensated":
+              await refresh();
+              return { proposalId };
+            default:
+              onFailure(new Error("Author Undo did not compensate"));
+              return undefined;
+          }
+        } catch (error) {
+          if (isCurrent()) onFailure(error);
+          return undefined;
+        }
+      })().finally(() => { if (abandonUndo === abandon) abandonUndo = undefined; });
+    },
+    async runAfterQuiesce(condition, command) {
+      if (hasIncompleteInput()) return { kind: "refused", reason: "incomplete_semantic_intent" };
       const capturedBefore = captured;
-      const installsBefore = installs;
+      if (condition === "settled") await flush();
+      await whenIdle();
+      if (hasIncompleteInput()) return { kind: "refused", reason: "incomplete_semantic_intent" };
       let projection: PendingEditProjection;
       try {
-        projection = await rebuildPendingProjection(workspace);
-      } catch (error) {
-        // A closed controller has no reader left for the result.
-        if (stopped) return state.projection;
-        throw error;
+        projection = await refresh();
+      } catch {
+        return { kind: "refused", reason: "journal_unavailable" };
       }
-      // A read that started before newer input or a newer install is stale (ADR 0046).
-      if (!stopped && captured === capturedBefore && installs === installsBefore && unjournaled === 0) install(projection);
-      return state.projection;
+      // Input during the wait or the read is newer than the projection, so the editor is not quiet.
+      if (hasIncompleteInput() || captured !== capturedBefore || unjournaled > 0) {
+        return { kind: "refused", reason: "incomplete_semantic_intent" };
+      }
+      if (condition === "settled" && projection.unsettled_intent_count > 0) {
+        return { kind: "refused", reason: "unsettled_input" };
+      }
+      return { kind: "ran", result: await command(projection) };
     },
-    flush() {
-      clearIdle();
-      if (pendingIntentCount > 0 || unjournaled > 0) submissionClosed = true;
-      return enqueue(settle);
+    async reconfirmLegacyBlocks() {
+      await reconfirmLegacyReplaceSelection(workspace, cryptoImpl);
+      await refresh();
     },
+    async retryDraft(retry) {
+      await retryRefusedEdit({ ...retry, workspace, baseUrl, fetchImpl });
+      await refresh();
+    },
+    setInlineProposalAnchors(anchors) { workspace.inlineProposalAnchors = anchors; },
+    hasIncompleteInput,
     canAcceptInput(hardBoundary, candidate) {
       if (stopped || failed || attention
-        || (workspace.pending.author_edit_unsettled_intent_count ?? workspace.pending.unsettled_intent_count)
-          !== workspace.pending.unsettled_intent_count) return false;
+        || (journal.author_edit_unsettled_intent_count ?? journal.unsettled_intent_count)
+          !== journal.unsettled_intent_count) return false;
       // Input in the candidate of the open or in-progress group continues it (ADR 0046).
-      if (candidate !== undefined && openCandidate === `${candidate.proposalId}:${candidate.operationId}`) return true;
+      const key = candidate === undefined ? undefined : `${candidate.proposalId}:${candidate.operationId}`;
+      if (key !== undefined && (key === openCandidate || key === capturedCandidate)) return true;
       return !submissionClosed && (!hardBoundary || pendingIntentCount === 0 && unjournaled === 0);
     },
-    holdsInput: () => held.length > 0,
-    async whenIdle() {
-      await Promise.resolve();
-      await queue;
-    },
     fail,
-    setHoldSubmission(hold) {
-      holdSubmission = hold;
-      if (hold) clearIdle();
+    setComposing(value) {
+      composing = value;
+      if (value) clearIdle();
       else if (pendingIntentCount > 0) scheduleIdle();
     },
     close() {
       stopped = true;
+      abandonUndo?.();
       clearIdle();
       challengeAdmission.cancel();
       listeners.clear();

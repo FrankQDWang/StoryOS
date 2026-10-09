@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 import undoFixture from "../../../../generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json";
 import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
 import { ManuscriptEditor } from "../../src/manuscript-editor.tsx";
-import type { PendingEditProjection } from "../../src/editor-types.ts";
+import type { EditorReadyState, PendingEditProjection } from "../../src/editor-types.ts";
 import { applyImeComposition, applyTrustedInput } from "../support/browser-command-client.ts";
 import { focusManuscriptEnd, manuscriptBody } from "../support/manuscript-surface.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
@@ -84,32 +84,29 @@ async function openUndoEditor() {
   const root = createRoot(host);
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin, fetchImpl,
-    onFailure: (error) => { failures.push(error); } });
-  writing.subscribe(() => { projections.push(writing.snapshot().projection); });
-  const props: Parameters<typeof ManuscriptEditor>[0] = { blocks: test.workspace.pending.blocks, editable: true,
-    persistWorkspace: test.workspace, writing, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
-    controllerRef: { current: null },
-    onFailure: (error) => { failures.push(error); },
-    undoChallengeTimers: {
+  const open = (workspace: EditorReadyState) => {
+    const controller = createEditorSessionWritingController({ workspace, baseUrl: location.origin, fetchImpl,
+      onFailure: (error) => { failures.push(error); },
       setTimeoutImpl: (callback, timeout) => timers.push({ callback, timeout, cleared: false }) - 1,
-      clearTimeoutImpl: (timer) => { if (typeof timer === "number" && timers[timer]) timers[timer].cleared = true; },
-    } };
+      clearTimeoutImpl: (timer) => { if (typeof timer === "number" && timers[timer]) timers[timer].cleared = true; } });
+    controller.subscribe(() => { projections.push(controller.snapshot().projection); });
+    return controller;
+  };
+  let writing = open(test.workspace);
+  const props: Parameters<typeof ManuscriptEditor>[0] = { blocks: test.workspace.openedProjection.blocks, editable: true,
+    writing };
   await act(async () => { root.render(createElement(ManuscriptEditor, props)); });
   const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
   surface.focus();
   let unmounted = false;
   return {
     gates, sessionRefreshRead, firstChallengeRead, refusedChallenges, surface, timers, projections, failures, undoChallengeKeys, undoKeys,
-    pressUndo() {
-      const mac = navigator.platform.includes("Mac");
-      surface.dispatchEvent(new KeyboardEvent("keydown", { key: "z", code: "KeyZ", bubbles: true, cancelable: true,
-        metaKey: mac, ctrlKey: !mac }));
-    },
-    // A new Editor Session workspace abandons an Undo of the earlier one.
+    pressUndo() { void writing.undo(); },
+    // A new Editor Session workspace closes the controller of the earlier one, and that abandons its Undo.
     async replaceWorkspace() {
-      const persistWorkspace = { ...test.workspace, pending: structuredClone(test.workspace.pending) };
-      await act(async () => { root.render(createElement(ManuscriptEditor, { ...props, persistWorkspace })); });
+      writing.close();
+      writing = open({ ...test.workspace });
+      await act(async () => { root.render(createElement(ManuscriptEditor, { ...props, writing })); });
     },
     // Composition input abandons an Undo and does not submit an Author Edit.
     async startComposition() {
@@ -129,6 +126,8 @@ async function openUndoEditor() {
       test.workspace.database.transaction(["metadata"], "readonly").oncomplete = () => resolve();
     }),
     unmount: async () => { unmounted = true; await act(async () => { root.unmount(); }); },
+    // The workspace view closes the controller when its Editor Session ends.
+    closeController: () => { writing.close(); },
     async close() {
       gates.firstChallenge.open();
       gates.undoResponse.open();
@@ -184,13 +183,14 @@ it("ignores another Ctrl/Cmd+Z while an Author Undo is in progress", async () =>
   }
 });
 
-it.each(["input", "unmount"] as const)("abandons an Author Undo Challenge wait at the editor %s boundary", async (boundary) => {
+it.each(["input", "unmount", "close"] as const)("abandons an Author Undo Challenge wait at the editor %s boundary", async (boundary) => {
   const undo = await openUndoEditor();
   try {
     undo.pressUndo();
     await undo.waitForRetryTimer();
     if (boundary === "input") await applyTrustedInput({ operation: "insert_text", text: "!" });
-    else await undo.unmount();
+    else if (boundary === "unmount") await undo.unmount();
+    else undo.closeController();
     await drain();
 
     expect({ cleared: undo.retryTimers()[0]!.cleared, challengeKeys: undo.undoChallengeKeys.length,

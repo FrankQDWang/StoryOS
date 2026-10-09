@@ -467,7 +467,7 @@ export async function openEditorWorkspace({
       return { kind: "editor-read-only-recovery", code: "editor_session_read_only",
         editor_session: session.editor_session, writer: session.writer, pending };
     }
-    return { kind: "editor-ready", ...workspace, pending };
+    return { kind: "editor-ready", ...workspace, openedProjection: pending };
   } catch (error) {
     database?.close();
     return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };

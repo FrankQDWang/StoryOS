@@ -1,6 +1,7 @@
 import { RefusedEditRetryControls } from "./refused-edit-retry-controls.tsx";
 import { RefusedDraftChapterSource } from "./refused-draft-chapter-source.tsx";
-import { retryRefusedEdit, type RetryTargetRead } from "./refused-edit-retry.ts";
+import type { RetryTargetRead } from "./refused-edit-retry.ts";
+import type { EditorSessionWritingController } from "./editor-session-writing.ts";
 import { expandWholeDraft } from "./refused-edit-expansion.ts";
 import type { DraftPayloadPosition } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { useEffect, useRef, useState } from "react";
@@ -12,10 +13,13 @@ import { validDraftReopen, reconcileDraftUndo } from "./draft-undo-journal.ts";
 import { rebuildPendingProjection, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import type { EditorWorkspace, JournalSubmissionGroup, PendingEditProjection } from "./editor-types.ts";
 
-export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, refreshKey, onHoldChange, onProjection, onResult }: {
+export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, refreshKey, onHoldChange, onProjection, onResult,
+  retryDraft }: {
   workspace: EditorWorkspace | undefined; scope: ProjectScope; baseUrl: string;
   fetchImpl: typeof fetch; refreshKey: string; onHoldChange?: ((hold: boolean) => void) | undefined;
   onProjection?: ((projection: PendingEditProjection) => Promise<void> | void) | undefined; onResult?: (() => void) | undefined;
+  /** The writing controller submits a retry and installs its projection. */
+  retryDraft?: EditorSessionWritingController["retryDraft"] | undefined;
 }) {
   const [reads, setReads] = useState<{ group: JournalSubmissionGroup;
     draft?: RefusedEditDraftInspect; copied?: boolean; discard?: DiscardObservation | undefined }[]>([]);
@@ -151,10 +155,11 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
     try {
       const draft = await read(group);
       if (started !== lifetime.current) throw new Error("Retry view changed");
-      const projection = await retryRefusedEdit({ workspace, draft, from, to, target, targetFrom, targetTo, targetRead,
-        baseUrl, fetchImpl, isCurrent: () => started === lifetime.current });
+      if (retryDraft === undefined) throw new Error("Draft retry needs the current writer");
+      await retryDraft({ draft, from, to, target, targetFrom, targetTo, targetRead,
+        isCurrent: () => started === lifetime.current });
       if (started !== lifetime.current) return;
-      await onProjection?.(projection); onResult?.();
+      onResult?.();
       setRetryRefresh((value) => value + 1);
     } finally { if (started === lifetime.current) { setBusy(false); onHoldChange?.(false); } }
   }

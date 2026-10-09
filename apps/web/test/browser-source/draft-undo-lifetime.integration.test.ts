@@ -6,6 +6,8 @@ import draftFixture from "../../../../generated/golden-wire/storyos-public-relea
 import { digestCloseEditorFlowDraft } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CloseEditorFlowDraftRequest, RefusedEditDraftInspect }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
+import type { EditorReadyState } from "../../src/editor-types.ts";
 import { ManuscriptEditor } from "../../src/manuscript-editor.tsx";
 import { discardRefusedEdit } from "../../src/refused-edit-discard.ts";
 import { createBrowserScenario, jsonResponse, requestResult } from "./scenario.ts";
@@ -71,26 +73,35 @@ it.each(["unmount", "replace", "secret", "schema"] as const)("Draft Undo respect
   };
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const replacement = { ...test.workspace, pending: structuredClone(test.workspace.pending) };
-  const props = { blocks: test.workspace.pending.blocks, editable: true, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
-    controllerRef: { current: null }, onProjection: () => { callbacks.push("projection"); },
-    onFailure: () => { callbacks.push("failure"); failed(); }, onCandidateSettled: () => { callbacks.push("settled"); } };
+  const onFailure = () => { callbacks.push("failure"); failed(); };
+  const open = (workspace: EditorReadyState) => {
+    const writing = createEditorSessionWritingController({ workspace, baseUrl: location.origin, fetchImpl, onFailure });
+    writing.subscribe(() => { callbacks.push("projection"); });
+    return writing;
+  };
+  const writing = open(test.workspace);
+  const replacement = open({ ...test.workspace });
+  const props = { blocks: test.workspace.openedProjection.blocks, editable: true,
+    onCandidateSettled: () => { callbacks.push("settled"); } };
   try {
     await discardRefusedEdit({ workspace: test.workspace, draft, baseUrl: location.origin, fetchImpl });
     observing = true;
-    await act(async () => { root.render(createElement(ManuscriptEditor, { ...props, persistWorkspace: test.workspace })); });
+    await act(async () => { root.render(createElement(ManuscriptEditor, { ...props, writing })); });
     const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!; surface.focus();
     surface.dispatchEvent(new KeyboardEvent("keydown", { key: "z", code: "KeyZ", bubbles: true, cancelable: true,
       metaKey: navigator.platform.includes("Mac"), ctrlKey: !navigator.platform.includes("Mac") }));
     await sourceReached;
-    await act(async () => { if (boundary === "unmount") root.unmount();
-      else if (boundary === "replace") root.render(createElement(ManuscriptEditor, { ...props, persistWorkspace: replacement })); });
+    // The workspace view closes the controller of an earlier Editor Session workspace.
+    await act(async () => {
+      if (boundary === "unmount") { root.unmount(); writing.close(); }
+      else if (boundary === "replace") { writing.close(); root.render(createElement(ManuscriptEditor, { ...props, writing: replacement })); }
+    });
     if (boundary === "schema") {
       const transaction = database.transaction("metadata", "readwrite");
       const done = new Promise<void>((resolve) => { transaction.oncomplete = () => resolve(); });
       transaction.objectStore("metadata").put({ key: "schema", version: 0 }); await done;
     }
-    const pending = structuredClone(replacement.pending);
+    const pending = replacement.snapshot();
     callbacks.length = 0;
     await act(async () => { release(); await (boundary === "schema" ? failure : oldTransaction); });
     const rows = await requestResult(database.transaction("metadata").objectStore("metadata").getAll());
@@ -110,9 +121,10 @@ it.each(["unmount", "replace", "secret", "schema"] as const)("Draft Undo respect
       return;
     }
     expect((rows as { key: string }[]).filter((row) => row.key.startsWith("draft-undo:"))).toEqual([]);
-    expect(mutations).toEqual([]); expect(callbacks).toEqual(boundary === "schema" ? ["failure"] : []); expect(replacement.pending).toEqual(pending);
+    expect(mutations).toEqual([]); expect(callbacks).toEqual(boundary === "schema" ? ["failure"] : []); expect(replacement.snapshot()).toBe(pending);
   } finally {
     release(); if (boundary !== "unmount") await act(async () => { root.unmount(); });
+    writing.close(); replacement.close();
     host.remove(); await test.close(); Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
   }
 });
