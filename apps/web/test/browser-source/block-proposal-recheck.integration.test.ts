@@ -11,7 +11,7 @@ import type { EditorReadyState } from "../../src/editor-types.ts";
 import type { ManualInputController } from "../../src/manual-input.ts";
 import { manuscriptJson } from "../../src/manuscript-doc.ts";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
-import { applyTrustedInput } from "../support/browser-command-client.ts";
+import { applyImeComposition, applyTrustedInput } from "../support/browser-command-client.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import { BLOCK, createAppliedAuthorEditResponse, createBrowserScenario, jsonResponse } from "./scenario.ts";
 
@@ -217,6 +217,48 @@ it("accepts input in a candidate during and after its own settlement and keeps t
         .toEqual({ text: `${edited}+?`, transitions: [], failures: [] });
     } finally {
       releaseReread(proposal);
+      await view.unmount(); await test.close();
+    }
+  });
+});
+
+it("keeps an IME composition in a candidate while the controller publishes a saving projection", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const scenario = createBrowserScenario();
+  const proposal = candidateFor(test.workspace);
+  const fetchImpl: typeof fetch = async (input) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    if (path.endsWith(`/proposals/${proposal.proposal_id}`)) {
+      return jsonResponse({ ...proposalFixture, project_scope: scenario.project.project_scope, proposal });
+    }
+    // The candidate edits stay unsettled. This test examines only the editor surface.
+    return new Promise<Response>(() => {});
+  };
+  await withActEnvironment(async () => {
+    const view = await renderCandidate(test.workspace, proposal, fetchImpl);
+    try {
+      const text = () => view.surface.querySelector(`[data-candidate-proposal-id="${proposal.proposal_id}"] .block-proposal-text`)!;
+      const end = () => {
+        view.surface.focus();
+        window.getSelection()!.setBaseAndExtent(text().firstChild!, text().textContent!.length,
+          text().firstChild!, text().textContent!.length);
+        document.dispatchEvent(new Event("selectionchange"));
+      };
+      end();
+      await applyTrustedInput({ operation: "insert_text", text: "!" });
+      // The composition offsets count the rendered text of the editor, which the selection text gives.
+      window.getSelection()!.setBaseAndExtent(view.surface, 0, text().firstChild!, text().textContent!.length);
+      const offset = window.getSelection()!.toString().length;
+      end();
+      await applyImeComposition({ text: "zhong", replacementStart: offset, replacementEnd: offset,
+        selectionStart: 5, selectionEnd: 5 });
+      await act(async () => { await new Promise((resolve) => { setTimeout(resolve); }); });
+      expect(text().textContent).toBe(`${proposal.candidate_text}!zhong`);
+      await applyTrustedInput({ operation: "insert_text", text: "中" });
+      await act(async () => { await new Promise((resolve) => { setTimeout(resolve); }); });
+      expect({ text: text().textContent, failures: view.failures })
+        .toEqual({ text: `${proposal.candidate_text}!中`, failures: [] });
+    } finally {
       await view.unmount(); await test.close();
     }
   });
