@@ -13,8 +13,8 @@ use super::admission::insert_admission;
 use super::records::read_project;
 use super::{
     Admission, CommandIsolation, MissingAdmission, ProjectCommand, SettledCommand,
-    challenge_problem, record_error, replay_command, replay_problem, settle_classified,
-    unavailable,
+    challenge_problem, record_ids, record_settled, replay_command, replay_problem,
+    settle_classified, unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::read_command_replay;
@@ -57,8 +57,8 @@ enum AdmittedState {
 #[tracing::instrument(skip_all, fields(
     command_kind = C::SPEC.kind.diagnostic(),
     project_id = envelope.project_scope.project_id.diagnostic(),
-    command_id = DiagnosticId(&envelope.ids.command_id).diagnostic(),
-    author_command_admission_id = DiagnosticId(&envelope.ids.author_command_admission_id).diagnostic(),
+    command_id = tracing::field::Empty,
+    author_command_admission_id = tracing::field::Empty,
     correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
     outcome = tracing::field::Empty,
 ))]
@@ -68,9 +68,9 @@ pub(crate) async fn admit_and_settle<C: AdmittedCommand>(
     command: &C,
     after_admission: impl FnOnce() -> Result<(), C::Error>,
 ) -> Result<SettledCommand<C>, C::Error> {
-    admit_then_settle(store, envelope, command, after_admission)
-        .await
-        .inspect_err(record_error)
+    let settled = admit_then_settle(store, envelope, command, after_admission).await;
+    record_settled(&settled);
+    settled
 }
 
 async fn admit_then_settle<C: AdmittedCommand>(
@@ -98,6 +98,7 @@ async fn admit_then_settle<C: AdmittedCommand>(
             if result_reference == REQUIRES_RECONFIRMATION {
                 return Err(ProjectCommandError::BindingConflict.into());
             }
+            tracing::Span::current().record("outcome", "replayed");
             return replay_settled(store, envelope, command, &result_reference).await;
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
@@ -105,6 +106,10 @@ async fn admit_then_settle<C: AdmittedCommand>(
             return Err(ProjectCommandError::BindingConflict.into());
         }
         ProjectCommandChallengeUse::FirstUse => {
+            record_ids(
+                &envelope.ids.command_id,
+                &envelope.ids.author_command_admission_id,
+            );
             match admit(&transaction.client, envelope, command).await {
                 Ok(()) => {
                     transaction.commit().await.map_err(challenge_error)?;
@@ -146,8 +151,8 @@ async fn admit<C: AdmittedCommand>(
 #[tracing::instrument(skip_all, fields(
     command_kind = C::SPEC.kind.diagnostic(),
     project_id = envelope.project_scope.project_id.diagnostic(),
-    command_id = DiagnosticId(&envelope.ids.command_id).diagnostic(),
-    author_command_admission_id = DiagnosticId(&envelope.ids.author_command_admission_id).diagnostic(),
+    command_id = tracing::field::Empty,
+    author_command_admission_id = tracing::field::Empty,
     correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
     outcome = tracing::field::Empty,
 ))]
@@ -156,9 +161,13 @@ pub(crate) async fn settle_admitted_command<C: AdmittedCommand>(
     envelope: &ProjectCommandEnvelope,
     command: &C,
 ) -> Result<SettledCommand<C>, C::Error> {
-    settle_admitted_steps(store, envelope, command)
-        .await
-        .inspect_err(record_error)
+    record_ids(
+        &envelope.ids.command_id,
+        &envelope.ids.author_command_admission_id,
+    );
+    let settled = settle_admitted_steps(store, envelope, command).await;
+    record_settled(&settled);
+    settled
 }
 
 async fn settle_admitted_steps<C: AdmittedCommand>(
@@ -217,8 +226,8 @@ async fn settle_admitted_steps<C: AdmittedCommand>(
 #[tracing::instrument(skip_all, fields(
     command_kind = C::SPEC.kind.diagnostic(),
     project_id = envelope.project_scope.project_id.diagnostic(),
-    command_id = DiagnosticId(&envelope.ids.command_id).diagnostic(),
-    author_command_admission_id = DiagnosticId(&envelope.ids.author_command_admission_id).diagnostic(),
+    command_id = tracing::field::Empty,
+    author_command_admission_id = tracing::field::Empty,
     correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
     outcome = tracing::field::Empty,
 ))]
@@ -229,7 +238,7 @@ pub(crate) async fn replay_settled<C: ProjectCommand>(
     receipt_id: &str,
 ) -> Result<SettledCommand<C>, C::Error> {
     tracing::Span::current().record("outcome", "replayed");
-    read_command_replay(
+    let replayed = read_command_replay(
         store,
         &envelope.challenge_binding,
         receipt_id,
@@ -238,7 +247,9 @@ pub(crate) async fn replay_settled<C: ProjectCommand>(
     )
     .await
     .and_then(|replay| replay_command(command, &replay))
-    .map_err(|fault| replay_problem(fault).into())
+    .map_err(|fault| replay_problem(fault).into());
+    record_settled(&replayed);
+    replayed
 }
 
 /// Reads the settlement, expiry, and writer facts of the Admission of `envelope`. The settlement

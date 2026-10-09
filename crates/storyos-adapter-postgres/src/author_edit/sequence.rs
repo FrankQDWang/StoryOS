@@ -61,6 +61,16 @@ impl CommandError for AuthorEditFailure {
     fn sequence_error(&self) -> Option<&ProjectCommandError> {
         None
     }
+
+    fn reason_code(&self) -> &'static str {
+        match self.0 {
+            AuthorEditError::BindingConflict => "binding_conflict",
+            AuthorEditError::InvalidChallenge => "invalid_challenge",
+            AuthorEditError::StaleWriter => "stale_writer",
+            AuthorEditError::AdmissionExpired => "admission_expired",
+            AuthorEditError::Unavailable(_) => "unavailable",
+        }
+    }
 }
 
 /// The facts that the acknowledgement of every Author Edit outcome records.

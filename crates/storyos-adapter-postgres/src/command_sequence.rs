@@ -489,8 +489,8 @@ pub(crate) type SettledCommand<C> = ProjectCommandSettlement<
 #[tracing::instrument(skip_all, fields(
     command_kind = C::SPEC.kind.diagnostic(),
     project_id = envelope.project_scope.project_id.diagnostic(),
-    command_id = DiagnosticId(&envelope.ids.command_id).diagnostic(),
-    author_command_admission_id = DiagnosticId(&envelope.ids.author_command_admission_id).diagnostic(),
+    command_id = tracing::field::Empty,
+    author_command_admission_id = tracing::field::Empty,
     correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
     outcome = tracing::field::Empty,
 ))]
@@ -499,17 +499,37 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     envelope: &ProjectCommandEnvelope,
     command: &C,
 ) -> Result<SettledCommand<C>, C::Error> {
-    settle_steps(store, envelope, command)
-        .await
-        .inspect_err(record_error)
+    let settled = settle_steps(store, envelope, command).await;
+    record_settled(&settled);
+    settled
 }
 
-/// Records the category of a failed or refused command on the current command span.
+/// Records the identifiers that a settlement returns, so that a replay records the stored
+/// identifiers, or the reason code of a failed or refused command.
+pub(crate) fn record_settled<A, N, F, R, P, Z>(
+    settled: &Result<ProjectCommandSettlement<A, N, F, R, P, Z>, impl CommandError>,
+) {
+    match settled {
+        Ok(settlement) => record_ids(
+            &settlement.ids.command_id,
+            &settlement.ids.author_command_admission_id,
+        ),
+        Err(error) => record_error(error),
+    }
+}
+
+/// Records the reason code of a failed or refused command on the current command span.
 pub(crate) fn record_error(error: &impl CommandError) {
-    let outcome = error
-        .sequence_error()
-        .map_or("refused", DiagnosticField::diagnostic);
-    tracing::Span::current().record("outcome", outcome.diagnostic());
+    tracing::Span::current().record("outcome", error.reason_code().diagnostic());
+}
+
+/// Records the command identifiers on the current command span.
+pub(crate) fn record_ids(command_id: &str, author_command_admission_id: &str) {
+    tracing::Span::current().record("command_id", DiagnosticId(command_id).diagnostic());
+    tracing::Span::current().record(
+        "author_command_admission_id",
+        DiagnosticId(author_command_admission_id).diagnostic(),
+    );
 }
 
 async fn settle_steps<C: ProjectCommand>(
@@ -556,6 +576,10 @@ async fn settle_steps<C: ProjectCommand>(
             Err(ProjectCommandError::BindingConflict.into())
         }
         ProjectCommandChallengeUse::FirstUse => {
+            record_ids(
+                &envelope.ids.command_id,
+                &envelope.ids.author_command_admission_id,
+            );
             let settled = match first_use(&transaction.client, envelope, command).await {
                 Ok(settlement) => transaction
                     .commit()
