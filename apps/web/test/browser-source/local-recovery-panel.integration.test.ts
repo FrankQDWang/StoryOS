@@ -2,8 +2,8 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { LocalRecoveryPanel } from "../../src/local-recovery-panel.tsx";
-import { openEditorWorkspace, persistReplaceSelection, rebuildPendingProjection, submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
-import { persistCandidateSelection, candidateTextsFromJournal, readJournalSnapshot, validateJournalSnapshot } from "../../src/local-edit-journal.ts";
+import { openEditorWorkspace, appendAuthorEdit, rebuildPendingProjection, submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
+import { candidateTextsFromJournal, readJournalSnapshot, validateJournalSnapshot } from "../../src/local-edit-journal.ts";
 import { readLocalRecovery } from "../../src/local-edit-recovery.ts";
 import { BLOCK, OWNER, PROJECT, SESSION, createBrowserScenario, deleteJournal, jsonResponse, requireEditorReady } from "./scenario.ts";
 
@@ -47,8 +47,8 @@ it.each(["multi_block", "candidate"] as const)("keeps complete %s recovery visib
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
   try {
-    if (kind === "candidate") await persistCandidateSelection(workspace, { kind: "candidate_selection", target, expectedProposalHeads: [target.revision_id], priorText: "Candidate", from: 9, to: 9, text: "!", resultingBody: "Candidate!" });
-    else await persistReplaceSelection(workspace, { manuscript_block_id: BLOCK, from: 4, to: 4, text: "!", resultingBody: "Base!\nSecond" });
+    if (kind === "candidate") await appendAuthorEdit(workspace, { kind: "candidate_selection", target, expectedProposalHeads: [target.revision_id], priorText: "Candidate", from: 9, to: 9, text: "!", resultingBody: "Candidate!" });
+    else await appendAuthorEdit(workspace, { manuscript_block_id: BLOCK, from: 4, to: 4, text: "!", resultingBody: "Base!\nSecond" });
     // Cut after strict local persistence and before the first Author Edit POST.
     workspace.database.close(); workspace = await open();
     expect(posts).toBe(0);
@@ -70,7 +70,7 @@ it.each(["multi_block", "candidate"] as const)("keeps complete %s recovery visib
     expect(retained[0]?.text).toBe(completeText);
     expect([...await candidateTextsFromJournal(workspace)]).toEqual([]);
     expect(await rebuildPendingProjection(workspace)).toMatchObject({ body: scenario.chapter.chapter.current_revision.body, save_state: "saved", unsettled_intent_count: 0 });
-    await persistReplaceSelection(workspace, { manuscript_block_id: BLOCK, from: 4, to: 4, text: "+", resultingBody: kind === "candidate" ? "Base+" : "Base+\nSecond" });
+    await appendAuthorEdit(workspace, { manuscript_block_id: BLOCK, from: 4, to: 4, text: "+", resultingBody: kind === "candidate" ? "Base+" : "Base+\nSecond" });
     await act(async () => root.unmount());
     workspace.database.close(); workspace = await open(); root = createRoot(host);
     await render();

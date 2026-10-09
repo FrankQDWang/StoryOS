@@ -1,7 +1,7 @@
 import { LocalRecoveryPanel } from "./local-recovery-panel.tsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 
 import {
   createProject,
@@ -175,7 +175,7 @@ function ProjectReadyView({
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
     void (async () => {
-      const quiet = await runWhenQuiet("journaled", async (projection) => projection);
+      const quiet = await runWhenQuiet("journaled", async () => undefined);
       if (generation !== switchGenerationRef.current) return;
       if (quiet.kind === "refused") {
         setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
@@ -197,7 +197,8 @@ function ProjectReadyView({
       const surface = selectedChapterSurface({
         selectedChapterId: opened.chapter.chapter.chapter_id,
         currentChapterId,
-        currentPending: quiet.result,
+        // A save can complete during the chapter request, so the current snapshot is newer than the quiet read.
+        currentPending: writing?.snapshot().projection ?? null,
         opened: opened.chapter,
       });
       selectedChapterIdRef.current = opened.chapter.chapter.chapter_id;
@@ -966,9 +967,12 @@ function Stage1View({
   );
 }
 
-export function mountStage1View(root: HTMLElement, props: Stage1ViewProps): void {
+/** Renders the workspace into `root`. Unmount the returned React root to close its Editor Session controller. */
+export function mountStage1View(root: HTMLElement, props: Stage1ViewProps): Root {
   root.dataset.bootState = props.state.kind;
-  createRoot(root).render(
+  const reactRoot = createRoot(root);
+  reactRoot.render(
     <Stage1View {...props} setBootState={(kind) => { root.dataset.bootState = kind; }} />,
   );
+  return reactRoot;
 }

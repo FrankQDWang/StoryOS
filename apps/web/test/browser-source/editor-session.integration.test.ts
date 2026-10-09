@@ -12,7 +12,7 @@ import type {
 import {
   freezeOneIntentSubmission,
   openEditorWorkspace,
-  persistReplaceSelection,
+  appendAuthorEdit,
   rebuildPendingProjection,
   reconfirmLegacyReplaceSelection,
   submitOnePendingAuthorEdit,
@@ -90,7 +90,7 @@ it.each(["changed_head", "legacy_editor_contract"] as const)("preserves the comp
     const journal = workspace.database;
     database = journal;
     expect(workspace.session.base_snapshot.project_activity_position).toBe("0");
-    await persistReplaceSelection(workspace,
+    await appendAuthorEdit(workspace,
       { from: 4, to: 4, text: " retained", resultingBody: "Base retained" });
     if (boundary === "legacy_editor_contract") {
       const transaction = journal.transaction("intents", "readwrite");
@@ -126,7 +126,7 @@ it("keeps incompatible pending ReplaceSelection inspectable until Block reconfir
   const test = await openJournalAppendTestWorkspace();
   try {
     const workspace = test.workspace;
-    await persistReplaceSelection(workspace, FIRST_APPEND_EDIT);
+    await appendAuthorEdit(workspace, FIRST_APPEND_EDIT);
     const snapshot = await validateJournalSnapshot(
       workspace,
       await readJournalSnapshot(workspace),
@@ -177,7 +177,7 @@ it("keeps incompatible pending ReplaceSelection inspectable until Block reconfir
     });
     await expect(freezeOneIntentSubmission(workspace, crypto))
       .rejects.toThrow(/Block reconfirmation/);
-    await expect(persistReplaceSelection(workspace, {
+    await expect(appendAuthorEdit(workspace, {
       from: 5,
       to: 5,
       text: "?",
@@ -561,7 +561,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
     partitionTransaction.objectStore("partitions")
       .delete(workspace.partition.journal_partition_id);
     await transactionResult(partitionTransaction);
-    await expect(persistReplaceSelection(workspace, {
+    await expect(appendAuthorEdit(workspace, {
       from: 4,
       to: 4,
       text: "!",
@@ -583,7 +583,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
     requireEditorReady(state);
     let reopened = state;
     openDatabase = reopened.database;
-    await persistReplaceSelection(reopened, {
+    await appendAuthorEdit(reopened, {
       from: 4,
       to: 4,
       text: "!",
@@ -592,7 +592,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       undoGroupId: "018f0000-0000-7001-8000-000000000040",
       createdAt: "2026-08-15T08:00:00.000Z",
     });
-    await expect(persistReplaceSelection(reopened, {
+    await expect(appendAuthorEdit(reopened, {
       from: 5,
       to: 5,
       text: "?",
@@ -605,7 +605,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
     await deleteWorkspace(reopened);
 
     workspace = await openCurrentWorkspace();
-    await persistReplaceSelection(workspace, {
+    await appendAuthorEdit(workspace, {
       from: 4,
       to: 4,
       text: "!",
@@ -614,7 +614,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       undoGroupId: "018f0000-0000-7001-8000-000000000040",
       createdAt: "2026-08-15T08:00:00.000Z",
     });
-    projection = await persistReplaceSelection(workspace, {
+    projection = await appendAuthorEdit(workspace, {
       from: 5,
       to: 5,
       text: "?",
@@ -669,7 +669,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       .toEqual(editChallenges[1]?.canonical_command_digest);
     expect(workspace.session).toEqual(freshSession);
 
-    projection = await persistReplaceSelection(workspace, {
+    projection = await appendAuthorEdit(workspace, {
       from: 6,
       to: 6,
       text: "+",
@@ -1004,7 +1004,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       await replaceGroups(workspace, originalGroups);
     }
 
-    await expect(persistReplaceSelection(workspace, {
+    await expect(appendAuthorEdit(workspace, {
       from: 5,
       to: 5,
       text: "?",
@@ -1012,7 +1012,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
     })).rejects.toThrow(/limit failed/);
     expect(await intentCount(workspace.database)).toBe(3);
     workspace.partition.disposition = "read_only_observer";
-    await expect(persistReplaceSelection(workspace, {
+    await expect(appendAuthorEdit(workspace, {
       from: 5,
       to: 5,
       text: "?",
@@ -1021,7 +1021,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
     workspace.partition.disposition = "current_writer_open";
     expect(await intentCount(workspace.database)).toBe(3);
 
-    projection = await persistReplaceSelection(workspace, {
+    projection = await appendAuthorEdit(workspace, {
       from: 7,
       to: 7,
       text: "Z",
@@ -1064,7 +1064,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
     let limitBody = canonicalSession.base_snapshot.materialized_revision.body;
     for (let index = 0; index < 240; index += 1) {
       const nextBody = `${limitBody}a`;
-      projection = await persistReplaceSelection(workspace, {
+      projection = await appendAuthorEdit(workspace, {
         from: limitBody.length,
         to: limitBody.length,
         text: "a",
@@ -1076,7 +1076,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       limitBody = nextBody;
     }
     expect(await intentCount(workspace.database)).toBe(240);
-    await expect(persistReplaceSelection(workspace, {
+    await expect(appendAuthorEdit(workspace, {
       from: limitBody.length,
       to: limitBody.length,
       text: "a",
@@ -1123,7 +1123,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       const baseBeforeZero = structuredClone(workspace.session);
       const baseBody = baseBeforeZero.base_snapshot.materialized_revision.body;
       const localBody = `${baseBody}${zeroCase.suffix}`;
-      projection = await persistReplaceSelection(workspace, {
+      projection = await appendAuthorEdit(workspace, {
         from: baseBody.length,
         to: baseBody.length,
         text: zeroCase.text,
@@ -1216,7 +1216,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
           unsettled_intent_count: 0,
           authoritative_revision_id: baseBeforeZero.base_snapshot.authoritative_head_revision_id,
         });
-        expect(await persistReplaceSelection(workspace, {
+        expect(await appendAuthorEdit(workspace, {
           from: baseBody.length,
           to: baseBody.length,
           text: "!",

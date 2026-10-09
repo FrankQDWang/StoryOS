@@ -6,7 +6,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   openEditorWorkspace,
-  persistReplaceSelection,
+  appendAuthorEdit,
   submitOnePendingAuthorEdit,
 } from "../../src/editor-session.ts";
 import { collectEligibleJournalPayload } from "../../src/journal-payload-collection.ts";
@@ -110,7 +110,7 @@ it("collects Journal payload only after settlement and a durable successor", asy
     });
     requireEditorReady(workspace);
     trackDatabase(workspace.database, openDatabases);
-    await persistReplaceSelection(workspace, {
+    await appendAuthorEdit(workspace, {
       from: 4,
       to: 4,
       text: "!?",
@@ -195,7 +195,7 @@ it("collects Journal payload only after settlement and a durable successor", asy
       unsettled_intent_count: 0,
       authoritative_revision_id: NEXT_REVISION,
     });
-    await persistReplaceSelection(workspace, {
+    await appendAuthorEdit(workspace, {
       from: 6,
       to: 6,
       text: "+",

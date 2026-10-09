@@ -7,7 +7,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   openEditorWorkspace,
-  persistReplaceSelection,
+  appendAuthorEdit,
   submitOnePendingAuthorEdit,
 } from "../../src/editor-session.ts";
 import { collectEligibleJournalPayload } from "../../src/journal-payload-collection.ts";
@@ -133,7 +133,7 @@ it("collects a fenced partition under its immutable old writer generation", asyn
     requireEditorReady(workspace);
     trackDatabase(workspace.database, openDatabases);
     const openPartition = { ...workspace.partition };
-    await persistReplaceSelection(workspace, {
+    await appendAuthorEdit(workspace, {
       from: 4,
       to: 4,
       text: "!?",
@@ -213,7 +213,7 @@ it("collects a fenced partition under its immutable old writer generation", asyn
       unsettled_intent_count: 0,
       authoritative_revision_id: NEXT_REVISION,
     });
-    await expect(persistReplaceSelection(workspace, {
+    await expect(appendAuthorEdit(workspace, {
       from: 6,
       to: 6,
       text: "+",
