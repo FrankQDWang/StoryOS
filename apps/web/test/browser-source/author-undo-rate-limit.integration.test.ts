@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 
 import undoFixture from "../../../../generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json";
+import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
 import { ManuscriptEditor } from "../../src/manuscript-editor.tsx";
 import type { PendingEditProjection } from "../../src/editor-types.ts";
 import { applyImeComposition, applyTrustedInput } from "../support/browser-command-client.ts";
@@ -83,10 +84,12 @@ async function openUndoEditor() {
   const root = createRoot(host);
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin, fetchImpl,
+    onFailure: (error) => { failures.push(error); } });
+  writing.subscribe(() => { projections.push(writing.snapshot().projection); });
   const props: Parameters<typeof ManuscriptEditor>[0] = { blocks: test.workspace.pending.blocks, editable: true,
-    persistWorkspace: test.workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    persistWorkspace: test.workspace, writing, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
     controllerRef: { current: null },
-    onProjection: (projection) => { projections.push(projection); },
     onFailure: (error) => { failures.push(error); },
     undoChallengeTimers: {
       setTimeoutImpl: (callback, timeout) => timers.push({ callback, timeout, cleared: false }) - 1,
@@ -130,6 +133,7 @@ async function openUndoEditor() {
       gates.firstChallenge.open();
       gates.undoResponse.open();
       if (!unmounted) await act(async () => { root.unmount(); });
+      writing.close();
       host.remove();
       await test.close();
       Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
