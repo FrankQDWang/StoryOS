@@ -1,12 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { captureStructuredSelection, type StructuredSelectionEdit } from "./structured-edit-capture.ts";
 
 import type { EditorSessionWritingController } from "./editor-session-writing.ts";
-import type { EditorReadyState } from "./editor-types.ts";
-import type { ManualInputController } from "./manual-input.ts";
 import {
   captureManuscriptChange,
   type ManuscriptParagraph,
@@ -27,8 +25,6 @@ import {
   capturedCandidateEdit, projectBlockProposals,
   type BlockProposalProjection,
 } from "./block-proposal-decoration.ts";
-import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
-import { createChallengeAdmissionWait, type ChallengeAdmissionTimers } from "./challenge-admission-wait.ts";
 
 import type { ProposalFocus } from "./proposal-navigation.ts";
 
@@ -38,14 +34,8 @@ export interface ManuscriptEditorProps {
   blocks: readonly ManuscriptParagraph[];
   proposals?: readonly BlockProposalProjection[];
   editable: boolean;
-  persistWorkspace: EditorReadyState | undefined;
-  /** The writing controller of `persistWorkspace`. */
+  /** The writing controller of the current-writer Editor Session. */
   writing?: EditorSessionWritingController | undefined;
-  baseUrl: string;
-  fetchImpl: typeof fetch;
-  cryptoImpl: Crypto;
-  controllerRef: { current: ManualInputController | null };
-  onFailure: (error: unknown) => void;
   onCandidateSettled?: (proposalId?: string) => void;
   onAcceptProposal?: (target: {
     proposalId: string;
@@ -74,8 +64,9 @@ export interface ManuscriptEditorProps {
     text: string;
   }) => void;
   onCopyProposal?: (proposalId: string) => void;
-  undoChallengeTimers?: ChallengeAdmissionTimers;
 }
+
+const ignoreChanges = () => () => {};
 
 function syncManuscriptSurface(
   dom: HTMLElement,
@@ -99,20 +90,13 @@ export function ManuscriptEditor({
   blocks,
   proposals = [],
   editable,
-  persistWorkspace,
   writing,
-  baseUrl,
-  fetchImpl,
-  cryptoImpl,
-  controllerRef,
-  onFailure,
   onCandidateSettled, focusProposal, onCandidateFocus,
   onAcceptProposal,
   onRejectProposal,
   onReplanProposal,
   onWithdrawProposal,
   onCopyProposal,
-  undoChallengeTimers,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const capturedInputRef = useRef(0);
@@ -125,7 +109,6 @@ export function ManuscriptEditor({
   const candidateCompositionDirtyRef = useRef(false);
   const writingRef = useRef(writing);
   writingRef.current = writing;
-  const onFailureRef = useRef(onFailure);
   const onCandidateSettledRef = useRef(onCandidateSettled);
   const onCandidateFocusRef = useRef(onCandidateFocus);
   onCandidateFocusRef.current = onCandidateFocus;
@@ -136,18 +119,14 @@ export function ManuscriptEditor({
   const onReplanProposalRef = useRef(onReplanProposal);
   const onWithdrawProposalRef = useRef(onWithdrawProposal);
   const onCopyProposalRef = useRef(onCopyProposal);
-  const persistWorkspaceRef = useRef(persistWorkspace);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
-  const abandonUndoRef = useRef<(() => void) | undefined>(undefined);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
-  onFailureRef.current = onFailure;
   onCandidateSettledRef.current = onCandidateSettled;
   onAcceptProposalRef.current = onAcceptProposal;
   onRejectProposalRef.current = onRejectProposal;
   onReplanProposalRef.current = onReplanProposal;
   onWithdrawProposalRef.current = onWithdrawProposal;
   onCopyProposalRef.current = onCopyProposal;
-  persistWorkspaceRef.current = persistWorkspace;
   const editor = useEditor({
     extensions: [
       ...storyosManuscriptExtensions(firstBlockId,
@@ -181,8 +160,7 @@ export function ManuscriptEditor({
         if (!current.view.composing && !composingRef.current) observedBlocksRef.current = nextBlocks;
         return;
       }
-      // New input changes the Author Undo Frontier, so an Undo in progress can only conflict.
-      abandonUndoRef.current?.();
+      writingRef.current?.noteInput();
       const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
       if (mixed !== undefined) {
         if (current.view.composing || composingRef.current) {
@@ -251,66 +229,12 @@ export function ManuscriptEditor({
     },
   }, []);
 
-  const undoLifetime = useRef(0);
-  useEffect(() => { undoLifetime.current += 1;
-    return () => { undoLifetime.current += 1; abandonUndoRef.current?.(); };
-  }, [persistWorkspace, editor]);
   onAuthorUndoRef.current = () => {
-    const workspace = persistWorkspaceRef.current;
-    // One Author Undo is in progress from the key press until it settles.
-    if (abandonUndoRef.current !== undefined || editor === null || workspace === undefined) return true;
-    const started = undoLifetime.current;
-    let abandoned = false;
-    const isCurrent = () => !abandoned && started === undoLifetime.current
-      && persistWorkspaceRef.current === workspace && !editor.isDestroyed;
-    const challengeAdmission = createChallengeAdmissionWait(undoChallengeTimers);
-    const abandon = () => {
-      abandoned = true;
-      challengeAdmission.cancel();
-      if (abandonUndoRef.current === abandon) abandonUndoRef.current = undefined;
-    };
-    abandonUndoRef.current = abandon;
-    void (async () => {
-      await writingRef.current?.flush();
-      if (!isCurrent()) return;
-      let waited = false;
-      try {
-        const settled = await undoOwnedLatestAuthorAction({
-          workspace,
-          baseUrl,
-          fetchImpl,
-          cryptoImpl, isCurrent, challengeAdmission,
-          onChallengeWait: () => {
-            if (!waited) writingRef.current?.showSaving();
-            waited = true;
-          },
-        });
-        if (!isCurrent()) return;
-        if (settled !== undefined && (settled.effect.kind === "draft_compensated" || settled.effect.kind === "draft_reconciled")) {
-          await writingRef.current?.refresh();
-          if (!isCurrent()) return;
-          onCandidateSettledRef.current?.(); return;
-        }
-        if (settled !== undefined && settled.effect.kind === "reversal_required") {
-          if (waited) await writingRef.current?.refresh();
-          onCandidateSettledRef.current?.("proposal_id" in settled ? settled.proposal_id ?? undefined : undefined); return;
-        }
-        if (settled === undefined || settled.effect.kind !== "compensated") {
-          if (settled !== undefined) {
-            onFailureRef.current(new Error("Author Undo did not compensate"));
-          }
-          return;
-        }
-        const restored = workspace.session.base_snapshot.materialized_revision.blocks;
-        hydrateManuscriptBlocks(editor, restored);
-        observedBlocksRef.current = restored.map((block) => ({ ...block }));
-        syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
-        await writingRef.current?.refresh();
-        onCandidateSettledRef.current?.("proposal_id" in settled ? settled.proposal_id ?? undefined : undefined);
-      } catch (error) {
-        if (isCurrent()) onFailureRef.current(error);
-      }
-    })().finally(() => { if (abandonUndoRef.current === abandon) abandonUndoRef.current = undefined; });
+    const current = writingRef.current;
+    if (editor === null || current === undefined) return true;
+    void current.undo().then((outcome) => {
+      if (outcome !== undefined) onCandidateSettledRef.current?.(outcome.proposalId);
+    });
     return true;
   };
 
@@ -383,6 +307,7 @@ export function ManuscriptEditor({
     return () => { editor.view.dom.removeEventListener("click", onClick); };
   }, [editor]);
 
+  const written = useSyncExternalStore(writing?.subscribe ?? ignoreChanges, () => writing?.snapshot());
   const inputAtRender = capturedInputRef.current;
   useEffect(() => {
     if (editor === null || editor.view.composing || composingRef.current) return;
@@ -393,8 +318,8 @@ export function ManuscriptEditor({
       `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" ");
     // Author input after this render is newer than these blocks. The render for that input does this check again.
     if (capturedInputRef.current === inputAtRender && (renderedKey !== identityKey || (rendered !== undefined
-      && !paragraphsEqual(rendered, blocks) && persistWorkspace?.pending.save_state === "saved"
-      && persistWorkspace.pending.unsettled_intent_count === 0))) {
+      && !paragraphsEqual(rendered, blocks) && written?.projection.save_state === "saved"
+      && written.projection.unsettled_intent_count === 0))) {
       hydrateManuscriptBlocks(editor, blocks);
       projectBlockProposals(editor, proposals);
     }
@@ -403,30 +328,10 @@ export function ManuscriptEditor({
     syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
   }, [blocks.map((block) =>
     `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}:${block.text}`).join(" "),
-    persistWorkspace?.pending.save_state, editor]);
+    written?.projection.save_state, editor]);
 
   useEffect(() => {
-    if (editor === null || writing === undefined) {
-      const detached: ManualInputController = {
-        flush: () => Promise.resolve(),
-        whenIdle: () => Promise.resolve(),
-        installProjection: async () => {},
-        hasIncompleteSemanticIntent: () => composingRef.current,
-        close() {},
-      };
-      controllerRef.current = detached;
-      return () => {
-        if (controllerRef.current === detached) controllerRef.current = null;
-      };
-    }
-    const controller: ManualInputController = {
-      installProjection: async () => { await writing.refresh(); },
-      flush: () => writing.flush(),
-      whenIdle: () => writing.whenIdle(),
-      hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing || writing.holdsInput(),
-      close() {},
-    };
-    controllerRef.current = controller;
+    if (editor === null || writing === undefined) return;
     const { dom } = editor.view;
     const onCompositionStart = (): void => {
       composingRef.current = true;
@@ -440,11 +345,11 @@ export function ManuscriptEditor({
       candidateCompositionStartRef.current = candidateSelected
         && !candidateCompositionBlockedRef.current ? editor.state.doc : null;
       candidateCompositionDirtyRef.current = false;
-      writing.setHoldSubmission(true);
+      writing.setComposing(true);
     };
     const onCompositionEnd = (event: CompositionEvent): void => {
       composingRef.current = false;
-      writing.setHoldSubmission(false);
+      writing.setComposing(false);
       const candidateStart = candidateCompositionStartRef.current;
       candidateCompositionStartRef.current = null;
       candidateCompositionBlockedRef.current = false;
@@ -505,9 +410,8 @@ export function ManuscriptEditor({
     return () => {
       dom.removeEventListener("compositionstart", onCompositionStart, true);
       dom.removeEventListener("compositionend", onCompositionEnd);
-      if (controllerRef.current === controller) controllerRef.current = null;
     };
-  }, [controllerRef, editor, writing]);
+  }, [editor, writing]);
 
   if (editor === null) return null;
   return <EditorContent editor={editor} />;

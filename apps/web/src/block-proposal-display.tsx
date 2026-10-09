@@ -78,6 +78,11 @@ export function BlockProposalDisplay({
   refreshKey: number;
   safeToProject: boolean;
   onAccepted: () => Promise<void>;
+  persistWorkspace: EditorReadyState | undefined;
+  onFailure: (error: unknown) => void;
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
 }) {
   const [reads, setReads] = useState<ProposalRead[]>([]);
   const writing = useSyncExternalStore(editorProps.writing?.subscribe ?? ignoreChanges,
@@ -366,14 +371,13 @@ export function BlockProposalDisplay({
     });
   }
 
-  const anchorWorkspace = editorProps.persistWorkspace;
-  if (anchorWorkspace !== undefined) {
-    anchorWorkspace.inlineProposalAnchors = reads.flatMap(({ proposal }) =>
+  if (editorProps.writing !== undefined) {
+    editorProps.writing.setInlineProposalAnchors(reads.flatMap(({ proposal }) =>
       proposal?.chapter_id === chapterId && proposal.kind === "inline_edit"
         && expectedHeads.length === 1 && expectedHeads[0] === proposal.revision_id
         && inlineProjectionAnchor(proposal, editorProps.blocks, authoritativeRevisionId) !== undefined
         ? proposal.anchors.map(({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest }) =>
-          ({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest })) : []);
+          ({ manuscript_block_id, coordinate_profile, from, to, base_slice_digest })) : []));
   }
 
   const acceptDisplayed = (target: {
@@ -407,14 +411,12 @@ export function BlockProposalDisplay({
     setAccepting(target.proposalId);
     void (async () => {
       try {
-        if (editorProps.controllerRef.current?.hasIncompleteSemanticIntent()) {
-          throw new Error("请先完成当前输入。");
-        }
-        await editorProps.controllerRef.current?.flush();
+        if (editorProps.writing?.hasIncompleteInput()) throw new Error("请先完成当前输入。");
+        await editorProps.writing?.flush();
+        const projection = editorProps.writing?.snapshot().projection;
         if (workspace.partition.disposition !== "current_writer_open"
           || (!pendingAcceptances.includes(target.proposalId)
-            && (workspace.pending.save_state !== "saved"
-              || workspace.pending.unsettled_intent_count !== 0))) {
+            && (projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0))) {
           throw new Error("请先保存候选文字。");
         }
         const current = await getProposal({
@@ -539,13 +541,11 @@ export function BlockProposalDisplay({
     setAccepting(target.proposalId);
     void (async () => {
       try {
-        if (editorProps.controllerRef.current?.hasIncompleteSemanticIntent()) {
-          throw new Error("请先完成当前输入。");
-        }
-        await editorProps.controllerRef.current?.flush();
+        if (editorProps.writing?.hasIncompleteInput()) throw new Error("请先完成当前输入。");
+        await editorProps.writing?.flush();
+        const projection = editorProps.writing?.snapshot().projection;
         if (workspace.partition.disposition !== "current_writer_open"
-          || workspace.pending.save_state !== "saved"
-          || workspace.pending.unsettled_intent_count !== 0) {
+          || projection?.save_state !== "saved" || projection.unsettled_intent_count !== 0) {
           throw new Error("请先保存候选文字。");
         }
         const current = await getProposal({ baseUrl: editorProps.baseUrl,
@@ -785,6 +785,7 @@ export function BlockProposalDisplay({
         baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
         refreshKey={`${refreshKey}:${settlementRefresh}:${settlements}`} onHoldChange={setDiscardHold}
         onProjection={async () => { await editorProps.writing?.refresh().catch(editorProps.onFailure); }}
+        retryDraft={editorProps.writing?.retryDraft}
         onResult={() => setSettlementRefresh((value) => value + 1)} />
       {reads.flatMap(({ proposal }) => proposal?.source.kind === "refused_edit_draft" ? [
         <section className="editor-recovery" key={proposal.proposal_id} data-proposal-id={proposal.proposal_id} aria-label="Draft Proposal">

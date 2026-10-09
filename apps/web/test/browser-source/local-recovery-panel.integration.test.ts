@@ -55,8 +55,8 @@ it.each(["multi_block", "candidate"] as const)("keeps complete %s recovery visib
     const before = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
     const completeText = kind === "candidate" ? "Candidate!" : "Base!\nSecond";
     expect(before.bodyBySequence.get(before.records.at(-1)!.local_intent_sequence)).toBe(completeText);
-    workspace.pending = await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto });
-    expect(workspace.pending.save_state).toBe("needs_attention");
+    const projection = await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto });
+    expect(projection.save_state).toBe("needs_attention");
     let continued = false;
     const render = async () => act(async () => root.render(createElement(LocalRecoveryPanel, { workspace, refreshKey: "0", onContinue: async () => { continued = true; } })));
     await render();
@@ -77,7 +77,7 @@ it.each(["multi_block", "candidate"] as const)("keeps complete %s recovery visib
     await expect.poll(() => host.querySelector("[data-local-recovery-text]")?.textContent).toBe(completeText);
     expect(host.querySelector("[data-local-recovery-continue]")).toBeNull();
     expect(await readLocalRecovery(workspace)).toEqual(retained);
-    expect(workspace.pending.body).toBe(kind === "candidate" ? "Base+" : "Base+\nSecond");
+    expect(workspace.openedProjection.body).toBe(kind === "candidate" ? "Base+" : "Base+\nSecond");
     expect(posts).toBe(1);
   } finally {
     await act(async () => root.unmount()); clipboard.mockRestore(); host.remove(); workspace.database.close();

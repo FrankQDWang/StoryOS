@@ -4,7 +4,6 @@ import { test } from "vitest";
 
 import type { GetChapterResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
-  completeJournalOrRefuse,
   openSelectedChapter,
   selectedChapterSurface,
 } from "../../src/chapter-navigation.ts";
@@ -120,29 +119,6 @@ test("openSelectedChapter classifies missing, expired, and Scope-mismatched Chap
     assert.deepEqual(result, { kind: expected }, name);
     assert.doesNotMatch(JSON.stringify(result), /Chapter B|雨落在窗沿|000000000101/);
   }
-});
-
-test("completeJournalOrRefuse waits for a durable Journal or refuses with a typed gate", async () => {
-  const idleCalls: number[] = [];
-  const whenIdle = async () => {
-    idleCalls.push(idleCalls.length + 1);
-  };
-  assert.deepEqual(await completeJournalOrRefuse({
-    incompleteSemanticIntent: true,
-    whenIdle,
-  }), { kind: "refused", reason: "incomplete_semantic_intent" });
-  assert.deepEqual(idleCalls, []);
-  assert.deepEqual(await completeJournalOrRefuse({
-    incompleteSemanticIntent: false,
-    whenIdle: async () => {
-      throw new Error("Local Edit Journal is corrupt");
-    },
-  }), { kind: "refused", reason: "journal_unavailable" });
-  assert.deepEqual(await completeJournalOrRefuse({
-    incompleteSemanticIntent: false,
-    whenIdle,
-  }), { kind: "ready" });
-  assert.deepEqual(idleCalls, [1]);
 });
 
 test("selectedChapterSurface keeps pending bytes on the current Chapter", () => {
