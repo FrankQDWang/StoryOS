@@ -175,3 +175,18 @@ impl DiagnosticField for crate::CompleteAgentRun {
         }
     }
 }
+
+impl DiagnosticField for crate::ProjectCommandError {
+    type Value<'a> = &'static str;
+
+    fn diagnostic(&self) -> Self::Value<'_> {
+        match self {
+            Self::BindingConflict => "binding_conflict",
+            Self::HistoricalAcknowledgementUnavailable => "historical_acknowledgement_unavailable",
+            Self::InvalidChallenge => "invalid_challenge",
+            Self::MissingProject => "missing_project",
+            Self::WriterIneligible => "writer_ineligible",
+            Self::Unavailable(_) => "unavailable",
+        }
+    }
+}

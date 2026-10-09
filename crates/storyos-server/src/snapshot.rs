@@ -138,7 +138,10 @@ fn snapshot_read_error(error: SnapshotReadError) -> ApiError {
             "activity_cursor_too_old",
             "The Activity cursor is below the replay floor.",
         ),
-        SnapshotReadError::Unavailable(_) => resource_unavailable(),
+        SnapshotReadError::Unavailable(source) => {
+            record_unavailable(&*source);
+            resource_unavailable()
+        }
     }
 }
 
