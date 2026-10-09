@@ -344,3 +344,7 @@ fn session_challenge_error(error: ProjectCommandChallengeError) -> EditorSession
 fn session_database_error(error: tokio_postgres::Error) -> EditorSessionError {
     EditorSessionError::Unavailable(Box::new(error))
 }
+
+#[cfg(test)]
+#[path = "editor_session_tests.rs"]
+mod tests;
