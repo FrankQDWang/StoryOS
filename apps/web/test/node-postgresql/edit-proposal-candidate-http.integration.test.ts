@@ -499,6 +499,11 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       }),
     );
     assert.equal(undone.effect.kind, "compensated");
+    // The Compensation writes no Authoritative Revision and no Authoritative Commit, so the effect names neither.
+    assert.deepEqual([Object.hasOwn(undone.effect, "authoritative_revision"), Object.hasOwn(undone.effect, "authoritative_commit_id")],
+      [false, false]);
+    assert.deepEqual([undone.receipt.resulting_heads, undone.receipt.authoritative_revision_ids, undone.receipt.authoritative_commit_ids],
+      [[before.chapter.current_revision.revision_id], [], []]);
     const restored = await getProposal({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,

@@ -515,7 +515,8 @@ test("root undo of an author withdrawal reopens the Proposal under the existing 
     assert.equal(undone.effect.kind, "compensated");
     if (undone.effect.kind !== "compensated") throw new Error("expected compensated undo");
     assert.equal(undone.effect.source_sequence, opened.authorActionSequence);
-    assert.equal(undone.effect.authoritative_commit_id, "");
+    assert.deepEqual([Object.hasOwn(undone.effect, "authoritative_revision"), Object.hasOwn(undone.effect, "authoritative_commit_id")],
+      [false, false]);
     const inspected = await getProposal({
       baseUrl: started.baseUrl,
       projectId: opened.projectId,

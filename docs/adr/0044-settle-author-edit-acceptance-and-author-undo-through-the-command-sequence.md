@@ -83,6 +83,14 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 - Thus Author Undo after a Project rename compensates the latest earlier Forward action, for example a prose edit. The Project title does not change. Author Undo reverses the manuscript and Proposal work of the editor. A Project setting is not part of that work. Similarly, a document title is not in the undo history of a text editor.
 - The reference model study reported this behavior as a defect ([issue 1027](https://github.com/FrankQDWang/StoryOS/issues/1027)). This decision makes it the contract.
 
+### The `compensated` effect names only the records that the compensation writes
+
+- On 2026-10-09 the author decided this ([issue 1030](https://github.com/FrankQDWang/StoryOS/issues/1030)). The `compensated` effect of the Author Undo response omits `authoritative_revision` when the compensation writes no Authoritative Revision. It omits `authoritative_commit_id` when the compensation writes no Authoritative Commit.
+- Thus a prose Compensation and an Acceptance Compensation give the two fields. A Structure Compensation gives only `authoritative_commit_id`. A Current Chapter Compensation and a Proposal Compensation give neither field. The Proposal Compensations are the compensations of a Proposal edit, a Withdrawal, a Replan, and a reopen.
+- Before, these compensations gave the unchanged head with an empty body and no Blocks, and an empty `authoritative_commit_id`. A client can read this projection as the payload of that Revision. But the [Manuscript state machine](../foundation/manuscript-revision-proposal-state-machine.md) binds one payload to each Revision identity, and the response contract had no empty-payload value.
+- The generated response schema and the TypeScript declaration make the two fields optional. The Domain Receipt, the stored rows, and the replay of a Receipt do not change. A replay of an earlier Receipt also gives the new shape.
+- The Web Client validator of a Draft Undo accepts a Proposal Compensation only without the two fields. A Draft Undo observation that the browser kept with the earlier empty projection is not valid evidence.
+
 ## Relation to other decisions
 
 - ADR 0041 and ADR 0043 stay in force. ADR 0043 says that Author Edit, `acceptProposal`, and Author Undo need sequence capabilities that a later decision records. This decision records them, and these three commands now settle through the sequence. After this decision, every implemented project command settles through the sequence, except the three operations that ADR 0043 excludes.
@@ -169,7 +177,7 @@ Each ticket that moves a command records here every observable difference from `
 
 ## Consequences
 
-- Rows, migrations, persisted formats, isolation levels, reason code texts, HTTP statuses, and problem codes do not change, except for the three compensations above. Each specification that moves these commands lists every other observable difference in its behavior-equivalence review.
+- Rows, migrations, persisted formats, isolation levels, reason code texts, HTTP statuses, and problem codes do not change, except for the three compensations above. The `compensated` effect of Author Undo omits the records that a compensation does not write. Each specification that moves these commands lists every other observable difference in its behavior-equivalence review.
 - The hand-written transactions, replay queries, Store traits, and binding self-checks of the three commands are removed. Then the shared code that no command uses is removed, and `AGENTS.md` states that a new project command must settle through the sequence.
 - A new Forward command kind needs a compensation adapter or a Barrier entry, and its Author Undo Disposition must be recorded.
 - Making `rejectProposalOperations` compensable is a separate decision.
