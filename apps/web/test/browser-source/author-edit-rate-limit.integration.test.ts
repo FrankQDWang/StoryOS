@@ -4,7 +4,7 @@ import type {
   DigestValue,
   GetEditorSessionResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { createAuthorEditIdleController } from "../../src/author-edit-idle.ts";
+import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
 import { openEditorWorkspace } from "../../src/editor-session.ts";
 import type { PendingEditProjection } from "../../src/editor-types.ts";
 import { FIRST_APPEND_EDIT, SECOND_APPEND_EDIT } from "./local-edit-journal-append-fixture.ts";
@@ -90,13 +90,14 @@ async function openRateLimitedEditor() {
   const timers: Array<{ callback: () => void; timeout: number; cleared: boolean }> = [];
   const projections: PendingEditProjection[] = [];
   const failures: unknown[] = [];
-  const idle = createAuthorEditIdleController({ workspace, baseUrl: location.origin, fetchImpl,
-    onProjection: (projection) => { projections.push(projection); },
-    onFailure: (error) => { failures.push(error); },
+  const times = [Date.parse(FIRST_APPEND_EDIT.createdAt!), Date.parse(SECOND_APPEND_EDIT.createdAt!)];
+  const idle = createEditorSessionWritingController({ workspace, baseUrl: location.origin, fetchImpl,
+    onFailure: (error) => { failures.push(error); }, now: () => times.shift()!,
     setTimeoutImpl: (callback, timeout) => timers.push({ callback, timeout, cleared: false }) - 1,
     clearTimeoutImpl: (timer) => { if (typeof timer === "number" && timers[timer]) timers[timer].cleared = true; } });
-  await idle.persist(FIRST_APPEND_EDIT, "typing", "2026-08-15T08:00:00.000Z");
-  await idle.persist(SECOND_APPEND_EDIT, "typing", "2026-08-15T08:00:00.001Z");
+  idle.subscribe(() => { projections.push(idle.snapshot().projection); });
+  idle.capture(FIRST_APPEND_EDIT, "typing");
+  idle.capture(SECOND_APPEND_EDIT, "typing");
   const flushed = idle.flush();
   await expect.poll(() => timers.some((timer) => timer.timeout === 7_000)).toBe(true);
   return {

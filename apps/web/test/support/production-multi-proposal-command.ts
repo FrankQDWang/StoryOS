@@ -191,11 +191,27 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect.poll(() => page.evaluate(() => window.getSelection()?.anchorNode?.parentElement
       ?.closest('[data-proposal-operation-id]')?.getAttribute('data-proposal-operation-id'))).toBe(secondaryOutcome.operation_id);
     await page.keyboard.press('End');
+    // Hold the first candidate Author Edit, so the author types more while it is in progress (#946).
+    let releaseEdit!: () => void;
+    let observedEdit!: () => void;
+    const editHeld = new Promise<void>(resolve => { releaseEdit = resolve; });
+    const editObserved = new Promise<void>(resolve => { observedEdit = resolve; });
+    const editRoute = (url: URL) => url.pathname.endsWith(`/projects/${projectId}/manuscript/author-edits`);
+    let editPosts = 0;
+    await page.route(editRoute, async route => {
+      if (route.request().method() === 'POST' && ++editPosts === 1) { observedEdit(); await editHeld; }
+      await route.continue();
+    });
     await page.keyboard.insertText(' Manual candidate edit.');
-    await expect(candidate().locator('.block-proposal-text')).toHaveText(`${secondary.candidate_text} Manual candidate edit.`);
+    await editObserved;
+    await page.keyboard.insertText(' More.');
+    releaseEdit();
+    const manualText = `${secondary.candidate_text} Manual candidate edit. More.`;
+    await expect(candidate().locator('.block-proposal-text')).toHaveText(manualText);
     await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text)
-      .toBe(`${secondary.candidate_text} Manual candidate edit.`);
+      .toBe(manualText);
+    await page.unroute(editRoute, undefined);
     const manual = (await getProposal({ ...options, proposalId })).proposal;
     assert.notEqual(manual.revision_id, before.revision_id);
     assert.equal(manual.operations.find(operation => operation.operation_id === firstOutcome.operation_id)?.candidate_text,

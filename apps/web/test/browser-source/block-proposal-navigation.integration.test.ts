@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import proposalFixture from "../../../../generated/golden-wire/storyos-public-release-1/get-proposal.json";
 import { BlockProposalDisplay, type ProposalLocator } from "../../src/block-proposal-display.tsx";
+import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import { jsonResponse } from "./scenario.ts";
 
@@ -27,11 +28,13 @@ it("keeps the editor editable when a Proposal navigation only reorders the known
     return jsonResponse({ ...proposalFixture, project_scope: scope,
       proposal: { ...proposalFixture.proposal, proposal_id: proposalId } });
   };
+  const writing = createEditorSessionWritingController({ workspace, baseUrl: location.origin, fetchImpl,
+    onFailure: (error) => { throw error; } });
   const props = { scope, chapterId: workspace.session.base_snapshot.chapter_id,
     authoritativeRevisionId: workspace.pending.authoritative_revision_id, refreshKey: 0, safeToProject: true,
-    onAccepted: async () => {}, blocks: workspace.pending.blocks, editable: true, persistWorkspace: workspace,
+    onAccepted: async () => {}, blocks: workspace.pending.blocks, editable: true, persistWorkspace: workspace, writing,
     baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: { current: null },
-    onProjection: () => {}, onFailure: (error: unknown) => { throw error; } };
+    onFailure: (error: unknown) => { throw error; } };
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   try {
@@ -46,15 +49,17 @@ it("keeps the editor editable when a Proposal navigation only reorders the known
       transitions.push(...records.map((record) => (record.target as Element).getAttribute("contenteditable")));
     });
     observer.observe(surface, { attributes: true, attributeFilter: ["contenteditable"] });
+    const before = { projection: writing.snapshot().projection, text: surface.textContent };
     settled = new Promise<void>((resolve) => { readsSettled = resolve; });
     await act(async () => { root.render(createElement(BlockProposalDisplay, { ...props, locators: [...locators].reverse() })); });
     await act(readsApplied);
     await expect.poll(() => surface.getAttribute("contenteditable")).toBe("true");
     transitions.push(...observer.takeRecords().map((record) => (record.target as Element).getAttribute("contenteditable")));
     observer.disconnect();
-    expect({ reads: reads.length, transitions }).toEqual({ reads: 4, transitions: [] });
+    expect({ reads: reads.length, transitions, projection: writing.snapshot().projection, text: surface.textContent })
+      .toEqual({ reads: 4, transitions: [], ...before });
   } finally {
     await act(async () => { root.unmount(); });
-    host.remove(); await test.close(); Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
+    writing.close(); host.remove(); await test.close(); Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });
   }
 });
