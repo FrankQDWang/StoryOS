@@ -29,7 +29,7 @@ import type {
   ValidatedJournalSnapshot,
 } from "./editor-types.ts";
 import { flattenChapterBody } from "./manuscript-doc.ts";
-import type { ContiguousReplacementPrimitive } from "./manuscript-doc.ts";
+import type { CapturedManuscriptEdit, ContiguousReplacementPrimitive } from "./manuscript-doc.ts";
 
 import {
   MAX_WORKING_JOURNAL_ITEMS, readJournalWorkingBoundary, retireCollectedJournalPrefix,
@@ -829,7 +829,7 @@ async function prepareJournalAppend(workspace: EditorWorkspace) {
   return snapshot;
 }
 
-export async function persistReplaceSelection(
+async function persistReplaceSelection(
   workspace: EditorWorkspace,
   edit: ReplaceSelectionEdit,
   cryptoImpl: Crypto = globalThis.crypto,
@@ -871,7 +871,7 @@ export async function persistReplaceSelection(
   }, cryptoImpl);
 }
 
-export async function persistStructuredSelection(
+async function persistStructuredSelection(
   workspace: EditorWorkspace,
   edit: StructuredSelectionEdit & { inputOrigin: InputOrigin; undoGroupId?: string; createdAt: string },
   cryptoImpl: Crypto,
@@ -892,7 +892,7 @@ export async function persistStructuredSelection(
   }, cryptoImpl);
 }
 
-export async function persistDraftRetryUnit(workspace: EditorWorkspace, authorEditUnit: AuthorEditUnit,
+async function persistDraftRetryUnit(workspace: EditorWorkspace, authorEditUnit: AuthorEditUnit,
   retrySource: DraftRetry, expectedProposalHeads: string[]): Promise<PendingEditProjection> {
   const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
@@ -924,7 +924,7 @@ export interface CandidateSelectionEdit {
   createdAt?: string;
 }
 
-export async function persistCandidateSelection(
+async function persistCandidateSelection(
   workspace: EditorWorkspace,
   edit: CandidateSelectionEdit,
   cryptoImpl: Crypto = globalThis.crypto,
@@ -995,7 +995,7 @@ export async function candidateTextsFromJournal(
   return texts;
 }
 
-export async function persistSplitBlock(
+async function persistSplitBlock(
   workspace: EditorWorkspace,
   edit: {
     manuscript_block_id: string;
@@ -1049,7 +1049,7 @@ export async function persistSplitBlock(
   }, cryptoImpl);
 }
 
-export async function persistJoinBlocks(
+async function persistJoinBlocks(
   workspace: EditorWorkspace,
   edit: {
     left_manuscript_block_id: string;
@@ -1102,7 +1102,7 @@ export async function persistJoinBlocks(
   }, cryptoImpl);
 }
 
-export async function persistMoveBlock(
+async function persistMoveBlock(
   workspace: EditorWorkspace,
   edit: {
     manuscript_block_id: string;
@@ -1160,7 +1160,7 @@ export async function persistMoveBlock(
   }, cryptoImpl);
 }
 
-export async function persistRetypeBlock(
+async function persistRetypeBlock(
   workspace: EditorWorkspace,
   edit: {
     manuscript_block_id: string;
@@ -1218,7 +1218,7 @@ export async function persistRetypeBlock(
   }, cryptoImpl);
 }
 
-export async function persistContiguousReplacement(
+async function persistContiguousReplacement(
   workspace: EditorWorkspace,
   edit: {
     primitives: readonly ContiguousReplacementPrimitive[];
@@ -1604,4 +1604,36 @@ export async function reconfirmLegacyReplaceSelection(
   }
   await transactionResult(transaction);
   return rebuildPendingProjection(workspace);
+}
+
+type EditInputFields = { inputOrigin?: InputOrigin; undoGroupId?: string; createdAt?: string };
+
+/** One author edit for the Journal. An edit without `kind` replaces a selection. */
+export type JournalAuthorEdit =
+  | ReplaceSelectionEdit
+  | (CapturedManuscriptEdit & { expectedProposalHeads?: string[] } & EditInputFields)
+  | CandidateSelectionEdit
+  | (StructuredSelectionEdit & EditInputFields)
+  | { kind: "draft_retry"; authorEditUnit: AuthorEditUnit; retrySource: DraftRetry; expectedProposalHeads: string[] };
+
+/** Appends one author edit to the Journal and returns the Pending Edit Projection after the append. */
+export async function appendAuthorEdit(
+  workspace: EditorWorkspace,
+  edit: JournalAuthorEdit,
+  cryptoImpl: Crypto = globalThis.crypto,
+): Promise<PendingEditProjection> {
+  if (!("kind" in edit)) return persistReplaceSelection(workspace, edit, cryptoImpl);
+  switch (edit.kind) {
+    case "draft_retry":
+      return persistDraftRetryUnit(workspace, edit.authorEditUnit, edit.retrySource, edit.expectedProposalHeads);
+    case "structured_selection": return persistStructuredSelection(workspace, { ...edit,
+      inputOrigin: edit.inputOrigin ?? "typing", createdAt: edit.createdAt ?? new Date().toISOString() }, cryptoImpl);
+    case "candidate_selection": return persistCandidateSelection(workspace, edit, cryptoImpl);
+    case "split_block": return persistSplitBlock(workspace, edit, cryptoImpl);
+    case "join_blocks": return persistJoinBlocks(workspace, edit, cryptoImpl);
+    case "move_block": return persistMoveBlock(workspace, edit, cryptoImpl);
+    case "retype_block": return persistRetypeBlock(workspace, edit, cryptoImpl);
+    case "contiguous_replacement": return persistContiguousReplacement(workspace, edit, cryptoImpl);
+    case "replace_block_selection": return persistReplaceSelection(workspace, edit, cryptoImpl);
+  }
 }

@@ -4,7 +4,7 @@ import type { DraftPayloadPosition, DraftRetry, RefusedEditDraftInspect, Replace
 import type { EditorWorkspace } from "./editor-types.ts";
 import { canonicalDraftValue as canonical } from "./refused-edit-discard.ts";
 import { installAuthoritativeBaseSnapshot } from "./undo-latest-author-action.ts";
-import { persistCandidateSelection, persistDraftRetryUnit, rebuildPendingProjection } from "./local-edit-journal.ts";
+import { appendAuthorEdit, rebuildPendingProjection } from "./local-edit-journal.ts";
 import { submitOnePendingAuthorEdit } from "./author-edit-submission.ts";
 
 export function selectedDraftBlocks(draft: RefusedEditDraftInspect, from: DraftPayloadPosition,
@@ -105,15 +105,16 @@ export async function retryRefusedEdit({ workspace, draft, from, to, target, tar
   workspace.session = session;
   if (candidate) {
     const proposal = candidate, text = replacement[0]!.text;
-    await persistCandidateSelection(workspace, { kind: "candidate_selection", retrySource,
+    await appendAuthorEdit(workspace, { kind: "candidate_selection", retrySource,
       target: { proposal_id: proposal.proposal_id, operation_id: proposal.operation_id,
         revision_id: proposal.revision_id, manuscript_block_id: proposal.manuscript_block_id },
       expectedProposalHeads: targetRead.proposalHeads, priorText: proposal.candidate_text,
       from: targetFrom, to: targetTo, text, resultingBody: proposal.candidate_text.slice(0, targetFrom) + text
         + proposal.candidate_text.slice(targetTo), inputOrigin: "selection_replacement" }, workspace.cryptoImpl);
   } else if (target === "original") {
-    await persistDraftRetryUnit(workspace, { ...original,
-      normalized_primitives: [{ kind: "replace_structured_selection", replacement }] }, retrySource, targetRead.proposalHeads);
+    await appendAuthorEdit(workspace, { kind: "draft_retry", authorEditUnit: { ...original,
+      normalized_primitives: [{ kind: "replace_structured_selection", replacement }] }, retrySource,
+    expectedProposalHeads: targetRead.proposalHeads });
   } else {
     if (source?.owner.kind !== "manuscript") throw new Error("Retry target unavailable");
     const blocks = session.base_snapshot.materialized_revision.blocks;
@@ -121,8 +122,9 @@ export async function retryRefusedEdit({ workspace, draft, from, to, target, tar
       ? { kind: "replace_selection" as const, from: targetFrom, to: targetTo, text: replacement[0]!.text }
       : { kind: "replace_block_selection" as const, manuscript_block_id: source.owner.manuscript_block_id,
         from: targetFrom, to: targetTo, text: replacement[0]!.text };
-    await persistDraftRetryUnit(workspace, { normalized_primitives: [primitive], selection_snapshot: {
-      coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: targetFrom, to: targetTo } }, retrySource, targetRead.proposalHeads);
+    await appendAuthorEdit(workspace, { kind: "draft_retry", authorEditUnit: { normalized_primitives: [primitive],
+      selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: targetFrom, to: targetTo } },
+    retrySource, expectedProposalHeads: targetRead.proposalHeads });
   }
   const guardedFetch: typeof fetch = (input, init) => {
     if (!isCurrent()) throw new Error("Retry view changed");

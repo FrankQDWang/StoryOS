@@ -10,7 +10,7 @@ import type {
 import { commitStrongerGroup } from "../../src/author-edit-outcome-reconciliation.ts";
 import {
   openEditorWorkspace,
-  persistReplaceSelection,
+  appendAuthorEdit,
   submitOnePendingAuthorEdit,
 } from "../../src/editor-session.ts";
 import type {
@@ -229,7 +229,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
     outcomeMode = "unavailable";
     const workspace = await openReady();
-    await persistReplaceSelection(workspace, {
+    await appendAuthorEdit(workspace, {
       from: 4,
       to: 4,
       text: "!?",
