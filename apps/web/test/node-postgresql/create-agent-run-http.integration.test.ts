@@ -905,16 +905,19 @@ test("createAgentRun competing existing admission keeps one queued run", async (
       antiForgery: competingChallenge.nonce,
       request: competingRequest,
     });
-    unlinkSync(holdPath);
-    const admitted = await held;
-    assert.equal(admitted.acknowledgement, "accepted");
-    await assert.rejects(
-      () => competing,
+    // Attach the refusal handler before the next await. The competing refusal can arrive
+    // before the held acknowledgement.
+    const competingRefused = assert.rejects(
+      competing,
       (error) => {
         const protocol = requireStoryOSProtocolError(error);
         return protocol.status === 422 && problemCode(error) === "conversation_busy";
       },
     );
+    unlinkSync(holdPath);
+    const admitted = await held;
+    assert.equal(admitted.acknowledgement, "accepted");
+    await competingRefused;
     assert.equal(
       await queryPostgres(`
         SELECT
