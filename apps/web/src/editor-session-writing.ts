@@ -377,7 +377,14 @@ export function createEditorSessionWritingController({
     async refresh() {
       const capturedBefore = captured;
       const installsBefore = installs;
-      const projection = await rebuildPendingProjection(workspace);
+      let projection: PendingEditProjection;
+      try {
+        projection = await rebuildPendingProjection(workspace);
+      } catch (error) {
+        // A closed controller has no reader left for the result.
+        if (stopped) return state.projection;
+        throw error;
+      }
       // A read that started before newer input or a newer install is stale (ADR 0046).
       if (!stopped && captured === capturedBefore && installs === installsBefore && unjournaled === 0) install(projection);
       return state.projection;

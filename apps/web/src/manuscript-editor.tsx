@@ -319,7 +319,8 @@ export function ManuscriptEditor({
   }, [editable, editor]);
 
   useEffect(() => {
-    if (editor === null) return;
+    // A projection during IME composition replaces the composed text. The capture at its end renders again.
+    if (editor === null || editor.view.composing || composingRef.current) return;
     projectBlockProposals(editor, proposals);
     if (!editable) { focusedProposalRef.current = undefined; return; }
     if (focusProposal === undefined) return;
