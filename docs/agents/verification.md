@@ -14,6 +14,8 @@ every agent client. The main flow is in this guide. The reference sections are i
    `make verify-policy` runs the ASD-STE100 text guard on added prose with the
    [rejected-word list](ste-rejected-words.json). It also runs the whitespace check and the
    Rust literal guard on added Rust lines with the [exemption list](rust-literal-exemptions.json).
+   The same guard refuses each `tracing` form in `crates/` that can record author text (ADR 0047).
+
    `make verify-status` shows the change size and the module size as advisory. It also
    shows two prerequisites. `cleanTree` needs a clean worktree for a check that requires
    it. `policyFresh` needs a current passed `verify-policy` result for a complete run.

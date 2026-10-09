@@ -209,6 +209,12 @@ pub use storage_activation_proof::{
     StorageActivationProofError, require_release1_storage_activation_proof,
 };
 
+/// Returns the SQLSTATE code of a PostgreSQL error, for the Diagnostic Projection (ADR 0047).
+pub fn sql_state(error: &(dyn std::error::Error + 'static)) -> Option<String> {
+    let code = error.downcast_ref::<tokio_postgres::Error>()?.code()?;
+    Some(code.code().to_owned())
+}
+
 /// The `storyos_runtime` store. Clones share one connection pool.
 #[derive(Clone, Debug)]
 pub struct PostgresProjectReader {

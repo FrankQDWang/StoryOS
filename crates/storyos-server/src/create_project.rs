@@ -185,10 +185,13 @@ fn create_project_error(error: CreateProjectError) -> ApiError {
             "project_exists",
             "The prospective Project already exists.",
         ),
-        CreateProjectError::Unavailable(_) => problem(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "project_store_unavailable",
-            "The Project store is unavailable.",
-        ),
+        CreateProjectError::Unavailable(source) => {
+            record_unavailable(&*source);
+            problem(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "project_store_unavailable",
+                "The Project store is unavailable.",
+            )
+        }
     }
 }
