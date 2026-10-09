@@ -28,6 +28,7 @@ enum FakePlan {
 impl ModelProviderAdapter for FakeDestination {
     type Prepared = FakeExchange;
 
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn prepare(
         &self,
         request: &DestinationRequest,
@@ -121,6 +122,7 @@ impl ModelProviderAdapter for FakeDestination {
         })
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn exchange(
         &self,
         prepared: FakeExchange,

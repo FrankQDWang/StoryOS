@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 storyos-application = { path = "../storyos-application" }
 tokio = { workspace = true, features = ["time"] }
+tracing.workspace = true
 
 [lints]
 workspace = true
