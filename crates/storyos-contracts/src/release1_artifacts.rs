@@ -39,9 +39,9 @@ const SCHEMA_CATALOG_PATH: &str = "generated/schema-catalog/storyos-public-relea
 const FIXTURE_CATALOG_PATH: &str = "generated/fixtures/storyos-public-release-1.json";
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
-    "sha256:724246c75a29c503e9deee608707399dbd7277928724854d23418b63093a7595";
+    "sha256:b63e540ba02a82c034391fabbe6560d12efc0e55efad6dba7481a5f4e500cff3";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:e18e4b121933df479b274b93a57a3ae93cb638a442e6329de006d8d670fc9f68";
+    "sha256:05f14fd967c818a5722370d6c769d9d0eefeef7e1e4dc3c7cfbd2e9cea9e4f58";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 

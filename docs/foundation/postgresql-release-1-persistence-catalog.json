@@ -27,7 +27,7 @@
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:724246c75a29c503e9deee608707399dbd7277928724854d23418b63093a7595",
+      "route_catalog_sha256": "sha256:b63e540ba02a82c034391fabbe6560d12efc0e55efad6dba7481a5f4e500cff3",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
