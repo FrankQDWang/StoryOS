@@ -85,6 +85,8 @@ pub struct EditorSession {
 #[derive(Debug)]
 pub enum EditorSessionError {
     BindingConflict,
+    /// The fence of an exact retry predates the capture of the first acknowledgement (ADR 0032).
+    HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -93,6 +95,8 @@ impl std::fmt::Display for EditorSessionError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BindingConflict => formatter.write_str("The Editor Session binding conflicts"),
+            Self::HistoricalAcknowledgementUnavailable => formatter
+                .write_str("The original Editor Session acknowledgement cannot be recovered"),
             Self::InvalidChallenge => {
                 formatter.write_str("The Editor Session challenge is invalid")
             }
@@ -105,7 +109,9 @@ impl std::error::Error for EditorSessionError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict | Self::InvalidChallenge => None,
+            Self::BindingConflict
+            | Self::HistoricalAcknowledgementUnavailable
+            | Self::InvalidChallenge => None,
         }
     }
 }

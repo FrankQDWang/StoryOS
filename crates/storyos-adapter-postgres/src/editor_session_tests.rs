@@ -1,4 +1,7 @@
-use storyos_application::{EditorSessionId, EditorSessionStore, OpenEditorSession};
+use storyos_application::{
+    EditorSessionError, EditorSessionId, EditorSessionStore, OpenEditorSession,
+};
+use tokio_postgres::NoTls;
 
 use crate::PostgresProjectReader;
 use crate::create_volume_authority_tests::{NamedEdit, apply_named_edit};
@@ -56,4 +59,46 @@ async fn an_exact_retry_after_an_author_edit_returns_the_first_editor_session() 
             .unwrap(),
         first
     );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_exact_retry_separates_a_pre_capture_fence_from_a_damaged_acknowledgement() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let store = store();
+    let (admin, connection) = tokio_postgres::connect(
+        &std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+            .expect("run through scripts/verify-project-scope.sh"),
+        NoTls,
+    )
+    .await
+    .unwrap();
+    tokio::spawn(connection);
+    let (scope, ..) = seed_two_chapters(&store, OWNER, "e130", "e131", "e132", "e133").await;
+    let request = open_session_request(&store, &scope, "e134").await;
+    store.create_editor_session(&request).await.unwrap();
+    let key = &request.challenge_binding.idempotency_key;
+    let mut observed = Vec::new();
+    for (evidence, suffix) in [("NULL", "e135"), ("'{}'::jsonb", "e136")] {
+        admin
+            .batch_execute(&format!(
+                "UPDATE storyos.command_idempotency SET response_editor_session = {evidence}
+                  WHERE idempotency_key = '{key}'"
+            ))
+            .await
+            .unwrap();
+        observed.push(
+            match store
+                .create_editor_session(&exact_retry(&request, suffix))
+                .await
+            {
+                Err(EditorSessionError::HistoricalAcknowledgementUnavailable) => "pre-capture",
+                Err(EditorSessionError::Unavailable(_)) => "damaged",
+                other => panic!("the replay must fail on this evidence, got {other:?}"),
+            },
+        );
+    }
+    assert_eq!(observed, vec!["pre-capture", "damaged"]);
 }

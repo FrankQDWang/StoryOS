@@ -6,6 +6,9 @@ use storyos_application::{
 };
 
 use super::*;
+use crate::editor_session_acknowledgement::{
+    decode_editor_session_acknowledgement, encode_editor_session_acknowledgement,
+};
 
 impl EditorSessionStore for PostgresProjectReader {
     async fn create_editor_session(
@@ -20,7 +23,7 @@ impl EditorSessionStore for PostgresProjectReader {
             .consume(&request.challenge_binding, &request.nonce_digest)
             .await
             .map_err(session_challenge_error)?;
-        let editor_session_id = match challenge_use {
+        let result = match challenge_use {
             ProjectCommandChallengeUse::FirstUse => {
                 transaction.client.execute(
                     "INSERT INTO storyos.editor_sessions
@@ -86,11 +89,20 @@ impl EditorSessionStore for PostgresProjectReader {
                 )
                 .await
                 .map_err(session_database_error)?;
+                let session = read_session(
+                    &transaction.client,
+                    &request.project_scope,
+                    request.editor_session_id.as_ref(),
+                    &request.client_binding,
+                )
+                .await?
+                .ok_or(EditorSessionError::BindingConflict)?;
                 transaction
                     .client
                     .execute(
                         "UPDATE storyos.command_idempotency
-                     SET outcome_kind = 'settled', result_reference = $5
+                     SET outcome_kind = 'settled', result_reference = $5,
+                         response_editor_session = $6::text::jsonb
                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                        AND command_kind = $3 AND idempotency_key = $4::text::uuid",
                         &[
@@ -99,13 +111,16 @@ impl EditorSessionStore for PostgresProjectReader {
                             &request.challenge_binding.command_kind,
                             &request.challenge_binding.idempotency_key,
                             &request.editor_session_id.as_ref(),
+                            &encode_editor_session_acknowledgement(&session),
                         ],
                     )
                     .await
                     .map_err(session_database_error)?;
-                request.editor_session_id.as_ref().to_owned()
+                session
             }
-            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => result_reference,
+            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
+                replay_session(&transaction.client, request, &result_reference).await?
+            }
             ProjectCommandChallengeUse::ExactRetryInProgress => {
                 transaction
                     .rollback()
@@ -114,14 +129,6 @@ impl EditorSessionStore for PostgresProjectReader {
                 return Err(EditorSessionError::BindingConflict);
             }
         };
-        let result = read_session(
-            &transaction.client,
-            &request.project_scope,
-            &editor_session_id,
-            &request.client_binding,
-        )
-        .await?
-        .ok_or(EditorSessionError::BindingConflict)?;
         transaction
             .commit()
             .await
@@ -234,20 +241,16 @@ async fn read_session(
         .get::<_, String>(11)
         .parse::<u64>()
         .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
-    let stored = row.get::<_, String>(12);
     let chapter_id: String = row.get(9);
     let authoritative_revision_id: String = row.get(10);
-    let blocks = crate::manuscript_block::load_or_upgrade_blocks(
+    let (body, blocks, payload_digest_hex) = materialized_payload(
         client,
-        scope.owner_user_id.as_ref(),
-        scope.project_id.as_ref(),
+        scope,
         &chapter_id,
         &authoritative_revision_id,
-        &stored,
+        &row.get::<_, String>(12),
     )
-    .await
-    .map_err(session_database_error)?;
-    let body = crate::manuscript_block::display_body_from_stored(&stored, &blocks);
+    .await?;
     Ok(Some(EditorSession {
         editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
         client_binding: binding.clone(),
@@ -269,14 +272,7 @@ async fn read_session(
             chapter_id,
             authoritative_revision_id,
             project_activity_position,
-            payload_digest_hex: Sha256::digest(body.as_bytes()).iter().fold(
-                String::with_capacity(64),
-                |mut encoded, byte| {
-                    use std::fmt::Write as _;
-                    write!(encoded, "{byte:02x}").expect("writing to String cannot fail");
-                    encoded
-                },
-            ),
+            payload_digest_hex,
             body,
             blocks,
             created_at: row.get(13),
@@ -288,6 +284,130 @@ async fn read_session(
         )
         .await?,
     }))
+}
+
+/// The first acknowledgement of a settled Create Editor Session (protocol section 7.3). A fence
+/// without a captured acknowledgement predates the capture (ADR 0032).
+async fn replay_session(
+    client: &tokio_postgres::Client,
+    request: &OpenEditorSession,
+    editor_session_id: &str,
+) -> Result<EditorSession, EditorSessionError> {
+    let scope = &request.project_scope;
+    let stored: Option<String> = client
+        .query_one(
+            "SELECT response_editor_session::text FROM storyos.command_idempotency
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND command_kind = $3 AND idempotency_key = $4::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &request.challenge_binding.command_kind,
+                &request.challenge_binding.idempotency_key,
+            ],
+        )
+        .await
+        .map_err(session_database_error)?
+        .get(/*idx*/ 0);
+    let acknowledgement = decode_editor_session_acknowledgement(
+        &stored.ok_or(EditorSessionError::HistoricalAcknowledgementUnavailable)?,
+    )
+    .map_err(|()| damaged("the stored Editor Session acknowledgement is damaged"))?;
+    let binding = &request.client_binding;
+    let generation = binding.session_generation.to_string();
+    let row = client
+        .query_opt(
+            "SELECT to_char(session.opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
+                    convert_from(payload.canonical_bytes, 'UTF8')
+               FROM storyos.editor_sessions AS session
+          LEFT JOIN storyos.authoritative_revisions AS revision
+                 ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+                     revision.revision_id) =
+                    (session.owner_user_id, session.project_id, $6::text::uuid, $7::text::uuid)
+          LEFT JOIN storyos.authoritative_payloads AS payload
+                 ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                    (revision.owner_user_id, revision.project_id, revision.payload_id)
+              WHERE session.owner_user_id = current_setting('storyos.owner_user_id')::uuid
+                AND session.project_id = current_setting('storyos.project_id')::uuid
+                AND session.editor_session_id = $1::text::uuid
+                AND session.client_session_binding_ref = $2
+                AND session.client_session_generation = $3::text::numeric
+                AND session.client_contract_revision = $4 AND session.security_policy_revision = $5",
+            &[
+                &editor_session_id,
+                &binding.binding_ref,
+                &generation,
+                &binding.client_contract_revision,
+                &binding.security_policy_revision,
+                &acknowledgement.chapter_id,
+                &acknowledgement.authoritative_revision_id,
+            ],
+        )
+        .await
+        .map_err(session_database_error)?
+        .ok_or(EditorSessionError::BindingConflict)?;
+    let stored_payload: String = row
+        .get::<_, Option<String>>(1)
+        .ok_or_else(|| damaged("the acknowledged Authoritative Revision is missing"))?;
+    let (body, blocks, payload_digest_hex) = materialized_payload(
+        client,
+        scope,
+        &acknowledgement.chapter_id,
+        &acknowledgement.authoritative_revision_id,
+        &stored_payload,
+    )
+    .await?;
+    Ok(EditorSession {
+        editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
+        client_binding: binding.clone(),
+        opened_at: row.get(0),
+        writer: acknowledgement.writer,
+        base_snapshot: EditorSessionSnapshot {
+            snapshot_id: acknowledgement.snapshot_id,
+            chapter_id: acknowledgement.chapter_id,
+            authoritative_revision_id: acknowledgement.authoritative_revision_id,
+            project_activity_position: acknowledgement.project_activity_position,
+            payload_digest_hex,
+            body,
+            blocks,
+            created_at: acknowledgement.created_at,
+        },
+        author_undo_frontier_sequence: acknowledgement.author_undo_frontier_sequence,
+    })
+}
+
+/// The display body, the Blocks, and the payload digest of one stored Revision payload.
+async fn materialized_payload(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    revision_id: &str,
+    stored: &str,
+) -> Result<(String, Vec<storyos_application::ManuscriptBlock>, String), EditorSessionError> {
+    let blocks = crate::manuscript_block::load_or_upgrade_blocks(
+        client,
+        scope.owner_user_id.as_ref(),
+        scope.project_id.as_ref(),
+        chapter_id,
+        revision_id,
+        stored,
+    )
+    .await
+    .map_err(session_database_error)?;
+    let body = crate::manuscript_block::display_body_from_stored(stored, &blocks);
+    let digest = Sha256::digest(body.as_bytes()).iter().fold(
+        String::with_capacity(64),
+        |mut encoded, byte| {
+            use std::fmt::Write as _;
+            write!(encoded, "{byte:02x}").expect("writing to String cannot fail");
+            encoded
+        },
+    );
+    Ok((body, blocks, digest))
+}
+
+fn damaged(message: &str) -> EditorSessionError {
+    EditorSessionError::Unavailable(message.into())
 }
 
 pub(super) async fn current_author_undo_frontier_sequence(
