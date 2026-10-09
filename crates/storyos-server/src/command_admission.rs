@@ -608,11 +608,14 @@ impl ProjectCommandRoute {
                 &format!("The {name} challenge is invalid."),
             ),
             ProjectCommandError::MissingProject => resource_unavailable(),
-            ProjectCommandError::Unavailable(_) => problem(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "project_store_unavailable",
-                "The Project store is unavailable.",
-            ),
+            ProjectCommandError::Unavailable(source) => {
+                record_unavailable(&*source);
+                problem(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "project_store_unavailable",
+                    "The Project store is unavailable.",
+                )
+            }
         }
     }
 }

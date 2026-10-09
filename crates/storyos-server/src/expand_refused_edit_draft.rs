@@ -53,7 +53,10 @@ fn expansion_problem(error: ProjectCommandError) -> ApiError {
             "challenge_invalid",
             "The Draft expansion challenge is invalid.",
         ),
-        ProjectCommandError::Unavailable(_) => store_unavailable(),
+        ProjectCommandError::Unavailable(source) => {
+            record_unavailable(&*source);
+            store_unavailable()
+        }
     }
 }
 

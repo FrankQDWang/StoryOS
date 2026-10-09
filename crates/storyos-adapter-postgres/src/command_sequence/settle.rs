@@ -4,8 +4,8 @@
 //! `in_progress`. The settle step settles the admitted command in a new transaction.
 
 use storyos_application::{
-    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectCommandEnvelope,
-    ProjectCommandError,
+    DiagnosticField as _, DiagnosticId, ProjectCommandChallengeTransaction,
+    ProjectCommandChallengeUse, ProjectCommandEnvelope, ProjectCommandError,
 };
 use tokio_postgres::Client;
 
@@ -13,7 +13,8 @@ use super::admission::insert_admission;
 use super::records::read_project;
 use super::{
     Admission, CommandIsolation, MissingAdmission, ProjectCommand, SettledCommand,
-    challenge_problem, replay_command, replay_problem, settle_classified, unavailable,
+    challenge_problem, record_error, replay_command, replay_problem, settle_classified,
+    unavailable,
 };
 use crate::PostgresProjectReader;
 use crate::command_replay::read_command_replay;
@@ -53,7 +54,26 @@ enum AdmittedState {
 }
 
 /// Runs the admit step and then the settle step. `after_admission` runs between the steps.
+#[tracing::instrument(skip_all, fields(
+    command_kind = C::SPEC.kind.diagnostic(),
+    project_id = envelope.project_scope.project_id.diagnostic(),
+    command_id = DiagnosticId(&envelope.ids.command_id).diagnostic(),
+    author_command_admission_id = DiagnosticId(&envelope.ids.author_command_admission_id).diagnostic(),
+    correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
+    outcome = tracing::field::Empty,
+))]
 pub(crate) async fn admit_and_settle<C: AdmittedCommand>(
+    store: &PostgresProjectReader,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+    after_admission: impl FnOnce() -> Result<(), C::Error>,
+) -> Result<SettledCommand<C>, C::Error> {
+    admit_then_settle(store, envelope, command, after_admission)
+        .await
+        .inspect_err(record_error)
+}
+
+async fn admit_then_settle<C: AdmittedCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
@@ -86,7 +106,10 @@ pub(crate) async fn admit_and_settle<C: AdmittedCommand>(
         }
         ProjectCommandChallengeUse::FirstUse => {
             match admit(&transaction.client, envelope, command).await {
-                Ok(()) => transaction.commit().await.map_err(challenge_error)?,
+                Ok(()) => {
+                    transaction.commit().await.map_err(challenge_error)?;
+                    tracing::Span::current().record("outcome", "admitted");
+                }
                 Err(error) => {
                     transaction.rollback().await.map_err(challenge_error)?;
                     return Err(error);
@@ -120,7 +143,25 @@ async fn admit<C: AdmittedCommand>(
 /// Settles one admitted command in a new transaction. It reads the Project row without a lock, and
 /// the command locks its own facts in `classify`. It requires an Admission without settlement that is not expired and whose Editor Session is
 /// the current writer. A settled Admission replays its Receipt.
+#[tracing::instrument(skip_all, fields(
+    command_kind = C::SPEC.kind.diagnostic(),
+    project_id = envelope.project_scope.project_id.diagnostic(),
+    command_id = DiagnosticId(&envelope.ids.command_id).diagnostic(),
+    author_command_admission_id = DiagnosticId(&envelope.ids.author_command_admission_id).diagnostic(),
+    correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
+    outcome = tracing::field::Empty,
+))]
 pub(crate) async fn settle_admitted_command<C: AdmittedCommand>(
+    store: &PostgresProjectReader,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+) -> Result<SettledCommand<C>, C::Error> {
+    settle_admitted_steps(store, envelope, command)
+        .await
+        .inspect_err(record_error)
+}
+
+async fn settle_admitted_steps<C: AdmittedCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
@@ -173,12 +214,21 @@ pub(crate) async fn settle_admitted_command<C: AdmittedCommand>(
 }
 
 /// Replays the Domain Receipt `receipt_id` of one settled command.
+#[tracing::instrument(skip_all, fields(
+    command_kind = C::SPEC.kind.diagnostic(),
+    project_id = envelope.project_scope.project_id.diagnostic(),
+    command_id = DiagnosticId(&envelope.ids.command_id).diagnostic(),
+    author_command_admission_id = DiagnosticId(&envelope.ids.author_command_admission_id).diagnostic(),
+    correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
+    outcome = tracing::field::Empty,
+))]
 pub(crate) async fn replay_settled<C: ProjectCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
     receipt_id: &str,
 ) -> Result<SettledCommand<C>, C::Error> {
+    tracing::Span::current().record("outcome", "replayed");
     read_command_replay(
         store,
         &envelope.challenge_binding,

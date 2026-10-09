@@ -8,6 +8,10 @@ pub(super) fn contract_reason<W: DeserializeOwned>(
     reason: &impl ReasonCode,
 ) -> Result<W, ApiError> {
     serde_json::from_value(serde_json::Value::from(reason.code())).map_err(|_| {
+        tracing::warn!(
+            reason = "unmapped_contract_reason",
+            "a Core reason has no public reason"
+        );
         problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",

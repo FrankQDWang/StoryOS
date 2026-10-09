@@ -44,7 +44,10 @@ fn close_problem(error: ProjectCommandError) -> ApiError {
             "draft_binding_conflict",
             "The Draft Discard binding conflicts.",
         ),
-        ProjectCommandError::Unavailable(_) => store_unavailable(),
+        ProjectCommandError::Unavailable(source) => {
+            record_unavailable(&*source);
+            store_unavailable()
+        }
     }
 }
 

@@ -4,8 +4,9 @@
 use std::future::Future;
 
 use storyos_application::{
-    AdmittedProjectCommand, Project, ProjectCommandChallengeTransaction,
-    ProjectCommandChallengeUse, ProjectCommandEnvelope, ProjectCommandError,
+    AdmittedProjectCommand, DiagnosticField as _, DiagnosticId, Project,
+    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectCommandEnvelope,
+    ProjectCommandError,
 };
 use tokio_postgres::Client;
 
@@ -148,7 +149,30 @@ impl AdmittedResponse for ProjectResponse {
     }
 }
 
+#[tracing::instrument(skip_all, fields(
+    command_kind = C::SPEC.kind.diagnostic(),
+    project_id = envelope.project_scope.project_id.diagnostic(),
+    command_id = DiagnosticId(&envelope.ids.command_id).diagnostic(),
+    author_command_admission_id = DiagnosticId(&envelope.ids.author_command_admission_id).diagnostic(),
+    correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
+    outcome = tracing::field::Empty,
+))]
 pub(crate) async fn admit_project_command<C: AdmitCommand>(
+    store: &PostgresProjectReader,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+) -> Result<Admitted<C>, C::Error> {
+    let admitted = admit_steps(store, envelope, command).await;
+    let outcome = if admitted.is_ok() {
+        "admitted"
+    } else {
+        "not_admitted"
+    };
+    tracing::Span::current().record("outcome", outcome.diagnostic());
+    admitted
+}
+
+async fn admit_steps<C: AdmitCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,

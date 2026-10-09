@@ -4,8 +4,9 @@
 use std::future::Future;
 
 use storyos_application::{
-    ProjectCommandChallengeError, ProjectCommandChallengeTransaction, ProjectCommandChallengeUse,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
+    DiagnosticField, DiagnosticId, ProjectCommandChallengeError,
+    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectCommandEnvelope,
+    ProjectCommandError, ProjectCommandSettlement, ProjectScope,
 };
 use storyos_core::{ProjectLifecycle, ReasonCode, TransitionOutcome};
 use tokio_postgres::Client;
@@ -485,7 +486,33 @@ pub(crate) type SettledCommand<C> = ProjectCommandSettlement<
     <C as ProjectCommand>::ZeroEffect,
 >;
 
+#[tracing::instrument(skip_all, fields(
+    command_kind = C::SPEC.kind.diagnostic(),
+    project_id = envelope.project_scope.project_id.diagnostic(),
+    command_id = DiagnosticId(&envelope.ids.command_id).diagnostic(),
+    author_command_admission_id = DiagnosticId(&envelope.ids.author_command_admission_id).diagnostic(),
+    correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
+    outcome = tracing::field::Empty,
+))]
 pub(crate) async fn settle_project_command<C: ProjectCommand>(
+    store: &PostgresProjectReader,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+) -> Result<SettledCommand<C>, C::Error> {
+    settle_steps(store, envelope, command)
+        .await
+        .inspect_err(record_error)
+}
+
+/// Records the category of a failed or refused command on the current command span.
+pub(crate) fn record_error(error: &impl CommandError) {
+    let outcome = error
+        .sequence_error()
+        .map_or("refused", DiagnosticField::diagnostic);
+    tracing::Span::current().record("outcome", outcome.diagnostic());
+}
+
+async fn settle_steps<C: ProjectCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
@@ -512,6 +539,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     match challenge_use {
         ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
             transaction.rollback().await.map_err(challenge_error)?;
+            tracing::Span::current().record("outcome", "replayed");
             read_command_replay(
                 store,
                 &envelope.challenge_binding,
@@ -614,6 +642,9 @@ async fn settle_classified<C: ProjectCommand>(
         refs: zero_refs,
         revision_ids: Vec::new(),
     };
+    // A zero-authority outcome records its reason code, and an applied variant its result kind.
+    let recorded = classified.reason_code().unwrap_or(receipt.result);
+    tracing::Span::current().record("outcome", recorded.diagnostic());
     let (receipt_created_at, outcome) = match classified {
         TransitionOutcome::Applied((applied, plan)) => {
             let variant = command.applied_variant(&applied, &plan);
