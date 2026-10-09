@@ -346,8 +346,8 @@ test("Editor Sessions capture nonzero Activity and preserve legacy Snapshot evid
     assert.equal((await getSnapshot({ ...canonicalInput,
       snapshotId: next.session.base_snapshot.snapshot_id })).snapshot.project_activity_position, "3");
     assert.deepEqual(await createEditorSession(next.input), next.session);
-    assert.deepEqual(await createEditorSession(first.input),
-      { ...first.session, base_snapshot: legacy.base_snapshot });
+    // An exact retry returns the captured first acknowledgement, not the changed base row.
+    assert.deepEqual(await createEditorSession(first.input), first.session);
     assert.deepEqual((await getEditorSession(legacyInput)).base_snapshot, legacy.base_snapshot);
     assert.deepEqual((await getSnapshot(canonicalInput)).snapshot, legacySnapshot.snapshot);
     assert.deepEqual(JSON.parse(await queryPostgres(retainedQuery)), retained);
