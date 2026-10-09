@@ -164,6 +164,8 @@ export function createEditorSessionWritingController({
   // The candidate whose latest group has an unknown outcome. Input waits in `held` until it settles.
   let unknownCandidate: string | undefined;
   let openCandidate: string | undefined;
+  // The candidate of the latest captured input. It continues before its Journal append completes.
+  let capturedCandidate: string | undefined;
   const held: Captured[] = [];
   const successors = new Map<string, string>();
   const listeners = new Set<() => void>();
@@ -357,6 +359,7 @@ export function createEditorSessionWritingController({
       unjournaled += 1;
       if (HARD_INPUT.includes(origin)) submissionClosed = true;
       const key = candidateKey(edit);
+      capturedCandidate = key;
       if (key !== undefined && "kind" in edit && edit.kind === "candidate_selection") {
         setCandidate(key, [edit.target.revision_id], edit.resultingBody);
       }
@@ -399,7 +402,8 @@ export function createEditorSessionWritingController({
         || (workspace.pending.author_edit_unsettled_intent_count ?? workspace.pending.unsettled_intent_count)
           !== workspace.pending.unsettled_intent_count) return false;
       // Input in the candidate of the open or in-progress group continues it (ADR 0046).
-      if (candidate !== undefined && openCandidate === `${candidate.proposalId}:${candidate.operationId}`) return true;
+      const key = candidate === undefined ? undefined : `${candidate.proposalId}:${candidate.operationId}`;
+      if (key !== undefined && (key === openCandidate || key === capturedCandidate)) return true;
       return !submissionClosed && (!hardBoundary || pendingIntentCount === 0 && unjournaled === 0);
     },
     holdsInput: () => held.length > 0,

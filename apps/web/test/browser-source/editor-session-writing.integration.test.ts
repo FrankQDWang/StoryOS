@@ -168,6 +168,27 @@ it("journals a candidate paste after typing against the Revision that the typing
   }
 });
 
+it("accepts typing in a candidate right after a paste in it, before the Journal append completes", async () => {
+  const session = await openWriting();
+  try {
+    const candidate = { proposalId: PROPOSAL, operationId: OPERATION };
+    session.writing.capture(candidateEdit(FIRST_REVISION, "Candidate", " pasted"), "paste");
+    expect(session.writing.canAcceptInput(false, candidate)).toBe(true);
+    session.writing.capture(candidateEdit(FIRST_REVISION, "Candidate pasted", "!"), "typing");
+    await session.reply((request, init) => revisedResponse(request, init, SECOND_REVISION, "1"));
+    await session.waitTimer(250);
+    session.fire(250);
+    await session.reply((request, init) => revisedResponse(request, init, THIRD_REVISION, "2"));
+    await session.writing.whenIdle();
+    expect({ targets: session.sent.map(({ request }) =>
+      (request.proposal_target as { revision_id: string }).revision_id), text: session.candidate()?.text,
+      failures: session.failures })
+      .toEqual({ targets: [FIRST_REVISION, SECOND_REVISION], text: "Candidate pasted!", failures: [] });
+  } finally {
+    await session.close();
+  }
+});
+
 it("keeps held candidate input visible and outside the Journal after a conflicted candidate edit", async () => {
   const session = await openWriting();
   try {
