@@ -190,3 +190,7 @@ impl DiagnosticField for crate::ProjectCommandError {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "diagnostics_tests.rs"]
+mod tests;
