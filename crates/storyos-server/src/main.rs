@@ -11,6 +11,11 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    storyos_adapter_diagnostics::install(
+        env::var(storyos_adapter_diagnostics::LOG_LEVEL_VARIABLE)
+            .ok()
+            .as_deref(),
+    )?;
     let arguments = env::args().skip(/*n*/ 1).collect::<Vec<_>>();
     if let [flag, root] = arguments.as_slice()
         && flag == "--check-web-root"

@@ -4,6 +4,7 @@ use std::path::Path;
 use serde::Serialize;
 
 const EXPECTED_CRATES: &[&str] = &[
+    "crates/storyos-adapter-diagnostics",
     "crates/storyos-adapter-fake-destination",
     "crates/storyos-adapter-postgres",
     "crates/storyos-application",

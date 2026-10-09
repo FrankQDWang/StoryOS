@@ -53,6 +53,7 @@ mod reopen_rejected_operations;
 mod reopen_withdrawn_proposal;
 mod replan_proposal;
 mod request_origin;
+mod request_span;
 mod session_bootstrap;
 mod set_current_chapter;
 mod snapshot;
