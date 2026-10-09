@@ -273,6 +273,11 @@ fn editor_session_error(error: EditorSessionError) -> ApiError {
             "idempotency_binding_conflict",
             "The Editor Session binding conflicts.",
         ),
+        EditorSessionError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Editor Session acknowledgement cannot be recovered. Refresh to inspect the current Project.",
+        ),
         EditorSessionError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,
             "challenge_invalid",
