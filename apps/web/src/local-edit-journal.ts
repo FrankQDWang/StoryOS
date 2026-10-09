@@ -977,18 +977,22 @@ export async function persistCandidateSelection(
   }, cryptoImpl);
 }
 
-export async function candidateProjectionFromJournal(
+/** The latest journaled text of each Proposal operation, keyed `proposal:operation`, with the Revisions that its records target. */
+export async function candidateTextsFromJournal(
   workspace: EditorWorkspace,
-  target: AuthorEditProposalTarget,
-): Promise<string | undefined> {
+): Promise<Map<string, { revisions: string[]; text: string }>> {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const retained = retainedRecoverySequences(snapshot);
-  // A settled revision of this target stays local until the display shows the new Proposal Revision (#943).
-  const unresolved = snapshot.records.filter((record) =>
-    !retained.has(record.local_intent_sequence)
-    && JSON.stringify(record.proposal_target) === JSON.stringify(target));
-  const latest = unresolved.at(-1);
-  return latest === undefined ? undefined : snapshot.bodyBySequence.get(latest.local_intent_sequence);
+  const texts = new Map<string, { revisions: string[]; text: string }>();
+  for (const record of snapshot.records) {
+    const target = record.proposal_target;
+    const text = snapshot.bodyBySequence.get(record.local_intent_sequence);
+    if (target === undefined || text === undefined || retained.has(record.local_intent_sequence)) continue;
+    const key = `${target.proposal_id}:${target.operation_id}`;
+    const revisions = texts.get(key)?.revisions ?? [];
+    texts.set(key, { revisions: revisions.includes(target.revision_id) ? revisions : [...revisions, target.revision_id], text });
+  }
+  return texts;
 }
 
 export async function persistSplitBlock(

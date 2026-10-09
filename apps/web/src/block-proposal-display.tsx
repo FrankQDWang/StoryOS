@@ -1,5 +1,5 @@
 import { inlineProjectionAnchor } from "./inline-proposal-decoration.ts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { getProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
@@ -9,7 +9,6 @@ import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-edito
 import type { EditorReadyState } from "./editor-types.ts";
 import { RefusedEditDraftDisplay } from "./refused-edit-draft-display.tsx";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
-import { candidateProjectionFromJournal } from "./local-edit-journal.ts";
 import { canonicalDraftValue as canonical } from "./refused-edit-discard.ts";
 import { readExpansionJournal, retryExpansion } from "./refused-edit-expansion.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
@@ -27,6 +26,8 @@ import { ProposalDecisionStatus } from "./proposal-decision-status.tsx";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
+
+const ignoreChanges = () => () => {};
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -79,7 +80,14 @@ export function BlockProposalDisplay({
   onAccepted: () => Promise<void>;
 }) {
   const [reads, setReads] = useState<ProposalRead[]>([]);
-  const [candidateTexts, setCandidateTexts] = useState<Record<string, string>>({});
+  const writing = useSyncExternalStore(editorProps.writing?.subscribe ?? ignoreChanges,
+    () => editorProps.writing?.snapshot());
+  const settlements = writing?.settlements ?? 0;
+  // The writing controller supplies the candidate text, also input that it holds (ADR 0046).
+  const candidateText = (proposal: BlockProposalInspect, operationId: string) => {
+    const shown = writing?.candidates.get(`${proposal.proposal_id}:${operationId}`);
+    return shown?.revisions.includes(proposal.revision_id) === true ? shown.text : undefined;
+  };
   const [discardHold, setDiscardHold] = useState(false);
   const [settlementRefresh, setSettlementRefresh] = useState(0);
   const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({});
@@ -155,7 +163,7 @@ export function BlockProposalDisplay({
       if (active) setRecoveryCheck({ workspace, generation });
     });
     return () => { active = false; };
-  }, [editorProps.persistWorkspace, settlementRefresh, decisionGeneration]);
+  }, [editorProps.persistWorkspace, settlementRefresh, settlements, decisionGeneration]);
 
   useEffect(() => {
     let active = true;
@@ -193,34 +201,8 @@ export function BlockProposalDisplay({
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, locatorKey, refreshKey,
-    settlementRefresh,
+    settlementRefresh, settlements,
     editorProps.baseUrl, editorProps.fetchImpl]);
-
-  useEffect(() => {
-    let active = true;
-    const workspace = editorProps.persistWorkspace;
-    if (workspace === undefined) {
-      setCandidateTexts({});
-      return () => { active = false; };
-    }
-    void Promise.all(reads.flatMap(({ proposal }) => {
-      if (proposal === undefined || proposal.chapter_id !== chapterId) return [];
-      return proposal.operations.filter((item) => item.resolution === "pending").map(async (operation) => {
-        const text = await candidateProjectionFromJournal(workspace, {
-          proposal_id: proposal.proposal_id,
-          operation_id: operation.operation_id,
-          revision_id: proposal.revision_id,
-          manuscript_block_id: operation.manuscript_block_id,
-        });
-        return text === undefined ? undefined
-          : [`${proposal.proposal_id}:${operation.operation_id}:${proposal.revision_id}`, text] as const;
-      });
-    })).then((values) => {
-      if (active) setCandidateTexts(Object.fromEntries(values.filter((item) => item !== undefined)));
-    }).catch(editorProps.onFailure);
-    return () => { active = false; };
-  }, [reads, chapterId, editorProps.persistWorkspace, editorProps.persistWorkspace?.pending.unsettled_intent_count,
-    editorProps.onFailure]);
 
   useEffect(() => {
     let active = true;
@@ -320,10 +302,10 @@ export function BlockProposalDisplay({
       && editorProps.persistWorkspace.session.writer.kind === "current_writer";
     const sessionBlocked = sessionBlockedIds.includes(proposal.proposal_id);
     const pendingAcceptance = pendingAcceptances.includes(proposal.proposal_id);
-    const localPending = candidateTexts[`${proposal.proposal_id}:${operation.operation_id}:${proposal.revision_id}`] !== undefined;
+    const localText = candidateText(proposal, operation.operation_id);
     const controlsReady = allHeadsKnown && acceptanceChecked && !recoveryUnavailable
       && journalPendingIds.length === 0 && writerOpen && !sessionBlocked
-      && editorProps.editable && accepting !== proposal.proposal_id && !localPending;
+      && editorProps.editable && accepting !== proposal.proposal_id;
     const problem = knownProblems[proposal.proposal_id];
     const eligible = controlsReady
       && proposal.generation === "ready" && proposal.validation === "valid"
@@ -362,8 +344,7 @@ export function BlockProposalDisplay({
       blockId: operation.manuscript_block_id,
       sourceRunId: proposal.source.kind === "agent_run_decision" ? proposal.source.run_id : "",
       sourceDecisionId: proposal.source.kind === "agent_run_decision" ? proposal.source.decision_id : "",
-      text: candidateTexts[`${proposal.proposal_id}:${operation.operation_id}:${proposal.revision_id}`]
-        ?? operation.candidate_text,
+      text: localText ?? operation.candidate_text,
       eligible,
       candidateEditable: rejectEligible && baseMatches && condition === "absent"
         && proposal.generation === "ready" && proposal.validation !== "invalid"
@@ -381,8 +362,7 @@ export function BlockProposalDisplay({
       validity: proposal.validation,
       sessionEligible: writerOpen && !sessionBlocked,
       expectedHeads,
-      localPending: candidateTexts[`${proposal.proposal_id}:${operation.operation_id}:${proposal.revision_id}`]
-        !== undefined,
+      localPending: localText !== undefined,
     });
   }
 
@@ -787,7 +767,7 @@ export function BlockProposalDisplay({
         editable={editorProps.editable && !discardHold && !recoveryUnavailable
           && journalPendingIds.length === 0
           && (acceptanceChecked || (effectiveLocators.length === 0
-            && editorProps.persistWorkspace?.pending.unsettled_intent_count === 0))
+            && writing?.projection.unsettled_intent_count === 0))
           && accepting === undefined
           && pendingAcceptances.length === 0}
         proposals={projections}
@@ -803,8 +783,8 @@ export function BlockProposalDisplay({
         onCopyProposal={copyDisplayed} />
       <RefusedEditDraftDisplay workspace={editorProps.persistWorkspace} scope={scope}
         baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
-        refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold}
-        onProjection={(projection) => editorProps.controllerRef.current?.installProjection(projection)}
+        refreshKey={`${refreshKey}:${settlementRefresh}:${settlements}`} onHoldChange={setDiscardHold}
+        onProjection={async () => { await editorProps.writing?.refresh().catch(editorProps.onFailure); }}
         onResult={() => setSettlementRefresh((value) => value + 1)} />
       {reads.flatMap(({ proposal }) => proposal?.source.kind === "refused_edit_draft" ? [
         <section className="editor-recovery" key={proposal.proposal_id} data-proposal-id={proposal.proposal_id} aria-label="Draft Proposal">
