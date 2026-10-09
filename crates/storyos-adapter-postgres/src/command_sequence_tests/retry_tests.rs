@@ -27,7 +27,7 @@ use super::proposal_generation::{
 };
 use super::steer_agent_run::steer_agent_run_call;
 use super::structure::{
-    DELETE_VOLUME, SET_CURRENT_CHAPTER, create_chapter_call, create_volume_call,
+    DELETE_VOLUME, SET_CURRENT_CHAPTER, create_chapter, create_chapter_call, create_volume_call,
     delete_chapter_call, delete_volume, delete_volume_call, new_volume, set_current_chapter_call,
     update_chapter_call, update_volume_call,
 };
@@ -270,6 +270,27 @@ async fn an_exact_retry_ignores_a_later_canonical_snapshot_at_the_same_position(
                 .unwrap(),
         ),
         (switched, renamed)
+    );
+}
+
+/// The first Editor Session of a Project writes a second canonical Snapshot at the Activity
+/// position of the Create Chapter Receipt.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_create_chapter_exact_retry_after_the_first_editor_session_returns_the_first_settlement()
+{
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, _admin) = stores().await;
+    let call = create_chapter_call(&store, /*base*/ 0xe100).await;
+    let first = create_chapter(&store, &call).await.unwrap();
+    open_session(&store, &call.envelope.project_scope, "e10a").await;
+    assert_eq!(
+        create_chapter(&store, &with_new_request_ids(&call))
+            .await
+            .unwrap(),
+        first
     );
 }
 

@@ -332,6 +332,9 @@ pub(crate) fn undo_from_session(error: EditorSessionError) -> ProjectCommandErro
         EditorSessionError::BindingConflict | EditorSessionError::InvalidChallenge => {
             ProjectCommandError::BindingConflict
         }
+        EditorSessionError::HistoricalAcknowledgementUnavailable => {
+            ProjectCommandError::HistoricalAcknowledgementUnavailable
+        }
         EditorSessionError::Unavailable(source) => ProjectCommandError::Unavailable(source),
     }
 }
