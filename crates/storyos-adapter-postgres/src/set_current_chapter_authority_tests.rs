@@ -231,6 +231,17 @@ pub(super) async fn open_session(
     scope: &ProjectScope,
     suffix: &str,
 ) -> String {
+    let request = open_session_request(store, scope, suffix).await;
+    create_editor_session(store, &request).await.unwrap();
+    request.editor_session_id.as_ref().to_owned()
+}
+
+/// Issues one Create Editor Session Command Challenge and returns the request that uses it.
+pub(super) async fn open_session_request(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: &str,
+) -> OpenEditorSession {
     let issue = command_issue(
         scope,
         suffix,
@@ -243,26 +254,21 @@ pub(super) async fn open_session(
     issue_project_command_challenge(store, &issue)
         .await
         .unwrap();
-    let editor_session_id = format!("018f0000-0000-7001-8000-00000001{suffix}");
-    create_editor_session(
-        store,
-        &OpenEditorSession {
-            project_scope: scope.clone(),
-            editor_session_id: EditorSessionId::new(editor_session_id.clone()),
-            snapshot_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
-            client_binding: EditorClientBinding {
-                binding_ref: issue.binding.client_session_binding_digest.clone(),
-                session_generation: issue.binding.client_session_generation,
-                client_contract_revision: issue.binding.client_contract_revision.clone(),
-                security_policy_revision: issue.binding.security_policy_revision.clone(),
-            },
-            challenge_binding: issue.binding,
-            nonce_digest: issue.nonce_digest,
+    OpenEditorSession {
+        project_scope: scope.clone(),
+        editor_session_id: EditorSessionId::new(format!(
+            "018f0000-0000-7001-8000-00000001{suffix}"
+        )),
+        snapshot_id: format!("018f0000-0000-7001-8000-00000002{suffix}"),
+        client_binding: EditorClientBinding {
+            binding_ref: issue.binding.client_session_binding_digest.clone(),
+            session_generation: issue.binding.client_session_generation,
+            client_contract_revision: issue.binding.client_contract_revision.clone(),
+            security_policy_revision: issue.binding.security_policy_revision.clone(),
         },
-    )
-    .await
-    .unwrap();
-    editor_session_id
+        challenge_binding: issue.binding,
+        nonce_digest: issue.nonce_digest,
+    }
 }
 
 async fn switch_current(

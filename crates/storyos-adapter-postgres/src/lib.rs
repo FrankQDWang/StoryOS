@@ -138,6 +138,7 @@ mod delete_chapter;
 mod delete_volume;
 mod draft_retry;
 mod editor_session;
+mod editor_session_acknowledgement;
 mod expand_refused_edit_draft;
 mod export_work;
 mod get_proposal;

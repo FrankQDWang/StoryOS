@@ -117,7 +117,7 @@ An author redo of a successfully undone Acceptance is a new Acceptance attempt a
 _Avoid_: Redo Acceptance, Receipt replay, status rollback
 
 **Author Action**:
-The immutable `AuthorActionRef` Operational Record created atomically for one successfully committed author-owned Core Transition, binding its Author Action Sequence, canonical Revision, Receipt, or Commit, and `Forward | Compensation` disposition. A successful author-authored Proposal Revision receives one Forward Author Action even without an Authoritative Commit; Admission, Editor Input Fence, refused, conflicted, invalid, no-effect, and recovery-Draft evidence create none.
+The immutable `AuthorActionRef` Operational Record that the transaction of one successfully committed author-owned Core Transition creates. It binds its Author Action Sequence, its canonical Revision, Receipt, or Commit, and its `Forward | Compensation` disposition. A successful author-authored Proposal Revision receives one Forward Author Action, also without an Authoritative Commit. Admission, Editor Input Fence, refused, conflicted, invalid, no-effect, and recovery-Draft evidence create none. Project creation and Project setting changes are not author-owned Core Transitions, and they create none.
 _Avoid_: Author Command Admission, physical-human gesture, browser history item, attempted command
 
 **Author Action Sequence**:
