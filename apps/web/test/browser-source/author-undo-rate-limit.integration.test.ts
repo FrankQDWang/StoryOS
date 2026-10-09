@@ -125,8 +125,9 @@ async function openUndoEditor() {
     journalSettled: () => new Promise<void>((resolve) => {
       test.workspace.database.transaction(["metadata"], "readonly").oncomplete = () => resolve();
     }),
-    // The workspace view closes the controller when the editor closes.
-    unmount: async () => { unmounted = true; await act(async () => { root.unmount(); }); writing.close(); },
+    unmount: async () => { unmounted = true; await act(async () => { root.unmount(); }); },
+    // The workspace view closes the controller when its Editor Session ends.
+    closeController: () => { writing.close(); },
     async close() {
       gates.firstChallenge.open();
       gates.undoResponse.open();
@@ -182,13 +183,14 @@ it("ignores another Ctrl/Cmd+Z while an Author Undo is in progress", async () =>
   }
 });
 
-it.each(["input", "unmount"] as const)("abandons an Author Undo Challenge wait at the editor %s boundary", async (boundary) => {
+it.each(["input", "unmount", "close"] as const)("abandons an Author Undo Challenge wait at the editor %s boundary", async (boundary) => {
   const undo = await openUndoEditor();
   try {
     undo.pressUndo();
     await undo.waitForRetryTimer();
     if (boundary === "input") await applyTrustedInput({ operation: "insert_text", text: "!" });
-    else await undo.unmount();
+    else if (boundary === "unmount") await undo.unmount();
+    else undo.closeController();
     await drain();
 
     expect({ cleared: undo.retryTimers()[0]!.cleared, challengeKeys: undo.undoChallengeKeys.length,

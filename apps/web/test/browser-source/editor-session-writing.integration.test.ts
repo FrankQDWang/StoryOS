@@ -4,7 +4,8 @@ import { digestApplyAuthorEdit } from "../../../../generated/typescript/storyos-
 import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
 import type { CandidateSelectionEdit } from "../../src/local-edit-journal.ts";
 import { readJournalSnapshot } from "../../src/local-edit-journal.ts";
-import { FIRST_APPEND_EDIT, openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
+import { FIRST_APPEND_EDIT, SECOND_APPEND_EDIT, createPausedDigestCrypto, openJournalAppendTestWorkspace }
+  from "./local-edit-journal-append-fixture.ts";
 import { BLOCK, createAppliedAuthorEditResponse, createBrowserScenario, jsonResponse, requestHeaders } from "./scenario.ts";
 
 const PROPOSAL = "018f0000-0000-7001-8000-000000000c01";
@@ -307,6 +308,25 @@ it("refuses a settled command while the outcome of the input is unknown", async 
     const quiet = session.writing.runAfterQuiesce("settled", async () => "ran");
     await session.reply(async () => { throw new TypeError("Failed to fetch"); });
     expect(await quiet).toEqual({ kind: "refused", reason: "unsettled_input" });
+  } finally {
+    await session.close();
+  }
+});
+
+it.each(["composition", "capture"] as const)("refuses a quiet command when a %s starts during its Journal read", async (input) => {
+  const session = await openWriting();
+  try {
+    session.writing.capture(FIRST_APPEND_EDIT, "typing", [{ manuscript_block_id: BLOCK, text: "Base!" }]);
+    await session.writing.whenIdle();
+    const paused = createPausedDigestCrypto(crypto);
+    session.workspace.cryptoImpl = paused.cryptoImpl;
+    let ran = false;
+    const quiet = session.writing.runAfterQuiesce("journaled", async () => { ran = true; });
+    await paused.reached;
+    if (input === "composition") session.writing.setComposing(true);
+    else session.writing.capture(SECOND_APPEND_EDIT, "typing", [{ manuscript_block_id: BLOCK, text: "Base!?" }]);
+    paused.release();
+    expect({ quiet: await quiet, ran }).toEqual({ quiet: { kind: "refused", reason: "incomplete_semantic_intent" }, ran: false });
   } finally {
     await session.close();
   }
