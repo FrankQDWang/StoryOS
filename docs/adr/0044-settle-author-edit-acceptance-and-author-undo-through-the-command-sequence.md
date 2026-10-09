@@ -77,6 +77,12 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 - After an Undo of a reopen, the author cannot reopen the same withdrawal or rejection again, because the reopen records stay. [Decide if Author Undo of a Proposal Reopen Lets the Author Reopen Again](https://github.com/FrankQDWang/StoryOS/issues/1051) owns this question.
 - A Barrier stops Author Undo, and Author Undo never skips it. Thus a Barrier frontier also stops Author Undo of all earlier Forward actions. A later decision can change a Barrier to a Compensation.
 
+### Project setting commands stay outside Author Undo Order
+
+- On 2026-10-09 the author decided this. These four commands are not author-owned Core Transitions: `createProject`, `updateProject`, `archiveProject`, and `updateProjectAssistance`. They write no Author Action, and Author Undo Order does not include them. They are not Forward command kinds, so they declare no Author Undo Disposition.
+- Thus Author Undo after a Project rename compensates the latest earlier Forward action, for example a prose edit. The Project title does not change. Author Undo reverses the manuscript and Proposal work of the editor. A Project setting is not part of that work. Similarly, a document title is not in the undo history of a text editor.
+- The reference model study reported this behavior as a defect ([issue 1027](https://github.com/FrankQDWang/StoryOS/issues/1027)). This decision makes it the contract.
+
 ## Relation to other decisions
 
 - ADR 0041 and ADR 0043 stay in force. ADR 0043 says that Author Edit, `acceptProposal`, and Author Undo need sequence capabilities that a later decision records. This decision records them, and these three commands now settle through the sequence. After this decision, every implemented project command settles through the sequence, except the three operations that ADR 0043 excludes.
@@ -158,6 +164,8 @@ Each ticket that moves a command records here every observable difference from `
 - A refusal record profile in the sequence was rejected. Only Acceptance writes a Pre-Admission Refusal Record, and its transaction runs after the command transaction rolls back.
 - One Author Undo adapter with one internal match over the compensation families was rejected. The seven families change independently, and the selection by Receipt result kind caused the defect of issue 933.
 - A Barrier for `replanProposal`, `reopenRejectedOperations`, and `reopenWithdrawnProposal` was rejected. One Proposal decision would then stop Author Undo of all earlier prose edits.
+- A Barrier for `updateProject` and `archiveProject` was rejected. With it, one rename stops Author Undo of all earlier prose edits.
+- A Compensation that restores the prior Project title was rejected. With it, Author Undo in the editor changes the Project title.
 
 ## Consequences
 

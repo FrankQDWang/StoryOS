@@ -1,8 +1,9 @@
 use storyos_application::{
     AuthorEditProposalTarget, CreateVolumeInput, EditorSessionId, ProjectCommandError,
     ProjectScope, UndoLatestAuthorActionInput, UndoLatestAuthorActionSettlement,
+    UpdateProjectInput,
 };
-use storyos_core::ReceiptResult;
+use storyos_core::{ReceiptResult, TransitionOutcome};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
@@ -16,6 +17,7 @@ use super::draft::{
     close_editor_flow_draft, close_editor_flow_draft_call, expand_refused_edit_draft,
     expand_refused_edit_draft_call,
 };
+use super::project_session::UPDATE_PROJECT;
 use super::proposal_decision::{
     reject_proposal_operations, reject_proposal_operations_call, reopen_rejected_operations,
     reopen_rejected_operations_call, reopen_withdrawn_proposal, reopen_withdrawn_proposal_call,
@@ -708,4 +710,76 @@ async fn a_damaged_undo_replay_is_a_store_fault() {
         observed.push(damaged_replay(&store, &admin, &call, damage).await);
     }
     assert_eq!(observed, vec![ReplayError::Unavailable; 4]);
+}
+
+/// A Project setting command writes no Author Action (ADR 0044). Thus Author Undo after a
+/// rename compensates the earlier prose edit and keeps the new title.
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn author_undo_after_a_rename_compensates_the_earlier_prose_edit_and_keeps_the_title() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_a, _chapter_b, _revision_b, editor_session_id) =
+        two_chapter_writer(&store, /*base*/ 0xe110).await;
+    let prior_head = session_chapter_head(&admin, &editor_session_id).await;
+    apply_named_edit(
+        &store,
+        &scope,
+        NamedEdit {
+            editor_session_id: &editor_session_id,
+            chapter_id: &chapter_a,
+            expected_revision_id: &prior_head,
+            suffix: "e119",
+            local_intent_sequence: 1,
+            text: "Keep this sentence.",
+            proposal_target: None,
+        },
+    )
+    .await;
+    let edited_head = session_chapter_head(&admin, &editor_session_id).await;
+    let edit_sequence = latest_forward(&admin, &scope).await;
+    let rename = issued(
+        &store,
+        &scope,
+        /*suffix*/ 0xe11a,
+        &UPDATE_PROJECT,
+        UpdateProjectInput {
+            title: "Renamed".to_owned(),
+            expected_revision: 1,
+        },
+    )
+    .await;
+    store
+        .update_project(&rename.envelope, &rename.input)
+        .await
+        .unwrap();
+    let call = issued_undo(
+        &store,
+        &scope,
+        /*suffix*/ 0xe11b,
+        UndoLatestAuthorActionInput {
+            editor_session_id: EditorSessionId::new(editor_session_id.clone()),
+            expected_author_undo_frontier_sequence: latest_forward(&admin, &scope).await,
+            expected_authoritative_revision_id: edited_head,
+        },
+    )
+    .await;
+    let source_sequence = match undo(&store, &call).await.unwrap().outcome {
+        TransitionOutcome::Applied(applied) => applied.source_sequence,
+        other => panic!("the Undo must compensate the prose edit, got {other:?}"),
+    };
+    let title: String = admin
+        .query_one(
+            "SELECT title FROM storyos.projects WHERE project_id = $1::text::uuid",
+            &[&scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    assert_eq!(
+        (source_sequence, title.as_str()),
+        (edit_sequence, "Renamed")
+    );
 }

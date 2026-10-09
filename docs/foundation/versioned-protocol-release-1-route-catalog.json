@@ -287,7 +287,8 @@
       "precondition_required",
       "rate_limited",
       "outcome_unknown",
-      "upgrade_required"
+      "upgrade_required",
+      "historical_acknowledgement_unavailable"
     ],
     "query_canonical": [
       "invalid_request",
