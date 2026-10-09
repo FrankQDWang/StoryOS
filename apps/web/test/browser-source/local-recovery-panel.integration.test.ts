@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { LocalRecoveryPanel } from "../../src/local-recovery-panel.tsx";
 import { openEditorWorkspace, persistReplaceSelection, rebuildPendingProjection, submitOnePendingAuthorEdit } from "../../src/editor-session.ts";
-import { persistCandidateSelection, candidateProjectionFromJournal, readJournalSnapshot, validateJournalSnapshot } from "../../src/local-edit-journal.ts";
+import { persistCandidateSelection, candidateTextsFromJournal, readJournalSnapshot, validateJournalSnapshot } from "../../src/local-edit-journal.ts";
 import { readLocalRecovery } from "../../src/local-edit-recovery.ts";
 import { BLOCK, OWNER, PROJECT, SESSION, createBrowserScenario, deleteJournal, jsonResponse, requireEditorReady } from "./scenario.ts";
 
@@ -68,7 +68,7 @@ it.each(["multi_block", "candidate"] as const)("keeps complete %s recovery visib
     await expect.poll(() => continued).toBe(true);
     const retained = await readLocalRecovery(workspace);
     expect(retained[0]?.text).toBe(completeText);
-    expect(await candidateProjectionFromJournal(workspace, target)).toBeUndefined();
+    expect([...await candidateTextsFromJournal(workspace)]).toEqual([]);
     expect(await rebuildPendingProjection(workspace)).toMatchObject({ body: scenario.chapter.chapter.current_revision.body, save_state: "saved", unsettled_intent_count: 0 });
     await persistReplaceSelection(workspace, { manuscript_block_id: BLOCK, from: 4, to: 4, text: "+", resultingBody: kind === "candidate" ? "Base+" : "Base+\nSecond" });
     await act(async () => root.unmount());

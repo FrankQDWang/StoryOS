@@ -183,7 +183,7 @@ function retypeCurrentBlock(view: EditorView): boolean {
 export function storyosManuscriptExtensions(
   blockId: string,
   onAuthorUndo?: () => boolean,
-  canAcceptCandidateInput?: (hardBoundary: boolean) => boolean,
+  canAcceptCandidateInput?: (hardBoundary: boolean, candidate?: { proposalId: string; operationId: string }) => boolean,
   hasMixedComposition?: () => boolean,
 ) {
   return [
@@ -272,7 +272,7 @@ export function storyosManuscriptExtensions(
                 const origin = transaction.getMeta(STORYOS_ORIGIN);
                 const hardBoundary = origin === "paste" || origin === "cut"
                   || origin === "drop";
-                if (canAcceptCandidateInput?.(hardBoundary) !== true) return false;
+                if (canAcceptCandidateInput?.(hardBoundary, candidate.edit.proposal) !== true) return false;
                 transaction.setMeta(STORYOS_CANDIDATE_EDIT, candidate.edit);
                 return true;
               }

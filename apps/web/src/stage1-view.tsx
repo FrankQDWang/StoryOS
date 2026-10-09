@@ -1,5 +1,5 @@
 import { LocalRecoveryPanel } from "./local-recovery-panel.tsx";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
@@ -31,7 +31,8 @@ import type {
   PendingEditProjection,
   ProjectReadyState,
 } from "./editor-types.ts";
-import { rebuildPendingProjection, reconfirmLegacyReplaceSelection } from "./editor-session.ts";
+import { reconfirmLegacyReplaceSelection } from "./editor-session.ts";
+import { createEditorSessionWritingController } from "./editor-session-writing.ts";
 import type { ManualInputController } from "./manual-input.ts";
 import {
   BlockProposalDisplay, readProposalLocators, rememberProposalLocator,
@@ -128,6 +129,26 @@ function ProjectReadyView({
     () => readProposalLocators(state.project.project_scope),
   );
   const [proposalRefresh, setProposalRefresh] = useState(0);
+  const onEditorFailureRef = useRef<(error: unknown) => void>(() => {});
+  const editorState = state.editor;
+  // One writing controller owns the Pending Edit Projection of this Editor Session (ADR 0046).
+  const writing = useMemo(() => editorState.kind === "editor-ready"
+    ? createEditorSessionWritingController({ workspace: editorState, baseUrl, fetchImpl, cryptoImpl,
+      onFailure: (error) => { onEditorFailureRef.current(error); } })
+    : undefined, [editorState, baseUrl, fetchImpl, cryptoImpl]);
+  useEffect(() => () => { writing?.close(); }, [writing]);
+  useEffect(() => writing?.subscribe(() => {
+    if (selectedChapterIdRef.current !== currentChapterId) return;
+    const { projection, local } = writing.snapshot();
+    // Paint unjournaled input before the next poll so saved waiters do not treat it as settled.
+    const show = () => {
+      setPending(projection);
+      setSaveState(projection.save_state);
+    };
+    if (local) flushSync(show);
+    else show();
+    if (projection.save_state !== "needs_attention") setEditorFailure(undefined);
+  }), [writing, currentChapterId]);
 
   useEffect(() => {
     void listProjects({ baseUrl, fetchImpl }).then((response) => {
@@ -175,10 +196,8 @@ function ProjectReadyView({
       }
       setSwitchRecovery(undefined);
       let currentPending = state.editor.kind === "editor-ready" ? state.editor.pending : null;
-      if (opened.chapter.chapter.chapter_id === currentChapterId
-        && state.editor.kind === "editor-ready") {
-        currentPending = await rebuildPendingProjection(state.editor);
-        state.editor.pending = currentPending;
+      if (opened.chapter.chapter.chapter_id === currentChapterId && writing !== undefined) {
+        currentPending = await writing.refresh();
       }
       if (generation !== switchGenerationRef.current) return;
       const surface = selectedChapterSurface({
@@ -196,11 +215,10 @@ function ProjectReadyView({
   };
 
   const makeCurrent = (chapterId: string) => {
-    if (chapterId === currentChapterId || state.editor.kind !== "editor-ready") return;
+    if (chapterId === currentChapterId || state.editor.kind !== "editor-ready" || writing === undefined) return;
     if (makeCurrentInFlightRef.current) return;
     makeCurrentInFlightRef.current = true;
-    const editor = state.editor;
-    const editorSessionId = editor.session.editor_session.editor_session_id;
+    const editorSessionId = state.editor.session.editor_session.editor_session_id;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
     void (async () => {
@@ -215,8 +233,7 @@ function ProjectReadyView({
           setSwitchRecovery(chapterSwitchRecoveryMessage(gate.reason));
           return;
         }
-        const drained = await rebuildPendingProjection(editor);
-        editor.pending = drained;
+        const drained = await writing.refresh();
         setPending(drained);
         setSaveState(drained.save_state);
         if (drained.unsettled_intent_count > 0) {
@@ -291,9 +308,8 @@ function ProjectReadyView({
           );
           return;
         }
-        if (state.editor.kind === "editor-ready") {
-          const drained = await rebuildPendingProjection(state.editor);
-          state.editor.pending = drained;
+        if (writing !== undefined) {
+          const drained = await writing.refresh();
           setPending(drained);
           setSaveState(drained.save_state);
           if (drained.unsettled_intent_count > 0) {
@@ -365,9 +381,8 @@ function ProjectReadyView({
           );
           return;
         }
-        if (state.editor.kind === "editor-ready") {
-          const drained = await rebuildPendingProjection(state.editor);
-          state.editor.pending = drained;
+        if (writing !== undefined) {
+          const drained = await writing.refresh();
           setPending(drained);
           setSaveState(drained.save_state);
           if (drained.unsettled_intent_count > 0) {
@@ -428,6 +443,16 @@ function ProjectReadyView({
       text: block.text,
     }))
     : editorParagraphs(selectedChapter.chapter.current_revision.blocks);
+  const onEditorFailure = (error: unknown) => {
+    if (historicalAcknowledgementUnavailable(error)) {
+      setSwitchRecovery(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
+      return;
+    }
+    setReadOnly(true);
+    setSaveState("needs_attention");
+    setEditorFailure(error instanceof Error ? error.message : "Manuscript editor failed");
+  };
+  onEditorFailureRef.current = onEditorFailure;
   const refreshTree = () => {
     void getManuscriptTree({
       baseUrl,
@@ -549,37 +574,12 @@ function ProjectReadyView({
                 ? state.editor
                 : undefined
             }
+            writing={selectedChapter.chapter.chapter_id === currentChapterId ? writing : undefined}
             baseUrl={baseUrl}
             fetchImpl={fetchImpl}
             cryptoImpl={cryptoImpl}
             controllerRef={inputRef}
-            onProjection={(projection, source) => {
-              (state.editor as EditorReadyState).pending = projection;
-              if (selectedChapterIdRef.current !== currentChapterId) return;
-              if (source === "local") {
-                // Paint the pre-Journal copy before the next poll so saved
-                // waiters do not treat unsettled local input as settled.
-                flushSync(() => {
-                  setPending(projection);
-                  setSaveState(projection.save_state === "saving" ? "saving" : "pending");
-                });
-                return;
-              }
-              setPending(projection);
-              setSaveState(projection.save_state);
-              if (projection.save_state !== "needs_attention") setEditorFailure(undefined);
-            }}
-            onFailure={(error) => {
-              if (historicalAcknowledgementUnavailable(error)) {
-                setSwitchRecovery(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
-                return;
-              }
-              setReadOnly(true);
-              setSaveState("needs_attention");
-              setEditorFailure(
-                error instanceof Error ? error.message : "Manuscript editor failed",
-              );
-            }}
+            onFailure={onEditorFailure}
           />
           <div className="editor-status">
           <ManuscriptStatisticsPanel
@@ -639,11 +639,7 @@ function ProjectReadyView({
                 data-reconfirm-legacy-blocks=""
                 onClick={() => {
                   void reconfirmLegacyReplaceSelection(state.editor as EditorReadyState)
-                    .then((projection) => {
-                      (state.editor as EditorReadyState).pending = projection;
-                      setPending(projection);
-                      setSaveState(projection.save_state);
-                    });
+                    .then(() => writing?.refresh());
                 }}
               >
                 确认待写入正文

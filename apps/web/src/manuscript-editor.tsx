@@ -4,15 +4,11 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { captureStructuredSelection, type StructuredSelectionEdit } from "./structured-edit-capture.ts";
 
-import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
-import { createAuthorEditIdleController, type AuthorEditIdleController }
-  from "./author-edit-idle.ts";
-import type { EditorReadyState, PendingEditProjection } from "./editor-types.ts";
-import { rebuildPendingProjection } from "./local-edit-journal.ts";
-import type { ManualInputController, BoundReplacementMatch } from "./manual-input.ts";
+import type { EditorSessionWritingController } from "./editor-session-writing.ts";
+import type { EditorReadyState } from "./editor-types.ts";
+import type { ManualInputController } from "./manual-input.ts";
 import {
   captureManuscriptChange,
-  flattenChapterBody,
   type ManuscriptParagraph,
   manuscriptBlocksJson,
   paragraphsEqual,
@@ -43,11 +39,12 @@ export interface ManuscriptEditorProps {
   proposals?: readonly BlockProposalProjection[];
   editable: boolean;
   persistWorkspace: EditorReadyState | undefined;
+  /** The writing controller of `persistWorkspace`. */
+  writing?: EditorSessionWritingController | undefined;
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   controllerRef: { current: ManualInputController | null };
-  onProjection: (projection: PendingEditProjection, source?: "local") => void;
   onFailure: (error: unknown) => void;
   onCandidateSettled?: (proposalId?: string) => void;
   onAcceptProposal?: (target: {
@@ -98,47 +95,16 @@ function syncManuscriptSurface(
   );
 }
 
-function applyBoundReplaces(
-  blocks: readonly ManuscriptParagraph[],
-  matches: BoundReplacementMatch[],
-  text: string,
-): ManuscriptParagraph[] {
-  const next = blocks.map((block) => ({ ...block }));
-  const ordered = [...matches].sort((left, right) => right.start - left.start);
-  for (const match of ordered) {
-    const block = next.find((item) => item.manuscript_block_id === match.manuscriptBlockId);
-    if (block === undefined) continue;
-    block.text = `${block.text.slice(0, match.start)}${text}${block.text.slice(match.end)}`;
-  }
-  return next;
-}
-
-function projectLocalPending(
-  workspace: EditorReadyState,
-  blocks: readonly ManuscriptParagraph[],
-): PendingEditProjection | undefined {
-  if (workspace.pending.save_state === "needs_attention") return undefined;
-  return {
-    ...workspace.pending,
-    body: flattenChapterBody(blocks),
-    blocks: blocks.map((block) => ({
-      manuscript_block_id: block.manuscript_block_id,
-      block_kind: block.block_kind === "heading" ? "heading" as const : "paragraph" as const,
-      text: block.text,
-    })),
-  };
-}
-
 export function ManuscriptEditor({
   blocks,
   proposals = [],
   editable,
   persistWorkspace,
+  writing,
   baseUrl,
   fetchImpl,
   cryptoImpl,
   controllerRef,
-  onProjection,
   onFailure,
   onCandidateSettled, focusProposal, onCandidateFocus,
   onAcceptProposal,
@@ -157,8 +123,8 @@ export function ManuscriptEditor({
   const candidateCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionBlockedRef = useRef(false);
   const candidateCompositionDirtyRef = useRef(false);
-  const idleRef = useRef<AuthorEditIdleController | null>(null);
-  const onProjectionRef = useRef(onProjection);
+  const writingRef = useRef(writing);
+  writingRef.current = writing;
   const onFailureRef = useRef(onFailure);
   const onCandidateSettledRef = useRef(onCandidateSettled);
   const onCandidateFocusRef = useRef(onCandidateFocus);
@@ -174,7 +140,6 @@ export function ManuscriptEditor({
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
   const abandonUndoRef = useRef<(() => void) | undefined>(undefined);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
-  onProjectionRef.current = onProjection;
   onFailureRef.current = onFailure;
   onCandidateSettledRef.current = onCandidateSettled;
   onAcceptProposalRef.current = onAcceptProposal;
@@ -187,8 +152,8 @@ export function ManuscriptEditor({
     extensions: [
       ...storyosManuscriptExtensions(firstBlockId,
         () => onAuthorUndoRef.current(),
-        (hardBoundary) => !candidateCompositionBlockedRef.current
-          && idleRef.current?.canAcceptCandidateInput(hardBoundary) === true,
+        (hardBoundary, candidate) => !candidateCompositionBlockedRef.current
+          && writingRef.current?.canAcceptInput(hardBoundary, candidate) === true,
         () => composingRef.current && mixedCompositionRef.current !== undefined),
     ],
     content: manuscriptBlocksJson(blocks),
@@ -228,8 +193,7 @@ export function ManuscriptEditor({
         const text = primitive?.kind === "replace_structured_selection"
           ? primitive.replacement.map((block) => block.text).join("\n") : "";
         capturedInputRef.current += 1;
-        void idleRef.current?.persist(mixed, originFromTransaction(transaction,
-          { from: 0, to: 1, text }), new Date().toISOString());
+        writingRef.current?.capture(mixed, originFromTransaction(transaction, { from: 0, to: 1, text }));
         return;
       }
       const candidate = capturedCandidateEditFromTransaction(transaction);
@@ -238,17 +202,12 @@ export function ManuscriptEditor({
         const origin = originFromTransaction(transaction, { from, to, text });
         const composing = current.view.composing || composingRef.current;
         if (composing && candidateCompositionDirtyRef.current) return;
-        if (composing) candidateCompositionDirtyRef.current = true;
-        const workspace = persistWorkspaceRef.current;
-        if (workspace !== undefined && workspace.pending.save_state !== "needs_attention") {
-          onProjectionRef.current({
-            ...workspace.pending,
-            save_state: "saving",
-            unsettled_intent_count: workspace.pending.unsettled_intent_count + 1,
-          }, "local");
+        if (composing) {
+          candidateCompositionDirtyRef.current = true;
+          writingRef.current?.showSaving();
+          return;
         }
-        if (composing) return;
-        void idleRef.current?.persist({
+        writingRef.current?.capture({
           kind: "candidate_selection",
           target: {
             proposal_id: proposal.proposalId,
@@ -258,15 +217,11 @@ export function ManuscriptEditor({
           },
           expectedProposalHeads: proposal.expectedHeads,
           priorText, from, to, text, resultingBody,
-        }, origin, new Date().toISOString());
+        }, origin);
         return;
       }
       if (current.view.composing || composingRef.current) {
-        const workspace = persistWorkspaceRef.current;
-        const local = workspace === undefined
-          ? undefined
-          : projectLocalPending(workspace, nextBlocks);
-        if (local !== undefined) onProjectionRef.current(local, "local");
+        writingRef.current?.showSaving(nextBlocks);
         return;
       }
       if (paragraphsEqual(nextBlocks, observedBlocksRef.current)) return;
@@ -274,13 +229,9 @@ export function ManuscriptEditor({
       observedBlocksRef.current = nextBlocks;
       capturedInputRef.current += 1;
       if (edit === undefined) {
-        idleRef.current?.fail(new Error("Manuscript replacement is not a supported Block edit"));
+        writingRef.current?.fail(new Error("Manuscript replacement is not a supported Block edit"));
         return;
       }
-      const createdAt = new Date().toISOString();
-      const workspace = persistWorkspaceRef.current;
-      const local = workspace === undefined ? undefined : projectLocalPending(workspace, nextBlocks);
-      if (local !== undefined) onProjectionRef.current(local, "local");
       const origin = edit.kind === "split_block"
         || edit.kind === "join_blocks"
         || edit.kind === "move_block"
@@ -295,8 +246,8 @@ export function ManuscriptEditor({
             }
             : edit);
       const edgeHeads = transaction.getMeta("storyos.inlineEdgeHeads") as string[] | undefined;
-      void idleRef.current?.persist(edgeHeads === undefined ? edit
-        : { ...edit, expectedProposalHeads: edgeHeads }, origin, createdAt);
+      writingRef.current?.capture(edgeHeads === undefined ? edit
+        : { ...edit, expectedProposalHeads: edgeHeads }, origin, nextBlocks);
     },
   }, []);
 
@@ -320,7 +271,7 @@ export function ManuscriptEditor({
     };
     abandonUndoRef.current = abandon;
     void (async () => {
-      await idleRef.current?.flush();
+      await writingRef.current?.flush();
       if (!isCurrent()) return;
       let waited = false;
       try {
@@ -330,19 +281,18 @@ export function ManuscriptEditor({
           fetchImpl,
           cryptoImpl, isCurrent, challengeAdmission,
           onChallengeWait: () => {
-            if (!waited) onProjectionRef.current({ ...workspace.pending, save_state: "saving" }, "local");
+            if (!waited) writingRef.current?.showSaving();
             waited = true;
           },
         });
         if (!isCurrent()) return;
         if (settled !== undefined && (settled.effect.kind === "draft_compensated" || settled.effect.kind === "draft_reconciled")) {
-          const projection = await rebuildPendingProjection(workspace);
+          await writingRef.current?.refresh();
           if (!isCurrent()) return;
-          onProjectionRef.current(projection);
           onCandidateSettledRef.current?.(); return;
         }
         if (settled !== undefined && settled.effect.kind === "reversal_required") {
-          if (waited) onProjectionRef.current(await rebuildPendingProjection(workspace));
+          if (waited) await writingRef.current?.refresh();
           onCandidateSettledRef.current?.("proposal_id" in settled ? settled.proposal_id ?? undefined : undefined); return;
         }
         if (settled === undefined || settled.effect.kind !== "compensated") {
@@ -355,7 +305,7 @@ export function ManuscriptEditor({
         hydrateManuscriptBlocks(editor, restored);
         observedBlocksRef.current = restored.map((block) => ({ ...block }));
         syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
-        onProjectionRef.current(await rebuildPendingProjection(workspace));
+        await writingRef.current?.refresh();
         onCandidateSettledRef.current?.("proposal_id" in settled ? settled.proposal_id ?? undefined : undefined);
       } catch (error) {
         if (isCurrent()) onFailureRef.current(error);
@@ -455,176 +405,45 @@ export function ManuscriptEditor({
     persistWorkspace?.pending.save_state, editor]);
 
   useEffect(() => {
-    if (editor === null || persistWorkspace === undefined) {
+    if (editor === null || writing === undefined) {
       const detached: ManualInputController = {
         flush: () => Promise.resolve(),
         whenIdle: () => Promise.resolve(),
-        installProjection: async (projection) => { onProjectionRef.current(projection); },
+        installProjection: async () => {},
         hasIncompleteSemanticIntent: () => composingRef.current,
         close() {},
-        replaceBound: async () => "refused",
       };
       controllerRef.current = detached;
       return () => {
         if (controllerRef.current === detached) controllerRef.current = null;
       };
     }
-    const installProjection = (projection: PendingEditProjection): void => {
-      const rendered = readManuscriptParagraphs(editor.state.doc);
-      const local = idle.hasQueuedInput() && rendered !== undefined
-        && !paragraphsEqual(rendered, projection.blocks)
-        ? projectLocalPending({ ...persistWorkspace, pending: projection }, rendered) : undefined;
-      if (local !== undefined) {
-        onProjectionRef.current({ ...local, save_state: "saving" }, "local");
-      } else onProjectionRef.current(projection);
-    };
-    const idle = createAuthorEditIdleController({
-      workspace: persistWorkspace,
-      baseUrl,
-      fetchImpl,
-      cryptoImpl,
-      afterAppliedSettlement: async (workspace) => {
-        await collectEligibleJournalPayload(workspace);
-        onCandidateSettledRef.current?.();
-      },
-      onProjection: installProjection,
-      onFailure: (error) => { onFailureRef.current(error); },
-    });
-    idleRef.current = idle;
     const controller: ManualInputController = {
-      // A projection that another reader read from the Journal can be older than input that persisted after that read.
-      async installProjection(projection) {
-        const rendered = readManuscriptParagraphs(editor.state.doc);
-        if (rendered === undefined || paragraphsEqual(rendered, projection.blocks) || idle.hasQueuedInput()) {
-          installProjection(projection);
-          return;
-        }
-        const captured = idle.capturedInputCount();
-        try {
-          const current = await rebuildPendingProjection(persistWorkspace);
-          // Input captured during this read installs its own newer projection.
-          if (idleRef.current === idle && idle.capturedInputCount() === captured) installProjection(current);
-        } catch (error: unknown) {
-          if (idleRef.current === idle) onFailureRef.current(error);
-        }
-      },
-      flush: () => idle.flush(),
-      whenIdle: () => idle.whenIdle(),
-      hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing,
-      close: () => idle.close(),
-      async replaceBound({ kind, matches, text }) {
-        if (persistWorkspaceRef.current === undefined) return "refused";
-        await idle.flush();
-        const workspace = persistWorkspaceRef.current;
-        if (workspace === undefined) return "refused";
-        const chapterId = workspace.session.base_snapshot.chapter_id;
-        const current = workspace.pending.blocks.map((block) => ({
-          manuscript_block_id: block.manuscript_block_id,
-          block_kind: block.block_kind === "heading" ? "heading" as const : "paragraph" as const,
-          text: block.text,
-        }));
-        const match = matches.find((item) => item.chapterId === chapterId);
-        const createdAt = new Date().toISOString();
-        const beforeRevision = workspace.pending.authoritative_revision_id;
-        if (kind === "one" && match !== undefined && matches.length === 1) {
-          const currentBlock = current.find((block) =>
-            block.manuscript_block_id === match.manuscriptBlockId);
-          if (currentBlock === undefined
-            || !Number.isSafeInteger(match.start)
-            || !Number.isSafeInteger(match.end)
-            || match.start < 0
-            || match.end < match.start
-            || match.end > currentBlock.text.length
-            || currentBlock.text.slice(match.start, match.end) !== match.queryText) {
-            return "stale";
-          }
-          const resultingBlocks = applyBoundReplaces(current, [match], text);
-          await idle.persist({
-            kind: "replace_block_selection",
-            manuscript_block_id: match.manuscriptBlockId,
-            from: match.start,
-            to: match.end,
-            text,
-            resultingBlocks,
-            resultingBody: flattenChapterBody(resultingBlocks),
-          }, "selection_replacement", createdAt);
-          await idle.flush();
-          const pending = persistWorkspaceRef.current?.pending;
-          if (pending?.save_state !== "saved") {
-            hydrateManuscriptBlocks(editor, observedBlocksRef.current);
-            syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
-            return "refused";
-          }
-          hydrateManuscriptBlocks(editor, resultingBlocks);
-          observedBlocksRef.current = resultingBlocks.map((block) => ({ ...block }));
-          syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
-          return pending.authoritative_revision_id === beforeRevision ? "unchanged" : "applied";
-        }
-        const currentMatches = matches.filter((item) => item.chapterId === chapterId);
-        const first = current[0];
-        if (first === undefined) return "refused";
-        const broader = currentMatches.length >= 2
-          ? [...currentMatches]
-            .sort((left, right) => right.start - left.start)
-            .slice(0, 2)
-          : [
-            {
-              chapterId,
-              manuscriptBlockId: first.manuscript_block_id,
-              start: 0,
-              end: 0,
-              queryText: "",
-            },
-            {
-              chapterId,
-              manuscriptBlockId: first.manuscript_block_id,
-              start: 0,
-              end: 0,
-              queryText: "",
-            },
-          ];
-        const resultingBlocks = currentMatches.length >= 2
-          ? applyBoundReplaces(current, broader, text)
-          : current.map((block) => ({ ...block }));
-        await idle.persist({
-          kind: "contiguous_replacement",
-          primitives: broader.map((item) => ({
-            kind: "replace_block_selection" as const,
-            manuscript_block_id: item.manuscriptBlockId,
-            from: item.start,
-            to: item.end,
-            text: currentMatches.length >= 2 ? text : "",
-          })),
-          from: broader.at(-1)?.start ?? 0,
-          to: broader[0]?.end ?? 0,
-          resultingBlocks,
-          resultingBody: flattenChapterBody(resultingBlocks),
-        }, "selection_replacement", createdAt);
-        await idle.flush();
-        hydrateManuscriptBlocks(editor, observedBlocksRef.current);
-        syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
-        return "refused";
-      },
+      installProjection: async () => { await writing.refresh(); },
+      flush: () => writing.flush(),
+      whenIdle: () => writing.whenIdle(),
+      hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing || writing.holdsInput(),
+      close() {},
     };
     controllerRef.current = controller;
     const { dom } = editor.view;
     const onCompositionStart = (): void => {
       composingRef.current = true;
       mixedCompositionRef.current = captureStructuredSelection(editor.state, editor.state.tr.deleteSelection());
-      if (mixedCompositionRef.current !== undefined && !idle.canAcceptCandidateInput(true)) mixedCompositionRef.current = undefined;
+      if (mixedCompositionRef.current !== undefined && !writing.canAcceptInput(true)) mixedCompositionRef.current = undefined;
       mixedCompositionStartRef.current = mixedCompositionRef.current === undefined ? null : editor.state.doc;
-      const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal"
-        || editor.state.selection.$from.parent.type.name === "inlineProposal";
-      candidateCompositionBlockedRef.current = candidateSelected
-        && !idle.canAcceptCandidateInput(true);
+      const parent = editor.state.selection.$from.parent;
+      const candidateSelected = parent.type.name === "blockProposal" || parent.type.name === "inlineProposal";
+      candidateCompositionBlockedRef.current = candidateSelected && !writing.canAcceptInput(true,
+        { proposalId: String(parent.attrs.proposalId), operationId: String(parent.attrs.operationId) });
       candidateCompositionStartRef.current = candidateSelected
         && !candidateCompositionBlockedRef.current ? editor.state.doc : null;
       candidateCompositionDirtyRef.current = false;
-      idle.setHoldSubmission(true);
+      writing.setHoldSubmission(true);
     };
     const onCompositionEnd = (event: CompositionEvent): void => {
       composingRef.current = false;
-      idle.setHoldSubmission(false);
+      writing.setHoldSubmission(false);
       const candidateStart = candidateCompositionStartRef.current;
       candidateCompositionStartRef.current = null;
       candidateCompositionBlockedRef.current = false;
@@ -640,7 +459,7 @@ export function ManuscriptEditor({
           const primitive = mixed.authorEditUnit.normalized_primitives[0];
           if (primitive?.kind === "replace_structured_selection") {
             primitive.replacement = [{ block_kind: primitive.replacement[0]!.block_kind, text: event.data }];
-            void idle.persist(mixed, "composition_confirmation", new Date().toISOString());
+            writing.capture(mixed, "composition_confirmation");
           }
         }
         return;
@@ -648,12 +467,12 @@ export function ManuscriptEditor({
       if (candidateStart !== null) {
         const captured = capturedCandidateEdit(candidateStart, editor.state.doc);
         if (!captured.valid) {
-          idle.fail(new Error("Candidate composition is not a supported edit"));
+          writing.fail(new Error("Candidate composition is not a supported edit"));
           return;
         }
         if (captured.edit !== undefined) {
           const { proposal, priorText, from, to, text, resultingBody } = captured.edit;
-          void idle.persist({
+          writing.capture({
             kind: "candidate_selection",
             target: {
               proposal_id: proposal.proposalId,
@@ -663,7 +482,7 @@ export function ManuscriptEditor({
             },
             expectedProposalHeads: proposal.expectedHeads,
             priorText, from, to, text, resultingBody,
-          }, "composition_confirmation", new Date().toISOString());
+          }, "composition_confirmation");
         }
         return;
       }
@@ -675,24 +494,19 @@ export function ManuscriptEditor({
       observedBlocksRef.current = nextBlocks;
       capturedInputRef.current += 1;
       if (edit === undefined) {
-        idle.fail(new Error("Manuscript replacement is not a supported Block edit"));
+        writing.fail(new Error("Manuscript replacement is not a supported Block edit"));
         return;
       }
-      const workspace = persistWorkspaceRef.current;
-      const local = workspace === undefined ? undefined : projectLocalPending(workspace, nextBlocks);
-      if (local !== undefined) onProjectionRef.current(local, "local");
-      void idle.persist(edit, "composition_confirmation", new Date().toISOString());
+      writing.capture(edit, "composition_confirmation", nextBlocks);
     };
     dom.addEventListener("compositionstart", onCompositionStart, true);
     dom.addEventListener("compositionend", onCompositionEnd);
     return () => {
       dom.removeEventListener("compositionstart", onCompositionStart, true);
       dom.removeEventListener("compositionend", onCompositionEnd);
-      idle.close();
-      idleRef.current = null;
       if (controllerRef.current === controller) controllerRef.current = null;
     };
-  }, [baseUrl, controllerRef, cryptoImpl, editor, fetchImpl, persistWorkspace]);
+  }, [controllerRef, editor, writing]);
 
   if (editor === null) return null;
   return <EditorContent editor={editor} />;

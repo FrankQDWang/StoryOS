@@ -45,7 +45,7 @@ The controller counts each captured input. A projection read that started before
 - While an edit of one Proposal candidate is in progress, the editor accepts more input in that candidate. Typing, IME composition confirmation, and paste use this rule. IME composition behavior does not change.
 - The controller holds that input in memory. It uses the bounded in-memory queue of ADR 0038 (240 operations).
 - When the earlier edit settles as `proposal_revised`, the controller journals the held input against the new Proposal Revision. The new expected Proposal Heads replace the earlier Revision with the new Revision only.
-- When the earlier edit settles with another result, the controller journals the held input against its original target. The controller does not submit it. The save state is `needs_attention`, and the text stays in the editor and in the Journal.
+- When the earlier edit settles with another result, the save state is `needs_attention`. The Local Edit Journal refuses appends in this state. Thus the controller keeps the held input in memory and does not submit it. The text stays in the editor, and the editor becomes read-only. A reload loses the held input, as a crash does.
 - While the earlier outcome is unknown, or while a Challenge waits for `Retry-After`, the controller continues to hold the input. When the queue exceeds its limit, the existing failure path applies: the editor becomes read-only, and the save state is `needs_attention`.
 - A crash can lose the held input. The loss is at most the input of one candidate round trip. This is the same class of loss as the ADR 0038 queue.
 
@@ -61,6 +61,7 @@ The client removes `attachManualInput` and its textarea-only test cases. [ADR 00
 - **The Server accepts an edit against the prior Proposal Revision of the same Editor Session.** Rejected: it changes the Author Edit contract.
 - **Keep the candidate lock and tell the author that the candidate is saving.** Rejected: the author still loses keystrokes.
 - **Discard held input after a failed earlier edit.** Rejected: it removes text that the author saw.
+- **Journal held input after a failed earlier edit.** Rejected during implementation on 2026-10-09: the Journal refuses appends while the save state is `needs_attention`. An exception changes the Journal append rules and its recovery. The loss bound stays the bound of a crash.
 - **Keep `attachManualInput` as a second adapter of the controller.** Rejected: only tests use it, and it tests a retired write path.
 
 ## Consequences

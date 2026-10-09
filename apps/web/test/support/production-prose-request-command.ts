@@ -367,6 +367,9 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       await route.abort("failed");
       noteCandidateResponseDone();
     });
+    // Before the reload, the outcome stays unknown, so the held input stays in memory and the reload removes it (ADR 0046).
+    const outcomeRoute = (url: URL) => url.pathname.includes("/manuscript/author-edit-outcomes/");
+    await page.route(outcomeRoute, () => new Promise<void>(() => {}));
     const revisedText = `${firstProposal.candidate_text} Keep this line.`;
     const candidateText = page.locator(`[data-proposal-id="${firstProposalId}"] .block-proposal-text`);
     await candidateText.click();
@@ -390,12 +393,14 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
         selection?.removeAllRanges();
         selection?.addRange(range);
       });
+      // The controller holds input in the same candidate while its edit is in progress (ADR 0046).
       await page.keyboard.insertText(" This must wait.");
-      assert.equal(await candidateText.textContent(), revisedText);
+      assert.equal(await candidateText.textContent(), `${revisedText} This must wait.`);
     } finally {
       releaseCandidateResponse();
     }
     await candidateResponseDone;
+    await page.unroute(outcomeRoute);
     await page.reload();
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     assert.equal(candidatePosts, 1, "candidate recovery must reuse the frozen command");
