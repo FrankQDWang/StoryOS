@@ -29,14 +29,6 @@ interface CompositionObservation {
   to: number;
 }
 
-export interface BoundReplacementMatch {
-  chapterId: string;
-  manuscriptBlockId: string;
-  start: number;
-  end: number;
-  queryText: string;
-}
-
 export interface ManualInputController {
   flush(): Promise<void>;
   whenIdle(): Promise<void>;
@@ -44,11 +36,6 @@ export interface ManualInputController {
   installProjection(projection: PendingEditProjection): Promise<void>;
   hasIncompleteSemanticIntent(): boolean;
   close(): void;
-  replaceBound(options: {
-    kind: "one" | "broader";
-    matches: BoundReplacementMatch[];
-    text: string;
-  }): Promise<"applied" | "unchanged" | "refused" | "stale">;
 }
 
 type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
@@ -416,9 +403,6 @@ export function attachManualInput({
     },
     hasIncompleteSemanticIntent() {
       return composition !== undefined || compositionFinishing;
-    },
-    async replaceBound() {
-      return "refused";
     },
     close() {
       stopped = true;

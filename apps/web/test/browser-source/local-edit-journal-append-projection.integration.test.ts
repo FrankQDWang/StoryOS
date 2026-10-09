@@ -1,10 +1,10 @@
 import { expect, it, vi } from "vitest";
-import { act, createElement, useLayoutEffect, useState } from "react";
-import { flushSync } from "react-dom";
+import { act, createElement, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { RefusedEditDraftDisplay } from "../../src/refused-edit-draft-display.tsx";
 
 import { persistReplaceSelection } from "../../src/editor-session.ts";
+import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
 import { rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import {
   FIRST_APPEND_EDIT,
@@ -44,7 +44,6 @@ it("returns the valid append projection without a second Journal reconstruction"
 it("keeps a complete mixed intent in the immutable Journal without projecting it as manuscript truth", async () => {
   const test = await openJournalAppendTestWorkspace();
   try {
-    const { createAuthorEditIdleController } = await import("../../src/author-edit-idle.ts");
     const unit = { normalized_primitives: [{ kind: "replace_structured_selection", replacement: [
       { block_kind: "heading", text: "New heading" }, { block_kind: "paragraph", text: "New paragraph" },
     ] }], selection_snapshot: { coordinate_profile: "storyos.editor.ordered-source.v1", from: 0, to: 3,
@@ -56,12 +55,12 @@ it("keeps a complete mixed intent in the immutable Journal without projecting it
           coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 3, block_kind: "paragraph", source_text: "Old" }],
         anchor: { source_index: 0, source_offset: 0 }, head: { source_index: 1, source_offset: 3 } } } };
     let failure: unknown;
-    const idle = createAuthorEditIdleController({ workspace: test.workspace, baseUrl: "http://localhost",
-      onProjection: () => {}, onFailure: (error) => { failure = error; },
-      setTimeoutImpl: () => 1, clearTimeoutImpl: () => {} });
+    const idle = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: "http://localhost",
+      onFailure: (error) => { failure = error; }, setTimeoutImpl: () => 1, clearTimeoutImpl: () => {} });
     idle.setHoldSubmission(true);
-    await Reflect.apply(idle.persist, idle, [{ kind: "structured_selection", authorEditUnit: unit,
-      expectedProposalHeads: ["018f0000-0000-7001-8000-000000000092"] }, "typing", new Date().toISOString()]);
+    Reflect.apply(idle.capture, idle, [{ kind: "structured_selection", authorEditUnit: unit,
+      expectedProposalHeads: ["018f0000-0000-7001-8000-000000000092"] }, "typing"]);
+    await idle.whenIdle();
     idle.close();
     expect(failure).toBeUndefined();
     const { readJournalSnapshot } = await import("../../src/local-edit-journal.ts");
@@ -165,15 +164,17 @@ it("freezes one complete mixed Tiptap IME intent only after confirmation and ign
   const { readJournalSnapshot } = await import("../../src/local-edit-journal.ts");
   let failure: unknown;
   let requests = 0;
+  const fetchImpl = () => { requests += 1; return new Promise<Response>(() => {}); };
+  const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin, fetchImpl,
+    onFailure: (error) => { failure = error; } });
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   try {
     await act(async () => { root.render(createElement(ManuscriptEditor, { blocks: test.workspace.pending.blocks,
       proposals: [{ proposalId: id, operationId: id, revisionId: id, blockId: test.workspace.pending.blocks[0]!.manuscript_block_id,
         sourceRunId: id, sourceDecisionId: id, text: "Old", eligible: true, expectedHeads: [id] }],
-      editable: true, persistWorkspace: test.workspace, baseUrl: location.origin,
-      fetchImpl: () => { requests += 1; return new Promise<Response>(() => {}); }, cryptoImpl: crypto,
-      controllerRef: controller, onProjection: () => {}, onFailure: (error) => { failure = error; } })); });
+      editable: true, persistWorkspace: test.workspace, writing, baseUrl: location.origin,
+      fetchImpl, cryptoImpl: crypto, controllerRef: controller, onFailure: (error) => { failure = error; } })); });
     await expect.poll(() => host.querySelector(".block-proposal-text")).not.toBeNull();
     const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
     const select = () => {
@@ -211,7 +212,7 @@ it("freezes one complete mixed Tiptap IME intent only after confirmation and ign
     expect(surface.querySelector("p")!.textContent).toBe("Base");
     expect(surface.querySelector(".block-proposal-text")!.textContent).toBe("Old");
     expect(failure).toBeUndefined();
-  } finally { await act(async () => { root.unmount(); }); host.remove(); await test.close();
+  } finally { await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
 
@@ -252,17 +253,16 @@ it("keeps newer captured input visible when an earlier Author Edit settles", asy
   const root = createRoot(host);
   const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
   let failure: unknown, installedBody: string | null | undefined;
+  const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin, fetchImpl,
+    onFailure: (error) => { failure = error; } });
   function View() {
-    const [projection, setProjection] = useState(test.workspace.pending);
-    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true,
-      persistWorkspace: test.workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: controller,
-      onFailure: (error) => { failure = error; }, onProjection: (next) => {
-        test.workspace.pending = next;
-        flushSync(() => { setProjection(next); });
-        if (next.authoritative_revision_id !== scenario.session.base_snapshot.authoritative_head_revision_id) {
-          installedBody ??= host.querySelector("[data-manuscript-editor] p")?.textContent;
-        }
-      } });
+    const { projection } = useSyncExternalStore(writing.subscribe, writing.snapshot);
+    if (projection.authoritative_revision_id !== scenario.session.base_snapshot.authoritative_head_revision_id) {
+      queueMicrotask(() => { installedBody ??= host.querySelector("[data-manuscript-editor] p")?.textContent; });
+    }
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, persistWorkspace: test.workspace,
+      writing, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: controller,
+      onFailure: (error) => { failure = error; } });
   }
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -282,7 +282,7 @@ it("keeps newer captured input visible when an earlier Author Edit settles", asy
     expect(surface.querySelector("p")!.textContent).toBe("Base!?");
     expect((await rebuildPendingProjection(test.workspace)).body).toBe("Base!?");
     expect(failure).toBeUndefined();
-  } finally { release(); await act(async () => { root.unmount(); }); host.remove(); await test.close();
+  } finally { release(); await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
 
@@ -323,8 +323,10 @@ it("keeps input that the author types before the effects of a settled projection
   const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
   let failure: unknown, typed = false;
   const initialRevision = test.workspace.pending.authoritative_revision_id;
+  const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin, fetchImpl,
+    onFailure: (error) => { failure = error; } });
   function View() {
-    const [projection, setProjection] = useState(test.workspace.pending);
+    const { projection } = useSyncExternalStore(writing.subscribe, writing.snapshot);
     // The author types after the settled render commits and before its passive effects occur.
     useLayoutEffect(() => {
       if (typed || projection.save_state !== "saved" || projection.authoritative_revision_id === initialRevision) return;
@@ -332,13 +334,8 @@ it("keeps input that the author types before the effects of a settled projection
       queueMicrotask(() => { document.execCommand("insertText", false, "?"); });
     }, [projection]);
     return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true,
-      persistWorkspace: test.workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: controller,
-      onFailure: (error) => { failure = error; }, onProjection: (next, source) => {
-        test.workspace.pending = next;
-        // The workspace view shows local input immediately and other projections in a render without flushSync.
-        if (source === "local") flushSync(() => { setProjection(next); });
-        else setProjection(next);
-      } });
+      persistWorkspace: test.workspace, writing, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+      controllerRef: controller, onFailure: (error) => { failure = error; } });
   }
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false });
@@ -364,7 +361,7 @@ it("keeps input that the author types before the effects of a settled projection
     observer.disconnect();
     expect({ newestReplaced: replaced.includes("Base!?"), text: surface.querySelector("p")!.textContent, failure })
       .toEqual({ newestReplaced: false, text: "Base!?", failure: undefined });
-  } finally { root.unmount(); host.remove(); await test.close();
+  } finally { root.unmount(); writing.close(); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
 
@@ -382,7 +379,7 @@ it("hydrates new blocks when a new inline Proposal projects in the same render",
   let failure: unknown;
   const props = { editable: true, persistWorkspace: test.workspace, baseUrl: location.origin,
     fetchImpl: () => new Promise<Response>(() => {}), cryptoImpl: crypto, controllerRef: { current: null },
-    onProjection: () => {}, onFailure: (error: unknown) => { failure = error; } };
+    onFailure: (error: unknown) => { failure = error; } };
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   try {
@@ -410,21 +407,24 @@ it("keeps captured manuscript input during a background Draft refresh", async ()
   const refreshed = new Promise<void>((resolve) => { observed = resolve; });
   let phase = "open", failure: unknown;
   const fetchImpl: typeof fetch = () => { throw new Error("No command is issued before the append completes"); };
+  const controlled = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin,
+    fetchImpl, cryptoImpl: paused.cryptoImpl, onFailure: (error) => { failure = error; } });
+  // The Draft display refreshes the projection through the controller.
+  const writing = { ...controlled, async refresh() {
+    const projection = await controlled.refresh();
+    if (phase === "refresh") observed();
+    return projection;
+  } };
   function View() {
-    const [projection, setProjection] = useState(test.workspace.pending);
+    const { projection } = useSyncExternalStore(writing.subscribe, writing.snapshot);
     const [refreshKey, setRefreshKey] = useState(0);
     refresh = () => { setRefreshKey(1); };
     return createElement(BlockProposalDisplay, { blocks: projection.blocks, editable: true,
-      persistWorkspace: test.workspace, baseUrl: location.origin, cryptoImpl: paused.cryptoImpl,
+      persistWorkspace: test.workspace, writing, baseUrl: location.origin, cryptoImpl: paused.cryptoImpl,
       fetchImpl, controllerRef: controller,
       scope: test.workspace.session.project_scope, chapterId: test.workspace.session.base_snapshot.chapter_id,
       authoritativeRevisionId: projection.authoritative_revision_id, locators: [], refreshKey,
-      safeToProject: true, onAccepted: async () => {},
-      onFailure: (error) => { failure = error; }, onProjection: (next) => {
-        test.workspace.pending = next;
-        flushSync(() => { setProjection(next); });
-        if (phase === "refresh") observed();
-      } });
+      safeToProject: true, onAccepted: async () => {}, onFailure: (error) => { failure = error; } });
   }
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -441,32 +441,31 @@ it("keeps captured manuscript input during a background Draft refresh", async ()
     await act(async () => { refresh(); });
     await refreshed;
     expect(surface.querySelector("p")!.textContent).toBe("Base!");
-    expect(test.workspace.pending.body).toBe("Base!");
-    expect(test.workspace.pending.save_state).toBe("saving");
+    expect(writing.snapshot().projection).toMatchObject({ body: "Base!", save_state: "saving" });
     phase = "append";
     await act(async () => { paused.release(); await controller.current!.whenIdle(); });
     expect((await rebuildPendingProjection(test.workspace)).body).toBe("Base!");
     expect(failure).toBeUndefined();
-  } finally { paused.release(); await act(async () => { root.unmount(); }); host.remove(); await test.close();
+  } finally { paused.release(); await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
 
 
-it("keeps author input when a Journal projection read before that input installs after it", async () => {
+it("keeps author input when a Journal projection read before that input completes after it", async () => {
   const test = await openJournalAppendTestWorkspace();
   const { ManuscriptEditor } = await import("../../src/manuscript-editor.tsx");
   const { applyTrustedInput } = await import("../support/browser-command-client.ts");
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
-  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
-  let failure: unknown, installs = 0;
+  let failure: unknown;
+  // The submission stays unsettled, so the Journal keeps the input as local work.
+  const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin,
+    fetchImpl: () => new Promise<Response>(() => {}), onFailure: (error) => { failure = error; } });
   function View() {
-    const [projection, setProjection] = useState(test.workspace.pending);
-    // The submission stays unsettled, so the Journal keeps the input as local work.
-    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true,
-      persistWorkspace: test.workspace, baseUrl: location.origin, fetchImpl: () => new Promise<Response>(() => {}),
-      cryptoImpl: crypto, controllerRef: controller, onFailure: (error) => { failure = error; },
-      onProjection: (next) => { installs += 1; test.workspace.pending = next; flushSync(() => { setProjection(next); }); } });
+    const { projection } = useSyncExternalStore(writing.subscribe, writing.snapshot);
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, persistWorkspace: test.workspace,
+      writing, baseUrl: location.origin, fetchImpl: () => new Promise<Response>(() => {}), cryptoImpl: crypto,
+      controllerRef: { current: null }, onFailure: (error) => { failure = error; } });
   }
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -474,20 +473,17 @@ it("keeps author input when a Journal projection read before that input installs
     await act(async () => { root.render(createElement(View)); });
     const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
     // A background reader, for example the Draft refresh after a settlement, reads the Journal before the input.
-    const earlier = await rebuildPendingProjection(test.workspace);
+    const earlier = writing.refresh();
     surface.focus();
     const text = surface.querySelector("p")!.firstChild!;
     window.getSelection()!.setBaseAndExtent(text, 4, text, 4);
     await applyTrustedInput({ operation: "insert_text", text: "!" });
-    await act(async () => { await controller.current!.whenIdle(); });
-    const installed = installs;
-    await act(async () => { controller.current!.installProjection(earlier); });
-    await expect.poll(() => installs).toBe(installed + 1);
+    await act(async () => { await earlier; await writing.whenIdle(); });
     const journal = await rebuildPendingProjection(test.workspace);
-    expect({ text: surface.querySelector("p")!.textContent, installed: test.workspace.pending, failure })
+    expect({ text: surface.querySelector("p")!.textContent, installed: writing.snapshot().projection, failure })
       .toEqual({ text: "Base!", installed: journal, failure: undefined });
     expect(journal.save_state).toBe("saving");
-  } finally { await act(async () => { root.unmount(); }); host.remove(); await test.close();
+  } finally { await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
 
@@ -522,14 +518,14 @@ it("shows a changed Journal projection before its install completes", async () =
   };
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
-  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
   let failure: unknown;
+  const writing = createEditorSessionWritingController({ workspace: test.workspace, baseUrl: location.origin, fetchImpl,
+    onFailure: (error) => { failure = error; } });
   function View() {
-    const [projection, setProjection] = useState(test.workspace.pending);
-    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true,
-      persistWorkspace: test.workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: controller,
-      onFailure: (error) => { failure = error; },
-      onProjection: (next) => { test.workspace.pending = next; flushSync(() => { setProjection(next); }); } });
+    const { projection } = useSyncExternalStore(writing.subscribe, writing.snapshot);
+    return createElement(ManuscriptEditor, { blocks: projection.blocks, editable: true, persistWorkspace: test.workspace,
+      writing, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: { current: null },
+      onFailure: (error) => { failure = error; } });
   }
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -541,11 +537,11 @@ it("shows a changed Journal projection before its install completes", async () =
     const settled = await submitOnePendingAuthorEdit({ workspace: test.workspace, baseUrl: location.origin, fetchImpl });
     let shown: string | null = null;
     await act(async () => {
-      await controller.current!.installProjection(settled);
+      await writing.refresh();
       shown = surface.querySelector("p")!.textContent;
     });
-    expect({ shown, installed: test.workspace.pending, failure })
+    expect({ shown, installed: writing.snapshot().projection, failure })
       .toEqual({ shown: "Base!", installed: settled, failure: undefined });
-  } finally { await act(async () => { root.unmount(); }); host.remove(); await test.close();
+  } finally { await act(async () => { root.unmount(); }); writing.close(); host.remove(); await test.close();
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
 });
