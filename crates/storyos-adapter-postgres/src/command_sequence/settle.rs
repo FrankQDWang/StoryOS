@@ -98,8 +98,7 @@ async fn admit_then_settle<C: AdmittedCommand>(
             if result_reference == REQUIRES_RECONFIRMATION {
                 return Err(ProjectCommandError::BindingConflict.into());
             }
-            tracing::Span::current().record("outcome", "replayed");
-            return replay_settled(store, envelope, command, &result_reference).await;
+            return replay_receipt(store, envelope, command, &result_reference).await;
         }
         ProjectCommandChallengeUse::ExactRetryInProgress => {
             transaction.rollback().await.map_err(challenge_error)?;
@@ -123,7 +122,8 @@ async fn admit_then_settle<C: AdmittedCommand>(
         }
     }
     after_admission()?;
-    settle_admitted_command(store, envelope, command).await
+    // The settle step records its outcome on this span, so that one command has one span.
+    settle_admitted_steps(store, envelope, command).await
 }
 
 async fn admit<C: AdmittedCommand>(
@@ -209,13 +209,13 @@ async fn settle_admitted_steps<C: AdmittedCommand>(
         }
         Ok(Err(receipt_id)) => {
             transaction.rollback().await.map_err(challenge_error)?;
-            replay_settled(store, envelope, command, &receipt_id).await
+            replay_receipt(store, envelope, command, &receipt_id).await
         }
         Err(error) => {
             transaction.rollback().await.map_err(challenge_error)?;
             // A concurrent settle step can settle the same Admission first.
             match settled_receipt(store, envelope).await? {
-                Some(receipt_id) => replay_settled(store, envelope, command, &receipt_id).await,
+                Some(receipt_id) => replay_receipt(store, envelope, command, &receipt_id).await,
                 None => Err(error),
             }
         }
@@ -232,6 +232,16 @@ async fn settle_admitted_steps<C: AdmittedCommand>(
     outcome = tracing::field::Empty,
 ))]
 pub(crate) async fn replay_settled<C: ProjectCommand>(
+    store: &PostgresProjectReader,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+    receipt_id: &str,
+) -> Result<SettledCommand<C>, C::Error> {
+    replay_receipt(store, envelope, command, receipt_id).await
+}
+
+/// Replays one Domain Receipt and records `replayed` and its identifiers on the current span.
+async fn replay_receipt<C: ProjectCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
