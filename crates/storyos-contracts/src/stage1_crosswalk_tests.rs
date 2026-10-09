@@ -281,6 +281,7 @@ fn expected_provenance_evidence() -> Value {
         },
         "workspace": {
             "crates": [
+                "crates/storyos-adapter-diagnostics",
                 "crates/storyos-adapter-fake-destination",
                 "crates/storyos-adapter-postgres",
                 "crates/storyos-application",

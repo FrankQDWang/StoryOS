@@ -12,6 +12,7 @@ storyos-core = { path = "../storyos-core" }
 storyos-contracts = { path = "../storyos-contracts" }
 tokio.workspace = true
 tokio-postgres.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

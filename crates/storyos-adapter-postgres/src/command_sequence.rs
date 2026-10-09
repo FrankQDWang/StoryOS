@@ -4,8 +4,9 @@
 use std::future::Future;
 
 use storyos_application::{
-    ProjectCommandChallengeError, ProjectCommandChallengeTransaction, ProjectCommandChallengeUse,
-    ProjectCommandEnvelope, ProjectCommandError, ProjectCommandSettlement, ProjectScope,
+    DiagnosticField, DiagnosticId, ProjectCommandChallengeError,
+    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectCommandEnvelope,
+    ProjectCommandError, ProjectCommandSettlement, ProjectScope,
 };
 use storyos_core::{ProjectLifecycle, ReasonCode, TransitionOutcome};
 use tokio_postgres::Client;
@@ -485,7 +486,53 @@ pub(crate) type SettledCommand<C> = ProjectCommandSettlement<
     <C as ProjectCommand>::ZeroEffect,
 >;
 
+#[tracing::instrument(skip_all, fields(
+    command_kind = C::SPEC.kind.diagnostic(),
+    project_id = envelope.project_scope.project_id.diagnostic(),
+    command_id = tracing::field::Empty,
+    author_command_admission_id = tracing::field::Empty,
+    correlation_id = DiagnosticId(&envelope.correlation_id).diagnostic(),
+    outcome = tracing::field::Empty,
+))]
 pub(crate) async fn settle_project_command<C: ProjectCommand>(
+    store: &PostgresProjectReader,
+    envelope: &ProjectCommandEnvelope,
+    command: &C,
+) -> Result<SettledCommand<C>, C::Error> {
+    let settled = settle_steps(store, envelope, command).await;
+    record_settled(&settled);
+    settled
+}
+
+/// Records the identifiers that a settlement returns, so that a replay records the stored
+/// identifiers, or the reason code of a failed or refused command.
+pub(crate) fn record_settled<A, N, F, R, P, Z>(
+    settled: &Result<ProjectCommandSettlement<A, N, F, R, P, Z>, impl CommandError>,
+) {
+    match settled {
+        Ok(settlement) => record_ids(
+            &settlement.ids.command_id,
+            &settlement.ids.author_command_admission_id,
+        ),
+        Err(error) => record_error(error),
+    }
+}
+
+/// Records the reason code of a failed or refused command on the current command span.
+pub(crate) fn record_error(error: &impl CommandError) {
+    tracing::Span::current().record("outcome", error.reason_code().diagnostic());
+}
+
+/// Records the command identifiers on the current command span.
+pub(crate) fn record_ids(command_id: &str, author_command_admission_id: &str) {
+    tracing::Span::current().record("command_id", DiagnosticId(command_id).diagnostic());
+    tracing::Span::current().record(
+        "author_command_admission_id",
+        DiagnosticId(author_command_admission_id).diagnostic(),
+    );
+}
+
+async fn settle_steps<C: ProjectCommand>(
     store: &PostgresProjectReader,
     envelope: &ProjectCommandEnvelope,
     command: &C,
@@ -512,6 +559,7 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
     match challenge_use {
         ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
             transaction.rollback().await.map_err(challenge_error)?;
+            tracing::Span::current().record("outcome", "replayed");
             read_command_replay(
                 store,
                 &envelope.challenge_binding,
@@ -528,6 +576,10 @@ pub(crate) async fn settle_project_command<C: ProjectCommand>(
             Err(ProjectCommandError::BindingConflict.into())
         }
         ProjectCommandChallengeUse::FirstUse => {
+            record_ids(
+                &envelope.ids.command_id,
+                &envelope.ids.author_command_admission_id,
+            );
             let settled = match first_use(&transaction.client, envelope, command).await {
                 Ok(settlement) => transaction
                     .commit()
@@ -614,6 +666,9 @@ async fn settle_classified<C: ProjectCommand>(
         refs: zero_refs,
         revision_ids: Vec::new(),
     };
+    // A zero-authority outcome records its reason code, and an applied variant its result kind.
+    let recorded = classified.reason_code().unwrap_or(receipt.result);
+    tracing::Span::current().record("outcome", recorded.diagnostic());
     let (receipt_created_at, outcome) = match classified {
         TransitionOutcome::Applied((applied, plan)) => {
             let variant = command.applied_variant(&applied, &plan);

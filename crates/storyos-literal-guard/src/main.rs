@@ -1,7 +1,10 @@
 //! Reports positional opaque literal arguments that have no `/*param*/` comment.
 //! The guard checks only the added lines of the Rust files that changed after the merge base.
+//! It also reports each `tracing` form in the workspace crates that can record the `Display` or
+//! `Debug` text of a value (ADR 0047).
 
 mod finder;
+mod tracing_capture;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
@@ -25,11 +28,16 @@ fn main() -> ExitCode {
         return ExitCode::from(INVALID_INPUT);
     };
     match run(base) {
-        Ok(0) => ExitCode::SUCCESS,
-        Ok(count) => {
-            eprintln!(
-                "{count} positional literal arguments need a /*param*/ comment or a rename to a self-documenting API"
-            );
+        Ok((0, 0)) => ExitCode::SUCCESS,
+        Ok((literals, captures)) => {
+            if literals > 0 {
+                eprintln!(
+                    "{literals} positional literal arguments need a /*param*/ comment or a rename to a self-documenting API"
+                );
+            }
+            if captures > 0 {
+                eprintln!("{captures} tracing forms can record author text or a secret (ADR 0047)");
+            }
             ExitCode::FAILURE
         }
         Err(error) => {
@@ -39,7 +47,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(base: &str) -> Result<usize, String> {
+fn run(base: &str) -> Result<(usize, usize), String> {
     let root = git(Path::new("."), &["rev-parse", "--show-toplevel"])?;
     let root = Path::new(root.trim_end());
     let exemptions = serde_json::from_str::<Exemptions>(&read(&root.join(EXEMPTIONS))?)
@@ -116,6 +124,40 @@ fn run(base: &str) -> Result<usize, String> {
             println!(
                 "{path}:{line}:{column}: positional-literal: argument `{literal}` of `{callee}` has no /*param*/ comment"
             );
+        }
+        count += findings.len();
+        proc_macro2::extra::invalidate_current_thread_spans();
+    }
+    Ok((count, tracing_captures(root)?))
+}
+
+fn tracing_captures(root: &Path) -> Result<usize, String> {
+    let files = git(
+        root,
+        &[
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            "crates/*.rs",
+        ],
+    )?;
+    let mut count = 0;
+    for path in files.split('\0').filter(|path| !path.is_empty()) {
+        let Ok(source) = std::fs::read_to_string(root.join(path)) else {
+            continue;
+        };
+        let findings =
+            tracing_capture::find(&source).map_err(|error| format!("{path}: {error}"))?;
+        for tracing_capture::Finding {
+            line,
+            column,
+            reason,
+        } in &findings
+        {
+            println!("{path}:{line}:{column}: tracing-capture: {reason}");
         }
         count += findings.len();
         proc_macro2::extra::invalidate_current_thread_spans();

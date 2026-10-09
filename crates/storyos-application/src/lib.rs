@@ -45,6 +45,10 @@ pub use refused_edit_draft::{
     RefusedEditDraftReader, RefusedEditDraftRecord,
 };
 mod author_edit_outcome;
+mod diagnostics;
+pub use diagnostics::{
+    DiagnosticField, DiagnosticId, SqlState, SqlStateLookup, register_sql_state,
+};
 mod challenge_rate_class;
 pub use challenge_rate_class::ChallengeRateClass;
 mod chapter_query;

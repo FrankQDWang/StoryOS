@@ -5,9 +5,12 @@ use storyos_core::NativeStreamItem;
 use crate::model_gateway_ports::{
     CommittedCancellation, ContractFaultObserver, ContractFaultPoint, DestinationRequest,
     DispatchClaim, DispatchRecord, ModelDispatchStore, ModelProviderAdapter, ModelStreamSink,
-    NextDispatchWork, RequestAttempt, StreamControl, StreamStop,
+    ModelUsage, NextDispatchWork, Observation, RequestAttempt, StreamControl, StreamStop,
 };
-use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
+use crate::{
+    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DiagnosticField, DiagnosticId,
+    SqlState,
+};
 
 /// Gets the next work, prepares, claims, exchanges with no open transaction, and records,
 /// until the claimed AgentRun needs no destination I/O.
@@ -46,6 +49,16 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
     Gateway<'_, S, A, O>
 {
     /// Sends one request in order. Returns the cancellation that stopped its stream, if any.
+    #[tracing::instrument(skip_all, fields(
+        project_id = self.claim.project_scope.project_id.diagnostic(),
+        run_id = DiagnosticId(&self.claim.run_id).diagnostic(),
+        request_kind = RequestKind(&request).diagnostic(),
+        adapter = std::any::type_name::<A>().diagnostic(),
+        observation = tracing::field::Empty,
+        usage = tracing::field::Empty,
+        input_tokens = tracing::field::Empty,
+        output_tokens = tracing::field::Empty,
+    ))]
     async fn dispatch(
         &self,
         request: DestinationRequest,
@@ -59,6 +72,7 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
         let prepared = match adapter.prepare(&request).await {
             Ok(prepared) => prepared,
             Err(refusal) => {
+                tracing::Span::current().record("observation", "pre_dispatch_refusal");
                 store
                     .record(claim, DispatchRecord::Refusal(refusal))
                     .await?;
@@ -72,6 +86,7 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
                     .commit_dispatch_claim(claim, &request, &prepared.projection)
                     .await?
                 else {
+                    tracing::Span::current().record("observation", "work_changed");
                     return Ok(None);
                 };
                 observer.reached(ContractFaultPoint::DispatchClaimed).await;
@@ -86,6 +101,7 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
             cancellation: None,
         };
         let observation = adapter.exchange(prepared.prepared, &mut sink).await;
+        record_observation(&observation);
         let cancellation = sink.cancellation;
         store
             .record(
@@ -126,7 +142,87 @@ impl<S: ModelDispatchStore, O: ContractFaultObserver> ModelStreamSink for Gatewa
                 self.cancellation = Some(cancellation);
                 StreamControl::Stop
             }
-            Ok(Some(StreamStop::StaleFence)) | Err(_) => StreamControl::Stop,
+            Ok(Some(StreamStop::StaleFence)) => StreamControl::Stop,
+            Err(error) => {
+                tracing::warn!(
+                    reason = error.diagnostic(),
+                    sql_state = SqlState(&error).diagnostic(),
+                    "Model Stream Event append failed"
+                );
+                StreamControl::Stop
+            }
+        }
+    }
+}
+
+fn record_observation(observation: &Observation) {
+    tracing::Span::current().record("observation", ObservationKind(observation).diagnostic());
+    let Observation::Terminal(response) = observation else {
+        return;
+    };
+    match response.usage {
+        ModelUsage::Reported {
+            input_tokens,
+            output_tokens,
+        }
+        | ModelUsage::Estimated {
+            input_tokens,
+            output_tokens,
+        } => {
+            tracing::Span::current().record("input_tokens", input_tokens.diagnostic());
+            tracing::Span::current().record("output_tokens", output_tokens.diagnostic());
+        }
+        ModelUsage::Unknown => {}
+    }
+    tracing::Span::current().record("usage", UsageKind(response.usage).diagnostic());
+}
+
+struct RequestKind<'a>(&'a DestinationRequest);
+
+impl DiagnosticField for RequestKind<'_> {
+    type Value<'b>
+        = &'static str
+    where
+        Self: 'b;
+
+    fn diagnostic(&self) -> Self::Value<'_> {
+        match self.0 {
+            DestinationRequest::Create(_) => "create",
+            DestinationRequest::Retrieve(_) => "retrieve",
+            DestinationRequest::Abort(_) => "abort",
+        }
+    }
+}
+
+/// The category of an observation. A rejection reason is native destination text, so it is absent.
+struct ObservationKind<'a>(&'a Observation);
+
+impl DiagnosticField for ObservationKind<'_> {
+    type Value<'b>
+        = &'static str
+    where
+        Self: 'b;
+
+    fn diagnostic(&self) -> Self::Value<'_> {
+        match self.0 {
+            Observation::NotSubmitted => "not_submitted",
+            Observation::Rejected { .. } => "rejected",
+            Observation::Terminal(_) => "terminal",
+            Observation::OutcomeUnknown { .. } => "outcome_unknown",
+        }
+    }
+}
+
+struct UsageKind(ModelUsage);
+
+impl DiagnosticField for UsageKind {
+    type Value<'a> = &'static str;
+
+    fn diagnostic(&self) -> Self::Value<'_> {
+        match self.0 {
+            ModelUsage::Reported { .. } => "reported",
+            ModelUsage::Estimated { .. } => "estimated",
+            ModelUsage::Unknown => "unknown",
         }
     }
 }

@@ -17,6 +17,8 @@ const execFileAsync = promisify(execFile);
 export interface StoryOSServer {
   readonly baseUrl: string;
   readonly server: ChildProcess;
+  /** The stderr bytes that the Server wrote up to now. */
+  readonly stderr: () => string;
 }
 
 export function sessionFetch(baseUrl: string, sessionHandle?: string): typeof fetch {
@@ -46,6 +48,7 @@ export async function startStoryOSServer(options: {
   readonly webRoot?: string;
   readonly sessions?: Readonly<Record<string, string>>;
   readonly extraEnv?: Readonly<Record<string, string>>;
+  readonly databaseUrl?: string;
 }): Promise<StoryOSServer> {
   const { bind = "127.0.0.1:0", repositoryRoot, serverBinary, sessions } = options;
   const webRoot = options.webRoot ?? join(dirname(serverBinary), "web");
@@ -53,13 +56,14 @@ export async function startStoryOSServer(options: {
     STORYOS_WORKER: "0",
     ...(options.extraEnv ?? {}),
   });
-  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
-    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
+  const databaseUrl = options.databaseUrl ?? process.env.STORYOS_TEST_DATABASE_URL;
+  if (databaseUrl !== undefined) {
+    env.STORYOS_DATABASE_URL = databaseUrl;
   }
   if (sessions !== undefined) {
     env.STORYOS_BOOTSTRAP_SESSIONS = JSON.stringify(sessions);
-    env.STORYOS_CHALLENGE_SECRET =
-      "test-only-challenge-secret-that-is-at-least-thirty-two-bytes";
+    env.STORYOS_CHALLENGE_SECRET = options.extraEnv?.STORYOS_CHALLENGE_SECRET
+      ?? "test-only-challenge-secret-that-is-at-least-thirty-two-bytes";
     if (Object.keys(sessions).length !== 1) {
       env.STORYOS_TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS = "1";
     }
@@ -97,7 +101,7 @@ export async function startStoryOSServer(options: {
       const baseUrl = stdout.match(/^STORYOS_SERVER_URL=(http:\/\/[^\s]+)$/m)?.[1];
       if (baseUrl !== undefined) {
         clearTimeout(timeout);
-        resolve({ baseUrl, server });
+        resolve({ baseUrl, server, stderr: () => stderr });
       }
     });
   });
@@ -110,22 +114,32 @@ export async function stopStoryOSServer(server: ChildProcess): Promise<void> {
   await exited;
 }
 
-export async function runStoryOSWorker(options: {
+interface StoryOSWorkerOptions {
   readonly repositoryRoot: string;
   readonly workerBinary: string;
   readonly args: readonly string[];
   readonly extraEnv?: Readonly<Record<string, string>>;
-}): Promise<void> {
+  readonly databaseUrl?: string;
+}
+
+export async function runStoryOSWorker(options: StoryOSWorkerOptions): Promise<void> {
+  await runStoryOSWorkerStderr(options);
+}
+
+/** Runs the Worker binary to its exit and returns its stderr. */
+export async function runStoryOSWorkerStderr(options: StoryOSWorkerOptions): Promise<string> {
   const env = childEnv(options.extraEnv ?? {});
-  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
-    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
+  const databaseUrl = options.databaseUrl ?? process.env.STORYOS_TEST_DATABASE_URL;
+  if (databaseUrl !== undefined) {
+    env.STORYOS_DATABASE_URL = databaseUrl;
   }
-  await execFileAsync(options.workerBinary, [...options.args], {
+  const { stderr } = await execFileAsync(options.workerBinary, [...options.args], {
     cwd: options.repositoryRoot,
     env,
     timeout: 15_000,
     killSignal: "SIGKILL",
   });
+  return stderr;
 }
 
 /** Creates one empty Project through the public protocol and returns its Project ID. */

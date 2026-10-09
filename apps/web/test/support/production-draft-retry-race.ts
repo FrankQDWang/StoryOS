@@ -120,7 +120,8 @@ export async function verifyProductionRetryReservationRace({ origin, projectId, 
     await release();
     const failure = await work;
     assert.ok(failure instanceof Error);
-    assert.match(String(Reflect.get(failure, "stderr")), /SqlState\(E40001\)/);
+    // ADR 0047: the Worker writes the SQLSTATE code in its error event, not the error text.
+    assert.match(String(Reflect.get(failure, "stderr")), /"stage":"run_once","sql_state":"40001"/);
     const after = await readPhase();
     const receiptRows = after.domain_receipts!.filter((row) => row.receipt_id === settled.receipt.receipt_id);
     const actionRows = after.author_action_entries!.filter((row) => row.receipt_id === settled.receipt.receipt_id);
