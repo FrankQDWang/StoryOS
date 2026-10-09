@@ -1225,6 +1225,12 @@ but restoring them does not make DOM state durable truth. A
 remains `Required`; it is never relabelled `saved` merely to express
 convergence.
 
+The Protected Web Client has one owner of the Pending Edit Projection: the
+Editor Session writing controller of
+[ADR 0046](../adr/0046-give-the-pending-edit-projection-one-owner-in-the-editor-session-writing-controller.md).
+Only the controller installs a projection. A projection read that started
+before the newest captured input never installs.
+
 ### 5.2 Chapter switching
 
 Before changing the selected chapter, the client atomically completes the
@@ -1264,6 +1270,14 @@ receives a pre-admission Problem and no Receipt. A concurrently admitted
 takeover that passed issuance bindings but loses the later domain compare
 receives `TakeoverCompareFailed`. A terminal pre-admission refusal releases no
 dependent group until its current bindings are explicitly rebuilt.
+
+While an Author Edit of one Proposal candidate is in progress, the controller
+holds later input in that candidate in memory. When the earlier edit settles
+as `proposal_revised`, the controller journals the held input against the new
+Proposal Revision. After any other result, it journals the held input against
+the original target, does not submit it, and shows `needs_attention`. A crash
+can lose held input of at most one candidate round trip. ADR 0046 gives the
+complete rule.
 
 This serial browser admission order prevents dependent edits from overtaking
 one another but is not Project authority order. An `ApplyAuthorEdit`
