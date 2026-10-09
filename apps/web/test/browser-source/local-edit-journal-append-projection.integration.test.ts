@@ -3,7 +3,7 @@ import { act, createElement, useLayoutEffect, useState, useSyncExternalStore } f
 import { createRoot } from "react-dom/client";
 import { RefusedEditDraftDisplay } from "../../src/refused-edit-draft-display.tsx";
 
-import { persistReplaceSelection } from "../../src/editor-session.ts";
+import { appendAuthorEdit } from "../../src/editor-session.ts";
 import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
 import { rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import {
@@ -17,10 +17,10 @@ import {
 it("returns the valid append projection without a second Journal reconstruction", async () => {
   const test = await openJournalAppendTestWorkspace();
   try {
-    await persistReplaceSelection(test.workspace, FIRST_APPEND_EDIT);
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
     test.workspace.cryptoImpl = withDigestBudget(crypto, 2);
 
-    const projection = await persistReplaceSelection(test.workspace, SECOND_APPEND_EDIT);
+    const projection = await appendAuthorEdit(test.workspace, SECOND_APPEND_EDIT);
     test.workspace.cryptoImpl = crypto;
 
     expect(projection).toEqual({
@@ -520,7 +520,7 @@ it("shows a changed Journal projection before its install completes", async () =
     await act(async () => { root.render(createElement(View)); });
     const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
     // A Draft retry settles outside the editor. The Draft display keeps its hold until this install completes.
-    await persistReplaceSelection(test.workspace, FIRST_APPEND_EDIT);
+    await appendAuthorEdit(test.workspace, FIRST_APPEND_EDIT);
     const settled = await submitOnePendingAuthorEdit({ workspace: test.workspace, baseUrl: location.origin, fetchImpl });
     let shown: string | null = null;
     await act(async () => {

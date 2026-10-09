@@ -2,7 +2,7 @@ import { restoreVersionThreeJournal } from "./journal-version-three.ts";
 import { expect, it, vi } from "vitest";
 import type { DigestValue, GetEditorSessionResponse }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { openEditorWorkspace, persistReplaceSelection, submitOnePendingAuthorEdit }
+import { openEditorWorkspace, appendAuthorEdit, submitOnePendingAuthorEdit }
   from "../../src/editor-session.ts";
 import { collectEligibleJournalPayload } from "../../src/journal-payload-collection.ts";
 import type { JournalSnapshot } from "../../src/editor-types.ts";
@@ -73,7 +73,7 @@ it("continues writing after 2400 saved and collected input intents", async () =>
       for (let offset = 0; offset < 240; offset++) {
         const from = body.length;
         body += "a";
-        await persistReplaceSelection(workspace, { from, to: from, text: "a",
+        await appendAuthorEdit(workspace, { from, to: from, text: "a",
           resultingBody: body, inputOrigin: "typing", undoGroupId,
           createdAt: new Date(Date.UTC(2026, 7, 15, 8) + batch * 10000 + offset).toISOString(),
         });
@@ -132,7 +132,7 @@ it("continues writing after 2400 saved and collected input intents", async () =>
     }
     async function refusesFullWorkingSet() {
       const before = await readJournalSnapshot(ready);
-      await expect(persistReplaceSelection(ready, { from: body.length, to: body.length,
+      await expect(appendAuthorEdit(ready, { from: body.length, to: body.length,
         text: "+", resultingBody: `${body}+`, inputOrigin: "typing" })).rejects.toThrow();
       expect(await readJournalSnapshot(ready)).toEqual(before);
     }
@@ -166,11 +166,11 @@ it("continues writing after 2400 saved and collected input intents", async () =>
       return key === undefined ? put.call(this, value) : put.call(this, value, key);
     });
     try {
-      await expect(persistReplaceSelection(workspace, { from: body.length, to: body.length,
+      await expect(appendAuthorEdit(workspace, { from: body.length, to: body.length,
         text: "+", resultingBody: `${body}+`, inputOrigin: "typing" })).rejects.toThrow();
     } finally { interrupted.mockRestore(); }
     expect(await readJournalSnapshot(workspace)).toEqual(saved);
-    await persistReplaceSelection(workspace, { from: body.length, to: body.length,
+    await appendAuthorEdit(workspace, { from: body.length, to: body.length,
       text: "+", resultingBody: `${body}+`, inputOrigin: "typing" });
     const continued = await readJournalSnapshot(workspace);
     expect(continued.records).toHaveLength(1);

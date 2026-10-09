@@ -11,7 +11,7 @@ import type {
 import { commitStrongerGroup } from "../../src/author-edit-outcome-reconciliation.ts";
 import {
   openEditorWorkspace,
-  persistReplaceSelection,
+  appendAuthorEdit,
   rebuildPendingProjection,
   submitOnePendingAuthorEdit,
 } from "../../src/editor-session.ts";
@@ -281,7 +281,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
   }
 
   async function persistPending(workspace: EditorReadyState): Promise<void> {
-    await persistReplaceSelection(workspace, {
+    await appendAuthorEdit(workspace, {
       from: 4,
       to: 4,
       text: "!?",
@@ -294,11 +294,11 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
 
   async function persistNetZero(workspace: EditorReadyState): Promise<void> {
     const undoGroupId = "018f0000-0000-7001-8000-000000000040";
-    await persistReplaceSelection(workspace, {
+    await appendAuthorEdit(workspace, {
       from: 4, to: 4, text: "x", resultingBody: "Basex",
       inputOrigin: "typing", undoGroupId, createdAt: "2026-08-15T08:00:00.000Z",
     });
-    await persistReplaceSelection(workspace, {
+    await appendAuthorEdit(workspace, {
       from: 4, to: 5, text: "", resultingBody: "Base",
       inputOrigin: "deletion", undoGroupId, createdAt: "2026-08-15T08:00:00.001Z",
     });
@@ -349,7 +349,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
   }
 
   async function persistBlocked(workspace: EditorReadyState): Promise<void> {
-    await expect(persistReplaceSelection(workspace, {
+    await expect(appendAuthorEdit(workspace, {
       from: 6,
       to: 6,
       text: "+",
@@ -398,7 +398,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     expect(retained).toHaveLength(1);
     expect(retained[0]).toMatchObject({ text: "Base!?", disposition: "retained_for_manual_reentry" });
     expect(requireGroup(await snapshot(reconfirmationWorkspace))).toEqual(originalGroup);
-    await persistReplaceSelection(reconfirmationWorkspace, {
+    await appendAuthorEdit(reconfirmationWorkspace, {
       from: 4, to: 4, text: "+", resultingBody: "Base+",
     });
     reconfirmationWorkspace.database.close();
@@ -488,7 +488,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     })).rejects.toThrow(/One pending Author Edit is required/);
     expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
       .toEqual({ authorEdits: 1, outcomes: 1 });
-    expect(await persistReplaceSelection(workspace, {
+    expect(await appendAuthorEdit(workspace, {
       from: 4, to: 4, text: "!", resultingBody: "Base!",
     })).toMatchObject({ body: "Base!", save_state: "saving", unsettled_intent_count: 1 });
     await closeScenario(workspace);

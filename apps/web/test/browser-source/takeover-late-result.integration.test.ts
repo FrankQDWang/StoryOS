@@ -7,7 +7,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   openEditorWorkspace,
-  persistReplaceSelection,
+  appendAuthorEdit,
   submitOnePendingAuthorEdit,
 } from "../../src/editor-session.ts";
 import {
@@ -136,7 +136,7 @@ it("fences the old Journal partition before a late applied result settles", asyn
       writer_generation: "1",
       disposition: "current_writer_open",
     });
-    await persistReplaceSelection(workspace, {
+    await appendAuthorEdit(workspace, {
       from: 4,
       to: 4,
       text: "!?",
@@ -190,7 +190,7 @@ it("fences the old Journal partition before a late applied result settles", asyn
       },
     });
     expect(group.ordered_coverage).toHaveLength(snapshot.records.length);
-    await expect(persistReplaceSelection(workspace, {
+    await expect(appendAuthorEdit(workspace, {
       from: 6,
       to: 6,
       text: "+",

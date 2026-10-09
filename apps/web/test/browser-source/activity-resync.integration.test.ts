@@ -10,7 +10,7 @@ import type {
 import {
   freezeOneIntentSubmission,
   openEditorWorkspace,
-  persistReplaceSelection,
+  appendAuthorEdit,
 } from "../../src/editor-session.ts";
 import {
   JOURNAL_OBJECT_STORES,
@@ -109,7 +109,7 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
     });
     requireEditorReady(workspace);
     trackDatabase(workspace.database, openDatabases);
-    const pending = await persistReplaceSelection(workspace, {
+    const pending = await appendAuthorEdit(workspace, {
       from: 4,
       to: 4,
       text: "!?",
@@ -313,7 +313,7 @@ it.each([
     trackDatabase(old.database, databases);
     const edit = { from: 4, to: 4, text: " retained", resultingBody: "Base retained",
       undoGroupId: "018f0000-0000-7001-8000-000000000415", createdAt: "2026-08-20T05:00:00.000Z" };
-    await persistReplaceSelection(old, edit);
+    await appendAuthorEdit(old, edit);
     await freezeOneIntentSubmission(old);
     const retained = await readJournalSnapshot(old);
     const readAll = async (): Promise<Record<string, unknown[]>> => {
@@ -358,7 +358,7 @@ it.each([
       expect(installed[name]).toEqual(before[name]);
     }
     expect(await readJournalSnapshot(old)).toEqual(retained);
-    await expect(persistReplaceSelection(old, edit)).rejects.toThrow();
+    await expect(appendAuthorEdit(old, edit)).rejects.toThrow();
     expect(await readAll()).toEqual(installed);
     const reload = await openEditorWorkspace(options);
     requireEditorReady(reload);
