@@ -160,7 +160,8 @@ export function ManuscriptEditor({
         if (!current.view.composing && !composingRef.current) observedBlocksRef.current = nextBlocks;
         return;
       }
-      writingRef.current?.noteInput();
+      // New input changes the Author Undo Frontier, so an Undo in progress can only conflict.
+      writingRef.current?.abandonUndo();
       const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
       if (mixed !== undefined) {
         if (current.view.composing || composingRef.current) {
@@ -410,6 +411,8 @@ export function ManuscriptEditor({
     return () => {
       dom.removeEventListener("compositionstart", onCompositionStart, true);
       dom.removeEventListener("compositionend", onCompositionEnd);
+      // A closed editor abandons its Author Undo (ADR 0038).
+      writing.abandonUndo();
     };
   }, [editor, writing]);
 

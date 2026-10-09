@@ -59,8 +59,8 @@ export type QuietRefusal = "incomplete_semantic_intent" | "unsettled_input" | "j
 export interface EditorSessionWritingController {
   /** Accepts one captured edit. `blocks` is the manuscript that the editor shows after the edit. */
   capture(edit: CapturedEdit, origin: InputOrigin, blocks?: readonly ManuscriptParagraph[]): void;
-  /** Notes new author input. It abandons an Author Undo in progress (ADR 0038). */
-  noteInput(): void;
+  /** Abandons an Author Undo in progress. The editor calls it at new input and when it closes (ADR 0038). */
+  abandonUndo(): void;
   /** Shows input that is not captured yet, for example an IME composition, as `saving`. */
   showSaving(blocks?: readonly ManuscriptParagraph[]): void;
   snapshot(): EditorWritingSnapshot;
@@ -431,7 +431,7 @@ export function createEditorSessionWritingController({
         await releaseHeld();
       });
     },
-    noteInput() { abandonUndo?.(); },
+    abandonUndo() { abandonUndo?.(); },
     showSaving(blocks) { showLocal(blocks, 0); },
     snapshot: () => state,
     subscribe(listener) {
@@ -491,11 +491,16 @@ export function createEditorSessionWritingController({
       if (condition === "settled") await flush();
       await whenIdle();
       if (hasIncompleteInput()) return { kind: "refused", reason: "incomplete_semantic_intent" };
+      const capturedBefore = captured;
       let projection: PendingEditProjection;
       try {
         projection = await refresh();
       } catch {
         return { kind: "refused", reason: "journal_unavailable" };
+      }
+      // Input during the read is newer than the projection, so the editor is not quiet.
+      if (hasIncompleteInput() || captured !== capturedBefore) {
+        return { kind: "refused", reason: "incomplete_semantic_intent" };
       }
       if (condition === "settled" && projection.unsettled_intent_count > 0) {
         return { kind: "refused", reason: "unsettled_input" };
