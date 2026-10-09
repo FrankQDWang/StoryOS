@@ -296,14 +296,19 @@ export function createEditorSessionWritingController({
   /** Journals one captured edit. Returns false when the edit must stay held. */
   const append = async ({ edit: capturedEdit, origin, createdAt }: Captured): Promise<boolean> => {
     if (attention) return false;
-    const edit = rebind(capturedEdit);
     const hardBoundary = HARD_INPUT.includes(origin) || STRUCTURAL_INPUT.includes(origin)
-      || ("kind" in edit && edit.kind === "structured_selection");
+      || ("kind" in capturedEdit && capturedEdit.kind === "structured_selection");
     const completedAt = Date.parse(createdAt);
-    const target = "kind" in edit && edit.kind === "candidate_selection" ? JSON.stringify(edit.target) : "authoritative";
+    const targetOf = (edit: CapturedEdit) => "kind" in edit && edit.kind === "candidate_selection"
+      ? JSON.stringify(edit.target) : "authoritative";
     const idleBoundary = lastCompletedAt !== undefined && completedAt - lastCompletedAt > AUTHOR_EDIT_BATCH_IDLE_MS;
-    if (hardBoundary || idleBoundary || pendingTarget !== undefined && pendingTarget !== target) await submitPending();
+    if (hardBoundary || idleBoundary || pendingTarget !== undefined && pendingTarget !== targetOf(rebind(capturedEdit))) {
+      await submitPending();
+    }
     if (unknownCandidate !== undefined || attention) return false;
+    // A settlement above can give the candidate a new Proposal Revision.
+    const edit = rebind(capturedEdit);
+    const target = targetOf(edit);
     undoGroupId ??= createJournalUuid(cryptoImpl);
     const projection = await persistEdit(workspace, edit, { inputOrigin: origin, undoGroupId, createdAt }, cryptoImpl);
     unjournaled -= 1;
