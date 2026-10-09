@@ -47,6 +47,7 @@ the PR with an ordinary merge commit.
 
    The command and `verification_reviews.py` retry a transient GitHub API failure. A retry does not post a verdict comment two times. Do not put a `gh` wrapper on `PATH`, because `PATH` is a verification input.
 2. If a verdict is `FAIL`, fix the blocking findings, commit, push, and run the command again. A PR gets at most three rounds. The command refuses a fourth round: send the open findings to the coordinator.
+   After a round with `PASS` on the two axes, the command refuses a new round while the candidate tree does not change. The verdict comments of the round record its tree. A source fix after that round, for example after a failed `make verify-local`, changes the tree and starts the next round.
 3. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after the imports.
 
    `make verify-local` is the pre-merge evidence command. Start it after the Standards

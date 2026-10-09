@@ -13,6 +13,7 @@ import verification_github
 SCRIPTS = Path(__file__).resolve().parent
 TEMPLATE = SCRIPTS.parent / 'docs/agents/review-prompt.md'
 VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
+TREE = re.compile(r'^Candidate: head `[0-9a-f]+`, base `[0-9a-f]+`, tree `([0-9a-f]{40})`\.$', re.M)
 ROUNDS = 3
 WAIT_MS = 600000
 WAITS = 6
@@ -88,14 +89,22 @@ def comment(axis, number, verdict, context, request):
 def run(root, pr, executor):
     route = 'repos/' + json.loads(gh('repo', 'view', '--json', 'nameWithOwner'))['nameWithOwner']
     pull = json.loads(gh('pr', 'view', str(pr), '--json', 'body,closingIssuesReferences,comments,headRefOid'))
-    rounds = {}
-    for match in filter(None, (VERDICT.match(c['body']) for c in pull['comments'])):
-        rounds.setdefault(int(match[2]), {})[match[1]] = match[3]
+    rounds, trees = {}, {}
+    for body in (c['body'] for c in pull['comments']):
+        if match := VERDICT.match(body):
+            rounds.setdefault(int(match[2]), {})[match[1]] = match[3]
+            trees.setdefault(int(match[2]), set()).update(TREE.findall(body))
     # A round counts only when it has a verdict comment for each axis; a retry resumes an incomplete round.
     number = 1 + max((n for n, verdicts in rounds.items() if len(verdicts) == 2), default=0)
     if rounds.get(number - 1) == {'Standards': 'PASS', 'Spec': 'PASS'}:
-        raise ValueError(f'Round {number - 1} passed on the two axes. Only a blocking finding starts a new round; '
-                         'send the PR link and the verdict comment links to the coordinator session')
+        # A passed round without a recorded tree, or with the tree of the current synthetic merge, stays final.
+        ref = 'refs/storyos/review-candidate'
+        verification.git(root, 'fetch', '--no-tags', 'origin', f'+refs/pull/{pr}/merge:{ref}')
+        tree = verification.git(root, 'rev-parse', f'{ref}^{{tree}}')
+        if not trees[number - 1] or tree in trees[number - 1]:
+            raise ValueError(f'Round {number - 1} passed on the two axes and the candidate tree {tree} did not change. '
+                             'Only a blocking finding or a changed tree starts a new round; '
+                             'send the PR link and the verdict comment links to the coordinator session')
     missing = [axis for axis in ('Standards', 'Spec') if rounds.get(number) and axis not in rounds[number]]
     if missing:
         # The records are already imported; post only the retained comment and do not review again.
