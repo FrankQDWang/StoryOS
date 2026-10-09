@@ -327,6 +327,23 @@ it.each(["composition", "capture"] as const)("refuses a quiet command when a %s 
     else session.writing.capture(SECOND_APPEND_EDIT, "typing", [{ manuscript_block_id: BLOCK, text: "Base!?" }]);
     paused.release();
     expect({ quiet: await quiet, ran }).toEqual({ quiet: { kind: "refused", reason: "incomplete_semantic_intent" }, ran: false });
+    // The Journal append of the later input completes before the test closes the Journal.
+    await session.writing.whenIdle();
+  } finally {
+    await session.close();
+  }
+});
+
+it("refuses a journaled command when input arrives while it waits for the queue", async () => {
+  const session = await openWriting();
+  try {
+    session.writing.capture(FIRST_APPEND_EDIT, "typing", [{ manuscript_block_id: BLOCK, text: "Base!" }]);
+    let ran = false;
+    const quiet = session.writing.runAfterQuiesce("journaled", async () => { ran = true; });
+    session.writing.capture(SECOND_APPEND_EDIT, "typing", [{ manuscript_block_id: BLOCK, text: "Base!?" }]);
+    expect({ quiet: await quiet, ran }).toEqual({ quiet: { kind: "refused", reason: "incomplete_semantic_intent" }, ran: false });
+    // The Journal append of the later input completes before the test closes the Journal.
+    await session.writing.whenIdle();
   } finally {
     await session.close();
   }
