@@ -377,7 +377,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/undo-latest-author-action-response.schema.json",
       "schema_id": "storyos.command.undo-latest-author-action.response.v1",
-      "sha256": "sha256:e249391832439899a70cd7d1f88e10aa2c16d09abcdceb2cf62b83c7289f7aa6"
+      "sha256": "sha256:11cb343f1028b4112397374ced96cf757e76a602a828987e63e5af51b4518560"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-reopened.schema.json",

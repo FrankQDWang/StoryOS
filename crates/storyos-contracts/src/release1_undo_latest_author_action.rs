@@ -121,8 +121,13 @@ pub enum UndoLatestAuthorActionEffect {
     Compensated {
         source_sequence: String,
         author_action_sequence: String,
-        authoritative_commit_id: String,
-        authoritative_revision: AuthoritativeChapterRevision,
+        // Each of the two records is absent when the compensation does not write it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        authoritative_commit_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        authoritative_revision: Option<AuthoritativeChapterRevision>,
         project_activity_position: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         author_undo_frontier_sequence: Option<String>,

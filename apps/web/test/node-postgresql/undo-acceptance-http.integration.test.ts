@@ -29,14 +29,16 @@ test("undo acceptance restores the prior chapter, reopens the proposal, and reap
       (antiForgery) => { undoOptions.antiForgery = antiForgery; return undoLatestAuthorAction(undoOptions); });
     assert.equal(undone.effect.kind, "compensated");
     if (undone.effect.kind !== "compensated") throw new Error("expected compensated");
-    assert.notEqual(undone.effect.authoritative_revision.revision_id, accepted.chapterRevision);
-    assert.match(undone.effect.authoritative_commit_id, UUID_V7);
+    const { authoritative_revision: restored, authoritative_commit_id: commitId } = undone.effect;
+    if (restored === undefined || commitId === undefined) throw new Error("expected the restored Revision");
+    assert.notEqual(restored.revision_id, accepted.chapterRevision);
+    assert.match(commitId, UUID_V7);
     assert.equal(undone.proposal_id, accepted.proposalId);
     assert.deepEqual(await undoLatestAuthorAction(undoOptions), undone);
     const chapter = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
     assert.equal(chapter.chapter.current_revision.body, accepted.beforeBody);
-    assert.equal(chapter.chapter.current_revision.revision_id, undone.effect.authoritative_revision.revision_id);
+    assert.equal(chapter.chapter.current_revision.revision_id, restored.revision_id);
     assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.authoritative_revisions
       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
         AND revision_id = '${accepted.chapterRevision}'::uuid`), "1");

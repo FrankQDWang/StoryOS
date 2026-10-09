@@ -101,21 +101,22 @@ function validObservation(record: DraftUndoRecord, observation: Observation): bo
     && [receipt.expected_heads, receipt.prior_heads].every((heads) => same(heads, [expectedHead]))
     && same(receipt.proposal_revision_ids, []) && same(receipt.condition_refs, [])
     && (coupled && effect.kind === "compensated" ? keys(effect, ["kind", "source_sequence", "author_action_sequence",
-      "authoritative_commit_id", "authoritative_revision", "project_activity_position", "author_undo_frontier_sequence"])
+      "project_activity_position", "author_undo_frontier_sequence", ...proposal ? [] : ["authoritative_commit_id", "authoritative_revision"]])
       && effect.source_sequence === record.source_close.author_action_sequence
       && effect.author_action_sequence === reopened?.author_action_sequence
       && (effect.project_activity_position === "0" || positive(effect.project_activity_position))
-      && keys(effect.authoritative_revision, ["revision_id", "body", "blocks"])
-      && (proposal ? UUID.test(response.proposal_revision_id!) && effect.authoritative_commit_id === ""
-        && same(effect.authoritative_revision, { revision_id: expectedHead, body: "", blocks: [] })
+      // A Proposal Compensation writes no Authoritative Revision and no Authoritative Commit, so its effect omits them.
+      && (proposal ? UUID.test(response.proposal_revision_id!) && same(receipt.resulting_heads, [expectedHead])
         && [receipt.authoritative_revision_ids, receipt.authoritative_commit_ids].every((refs) => same(refs, []))
-        : UUID.test(effect.authoritative_revision.revision_id) && UUID.test(effect.authoritative_commit_id)
+        : effect.authoritative_revision !== undefined && effect.authoritative_commit_id !== undefined
+          && keys(effect.authoritative_revision, ["revision_id", "body", "blocks"])
+          && UUID.test(effect.authoritative_revision.revision_id) && UUID.test(effect.authoritative_commit_id)
           && same(receipt.authoritative_revision_ids, [effect.authoritative_revision.revision_id])
           && same(receipt.authoritative_commit_ids, [effect.authoritative_commit_id])
+          && same(receipt.resulting_heads, [effect.authoritative_revision.revision_id])
           && typeof effect.authoritative_revision.body === "string" && Array.isArray(effect.authoritative_revision.blocks)
           && effect.authoritative_revision.blocks.every((block) => keys(block, ["manuscript_block_id", "block_kind", "text"])
             && UUID.test(block.manuscript_block_id) && ["paragraph", "heading"].includes(block.block_kind) && typeof block.text === "string"))
-      && same(receipt.resulting_heads, [effect.authoritative_revision.revision_id])
       : same(receipt.resulting_heads, [expectedHead])
         && [receipt.authoritative_revision_ids, receipt.authoritative_commit_ids].every((refs) => same(refs, []))
         && response.proposal_revision_id == null && response.source_reopen_event == null)

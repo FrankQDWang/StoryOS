@@ -75,7 +75,6 @@ fn undo_response(
     let envelope = &admitted.envelope;
     let expected = admitted.input.expected_authoritative_revision_id.clone();
     let mut source_reopen_event = None;
-    let empty_revision = || contract_chapter_revision(expected.clone(), String::new(), &[]);
     let mut acknowledgement = UndoAcknowledgement {
         proposal_id: None,
         proposal_revision_id: None,
@@ -93,7 +92,7 @@ fn undo_response(
             let frontier = applied
                 .author_undo_frontier_sequence
                 .map(|sequence| sequence.to_string());
-            let compensated = |commit_id: String, revision, position: u64| {
+            let compensated = |commit_id: Option<String>, revision, position: u64| {
                 contracts::UndoLatestAuthorActionEffect::Compensated {
                     source_sequence: applied.source_sequence.to_string(),
                     author_action_sequence: applied.author_action_sequence.to_string(),
@@ -121,8 +120,8 @@ fn undo_response(
                     (
                         contracts::DomainReceiptResult::AuthoritativeApplied,
                         compensated(
-                            authoritative_commit_id,
-                            contract_chapter_revision(revision_id, body, &blocks),
+                            Some(authoritative_commit_id),
+                            Some(contract_chapter_revision(revision_id, body, &blocks)),
                             project_activity_position,
                         ),
                     )
@@ -136,8 +135,8 @@ fn undo_response(
                     (
                         contracts::DomainReceiptResult::AuthoritativeApplied,
                         compensated(
-                            authoritative_commit_id,
-                            empty_revision(),
+                            Some(authoritative_commit_id),
+                            /*revision*/ None,
                             project_activity_position,
                         ),
                     )
@@ -147,7 +146,11 @@ fn undo_response(
                     project_activity_position,
                 } => (
                     contracts::DomainReceiptResult::AuthoritativeApplied,
-                    compensated(String::new(), empty_revision(), project_activity_position),
+                    compensated(
+                        /*commit_id*/ None,
+                        /*revision*/ None,
+                        project_activity_position,
+                    ),
                 ),
                 UndoRecords::Proposal {
                     proposal_revision_id,
@@ -156,7 +159,11 @@ fn undo_response(
                     acknowledgement.proposal_revision_id = proposal_revision_id;
                     (
                         contracts::DomainReceiptResult::AuthoritativeApplied,
-                        compensated(String::new(), empty_revision(), project_activity_position),
+                        compensated(
+                            /*commit_id*/ None,
+                            /*revision*/ None,
+                            project_activity_position,
+                        ),
                     )
                 }
                 UndoRecords::Draft { event } => {

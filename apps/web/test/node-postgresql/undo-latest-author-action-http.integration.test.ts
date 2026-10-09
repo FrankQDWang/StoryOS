@@ -452,6 +452,10 @@ test("undoLatestAuthorAction freezes compensation and conflict acknowledgements 
     );
     const compensatedBody = compensatedCapture.lastUndoBody();
     assert.equal(compensated.undone.effect.kind, "compensated");
+    if (compensated.undone.effect.kind !== "compensated") throw new Error("expected a Structure Compensation");
+    // A Structure Compensation writes an Authoritative Commit and no Authoritative Revision.
+    assert.deepEqual([Object.hasOwn(compensated.undone.effect, "authoritative_revision"),
+      [compensated.undone.effect.authoritative_commit_id]], [false, compensated.undone.receipt.authoritative_commit_ids]);
     assert.equal(compensated.undone.project.title, "Undo Freeze Novel");
     assert.equal(compensated.undone.project.open.kind, "current_chapter");
     if (compensated.undone.project.open.kind !== "current_chapter") {
@@ -1098,7 +1102,8 @@ function assertCompensated(undone: Awaited<ReturnType<typeof undoLatestAuthorAct
   assert.equal(undone.effect.kind, "compensated");
   if (undone.effect.kind !== "compensated") throw new Error("expected a Compensation");
   assert.equal(undone.effect.source_sequence, sourceSequence);
-  assert.equal(undone.effect.authoritative_commit_id, "");
+  assert.deepEqual([Object.hasOwn(undone.effect, "authoritative_revision"), Object.hasOwn(undone.effect, "authoritative_commit_id")],
+    [false, false]);
   assert.equal(undone.proposal_revision_id, after.proposal.revision_id);
 }
 

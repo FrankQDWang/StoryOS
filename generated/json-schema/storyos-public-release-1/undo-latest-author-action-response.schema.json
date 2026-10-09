@@ -485,10 +485,20 @@
               ]
             },
             "authoritative_commit_id": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "authoritative_revision": {
-              "$ref": "#/$defs/AuthoritativeChapterRevision"
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AuthoritativeChapterRevision"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "kind": {
               "const": "compensated",
@@ -505,8 +515,6 @@
             "kind",
             "source_sequence",
             "author_action_sequence",
-            "authoritative_commit_id",
-            "authoritative_revision",
             "project_activity_position"
           ],
           "type": "object"
