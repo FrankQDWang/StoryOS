@@ -3,7 +3,7 @@
 use std::fmt;
 use std::panic::Location;
 
-use storyos_application::DiagnosticField;
+use storyos_application::{DiagnosticField, SqlState};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::Layer as _;
 use tracing_subscriber::filter::Targets;
@@ -56,6 +56,23 @@ pub fn install(level: Option<&str>) -> Result<(), UnknownLogLevel> {
         None => tracing::error!("panic"),
     }));
     Ok(())
+}
+
+/// Returns the value, or writes one `error` event with the stage and the SQLSTATE code and stops
+/// the process. The error text is not written, because a store error can contain bind values.
+pub fn or_exit<T, E: Into<Box<dyn std::error::Error + Send + Sync>>>(
+    result: Result<T, E>,
+    stage: &'static str,
+) -> T {
+    result.unwrap_or_else(|error| {
+        let error: Box<dyn std::error::Error + Send + Sync> = error.into();
+        tracing::error!(
+            stage = stage.diagnostic(),
+            sql_state = SqlState(&*error).diagnostic(),
+            "the process stopped"
+        );
+        std::process::exit(/*code*/ 1)
+    })
 }
 
 struct SourceLocation<'a>(&'a Location<'a>);

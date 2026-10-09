@@ -26,7 +26,7 @@ Most domain types derive `Debug`, and many hold author text, for example `Manusc
 - Stdout keeps only the `STORYOS_SERVER_URL=` startup line. Tests and scripts find the Server through this line.
 - StoryOS installs no OTLP exporter, no collector, and no hosted vendor. A later exporter is a Telemetry Disclosure and needs its own ADR.
 - On the Linux VPS of [ADR 0022](0022-prefer-widely-validated-hosted-infrastructure.md), the process manager keeps stderr on the host. That process manager owns the Diagnostic Projection retention. The `PER-008` tuning item owns the window, and deployment preparation sets it.
-- Startup refusals that occur before the formatter starts keep their current stderr text.
+- A configuration refusal at startup keeps its current stderr text. A runtime error that stops a binary writes one `error` event with the stage and the SQLSTATE code, and no error text.
 
 ### Configuration and levels
 

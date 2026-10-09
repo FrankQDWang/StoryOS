@@ -86,6 +86,7 @@ test("the Diagnostic Projection of HTTP requests holds no author text and no sec
   const secret = canary("challenge-secret");
   const applicationName = canary("database").replaceAll("-", "_");
   const databaseUrl = canaryDatabaseUrl(applicationName);
+  let editCommandId = "";
   const { baseUrl, server, stderr } = await startStoryOSServer({
     repositoryRoot,
     serverBinary,
@@ -190,17 +191,24 @@ test("the Diagnostic Projection of HTTP requests holds no author text and no sec
         selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1", from, to: from },
       }],
     };
+    let editNonce = "";
     const edited = await challenged({
       ...command,
       route: "/api/v1/projects/{project_id}/manuscript/author-edits",
       schema: editRequest.command_schema,
       idempotencyKey: id("05"),
       digest: await digestApplyAuthorEdit(editRequest),
-      send: (antiForgery) => applyAuthorEdit({
-        ...command, idempotencyKey: id("05"), antiForgery, request: editRequest,
-      }),
+      send: (antiForgery) => {
+        editNonce = antiForgery;
+        return applyAuthorEdit({ ...command, idempotencyKey: id("05"), antiForgery, request: editRequest });
+      },
     });
     assert.equal(edited.effect.kind, "authoritative_applied");
+    const replayedEdit = await applyAuthorEdit({
+      ...command, idempotencyKey: id("05"), antiForgery: editNonce, request: editRequest,
+    });
+    assert.equal(replayedEdit.command_id, edited.command_id);
+    editCommandId = edited.command_id;
 
     await searchManuscript({
       ...command,
@@ -228,4 +236,13 @@ test("the Diagnostic Projection of HTTP requests holds no author text and no sec
     assert.ok(routes.includes(route), `no request span for ${route} in ${JSON.stringify(routes)}`);
   }
   assert.ok(requests.every((line) => typeof line.span?.status === "number"), output);
+  // The Author Edit admits and settles in one span, and its exact retry replays the stored identifiers.
+  const edits = closedSpans(lines, "admit_and_settle")
+    .filter((line) => line.span?.correlation_id === id("15"));
+  assert.deepEqual(
+    edits.map((line) => [line.span?.outcome, line.span?.command_id]),
+    [["authoritative_applied", editCommandId], ["replayed", editCommandId]],
+  );
+  assert.deepEqual(closedSpans(lines, "settle_admitted_command"), []);
+  assert.deepEqual(closedSpans(lines, "replay_settled"), []);
 });

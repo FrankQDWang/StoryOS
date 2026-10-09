@@ -45,7 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = env::var("STORYOS_DATABASE_URL").map_err(|_| {
         "STORYOS_DATABASE_URL is required for Release 1 Storage Activation".to_owned()
     })?;
-    require_release1_storage_activation_proof(&database_url).await?;
+    storyos_adapter_diagnostics::or_exit(
+        require_release1_storage_activation_proof(&database_url).await,
+        "storage_activation",
+    );
     let listener = TcpListener::bind(bind_address).await?;
     let address = listener.local_addr()?;
     let (allowed_host, allowed_origin, printed_server_url) = match &transport {
