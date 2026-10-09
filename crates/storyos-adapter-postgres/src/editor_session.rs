@@ -248,7 +248,7 @@ async fn read_session(
         scope,
         &chapter_id,
         &authoritative_revision_id,
-        &row.get::<_, String>(12),
+        &row.get::<_, String>(/*idx*/ 12),
     )
     .await?;
     Ok(Some(EditorSession {
@@ -347,7 +347,7 @@ async fn replay_session(
         .map_err(session_database_error)?
         .ok_or(EditorSessionError::BindingConflict)?;
     let stored_payload: String = row
-        .get::<_, Option<String>>(1)
+        .get::<_, Option<String>>(/*idx*/ 1)
         .ok_or_else(|| damaged("the acknowledged Authoritative Revision is missing"))?;
     let (body, blocks, payload_digest_hex) = materialized_payload(
         client,
@@ -360,7 +360,7 @@ async fn replay_session(
     Ok(EditorSession {
         editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
         client_binding: binding.clone(),
-        opened_at: row.get(0),
+        opened_at: row.get(/*idx*/ 0),
         writer: acknowledgement.writer,
         base_snapshot: EditorSessionSnapshot {
             snapshot_id: acknowledgement.snapshot_id,
@@ -396,7 +396,7 @@ async fn materialized_payload(
     .map_err(session_database_error)?;
     let body = crate::manuscript_block::display_body_from_stored(stored, &blocks);
     let digest = Sha256::digest(body.as_bytes()).iter().fold(
-        String::with_capacity(64),
+        String::with_capacity(/*capacity*/ 64),
         |mut encoded, byte| {
             use std::fmt::Write as _;
             write!(encoded, "{byte:02x}").expect("writing to String cannot fail");
