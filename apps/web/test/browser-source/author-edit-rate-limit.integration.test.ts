@@ -114,7 +114,7 @@ async function openRateLimitedEditor() {
 it("keeps an Author Edit saving through a Challenge rate limit and retries the same group", async () => {
   const editor = await openRateLimitedEditor();
   try {
-    expect({ failures: editor.failures, saveState: editor.workspace.pending.save_state,
+    expect({ failures: editor.failures, saveState: editor.idle.snapshot().projection.save_state,
       challengeCount: editor.challengeKeys.length })
       .toEqual({ failures: [], saveState: "saving", challengeCount: 1 });
 

@@ -14,7 +14,7 @@ import type {
   UndoLatestAuthorActionResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
+import type { EditorReadyState, EditorWorkspace, PendingEditProjection } from "./editor-types.ts";
 
 import { readDiscardJournal, canonicalDraftValue } from "./refused-edit-discard.ts";
 import { readExpansionJournal } from "./refused-edit-expansion.ts";
@@ -71,6 +71,8 @@ export async function installAuthoritativeBaseSnapshot(
 
 export async function undoOwnedLatestAuthorAction(options: {
   workspace: EditorReadyState;
+  /** The projection that the editor shows when the Undo starts. */
+  projection: PendingEditProjection;
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
@@ -81,8 +83,8 @@ export async function undoOwnedLatestAuthorAction(options: {
   const retainedUndo = await readDraftUndoJournal(options.workspace);
   const pendingUndo = retainedUndo.filter(({ observation }) => observation === undefined);
   if (options.workspace.partition.disposition !== "current_writer_open"
-    || (options.workspace.pending.save_state !== "saved"
-      && options.workspace.pending.unsettled_intent_count !== pendingUndo.length)) {
+    || (options.projection.save_state !== "saved"
+      && options.projection.unsettled_intent_count !== pendingUndo.length)) {
     throw new Error("Author Undo requires a settled current writer");
   }
   const canonical = await getEditorSession({

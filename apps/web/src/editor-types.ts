@@ -236,7 +236,8 @@ export interface EditorWorkspace {
 
 export interface EditorReadyState extends EditorWorkspace {
   kind: "editor-ready";
-  pending: PendingEditProjection;
+  /** The projection that the open read. Only the Editor Session writing controller installs later projections. */
+  readonly openedProjection: PendingEditProjection;
 }
 
 export interface EditorReadOnlyState {

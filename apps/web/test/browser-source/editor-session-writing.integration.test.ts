@@ -202,7 +202,7 @@ it("keeps held candidate input visible and outside the Journal after a conflicte
     await session.writing.whenIdle();
 
     expect({ requests: session.sent.length, failures: session.failures.map(String),
-      saveState: session.writing.snapshot().projection.save_state, held: session.writing.holdsInput(),
+      saveState: session.writing.snapshot().projection.save_state, held: session.writing.hasIncompleteInput(),
       records: (await readJournalSnapshot(session.workspace)).records.length, candidate: session.candidate()?.text,
       accepts: session.writing.canAcceptInput(false, { proposalId: PROPOSAL, operationId: OPERATION }) })
       .toEqual({ requests: 1, failures: ["Error: Author Edit requires attention"], saveState: "needs_attention",
@@ -227,7 +227,7 @@ it("holds candidate input outside the Journal while the outcome of its earlier e
     session.tick(10);
     session.writing.capture(candidateEdit(FIRST_REVISION, "Candidate!", "?"), "typing");
     await session.writing.whenIdle();
-    expect({ held: session.writing.holdsInput(), records: (await readJournalSnapshot(session.workspace)).records.length,
+    expect({ held: session.writing.hasIncompleteInput(), records: (await readJournalSnapshot(session.workspace)).records.length,
       saveState: session.writing.snapshot().projection.save_state }).toEqual({ held: true, records: 1, saveState: "saving" });
 
     const first = session.sent[0]!;
@@ -238,7 +238,7 @@ it("holds candidate input outside the Journal while the outcome of its earlier e
     await session.waitTimer(250);
     session.fire(250);
     await session.sentCount(2);
-    expect({ held: session.writing.holdsInput(), target: session.sent[1]!.request.proposal_target, failures: session.failures })
+    expect({ held: session.writing.hasIncompleteInput(), target: session.sent[1]!.request.proposal_target, failures: session.failures })
       .toEqual({ held: false, failures: [], target: { proposal_id: PROPOSAL, operation_id: OPERATION,
         revision_id: SECOND_REVISION, manuscript_block_id: BLOCK } });
   } finally {
@@ -254,8 +254,59 @@ it("does not install a Journal read that started before newer input", async () =
     await read;
     await session.writing.whenIdle();
     const shown = session.bodies.slice(session.bodies.indexOf("Base!"));
-    expect({ shown: [...new Set(shown)], journal: session.workspace.pending.body, failures: session.failures })
+    expect({ shown: [...new Set(shown)], journal: session.writing.snapshot().projection.body, failures: session.failures })
       .toEqual({ shown: ["Base!"], journal: "Base!", failures: [] });
+  } finally {
+    await session.close();
+  }
+});
+
+it("runs a journaled command after captured input enters the Journal, without a submission", async () => {
+  const session = await openWriting();
+  try {
+    session.writing.setComposing(true);
+    expect(await session.writing.runAfterQuiesce("journaled", async () => "ran"))
+      .toEqual({ kind: "refused", reason: "incomplete_semantic_intent" });
+    session.writing.setComposing(false);
+    session.writing.capture(FIRST_APPEND_EDIT, "typing", [{ manuscript_block_id: BLOCK, text: "Base!" }]);
+    const quiet = await session.writing.runAfterQuiesce("journaled", async (projection) => projection);
+    expect({ quiet, sent: session.sent.length, records: (await readJournalSnapshot(session.workspace)).records.length })
+      .toEqual({ quiet: { kind: "ran", result: expect.objectContaining({ body: "Base!", save_state: "saving" }) },
+        sent: 0, records: 1 });
+  } finally {
+    await session.close();
+  }
+});
+
+it("runs a settled command only after the captured input settles", async () => {
+  const session = await openWriting();
+  try {
+    session.writing.capture(candidateEdit(FIRST_REVISION, "Candidate", "!"), "typing");
+    const order: string[] = [];
+    const quiet = session.writing.runAfterQuiesce("settled", async (projection) => {
+      order.push("command");
+      return projection.save_state;
+    });
+    await session.reply(async (request, init) => {
+      order.push("settlement");
+      return revisedResponse(request, init, SECOND_REVISION, "1");
+    });
+    expect({ quiet: await quiet, order }).toEqual({ quiet: { kind: "ran", result: "saved" }, order: ["settlement", "command"] });
+  } finally {
+    await session.close();
+  }
+});
+
+it("refuses a settled command while the outcome of the input is unknown", async () => {
+  const session = await openWriting();
+  try {
+    session.writing.capture(FIRST_APPEND_EDIT, "typing", [{ manuscript_block_id: BLOCK, text: "Base!" }]);
+    session.outcomes.push(async () => ({ outcome_kind: "still_unknown", observation: {
+      observation_kind: "admission_committed", command_id: "018f0000-0000-7001-8000-000000000311",
+      author_command_admission_id: "018f0000-0000-7001-8000-000000000312", reconciliation_required: true } }));
+    const quiet = session.writing.runAfterQuiesce("settled", async () => "ran");
+    await session.reply(async () => { throw new TypeError("Failed to fetch"); });
+    expect(await quiet).toEqual({ kind: "refused", reason: "unsettled_input" });
   } finally {
     await session.close();
   }

@@ -22,6 +22,7 @@ import type {
   JournalIntentRecord,
   JournalPayloadChain,
   JournalSubmissionGroup,
+  PendingEditProjection,
   SubmissionSettlement,
 } from "../../src/editor-types.ts";
 import {
@@ -59,6 +60,9 @@ type ZeroAuthorityResult = Exclude<
   "authoritative_applied" | "proposal_revised" | "refused_to_draft" | "draft_closure_changed" | "proposal_created_from_draft"
 >;
 
+
+// The projection that the last Journal call in a test returned.
+let projection!: PendingEditProjection;
 const FIRST_REVISION = "018f0000-0000-7001-8000-000000000034";
 const SECOND_REVISION = "018f0000-0000-7001-8000-000000000044";
 
@@ -164,8 +168,8 @@ it("keeps incompatible pending ReplaceSelection inspectable until Block reconfir
     transaction.objectStore("payload_chains").put(rewrittenChain);
     await transactionResult(transaction);
 
-    workspace.pending = await rebuildPendingProjection(workspace);
-    expect(workspace.pending).toMatchObject({
+    projection = await rebuildPendingProjection(workspace);
+    expect(projection).toMatchObject({
       body: "Base!",
       save_state: "needs_attention",
       unsettled_intent_count: 1,
@@ -180,8 +184,8 @@ it("keeps incompatible pending ReplaceSelection inspectable until Block reconfir
       resultingBody: "Base!?",
     })).rejects.toThrow(/limit failed/);
 
-    workspace.pending = await reconfirmLegacyReplaceSelection(workspace, crypto);
-    expect(workspace.pending).toMatchObject({
+    projection = await reconfirmLegacyReplaceSelection(workspace, crypto);
+    expect(projection).toMatchObject({
       body: "Base!",
       save_state: "saving",
       unsettled_intent_count: 1,
@@ -610,7 +614,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       undoGroupId: "018f0000-0000-7001-8000-000000000040",
       createdAt: "2026-08-15T08:00:00.000Z",
     });
-    workspace.pending = await persistReplaceSelection(workspace, {
+    projection = await persistReplaceSelection(workspace, {
       from: 5,
       to: 5,
       text: "?",
@@ -619,7 +623,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       undoGroupId: "018f0000-0000-7001-8000-000000000040",
       createdAt: "2026-08-15T08:00:00.250Z",
     });
-    expect(workspace.pending).toMatchObject({
+    expect(projection).toMatchObject({
       body: "Base!?",
       save_state: "saving",
       unsettled_intent_count: 2,
@@ -665,7 +669,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       .toEqual(editChallenges[1]?.canonical_command_digest);
     expect(workspace.session).toEqual(freshSession);
 
-    workspace.pending = await persistReplaceSelection(workspace, {
+    projection = await persistReplaceSelection(workspace, {
       from: 6,
       to: 6,
       text: "+",
@@ -674,7 +678,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       undoGroupId: "018f0000-0000-7001-8000-000000000049",
       createdAt: "2026-08-15T08:00:00.500Z",
     });
-    expect(workspace.pending).toMatchObject({
+    expect(projection).toMatchObject({
       body: "Base!?+",
       save_state: "saving",
       unsettled_intent_count: 1,
@@ -1017,7 +1021,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
     workspace.partition.disposition = "current_writer_open";
     expect(await intentCount(workspace.database)).toBe(3);
 
-    workspace.pending = await persistReplaceSelection(workspace, {
+    projection = await persistReplaceSelection(workspace, {
       from: 7,
       to: 7,
       text: "Z",
@@ -1060,7 +1064,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
     let limitBody = canonicalSession.base_snapshot.materialized_revision.body;
     for (let index = 0; index < 240; index += 1) {
       const nextBody = `${limitBody}a`;
-      workspace.pending = await persistReplaceSelection(workspace, {
+      projection = await persistReplaceSelection(workspace, {
         from: limitBody.length,
         to: limitBody.length,
         text: "a",
@@ -1119,7 +1123,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       const baseBeforeZero = structuredClone(workspace.session);
       const baseBody = baseBeforeZero.base_snapshot.materialized_revision.body;
       const localBody = `${baseBody}${zeroCase.suffix}`;
-      workspace.pending = await persistReplaceSelection(workspace, {
+      projection = await persistReplaceSelection(workspace, {
         from: baseBody.length,
         to: baseBody.length,
         text: zeroCase.text,
@@ -1128,7 +1132,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         undoGroupId: `018f0000-0000-7001-8000-00000000008${index + 2}`,
         createdAt: `2026-08-15T10:00:00.00${index}Z`,
       });
-      expect(workspace.pending).toMatchObject({
+      expect(projection).toMatchObject({
         body: localBody,
         save_state: "saving",
         unsettled_intent_count: 1,
@@ -1206,7 +1210,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       if (zeroCase.result === "no_effect") {
         workspace.database.close();
         workspace = await openCurrentWorkspace();
-        expect(workspace.pending).toMatchObject({
+        expect(workspace.openedProjection).toMatchObject({
           body: baseBody,
           save_state: "saved",
           unsettled_intent_count: 0,

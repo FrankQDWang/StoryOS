@@ -8,7 +8,6 @@ import { projectBlockProposals, type BlockProposalProjection } from "../../src/b
 import { BlockProposalDisplay, type ProposalLocator } from "../../src/block-proposal-display.tsx";
 import { createEditorSessionWritingController } from "../../src/editor-session-writing.ts";
 import type { EditorReadyState } from "../../src/editor-types.ts";
-import type { ManualInputController } from "../../src/manual-input.ts";
 import { manuscriptJson } from "../../src/manuscript-doc.ts";
 import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
 import { applyImeComposition, applyTrustedInput } from "../support/browser-command-client.ts";
@@ -18,16 +17,15 @@ import { BLOCK, createAppliedAuthorEditResponse, createBrowserScenario, jsonResp
 type Proposal = typeof proposalFixture.proposal;
 
 function candidateFor(workspace: EditorReadyState): Proposal {
-  const blockId = workspace.pending.blocks[0]!.manuscript_block_id;
+  const blockId = workspace.openedProjection.blocks[0]!.manuscript_block_id;
   return { ...proposalFixture.proposal, chapter_id: workspace.session.base_snapshot.chapter_id,
-    manuscript_block_id: blockId, base_authoritative_revision_id: workspace.pending.authoritative_revision_id,
+    manuscript_block_id: blockId, base_authoritative_revision_id: workspace.openedProjection.authoritative_revision_id,
     operations: proposalFixture.proposal.operations.map((operation) => ({ ...operation, manuscript_block_id: blockId })) };
 }
 
 async function renderCandidate(workspace: EditorReadyState, proposal: Proposal, fetchImpl: typeof fetch) {
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
-  const controller = { current: null as ManualInputController | null };
   const locator: ProposalLocator = { proposalId: proposal.proposal_id, runId: proposal.source.run_id,
     decisionId: proposal.source.decision_id };
   const failures: unknown[] = [];
@@ -41,7 +39,7 @@ async function renderCandidate(workspace: EditorReadyState, proposal: Proposal, 
       focusProposal: { proposalId: proposal.proposal_id, operationId: proposal.operation_id,
         revisionId: proposal.revision_id, blockId: proposal.manuscript_block_id },
       blocks: projection.blocks, editable: true, persistWorkspace: workspace, writing, baseUrl: location.origin, fetchImpl,
-      cryptoImpl: crypto, controllerRef: controller, onFailure: (error) => { failures.push(error); } });
+      cryptoImpl: crypto, onFailure: (error) => { failures.push(error); } });
   }
   await act(async () => { root.render(createElement(View)); });
   const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
@@ -52,7 +50,7 @@ async function renderCandidate(workspace: EditorReadyState, proposal: Proposal, 
     transitions.push(...records.map((record) => (record.target as Element).getAttribute("contenteditable")));
   });
   observer.observe(surface, { attributes: true, attributeFilter: ["contenteditable"] });
-  return { host, surface, controller, failures,
+  return { host, surface, writing, failures,
     transitions: () => [...transitions, ...observer.takeRecords().map((record) =>
       (record.target as Element).getAttribute("contenteditable"))],
     async unmount() { observer.disconnect(); await act(async () => { root.unmount(); }); writing.close(); host.remove(); } };
@@ -109,7 +107,7 @@ it("keeps the editor editable and the caret in place while the Proposal checks r
       window.getSelection()!.setBaseAndExtent(paragraph.firstChild!, 4, paragraph.firstChild!, 4);
       document.dispatchEvent(new Event("selectionchange"));
       await applyTrustedInput({ operation: "insert_text", text: "!" });
-      await act(async () => { await view.controller.current!.flush(); await reread; });
+      await act(async () => { await view.writing.flush(); await reread; });
       await act(async () => { await new Promise((resolve) => { setTimeout(resolve); }); });
       await applyTrustedInput({ operation: "insert_text", text: "?" });
       expect({ paragraph: paragraph.textContent, candidate: view.surface.querySelector(".block-proposal-text")?.textContent })
@@ -201,10 +199,10 @@ it("accepts input in a candidate during and after its own settlement and keeps t
         text().firstChild!, proposal.candidate_text.length);
       document.dispatchEvent(new Event("selectionchange"));
       await applyTrustedInput({ operation: "insert_text", text: "!" });
-      await act(async () => { await view.controller.current!.flush(); await reread; });
+      await act(async () => { await view.writing.flush(); await reread; });
       // The display still shows the settled Revision. The controller journals this input against the new Revision.
       await applyTrustedInput({ operation: "insert_text", text: "+" });
-      await act(async () => { await view.controller.current!.flush(); });
+      await act(async () => { await view.writing.flush(); });
       expect({ candidate: candidate().getAttribute("contenteditable"), text: text().textContent, targets })
         .toEqual({ candidate: null, text: `${proposal.candidate_text}!+`, targets: [proposal.revision_id, revisions[0]] });
 

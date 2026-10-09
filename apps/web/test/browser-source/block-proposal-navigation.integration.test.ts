@@ -31,9 +31,9 @@ it("keeps the editor editable when a Proposal navigation only reorders the known
   const writing = createEditorSessionWritingController({ workspace, baseUrl: location.origin, fetchImpl,
     onFailure: (error) => { throw error; } });
   const props = { scope, chapterId: workspace.session.base_snapshot.chapter_id,
-    authoritativeRevisionId: workspace.pending.authoritative_revision_id, refreshKey: 0, safeToProject: true,
-    onAccepted: async () => {}, blocks: workspace.pending.blocks, editable: true, persistWorkspace: workspace, writing,
-    baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, controllerRef: { current: null },
+    authoritativeRevisionId: workspace.openedProjection.authoritative_revision_id, refreshKey: 0, safeToProject: true,
+    onAccepted: async () => {}, blocks: workspace.openedProjection.blocks, editable: true, persistWorkspace: workspace, writing,
+    baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
     onFailure: (error: unknown) => { throw error; } };
   const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });

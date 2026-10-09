@@ -19,7 +19,6 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyo
 import { openControlledProject } from "./boot.ts";
 import {
   chapterSwitchRecoveryMessage,
-  completeJournalOrRefuse,
   openSelectedChapter,
   selectedChapterSurface,
 } from "./chapter-navigation.ts";
@@ -31,9 +30,7 @@ import type {
   PendingEditProjection,
   ProjectReadyState,
 } from "./editor-types.ts";
-import { reconfirmLegacyReplaceSelection } from "./editor-session.ts";
 import { createEditorSessionWritingController } from "./editor-session-writing.ts";
-import type { ManualInputController } from "./manual-input.ts";
 import {
   BlockProposalDisplay, readProposalLocators, rememberProposalLocator,
 } from "./block-proposal-display.tsx";
@@ -100,7 +97,6 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
 function ProjectReadyView({
   state, baseUrl, fetchImpl, cryptoImpl, onReopened, onLocalRecoveryContinued, proposalNavigation, proposalFocus, proposalNotice, onProposalOpened,
 }: ProjectReadyViewProps) {
-  const inputRef = useRef<ManualInputController | null>(null);
   const [candidateTarget, setCandidateTarget] = useState<ProposalFocus>();
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
@@ -110,12 +106,12 @@ function ProjectReadyView({
     ? state.project.project.open.current_chapter_id
     : state.chapter.chapter.chapter_id;
   const [pending, setPending] = useState<PendingEditProjection | null>(
-    state.editor.kind === "editor-ready" ? state.editor.pending : null,
+    state.editor.kind === "editor-ready" ? state.editor.openedProjection : null,
   );
   const [saveState, setSaveState] = useState<
     PendingEditProjection["save_state"] | "pending"
   >(
-    state.editor.kind === "editor-ready" ? state.editor.pending.save_state : "needs_attention",
+    state.editor.kind === "editor-ready" ? state.editor.openedProjection.save_state : "needs_attention",
   );
   const [editorFailure, setEditorFailure] = useState<string>();
   const [readOnly, setReadOnly] = useState(state.editor.kind !== "editor-ready");
@@ -167,19 +163,22 @@ function ProjectReadyView({
     }).then(setTree).catch(() => {});
   }, [baseUrl, fetchImpl, state.project.project.project_id]);
 
+  // A read-only editor has no writing controller and no input to wait for.
+  const runWhenQuiet = <Result,>(condition: "journaled" | "settled",
+    command: (projection: PendingEditProjection | null) => Promise<Result>) => writing === undefined
+    ? command(null).then((result) => ({ kind: "ran" as const, result }))
+    : writing.runAfterQuiesce(condition, command);
+
   const selectChapter = (chapterId: string) => {
     if (makeCurrentInFlightRef.current) return;
     if (chapterId === selectedChapterIdRef.current) return;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
     void (async () => {
-      const gate = await completeJournalOrRefuse({
-        incompleteSemanticIntent: inputRef.current?.hasIncompleteSemanticIntent() ?? false,
-        whenIdle: () => inputRef.current?.whenIdle() ?? Promise.resolve(),
-      });
+      const quiet = await runWhenQuiet("journaled", async (projection) => projection);
       if (generation !== switchGenerationRef.current) return;
-      if (gate.kind === "refused") {
-        setSwitchRecovery(chapterSwitchRecoveryMessage(gate.reason));
+      if (quiet.kind === "refused") {
+        setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
         return;
       }
       const opened = await openSelectedChapter({
@@ -195,15 +194,10 @@ function ProjectReadyView({
         return;
       }
       setSwitchRecovery(undefined);
-      let currentPending = state.editor.kind === "editor-ready" ? state.editor.pending : null;
-      if (opened.chapter.chapter.chapter_id === currentChapterId && writing !== undefined) {
-        currentPending = await writing.refresh();
-      }
-      if (generation !== switchGenerationRef.current) return;
       const surface = selectedChapterSurface({
         selectedChapterId: opened.chapter.chapter.chapter_id,
         currentChapterId,
-        currentPending,
+        currentPending: quiet.result,
         opened: opened.chapter,
       });
       selectedChapterIdRef.current = opened.chapter.chapter.chapter_id;
@@ -223,57 +217,46 @@ function ProjectReadyView({
     switchGenerationRef.current = generation;
     void (async () => {
       try {
-        await inputRef.current?.flush();
-        const gate = await completeJournalOrRefuse({
-          incompleteSemanticIntent: inputRef.current?.hasIncompleteSemanticIntent() ?? false,
-          whenIdle: () => inputRef.current?.whenIdle() ?? Promise.resolve(),
+        const quiet = await writing.runAfterQuiesce("settled", async () => {
+          if (generation !== switchGenerationRef.current) return;
+          const opened = await openSelectedChapter({
+            baseUrl,
+            projectId: state.project.project.project_id,
+            chapterId,
+            expectedScope: state.project.project_scope,
+            fetchImpl,
+          });
+          if (generation !== switchGenerationRef.current) return;
+          if (opened.kind !== "opened") {
+            setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
+            return;
+          }
+          const switched = await setOwnedCurrentChapter({
+            baseUrl,
+            fetchImpl,
+            cryptoImpl,
+            projectId: state.project.project.project_id,
+            chapterId,
+            expectedCurrentChapterId: currentChapterId,
+            expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
+            editorSessionId,
+          });
+          if (switched.effect.kind !== "authoritative_applied"
+            && switched.effect.kind !== "no_effect") {
+            setSwitchRecovery("无法设为当前章节。");
+            return;
+          }
+          onReopened(await openControlledProject({
+            baseUrl,
+            projectId: state.project.project.project_id,
+            fetchImpl,
+            cryptoImpl,
+          }));
         });
-        if (generation !== switchGenerationRef.current) return;
-        if (gate.kind === "refused") {
-          setSwitchRecovery(chapterSwitchRecoveryMessage(gate.reason));
-          return;
+        if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
+          setSwitchRecovery(quiet.reason === "unsettled_input"
+            ? "无法设为当前章节。" : chapterSwitchRecoveryMessage(quiet.reason));
         }
-        const drained = await writing.refresh();
-        setPending(drained);
-        setSaveState(drained.save_state);
-        if (drained.unsettled_intent_count > 0) {
-          setSwitchRecovery("无法设为当前章节。");
-          return;
-        }
-        const opened = await openSelectedChapter({
-          baseUrl,
-          projectId: state.project.project.project_id,
-          chapterId,
-          expectedScope: state.project.project_scope,
-          fetchImpl,
-        });
-        if (generation !== switchGenerationRef.current) return;
-        if (opened.kind !== "opened") {
-          setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
-          return;
-        }
-        const switched = await setOwnedCurrentChapter({
-          baseUrl,
-          fetchImpl,
-          cryptoImpl,
-          projectId: state.project.project.project_id,
-          chapterId,
-          expectedCurrentChapterId: currentChapterId,
-          expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
-          editorSessionId,
-        });
-        if (switched.effect.kind !== "authoritative_applied"
-          && switched.effect.kind !== "no_effect") {
-          setSwitchRecovery("无法设为当前章节。");
-          return;
-        }
-        const next = await openControlledProject({
-          baseUrl,
-          projectId: state.project.project.project_id,
-          fetchImpl,
-          cryptoImpl,
-        });
-        onReopened(next);
       } catch (error: unknown) {
         setSwitchRecovery(
           historicalAcknowledgementUnavailable(error)
@@ -286,7 +269,9 @@ function ProjectReadyView({
     })();
   };
 
-  const removeChapter = (chapterId: string) => {
+  const removeFromTree = (noun: "章节" | "卷", remove: (expectedTreeRevision: string) => Promise<{
+    effect: { kind: string };
+  }>) => {
     if (tree === undefined) return;
     if (makeCurrentInFlightRef.current) return;
     makeCurrentInFlightRef.current = true;
@@ -294,64 +279,38 @@ function ProjectReadyView({
     switchGenerationRef.current = generation;
     void (async () => {
       try {
-        await inputRef.current?.flush();
-        const gate = await completeJournalOrRefuse({
-          incompleteSemanticIntent: inputRef.current?.hasIncompleteSemanticIntent() ?? false,
-          whenIdle: () => inputRef.current?.whenIdle() ?? Promise.resolve(),
-        });
-        if (generation !== switchGenerationRef.current) return;
-        if (gate.kind === "refused") {
-          setSwitchRecovery(
-            gate.reason === "incomplete_semantic_intent"
-              ? "无法删除章节：请先完成当前输入。"
-              : "无法删除章节：本地编辑需要恢复。",
-          );
-          return;
-        }
-        if (writing !== undefined) {
-          const drained = await writing.refresh();
-          setPending(drained);
-          setSaveState(drained.save_state);
-          if (drained.unsettled_intent_count > 0) {
-            setSwitchRecovery("无法删除章节。");
+        const quiet = await runWhenQuiet("settled", async () => {
+          if (generation !== switchGenerationRef.current) return;
+          const latestTree = await getManuscriptTree({
+            baseUrl,
+            projectId: state.project.project.project_id,
+            fetchImpl,
+          });
+          if (generation !== switchGenerationRef.current) return;
+          const removed = await remove(latestTree.tree_revision);
+          if (generation !== switchGenerationRef.current) return;
+          if (removed.effect.kind !== "authoritative_applied" && removed.effect.kind !== "no_effect") {
+            setSwitchRecovery(`无法删除${noun}。`);
             return;
           }
+          const next = await openControlledProject({
+            baseUrl,
+            projectId: state.project.project.project_id,
+            fetchImpl,
+            cryptoImpl,
+          });
+          if (generation !== switchGenerationRef.current) return;
+          onReopened(next);
+        });
+        if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
+          setSwitchRecovery(quiet.reason === "incomplete_semantic_intent" ? `无法删除${noun}：请先完成当前输入。`
+            : quiet.reason === "journal_unavailable" ? `无法删除${noun}：本地编辑需要恢复。` : `无法删除${noun}。`);
         }
-        const latestTree = await getManuscriptTree({
-          baseUrl,
-          projectId: state.project.project.project_id,
-          fetchImpl,
-        });
-        if (generation !== switchGenerationRef.current) return;
-        const removed = await deleteOwnedChapter({
-          baseUrl,
-          fetchImpl,
-          cryptoImpl,
-          projectId: state.project.project.project_id,
-          chapterId,
-          expectedTreeRevision: latestTree.tree_revision,
-        });
-        if (generation !== switchGenerationRef.current) return;
-        if (
-          removed.effect.kind !== "authoritative_applied"
-          && removed.effect.kind !== "no_effect"
-        ) {
-          setSwitchRecovery("无法删除章节。");
-          return;
-        }
-        const next = await openControlledProject({
-          baseUrl,
-          projectId: state.project.project.project_id,
-          fetchImpl,
-          cryptoImpl,
-        });
-        if (generation !== switchGenerationRef.current) return;
-        onReopened(next);
       } catch (error: unknown) {
         setSwitchRecovery(
           historicalAcknowledgementUnavailable(error)
             ? HISTORICAL_ACKNOWLEDGEMENT_MESSAGE
-            : "无法删除章节。",
+            : `无法删除${noun}。`,
         );
       } finally {
         makeCurrentInFlightRef.current = false;
@@ -359,78 +318,13 @@ function ProjectReadyView({
     })();
   };
 
-  const removeVolume = (volumeId: string) => {
-    if (tree === undefined) return;
-    if (makeCurrentInFlightRef.current) return;
-    makeCurrentInFlightRef.current = true;
-    const generation = switchGenerationRef.current + 1;
-    switchGenerationRef.current = generation;
-    void (async () => {
-      try {
-        await inputRef.current?.flush();
-        const gate = await completeJournalOrRefuse({
-          incompleteSemanticIntent: inputRef.current?.hasIncompleteSemanticIntent() ?? false,
-          whenIdle: () => inputRef.current?.whenIdle() ?? Promise.resolve(),
-        });
-        if (generation !== switchGenerationRef.current) return;
-        if (gate.kind === "refused") {
-          setSwitchRecovery(
-            gate.reason === "incomplete_semantic_intent"
-              ? "无法删除卷：请先完成当前输入。"
-              : "无法删除卷：本地编辑需要恢复。",
-          );
-          return;
-        }
-        if (writing !== undefined) {
-          const drained = await writing.refresh();
-          setPending(drained);
-          setSaveState(drained.save_state);
-          if (drained.unsettled_intent_count > 0) {
-            setSwitchRecovery("无法删除卷。");
-            return;
-          }
-        }
-        const latestTree = await getManuscriptTree({
-          baseUrl,
-          projectId: state.project.project.project_id,
-          fetchImpl,
-        });
-        if (generation !== switchGenerationRef.current) return;
-        const removed = await deleteOwnedVolume({
-          baseUrl,
-          fetchImpl,
-          cryptoImpl,
-          projectId: state.project.project.project_id,
-          volumeId,
-          expectedTreeRevision: latestTree.tree_revision,
-        });
-        if (generation !== switchGenerationRef.current) return;
-        if (
-          removed.effect.kind !== "authoritative_applied"
-          && removed.effect.kind !== "no_effect"
-        ) {
-          setSwitchRecovery("无法删除卷。");
-          return;
-        }
-        const next = await openControlledProject({
-          baseUrl,
-          projectId: state.project.project.project_id,
-          fetchImpl,
-          cryptoImpl,
-        });
-        if (generation !== switchGenerationRef.current) return;
-        onReopened(next);
-      } catch (error: unknown) {
-        setSwitchRecovery(
-          historicalAcknowledgementUnavailable(error)
-            ? HISTORICAL_ACKNOWLEDGEMENT_MESSAGE
-            : "无法删除卷。",
-        );
-      } finally {
-        makeCurrentInFlightRef.current = false;
-      }
-    })();
-  };
+  const removeChapter = (chapterId: string) => removeFromTree("章节", (expectedTreeRevision) => deleteOwnedChapter({
+    baseUrl, fetchImpl, cryptoImpl, projectId: state.project.project.project_id, chapterId, expectedTreeRevision,
+  }));
+
+  const removeVolume = (volumeId: string) => removeFromTree("卷", (expectedTreeRevision) => deleteOwnedVolume({
+    baseUrl, fetchImpl, cryptoImpl, projectId: state.project.project.project_id, volumeId, expectedTreeRevision,
+  }));
 
   const archived = lifecycle === "archived";
   const writer = state.editor.kind === "editor-ready"
@@ -464,7 +358,7 @@ function ProjectReadyView({
     <WritingWorkspace
       writer={writer}
       onNavigateProposal={(destination) => navigateProposal({ state, destination,
-        navigation: proposalNavigation, controller: inputRef, baseUrl, fetchImpl, cryptoImpl,
+        navigation: proposalNavigation, writing, baseUrl, fetchImpl, cryptoImpl,
         onOpened: (next, focus, notice) => {
           setCandidateTarget(focus); setSwitchRecovery(undefined); onProposalOpened(next, focus, notice);
         }, onFailure: setSwitchRecovery,
@@ -578,7 +472,6 @@ function ProjectReadyView({
             baseUrl={baseUrl}
             fetchImpl={fetchImpl}
             cryptoImpl={cryptoImpl}
-            controllerRef={inputRef}
             onFailure={onEditorFailure}
           />
           <div className="editor-status">
@@ -638,8 +531,7 @@ function ProjectReadyView({
                 type="button"
                 data-reconfirm-legacy-blocks=""
                 onClick={() => {
-                  void reconfirmLegacyReplaceSelection(state.editor as EditorReadyState)
-                    .then(() => writing?.refresh());
+                  void writing?.reconfirmLegacyBlocks();
                 }}
               >
                 确认待写入正文
