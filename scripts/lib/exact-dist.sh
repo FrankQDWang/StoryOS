@@ -121,9 +121,10 @@ start_ai_disabled_exact_dist_server() {
 
 # Returns success when $1 is a Stage 2 AI-independent journey.
 exact_dist_ai_disabled_journey() {
-  for journey in $exact_dist_ai_disabled_journeys; do
+  # A POSIX shell function has no local variables, so this name must differ from each caller.
+  for ai_disabled_journey in $exact_dist_ai_disabled_journeys; do
     case "$1" in
-      *"${journey#test/browser-exact-dist/}") return 0 ;;
+      *"${ai_disabled_journey#test/browser-exact-dist/}") return 0 ;;
     esac
   done
   return 1
