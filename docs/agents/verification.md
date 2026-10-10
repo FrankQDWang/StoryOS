@@ -47,7 +47,7 @@ the PR with an ordinary merge commit.
 
 1. Open the PR. On the clean candidate, run `make review-round PR=<pr> [CONTEXT=<executor context>]`. After the current `verify` succeeds, it writes the request and starts one new read-only Codex plugin thread for each axis with the [review prompt](review-prompt.md). Then it posts the two verdict comments, imports the two records, and prints the next action. When Codex implements, a different agent tool or a separate Claude Code session reviews each axis with the same prompt. The executor posts and imports the same verdicts and records.
 
-   After the two review jobs, the command stops the Codex broker of the worktree and its app server, also when a job fails.
+   After the two review jobs, the command stops each Codex broker of the worktree and its app server, also when a job fails.
 
    The command and `verification_reviews.py` retry a transient GitHub API failure. A retry does not post a verdict comment two times. Do not put a `gh` wrapper on `PATH`, because `PATH` is a verification input.
 2. If a verdict is `FAIL`, fix the blocking findings, commit, push, and run the command again. A PR gets at most three rounds. The command refuses a fourth round: send the open findings to the coordinator.

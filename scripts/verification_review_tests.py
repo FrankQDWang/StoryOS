@@ -331,6 +331,24 @@ else:
         self.assertIn('Spec: FAIL', result.stdout)
         self.assertIn('Next: fix the blocking findings', result.stdout)
 
+    def test_round_stops_each_broker_of_its_workspace_only(self):
+        import subprocess
+        import tempfile
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        command = [sys.executable, '-c', 'import time; time.sleep(120)',
+                   '/fake/openai-codex/codex/1.0.10/scripts/app-server-broker.mjs']
+        with tempfile.TemporaryDirectory() as elsewhere:
+            orphan = subprocess.Popen(command, cwd=self.root)
+            other = subprocess.Popen(command, cwd=elsewhere)
+            try:
+                result, _ = self.review_round({'standards': clean, 'spec': clean})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((orphan.wait(timeout=10), other.poll()), (-15, None))
+            finally:
+                for process in (orphan, other):
+                    process.kill()
+                    process.wait()
+
     def test_failed_review_job_still_stops_the_codex_broker(self):
         result, state = self.review_round({}, job_status='failed')
         self.assertNotEqual(result.returncode, 0)

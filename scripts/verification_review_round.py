@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 
@@ -16,6 +17,7 @@ TEMPLATE = SCRIPTS.parent / 'docs/agents/review-prompt.md'
 VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
 TREE = re.compile(r'^Candidate: head `[0-9a-f]+`, base `[0-9a-f]+`, tree `([0-9a-f]{40})`\.$', re.M)
 ROUNDS = 3
+BROKER_COMMAND = 'openai-codex/codex/.*/scripts/app-server-broker.mjs'
 WAIT_MS = 600000
 WAITS = 6
 gh = verification_github.gh
@@ -37,11 +39,33 @@ def codex(*args):
 
 
 def stop_codex_broker():
-    """Stop the broker of this workspace and its app server, as the plugin does when a Claude session ends."""
+    """Stop the brokers of this workspace and their app servers after the review jobs.
+
+    The plugin teardown of a Claude session end stops the broker that the plugin state records. Two
+    review jobs can start two brokers at the same time, and the state keeps only one, so the other
+    brokers of this workspace stop by their working directory."""
     stopped = subprocess.run(['node', str(codex_scripts() / 'session-lifecycle-hook.mjs'), 'SessionEnd'],
                              input=json.dumps({'cwd': os.getcwd()}), text=True, capture_output=True)
     if stopped.returncode != 0:
         print(f'Warning: the Codex broker did not stop: exit {stopped.returncode}', file=sys.stderr)
+    workspace = os.path.realpath(os.getcwd())
+    found = subprocess.run(['pgrep', '-f', BROKER_COMMAND], capture_output=True, text=True).stdout.split()
+    parents = [line.split() for line in subprocess.check_output(['ps', '-eo', 'pid=,ppid='], text=True).splitlines()]
+    for broker in (int(pid) for pid in found if process_directory(int(pid)) == workspace):
+        for pid in [int(child) for child, parent in parents if int(parent) == broker] + [broker]:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+
+def process_directory(pid):
+    """The working directory of a process, or None when it is not readable."""
+    try:
+        return os.path.realpath(os.readlink(f'/proc/{pid}/cwd'))
+    except OSError:
+        listed = subprocess.run(['lsof', '-a', '-p', str(pid), '-d', 'cwd', '-Fn'], capture_output=True, text=True)
+        return next((os.path.realpath(line[1:]) for line in listed.stdout.splitlines() if line.startswith('n')), None)
 
 
 def verify_ready(route, head):
