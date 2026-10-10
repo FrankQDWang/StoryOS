@@ -102,7 +102,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       }
       const completed = await getAgentRun({ ...options, runId });
       assert.equal(completed.status, 'completed');
-      assert.ok(completed.decision.kind === 'prose_change');
+      assert.ok(completed.decision.kind === 'prose_change', JSON.stringify(completed.decision));
       await page.locator('[data-assistant-inspect]').click();
       return completed;
     };
@@ -237,8 +237,10 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await expect(candidate()).toHaveAttribute('data-proposal-revision-id', restored.revision_id);
     await expect(candidate().locator('.block-proposal-text')).toHaveText(manualText);
     await page.reload();
-    await page.locator(`[data-proposal-location="${secondaryOutcome.operation_id}"]`).first().click();
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     await expect(candidate().locator('.block-proposal-text')).toHaveText(manualText);
+    await candidate().locator('.block-proposal-text').click();
+    await page.keyboard.press('End');
     assert.deepEqual((await getProposal({ ...options, proposalId })).proposal, restored);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const manual = (await getProposal({ ...options, proposalId })).proposal;
