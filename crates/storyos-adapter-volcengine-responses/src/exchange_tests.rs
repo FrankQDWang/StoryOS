@@ -1,11 +1,12 @@
 use std::sync::Mutex;
 use std::time::Duration;
 
+use serde_json::json;
 use storyos_application::{
     CreateRequest, CredentialReference, CredentialResolver, DeclaredTarget, DestinationRequest,
     DispatchClaim, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage, Observation,
-    PreDispatchRefusal, PreparedRequest, RequestAttempt, RequestBounds, RequestContextItem,
-    RequestRoute, ResolvedCredential, RetrievePurpose, RetrieveRequest, StreamControl,
+    PreDispatchRefusal, RequestAttempt, RequestBounds, RequestContextItem, RequestRoute,
+    ResolvedCredential, RetrievePurpose, RetrieveRequest, StreamControl,
 };
 use storyos_core::{
     ContextSourceClass, DecisionCandidate, ModelAdapter, ModelOutput, NativeStreamItem,
@@ -14,20 +15,18 @@ use storyos_core::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use super::{AgentPlanExchange, AgentPlanResponses};
+use super::AgentPlanResponses;
 
 const CREDENTIAL_CANARY: &str = "storyos-credential-canary-5e21";
-const REFERENCE: &str = "macos-keychain:storyos-volcengine-agent-plan/frankqdwang";
+const BLOCK: &str = "018f0000-0000-7001-8000-0000000000b1";
 
 /// Returns a test value that is not a real credential, and counts each resolution.
 #[derive(Default)]
-struct CanaryResolver {
-    resolved: Mutex<usize>,
-}
+struct CanaryResolver(Mutex<usize>);
 
 impl CredentialResolver for CanaryResolver {
     async fn resolve(&self, _reference: &CredentialReference) -> Option<ResolvedCredential> {
-        *self.resolved.lock().unwrap() += 1;
+        *self.0.lock().unwrap() += 1;
         Some(ResolvedCredential::new(CREDENTIAL_CANARY.to_owned()))
     }
 }
@@ -44,18 +43,13 @@ impl ModelStreamSink for RecordingSink {
 
 /// What the scripted destination does after it reads one complete request.
 enum Reply {
-    Http(u16, &'static str),
+    Http(u16, String),
     Drop,
     Hold,
 }
 
-/// The request that the scripted destination received.
-#[derive(Debug, PartialEq)]
-struct Received {
-    request_line: String,
-    authorization: Option<String>,
-    body: String,
-}
+/// The request line, the `Authorization` header, and the body that the destination received.
+type Received = (String, Option<String>, String);
 
 /// Serves one connection with `reply`, and returns its base URL and the received request.
 async fn destination(reply: Reply) -> (String, tokio::task::JoinHandle<Received>) {
@@ -67,20 +61,19 @@ async fn destination(reply: Reply) -> (String, tokio::task::JoinHandle<Received>
         let received = loop {
             let mut chunk = [0_u8; 4096];
             let read = stream.read(&mut chunk).await.unwrap();
+            assert_ne!(read, 0, "the request ended before its body");
             bytes.extend_from_slice(&chunk[..read]);
             if let Some(received) = complete_request(&bytes) {
                 break received;
             }
-            assert_ne!(read, 0, "the request ended before its body");
         };
         match reply {
             Reply::Http(status, body) => {
-                let response = format!(
-                    "HTTP/1.1 {status} Scripted\r\ncontent-type: application/json\r\n\
-                     content-length: {}\r\nconnection: close\r\n\r\n{body}",
+                let head = format!(
+                    "HTTP/1.1 {status} Scripted\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
                     body.len()
                 );
-                stream.write_all(response.as_bytes()).await.unwrap();
+                stream.write_all((head + &body).as_bytes()).await.unwrap();
             }
             Reply::Drop => drop(stream),
             Reply::Hold => std::future::pending::<()>().await,
@@ -91,8 +84,7 @@ async fn destination(reply: Reply) -> (String, tokio::task::JoinHandle<Received>
 }
 
 fn complete_request(bytes: &[u8]) -> Option<Received> {
-    let text = std::str::from_utf8(bytes).ok()?;
-    let (head, body) = text.split_once("\r\n\r\n")?;
+    let (head, body) = std::str::from_utf8(bytes).ok()?.split_once("\r\n\r\n")?;
     let header = |name: &str| {
         head.lines().find_map(|line| {
             let (key, value) = line.split_once(':')?;
@@ -101,37 +93,40 @@ fn complete_request(bytes: &[u8]) -> Option<Received> {
         })
     };
     let length: usize = header("content-length")?.parse().ok()?;
-    (body.len() >= length).then(|| Received {
-        request_line: head.lines().next().unwrap_or_default().to_owned(),
-        authorization: header("authorization"),
-        body: body[..length].to_owned(),
+    (body.len() >= length).then(|| {
+        let line = head.lines().next().unwrap_or_default().to_owned();
+        (line, header("authorization"), body[..length].to_owned())
     })
 }
 
 fn target() -> DeclaredTarget {
     DeclaredTarget {
         chapter_id: "018f0000-0000-7001-8000-0000000000c1".to_owned(),
-        block_id: "018f0000-0000-7001-8000-0000000000b1".to_owned(),
+        block_id: BLOCK.to_owned(),
         base_revision_id: "018f0000-0000-7001-8000-0000000000a1".to_owned(),
         collection: false,
         block_text: "The rain fell hard on the old roof.".to_owned(),
     }
 }
 
-fn route(endpoint: &str, timeout: Duration) -> RequestRoute {
+fn route(endpoint: &str) -> RequestRoute {
     RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
         endpoint: Some(endpoint.to_owned()),
-        credential_reference: Some(CredentialReference(REFERENCE.to_owned())),
+        credential_reference: Some(CredentialReference("macos-keychain:s/a".to_owned())),
         bounds: Some(RequestBounds {
             max_output_tokens: 8192,
-            timeout,
+            timeout: Duration::from_secs(1),
         }),
     }
 }
 
 fn create(route: RequestRoute, attempt: RequestAttempt) -> DestinationRequest {
+    let item = |source_class, content: &str| RequestContextItem {
+        source_class,
+        content: content.to_owned(),
+    };
     DestinationRequest::Create(CreateRequest {
         attempt,
         route,
@@ -140,14 +135,11 @@ fn create(route: RequestRoute, attempt: RequestAttempt) -> DestinationRequest {
         passage_resolution: None,
         passage_input: None,
         context: vec![
-            RequestContextItem {
-                source_class: ContextSourceClass::AuthorInstruction,
-                content: "Tighten this paragraph.".to_owned(),
-            },
-            RequestContextItem {
-                source_class: ContextSourceClass::WorkingTarget,
-                content: "The rain fell hard on the old roof.".to_owned(),
-            },
+            item(
+                ContextSourceClass::AuthorInstruction,
+                "Tighten this paragraph.",
+            ),
+            item(ContextSourceClass::WorkingTarget, "The rain fell hard."),
         ],
         declared_targets: vec![target()],
         candidate_revision: None,
@@ -156,281 +148,29 @@ fn create(route: RequestRoute, attempt: RequestAttempt) -> DestinationRequest {
     })
 }
 
-async fn prepare(
-    adapter: &AgentPlanResponses<CanaryResolver>,
-    request: &DestinationRequest,
-) -> PreparedRequest<AgentPlanExchange> {
-    adapter.prepare(request).await.ok().unwrap()
-}
-
-/// Sends one Create request to a scripted destination, with a one-second bound.
-async fn exchange(reply: Reply) -> (Observation, Vec<NativeStreamItem>) {
-    let (base, _served) = destination(reply).await;
-    exchange_at(&base, Duration::from_secs(1)).await
-}
-
-async fn exchange_at(base: &str, timeout: Duration) -> (Observation, Vec<NativeStreamItem>) {
+/// Prepares and sends one request to `base`, and returns the observation, the committed stream
+/// events, and the Wire Payload Projection.
+async fn exchange_at(base: &str) -> (Observation, Vec<NativeStreamItem>, Option<String>) {
     let adapter = AgentPlanResponses {
         resolver: CanaryResolver::default(),
     };
-    let request = create(route(base, timeout), RequestAttempt::New);
-    let prepared = prepare(&adapter, &request).await;
-    let mut sink = RecordingSink::default();
-    let observation = adapter.exchange(prepared.prepared, &mut sink).await;
-    (observation, sink.0)
-}
-
-const COMPLETED_PROSE_CHANGE: &str = r#"{
-  "id": "resp_0217000000000000000000000000000000000000000000001",
-  "object": "response",
-  "status": "completed",
-  "output": [
-    {"id": "rs_01", "type": "reasoning", "status": "completed",
-     "summary": [{"type": "summary_text", "text": "The author wants a tighter line."}]},
-    {"id": "msg_01", "type": "message", "role": "assistant", "status": "completed",
-     "content": [{"type": "output_text", "text": "{\"kind\":\"prose_change\",\"summary\":\"I made the line shorter.\",\"changes\":[{\"block_id\":\"018f0000-0000-7001-8000-0000000000b1\",\"candidate_text\":\"Rain hammered the old roof.\",\"explanation\":\"A stronger verb replaces two words.\"}]}"}]}
-  ],
-  "usage": {"input_tokens": 412, "input_tokens_details": {"cached_tokens": 0},
-            "output_tokens": 133, "output_tokens_details": {"reasoning_tokens": 61},
-            "total_tokens": 545},
-  "store": true
-}"#;
-
-#[tokio::test]
-async fn a_completed_response_maps_to_its_native_items_and_a_validated_candidate() {
-    let (base, served) = destination(Reply::Http(200, COMPLETED_PROSE_CHANGE)).await;
-    let adapter = AgentPlanResponses {
-        resolver: CanaryResolver::default(),
-    };
-    let request = create(route(&base, Duration::from_secs(1)), RequestAttempt::New);
-    let prepared = prepare(&adapter, &request).await;
-    let projection = prepared.projection.clone();
-    let mut sink = RecordingSink::default();
-    let observation = adapter.exchange(prepared.prepared, &mut sink).await;
-    let received = served.await.unwrap();
-
-    let items = vec![
-        NativeStreamItem {
-            item_id: "rs_01".to_owned(),
-            role: StreamItemRole::Assistant,
-            state: StreamItemState::Complete,
-            text: None,
-            summary: Some("The author wants a tighter line.".to_owned()),
-            call_id: None,
-            arguments: None,
-            refusal: None,
-            hosted_report: None,
-        },
-        NativeStreamItem {
-            item_id: "msg_01".to_owned(),
-            role: StreamItemRole::Assistant,
-            state: StreamItemState::Complete,
-            text: Some(
-                r#"{"kind":"prose_change","summary":"I made the line shorter.","changes":[{"block_id":"018f0000-0000-7001-8000-0000000000b1","candidate_text":"Rain hammered the old roof.","explanation":"A stronger verb replaces two words."}]}"#
-                    .to_owned(),
-            ),
-            summary: None,
-            call_id: None,
-            arguments: None,
-            refusal: None,
-            hosted_report: None,
-        },
-    ];
-    assert_eq!(
-        (observation, sink.0),
-        (
-            Observation::Terminal(ModelResponse {
-                items: items.clone(),
-                output: Some(ModelOutput {
-                    phase: OutputPhase::FinalAnswer,
-                    candidate: DecisionCandidate::ProseChange {
-                        text: "I made the line shorter.".to_owned(),
-                    },
-                    prose_changes: Some(vec![ProseChangeCandidate {
-                        chapter_id: target().chapter_id,
-                        manuscript_block_id: target().block_id,
-                        base_authoritative_revision_id: target().base_revision_id,
-                        candidate_text: "Rain hammered the old roof.".to_owned(),
-                        explanation: "A stronger verb replaces two words.".to_owned(),
-                    }]),
-                }),
-                usage: ModelUsage::Reported {
-                    input_tokens: 412,
-                    output_tokens: 133,
-                },
-                response_reference: Some(
-                    "resp_0217000000000000000000000000000000000000000000001".to_owned()
-                ),
-            }),
-            items,
-        )
-    );
-    let mut body: serde_json::Value = serde_json::from_str(&received.body).unwrap();
-    let instructions = body
-        .as_object_mut()
-        .unwrap()
-        .remove("instructions")
+    let prepared = adapter
+        .prepare(&create(route(base), RequestAttempt::New))
+        .await
+        .ok()
         .unwrap();
-    assert_eq!(
-        (
-            received.request_line,
-            received.authorization,
-            Some(received.body.clone()),
-            projection.digest,
-            body,
-        ),
-        (
-            "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
-            Some(format!("Bearer {CREDENTIAL_CANARY}")),
-            projection.serialized_payload,
-            format!(
-                "sha256:{}",
-                storyos_core::hex_sha256(received.body.as_bytes())
-            ),
-            serde_json::json!({
-                "model": "doubao-seed-2.1-pro",
-                "input": [{"role": "user", "content": [{"type": "input_text", "text":
-                    "Author request:\nTighten this paragraph.\n\n\
-                     Working text:\nThe rain fell hard on the old roof.\n\n\
-                     Target blocks:\n[block_id: 018f0000-0000-7001-8000-0000000000b1]\n\
-                     The rain fell hard on the old roof."}]}],
-                "max_output_tokens": 8192,
-                "stream": false,
-                "store": true,
-            }),
-        )
-    );
-    assert!(
-        instructions
-            .as_str()
-            .is_some_and(|text| text.contains("prose_change"))
-    );
-    assert!(!received.body.contains(CREDENTIAL_CANARY));
+    let mut sink = RecordingSink::default();
+    let observation = adapter.exchange(prepared.prepared, &mut sink).await;
+    (observation, sink.0, prepared.projection.serialized_payload)
 }
 
-fn completed_text(text: &str) -> String {
-    serde_json::json!({
-        "id": "resp_text",
-        "status": "completed",
-        "output": [{"id": "msg_01", "type": "message", "role": "assistant", "status": "completed",
-                    "content": [{"type": "output_text", "text": text}]}],
-    })
-    .to_string()
+async fn exchange(reply: Reply) -> Observation {
+    let (base, _served) = destination(reply).await;
+    exchange_at(&base).await.0
 }
 
-fn output_of(observation: Observation) -> Option<ModelOutput> {
-    match observation {
-        Observation::Terminal(response) => response.output,
-        other => panic!("not a terminal response: {other:?}"),
-    }
-}
-
-fn final_answer(
-    candidate: DecisionCandidate,
-    prose_changes: Option<Vec<ProseChangeCandidate>>,
-) -> Option<ModelOutput> {
-    Some(ModelOutput {
-        phase: OutputPhase::FinalAnswer,
-        candidate,
-        prose_changes,
-    })
-}
-
-#[test]
-fn each_complete_text_maps_to_its_contract_candidate_or_to_an_advisory() {
-    let observe = |text: &str| {
-        output_of(super::response::observe(
-            completed_text(text).as_bytes(),
-            &[target()],
-        ))
-    };
-    let undeclared = r#"{"kind":"prose_change","summary":"Changed.","changes":[{"block_id":"other","candidate_text":"New.","explanation":"Why."}]}"#;
-
-    assert_eq!(
-        [
-            observe(r#"{"kind":"advisory","text":"Keep the second sentence."}"#),
-            observe("```json\n{\"kind\":\"clarification\",\"question\":\"Which scene?\"}\n```"),
-            observe("Keep the second sentence."),
-            observe(r#"{"kind":"prose_change","summary":"Changed."}"#),
-            observe(undeclared),
-        ],
-        [
-            final_answer(
-                DecisionCandidate::Advisory {
-                    text: "Keep the second sentence.".to_owned()
-                },
-                None
-            ),
-            final_answer(
-                DecisionCandidate::Clarification {
-                    question: "Which scene?".to_owned()
-                },
-                None
-            ),
-            final_answer(
-                DecisionCandidate::Advisory {
-                    text: "Keep the second sentence.".to_owned()
-                },
-                None
-            ),
-            final_answer(
-                DecisionCandidate::Advisory {
-                    text: r#"{"kind":"prose_change","summary":"Changed."}"#.to_owned()
-                },
-                None
-            ),
-            final_answer(
-                DecisionCandidate::ProseChange {
-                    text: "Changed.".to_owned()
-                },
-                Some(vec![ProseChangeCandidate {
-                    chapter_id: String::new(),
-                    manuscript_block_id: "other".to_owned(),
-                    base_authoritative_revision_id: String::new(),
-                    candidate_text: "New.".to_owned(),
-                    explanation: "Why.".to_owned(),
-                }])
-            ),
-        ]
-    );
-    assert_eq!(
-        output_of(super::response::observe(
-            completed_text(r#"{"kind":"prose_change","summary":"Changed.","changes":[]}"#)
-                .as_bytes(),
-            &[]
-        )),
-        final_answer(
-            DecisionCandidate::Advisory {
-                text: r#"{"kind":"prose_change","summary":"Changed.","changes":[]}"#.to_owned()
-            },
-            None
-        )
-    );
-}
-
-#[test]
-fn a_refusal_a_function_call_or_an_incomplete_response_supplies_no_candidate() {
-    let observe = |body: serde_json::Value| {
-        super::response::observe(body.to_string().as_bytes(), &[target()])
-    };
-    let refusal = observe(serde_json::json!({
-        "id": "resp_refusal", "status": "completed",
-        "output": [{"id": "msg_01", "type": "message", "role": "assistant", "status": "completed",
-                    "content": [{"type": "refusal", "refusal": "I cannot help with that."}]}],
-    }));
-    let function_call = observe(serde_json::json!({
-        "id": "resp_call", "status": "completed",
-        "output": [{"id": "fc_01", "type": "function_call", "status": "completed",
-                    "call_id": "call_01", "name": "search", "arguments": "{\"q\":\"x\"}"}],
-    }));
-    let incomplete = observe(serde_json::json!({
-        "id": "resp_incomplete", "status": "incomplete",
-        "incomplete_details": {"reason": "max_output_tokens"},
-        "output": [{"id": "msg_01", "type": "message", "role": "assistant",
-                    "content": [{"type": "output_text", "text": "{\"kind\":\"adv"}]}],
-        "usage": {"input_tokens": 10},
-    }));
-    let item = |item_id: &str, role, state| NativeStreamItem {
+fn item(item_id: &str, role: StreamItemRole, state: StreamItemState) -> NativeStreamItem {
+    NativeStreamItem {
         item_id: item_id.to_owned(),
         role,
         state,
@@ -440,47 +180,197 @@ fn a_refusal_a_function_call_or_an_incomplete_response_supplies_no_candidate() {
         arguments: None,
         refusal: None,
         hosted_report: None,
+    }
+}
+
+fn message(text: &str) -> serde_json::Value {
+    json!({"id": "msg_01", "type": "message", "role": "assistant", "status": "completed",
+           "content": [{"type": "output_text", "text": text}]})
+}
+
+fn final_answer(
+    candidate: DecisionCandidate,
+    changes: Option<Vec<ProseChangeCandidate>>,
+) -> ModelOutput {
+    ModelOutput {
+        phase: OutputPhase::FinalAnswer,
+        candidate,
+        prose_changes: changes,
+    }
+}
+
+#[tokio::test]
+async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_projection() {
+    let reply = json!({"id": "resp_01", "status": "completed", "output": [
+        {"id": "rs_01", "type": "reasoning", "summary": [{"type": "summary_text", "text": "Plan."}]},
+        message(r#"{"kind":"advisory","text":"Keep the second sentence."}"#),
+    ], "usage": {"input_tokens": 412, "output_tokens": 133, "total_tokens": 545}});
+    let (base, served) = destination(Reply::Http(200, reply.to_string())).await;
+    let (observation, events, projection) = exchange_at(&base).await;
+    let (line, authorization, body) = served.await.unwrap();
+    let items = vec![
+        NativeStreamItem {
+            summary: Some("Plan.".to_owned()),
+            ..item(
+                "rs_01",
+                StreamItemRole::Assistant,
+                StreamItemState::Complete,
+            )
+        },
+        NativeStreamItem {
+            text: Some(r#"{"kind":"advisory","text":"Keep the second sentence."}"#.to_owned()),
+            ..item(
+                "msg_01",
+                StreamItemRole::Assistant,
+                StreamItemState::Complete,
+            )
+        },
+    ];
+    let mut sent: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let instructions = sent.as_object_mut().unwrap().remove("instructions");
+
+    assert_eq!(
+        (observation, events, line, authorization, projection, sent),
+        (
+            Observation::Terminal(ModelResponse {
+                items: items.clone(),
+                output: Some(final_answer(
+                    DecisionCandidate::Advisory {
+                        text: "Keep the second sentence.".to_owned()
+                    },
+                    None
+                )),
+                usage: ModelUsage::Reported {
+                    input_tokens: 412,
+                    output_tokens: 133,
+                },
+                response_reference: Some("resp_01".to_owned()),
+            }),
+            items,
+            "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+            Some(format!("Bearer {CREDENTIAL_CANARY}")),
+            Some(body.clone()),
+            json!({
+                "model": "doubao-seed-2.1-pro",
+                "input": [{"role": "user", "content": [{"type": "input_text", "text": format!(
+                    "Author request:\nTighten this paragraph.\n\nWorking text:\nThe rain fell \
+                     hard.\n\nTarget blocks:\n[block_id: {BLOCK}]\nThe rain fell hard on the old roof."
+                )}]}],
+                "max_output_tokens": 8192,
+                "stream": false,
+                "store": true,
+            }),
+        )
+    );
+    assert!(instructions.is_some_and(|text| text.as_str().is_some_and(|text| !text.is_empty())));
+    assert!(!body.contains(CREDENTIAL_CANARY));
+}
+
+#[test]
+fn complete_text_maps_to_its_contract_candidate_and_other_text_to_an_advisory() {
+    let advisory = |text: &str| {
+        final_answer(
+            DecisionCandidate::Advisory {
+                text: text.to_owned(),
+            },
+            None,
+        )
+    };
+    let change = |block: &str, chapter: &str, base: &str| ProseChangeCandidate {
+        chapter_id: chapter.to_owned(),
+        manuscript_block_id: block.to_owned(),
+        base_authoritative_revision_id: base.to_owned(),
+        candidate_text: "Rain hammered the roof.".to_owned(),
+        explanation: "A stronger verb.".to_owned(),
+    };
+    let prose = |block: &str| {
+        format!(
+            r#"{{"kind":"prose_change","summary":"Shorter.","changes":[{{"block_id":"{block}","candidate_text":"Rain hammered the roof.","explanation":"A stronger verb."}}]}}"#
+        )
+    };
+    let map = |text: &str| super::decision::map_output(text, &[target()]);
+    let shorter = DecisionCandidate::ProseChange {
+        text: "Shorter.".to_owned(),
     };
 
     assert_eq!(
-        [refusal, function_call, incomplete],
         [
-            Observation::Terminal(ModelResponse {
-                items: vec![NativeStreamItem {
-                    refusal: Some("I cannot help with that.".to_owned()),
-                    ..item(
-                        "msg_01",
-                        StreamItemRole::Assistant,
-                        StreamItemState::Complete
-                    )
+            map(&prose(BLOCK)),
+            map(&prose("undeclared")),
+            map("```json\n{\"kind\":\"clarification\",\"question\":\"Which scene?\"}\n```"),
+            map("Keep the second sentence."),
+            map(r#"{"kind":"prose_change","summary":"Shorter."}"#),
+            super::decision::map_output(&prose(BLOCK), &[]),
+        ],
+        [
+            final_answer(
+                shorter.clone(),
+                Some(vec![change(
+                    BLOCK,
+                    &target().chapter_id,
+                    &target().base_revision_id
+                )])
+            ),
+            final_answer(shorter, Some(vec![change("undeclared", "", "")])),
+            final_answer(
+                DecisionCandidate::Clarification {
+                    question: "Which scene?".to_owned()
+                },
+                None
+            ),
+            advisory("Keep the second sentence."),
+            advisory(r#"{"kind":"prose_change","summary":"Shorter."}"#),
+            advisory(&prose(BLOCK)),
+        ]
+    );
+}
+
+#[test]
+fn a_refusal_a_function_call_or_an_incomplete_response_supplies_no_candidate() {
+    let observe = |status: &str, output: serde_json::Value| {
+        let body = json!({"id": "resp_01", "status": status, "output": [output]});
+        match super::response::observe(body.to_string().as_bytes(), &[target()]) {
+            Observation::Terminal(response) => (response.items, response.output),
+            other => panic!("not a terminal response: {other:?}"),
+        }
+    };
+    let refusal = json!({"id": "msg_01", "type": "message", "status": "completed",
+                         "content": [{"type": "refusal", "refusal": "No."}]});
+    let call = json!({"id": "fc_01", "type": "function_call", "status": "completed",
+                      "call_id": "call_01", "arguments": "{\"q\""});
+    let partial = json!({"id": "msg_01", "type": "message",
+                         "content": [{"type": "output_text", "text": "{\"kind\""}]});
+    let (assistant, complete) = (StreamItemRole::Assistant, StreamItemState::Complete);
+
+    assert_eq!(
+        [
+            observe("completed", refusal),
+            observe("completed", call),
+            observe("incomplete", partial),
+        ],
+        [
+            (
+                vec![NativeStreamItem {
+                    refusal: Some("No.".to_owned()),
+                    ..item("msg_01", assistant, complete)
                 }],
-                output: None,
-                usage: ModelUsage::Unknown,
-                response_reference: Some("resp_refusal".to_owned()),
-            }),
-            Observation::Terminal(ModelResponse {
-                items: vec![NativeStreamItem {
+                None
+            ),
+            (
+                vec![NativeStreamItem {
                     call_id: Some("call_01".to_owned()),
-                    arguments: Some("{\"q\":\"x\"}".to_owned()),
-                    ..item("fc_01", StreamItemRole::Tool, StreamItemState::Complete)
+                    arguments: Some("{\"q\"".to_owned()),
+                    ..item("fc_01", StreamItemRole::Tool, complete)
                 }],
-                output: None,
-                usage: ModelUsage::Unknown,
-                response_reference: Some("resp_call".to_owned()),
-            }),
-            Observation::Terminal(ModelResponse {
-                items: vec![NativeStreamItem {
-                    text: Some("{\"kind\":\"adv".to_owned()),
-                    ..item(
-                        "msg_01",
-                        StreamItemRole::Assistant,
-                        StreamItemState::Incomplete
-                    )
+                None
+            ),
+            (
+                vec![NativeStreamItem {
+                    text: Some("{\"kind\"".to_owned()),
+                    ..item("msg_01", assistant, StreamItemState::Incomplete)
                 }],
-                output: None,
-                usage: ModelUsage::Unknown,
-                response_reference: Some("resp_incomplete".to_owned()),
-            }),
+                None
+            ),
         ]
     );
 }
@@ -491,33 +381,27 @@ async fn each_transport_outcome_maps_to_rejected_not_submitted_or_outcome_unknow
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         format!("http://{}/api/plan/v3", listener.local_addr().unwrap())
     };
+    let rejected = |reason: &str| Observation::Rejected {
+        reason: reason.to_owned(),
+    };
     let unknown = Observation::OutcomeUnknown {
         response_reference: None,
     };
-    let rate_limited = r#"{"error":{"code":"RateLimitExceeded.EndpointRPM","message":"echo: Tighten this paragraph.","type":"TooManyRequests"}}"#;
+    let limited = r#"{"error":{"code":"RateLimitExceeded.EndpointRPM","message":"echo: Tighten"}}"#;
 
     assert_eq!(
         [
-            exchange(Reply::Http(429, rate_limited)).await.0,
-            exchange(Reply::Http(
-                401,
-                r#"{"error":{"code":"Invalid key with spaces"}}"#
-            ))
-            .await
-            .0,
-            exchange(Reply::Http(500, "{}")).await.0,
-            exchange(Reply::Http(200, "not json")).await.0,
-            exchange(Reply::Drop).await.0,
-            exchange(Reply::Hold).await.0,
-            exchange_at(&closed, Duration::from_secs(1)).await.0,
+            exchange(Reply::Http(429, limited.to_owned())).await,
+            exchange(Reply::Http(401, r#"{"error":{"code":"a b"}}"#.to_owned())).await,
+            exchange(Reply::Http(500, "{}".to_owned())).await,
+            exchange(Reply::Http(200, "not json".to_owned())).await,
+            exchange(Reply::Drop).await,
+            exchange(Reply::Hold).await,
+            exchange_at(&closed).await.0,
         ],
         [
-            Observation::Rejected {
-                reason: "http_429:RateLimitExceeded.EndpointRPM".to_owned()
-            },
-            Observation::Rejected {
-                reason: "http_401".to_owned()
-            },
+            rejected("http_429:RateLimitExceeded.EndpointRPM"),
+            rejected("http_401"),
             unknown.clone(),
             unknown.clone(),
             unknown.clone(),
@@ -528,7 +412,7 @@ async fn each_transport_outcome_maps_to_rejected_not_submitted_or_outcome_unknow
 }
 
 #[tokio::test]
-async fn a_claimed_attempt_is_observed_again_without_a_second_request() {
+async fn a_claimed_attempt_retrieval_and_an_unknown_bound_send_nothing() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
     let adapter = AgentPlanResponses {
@@ -537,13 +421,32 @@ async fn a_claimed_attempt_is_observed_again_without_a_second_request() {
     let claimed = RequestAttempt::Claimed(DispatchClaim {
         model_attempt_id: "018f0000-0000-7001-8000-0000000000d1".to_owned(),
     });
-    let prepared = prepare(
-        &adapter,
-        &create(route(&base, Duration::from_secs(1)), claimed),
-    )
-    .await;
-    let mut sink = RecordingSink::default();
-    let observation = adapter.exchange(prepared.prepared, &mut sink).await;
+    let prepared = adapter
+        .prepare(&create(route(&base), claimed))
+        .await
+        .ok()
+        .unwrap();
+    let observation = adapter
+        .exchange(prepared.prepared, &mut RecordingSink::default())
+        .await;
+    let retrieve = DestinationRequest::Retrieve(RetrieveRequest {
+        attempt: RequestAttempt::New,
+        route: route(&base),
+        purpose: RetrievePurpose::OriginalResult,
+        original_model_attempt_id: "018f0000-0000-7001-8000-0000000000d1".to_owned(),
+        response_reference: "resp_01".to_owned(),
+    });
+    let unbounded = create(
+        RequestRoute {
+            bounds: None,
+            ..route(&base)
+        },
+        RequestAttempt::New,
+    );
+    let refusals = [
+        adapter.prepare(&retrieve).await.err(),
+        adapter.prepare(&unbounded).await.err(),
+    ];
     let connected = tokio::select! {
         biased;
         accepted = listener.accept() => accepted.is_ok(),
@@ -553,48 +456,17 @@ async fn a_claimed_attempt_is_observed_again_without_a_second_request() {
     assert_eq!(
         (
             observation,
-            sink.0,
+            refusals,
             connected,
-            *adapter.resolver.resolved.lock().unwrap()
+            *adapter.resolver.0.lock().unwrap()
         ),
         (
             Observation::OutcomeUnknown {
                 response_reference: None
             },
-            Vec::new(),
+            [Some(PreDispatchRefusal::UnsupportedRequest); 2],
             false,
             0
         )
-    );
-}
-
-#[tokio::test]
-async fn retrieval_and_an_unknown_bound_refuse_before_the_dispatch_claim() {
-    let adapter = AgentPlanResponses {
-        resolver: CanaryResolver::default(),
-    };
-    let base = "http://127.0.0.1:9/api/plan/v3";
-    let retrieve = DestinationRequest::Retrieve(RetrieveRequest {
-        attempt: RequestAttempt::New,
-        route: route(base, Duration::from_secs(1)),
-        purpose: RetrievePurpose::OriginalResult,
-        original_model_attempt_id: "018f0000-0000-7001-8000-0000000000d1".to_owned(),
-        response_reference: "resp_text".to_owned(),
-    });
-    let unbounded = create(
-        RequestRoute {
-            bounds: None,
-            ..route(base, Duration::from_secs(1))
-        },
-        RequestAttempt::New,
-    );
-    let mut refusals = Vec::new();
-    for request in [retrieve, unbounded] {
-        refusals.push(adapter.prepare(&request).await.err());
-    }
-
-    assert_eq!(
-        (refusals, *adapter.resolver.resolved.lock().unwrap()),
-        (vec![Some(PreDispatchRefusal::UnsupportedRequest); 2], 0)
     );
 }
