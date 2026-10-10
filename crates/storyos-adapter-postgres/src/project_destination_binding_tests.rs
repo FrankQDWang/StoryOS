@@ -2,8 +2,9 @@ use std::sync::Mutex;
 use storyos_adapter_fake_destination::FakeDestination;
 
 use storyos_application::{
-    ContractFaultObserver, ContractFaultPoint, NoContractFaults, ProjectAssistanceRecord,
-    ProjectScope, complete_agent_run, open_project_assistance,
+    ContractFaultObserver, ContractFaultPoint, DestinationRequest, ModelProviderAdapter,
+    ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
+    ProjectAssistanceRecord, ProjectScope, complete_agent_run, open_project_assistance,
 };
 use storyos_core::{
     AGENT_PLAN_REGISTRATION, AssistanceAvailability, DeploymentDestination, DestinationKind,
@@ -194,6 +195,37 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
     );
 }
 
+const AUTHORITY_PAUSE: &str =
+    r#"{"kind": "unknown_create_successor", "reason": "authority_unavailable"}"#;
+
+/// The status, settlement, successor allowance, and successor Attempt count of one AgentRun.
+async fn successor_state(
+    admin: &Client,
+    run_id: &str,
+) -> (String, Option<String>, Option<String>, i64) {
+    let row = admin
+        .query_one(
+            "SELECT run.status, run.settlement::text,
+                    attempt.payload->'unknown_create_successor'->>'allowance_consumed',
+                    (SELECT count(*) FROM storyos.model_attempts AS successor
+                      WHERE successor.run_id = run.run_id
+                        AND successor.attempt_role = 'successor')
+               FROM storyos.agent_runs AS run
+               JOIN storyos.model_attempts AS attempt
+                 ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+              WHERE run.run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+    (
+        row.get(/*idx*/ 0),
+        row.get(/*idx*/ 1),
+        row.get(/*idx*/ 2),
+        row.get(/*idx*/ 3),
+    )
+}
+
 /// Rebinds the Project to the Agent Plan destination when the first dispatch claim commits.
 struct RebindAtFirstClaim<'a> {
     store: &'a crate::PostgresProjectReader,
@@ -249,35 +281,95 @@ async fn a_rebinding_after_an_unknown_create_pauses_its_successor_without_dispat
         .await
         .unwrap();
 
-    let row = admin
-        .query_one(
-            "SELECT run.status, run.settlement::text,
-                    attempt.payload->'unknown_create_successor'->>'allowance_consumed',
-                    (SELECT count(*) FROM storyos.model_attempts AS successor
-                      WHERE successor.run_id = run.run_id
-                        AND successor.attempt_role = 'successor')
-               FROM storyos.agent_runs AS run
-               JOIN storyos.model_attempts AS attempt
-                 ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
-              WHERE run.run_id = $1::text::uuid",
-            &[&run_id],
-        )
-        .await
-        .unwrap();
     assert_eq!(
-        (
-            row.get::<_, String>(/*idx*/ 0),
-            row.get::<_, Option<String>>(/*idx*/ 1),
-            row.get::<_, Option<String>>(/*idx*/ 2),
-            row.get::<_, i64>(/*idx*/ 3),
-        ),
+        successor_state(&admin, &run_id).await,
         (
             "paused".to_owned(),
-            Some(
-                r#"{"kind": "unknown_create_successor", "reason": "authority_unavailable"}"#
-                    .to_owned()
-            ),
+            Some(AUTHORITY_PAUSE.to_owned()),
             Some("false".to_owned()),
+            0,
+        )
+    );
+}
+
+/// Makes Project assistance unavailable while the successor Create is prepared.
+struct DisableAtSuccessorPreparation<'a> {
+    admin: &'a Client,
+    scope: &'a ProjectScope,
+}
+
+impl ModelProviderAdapter for DisableAtSuccessorPreparation<'_> {
+    const ADAPTERS: &'static [storyos_core::ModelAdapter] = FakeDestination::ADAPTERS;
+    type Prepared = <FakeDestination as ModelProviderAdapter>::Prepared;
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
+        if let DestinationRequest::Create(create) = request
+            && create.successor_of.is_some()
+        {
+            self.admin
+                .execute(
+                    "INSERT INTO storyos.project_policy_revisions
+                       (owner_user_id, project_id, policy_revision, availability, receipt_id,
+                        external_compatibility_decision)
+                     SELECT owner_user_id, project_id, policy_revision + 1, 'unavailable',
+                            receipt_id, external_compatibility_decision
+                       FROM storyos.project_policy_revisions
+                      WHERE project_id = $1::text::uuid
+                      ORDER BY policy_revision DESC
+                      LIMIT 1",
+                    &[&self.scope.project_id.as_ref()],
+                )
+                .await
+                .unwrap();
+        }
+        FakeDestination.prepare(request).await
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+        sink: &mut impl ModelStreamSink,
+    ) -> Observation {
+        FakeDestination.exchange(prepared, sink).await
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn disabled_assistance_during_successor_preparation_pauses_it_with_its_spent_allowance() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, _) = queued_run(&store, "f5a", DeploymentDestination::HostFake).await;
+    let run_id = admit_run(
+        &store,
+        &scope,
+        &chapter_id,
+        "f5b",
+        DeploymentDestination::HostFake,
+        "SCRIPT:successor-once",
+    )
+    .await;
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let adapter = DisableAtSuccessorPreparation {
+        admin: &admin,
+        scope: &scope,
+    };
+
+    complete_agent_run(&store, &adapter, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        successor_state(&admin, &run_id).await,
+        (
+            "paused".to_owned(),
+            Some(AUTHORITY_PAUSE.to_owned()),
+            Some("true".to_owned()),
             0,
         )
     );

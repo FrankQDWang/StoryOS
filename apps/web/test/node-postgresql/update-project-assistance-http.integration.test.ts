@@ -287,7 +287,12 @@ test("project assistance prepares the host fake binding without a run", async ()
     assert.equal(await counts(), beforeRetries);
 
     await stopRealServer(started.server);
-    started = await startRealServer();
+    started = await startStoryOSServer({
+      repositoryRoot,
+      serverBinary,
+      sessions: { "session-a": USER_A, "session-b": USER_B },
+      modelDestination: null,
+    });
     const restartedFetch = browserFetch(started.baseUrl, "session-a");
     const restartedResponse = await updateProjectAssistance({
       baseUrl: started.baseUrl,
@@ -309,11 +314,25 @@ test("project assistance prepares the host fake binding without a run", async ()
       projectId: first.projectId,
       fetchImpl: restartedFetch,
     })).assistance, toggled.updated.assistance);
+    const unconfigured = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000a19", "Unconfigured Novel");
+    await assert.rejects(
+      () => prepare(
+        started.baseUrl,
+        unconfigured.fetchImpl,
+        unconfigured.projectId,
+        "018f0000-0000-7001-8000-000000000a18",
+        assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a17"),
+      ),
+      (error) => requireStoryOSProtocolError(error).status === 404,
+    );
+
+    await stopRealServer(started.server);
+    started = await startRealServer();
 
     const stillOpen = await getProject({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
-      fetchImpl: restartedFetch,
+      fetchImpl: browserFetch(started.baseUrl, "session-a"),
     });
     assert.equal(stillOpen.project.title, "Assistance Novel");
 

@@ -103,7 +103,7 @@ fn run_command(
             run_id: format!("018f0000-0000-7001-8000-00000004{ids_suffix}"),
             conversation_id: conversation_id.to_owned(),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{ids_suffix}"),
-            destination: storyos_core::DeploymentDestination::HostFake,
+            destination: Some(storyos_core::DeploymentDestination::HostFake),
         },
     )
 }
@@ -194,7 +194,7 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
         UpdateProjectAssistanceInput {
             availability: AssistanceAvailability::Available,
             expected_revision: 0,
-            destination: storyos_core::DeploymentDestination::HostFake,
+            destination: Some(storyos_core::DeploymentDestination::HostFake),
         },
     );
     store

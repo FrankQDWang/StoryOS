@@ -830,6 +830,47 @@ async function waitForReached(path: string) {
   throw new Error(`createAgentRun conversation hold did not reach ${path}`);
 }
 
+test("createAgentRun exact retry replays in a deployment that offers no model destination", async () => {
+  let started = await startRealServer();
+  try {
+    const first = await createEmpty(started.baseUrl, "session-a", id("e1a0"), "No Destination Novel", id("e1a1"));
+    const chapterId = await prepareProject(started.baseUrl, first.fetchImpl, first.projectId);
+    const request = runRequest({ kind: "new" }, chapterId, id("e1a2"));
+    const created = await postRun(started.baseUrl, first.fetchImpl, first.projectId, id("e1a3"), request);
+
+    await stopRealServer(started.server);
+    started = await startStoryOSServer({
+      repositoryRoot,
+      serverBinary,
+      sessions: { "session-a": USER_A, "session-b": USER_B },
+      modelDestination: null,
+    });
+    const restartedFetch = browserFetch(started.baseUrl, "session-a");
+    const replay = await createAgentRun({
+      baseUrl: started.baseUrl,
+      projectId: first.projectId,
+      fetchImpl: restartedFetch,
+      idempotencyKey: id("e1a3"),
+      antiForgery: created.challenge.nonce,
+      request,
+    });
+    assert.deepEqual(replay, created.admitted);
+    await assert.rejects(
+      () => postRun(
+        started.baseUrl,
+        restartedFetch,
+        first.projectId,
+        id("e1a4"),
+        runRequest({ kind: "new" }, chapterId, id("e1a5")),
+      ),
+      (error) => requireStoryOSProtocolError(error).status === 422
+        && problemCode(error) === "assistance_unavailable",
+    );
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
+
 test("createAgentRun competing existing admission keeps one queued run", async () => {
   const heldKey = "018f0000-0000-7001-8000-000000000b60";
   const holdPath = join(tmpdir(), `storyos-conversation-hold-${heldKey}.flag`);

@@ -22,8 +22,9 @@ pub struct CreateAgentRunInput {
     pub run_id: String,
     pub conversation_id: String,
     pub project_agent_id: String,
-    /// The destination of the deployment, from Host configuration. The Run binds it.
-    pub destination: storyos_core::DeploymentDestination,
+    /// The destination of the deployment, from Host configuration. The Run binds it. `None`
+    /// refuses a first use, and an exact retry still replays its acknowledgement.
+    pub destination: Option<storyos_core::DeploymentDestination>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -31,7 +31,8 @@ pub struct UpdateProjectAssistanceInput {
     /// Zero when the Project has no assistance binding yet.
     pub expected_revision: u64,
     /// The destination that a first setting binds. The Host supplies it from its configuration.
-    pub destination: DeploymentDestination,
+    /// `None` refuses a first setting, and an exact retry still replays its acknowledgement.
+    pub destination: Option<DeploymentDestination>,
 }
 
 /// The Command-response Project and the Project assistance record after the writes.

@@ -73,7 +73,7 @@ fn command(
         UpdateProjectAssistanceInput {
             availability,
             expected_revision,
-            destination: storyos_core::DeploymentDestination::HostFake,
+            destination: Some(storyos_core::DeploymentDestination::HostFake),
         },
     )
 }

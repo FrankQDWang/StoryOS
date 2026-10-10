@@ -72,7 +72,10 @@ impl ModelDispatchStore for PostgresProjectReader {
                         .await
                         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
                     let route = crate::agent_run_work::route_facts(&run, assistance.as_ref());
-                    if run.settled() || storyos_core::admit_route(&route).is_err() {
+                    let available = assistance.as_ref().map(|record| record.availability)
+                        == Some(storyos_core::AssistanceAvailability::Available);
+                    // The successor gates run again with the current authority and pause it.
+                    if run.settled() || !available || storyos_core::admit_route(&route).is_err() {
                         return Ok(None);
                     }
                     return crate::agent_run_successor_dispatch::commit(client, claim, projection)

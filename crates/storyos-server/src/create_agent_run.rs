@@ -30,11 +30,7 @@ pub(super) async fn create_agent_run(
     Path(project_id): Path<String>,
     request: Request,
 ) -> Result<(StatusCode, Json<contracts::CreateAgentRunResponse>), ApiError> {
-    let Some(destination) = state.config.model_destination.clone() else {
-        return Err(refusal_problem(
-            CreateAgentRunRefusal::AssistanceUnavailable,
-        ));
-    };
+    let destination = state.config.model_destination.clone();
     let admitted = admit(
         &state,
         &project_id,
@@ -94,7 +90,7 @@ pub(super) async fn create_agent_run(
 /// Validates the conversation and Working Target identities and allocates the new identities.
 fn create_agent_run_input(
     body: &contracts::CreateAgentRunRequest,
-    destination: storyos_core::DeploymentDestination,
+    destination: Option<storyos_core::DeploymentDestination>,
 ) -> Result<CreateAgentRunInput, ApiError> {
     let input = &body.create_agent_run_input;
     let conversation_id = match &input.conversation {

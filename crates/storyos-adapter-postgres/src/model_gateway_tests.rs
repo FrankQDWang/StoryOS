@@ -263,7 +263,7 @@ pub(crate) async fn queued_run(
         UpdateProjectAssistanceInput {
             availability: AssistanceAvailability::Available,
             expected_revision: 0,
-            destination: DeploymentDestination::HostFake,
+            destination: Some(DeploymentDestination::HostFake),
         },
     );
     store
@@ -336,7 +336,7 @@ pub(crate) async fn admit_run(
             run_id: format!("018f0000-0000-7001-8000-00000004{prefix}6"),
             conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
-            destination,
+            destination: Some(destination),
         },
     );
     store

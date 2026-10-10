@@ -128,11 +128,12 @@ impl ProjectCommand for CreateAgentRunInput {
         let outcome = create_agent_run(&CoreCreateAgentRun {
             presence: ProjectPresence::Present,
             lifecycle: project.lifecycle,
-            assistance: match &assistance {
-                Some(record) if record.availability == AssistanceAvailability::Unavailable => {
+            assistance: match (&assistance, &self.destination) {
+                (Some(record), _) if record.availability == AssistanceAvailability::Unavailable => {
                     AssistanceAdmission::Unavailable
                 }
-                Some(_) | None => AssistanceAdmission::Available,
+                (_, None) => AssistanceAdmission::Unavailable,
+                (_, Some(_)) => AssistanceAdmission::Available,
             },
             conversation,
             chapter: if project.current_chapter_id.as_deref() == Some(self.chapter_id.as_str()) {
@@ -150,14 +151,24 @@ impl ProjectCommand for CreateAgentRunInput {
         {
             return Err(ProjectCommandError::BindingConflict.into());
         }
+        let destination =
+            self.destination
+                .clone()
+                .ok_or(RefusableCommandError::RefusedBeforeAdmission(
+                    CreateAgentRunRefusal::AssistanceUnavailable,
+                ))?;
         let assistance = match assistance {
-            Some(record) if record.destination == self.destination.kind() => {
+            Some(record) if record.destination == destination.kind() => {
                 AssistancePlan::Current(record)
             }
             Some(record) => AssistancePlan::Bind {
                 revision: record.revision + 1,
+                destination,
             },
-            None => AssistancePlan::Bind { revision: 1 },
+            None => AssistancePlan::Bind {
+                revision: 1,
+                destination,
+            },
         };
         hold_conversation_if_requested(&envelope.challenge_binding.idempotency_key).await;
         Ok(Classification {
@@ -179,9 +190,10 @@ impl ProjectCommand for CreateAgentRunInput {
     ) -> Result<ActivityWrite<CreateAgentRunApplied>, ProjectCommandError> {
         let assistance = match assistance {
             AssistancePlan::Current(record) => record,
-            AssistancePlan::Bind { revision } => {
-                bind_deployment_destination(client, envelope, &self.destination, revision).await?
-            }
+            AssistancePlan::Bind {
+                revision,
+                destination,
+            } => bind_deployment_destination(client, envelope, &destination, revision).await?,
         };
         let applied = write::persist_conversation_and_run(
             client,
@@ -241,6 +253,7 @@ pub(crate) enum AssistancePlan {
     /// The Project has no binding, or its binding has another destination than the deployment.
     Bind {
         revision: u64,
+        destination: storyos_core::DeploymentDestination,
     },
 }
 

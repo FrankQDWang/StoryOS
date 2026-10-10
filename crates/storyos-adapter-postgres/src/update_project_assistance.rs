@@ -63,6 +63,10 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
         let current = read_assistance_record(client, &envelope.project_scope)
             .await
             .map_err(unavailable)?;
+        if current.is_none() && self.destination.is_none() {
+            // A deployment without a model destination has no assistance resource to set.
+            return Err(ProjectCommandError::MissingProject);
+        }
         let classified = update_project_assistance(&CoreUpdateProjectAssistance {
             binding: match &current {
                 None => AssistanceBindingPresence::Uninitialized,
@@ -93,10 +97,14 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
                 availability,
                 revision,
             } => {
+                let destination = self
+                    .destination
+                    .as_ref()
+                    .ok_or(ProjectCommandError::MissingProject)?;
                 let decision = crate::project_destination_binding::insert_destination_binding(
                     client,
                     envelope,
-                    &self.destination,
+                    destination,
                 )
                 .await
                 .map_err(unavailable)?;

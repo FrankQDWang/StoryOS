@@ -58,9 +58,7 @@ pub(super) async fn update_project_assistance(
     Path(project_id): Path<String>,
     request: Request,
 ) -> Result<Json<contracts::UpdateProjectAssistanceResponse>, ApiError> {
-    let Some(destination) = state.config.model_destination.clone() else {
-        return Err(resource_unavailable());
-    };
+    let destination = state.config.model_destination.clone();
     let admitted = admit(
         &state,
         &project_id,
