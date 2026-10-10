@@ -290,7 +290,15 @@ pub(crate) async fn queued_run(
         /*expected_tree_revision*/ 2,
     )
     .await;
-    let run_id = admit_run(store, &scope, &chapter_id, prefix, destination).await;
+    let run_id = admit_run(
+        store,
+        &scope,
+        &chapter_id,
+        prefix,
+        destination,
+        "Help with this passage.",
+    )
+    .await;
     (scope, chapter_id, run_id)
 }
 
@@ -302,6 +310,7 @@ pub(crate) async fn admit_run(
     chapter_id: &str,
     prefix: &str,
     destination: DeploymentDestination,
+    author_message: &str,
 ) -> String {
     let run = named_issue(
         scope,
@@ -322,7 +331,7 @@ pub(crate) async fn admit_run(
             passage_targets: None,
             candidate_target: None,
             conversation: ConversationSelection::New,
-            author_message: "Help with this passage.".to_owned(),
+            author_message: author_message.to_owned(),
             chapter_id: chapter_id.to_owned(),
             run_id: format!("018f0000-0000-7001-8000-00000004{prefix}6"),
             conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),

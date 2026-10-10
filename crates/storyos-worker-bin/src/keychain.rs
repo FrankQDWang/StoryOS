@@ -7,7 +7,6 @@ const KEYCHAIN_PREFIX: &str = "macos-keychain:";
 pub(crate) struct KeychainResolver;
 
 impl CredentialResolver for KeychainResolver {
-    #[tracing::instrument(skip_all, level = "debug")]
     async fn resolve(&self, reference: &CredentialReference) -> Option<ResolvedCredential> {
         let (service, account) = keychain_item(&reference.0)?;
         let (service, account) = (service.to_owned(), account.to_owned());

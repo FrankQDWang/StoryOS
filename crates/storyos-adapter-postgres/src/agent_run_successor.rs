@@ -87,11 +87,13 @@ pub(crate) async fn advance(
         return Ok(SuccessorWork::Done(CompleteAgentRun::AlreadySettled));
     }
     let successor_id = text(&marker, "successor_model_attempt_id").map(str::to_owned);
+    let route_admitted =
+        storyos_core::admit_route(&crate::agent_run_work::route_facts(run, assistance)).is_ok();
     let decision = decide_unknown_create_successor(&facts_from(
         &marker,
         &row.status,
         successor_id.as_deref(),
-        assistance,
+        assistance.filter(|_| route_admitted),
     ));
     match decision {
         UnknownCreateSuccessorDecision::AlreadyDispatched => {
@@ -114,12 +116,15 @@ pub(crate) async fn advance(
             Ok(SuccessorWork::Done(CompleteAgentRun::Settled))
         }
         UnknownCreateSuccessorDecision::Pause { reason } => {
+            // A pause after the fence keeps the spent allowance and never resets it.
+            let consumed = flag(&marker, "allowance_consumed");
+            let fenced = flag(&marker, "predecessor_fenced");
             seal(
                 &mut marker,
                 "paused",
                 Some(reason.label()),
-                /*allowance_consumed*/ false,
-                /*predecessor_fenced*/ false,
+                consumed,
+                fenced,
             );
             row.payload["unknown_create_successor"] = marker;
             write_decision_payload(client, claim, &row.attempt_id, &row.payload).await?;

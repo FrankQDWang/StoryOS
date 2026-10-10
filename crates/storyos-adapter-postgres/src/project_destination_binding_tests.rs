@@ -1,7 +1,9 @@
+use std::sync::Mutex;
 use storyos_adapter_fake_destination::FakeDestination;
+
 use storyos_application::{
-    NoContractFaults, ProjectAssistanceRecord, ProjectScope, complete_agent_run,
-    open_project_assistance,
+    ContractFaultObserver, ContractFaultPoint, NoContractFaults, ProjectAssistanceRecord,
+    ProjectScope, complete_agent_run, open_project_assistance,
 };
 use storyos_core::{
     AGENT_PLAN_REGISTRATION, AssistanceAvailability, DeploymentDestination, DestinationKind,
@@ -89,7 +91,15 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
         .unwrap()
         .unwrap();
 
-    let agent_plan_run = admit_run(&store, &scope, &chapter_id, "e7b", agent_plan()).await;
+    let agent_plan_run = admit_run(
+        &store,
+        &scope,
+        &chapter_id,
+        "e7b",
+        agent_plan(),
+        "Help with this passage.",
+    )
+    .await;
     let current = open_project_assistance(&store, &scope)
         .await
         .unwrap()
@@ -180,6 +190,95 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
         (
             Some("model_use_binding_stale"),
             Some("model_registration_drift")
+        )
+    );
+}
+
+/// Rebinds the Project to the Agent Plan destination when the first dispatch claim commits.
+struct RebindAtFirstClaim<'a> {
+    store: &'a crate::PostgresProjectReader,
+    scope: &'a ProjectScope,
+    chapter_id: &'a str,
+    rebound: Mutex<bool>,
+}
+
+impl ContractFaultObserver for RebindAtFirstClaim<'_> {
+    async fn reached(&self, point: ContractFaultPoint) {
+        let first = point == ContractFaultPoint::DispatchClaimed
+            && !std::mem::replace(&mut *self.rebound.lock().unwrap(), /*src*/ true);
+        if first {
+            admit_run(
+                self.store,
+                self.scope,
+                self.chapter_id,
+                "e7e",
+                agent_plan(),
+                "Help with this passage.",
+            )
+            .await;
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_rebinding_after_an_unknown_create_pauses_its_successor_without_dispatch() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, _) = queued_run(&store, "e7c", DeploymentDestination::HostFake).await;
+    let run_id = admit_run(
+        &store,
+        &scope,
+        &chapter_id,
+        "e7d",
+        DeploymentDestination::HostFake,
+        "SCRIPT:successor-once",
+    )
+    .await;
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let observer = RebindAtFirstClaim {
+        store: &store,
+        scope: &scope,
+        chapter_id: &chapter_id,
+        rebound: Mutex::default(),
+    };
+
+    complete_agent_run(&store, &FakeDestination, &observer, &claim)
+        .await
+        .unwrap();
+
+    let row = admin
+        .query_one(
+            "SELECT run.status, run.settlement::text,
+                    attempt.payload->'unknown_create_successor'->>'allowance_consumed',
+                    (SELECT count(*) FROM storyos.model_attempts AS successor
+                      WHERE successor.run_id = run.run_id
+                        AND successor.attempt_role = 'successor')
+               FROM storyos.agent_runs AS run
+               JOIN storyos.model_attempts AS attempt
+                 ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+              WHERE run.run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            row.get::<_, String>(/*idx*/ 0),
+            row.get::<_, Option<String>>(/*idx*/ 1),
+            row.get::<_, Option<String>>(/*idx*/ 2),
+            row.get::<_, i64>(/*idx*/ 3),
+        ),
+        (
+            "paused".to_owned(),
+            Some(
+                r#"{"kind": "unknown_create_successor", "reason": "authority_unavailable"}"#
+                    .to_owned()
+            ),
+            Some("false".to_owned()),
+            0,
         )
     );
 }

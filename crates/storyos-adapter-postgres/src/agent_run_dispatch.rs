@@ -68,7 +68,11 @@ impl ModelDispatchStore for PostgresProjectReader {
             let run = load_run_phase(client, claim).await?;
             let request = match request {
                 DestinationRequest::Create(create) if create.successor_of.is_some() => {
-                    if run.settled() {
+                    let assistance = read_assistance_record(client, &claim.project_scope)
+                        .await
+                        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+                    let route = crate::agent_run_work::route_facts(&run, assistance.as_ref());
+                    if run.settled() || storyos_core::admit_route(&route).is_err() {
                         return Ok(None);
                     }
                     return crate::agent_run_successor_dispatch::commit(client, claim, projection)

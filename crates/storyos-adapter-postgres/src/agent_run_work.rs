@@ -5,7 +5,7 @@ use storyos_application::{
 };
 use storyos_core::{
     AssistanceAvailability, CreateAdmission as CoreCreateAdmission, CreateAdmissionFacts,
-    ModelAdapter, stream_batch_plan,
+    ModelAdapter, RouteFacts, stream_batch_plan,
 };
 use uuid::Uuid;
 
@@ -211,6 +211,20 @@ pub(crate) enum CreateAdmission {
     Dispatch(Option<Box<crate::agent_run_expiry::RebuildDispatch>>),
 }
 
+/// The route that `run` pinned, compared with the current assistance record of its Project.
+pub(crate) fn route_facts<'a>(
+    run: &'a RunPhaseRow,
+    assistance: Option<&storyos_application::ProjectAssistanceRecord>,
+) -> RouteFacts<'a> {
+    RouteFacts {
+        model_registration_revision: &run.model_registration_revision,
+        binding_current: assistance.is_some_and(|record| {
+            record.project_model_use_binding_revision == run.binding_revision
+        }),
+        registration_current: run.registration_current,
+    }
+}
+
 /// Refuses a blocked or capability request before dispatch, or admits one new Model Attempt.
 pub(crate) async fn admit_create(
     client: &tokio_postgres::Client,
@@ -239,11 +253,7 @@ pub(crate) async fn admit_create(
             assistance.map(|record| record.availability),
             Some(AssistanceAvailability::Available)
         ),
-        model_registration_revision: &run.model_registration_revision,
-        binding_current: assistance.is_some_and(|record| {
-            record.project_model_use_binding_revision == run.binding_revision
-        }),
-        registration_current: run.registration_current,
+        route: route_facts(run, assistance),
     });
     let capability = match admission {
         CoreCreateAdmission::Dispatch => return Ok(CreateAdmission::Dispatch(rebuild)),

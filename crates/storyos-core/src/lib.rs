@@ -101,7 +101,9 @@ pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
     continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
 };
-pub use create_admission::{CreateAdmission, CreateAdmissionFacts, admit_create};
+pub use create_admission::{
+    CreateAdmission, CreateAdmissionFacts, RouteFacts, admit_create, admit_route,
+};
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
     CreateAgentRunOutcome, CreateAgentRunRefusal, create_agent_run,
