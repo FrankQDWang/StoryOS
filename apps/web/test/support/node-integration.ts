@@ -54,6 +54,7 @@ export async function startStoryOSServer(options: {
   const webRoot = options.webRoot ?? join(dirname(serverBinary), "web");
   const env = childEnv({
     STORYOS_WORKER: "0",
+    STORYOS_MODEL_DESTINATION: "host_fake",
     ...(options.extraEnv ?? {}),
   });
   const databaseUrl = options.databaseUrl ?? process.env.STORYOS_TEST_DATABASE_URL;

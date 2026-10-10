@@ -1,7 +1,10 @@
 use storyos_application::{
     ProjectAssistanceRecord, UpdateProjectAssistanceInput, open_project_assistance,
 };
-use storyos_core::{AssistanceAvailability, TransitionOutcome, UpdateProjectAssistanceApplied};
+use storyos_core::{
+    AssistanceAvailability, DestinationKind, RuntimeQualification, TransitionOutcome,
+    UpdateProjectAssistanceApplied,
+};
 
 use super::command_admission::{
     BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
@@ -55,6 +58,9 @@ pub(super) async fn update_project_assistance(
     Path(project_id): Path<String>,
     request: Request,
 ) -> Result<Json<contracts::UpdateProjectAssistanceResponse>, ApiError> {
+    let Some(destination) = state.config.model_destination.clone() else {
+        return Err(resource_unavailable());
+    };
     let admitted = admit(
         &state,
         &project_id,
@@ -77,6 +83,7 @@ pub(super) async fn update_project_assistance(
                     }
                 },
                 expected_revision,
+                destination: destination.clone(),
             })
         },
     )
@@ -162,6 +169,16 @@ fn contract_assistance(record: &ProjectAssistanceRecord) -> contracts::ProjectAs
             .to_string(),
         project_model_use_binding_revision: record.project_model_use_binding_revision.clone(),
         external_compatibility_decision: record.external_compatibility_decision.clone(),
+        destination: match record.destination {
+            DestinationKind::HostFake => contracts::ProjectModelDestination::HostFake,
+            DestinationKind::VolcengineAgentPlan => {
+                contracts::ProjectModelDestination::VolcengineAgentPlan
+            }
+        },
+        runtime_qualification: match record.runtime_qualification {
+            RuntimeQualification::Qualified => contracts::ModelRuntimeQualification::Qualified,
+            RuntimeQualification::Pending => contracts::ModelRuntimeQualification::Pending,
+        },
     }
 }
 

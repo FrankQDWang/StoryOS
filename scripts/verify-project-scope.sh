@@ -171,6 +171,7 @@ assert_packaged_server_refuses_bind() {
   STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
   STORYOS_BOOTSTRAP_SESSIONS="$gate_sessions" \
   STORYOS_CHALLENGE_SECRET="$gate_secret" \
+  STORYOS_MODEL_DESTINATION=host_fake \
   STORYOS_WORKER=1 \
     "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" >"$log" 2>&1 &
   pid=$!
@@ -213,6 +214,7 @@ assert_packaged_server_binds() {
   STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
   STORYOS_BOOTSTRAP_SESSIONS="$gate_sessions" \
   STORYOS_CHALLENGE_SECRET="$gate_secret" \
+  STORYOS_MODEL_DESTINATION=host_fake \
   STORYOS_WORKER=0 \
     "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" >"$log" 2>&1 &
   pid=$!
@@ -258,6 +260,7 @@ prove_bound_request_path_activation() {
   STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
   STORYOS_BOOTSTRAP_SESSIONS="$gate_sessions" \
   STORYOS_CHALLENGE_SECRET="$gate_secret" \
+  STORYOS_MODEL_DESTINATION=host_fake \
   STORYOS_WORKER=0 \
     "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" >"$log" 2>&1 &
   pid=$!

@@ -26,6 +26,7 @@ start_recovery_drill_server() {
   STORYOS_STORAGE_ADMIN_URL="postgres://postgres:wrong@127.0.0.1:1/postgres" \
   STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$owner_a\"}" \
   STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
+  STORYOS_MODEL_DESTINATION=host_fake \
     "$server_bin" --bind 127.0.0.1:0 \
     --web-root "$web_root" \
     >"$drill_server_log" 2>&1 &

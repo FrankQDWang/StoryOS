@@ -151,6 +151,32 @@ pub struct ServerConfig {
     pub project_command_challenge_secret: Option<Vec<u8>>,
     pub trusted_local_session_bootstrap: TrustedLocalSessionBootstrap,
     pub session_cookie_secure: SessionCookieSecure,
+    /// The one model destination that this deployment offers. `None` offers no assistance.
+    pub model_destination: Option<storyos_core::DeploymentDestination>,
+}
+
+pub const MODEL_DESTINATION_VARIABLE: &str = "STORYOS_MODEL_DESTINATION";
+pub const MODEL_CREDENTIAL_REFERENCE_VARIABLE: &str = "STORYOS_MODEL_CREDENTIAL_REFERENCE";
+
+/// Reads the deployment model destination (ADR 0048). An absent value offers no assistance.
+pub fn model_destination(
+    destination: Option<&str>,
+    credential_reference: Option<String>,
+) -> Result<Option<storyos_core::DeploymentDestination>, &'static str> {
+    match (destination, credential_reference) {
+        (None, None) => Ok(None),
+        (Some("host_fake"), None) => Ok(Some(storyos_core::DeploymentDestination::HostFake)),
+        (Some("volcengine_agent_plan"), Some(credential_reference))
+            if !credential_reference.is_empty() =>
+        {
+            Ok(Some(
+                storyos_core::DeploymentDestination::VolcengineAgentPlan {
+                    credential_reference,
+                },
+            ))
+        }
+        _ => Err("The model destination configuration is invalid"),
+    }
 }
 
 impl fmt::Debug for ServerConfig {

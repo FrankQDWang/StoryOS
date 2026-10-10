@@ -9,8 +9,8 @@ use storyos_application::{
     complete_agent_run, issue_project_command_challenge,
 };
 use storyos_core::{
-    AssistanceAvailability, DecisionCandidate, ModelOutput, NativeStreamItem, OutputPhase,
-    StreamItemRole, StreamItemState,
+    AssistanceAvailability, DecisionCandidate, DeploymentDestination, ModelOutput,
+    NativeStreamItem, OutputPhase, StreamItemRole, StreamItemState,
 };
 use tokio_postgres::{Client, NoTls};
 
@@ -197,12 +197,6 @@ fn digest(kind: &str, bytes: &[u8]) -> String {
     )
 }
 
-/// The destination binding of the Project of one test AgentRun.
-pub(crate) enum ProjectBinding {
-    HostFake,
-    AgentPlan,
-}
-
 /// Admits one fake-model AgentRun on a new chapter, then claims it with a known fence. The lease
 /// is already expired, so a later Worker can drain a Run that a test leaves claimed.
 async fn claimed_run(
@@ -210,7 +204,16 @@ async fn claimed_run(
     admin: &Client,
     prefix: &str,
 ) -> ClaimedAgentRun {
-    let (scope, run_id) = queued_run(store, admin, prefix, ProjectBinding::HostFake).await;
+    let (scope, _, run_id) = queued_run(store, prefix, DeploymentDestination::HostFake).await;
+    claim_run(admin, scope, run_id).await
+}
+
+/// Claims one queued AgentRun with a known fence and an expired lease.
+pub(crate) async fn claim_run(
+    admin: &Client,
+    scope: ProjectScope,
+    run_id: String,
+) -> ClaimedAgentRun {
     let fence_token = admin
         .query_one(
             "UPDATE storyos.agent_runs
@@ -232,13 +235,13 @@ async fn claimed_run(
     }
 }
 
-/// Admits one queued AgentRun on a new chapter of a new Project with `binding`.
+/// Admits one queued AgentRun on a new chapter of a new Project with fake assistance, in a
+/// deployment that offers `destination`.
 pub(crate) async fn queued_run(
     store: &PostgresProjectReader,
-    admin: &Client,
     prefix: &str,
-    binding: ProjectBinding,
-) -> (ProjectScope, String) {
+    destination: DeploymentDestination,
+) -> (ProjectScope, String, String) {
     let scope: ProjectScope = seed_project(store, &format!("{prefix}0")).await;
     let assistance = named_issue(
         &scope,
@@ -260,18 +263,13 @@ pub(crate) async fn queued_run(
         UpdateProjectAssistanceInput {
             availability: AssistanceAvailability::Available,
             expected_revision: 0,
+            destination: DeploymentDestination::HostFake,
         },
     );
     store
         .update_project_assistance(&assistance_call.envelope, &assistance_call.input)
         .await
         .unwrap();
-    match binding {
-        ProjectBinding::HostFake => {}
-        ProjectBinding::AgentPlan => {
-            crate::model_registration::tests::bind_agent_plan(admin, &scope).await;
-        }
-    }
     let volume_id = apply_volume(
         store,
         &scope,
@@ -292,8 +290,21 @@ pub(crate) async fn queued_run(
         /*expected_tree_revision*/ 2,
     )
     .await;
+    let run_id = admit_run(store, &scope, &chapter_id, prefix, destination).await;
+    (scope, chapter_id, run_id)
+}
+
+/// Admits one queued AgentRun of a new conversation on `chapter_id`, in a deployment that offers
+/// `destination`. `prefix` gives the identities of the command and the Run.
+pub(crate) async fn admit_run(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    destination: DeploymentDestination,
+) -> String {
     let run = named_issue(
-        &scope,
+        scope,
         &format!("{prefix}5"),
         "POST",
         "/api/v1/projects/{project_id}/agent-runs",
@@ -312,17 +323,18 @@ pub(crate) async fn queued_run(
             candidate_target: None,
             conversation: ConversationSelection::New,
             author_message: "Help with this passage.".to_owned(),
-            chapter_id,
+            chapter_id: chapter_id.to_owned(),
             run_id: format!("018f0000-0000-7001-8000-00000004{prefix}6"),
             conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
+            destination,
         },
     );
     store
         .create_agent_run(&call.envelope, &call.input)
         .await
         .unwrap();
-    (scope, call.input.run_id)
+    call.input.run_id
 }
 
 pub(crate) async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {
