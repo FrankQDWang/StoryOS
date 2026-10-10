@@ -4,7 +4,7 @@ use storyos_application::DeclaredTarget;
 use storyos_core::{DecisionCandidate, ModelOutput, OutputPhase, ProseChangeCandidate};
 
 /// Text that satisfies the reply contract maps to its candidate, and other text to an Advisory.
-/// Core validation of the whole candidate decides whether it becomes the Agent Decision.
+/// Core validation of the complete candidate decides whether it becomes the Agent Decision.
 pub(crate) fn map_output(text: &str, targets: &[DeclaredTarget]) -> ModelOutput {
     let (candidate, prose_changes) = match contract_candidate(text, targets) {
         Some(mapped) => mapped,
