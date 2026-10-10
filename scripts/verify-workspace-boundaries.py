@@ -11,6 +11,7 @@ expected = [
     root / "crates/storyos-adapter-diagnostics/Cargo.toml",
     root / "crates/storyos-adapter-fake-destination/Cargo.toml",
     root / "crates/storyos-adapter-postgres/Cargo.toml",
+    root / "crates/storyos-adapter-volcengine-responses/Cargo.toml",
     root / "crates/storyos-application/Cargo.toml",
     root / "crates/storyos-contracts/Cargo.toml",
     root / "crates/storyos-core/Cargo.toml",

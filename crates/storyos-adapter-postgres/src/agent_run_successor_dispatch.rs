@@ -312,6 +312,7 @@ pub(crate) async fn finish_dispatched(
             .await
             .map_err(unavailable)?;
         return Ok(SuccessorWork::Retrieve(RetrieveRequest {
+            route: crate::model_registration::request_route(client, claim).await?,
             attempt: match existing {
                 Some(found) => RequestAttempt::Claimed(DispatchClaim {
                     model_attempt_id: found.get(0),

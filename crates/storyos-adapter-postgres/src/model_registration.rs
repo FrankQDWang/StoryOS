@@ -1,5 +1,49 @@
-use storyos_core::ModelRegistration;
+use storyos_application::{
+    ClaimedAgentRun, CompleteAgentRunError, CredentialReference, RequestRoute,
+};
+use storyos_core::{ModelAdapter, ModelRegistration};
 use tokio_postgres::Client;
+
+use crate::agent_run_work::complete_database_error;
+
+/// The adapter of the Registration that the claimed AgentRun pinned, and the Credential
+/// Reference of its use binding.
+pub(crate) async fn request_route(
+    client: &Client,
+    claim: &ClaimedAgentRun,
+) -> Result<RequestRoute, CompleteAgentRunError> {
+    let row = client
+        .query_one(
+            "SELECT registration.model_kind, binding.credential_reference
+               FROM storyos.agent_runs AS run
+               JOIN storyos.model_registration_revisions AS registration
+                 ON registration.model_registration_revision = run.model_registration_revision
+               JOIN storyos.project_external_use_binding_revisions AS binding
+                 ON (binding.owner_user_id, binding.project_id,
+                     binding.project_model_use_binding_revision) =
+                    (run.owner_user_id, run.project_id, run.project_model_use_binding_revision)
+              WHERE run.owner_user_id = $1::text::uuid
+                AND run.project_id = $2::text::uuid
+                AND run.run_id = $3::text::uuid",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(complete_database_error)?;
+    Ok(RequestRoute {
+        adapter: ModelAdapter::parse(row.get(/*idx*/ 0)).ok_or_else(|| {
+            CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+                "The Model Registration adapter is damaged",
+            )))
+        })?,
+        credential_reference: row
+            .get::<_, Option<String>>(/*idx*/ 1)
+            .map(CredentialReference),
+    })
+}
 
 /// Inserts one global Model Registration with its Capability Profile and head, if absent.
 pub(crate) async fn insert_model_registration(

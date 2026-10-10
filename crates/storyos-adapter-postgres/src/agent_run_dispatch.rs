@@ -184,6 +184,8 @@ impl ModelDispatchStore for PostgresProjectReader {
             };
             if run.status == "cancelled" {
                 return Ok(Some(StreamStop::Cancelled(CommittedCancellation {
+                    route: crate::model_registration::request_route(&transaction.client, claim)
+                        .await?,
                     model_attempt_id: dispatch.model_attempt_id.clone(),
                     response_reference: None,
                     abort_attempt: RequestAttempt::New,
