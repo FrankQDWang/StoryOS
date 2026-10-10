@@ -56,7 +56,11 @@ cleanup
 make release-package
 require_release_package
 prepare_server_database "$container"
-start_exact_dist_server
+if exact_dist_ai_disabled_journey "$test_file"; then
+  start_exact_dist_server ""
+else
+  start_exact_dist_server
+fi
 count=0
 while [ "$count" -lt "$load" ]; do
   yes >/dev/null &

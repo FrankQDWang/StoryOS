@@ -18,7 +18,8 @@ At `main` `7b131cee`, migration 0045 permits only the Contract-Faithful Fake Des
 
 - The deployment configuration gives the one model destination that the deployment offers. A production deployment offers a real destination. A development or test deployment can offer the Contract-Faithful Fake Destination.
 - The author does not select a destination, and no author-facing view shows the fake destination.
-- A Project uses the offered destination by default. The author does not do an enablement step. The author can still make assistance unavailable for a Project, and the manual editor stays usable (ADR 0040).
+- A Project uses the offered destination by default. The author does not do an enablement step.
+- The assistance query of a Project without a binding answers `404` with the problem code `assistance_not_bound` when the deployment offers a destination. It answers `404 resource_unavailable` when the deployment offers none. Thus the panel shows assistance as available only in the first case. The author can still make assistance unavailable for a Project, and the manual editor stays usable (ADR 0040).
 - The offered destination can be different from the destination of the current binding of a Project. Then the Host makes new records for the Project. These are a Processing Destination Identity with its evidence revision, a Project Destination Grant, a `ProjectExternalUseBindingRevision`, and a separate External Contract Compatibility Decision. Earlier records stay unchanged, and earlier AgentRuns keep the binding that they pinned.
 
 ### Two credential sources

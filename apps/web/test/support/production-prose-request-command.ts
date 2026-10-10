@@ -62,10 +62,28 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     assert.ok(projectId !== null && UUID.test(projectId), `Project id: ${projectId}`);
     await page.locator('[data-assistant-availability="unavailable"]').waitFor();
     assert.equal(await page.locator(".composer button").isDisabled(), true);
+    await page.locator("[data-add-chapter]").click();
+    await page.locator("[data-create-volume-action]").click();
+    await page.locator('input[name="volume-title"]').fill("Request Volume");
+    await page.locator('input[name="volume-title"]').press("Enter");
+    await page.locator("[data-add-chapter]").click();
+    await page.locator('[data-chapter-placement="append"]').click();
+    await page.locator('input[name="chapter-title"]').fill("Request Chapter");
+    await page.locator('input[name="chapter-title"]').press("Enter");
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    assert.equal((await page.goto(`${origin}/projects/${projectId}`))?.status(), 200);
+    const editor = page.locator('[data-manuscript-editor][contenteditable="true"]');
+    await editor.waitFor();
+    const chapterId = await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]')
+      .getAttribute("data-chapter-id");
+    assert.ok(chapterId !== null && UUID.test(chapterId));
+    // A Project without a binding uses the destination that the deployment offers (ADR 0048).
+    await page.locator('[data-assistant-availability="available"]').waitFor();
     const fetchImpl = sessionFetch(origin, "session-a");
     const options = { baseUrl: origin, projectId, fetchImpl };
     await assert.rejects(() => getProjectAssistance(options), (error) =>
-      error instanceof StoryOSProtocolError && error.status === 404);
+      error instanceof StoryOSProtocolError && error.status === 404
+        && (JSON.parse(String(error.responseBody)) as { code?: string }).code === "assistance_not_bound");
     const request: UpdateProjectAssistanceRequest = {
       command_schema: "storyos.command.update-project-assistance.request.v1",
       update_project_assistance_input: {
@@ -91,22 +109,6 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       ...options, request, idempotencyKey, antiForgery: challenge.nonce,
     });
     assert.equal(enabled.assistance.availability, "available");
-    await page.locator("[data-add-chapter]").click();
-    await page.locator("[data-create-volume-action]").click();
-    await page.locator('input[name="volume-title"]').fill("Request Volume");
-    await page.locator('input[name="volume-title"]').press("Enter");
-    await page.locator("[data-add-chapter]").click();
-    await page.locator('[data-chapter-placement="append"]').click();
-    await page.locator('input[name="chapter-title"]').fill("Request Chapter");
-    await page.locator('input[name="chapter-title"]').press("Enter");
-    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
-    assert.equal((await page.goto(`${origin}/projects/${projectId}`))?.status(), 200);
-    const editor = page.locator('[data-manuscript-editor][contenteditable="true"]');
-    await editor.waitFor();
-    const chapterId = await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]')
-      .getAttribute("data-chapter-id");
-    assert.ok(chapterId !== null && UUID.test(chapterId));
-    await page.locator('[data-assistant-availability="available"]').waitFor();
     await page.locator('[name="assistant-message"]').waitFor();
     await editor.click();
     await page.keyboard.insertText("The lantern went dark.");

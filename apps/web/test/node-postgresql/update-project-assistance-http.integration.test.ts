@@ -143,7 +143,7 @@ test("project assistance prepares the host fake binding without a run", async ()
     };
     await assert.rejects(
       () => getProjectAssistance({ baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl }),
-      (error) => requireStoryOSProtocolError(error).status === 404,
+      (error) => requireStoryOSProtocolError(error).status === 404 && problemCode(error) === "assistance_not_bound",
     );
     const absentRequest = assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a2f");
     const absentKey = "018f0000-0000-7001-8000-000000000a20";
@@ -315,6 +315,10 @@ test("project assistance prepares the host fake binding without a run", async ()
       fetchImpl: restartedFetch,
     })).assistance, toggled.updated.assistance);
     const unconfigured = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000a19", "Unconfigured Novel");
+    await assert.rejects(
+      () => getProjectAssistance({ baseUrl: started.baseUrl, projectId: unconfigured.projectId, fetchImpl: unconfigured.fetchImpl }),
+      (error) => requireStoryOSProtocolError(error).status === 404 && problemCode(error) === "resource_unavailable",
+    );
     await assert.rejects(
       () => prepare(
         started.baseUrl,

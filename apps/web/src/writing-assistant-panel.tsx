@@ -129,9 +129,14 @@ function runFromActivity(body: string, ref: RequestReference): string | undefine
   return undefined;
 }
 
-/** A Project without a binding uses the deployment destination by default (ADR 0048). */
+/** A Project without a binding uses the destination that the deployment offers (ADR 0048). */
 function withoutBinding(error: unknown): boolean {
-  return error instanceof StoryOSProtocolError && error.status === 404;
+  if (!(error instanceof StoryOSProtocolError) || error.status !== 404) return false;
+  try {
+    return (JSON.parse(String(error.responseBody)) as { code?: unknown }).code === "assistance_not_bound";
+  } catch {
+    return false;
+  }
 }
 
 function resultText(run: GetAgentRunResponse): string | undefined {

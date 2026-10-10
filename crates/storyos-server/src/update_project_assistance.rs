@@ -29,7 +29,15 @@ pub(super) async fn get_project_assistance(
         .await
         .map_err(service_unavailable)?
     else {
-        return Err(resource_unavailable());
+        // A Project without a binding uses the deployment destination by default (ADR 0048).
+        return Err(match state.config.model_destination {
+            Some(_) => problem(
+                StatusCode::NOT_FOUND,
+                "assistance_not_bound",
+                "The Project has no assistance binding yet.",
+            ),
+            None => resource_unavailable(),
+        });
     };
     Ok(Json(contracts::GetProjectAssistanceResponse {
         schema_id: contracts::GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID.to_owned(),
