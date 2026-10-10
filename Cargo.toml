@@ -23,6 +23,8 @@ jsonschema = { version = "=0.50.1", default-features = false }
 mime = "=0.3.17"
 # The repository tool crate storyos-literal-guard alone uses proc-macro2 and syn.
 proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
+# ADR 0039: only storyos-adapter-volcengine-responses uses an HTTP client and TLS.
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls"] }
 schemars = "=1.2.2"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"

@@ -3,7 +3,8 @@
 use std::future::Future;
 
 use storyos_core::{
-    ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution, RetrievalBounds,
+    ContextSourceClass, ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
+    RetrievalBounds,
 };
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
@@ -34,12 +35,25 @@ impl DestinationRequest {
     }
 }
 
-/// The adapter of the Model Registration that the AgentRun pinned, and the Credential Reference
-/// of its use binding.
+/// The adapter and exact model of the Model Registration that the AgentRun pinned, and the
+/// endpoint, Credential Reference, and request bounds of its use binding.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RequestRoute {
     pub adapter: ModelAdapter,
+    pub provider_model_id: String,
+    /// The endpoint of the Processing Destination Identity evidence. The fake has none.
+    pub endpoint: Option<String>,
     pub credential_reference: Option<CredentialReference>,
+    /// `None` is an unknown bound, which blocks a real request.
+    pub bounds: Option<RequestBounds>,
+}
+
+/// The author-adopted bounds of one real destination request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RequestBounds {
+    /// The output token bound, reasoning tokens included.
+    pub max_output_tokens: u32,
+    pub timeout: std::time::Duration,
 }
 
 /// Whether a request still needs its dispatch claim.
@@ -60,12 +74,21 @@ pub struct CreateRequest {
     pub chapter_id: String,
     pub passage_resolution: Option<OrdinaryPassageResolution>,
     pub passage_input: Option<serde_json::Value>,
+    /// The selected items of the active decision Context Assembly, in order.
+    pub context: Vec<RequestContextItem>,
     pub declared_targets: Vec<DeclaredTarget>,
     pub candidate_revision: Option<String>,
     /// The destination reference of the prior response that an incremental continuation sends.
     pub previous_response_reference: Option<String>,
     /// The unknown predecessor Model Attempt that this one bounded successor replaces.
     pub successor_of: Option<String>,
+}
+
+/// One selected Context Assembly item that the request sends.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RequestContextItem {
+    pub source_class: ContextSourceClass,
+    pub content: String,
 }
 
 /// One admitted Proposal target that the request declares to the destination.
@@ -75,6 +98,8 @@ pub struct DeclaredTarget {
     pub block_id: String,
     pub base_revision_id: String,
     pub collection: bool,
+    /// The text of the block at its base revision.
+    pub block_text: String,
 }
 
 impl DeclaredTarget {
