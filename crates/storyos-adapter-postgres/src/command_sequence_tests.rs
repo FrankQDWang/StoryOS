@@ -46,6 +46,9 @@ mod undo;
 #[path = "command_sequence_tests/author_edit_tests.rs"]
 mod author_edit;
 
+#[path = "command_sequence_tests/secondary_operation_tests.rs"]
+mod secondary_operation;
+
 pub(crate) use structure::{
     create_chapter, create_volume, delete_chapter, delete_volume, update_chapter, update_volume,
 };

@@ -16,7 +16,8 @@ pub(super) struct LoadedProposal {
     pub(super) receipt_id: Option<String>,
     pub(super) receipt_result: Option<String>,
     pub(super) receipt_revision_id: Option<String>,
-    pub(super) receipt_candidate_text: Option<String>,
+    receipt_block_id: Option<String>,
+    receipt_candidate_text: Option<String>,
     pub(super) current_head_revision_id: Option<String>,
     pub(super) validated_target_matches_head: bool,
     kind: String,
@@ -37,6 +38,21 @@ pub(super) struct LoadedOperation {
 }
 
 impl LoadedProposal {
+    /// The Validation Receipt identifies the current candidate of its Block: the candidate of the
+    /// Operation of that Block, or else the candidate of the Revision.
+    pub(super) fn candidate_unaltered(&self) -> bool {
+        let current = self
+            .operations
+            .iter()
+            .find(|operation| {
+                Some(&operation.manuscript_block_id) == self.receipt_block_id.as_ref()
+            })
+            .map_or(self.candidate_text.as_str(), |operation| {
+                operation.candidate_text.as_str()
+            });
+        self.receipt_candidate_text.as_deref() == Some(current)
+    }
+
     pub(super) fn accepted_body(
         &self,
         selected_ids: &[String],
@@ -145,7 +161,8 @@ pub(super) async fn load_proposal(
                       AND revision.base_authoritative_revision_id = chapter_head.current_revision_id, false),
                     proposal.kind, convert_from(payload.canonical_bytes, 'UTF8'),
                     proposal.manuscript_block_id::text, anchor.range_from, anchor.range_to,
-                    anchor.base_slice_digest, proposal.bundle_policy
+                    anchor.base_slice_digest, proposal.bundle_policy,
+                    receipt.manuscript_block_id::text
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -233,6 +250,7 @@ pub(super) async fn load_proposal(
         receipt_id: row.get(/*idx*/ 5),
         receipt_result: row.get(/*idx*/ 6),
         receipt_revision_id: row.get(/*idx*/ 7),
+        receipt_block_id: row.get(/*idx*/ 19),
         receipt_candidate_text: row.get(/*idx*/ 8),
         current_head_revision_id,
         validation_current: row.get(/*idx*/ 10),
