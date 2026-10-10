@@ -312,6 +312,29 @@ pub(crate) async fn admit_run(
     destination: DeploymentDestination,
     author_message: &str,
 ) -> String {
+    let conversation = ConversationSelection::New;
+    admit_run_in(
+        store,
+        scope,
+        chapter_id,
+        prefix,
+        destination,
+        author_message,
+        conversation,
+    )
+    .await
+}
+
+/// Admits one queued AgentRun of `conversation`, as `admit_run` does.
+pub(crate) async fn admit_run_in(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    destination: DeploymentDestination,
+    author_message: &str,
+    conversation: ConversationSelection,
+) -> String {
     let run = named_issue(
         scope,
         &format!("{prefix}5"),
@@ -330,7 +353,7 @@ pub(crate) async fn admit_run(
         CreateAgentRunInput {
             passage_targets: None,
             candidate_target: None,
-            conversation: ConversationSelection::New,
+            conversation,
             author_message: author_message.to_owned(),
             chapter_id: chapter_id.to_owned(),
             run_id: format!("018f0000-0000-7001-8000-00000004{prefix}6"),

@@ -1,13 +1,13 @@
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CredentialReference, RequestRoute,
 };
-use storyos_core::{ModelAdapter, ModelRegistration};
+use storyos_core::{BudgetBounds, ModelAdapter, ModelRegistration};
 use tokio_postgres::Client;
 
 use crate::agent_run_work::complete_database_error;
 
-/// The adapter and model of the Registration that the claimed AgentRun pinned, and the endpoint
-/// and Credential Reference of its use binding.
+/// The adapter and model of the Registration that the claimed AgentRun pinned, and the endpoint,
+/// Credential Reference, and request bounds of its use binding.
 pub(crate) async fn request_route(
     client: &Client,
     claim: &ClaimedAgentRun,
@@ -15,7 +15,7 @@ pub(crate) async fn request_route(
     let row = client
         .query_one(
             "SELECT registration.model_kind, binding.credential_reference,
-                    registration.provider_model_id, evidence.endpoint
+                    registration.provider_model_id, evidence.endpoint, binding.budget_bounds
                FROM storyos.agent_runs AS run
                JOIN storyos.model_registration_revisions AS registration
                  ON registration.model_registration_revision = run.model_registration_revision
@@ -50,7 +50,7 @@ pub(crate) async fn request_route(
         credential_reference: row
             .get::<_, Option<String>>(/*idx*/ 1)
             .map(CredentialReference),
-        bounds: None,
+        bounds: BudgetBounds::parse(row.get(/*idx*/ 4)).and_then(BudgetBounds::request_bounds),
     })
 }
 

@@ -190,6 +190,9 @@ fn contract_assistance(record: &ProjectAssistanceRecord) -> contracts::ProjectAs
         runtime_qualification: match record.runtime_qualification {
             RuntimeQualification::Qualified => contracts::ModelRuntimeQualification::Qualified,
             RuntimeQualification::Pending => contracts::ModelRuntimeQualification::Pending,
+            RuntimeQualification::QualificationAuthorized => {
+                contracts::ModelRuntimeQualification::QualificationAuthorized
+            }
         },
     }
 }

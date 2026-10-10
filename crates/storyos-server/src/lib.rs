@@ -157,25 +157,46 @@ pub struct ServerConfig {
 
 pub const MODEL_DESTINATION_VARIABLE: &str = "STORYOS_MODEL_DESTINATION";
 pub const MODEL_CREDENTIAL_REFERENCE_VARIABLE: &str = "STORYOS_MODEL_CREDENTIAL_REFERENCE";
+pub const MODEL_QUALIFICATION_AUTHORIZATION_VARIABLE: &str =
+    "STORYOS_MODEL_QUALIFICATION_AUTHORIZATION";
+
+/// The model destination variables of the deployment configuration.
+pub struct ModelDestinationConfig<'a> {
+    pub destination: Option<&'a str>,
+    pub credential_reference: Option<String>,
+    /// The `https` link to the author authorization of the runtime qualification (ADR 0049).
+    pub qualification_authorization: Option<String>,
+}
 
 /// Reads the deployment model destination (ADR 0048). An absent value offers no assistance.
 pub fn model_destination(
-    destination: Option<&str>,
-    credential_reference: Option<String>,
+    config: ModelDestinationConfig<'_>,
 ) -> Result<Option<storyos_core::DeploymentDestination>, &'static str> {
-    match (destination, credential_reference) {
-        (None, None) => Ok(None),
-        (Some("host_fake"), None) => Ok(Some(storyos_core::DeploymentDestination::HostFake)),
-        (Some("volcengine_agent_plan"), Some(credential_reference))
-            if !credential_reference.is_empty() =>
+    let invalid = "The model destination configuration is invalid";
+    match (
+        config.destination,
+        config.credential_reference,
+        config.qualification_authorization,
+    ) {
+        (None, None, None) => Ok(None),
+        (Some("host_fake"), None, None) => Ok(Some(storyos_core::DeploymentDestination::HostFake)),
+        (
+            Some("volcengine_agent_plan"),
+            Some(credential_reference),
+            qualification_authorization,
+        ) if !credential_reference.is_empty()
+            && qualification_authorization.as_deref().is_none_or(|link| {
+                link.starts_with("https://") && (9..=500).contains(&link.len())
+            }) =>
         {
             Ok(Some(
                 storyos_core::DeploymentDestination::VolcengineAgentPlan {
                     credential_reference,
+                    qualification_authorization,
                 },
             ))
         }
-        _ => Err("The model destination configuration is invalid"),
+        _ => Err(invalid),
     }
 }
 

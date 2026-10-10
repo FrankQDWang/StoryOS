@@ -4,8 +4,8 @@ use storyos_application::{
     ProjectScope, RequestAttempt, UserId,
 };
 use storyos_core::{
-    AssistanceAvailability, CreateAdmission as CoreCreateAdmission, CreateAdmissionFacts,
-    ModelAdapter, RouteFacts, stream_batch_plan,
+    AssistanceAvailability, BudgetBounds, CreateAdmission as CoreCreateAdmission,
+    CreateAdmissionFacts, ModelAdapter, RouteFacts, RuntimeQualification, stream_batch_plan,
 };
 use uuid::Uuid;
 
@@ -121,6 +121,7 @@ pub(crate) struct RunPhaseRow {
     pub model_registration_revision: String,
     pub binding_revision: String,
     pub registration_current: bool,
+    pub budget_bounds: String,
 }
 
 impl RunPhaseRow {
@@ -159,7 +160,13 @@ pub(crate) async fn load_run_phase(
                        WHERE registration.model_registration_revision =
                                run.model_registration_revision
                          AND head.model_registration_revision = run.model_registration_revision
-                    ) AS registration_current
+                    ) AS registration_current,
+                    (SELECT binding.budget_bounds
+                       FROM storyos.project_external_use_binding_revisions AS binding
+                      WHERE (binding.owner_user_id, binding.project_id,
+                             binding.project_model_use_binding_revision) =
+                            (run.owner_user_id, run.project_id,
+                             run.project_model_use_binding_revision)) AS budget_bounds
                FROM storyos.agent_runs AS run
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
@@ -203,6 +210,7 @@ pub(crate) async fn load_run_phase(
         model_registration_revision: row.get("model_registration_revision"),
         binding_revision: row.get("binding_revision"),
         registration_current: row.get("registration_current"),
+        budget_bounds: row.get("budget_bounds"),
     })
 }
 
@@ -222,6 +230,10 @@ pub(crate) fn route_facts<'a>(
             record.project_model_use_binding_revision == run.binding_revision
         }),
         registration_current: run.registration_current,
+        qualification: assistance.map_or(RuntimeQualification::Pending, |record| {
+            record.runtime_qualification
+        }),
+        budget_bounds: BudgetBounds::parse(&run.budget_bounds).unwrap_or(BudgetBounds::Unqualified),
     }
 }
 

@@ -1,6 +1,8 @@
 //! The Host decision before the dispatch claim of a new Create request.
 
-use crate::{CREATE_REQUIREMENT, ExecutionCapability, model_registration};
+use crate::{
+    BudgetBounds, CREATE_REQUIREMENT, ExecutionCapability, RuntimeQualification, model_registration,
+};
 
 /// The facts of one claimed AgentRun that Create admission examines.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,6 +22,10 @@ pub struct RouteFacts<'a> {
     pub binding_current: bool,
     /// The pinned Registration is still the head Registration of its adapter.
     pub registration_current: bool,
+    /// The qualification of the current compatibility Decision.
+    pub qualification: RuntimeQualification,
+    /// The request bounds of the pinned use binding.
+    pub budget_bounds: BudgetBounds,
 }
 
 /// Dispatch, or a refusal before the dispatch claim with its recorded capability reason.
@@ -60,15 +66,23 @@ pub fn admit_route(route: &RouteFacts<'_>) -> Result<(), &'static str> {
     if !route.registration_current {
         return Err("model_registration_drift");
     }
-    match model_registration(route.model_registration_revision) {
-        None => Err("model_registration_unknown"),
-        Some(registration)
-            if !registration
-                .capability_profile
-                .qualifies(CREATE_REQUIREMENT) =>
-        {
-            Err("model_runtime_qualification_pending")
-        }
-        Some(_) => Ok(()),
+    let Some(registration) = model_registration(route.model_registration_revision) else {
+        return Err("model_registration_unknown");
+    };
+    // An authorized qualification admits a pending profile, and does not report it as qualified.
+    if !registration
+        .capability_profile
+        .qualifies(CREATE_REQUIREMENT)
+        && route.qualification != RuntimeQualification::QualificationAuthorized
+    {
+        return Err("model_runtime_qualification_pending");
     }
+    if !route.budget_bounds.known() {
+        return Err("model_request_bounds_unknown");
+    }
+    Ok(())
 }
+
+#[cfg(test)]
+#[path = "create_admission_tests.rs"]
+mod tests;

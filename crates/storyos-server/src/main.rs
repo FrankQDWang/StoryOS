@@ -94,12 +94,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect::<Result<HashMap<_, _>, uuid::Error>>()?;
     let model_destination = or_exit(
-        storyos_server::model_destination(
-            env::var(storyos_server::MODEL_DESTINATION_VARIABLE)
+        storyos_server::model_destination(storyos_server::ModelDestinationConfig {
+            destination: env::var(storyos_server::MODEL_DESTINATION_VARIABLE)
                 .ok()
                 .as_deref(),
-            env::var(storyos_server::MODEL_CREDENTIAL_REFERENCE_VARIABLE).ok(),
-        ),
+            credential_reference: env::var(storyos_server::MODEL_CREDENTIAL_REFERENCE_VARIABLE)
+                .ok(),
+            qualification_authorization: env::var(
+                storyos_server::MODEL_QUALIFICATION_AUTHORIZATION_VARIABLE,
+            )
+            .ok(),
+        }),
         "model_destination",
     );
     let config = storyos_server::ServerConfig {
