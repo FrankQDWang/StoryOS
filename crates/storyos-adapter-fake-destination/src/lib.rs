@@ -9,7 +9,7 @@ use storyos_application::{
     Observation, PreDispatchRefusal, PreparedRequest, ResponseReference, StreamControl,
     WirePayloadProjection,
 };
-use storyos_core::HOST_FAKE_MAPPING_REVISION;
+use storyos_core::{HOST_FAKE_MAPPING_REVISION, ModelAdapter};
 
 const HOST_FAKE_EXECUTION_PROFILE: &str = "storyos.host-fake.execution.v1";
 
@@ -26,6 +26,7 @@ enum FakePlan {
 }
 
 impl ModelProviderAdapter for FakeDestination {
+    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::HostFake];
     type Prepared = FakeExchange;
 
     #[tracing::instrument(skip_all, level = "debug")]

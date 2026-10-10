@@ -3,7 +3,8 @@
 use std::convert::Infallible;
 
 use storyos_core::{
-    AssistanceAvailability, UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
+    AssistanceAvailability, DeploymentDestination, DestinationKind, RuntimeQualification,
+    UpdateProjectAssistanceApplied, UpdateProjectAssistanceConflict,
     UpdateProjectAssistanceNoEffect,
 };
 
@@ -19,6 +20,8 @@ pub struct ProjectAssistanceRecord {
     pub project_model_use_binding_revision: String,
     pub grant_id: String,
     pub external_compatibility_decision: String,
+    pub destination: DestinationKind,
+    pub runtime_qualification: RuntimeQualification,
 }
 
 /// One author request to make Project assistance available or unavailable.
@@ -27,6 +30,9 @@ pub struct UpdateProjectAssistanceInput {
     pub availability: AssistanceAvailability,
     /// Zero when the Project has no assistance binding yet.
     pub expected_revision: u64,
+    /// The destination that a first setting binds. The Host supplies it from its configuration.
+    /// `None` refuses a first setting, and an exact retry still replays its acknowledgement.
+    pub destination: Option<DeploymentDestination>,
 }
 
 /// The Command-response Project and the Project assistance record after the writes.

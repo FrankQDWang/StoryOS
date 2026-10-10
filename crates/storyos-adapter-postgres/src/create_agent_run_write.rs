@@ -178,10 +178,15 @@ async fn insert_queued_run(
             "INSERT INTO storyos.agent_runs
                (owner_user_id, project_id, run_id, project_agent_id, conversation_id,
                 memory_settings_revision, grant_id, project_model_use_binding_revision,
-                chapter_id, author_message, status, receipt_id)
+                chapter_id, author_message, status, receipt_id, model_registration_revision)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, $10, 'queued', $11::text::uuid)",
+                     $9::text::uuid, $10, 'queued', $11::text::uuid,
+                     (SELECT binding.model_registration_revision
+                        FROM storyos.project_external_use_binding_revisions AS binding
+                       WHERE binding.owner_user_id = $1::text::uuid
+                         AND binding.project_id = $2::text::uuid
+                         AND binding.project_model_use_binding_revision = $8::text::uuid))",
             &[
                 &envelope.project_scope.owner_user_id.as_ref(),
                 &envelope.project_scope.project_id.as_ref(),

@@ -7,6 +7,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "crates/storyos-adapter-diagnostics",
     "crates/storyos-adapter-fake-destination",
     "crates/storyos-adapter-postgres",
+    "crates/storyos-adapter-volcengine-responses",
     "crates/storyos-application",
     "crates/storyos-contracts",
     "crates/storyos-core",

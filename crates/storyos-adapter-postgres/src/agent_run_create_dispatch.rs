@@ -149,6 +149,7 @@ pub(crate) async fn create_request(
         });
     Ok(CreateRequest {
         attempt,
+        route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
         chapter_id: run.chapter_id.clone(),
         passage_resolution,

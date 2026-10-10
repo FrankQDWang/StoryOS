@@ -9,16 +9,19 @@ mod archive_zip;
 mod assemble_context;
 mod compact_active_context;
 mod continuation_input;
+mod create_admission;
 mod create_agent_run;
 mod create_chapter;
 mod create_project;
 mod create_volume;
 mod delete_chapter;
 mod delete_volume;
+mod deployment_destination;
 mod draft_retry;
 mod expand_refused_edit_draft;
 mod host_fake_profile;
 mod model_output;
+mod model_registration;
 mod rebuild_expired_reference;
 mod retrieve_original_result;
 mod unknown_create_successor;
@@ -98,6 +101,9 @@ pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
     continuation_boundary_matches, continuation_mapping_can_represent, map_continuation_input,
 };
+pub use create_admission::{
+    CreateAdmission, CreateAdmissionFacts, RouteFacts, admit_create, admit_route,
+};
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
     CreateAgentRunOutcome, CreateAgentRunRefusal, create_agent_run,
@@ -122,6 +128,10 @@ pub use delete_volume::{
     DeleteVolumeRefusal, DeleteVolumeResult, VolumeChildPolicy, VolumeRemovalLifecycle,
     delete_volume,
 };
+pub use deployment_destination::{
+    AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_ELIGIBILITY_EVIDENCE, AGENT_PLAN_ENDPOINT,
+    DeploymentDestination, DestinationKind, RuntimeQualification,
+};
 pub use host_fake_profile::{
     ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
     INLINE_PROSE_CHANGE_TEXT, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT,
@@ -136,6 +146,12 @@ pub use manuscript_payload::{
 pub use model_output::{
     AgentDecisionKind, AgentDecisionOutcome, DecisionCandidate, ModelOutput, NativeStreamItem,
     OutputPhase, StreamItemRole, StreamItemState, validate_agent_decision,
+};
+pub use model_registration::{
+    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_REGISTRATION, CREATE_REQUIREMENT,
+    CapabilityCombination, CapabilityEntries, CapabilityEvidence, HOST_FAKE_CAPABILITY_PROFILE,
+    HOST_FAKE_REGISTRATION, ModelAdapter, ModelCapability, ModelCapabilityProfile,
+    ModelRegistration, model_registration,
 };
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,

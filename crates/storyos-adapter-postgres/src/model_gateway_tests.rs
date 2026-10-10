@@ -9,8 +9,8 @@ use storyos_application::{
     complete_agent_run, issue_project_command_challenge,
 };
 use storyos_core::{
-    AssistanceAvailability, DecisionCandidate, ModelOutput, NativeStreamItem, OutputPhase,
-    StreamItemRole, StreamItemState,
+    AssistanceAvailability, DecisionCandidate, DeploymentDestination, ModelOutput,
+    NativeStreamItem, OutputPhase, StreamItemRole, StreamItemState,
 };
 use tokio_postgres::{Client, NoTls};
 
@@ -24,14 +24,14 @@ const CHAPTER_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter 
 
 /// The durable dispatch evidence of one AgentRun.
 #[derive(Debug, PartialEq)]
-struct DispatchEvidence {
-    status: String,
-    settlement: Option<String>,
-    model_attempts: i64,
-    disclosure_events: i64,
-    destination_manifests: i64,
-    items: Option<String>,
-    decision_id: Option<String>,
+pub(crate) struct DispatchEvidence {
+    pub(crate) status: String,
+    pub(crate) settlement: Option<String>,
+    pub(crate) model_attempts: i64,
+    pub(crate) disclosure_events: i64,
+    pub(crate) destination_manifests: i64,
+    pub(crate) items: Option<String>,
+    pub(crate) decision_id: Option<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -67,6 +67,7 @@ struct ProbingDestination<'a> {
 }
 
 impl ModelProviderAdapter for ProbingDestination<'_> {
+    const ADAPTERS: &'static [storyos_core::ModelAdapter] = FakeDestination::ADAPTERS;
     type Prepared = <FakeDestination as ModelProviderAdapter>::Prepared;
 
     async fn prepare(
@@ -203,6 +204,44 @@ async fn claimed_run(
     admin: &Client,
     prefix: &str,
 ) -> ClaimedAgentRun {
+    let (scope, _, run_id) = queued_run(store, prefix, DeploymentDestination::HostFake).await;
+    claim_run(admin, scope, run_id).await
+}
+
+/// Claims one queued AgentRun with a known fence and an expired lease.
+pub(crate) async fn claim_run(
+    admin: &Client,
+    scope: ProjectScope,
+    run_id: String,
+) -> ClaimedAgentRun {
+    let fence_token = admin
+        .query_one(
+            "UPDATE storyos.agent_runs
+                SET claim_generation = claim_generation + 1,
+                    fence_token = claim_generation + 1,
+                    lease_expires_at = clock_timestamp(),
+                    status = 'claimed'
+              WHERE run_id = $1::text::uuid
+          RETURNING fence_token",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    ClaimedAgentRun {
+        project_scope: scope,
+        run_id,
+        fence_token,
+    }
+}
+
+/// Admits one queued AgentRun on a new chapter of a new Project with fake assistance, in a
+/// deployment that offers `destination`.
+pub(crate) async fn queued_run(
+    store: &PostgresProjectReader,
+    prefix: &str,
+    destination: DeploymentDestination,
+) -> (ProjectScope, String, String) {
     let scope: ProjectScope = seed_project(store, &format!("{prefix}0")).await;
     let assistance = named_issue(
         &scope,
@@ -224,6 +263,7 @@ async fn claimed_run(
         UpdateProjectAssistanceInput {
             availability: AssistanceAvailability::Available,
             expected_revision: 0,
+            destination: Some(DeploymentDestination::HostFake),
         },
     );
     store
@@ -250,8 +290,30 @@ async fn claimed_run(
         /*expected_tree_revision*/ 2,
     )
     .await;
-    let run = named_issue(
+    let run_id = admit_run(
+        store,
         &scope,
+        &chapter_id,
+        prefix,
+        destination,
+        "Help with this passage.",
+    )
+    .await;
+    (scope, chapter_id, run_id)
+}
+
+/// Admits one queued AgentRun of a new conversation on `chapter_id`, in a deployment that offers
+/// `destination`. `prefix` gives the identities of the command and the Run.
+pub(crate) async fn admit_run(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    chapter_id: &str,
+    prefix: &str,
+    destination: DeploymentDestination,
+    author_message: &str,
+) -> String {
+    let run = named_issue(
+        scope,
         &format!("{prefix}5"),
         "POST",
         "/api/v1/projects/{project_id}/agent-runs",
@@ -269,39 +331,22 @@ async fn claimed_run(
             passage_targets: None,
             candidate_target: None,
             conversation: ConversationSelection::New,
-            author_message: "Help with this passage.".to_owned(),
-            chapter_id,
+            author_message: author_message.to_owned(),
+            chapter_id: chapter_id.to_owned(),
             run_id: format!("018f0000-0000-7001-8000-00000004{prefix}6"),
             conversation_id: format!("018f0000-0000-7001-8000-00000006{prefix}6"),
             project_agent_id: format!("018f0000-0000-7001-8000-00000005{prefix}6"),
+            destination: Some(destination),
         },
     );
     store
         .create_agent_run(&call.envelope, &call.input)
         .await
         .unwrap();
-    let fence_token = admin
-        .query_one(
-            "UPDATE storyos.agent_runs
-                SET claim_generation = claim_generation + 1,
-                    fence_token = claim_generation + 1,
-                    lease_expires_at = clock_timestamp(),
-                    status = 'claimed'
-              WHERE run_id = $1::text::uuid
-          RETURNING fence_token",
-            &[&call.input.run_id],
-        )
-        .await
-        .unwrap()
-        .get(0);
-    ClaimedAgentRun {
-        project_scope: scope,
-        run_id: call.input.run_id,
-        fence_token,
-    }
+    call.input.run_id
 }
 
-async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {
+pub(crate) async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {
     let row = admin
         .query_one(
             "SELECT run.status, run.settlement::text,
@@ -333,7 +378,7 @@ async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {
     }
 }
 
-async fn stores() -> (PostgresProjectReader, Client) {
+pub(crate) async fn stores() -> (PostgresProjectReader, Client) {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")

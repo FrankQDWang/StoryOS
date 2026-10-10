@@ -1,7 +1,10 @@
 use storyos_application::{
     ProjectAssistanceRecord, UpdateProjectAssistanceInput, open_project_assistance,
 };
-use storyos_core::{AssistanceAvailability, TransitionOutcome, UpdateProjectAssistanceApplied};
+use storyos_core::{
+    AssistanceAvailability, DestinationKind, RuntimeQualification, TransitionOutcome,
+    UpdateProjectAssistanceApplied,
+};
 
 use super::command_admission::{
     BodyValidation, ProblemMapping, ProjectCommandRoute, RevisionMismatch, SchemaMismatch,
@@ -26,13 +29,27 @@ pub(super) async fn get_project_assistance(
         .await
         .map_err(service_unavailable)?
     else {
-        return Err(resource_unavailable());
+        // A Project without a binding uses the deployment destination by default (ADR 0048).
+        return Err(match state.config.model_destination {
+            Some(_) => problem(
+                StatusCode::NOT_FOUND,
+                "assistance_not_bound",
+                "The Project has no assistance binding yet.",
+            ),
+            None => resource_unavailable(),
+        });
     };
+    let mut assistance = contract_assistance(&assistance);
+    if state.config.model_destination.is_none() {
+        // A deployment without a destination refuses each new Run, so the query reports the
+        // effective availability. The stored records and the command replay do not change.
+        assistance.availability = contracts::ProjectAssistanceAvailability::Unavailable;
+    }
     Ok(Json(contracts::GetProjectAssistanceResponse {
         schema_id: contracts::GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: Uuid::now_v7().to_string(),
         project_scope: contract_scope(&scope),
-        assistance: contract_assistance(&assistance),
+        assistance,
     }))
 }
 
@@ -55,6 +72,7 @@ pub(super) async fn update_project_assistance(
     Path(project_id): Path<String>,
     request: Request,
 ) -> Result<Json<contracts::UpdateProjectAssistanceResponse>, ApiError> {
+    let destination = state.config.model_destination.clone();
     let admitted = admit(
         &state,
         &project_id,
@@ -77,6 +95,7 @@ pub(super) async fn update_project_assistance(
                     }
                 },
                 expected_revision,
+                destination: destination.clone(),
             })
         },
     )
@@ -162,6 +181,16 @@ fn contract_assistance(record: &ProjectAssistanceRecord) -> contracts::ProjectAs
             .to_string(),
         project_model_use_binding_revision: record.project_model_use_binding_revision.clone(),
         external_compatibility_decision: record.external_compatibility_decision.clone(),
+        destination: match record.destination {
+            DestinationKind::HostFake => contracts::ProjectModelDestination::HostFake,
+            DestinationKind::VolcengineAgentPlan => {
+                contracts::ProjectModelDestination::VolcengineAgentPlan
+            }
+        },
+        runtime_qualification: match record.runtime_qualification {
+            RuntimeQualification::Qualified => contracts::ModelRuntimeQualification::Qualified,
+            RuntimeQualification::Pending => contracts::ModelRuntimeQualification::Pending,
+        },
     }
 }
 

@@ -46,7 +46,11 @@ pub(crate) async fn pending(
         )
         .await
         .map_err(complete_database_error)?;
-    Ok(row.map(|row| CommittedCancellation {
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    Ok(Some(CommittedCancellation {
+        route: crate::model_registration::request_route(client, claim).await?,
         model_attempt_id: row.get(0),
         response_reference: row.get(2),
         abort_attempt: match row.get::<_, Option<String>>(1) {

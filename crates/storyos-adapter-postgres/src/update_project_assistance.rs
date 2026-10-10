@@ -5,12 +5,11 @@ use storyos_application::{
     ProjectScope, UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement,
 };
 use storyos_core::{
-    AssistanceAvailability, AssistanceBindingPresence,
+    AssistanceAvailability, AssistanceBindingPresence, DestinationKind, RuntimeQualification,
     UpdateProjectAssistance as CoreUpdateProjectAssistance, UpdateProjectAssistanceApplied,
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, update_project_assistance,
 };
 use tokio_postgres::Client;
-use uuid::Uuid;
 
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
@@ -19,9 +18,6 @@ use crate::command_sequence::{
     ProjectCommand, RateLimitedChallenge, ReplayEffect, settle_project_command, unavailable,
 };
 use crate::{PostgresProjectReader, read_error};
-
-pub(crate) const HOST_FAKE_MODEL_REGISTRATION_REVISION: &str =
-    "018f0000-0000-7001-8000-00000000fa01";
 
 impl PostgresProjectReader {
     /// Settles one Project assistance setting and keeps the assistance record for exact retry.
@@ -67,6 +63,10 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
         let current = read_assistance_record(client, &envelope.project_scope)
             .await
             .map_err(unavailable)?;
+        if current.is_none() && self.destination.is_none() {
+            // A deployment without a model destination has no assistance resource to set.
+            return Err(ProjectCommandError::MissingProject);
+        }
         let classified = update_project_assistance(&CoreUpdateProjectAssistance {
             binding: match &current {
                 None => AssistanceBindingPresence::Uninitialized,
@@ -97,14 +97,33 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
                 availability,
                 revision,
             } => {
-                initialize_host_fake_binding(client, envelope, availability, revision).await?;
+                let destination = self
+                    .destination
+                    .as_ref()
+                    .ok_or(ProjectCommandError::MissingProject)?;
+                let decision = crate::project_destination_binding::insert_destination_binding(
+                    client,
+                    envelope,
+                    destination,
+                )
+                .await
+                .map_err(unavailable)?;
+                insert_policy_revision(client, envelope, availability, revision, Some(&decision))
+                    .await?;
                 (availability, revision)
             }
             UpdateProjectAssistanceApplied::Changed {
                 availability,
                 revision,
             } => {
-                insert_policy_revision(client, envelope, availability, revision).await?;
+                insert_policy_revision(
+                    client,
+                    envelope,
+                    availability,
+                    revision,
+                    /*decision*/ None,
+                )
+                .await?;
                 (availability, revision)
             }
         };
@@ -147,26 +166,34 @@ pub(crate) async fn read_assistance_record(
             "SELECT policy.availability,
                     policy.policy_revision::text,
                     binding.model_registration_revision::text,
-                    identity.processing_destination_identity::text,
+                    evidence.processing_destination_identity::text,
                     evidence.evidence_revision::text,
                     binding.project_model_use_binding_revision::text,
                     binding.grant_id::text,
-                    decision.external_compatibility_decision::text
+                    decision.external_compatibility_decision::text,
+                    identity.destination_kind,
+                    decision.runtime_qualification
                FROM storyos.project_policy_revisions AS policy
-               JOIN storyos.processing_destination_identities AS identity
-                 ON (identity.owner_user_id, identity.project_id) =
-                    (policy.owner_user_id, policy.project_id)
+               JOIN storyos.external_contract_compatibility_decisions AS decision
+                 ON (decision.owner_user_id, decision.project_id,
+                     decision.external_compatibility_decision) =
+                    (policy.owner_user_id, policy.project_id,
+                     policy.external_compatibility_decision)
                JOIN storyos.project_external_use_binding_revisions AS binding
-                 ON (binding.owner_user_id, binding.project_id) =
-                    (policy.owner_user_id, policy.project_id)
+                 ON (binding.owner_user_id, binding.project_id,
+                     binding.project_model_use_binding_revision) =
+                    (decision.owner_user_id, decision.project_id,
+                     decision.project_model_use_binding_revision)
                JOIN storyos.processing_destination_identity_evidence_revisions AS evidence
                  ON (evidence.owner_user_id, evidence.project_id,
                      evidence.processing_destination_identity, evidence.evidence_revision) =
                     (binding.owner_user_id, binding.project_id,
                      binding.processing_destination_identity, binding.evidence_revision)
-               JOIN storyos.external_contract_compatibility_decisions AS decision
-                 ON (decision.owner_user_id, decision.project_id) =
-                    (policy.owner_user_id, policy.project_id)
+               JOIN storyos.processing_destination_identities AS identity
+                 ON (identity.owner_user_id, identity.project_id,
+                     identity.processing_destination_identity) =
+                    (evidence.owner_user_id, evidence.project_id,
+                     evidence.processing_destination_identity)
               WHERE policy.owner_user_id = $1::text::uuid
                 AND policy.project_id = $2::text::uuid
                 AND policy.policy_revision = (
@@ -193,135 +220,44 @@ pub(crate) async fn read_assistance_record(
         project_model_use_binding_revision: row.get(5),
         grant_id: row.get(6),
         external_compatibility_decision: row.get(7),
+        destination: DestinationKind::parse(row.get(/*idx*/ 8))
+            .ok_or_else(|| ProjectReadError::unavailable(damaged("destination kind")))?,
+        runtime_qualification: RuntimeQualification::parse(row.get(/*idx*/ 9))
+            .ok_or_else(|| ProjectReadError::unavailable(damaged("runtime qualification")))?,
     }))
 }
 
-async fn initialize_host_fake_binding(
-    client: &Client,
-    envelope: &ProjectCommandEnvelope,
-    availability: AssistanceAvailability,
-    revision: u64,
-) -> Result<(), ProjectCommandError> {
-    client
-        .execute(
-            "INSERT INTO storyos.model_registration_revisions
-               (model_registration_revision, model_kind)
-             VALUES ($1::text::uuid, 'host_fake')
-             ON CONFLICT (model_registration_revision) DO NOTHING",
-            &[&HOST_FAKE_MODEL_REGISTRATION_REVISION],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.model_registration_heads
-               (model_kind, model_registration_revision)
-             VALUES ('host_fake', $1::text::uuid)
-             ON CONFLICT (model_kind) DO NOTHING",
-            &[&HOST_FAKE_MODEL_REGISTRATION_REVISION],
-        )
-        .await
-        .map_err(unavailable)?;
-    let identity = Uuid::now_v7().to_string();
-    let grant_id = Uuid::now_v7().to_string();
-    let binding_revision = Uuid::now_v7().to_string();
-    let decision = Uuid::now_v7().to_string();
-    client
-        .execute(
-            "INSERT INTO storyos.processing_destination_identities
-               (owner_user_id, project_id, processing_destination_identity, destination_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'host_fake')",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &identity,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.processing_destination_identity_evidence_revisions
-               (owner_user_id, project_id, processing_destination_identity,
-                evidence_revision, evidence_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 1, 'host_fake_boundary')",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &identity,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.project_destination_grants
-               (owner_user_id, project_id, grant_id, processing_destination_identity, grant_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'host_fake_use')",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &grant_id,
-                &identity,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.project_external_use_binding_revisions
-               (owner_user_id, project_id, project_model_use_binding_revision,
-                processing_destination_identity, evidence_revision, grant_id,
-                model_registration_revision)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 1,
-                     $5::text::uuid, $6::text::uuid)",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &binding_revision,
-                &identity,
-                &grant_id,
-                &HOST_FAKE_MODEL_REGISTRATION_REVISION,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.external_contract_compatibility_decisions
-               (owner_user_id, project_id, external_compatibility_decision,
-                project_model_use_binding_revision, decision_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     'host_fake_compatible')",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &decision,
-                &binding_revision,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    insert_policy_revision(client, envelope, availability, revision).await
+fn damaged(field: &str) -> std::io::Error {
+    std::io::Error::other(format!("Project assistance {field} is damaged"))
 }
 
-async fn insert_policy_revision(
+/// Inserts the next policy revision. `None` keeps the compatibility Decision of the prior one.
+pub(crate) async fn insert_policy_revision(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
     availability: AssistanceAvailability,
     revision: u64,
+    decision: Option<&str>,
 ) -> Result<(), ProjectCommandError> {
     client
         .execute(
             "INSERT INTO storyos.project_policy_revisions
-               (owner_user_id, project_id, policy_revision, availability, receipt_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4, $5::text::uuid)",
+               (owner_user_id, project_id, policy_revision, availability, receipt_id,
+                external_compatibility_decision)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4, $5::text::uuid,
+                     COALESCE($6::text::uuid, (
+                       SELECT prior.external_compatibility_decision
+                         FROM storyos.project_policy_revisions AS prior
+                        WHERE prior.owner_user_id = $1::text::uuid
+                          AND prior.project_id = $2::text::uuid
+                          AND prior.policy_revision = $3::text::numeric - 1)))",
             &[
                 &envelope.project_scope.owner_user_id.as_ref(),
                 &envelope.project_scope.project_id.as_ref(),
                 &revision.to_string(),
                 &availability_text(availability),
                 &envelope.ids.receipt_id,
+                &decision,
             ],
         )
         .await

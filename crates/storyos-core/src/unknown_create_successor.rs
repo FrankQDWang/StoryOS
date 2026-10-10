@@ -192,7 +192,13 @@ pub fn decide_unknown_create_successor(
         return UnknownCreateSuccessorDecision::ProhibitedByCancellation;
     }
     if matches!(facts.allowance, SuccessorAllowance::ConsumedPendingDispatch) {
-        return UnknownCreateSuccessorDecision::ResumePendingDispatch;
+        return if facts.current_authority {
+            UnknownCreateSuccessorDecision::ResumePendingDispatch
+        } else {
+            UnknownCreateSuccessorDecision::Pause {
+                reason: SuccessorPauseReason::AuthorityUnavailable,
+            }
+        };
     }
     let reason = if !facts.current_authority {
         SuccessorPauseReason::AuthorityUnavailable

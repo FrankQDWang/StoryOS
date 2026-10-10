@@ -94,6 +94,24 @@ pub struct ProjectAssistanceBinding {
     pub processing_destination_identity_evidence_revision: String,
     pub project_model_use_binding_revision: String,
     pub external_compatibility_decision: String,
+    pub destination: ProjectModelDestination,
+    pub runtime_qualification: ModelRuntimeQualification,
+}
+
+/// The kind of the Processing Destination Identity of the current binding.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectModelDestination {
+    HostFake,
+    VolcengineAgentPlan,
+}
+
+/// Whether attributable runtime evidence qualifies the route of the current binding.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelRuntimeQualification {
+    Qualified,
+    Pending,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

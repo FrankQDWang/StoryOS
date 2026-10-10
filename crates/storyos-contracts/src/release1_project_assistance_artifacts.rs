@@ -7,12 +7,12 @@ use crate::release1_operation_registry::{
 use crate::release1_project_assistance::{
     GET_PROJECT_ASSISTANCE, GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
     GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID, GetProjectAssistanceResponse,
-    ProjectAssistanceAvailability, ProjectAssistanceBinding, UPDATE_PROJECT_ASSISTANCE,
-    UPDATE_PROJECT_ASSISTANCE_DIGEST_PROFILE, UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
-    UPDATE_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID, UpdateProjectAssistanceConflictReason,
-    UpdateProjectAssistanceEffect, UpdateProjectAssistanceInput,
-    UpdateProjectAssistanceNoEffectReason, UpdateProjectAssistanceRequest,
-    UpdateProjectAssistanceResponse,
+    ModelRuntimeQualification, ProjectAssistanceAvailability, ProjectAssistanceBinding,
+    ProjectModelDestination, UPDATE_PROJECT_ASSISTANCE, UPDATE_PROJECT_ASSISTANCE_DIGEST_PROFILE,
+    UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID, UPDATE_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
+    UpdateProjectAssistanceConflictReason, UpdateProjectAssistanceEffect,
+    UpdateProjectAssistanceInput, UpdateProjectAssistanceNoEffectReason,
+    UpdateProjectAssistanceRequest, UpdateProjectAssistanceResponse,
 };
 use crate::release1_wire::{U64_WIRE, generated_ref, json_bytes, schema_value};
 
@@ -183,8 +183,10 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ProjectAssistanceAvailability::decl(&config),
+        ProjectModelDestination::decl(&config),
+        ModelRuntimeQualification::decl(&config),
         ProjectAssistanceBinding::decl(&config),
         GetProjectAssistanceResponse::decl(&config),
         UpdateProjectAssistanceInput::decl(&config),
@@ -291,7 +293,9 @@ fn assistance_binding() -> Value {
         "processing_destination_identity": "018f0000-0000-7001-8000-000000000902",
         "processing_destination_identity_evidence_revision": "1",
         "project_model_use_binding_revision": "018f0000-0000-7001-8000-000000000903",
-        "external_compatibility_decision": "018f0000-0000-7001-8000-000000000904"
+        "external_compatibility_decision": "018f0000-0000-7001-8000-000000000904",
+        "destination": "volcengine_agent_plan",
+        "runtime_qualification": "pending"
     })
 }
 

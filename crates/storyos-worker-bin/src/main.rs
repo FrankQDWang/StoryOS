@@ -1,13 +1,19 @@
-//! The StoryOS Worker binary: the Worker loop with the PostgreSQL store and the fake adapter.
+//! The StoryOS Worker binary: the Worker loop with the PostgreSQL store, the fake and Agent Plan
+//! adapters, and the Keychain credential resolver.
 
 mod contract_fault_holds;
+mod keychain;
+mod registered_adapters;
 
 use std::env;
 
 use storyos_adapter_diagnostics::or_exit;
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_activation_proof};
+use storyos_adapter_volcengine_responses::AgentPlanResponses;
 use storyos_worker::ModelDestination;
+
+type WorkerAdapters = registered_adapters::RegisteredAdapters<keychain::KeychainResolver>;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -29,11 +35,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let store = PostgresProjectReader::new(database_url)
         .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl_from_env());
     if arguments.iter().any(|argument| argument == "--claim-only") {
-        or_exit(storyos_worker::claim_only(&store).await, "claim_only");
+        or_exit(
+            storyos_worker::claim_only::<WorkerAdapters>(&store).await,
+            "claim_only",
+        );
         std::process::exit(0);
     }
     let destination = ModelDestination {
-        adapter: FakeDestination,
+        adapter: WorkerAdapters {
+            fake: FakeDestination,
+            agent_plan: AgentPlanResponses {
+                resolver: keychain::KeychainResolver,
+            },
+        },
         observer: contract_fault_holds::ContractFaultHolds::from_env(),
     };
     if arguments.iter().any(|argument| argument == "--once") {
