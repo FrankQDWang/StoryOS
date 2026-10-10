@@ -54,10 +54,10 @@ pub(crate) async fn append_proposal_revision_as(
         .map_err(author_edit_database_error)?;
     let classification = open_block_proposal(&OpenBlockProposal {
         scope_matches: true,
-        target_block_present: facts.get(0),
+        target_block_present: facts.get(/*idx*/ 0),
         expected_base_revision_id: context.base_authoritative_revision_id.clone(),
         current_base_revision_id: Some(current_authoritative_revision_id.to_owned()),
-        conflicting_reservation: facts.get(1),
+        conflicting_reservation: facts.get(/*idx*/ 1),
     });
     let (validation, receipt_result) = match classification {
         storyos_core::OpenBlockProposalResult::Applied => ("valid", "valid"),
@@ -86,7 +86,12 @@ pub(crate) async fn append_proposal_revision_as(
         )
         .await
         .map_err(author_edit_database_error)?
-        .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)));
+        .map(|row| {
+            (
+                row.get::<_, String>(/*idx*/ 0),
+                row.get::<_, String>(/*idx*/ 1),
+            )
+        });
     if context.operation_id.is_some() && edited.is_none() {
         return Err(AuthorEditError::BindingConflict);
     }
