@@ -39,11 +39,17 @@ pub(super) async fn get_project_assistance(
             None => resource_unavailable(),
         });
     };
+    let mut assistance = contract_assistance(&assistance);
+    if state.config.model_destination.is_none() {
+        // A deployment without a destination refuses each new Run, so the query reports the
+        // effective availability. The stored records and the command replay do not change.
+        assistance.availability = contracts::ProjectAssistanceAvailability::Unavailable;
+    }
     Ok(Json(contracts::GetProjectAssistanceResponse {
         schema_id: contracts::GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: Uuid::now_v7().to_string(),
         project_scope: contract_scope(&scope),
-        assistance: contract_assistance(&assistance),
+        assistance,
     }))
 }
 

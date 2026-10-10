@@ -286,6 +286,16 @@ test("project assistance prepares the host fake binding without a run", async ()
     }
     assert.equal(await counts(), beforeRetries);
 
+    const bound = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000a16", "Bound Novel");
+    const boundInit = await prepare(
+      started.baseUrl,
+      bound.fetchImpl,
+      bound.projectId,
+      "018f0000-0000-7001-8000-000000000a15",
+      assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a14"),
+    );
+    assert.equal(boundInit.updated.assistance.availability, "available");
+
     await stopRealServer(started.server);
     started = await startStoryOSServer({
       repositoryRoot,
@@ -314,6 +324,11 @@ test("project assistance prepares the host fake binding without a run", async ()
       projectId: first.projectId,
       fetchImpl: restartedFetch,
     })).assistance, toggled.updated.assistance);
+    assert.deepEqual((await getProjectAssistance({
+      baseUrl: started.baseUrl,
+      projectId: bound.projectId,
+      fetchImpl: restartedFetch,
+    })).assistance, { ...boundInit.updated.assistance, availability: "unavailable" });
     const unconfigured = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000a19", "Unconfigured Novel");
     await assert.rejects(
       () => getProjectAssistance({ baseUrl: started.baseUrl, projectId: unconfigured.projectId, fetchImpl: unconfigured.fetchImpl }),
