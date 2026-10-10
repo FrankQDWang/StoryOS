@@ -259,3 +259,120 @@ async fn an_authorized_qualification_rebinds_and_dispatches_each_request_once_wi
         ]
     );
 }
+
+/// An Agent Plan adapter whose exchange cancels the AgentRun, as an author cancellation during
+/// the request does. It counts each refused Abort.
+struct CancellingAgentPlan<'a> {
+    admin: &'a Client,
+    run_id: String,
+    aborts: Mutex<usize>,
+}
+
+impl ModelProviderAdapter for CancellingAgentPlan<'_> {
+    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
+    type Prepared = ();
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<()>, PreDispatchRefusal> {
+        if let DestinationRequest::Abort(_) = request {
+            *self.aborts.lock().unwrap() += 1;
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        }
+        ScriptedAgentPlan::new(Observation::NotSubmitted)
+            .prepare(request)
+            .await
+    }
+
+    async fn exchange(&self, _prepared: (), _sink: &mut impl ModelStreamSink) -> Observation {
+        self.admin
+            .execute(
+                "UPDATE storyos.agent_runs
+                    SET status = 'cancelled', fence_token = fence_token + 1,
+                        lease_expires_at = NULL, wakeup_pending = true
+                  WHERE run_id = $1::text::uuid AND status = 'claimed'",
+                &[&self.run_id],
+            )
+            .await
+            .unwrap();
+        Observation::OutcomeUnknown {
+            response_reference: None,
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_cancelled_qualification_request_refuses_its_abort_once_before_dispatch() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, _, run_id) = queued_run(&store, "e9e", authorized()).await;
+    let adapter = CancellingAgentPlan {
+        admin: &admin,
+        run_id: run_id.clone(),
+        aborts: Mutex::default(),
+    };
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let fenced = complete_agent_run(&store, &adapter, &NoContractFaults, &claim).await;
+    let fence_token = admin
+        .query_one(
+            "UPDATE storyos.agent_runs
+                SET claim_generation = claim_generation + 1,
+                    fence_token = claim_generation + 1,
+                    lease_expires_at = clock_timestamp()
+              WHERE run_id = $1::text::uuid AND status = 'cancelled' AND wakeup_pending
+          RETURNING fence_token",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    let cancelled = storyos_application::ClaimedAgentRun {
+        fence_token,
+        ..claim
+    };
+    let settled = complete_agent_run(&store, &adapter, &NoContractFaults, &cancelled).await;
+    let row = admin
+        .query_one(
+            "SELECT run.status, run.wakeup_pending,
+                    (SELECT count(*) FROM storyos.model_attempts AS attempt
+                      WHERE attempt.run_id = run.run_id),
+                    decision.decision_id::text,
+                    decision.payload->>'cancellation_duties_refused'
+               FROM storyos.agent_runs AS run
+               JOIN storyos.model_attempts AS decision
+                 ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
+              WHERE run.run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        fenced,
+        Err(storyos_application::CompleteAgentRunError::StaleFence)
+    ));
+    assert_eq!(
+        (
+            settled.ok(),
+            *adapter.aborts.lock().unwrap(),
+            row.get::<_, String>(0),
+            row.get::<_, bool>(1),
+            row.get::<_, i64>(2),
+            row.get::<_, Option<String>>(3),
+            row.get::<_, Option<String>>(4),
+        ),
+        (
+            Some(storyos_application::CompleteAgentRun::AlreadySettled),
+            1,
+            "cancelled".to_owned(),
+            false,
+            1,
+            None,
+            Some("destination_request_unsupported".to_owned()),
+        )
+    );
+}
