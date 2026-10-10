@@ -146,6 +146,7 @@ mod list_projects;
 mod manuscript_block;
 mod manuscript_search;
 mod manuscript_tree;
+mod model_registration;
 mod open_block_proposal;
 mod open_inline_proposal;
 mod ordinary_passage_targets;

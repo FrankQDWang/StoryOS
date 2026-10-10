@@ -140,7 +140,9 @@ function resultText(run: GetAgentRunResponse): string | undefined {
     case "clarification":
       return run.decision.question;
     case "execution_refused":
-      return "本次请求未能执行。";
+      return run.decision.capability === "model_runtime_qualification_pending"
+        ? "真实模型还没有通过运行验证，暂时不能使用。你可以继续手动写作。"
+        : "本次请求未能执行。";
     case "absent":
       return undefined;
   }

@@ -1,10 +1,10 @@
 use super::*;
-use crate::update_project_assistance::HOST_FAKE_MODEL_REGISTRATION_REVISION;
 use storyos_application::{
     IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectCommandError, ProjectId,
     ProjectScope, UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement, UserId,
     issue_project_command_challenge, open_project_assistance,
 };
+use storyos_core::HOST_FAKE_REGISTRATION;
 use storyos_core::{
     AssistanceAvailability, TransitionOutcome, UpdateProjectAssistanceApplied,
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
@@ -178,7 +178,7 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
         .expect("initialized binding");
     assert_eq!(
         first_binding.model_registration_revision,
-        HOST_FAKE_MODEL_REGISTRATION_REVISION
+        HOST_FAKE_REGISTRATION.revision
     );
     assert_eq!(
         open_project_assistance(&store, &scope).await.unwrap(),
@@ -294,7 +294,7 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
                   WHERE project_id = $1::text::uuid),
                 (SELECT count(*) FROM storyos.project_policy_revisions
                   WHERE project_id = $1::text::uuid)",
-            &[&PROJECT, &HOST_FAKE_MODEL_REGISTRATION_REVISION],
+            &[&PROJECT, &HOST_FAKE_REGISTRATION.revision],
         )
         .await
         .unwrap();

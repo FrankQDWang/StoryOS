@@ -80,10 +80,10 @@ pub(super) async fn ready_partial_proposal(
              INSERT INTO storyos.agent_runs
                (owner_user_id, project_id, run_id, project_agent_id, conversation_id,
                 memory_settings_revision, grant_id, project_model_use_binding_revision,
-                chapter_id, author_message, status, receipt_id)
+                chapter_id, author_message, status, receipt_id, model_registration_revision)
              VALUES ('{owner}', '{project}', '{run}', '{agent}', '{conversation}',
                      '{memory}', '{grant}', '{binding}', '{chapter}', 'Continue',
-                     'paused', '{run_receipt}');
+                     'paused', '{run_receipt}', gen_random_uuid());
              INSERT INTO storyos.proposals
                (owner_user_id, project_id, proposal_id, kind, chapter_id, manuscript_block_id,
                 source_run_id, source_decision_id)

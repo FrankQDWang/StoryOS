@@ -29,7 +29,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let store = PostgresProjectReader::new(database_url)
         .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl_from_env());
     if arguments.iter().any(|argument| argument == "--claim-only") {
-        or_exit(storyos_worker::claim_only(&store).await, "claim_only");
+        or_exit(
+            storyos_worker::claim_only::<FakeDestination>(&store).await,
+            "claim_only",
+        );
         std::process::exit(0);
     }
     let destination = ModelDestination {

@@ -444,4 +444,4 @@ async fn commit_retrieve(
 
 #[cfg(test)]
 #[path = "model_gateway_tests.rs"]
-mod tests;
+pub(crate) mod tests;
