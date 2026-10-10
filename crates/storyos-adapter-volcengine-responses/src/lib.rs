@@ -128,7 +128,7 @@ async fn send(
     };
     let Ok(client) = reqwest::Client::builder()
         .http1_only()
-        .pool_max_idle_per_host(0)
+        .pool_max_idle_per_host(/*max*/ 0)
         .retry(reqwest::retry::never())
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()

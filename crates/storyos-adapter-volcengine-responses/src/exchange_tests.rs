@@ -117,7 +117,7 @@ fn route(endpoint: &str) -> RequestRoute {
         credential_reference: Some(CredentialReference("macos-keychain:s/a".to_owned())),
         bounds: Some(RequestBounds {
             max_output_tokens: 8192,
-            timeout: Duration::from_secs(1),
+            timeout: Duration::from_secs(/*secs*/ 1),
         }),
     }
 }
@@ -273,7 +273,7 @@ fn complete_text_maps_to_its_contract_candidate_and_other_text_to_an_advisory() 
             DecisionCandidate::Advisory {
                 text: text.to_owned(),
             },
-            None,
+            /*changes*/ None,
         )
     };
     let change = |block: &str, chapter: &str, base: &str| ProseChangeCandidate {

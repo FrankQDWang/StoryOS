@@ -38,7 +38,7 @@ fn create(adapter: ModelAdapter, reference: Option<&str>) -> DestinationRequest 
             credential_reference: reference.map(|value| CredentialReference(value.to_owned())),
             bounds: Some(RequestBounds {
                 max_output_tokens: 8192,
-                timeout: std::time::Duration::from_secs(180),
+                timeout: std::time::Duration::from_secs(/*secs*/ 180),
             }),
         },
         author_message: "Tighten this paragraph.".to_owned(),
