@@ -212,6 +212,7 @@
     {"pattern": "crates/storyos-worker-bin/*", "groups": ["database", "node-postgresql", "node-process-cut"]},
     {"pattern": "crates/storyos-adapter-diagnostics/*", "groups": ["database", "node-postgresql", "node-process-cut"]},
     {"pattern": "crates/storyos-adapter-fake-destination/*", "groups": ["database", "node-postgresql", "node-process-cut"]},
+    {"pattern": "crates/storyos-adapter-volcengine-responses/*", "groups": ["database", "node-postgresql", "node-process-cut"]},
     {"pattern": "crates/storyos-adapter-postgres/*", "groups": ["database", "node-postgresql", "node-process-cut"]},
     {"pattern": "crates/storyos-contracts/*", "groups": ["contracts", "node-contract", "browser-source", "node-postgresql"]},
     {"pattern": "crates/*/migrations/*", "groups": ["database", "node-postgresql"]},

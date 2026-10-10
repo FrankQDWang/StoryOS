@@ -53,7 +53,7 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
         project_id = self.claim.project_scope.project_id.diagnostic(),
         run_id = DiagnosticId(&self.claim.run_id).diagnostic(),
         request_kind = RequestKind(&request).diagnostic(),
-        adapter = std::any::type_name::<A>().diagnostic(),
+        adapter = request.route().adapter.kind().diagnostic(),
         observation = tracing::field::Empty,
         usage = tracing::field::Empty,
         input_tokens = tracing::field::Empty,

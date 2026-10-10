@@ -3,7 +3,10 @@ use storyos_application::{
     CompleteAgentRunError, DestinationRequest, DispatchClaim, ProjectId, ProjectReadError,
     ProjectScope, RequestAttempt, UserId,
 };
-use storyos_core::{ExecutionCapability, requested_execution_capability, stream_batch_plan};
+use storyos_core::{
+    AssistanceAvailability, CreateAdmission as CoreCreateAdmission, CreateAdmissionFacts,
+    ModelAdapter, RouteFacts, stream_batch_plan,
+};
 use uuid::Uuid;
 
 use crate::agent_run_create_dispatch::PriorContext;
@@ -12,7 +15,10 @@ use super::*;
 use crate::update_project_assistance::read_assistance_record;
 
 impl AgentRunWorkStore for PostgresProjectReader {
-    async fn claim_next_agent_run(&self) -> Result<Option<ClaimedAgentRun>, ProjectReadError> {
+    async fn claim_next_agent_run(
+        &self,
+        adapters: &[ModelAdapter],
+    ) -> Result<Option<ClaimedAgentRun>, ProjectReadError> {
         self.require_release1_storage_activation_proof()
             .await
             .map_err(ProjectReadError::unavailable)?;
@@ -21,7 +27,11 @@ impl AgentRunWorkStore for PostgresProjectReader {
         crate::export_work::set_worker_scope(&transaction).await?;
         let lease_seconds = i64::try_from(self.readable_export_lease_ttl.as_secs())
             .map_err(ProjectReadError::unavailable)?;
-        let claimed = claim_agent_run_row(&transaction, lease_seconds).await?;
+        let model_kinds = adapters
+            .iter()
+            .map(|adapter| adapter.kind())
+            .collect::<Vec<_>>();
+        let claimed = claim_agent_run_row(&transaction, lease_seconds, &model_kinds).await?;
         transaction.commit().await.map_err(read_error)?;
         Ok(claimed)
     }
@@ -34,16 +44,21 @@ pub(crate) enum WorkPhase {
     Abort(CommittedCancellation),
 }
 
+/// Claims the next AgentRun whose Model Registration binds one of `model_kinds`.
 async fn claim_agent_run_row(
     transaction: &tokio_postgres::Transaction<'_>,
     lease_seconds: i64,
+    model_kinds: &[&str],
 ) -> Result<Option<ClaimedAgentRun>, ProjectReadError> {
     let claimed = transaction
         .query_opt(
             "WITH next_work AS (
-               SELECT owner_user_id, project_id, run_id
+               SELECT run.owner_user_id, run.project_id, run.run_id
                  FROM storyos.agent_runs AS run
-                WHERE run.status = 'queued'
+                 JOIN storyos.model_registration_revisions AS registration
+                   ON registration.model_registration_revision = run.model_registration_revision
+                WHERE registration.model_kind = ANY($2::text[])
+                  AND (run.status = 'queued'
                    OR (
                      run.status = 'claimed'
                      AND run.claim_generation > 0
@@ -55,9 +70,9 @@ async fn claim_agent_run_row(
                      AND run.wakeup_pending
                      AND (run.lease_expires_at IS NULL
                           OR run.lease_expires_at <= clock_timestamp())
-                   )
+                   ))
                 ORDER BY run.status = 'cancelled', run.run_id
-                FOR UPDATE SKIP LOCKED
+                FOR UPDATE OF run SKIP LOCKED
                 LIMIT 1
              )
              UPDATE storyos.agent_runs AS run
@@ -75,7 +90,7 @@ async fn claim_agent_run_row(
                     run.project_id::text,
                     run.run_id::text,
                     run.fence_token",
-            &[&lease_seconds],
+            &[&lease_seconds, &model_kinds],
         )
         .await
         .map_err(read_error)?;
@@ -103,6 +118,9 @@ pub(crate) struct RunPhaseRow {
     pub attempt_payload: Option<String>,
     pub decision_position: String,
     pub assembly_payload: String,
+    pub model_registration_revision: String,
+    pub binding_revision: String,
+    pub registration_current: bool,
 }
 
 impl RunPhaseRow {
@@ -130,7 +148,18 @@ pub(crate) async fn load_run_phase(
                     attempt.continuation_binding_id::text AS continuation_id,
                     attempt.payload::text AS attempt_payload,
                     run.active_decision_position::text AS decision_position,
-                    assembly.payload::text AS assembly_payload
+                    assembly.payload::text AS assembly_payload,
+                    run.model_registration_revision::text AS model_registration_revision,
+                    run.project_model_use_binding_revision::text AS binding_revision,
+                    EXISTS (
+                      SELECT 1
+                        FROM storyos.model_registration_revisions AS registration
+                        JOIN storyos.model_registration_heads AS head
+                          ON head.model_kind = registration.model_kind
+                       WHERE registration.model_registration_revision =
+                               run.model_registration_revision
+                         AND head.model_registration_revision = run.model_registration_revision
+                    ) AS registration_current
                FROM storyos.agent_runs AS run
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
@@ -171,12 +200,29 @@ pub(crate) async fn load_run_phase(
         attempt_payload: row.get("attempt_payload"),
         decision_position: row.get("decision_position"),
         assembly_payload: row.get("assembly_payload"),
+        model_registration_revision: row.get("model_registration_revision"),
+        binding_revision: row.get("binding_revision"),
+        registration_current: row.get("registration_current"),
     })
 }
 
 pub(crate) enum CreateAdmission {
     Settled,
     Dispatch(Option<Box<crate::agent_run_expiry::RebuildDispatch>>),
+}
+
+/// The route that `run` pinned, compared with the current assistance record of its Project.
+pub(crate) fn route_facts<'a>(
+    run: &'a RunPhaseRow,
+    assistance: Option<&storyos_application::ProjectAssistanceRecord>,
+) -> RouteFacts<'a> {
+    RouteFacts {
+        model_registration_revision: &run.model_registration_revision,
+        binding_current: assistance.is_some_and(|record| {
+            record.project_model_use_binding_revision == run.binding_revision
+        }),
+        registration_current: run.registration_current,
+    }
 }
 
 /// Refuses a blocked or capability request before dispatch, or admits one new Model Attempt.
@@ -200,25 +246,18 @@ pub(crate) async fn admit_create(
         crate::agent_run_expiry::ExpiryAdmission::Settled => return Ok(CreateAdmission::Settled),
         crate::agent_run_expiry::ExpiryAdmission::Dispatch(rebuild) => rebuild,
     };
-    let capability = requested_execution_capability(&run.author_message);
-    let blocked = run.sufficiency != "complete"
-        || !matches!(
+    let admission = storyos_core::admit_create(&CreateAdmissionFacts {
+        author_message: &run.author_message,
+        context_complete: run.sufficiency == "complete",
+        assistance_available: matches!(
             assistance.map(|record| record.availability),
-            Some(storyos_core::AssistanceAvailability::Available)
-        );
-    if !blocked && capability.is_none() {
-        return Ok(CreateAdmission::Dispatch(rebuild));
-    }
-    let capability = match capability {
-        Some(ExecutionCapability::Tool) => "tool",
-        Some(ExecutionCapability::Mcp) => "mcp",
-        Some(ExecutionCapability::Research) => "research",
-        Some(ExecutionCapability::Embedding) => "embedding",
-        Some(ExecutionCapability::Memory) => "memory",
-        Some(ExecutionCapability::Skill) => "skill",
-        Some(ExecutionCapability::Subrun) => "subrun",
-        Some(ExecutionCapability::Eval) => "eval",
-        None => "blocked_context",
+            Some(AssistanceAvailability::Available)
+        ),
+        route: route_facts(run, assistance),
+    });
+    let capability = match admission {
+        CoreCreateAdmission::Dispatch => return Ok(CreateAdmission::Dispatch(rebuild)),
+        CoreCreateAdmission::Refuse(capability) => capability,
     };
     update_run(
         client,

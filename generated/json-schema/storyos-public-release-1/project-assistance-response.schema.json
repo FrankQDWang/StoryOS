@@ -1,5 +1,13 @@
 {
   "$defs": {
+    "ModelRuntimeQualification": {
+      "description": "Whether attributable runtime evidence qualifies the route of the current binding.",
+      "enum": [
+        "qualified",
+        "pending"
+      ],
+      "type": "string"
+    },
     "ProjectAssistanceAvailability": {
       "enum": [
         "available",
@@ -12,6 +20,9 @@
       "properties": {
         "availability": {
           "$ref": "#/$defs/ProjectAssistanceAvailability"
+        },
+        "destination": {
+          "$ref": "#/$defs/ProjectModelDestination"
         },
         "external_compatibility_decision": {
           "format": "uuid",
@@ -36,6 +47,9 @@
         "revision": {
           "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
           "type": "string"
+        },
+        "runtime_qualification": {
+          "$ref": "#/$defs/ModelRuntimeQualification"
         }
       },
       "required": [
@@ -45,9 +59,19 @@
         "processing_destination_identity",
         "processing_destination_identity_evidence_revision",
         "project_model_use_binding_revision",
-        "external_compatibility_decision"
+        "external_compatibility_decision",
+        "destination",
+        "runtime_qualification"
       ],
       "type": "object"
+    },
+    "ProjectModelDestination": {
+      "description": "The kind of the Processing Destination Identity of the current binding.",
+      "enum": [
+        "host_fake",
+        "volcengine_agent_plan"
+      ],
+      "type": "string"
     },
     "ProjectScope": {
       "additionalProperties": false,

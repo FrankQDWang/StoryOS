@@ -30,13 +30,14 @@ pub(super) async fn create_agent_run(
     Path(project_id): Path<String>,
     request: Request,
 ) -> Result<(StatusCode, Json<contracts::CreateAgentRunResponse>), ApiError> {
+    let destination = state.config.model_destination.clone();
     let admitted = admit(
         &state,
         &project_id,
         &[],
         request,
         &CREATE_AGENT_RUN,
-        create_agent_run_input,
+        |body: &contracts::CreateAgentRunRequest| create_agent_run_input(body, destination),
     )
     .await?;
     let message = &admitted.input.author_message;
@@ -89,6 +90,7 @@ pub(super) async fn create_agent_run(
 /// Validates the conversation and Working Target identities and allocates the new identities.
 fn create_agent_run_input(
     body: &contracts::CreateAgentRunRequest,
+    destination: Option<storyos_core::DeploymentDestination>,
 ) -> Result<CreateAgentRunInput, ApiError> {
     let input = &body.create_agent_run_input;
     let conversation_id = match &input.conversation {
@@ -144,6 +146,7 @@ fn create_agent_run_input(
         run_id: Uuid::now_v7().to_string(),
         conversation_id,
         project_agent_id: Uuid::now_v7().to_string(),
+        destination,
     })
 }
 

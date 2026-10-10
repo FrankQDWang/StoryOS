@@ -58,6 +58,7 @@ fn run_input(chapter_id: String) -> CreateAgentRunInput {
         run_id: Uuid::now_v7().to_string(),
         conversation_id: Uuid::now_v7().to_string(),
         project_agent_id: Uuid::now_v7().to_string(),
+        destination: Some(storyos_core::DeploymentDestination::HostFake),
     }
 }
 
@@ -79,6 +80,7 @@ pub(super) async fn create_agent_run_call(
     let assistance = UpdateProjectAssistanceInput {
         availability: AssistanceAvailability::Available,
         expected_revision: 0,
+        destination: Some(storyos_core::DeploymentDestination::HostFake),
     };
     let call = issued(
         store,
@@ -167,10 +169,11 @@ pub(super) async fn seed_run(admin: &Client, scope: &ProjectScope, run_id: &str,
                (owner_user_id, project_id, run_id, project_agent_id, conversation_id,
                 memory_settings_revision, grant_id, project_model_use_binding_revision,
                 chapter_id, author_message, status, receipt_id, lease_expires_at,
-                wakeup_pending)
+                wakeup_pending, model_registration_revision)
              VALUES ('{owner}', '{project}', '{run_id}', '{agent}', '{conversation}',
                      '{memory}', '{grant}', '{binding}', '{chapter}', 'Continue',
-                     '{status}', '{receipt}', now() + interval '1 minute', true);
+                     '{status}', '{receipt}', now() + interval '1 minute', true,
+                     gen_random_uuid());
              COMMIT;",
             owner = scope.owner_user_id.as_ref(),
             project = scope.project_id.as_ref(),
@@ -351,7 +354,7 @@ async fn a_create_agent_run_refusal_writes_no_row_and_a_missing_run_is_damaged()
     assert!(matches!(
         refused,
         Err(RefusableCommandError::RefusedBeforeAdmission(
-            CreateAgentRunRefusal::AssistanceUnavailable
+            CreateAgentRunRefusal::InvalidChapterJoin
         ))
     ));
     assert_eq!(request_rows(&admin, key).await, [0, 0, 0, 1]);

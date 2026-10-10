@@ -163,8 +163,8 @@ pub use model_gateway_ports::{
     DispatchClaim, DispatchRecord, ModelDispatchStore, ModelProviderAdapter, ModelResponse,
     ModelStreamSink, ModelUsage, NextDispatchWork, NoContractFaults, Observation,
     PreDispatchRefusal, PreparedRequest, ReferenceRetrieval, ReportedBinding, RequestAttempt,
-    ResolvedCredential, ResponseReference, RetrievePurpose, RetrieveRequest, StreamControl,
-    StreamStop, WirePayloadProjection,
+    RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose, RetrieveRequest,
+    StreamControl, StreamStop, WirePayloadProjection,
 };
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,

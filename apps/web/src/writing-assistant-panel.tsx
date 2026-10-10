@@ -129,6 +129,16 @@ function runFromActivity(body: string, ref: RequestReference): string | undefine
   return undefined;
 }
 
+/** A Project without a binding uses the destination that the deployment offers (ADR 0048). */
+function withoutBinding(error: unknown): boolean {
+  if (!(error instanceof StoryOSProtocolError) || error.status !== 404) return false;
+  try {
+    return (JSON.parse(String(error.responseBody)) as { code?: unknown }).code === "assistance_not_bound";
+  } catch {
+    return false;
+  }
+}
+
 function resultText(run: GetAgentRunResponse): string | undefined {
   switch (run.decision.kind) {
     case "advisory":
@@ -140,7 +150,9 @@ function resultText(run: GetAgentRunResponse): string | undefined {
     case "clarification":
       return run.decision.question;
     case "execution_refused":
-      return "本次请求未能执行。";
+      return run.decision.capability === "model_runtime_qualification_pending"
+        ? "真实模型还没有通过运行验证，暂时不能使用。你可以继续手动写作。"
+        : "本次请求未能执行。";
     case "absent":
       return undefined;
   }
@@ -191,8 +203,8 @@ export function WritingAssistantPanel({
           && response.project_scope.project_id === context.scope.project_id
           ? response.assistance.availability : "unavailable",
       );
-    }).catch(() => {
-      if (active) setAvailability("unavailable");
+    }).catch((error: unknown) => {
+      if (active) setAvailability(withoutBinding(error) ? "available" : "unavailable");
     });
     return () => { active = false; };
   }, [context?.baseUrl, context?.fetchImpl, context?.scope.owner_user_id, context?.scope.project_id]);
@@ -314,10 +326,14 @@ export function WritingAssistantPanel({
       const assistance = await getProjectAssistance({
         baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
         projectId: context.scope.project_id,
+      }).catch((error: unknown) => {
+        if (withoutBinding(error)) return undefined;
+        throw error;
       });
-      if (assistance.project_scope.owner_user_id !== context.scope.owner_user_id
-        || assistance.project_scope.project_id !== context.scope.project_id
-        || assistance.assistance.availability !== "available") {
+      if (assistance !== undefined
+        && (assistance.project_scope.owner_user_id !== context.scope.owner_user_id
+          || assistance.project_scope.project_id !== context.scope.project_id
+          || assistance.assistance.availability !== "available")) {
         setAvailability("unavailable");
         setStatus("写作助手当前不可用。你仍可以直接写作。");
         return;

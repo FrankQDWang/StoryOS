@@ -1,4 +1,5 @@
 use storyos_application::ProjectAssistanceRecord;
+use storyos_core::{DestinationKind, RuntimeQualification};
 
 use crate::command_response_project::COMMAND_RESPONSE_PROJECT_FORMAT;
 use crate::update_project_assistance::{availability_text, parse_availability, parse_u64};
@@ -25,6 +26,8 @@ pub(crate) fn encode_command_response_assistance(
             "project_model_use_binding_revision": record.project_model_use_binding_revision,
             "grant_id": record.grant_id,
             "external_compatibility_decision": record.external_compatibility_decision,
+            "destination": record.destination.as_str(),
+            "runtime_qualification": record.runtime_qualification.as_str(),
         })
         .to_string(),
     }
@@ -47,7 +50,7 @@ pub(crate) fn read_command_response_assistance(
         (Some(COMMAND_RESPONSE_ASSISTANCE_FORMAT), Some(payload)) => {
             let value: serde_json::Value = serde_json::from_str(payload).map_err(|_| ())?;
             let object = value.as_object().ok_or(())?;
-            if object.len() != 8 {
+            if object.len() != 10 {
                 return Err(());
             }
             let field = |name| {
@@ -74,6 +77,11 @@ pub(crate) fn read_command_response_assistance(
                     grant_id: field("grant_id")?.to_owned(),
                     external_compatibility_decision: field("external_compatibility_decision")?
                         .to_owned(),
+                    destination: DestinationKind::parse(field("destination")?).ok_or(())?,
+                    runtime_qualification: RuntimeQualification::parse(field(
+                        "runtime_qualification",
+                    )?)
+                    .ok_or(())?,
                 },
             )))
         }

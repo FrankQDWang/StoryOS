@@ -128,3 +128,16 @@ fn cancellation_and_spent_allowance_do_not_reset_or_duplicate() {
         UnknownCreateSuccessorDecision::ProhibitedByCancellation
     );
 }
+
+#[test]
+fn a_spent_allowance_pauses_when_current_authority_is_lost_before_dispatch() {
+    let mut pending = facts(UnknownCreateScript::Once);
+    pending.allowance = SuccessorAllowance::ConsumedPendingDispatch;
+    pending.current_authority = false;
+    assert_eq!(
+        decide_unknown_create_successor(&pending),
+        UnknownCreateSuccessorDecision::Pause {
+            reason: SuccessorPauseReason::AuthorityUnavailable,
+        }
+    );
+}

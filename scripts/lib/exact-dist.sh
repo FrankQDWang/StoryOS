@@ -10,6 +10,8 @@ web_root="$repository_root/target/release-package/web"
 canary_admin_url="postgres://postgres:wrong@127.0.0.1:1/postgres"
 exact_dist_server_pid=""
 exact_dist_server_log=""
+exact_dist_ai_disabled_pid=""
+exact_dist_ai_disabled_log=""
 
 require_release_package() {
   if [ ! -x "$storage_bin" ] || [ ! -x "$server_bin" ] || [ ! -x "$worker_bin" ]; then
@@ -58,38 +60,84 @@ reset_exact_dist_fixture() {
   reset_command_challenge_rate_windows "$1"
 }
 
-start_exact_dist_server() {
-  exact_dist_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
+# The Stage 2 AI-independent journeys run in a deployment that offers no model destination
+# (ADR 0048). The other journeys use a deployment that offers the Contract-Faithful Fake Destination.
+exact_dist_ai_disabled_journeys="test/browser-exact-dist/s2-jrn-001.integration.test.ts test/browser-exact-dist/s2-workspace.integration.test.ts"
+
+# Starts one packaged Server. $1 is its model destination; an empty value offers none.
+launch_exact_dist_server() {
+  launched_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
   stage1_user_id="018f0000-0000-7001-8000-000000000001"
-  STORYOS_WORKER=0 \
-  STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
-  STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
-  STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$stage1_user_id\"}" \
-  STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
-    "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" \
-    >"$exact_dist_server_log" 2>&1 &
-  exact_dist_server_pid=$!
+  (
+    if [ -n "$1" ]; then
+      export STORYOS_MODEL_DESTINATION="$1"
+    else
+      unset STORYOS_MODEL_DESTINATION
+    fi
+    exec env STORYOS_WORKER=0 \
+      STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
+      STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
+      STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$stage1_user_id\"}" \
+      STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
+      "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root"
+  ) >"$launched_log" 2>&1 &
+  launched_pid=$!
   attempt=0
-  while ! grep -q '^STORYOS_SERVER_URL=http://' "$exact_dist_server_log"; do
-    if ! kill -0 "$exact_dist_server_pid" >/dev/null 2>&1; then
-      cat "$exact_dist_server_log" >&2
+  while ! grep -q '^STORYOS_SERVER_URL=http://' "$launched_log"; do
+    if ! kill -0 "$launched_pid" >/dev/null 2>&1; then
+      cat "$launched_log" >&2
       echo "The StoryOS Server exited before the exact-dist journey" >&2
       exit 1
     fi
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 100 ]; then
-      cat "$exact_dist_server_log" >&2
+      cat "$launched_log" >&2
       echo "The StoryOS Server did not become ready for the exact-dist journey" >&2
       exit 1
     fi
     sleep 0.05
   done
-  STORYOS_DEV_SERVER=$(sed -n 's/^STORYOS_SERVER_URL=//p' "$exact_dist_server_log" | head -n 1)
+  launched_url=$(sed -n 's/^STORYOS_SERVER_URL=//p' "$launched_log" | head -n 1)
+}
+
+# Starts the exact-dist Server at STORYOS_DEV_SERVER. $1 is its model destination (default
+# host_fake); an empty value offers none.
+start_exact_dist_server() {
+  launch_exact_dist_server "${1-host_fake}"
+  exact_dist_server_log=$launched_log
+  exact_dist_server_pid=$launched_pid
+  STORYOS_DEV_SERVER=$launched_url
   export STORYOS_DEV_SERVER
+}
+
+# Starts a second Server without a model destination at STORYOS_AI_DISABLED_SERVER.
+start_ai_disabled_exact_dist_server() {
+  launch_exact_dist_server ""
+  exact_dist_ai_disabled_log=$launched_log
+  exact_dist_ai_disabled_pid=$launched_pid
+  STORYOS_AI_DISABLED_SERVER=$launched_url
+  export STORYOS_AI_DISABLED_SERVER
+}
+
+# Returns success when $1 is a Stage 2 AI-independent journey.
+exact_dist_ai_disabled_journey() {
+  # A POSIX shell function has no local variables, so this name must differ from each caller.
+  for ai_disabled_journey in $exact_dist_ai_disabled_journeys; do
+    case "$1" in
+      *"${ai_disabled_journey#test/browser-exact-dist/}") return 0 ;;
+    esac
+  done
+  return 1
 }
 
 # The cleanup trap of each caller also calls this function, so it must be idempotent.
 stop_exact_dist_server() {
+  if [ -n "$exact_dist_ai_disabled_pid" ]; then
+    kill "$exact_dist_ai_disabled_pid" >/dev/null 2>&1 || true
+    wait "$exact_dist_ai_disabled_pid" >/dev/null 2>&1 || true
+    exact_dist_ai_disabled_pid=""
+    rm -f "$exact_dist_ai_disabled_log"
+  fi
   if [ -n "$exact_dist_server_pid" ]; then
     kill "$exact_dist_server_pid" >/dev/null 2>&1 || true
     wait "$exact_dist_server_pid" >/dev/null 2>&1 || true

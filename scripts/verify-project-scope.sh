@@ -171,6 +171,7 @@ assert_packaged_server_refuses_bind() {
   STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
   STORYOS_BOOTSTRAP_SESSIONS="$gate_sessions" \
   STORYOS_CHALLENGE_SECRET="$gate_secret" \
+  STORYOS_MODEL_DESTINATION=host_fake \
   STORYOS_WORKER=1 \
     "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" >"$log" 2>&1 &
   pid=$!
@@ -213,6 +214,7 @@ assert_packaged_server_binds() {
   STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
   STORYOS_BOOTSTRAP_SESSIONS="$gate_sessions" \
   STORYOS_CHALLENGE_SECRET="$gate_secret" \
+  STORYOS_MODEL_DESTINATION=host_fake \
   STORYOS_WORKER=0 \
     "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" >"$log" 2>&1 &
   pid=$!
@@ -258,6 +260,7 @@ prove_bound_request_path_activation() {
   STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
   STORYOS_BOOTSTRAP_SESSIONS="$gate_sessions" \
   STORYOS_CHALLENGE_SECRET="$gate_secret" \
+  STORYOS_MODEL_DESTINATION=host_fake \
   STORYOS_WORKER=0 \
     "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" >"$log" 2>&1 &
   pid=$!
@@ -519,9 +522,24 @@ echo "Restoring the controlled Project fixture for S1-JRN-001"
 reset_exact_dist_fixture "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
 start_exact_dist_server
-# The authority oracle compares the receipts of the complete exact-dist suite.
+start_ai_disabled_exact_dist_server
+# The authority oracle compares the receipts of the exact-dist journeys of the fake destination.
+# The Stage 2 AI-independent journeys run first, without a model destination and the oracle.
 export STORYOS_STAGE1_AUTHORITY_ORACLE=1
-timed_stage exact-dist -- pnpm --dir apps/web exec vitest run --project browser-exact-dist
+# The vitest --exclude option does not apply to a workspace project, so the second run names its files.
+journeys=""
+for path in apps/web/test/browser-exact-dist/*.test.ts; do
+  journey=${path#apps/web/}
+  exact_dist_ai_disabled_journey "$journey" || journeys="$journeys $journey"
+done
+# shellcheck disable=SC2086
+timed_stage exact-dist -- sh -c '
+  ai_disabled=$1
+  shift
+  env -u STORYOS_STAGE1_AUTHORITY_ORACLE STORYOS_DEV_SERVER="$STORYOS_AI_DISABLED_SERVER" \
+    pnpm --dir apps/web exec vitest run --project browser-exact-dist $ai_disabled &&
+    pnpm --dir apps/web exec vitest run --project browser-exact-dist "$@"
+' exact-dist "$exact_dist_ai_disabled_journeys" $journeys
 stop_exact_dist_server
 echo "Running isolated Recovery Copy restore and Recovery Visibility Proof"
 STORYOS_RECOVERY_DRILL=fixture-only timed_stage recovery-fixture -- "$repository_root/scripts/verify-recovery-hold.sh"

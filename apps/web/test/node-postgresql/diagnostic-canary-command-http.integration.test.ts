@@ -158,7 +158,7 @@ test("each command settlement writes one span with its identifiers and outcome",
   );
   const refused = closedSpans(lines, "settle_project_command")
     .filter((line) => line.span?.correlation_id === id("15"));
-  assert.deepEqual(refused.map((line) => line.span?.outcome), ["assistance_unavailable"]);
+  assert.deepEqual(refused.map((line) => line.span?.outcome), ["invalid_chapter_join"]);
   for (const line of [...settled, ...admissions]) {
     assert.equal(typeof line.span?.author_command_admission_id, "string");
   }

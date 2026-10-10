@@ -68,7 +68,14 @@ impl ModelDispatchStore for PostgresProjectReader {
             let run = load_run_phase(client, claim).await?;
             let request = match request {
                 DestinationRequest::Create(create) if create.successor_of.is_some() => {
-                    if run.settled() {
+                    let assistance = read_assistance_record(client, &claim.project_scope)
+                        .await
+                        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+                    let route = crate::agent_run_work::route_facts(&run, assistance.as_ref());
+                    let available = assistance.as_ref().map(|record| record.availability)
+                        == Some(storyos_core::AssistanceAvailability::Available);
+                    // The successor gates run again with the current authority and pause it.
+                    if run.settled() || !available || storyos_core::admit_route(&route).is_err() {
                         return Ok(None);
                     }
                     return crate::agent_run_successor_dispatch::commit(client, claim, projection)
@@ -184,6 +191,8 @@ impl ModelDispatchStore for PostgresProjectReader {
             };
             if run.status == "cancelled" {
                 return Ok(Some(StreamStop::Cancelled(CommittedCancellation {
+                    route: crate::model_registration::request_route(&transaction.client, claim)
+                        .await?,
                     model_attempt_id: dispatch.model_attempt_id.clone(),
                     response_reference: None,
                     abort_attempt: RequestAttempt::New,
@@ -444,4 +453,4 @@ async fn commit_retrieve(
 
 #[cfg(test)]
 #[path = "model_gateway_tests.rs"]
-mod tests;
+pub(crate) mod tests;

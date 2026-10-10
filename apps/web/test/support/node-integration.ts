@@ -49,13 +49,17 @@ export async function startStoryOSServer(options: {
   readonly sessions?: Readonly<Record<string, string>>;
   readonly extraEnv?: Readonly<Record<string, string>>;
   readonly databaseUrl?: string;
+  /** `null` starts a deployment that offers no model destination. */
+  readonly modelDestination?: "host_fake" | null;
 }): Promise<StoryOSServer> {
   const { bind = "127.0.0.1:0", repositoryRoot, serverBinary, sessions } = options;
   const webRoot = options.webRoot ?? join(dirname(serverBinary), "web");
   const env = childEnv({
     STORYOS_WORKER: "0",
+    STORYOS_MODEL_DESTINATION: "host_fake",
     ...(options.extraEnv ?? {}),
   });
+  if (options.modelDestination === null) delete env.STORYOS_MODEL_DESTINATION;
   const databaseUrl = options.databaseUrl ?? process.env.STORYOS_TEST_DATABASE_URL;
   if (databaseUrl !== undefined) {
     env.STORYOS_DATABASE_URL = databaseUrl;

@@ -57,7 +57,11 @@ export type UpdateProjectResponse = { schema_id: string, correlation_id: string,
 
 export type ProjectAssistanceAvailability = "available" | "unavailable";
 
-export type ProjectAssistanceBinding = { availability: ProjectAssistanceAvailability, revision: string, model_registration_revision: string, processing_destination_identity: string, processing_destination_identity_evidence_revision: string, project_model_use_binding_revision: string, external_compatibility_decision: string, };
+export type ProjectModelDestination = "host_fake" | "volcengine_agent_plan";
+
+export type ModelRuntimeQualification = "qualified" | "pending";
+
+export type ProjectAssistanceBinding = { availability: ProjectAssistanceAvailability, revision: string, model_registration_revision: string, processing_destination_identity: string, processing_destination_identity_evidence_revision: string, project_model_use_binding_revision: string, external_compatibility_decision: string, destination: ProjectModelDestination, runtime_qualification: ModelRuntimeQualification, };
 
 export type GetProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, assistance: ProjectAssistanceBinding, };
 

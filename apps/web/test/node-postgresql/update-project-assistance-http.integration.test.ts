@@ -143,7 +143,7 @@ test("project assistance prepares the host fake binding without a run", async ()
     };
     await assert.rejects(
       () => getProjectAssistance({ baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl }),
-      (error) => requireStoryOSProtocolError(error).status === 404,
+      (error) => requireStoryOSProtocolError(error).status === 404 && problemCode(error) === "assistance_not_bound",
     );
     const absentRequest = assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a2f");
     const absentKey = "018f0000-0000-7001-8000-000000000a20";
@@ -286,8 +286,23 @@ test("project assistance prepares the host fake binding without a run", async ()
     }
     assert.equal(await counts(), beforeRetries);
 
+    const bound = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000a16", "Bound Novel");
+    const boundInit = await prepare(
+      started.baseUrl,
+      bound.fetchImpl,
+      bound.projectId,
+      "018f0000-0000-7001-8000-000000000a15",
+      assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a14"),
+    );
+    assert.equal(boundInit.updated.assistance.availability, "available");
+
     await stopRealServer(started.server);
-    started = await startRealServer();
+    started = await startStoryOSServer({
+      repositoryRoot,
+      serverBinary,
+      sessions: { "session-a": USER_A, "session-b": USER_B },
+      modelDestination: null,
+    });
     const restartedFetch = browserFetch(started.baseUrl, "session-a");
     const restartedResponse = await updateProjectAssistance({
       baseUrl: started.baseUrl,
@@ -309,11 +324,34 @@ test("project assistance prepares the host fake binding without a run", async ()
       projectId: first.projectId,
       fetchImpl: restartedFetch,
     })).assistance, toggled.updated.assistance);
+    assert.deepEqual((await getProjectAssistance({
+      baseUrl: started.baseUrl,
+      projectId: bound.projectId,
+      fetchImpl: restartedFetch,
+    })).assistance, { ...boundInit.updated.assistance, availability: "unavailable" });
+    const unconfigured = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000a19", "Unconfigured Novel");
+    await assert.rejects(
+      () => getProjectAssistance({ baseUrl: started.baseUrl, projectId: unconfigured.projectId, fetchImpl: unconfigured.fetchImpl }),
+      (error) => requireStoryOSProtocolError(error).status === 404 && problemCode(error) === "resource_unavailable",
+    );
+    await assert.rejects(
+      () => prepare(
+        started.baseUrl,
+        unconfigured.fetchImpl,
+        unconfigured.projectId,
+        "018f0000-0000-7001-8000-000000000a18",
+        assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a17"),
+      ),
+      (error) => requireStoryOSProtocolError(error).status === 404,
+    );
+
+    await stopRealServer(started.server);
+    started = await startRealServer();
 
     const stillOpen = await getProject({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
-      fetchImpl: restartedFetch,
+      fetchImpl: browserFetch(started.baseUrl, "session-a"),
     });
     assert.equal(stillOpen.project.title, "Assistance Novel");
 
