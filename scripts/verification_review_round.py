@@ -43,20 +43,24 @@ def stop_codex_broker():
 
     The plugin teardown of a Claude session end stops the broker that the plugin state records. Two
     review jobs can start two brokers at the same time, and the state keeps only one, so the other
-    brokers of this workspace stop by their working directory."""
-    stopped = subprocess.run(['node', str(codex_scripts() / 'session-lifecycle-hook.mjs'), 'SessionEnd'],
-                             input=json.dumps({'cwd': os.getcwd()}), text=True, capture_output=True)
-    if stopped.returncode != 0:
-        print(f'Warning: the Codex broker did not stop: exit {stopped.returncode}', file=sys.stderr)
-    workspace = os.path.realpath(os.getcwd())
-    found = subprocess.run(['pgrep', '-f', BROKER_COMMAND], capture_output=True, text=True).stdout.split()
-    parents = [line.split() for line in subprocess.check_output(['ps', '-eo', 'pid=,ppid='], text=True).splitlines()]
-    for broker in (int(pid) for pid in found if process_directory(int(pid)) == workspace):
-        for pid in [int(child) for child, parent in parents if int(parent) == broker] + [broker]:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+    brokers of this workspace stop by their working directory. A failure writes one warning and never
+    stops the round, so the completed verdicts are still imported and posted."""
+    try:
+        stopped = subprocess.run(['node', str(codex_scripts() / 'session-lifecycle-hook.mjs'), 'SessionEnd'],
+                                 input=json.dumps({'cwd': os.getcwd()}), text=True, capture_output=True)
+        if stopped.returncode != 0:
+            print(f'Warning: the Codex broker did not stop: exit {stopped.returncode}', file=sys.stderr)
+        workspace = os.path.realpath(os.getcwd())
+        found = subprocess.run(['pgrep', '-f', BROKER_COMMAND], capture_output=True, text=True).stdout.split()
+        parents = [line.split() for line in subprocess.check_output(['ps', '-eo', 'pid=,ppid='], text=True).splitlines()]
+        for broker in (int(pid) for pid in found if process_directory(int(pid)) == workspace):
+            for pid in [int(child) for child, parent in parents if int(parent) == broker] + [broker]:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        print(f'Warning: the Codex broker did not stop: {type(error).__name__}', file=sys.stderr)
 
 
 def process_directory(pid):

@@ -225,7 +225,7 @@ sys.exit({error!r})
     def gh_calls(self):
         return json.loads((self.root / 'target/gh-calls.json').read_text())
 
-    def review_round(self, verdicts, comments=(), checks=None, faults=None, job_status='completed'):
+    def review_round(self, verdicts, comments=(), checks=None, faults=None, job_status='completed', failing_ps=False):
         """Run the review round command with a mocked gh and a mocked Codex plugin."""
         import os
         import subprocess
@@ -274,6 +274,9 @@ else:
     print(json.dumps({{"job": {{"id": args[0]}}, "storedJob": {{"threadId": "thread-" + args[0], "result": {{"rawOutput": "Done.\\n```json\\n" + json.dumps(s["verdicts"][args[0]]) + "\\n```"}}}}}}))
 ''')
         (tools / 'node').chmod(0o755)
+        if failing_ps:
+            (tools / 'ps').write_text('#!/bin/sh\nexit 1\n')
+            (tools / 'ps').chmod(0o755)
         if faults:
             self.fault_gh(*faults)
         home = self.root / 'target/home'
@@ -348,6 +351,13 @@ else:
                 for process in (orphan, other):
                     process.kill()
                     process.wait()
+
+    def test_failed_broker_teardown_still_posts_the_verdicts(self):
+        clean = {'blocking': [], 'non_blocking': [], 'evidence': ['Read the diff.']}
+        result, state = self.review_round({'standards': clean, 'spec': clean}, failing_ps=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(state['comments']), 2)
+        self.assertIn('Warning: the Codex broker did not stop: CalledProcessError', result.stderr)
 
     def test_failed_review_job_still_stops_the_codex_broker(self):
         result, state = self.review_round({}, job_status='failed')
