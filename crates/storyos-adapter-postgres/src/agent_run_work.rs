@@ -119,6 +119,8 @@ pub(crate) struct RunPhaseRow {
     pub decision_position: String,
     pub assembly_payload: String,
     pub model_registration_revision: String,
+    pub binding_revision: String,
+    pub registration_current: bool,
 }
 
 impl RunPhaseRow {
@@ -147,7 +149,17 @@ pub(crate) async fn load_run_phase(
                     attempt.payload::text AS attempt_payload,
                     run.active_decision_position::text AS decision_position,
                     assembly.payload::text AS assembly_payload,
-                    run.model_registration_revision::text AS model_registration_revision
+                    run.model_registration_revision::text AS model_registration_revision,
+                    run.project_model_use_binding_revision::text AS binding_revision,
+                    EXISTS (
+                      SELECT 1
+                        FROM storyos.model_registration_revisions AS registration
+                        JOIN storyos.model_registration_heads AS head
+                          ON head.model_kind = registration.model_kind
+                       WHERE registration.model_registration_revision =
+                               run.model_registration_revision
+                         AND head.model_registration_revision = run.model_registration_revision
+                    ) AS registration_current
                FROM storyos.agent_runs AS run
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
@@ -189,6 +201,8 @@ pub(crate) async fn load_run_phase(
         decision_position: row.get("decision_position"),
         assembly_payload: row.get("assembly_payload"),
         model_registration_revision: row.get("model_registration_revision"),
+        binding_revision: row.get("binding_revision"),
+        registration_current: row.get("registration_current"),
     })
 }
 
@@ -226,6 +240,10 @@ pub(crate) async fn admit_create(
             Some(AssistanceAvailability::Available)
         ),
         model_registration_revision: &run.model_registration_revision,
+        binding_current: assistance.is_some_and(|record| {
+            record.project_model_use_binding_revision == run.binding_revision
+        }),
+        registration_current: run.registration_current,
     });
     let capability = match admission {
         CoreCreateAdmission::Dispatch => return Ok(CreateAdmission::Dispatch(rebuild)),

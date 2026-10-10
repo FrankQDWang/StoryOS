@@ -66,6 +66,7 @@ start_exact_dist_server() {
   STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
   STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$stage1_user_id\"}" \
   STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
+  STORYOS_MODEL_DESTINATION=host_fake \
     "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" \
     >"$exact_dist_server_log" 2>&1 &
   exact_dist_server_pid=$!

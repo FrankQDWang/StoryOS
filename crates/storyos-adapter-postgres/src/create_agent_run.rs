@@ -97,8 +97,7 @@ impl ProjectCommand for CreateAgentRunInput {
     type Response = ProjectResponse;
     type ZeroEffect = ();
     type Applied = ();
-    /// The assistance record whose grant and Model Use Binding revision the Run captures.
-    type Plan = ProjectAssistanceRecord;
+    type Plan = AssistancePlan;
     type Effect = CreateAgentRunApplied;
     type NoEffect = Infallible;
     type Conflict = Infallible;
@@ -130,11 +129,10 @@ impl ProjectCommand for CreateAgentRunInput {
             presence: ProjectPresence::Present,
             lifecycle: project.lifecycle,
             assistance: match &assistance {
-                Some(record) if record.availability == AssistanceAvailability::Available => {
-                    AssistanceAdmission::Available
+                Some(record) if record.availability == AssistanceAvailability::Unavailable => {
+                    AssistanceAdmission::Unavailable
                 }
-                Some(_) => AssistanceAdmission::Unavailable,
-                None => AssistanceAdmission::Missing,
+                Some(_) | None => AssistanceAdmission::Available,
             },
             conversation,
             chapter: if project.current_chapter_id.as_deref() == Some(self.chapter_id.as_str()) {
@@ -152,9 +150,15 @@ impl ProjectCommand for CreateAgentRunInput {
         {
             return Err(ProjectCommandError::BindingConflict.into());
         }
-        let assistance = assistance.ok_or(RefusableCommandError::RefusedBeforeAdmission(
-            CreateAgentRunRefusal::AssistanceUnavailable,
-        ))?;
+        let assistance = match assistance {
+            Some(record) if record.destination == self.destination.kind() => {
+                AssistancePlan::Current(record)
+            }
+            Some(record) => AssistancePlan::Bind {
+                revision: record.revision + 1,
+            },
+            None => AssistancePlan::Bind { revision: 1 },
+        };
         hold_conversation_if_requested(&envelope.challenge_binding.idempotency_key).await;
         Ok(Classification {
             outcome: outcome.map_applied(|()| ((), assistance)),
@@ -170,9 +174,15 @@ impl ProjectCommand for CreateAgentRunInput {
         envelope: &ProjectCommandEnvelope,
         _project: &LockedProject,
         _sequences: &ActivitySequences,
-        assistance: ProjectAssistanceRecord,
+        assistance: AssistancePlan,
         _applied: (),
     ) -> Result<ActivityWrite<CreateAgentRunApplied>, ProjectCommandError> {
+        let assistance = match assistance {
+            AssistancePlan::Current(record) => record,
+            AssistancePlan::Bind { revision } => {
+                bind_deployment_destination(client, envelope, &self.destination, revision).await?
+            }
+        };
         let applied = write::persist_conversation_and_run(
             client,
             envelope,
@@ -223,6 +233,43 @@ impl ProjectCommand for CreateAgentRunInput {
         }
         Ok(applied)
     }
+}
+
+/// The assistance record whose grant and Model Use Binding revision the Run captures.
+pub(crate) enum AssistancePlan {
+    Current(ProjectAssistanceRecord),
+    /// The Project has no binding, or its binding has another destination than the deployment.
+    Bind {
+        revision: u64,
+    },
+}
+
+/// Makes the deployment destination current with an available policy revision (ADR 0048).
+async fn bind_deployment_destination(
+    client: &Client,
+    envelope: &ProjectCommandEnvelope,
+    destination: &storyos_core::DeploymentDestination,
+    revision: u64,
+) -> Result<ProjectAssistanceRecord, ProjectCommandError> {
+    let decision = crate::project_destination_binding::insert_destination_binding(
+        client,
+        envelope,
+        destination,
+    )
+    .await
+    .map_err(unavailable)?;
+    crate::update_project_assistance::insert_policy_revision(
+        client,
+        envelope,
+        AssistanceAvailability::Available,
+        revision,
+        Some(&decision),
+    )
+    .await?;
+    read_assistance_record(client, &envelope.project_scope)
+        .await
+        .map_err(unavailable)?
+        .ok_or_else(|| unavailable(std::io::Error::other("the new binding is not current")))
 }
 
 async fn conversation_admission(

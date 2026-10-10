@@ -5,12 +5,11 @@ use storyos_application::{
     ProjectScope, UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement,
 };
 use storyos_core::{
-    AssistanceAvailability, AssistanceBindingPresence, HOST_FAKE_REGISTRATION,
+    AssistanceAvailability, AssistanceBindingPresence, DestinationKind, RuntimeQualification,
     UpdateProjectAssistance as CoreUpdateProjectAssistance, UpdateProjectAssistanceApplied,
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, update_project_assistance,
 };
 use tokio_postgres::Client;
-use uuid::Uuid;
 
 use crate::command_replay::{CommandReplay, ReplayFault};
 use crate::command_sequence::{
@@ -94,7 +93,15 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
                 availability,
                 revision,
             } => {
-                initialize_host_fake_binding(client, envelope, availability, revision).await?;
+                let decision = crate::project_destination_binding::insert_destination_binding(
+                    client,
+                    envelope,
+                    &self.destination,
+                )
+                .await
+                .map_err(unavailable)?;
+                insert_policy_revision(client, envelope, availability, revision, Some(&decision))
+                    .await?;
                 (availability, revision)
             }
             UpdateProjectAssistanceApplied::Changed {
@@ -155,7 +162,9 @@ pub(crate) async fn read_assistance_record(
                     evidence.evidence_revision::text,
                     binding.project_model_use_binding_revision::text,
                     binding.grant_id::text,
-                    decision.external_compatibility_decision::text
+                    decision.external_compatibility_decision::text,
+                    identity.destination_kind,
+                    decision.runtime_qualification
                FROM storyos.project_policy_revisions AS policy
                JOIN storyos.external_contract_compatibility_decisions AS decision
                  ON (decision.owner_user_id, decision.project_id,
@@ -172,6 +181,11 @@ pub(crate) async fn read_assistance_record(
                      evidence.processing_destination_identity, evidence.evidence_revision) =
                     (binding.owner_user_id, binding.project_id,
                      binding.processing_destination_identity, binding.evidence_revision)
+               JOIN storyos.processing_destination_identities AS identity
+                 ON (identity.owner_user_id, identity.project_id,
+                     identity.processing_destination_identity) =
+                    (evidence.owner_user_id, evidence.project_id,
+                     evidence.processing_destination_identity)
               WHERE policy.owner_user_id = $1::text::uuid
                 AND policy.project_id = $2::text::uuid
                 AND policy.policy_revision = (
@@ -198,110 +212,19 @@ pub(crate) async fn read_assistance_record(
         project_model_use_binding_revision: row.get(5),
         grant_id: row.get(6),
         external_compatibility_decision: row.get(7),
+        destination: DestinationKind::parse(row.get(/*idx*/ 8))
+            .ok_or_else(|| ProjectReadError::unavailable(damaged("destination kind")))?,
+        runtime_qualification: RuntimeQualification::parse(row.get(/*idx*/ 9))
+            .ok_or_else(|| ProjectReadError::unavailable(damaged("runtime qualification")))?,
     }))
 }
 
-async fn initialize_host_fake_binding(
-    client: &Client,
-    envelope: &ProjectCommandEnvelope,
-    availability: AssistanceAvailability,
-    revision: u64,
-) -> Result<(), ProjectCommandError> {
-    crate::model_registration::insert_model_registration(client, &HOST_FAKE_REGISTRATION)
-        .await
-        .map_err(unavailable)?;
-    let identity = Uuid::now_v7().to_string();
-    let grant_id = Uuid::now_v7().to_string();
-    let binding_revision = Uuid::now_v7().to_string();
-    let decision = Uuid::now_v7().to_string();
-    client
-        .execute(
-            "INSERT INTO storyos.processing_destination_identities
-               (owner_user_id, project_id, processing_destination_identity, destination_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'host_fake')",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &identity,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.processing_destination_identity_evidence_revisions
-               (owner_user_id, project_id, processing_destination_identity,
-                evidence_revision, evidence_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 1, 'host_fake_boundary')",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &identity,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.project_destination_grants
-               (owner_user_id, project_id, grant_id, processing_destination_identity, grant_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'host_fake_use')",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &grant_id,
-                &identity,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.project_external_use_binding_revisions
-               (owner_user_id, project_id, project_model_use_binding_revision,
-                processing_destination_identity, evidence_revision, grant_id,
-                model_registration_revision)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 1,
-                     $5::text::uuid, $6::text::uuid)",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &binding_revision,
-                &identity,
-                &grant_id,
-                &HOST_FAKE_REGISTRATION.revision,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.external_contract_compatibility_decisions
-               (owner_user_id, project_id, external_compatibility_decision,
-                project_model_use_binding_revision, decision_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     'host_fake_compatible')",
-            &[
-                &envelope.project_scope.owner_user_id.as_ref(),
-                &envelope.project_scope.project_id.as_ref(),
-                &decision,
-                &binding_revision,
-            ],
-        )
-        .await
-        .map_err(unavailable)?;
-    insert_policy_revision(
-        client,
-        envelope,
-        availability,
-        revision,
-        Some(decision.as_str()),
-    )
-    .await
+fn damaged(field: &str) -> std::io::Error {
+    std::io::Error::other(format!("Project assistance {field} is damaged"))
 }
 
 /// Inserts the next policy revision. `None` keeps the compatibility Decision of the prior one.
-async fn insert_policy_revision(
+pub(crate) async fn insert_policy_revision(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
     availability: AssistanceAvailability,

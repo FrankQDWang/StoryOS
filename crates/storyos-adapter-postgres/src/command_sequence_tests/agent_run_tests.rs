@@ -58,6 +58,7 @@ fn run_input(chapter_id: String) -> CreateAgentRunInput {
         run_id: Uuid::now_v7().to_string(),
         conversation_id: Uuid::now_v7().to_string(),
         project_agent_id: Uuid::now_v7().to_string(),
+        destination: storyos_core::DeploymentDestination::HostFake,
     }
 }
 
@@ -79,6 +80,7 @@ pub(super) async fn create_agent_run_call(
     let assistance = UpdateProjectAssistanceInput {
         availability: AssistanceAvailability::Available,
         expected_revision: 0,
+        destination: storyos_core::DeploymentDestination::HostFake,
     };
     let call = issued(
         store,
@@ -352,7 +354,7 @@ async fn a_create_agent_run_refusal_writes_no_row_and_a_missing_run_is_damaged()
     assert!(matches!(
         refused,
         Err(RefusableCommandError::RefusedBeforeAdmission(
-            CreateAgentRunRefusal::AssistanceUnavailable
+            CreateAgentRunRefusal::InvalidChapterJoin
         ))
     ));
     assert_eq!(request_rows(&admin, key).await, [0, 0, 0, 1]);

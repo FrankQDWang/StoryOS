@@ -708,7 +708,7 @@ test("createAgentRun reopens an idle conversation and refuses digest or scope su
       ),
       (error) => {
         const protocol = requireStoryOSProtocolError(error);
-        return protocol.status === 422 && problemCode(error) === "assistance_unavailable";
+        return protocol.status === 422 && problemCode(error) === "invalid_chapter_join";
       },
     );
     assert.equal(

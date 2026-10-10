@@ -129,6 +129,11 @@ function runFromActivity(body: string, ref: RequestReference): string | undefine
   return undefined;
 }
 
+/** A Project without a binding uses the deployment destination by default (ADR 0048). */
+function withoutBinding(error: unknown): boolean {
+  return error instanceof StoryOSProtocolError && error.status === 404;
+}
+
 function resultText(run: GetAgentRunResponse): string | undefined {
   switch (run.decision.kind) {
     case "advisory":
@@ -193,8 +198,8 @@ export function WritingAssistantPanel({
           && response.project_scope.project_id === context.scope.project_id
           ? response.assistance.availability : "unavailable",
       );
-    }).catch(() => {
-      if (active) setAvailability("unavailable");
+    }).catch((error: unknown) => {
+      if (active) setAvailability(withoutBinding(error) ? "available" : "unavailable");
     });
     return () => { active = false; };
   }, [context?.baseUrl, context?.fetchImpl, context?.scope.owner_user_id, context?.scope.project_id]);
@@ -316,10 +321,14 @@ export function WritingAssistantPanel({
       const assistance = await getProjectAssistance({
         baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
         projectId: context.scope.project_id,
+      }).catch((error: unknown) => {
+        if (withoutBinding(error)) return undefined;
+        throw error;
       });
-      if (assistance.project_scope.owner_user_id !== context.scope.owner_user_id
-        || assistance.project_scope.project_id !== context.scope.project_id
-        || assistance.assistance.availability !== "available") {
+      if (assistance !== undefined
+        && (assistance.project_scope.owner_user_id !== context.scope.owner_user_id
+          || assistance.project_scope.project_id !== context.scope.project_id
+          || assistance.assistance.availability !== "available")) {
         setAvailability("unavailable");
         setStatus("写作助手当前不可用。你仍可以直接写作。");
         return;

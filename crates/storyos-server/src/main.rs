@@ -93,6 +93,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok((handle, binding))
         })
         .collect::<Result<HashMap<_, _>, uuid::Error>>()?;
+    let model_destination = or_exit(
+        storyos_server::model_destination(
+            env::var(storyos_server::MODEL_DESTINATION_VARIABLE)
+                .ok()
+                .as_deref(),
+            env::var(storyos_server::MODEL_CREDENTIAL_REFERENCE_VARIABLE).ok(),
+        ),
+        "model_destination",
+    );
     let config = storyos_server::ServerConfig {
         database_url: Some(database_url),
         session_bindings,
@@ -113,6 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 storyos_server::SessionCookieSecure::Include
             }
         },
+        model_destination,
     };
     println!("STORYOS_SERVER_URL={printed_server_url}");
     or_exit(io::stdout().flush(), "startup_line");

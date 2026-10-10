@@ -10,6 +10,10 @@ pub struct CreateAdmissionFacts<'a> {
     pub assistance_available: bool,
     /// The Model Registration revision that the AgentRun pinned.
     pub model_registration_revision: &'a str,
+    /// The AgentRun pinned the current use binding and compatibility Decision of its Project.
+    pub binding_current: bool,
+    /// The pinned Registration is still the head Registration of its adapter.
+    pub registration_current: bool,
 }
 
 /// Dispatch, or a refusal before the dispatch claim with its recorded capability reason.
@@ -34,6 +38,12 @@ pub fn admit_create(facts: &CreateAdmissionFacts<'_>) -> CreateAdmission {
     }
     if !facts.context_complete || !facts.assistance_available {
         return CreateAdmission::Refuse("blocked_context");
+    }
+    if !facts.binding_current {
+        return CreateAdmission::Refuse("model_use_binding_stale");
+    }
+    if !facts.registration_current {
+        return CreateAdmission::Refuse("model_registration_drift");
     }
     match model_registration(facts.model_registration_revision) {
         None => CreateAdmission::Refuse("model_registration_unknown"),

@@ -16,6 +16,7 @@ mod create_project;
 mod create_volume;
 mod delete_chapter;
 mod delete_volume;
+mod deployment_destination;
 mod draft_retry;
 mod expand_refused_edit_draft;
 mod host_fake_profile;
@@ -124,6 +125,10 @@ pub use delete_volume::{
     DeleteVolume, DeleteVolumeApplied, DeleteVolumeConflict, DeleteVolumeNoEffect,
     DeleteVolumeRefusal, DeleteVolumeResult, VolumeChildPolicy, VolumeRemovalLifecycle,
     delete_volume,
+};
+pub use deployment_destination::{
+    AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_ELIGIBILITY_EVIDENCE, AGENT_PLAN_ENDPOINT,
+    DeploymentDestination, DestinationKind, RuntimeQualification,
 };
 pub use host_fake_profile::{
     ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
