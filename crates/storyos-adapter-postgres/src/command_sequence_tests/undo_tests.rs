@@ -25,6 +25,7 @@ use super::proposal_decision::{
 };
 use super::retry::in_progress_retry;
 use super::rollback::failed_then_settled;
+use super::secondary_operation::{edit_secondary_candidate, two_operation_proposal};
 use super::structure::{CREATE_VOLUME, create_volume, set_current_chapter_call};
 use super::support::{
     CommandCall, Route, issued, issued_with_bytes, replayed_outcome, run_without_foreign_keys,
@@ -53,6 +54,8 @@ enum Case {
     ApplyAuthorEdit,
     /// An Author Edit of the candidate of a Proposal Operation.
     EditProposalCandidate,
+    /// An Author Edit of the candidate of the secondary Operation of a two-operation Proposal.
+    EditSecondaryCandidate,
     AcceptProposal,
     /// An Acceptance whose Chapter head moved back to the prior Revision.
     AcceptanceReversal,
@@ -69,7 +72,7 @@ enum Case {
 }
 
 /// The cases whose Author Undo applies, in the order of their result rows.
-const APPLIED: [Case; 12] = [
+const APPLIED: [Case; 13] = [
     Case::CreateVolume,
     Case::SetCurrentChapter,
     Case::WithdrawProposal,
@@ -80,6 +83,7 @@ const APPLIED: [Case; 12] = [
     Case::ExpandRefusedEditDraft,
     Case::ApplyAuthorEdit,
     Case::EditProposalCandidate,
+    Case::EditSecondaryCandidate,
     Case::AcceptProposal,
     Case::AcceptanceReversal,
 ];
@@ -99,7 +103,7 @@ fn all_cases() -> impl Iterator<Item = Case> {
 }
 
 /// The latest Forward Author Action of the Project that no Compensation compensates.
-async fn latest_forward(admin: &Client, scope: &ProjectScope) -> u64 {
+pub(super) async fn latest_forward(admin: &Client, scope: &ProjectScope) -> u64 {
     let sequence: String = admin
         .query_one(
             "SELECT max(forward.author_action_sequence)::text
@@ -356,6 +360,15 @@ async fn undo_call(
                 input.expected_authoritative_revision_id,
             )
         }
+        Case::EditSecondaryCandidate => {
+            let proposal = two_operation_proposal(store, admin, base).await;
+            edit_secondary_candidate(store, admin, &proposal, base + 9).await;
+            (
+                proposal.scope,
+                proposal.editor_session_id,
+                proposal.chapter_revision_id,
+            )
+        }
         Case::AcceptProposal
         | Case::AcceptanceReversal
         | Case::AcceptanceWrongHead
@@ -446,7 +459,7 @@ async fn undo_acceptance_rows(admin: &Client, receipt_id: &str) -> i64 {
 
 /// Issues one Author Undo whose canonical bytes and digest are those of its command body. The
 /// Draft reopen records check both.
-async fn issued_undo(
+pub(super) async fn issued_undo(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: u16,
@@ -485,7 +498,7 @@ fn undo_body(input: &UndoLatestAuthorActionInput) -> Vec<u8> {
     .into_bytes()
 }
 
-async fn undo(
+pub(super) async fn undo(
     store: &PostgresProjectReader,
     call: &CommandCall<UndoLatestAuthorActionInput>,
 ) -> Result<UndoLatestAuthorActionSettlement, ProjectCommandError> {
@@ -545,6 +558,7 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
             draft,
             revision,
             proposal,
+            proposal,
             revision,
             reversal,
             conflicted,
@@ -558,7 +572,7 @@ async fn every_undo_outcome_replays_its_first_settlement_and_writes_only_its_rec
     // on `main`.
     assert_eq!(
         acceptance_children,
-        vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1]
+        vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1]
     );
 }
 

@@ -16,7 +16,8 @@ pub(super) struct LoadedProposal {
     pub(super) receipt_id: Option<String>,
     pub(super) receipt_result: Option<String>,
     pub(super) receipt_revision_id: Option<String>,
-    pub(super) receipt_candidate_text: Option<String>,
+    receipt_block_id: Option<String>,
+    receipt_candidate_text: Option<String>,
     pub(super) current_head_revision_id: Option<String>,
     pub(super) validated_target_matches_head: bool,
     kind: String,
@@ -37,6 +38,25 @@ pub(super) struct LoadedOperation {
 }
 
 impl LoadedProposal {
+    /// The Validation Receipt identifies the current candidate of its Block, and the candidate
+    /// of the Revision is the candidate of the primary Operation. The current candidate of a
+    /// Block is the candidate of its Operation, or else the candidate of the Revision.
+    pub(super) fn candidate_unaltered(&self) -> bool {
+        let operation_candidate = |block_id: &str| {
+            self.operations
+                .iter()
+                .find(|operation| operation.manuscript_block_id == block_id)
+                .map(|operation| operation.candidate_text.as_str())
+        };
+        let revision_matches = operation_candidate(&self.manuscript_block_id)
+            .is_none_or(|candidate| candidate == self.candidate_text);
+        let receipt_matches = self.receipt_block_id.as_deref().is_some_and(|block_id| {
+            self.receipt_candidate_text.as_deref()
+                == Some(operation_candidate(block_id).unwrap_or(&self.candidate_text))
+        });
+        revision_matches && receipt_matches
+    }
+
     pub(super) fn accepted_body(
         &self,
         selected_ids: &[String],
@@ -145,7 +165,8 @@ pub(super) async fn load_proposal(
                       AND revision.base_authoritative_revision_id = chapter_head.current_revision_id, false),
                     proposal.kind, convert_from(payload.canonical_bytes, 'UTF8'),
                     proposal.manuscript_block_id::text, anchor.range_from, anchor.range_to,
-                    anchor.base_slice_digest, proposal.bundle_policy
+                    anchor.base_slice_digest, proposal.bundle_policy,
+                    receipt.manuscript_block_id::text
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -233,6 +254,7 @@ pub(super) async fn load_proposal(
         receipt_id: row.get(/*idx*/ 5),
         receipt_result: row.get(/*idx*/ 6),
         receipt_revision_id: row.get(/*idx*/ 7),
+        receipt_block_id: row.get(/*idx*/ 19),
         receipt_candidate_text: row.get(/*idx*/ 8),
         current_head_revision_id,
         validation_current: row.get(/*idx*/ 10),

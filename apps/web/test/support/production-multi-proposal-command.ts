@@ -102,7 +102,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       }
       const completed = await getAgentRun({ ...options, runId });
       assert.equal(completed.status, 'completed');
-      assert.ok(completed.decision.kind === 'prose_change');
+      assert.ok(completed.decision.kind === 'prose_change', JSON.stringify(completed.decision));
       await page.locator('[data-assistant-inspect]').click();
       return completed;
     };
@@ -179,11 +179,11 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0 WHERE project_id='${projectId}'::uuid`);
     phase = "candidate-edit";
     const before = (await getProposal({ ...options, proposalId })).proposal;
-    const retainedHistory = async () => JSON.parse(await queryStoryOSPostgres(`SELECT jsonb_build_object(
+    const retainedHistory = async (revisionId = before.revision_id) => JSON.parse(await queryStoryOSPostgres(`SELECT jsonb_build_object(
       'revision', (SELECT to_jsonb(record) FROM storyos.proposal_revisions AS record
-        WHERE project_id='${projectId}'::uuid AND revision_id='${before.revision_id}'::uuid),
+        WHERE project_id='${projectId}'::uuid AND revision_id='${revisionId}'::uuid),
       'validation', (SELECT to_jsonb(record) FROM storyos.validation_receipts AS record
-        WHERE project_id='${projectId}'::uuid AND proposal_revision_id='${before.revision_id}'::uuid))::text`));
+        WHERE project_id='${projectId}'::uuid AND proposal_revision_id='${revisionId}'::uuid))::text`));
     const originalHistory = await retainedHistory();
     await page.locator(`[data-proposal-location="${secondaryOutcome.operation_id}"]`).click();
     const candidate = () => page.locator(`[data-proposal-id="${proposalId}"][data-proposal-operation-id="${secondaryOutcome.operation_id}"]`);
@@ -212,6 +212,37 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text)
       .toBe(manualText);
     await page.unroute(editRoute, undefined);
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    phase = "undo-secondary-edit";
+    // Root Undo of a secondary candidate edit restores that Operation (#971).
+    const saved = (await getProposal({ ...options, proposalId })).proposal;
+    const savedHistory = await retainedHistory(saved.revision_id);
+    await page.keyboard.insertText(' Undo me.');
+    await expect.poll(async () => (await getProposal({ ...options, proposalId })).proposal.operations
+      .find(operation => operation.operation_id === secondaryOutcome.operation_id)?.candidate_text)
+      .toBe(`${manualText} Undo me.`);
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    const undone = (await getProposal({ ...options, proposalId })).proposal;
+    const undoResponse = page.waitForResponse(response => response.url().endsWith('/author-actions/undo')
+      && response.request().method() === 'POST');
+    await page.keyboard.press('ControlOrMeta+Z');
+    assert.equal((await undoResponse).status(), 200);
+    const restored = (await getProposal({ ...options, proposalId })).proposal;
+    assert.deepEqual(restored.operations, saved.operations);
+    assert.ok(![saved.revision_id, undone.revision_id].includes(restored.revision_id));
+    assert.equal(restored.validation, 'valid');
+    assert.ok(restored.validation_receipt.kind === 'present' && undone.validation_receipt.kind === 'present');
+    assert.notEqual(restored.validation_receipt.validation_receipt_id, undone.validation_receipt.validation_receipt_id);
+    assert.deepEqual(await retainedHistory(saved.revision_id), savedHistory);
+    await expect(candidate()).toHaveAttribute('data-proposal-revision-id', restored.revision_id);
+    await expect(candidate().locator('.block-proposal-text')).toHaveText(manualText);
+    await page.reload();
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    await expect(candidate().locator('.block-proposal-text')).toHaveText(manualText);
+    await candidate().locator('.block-proposal-text').click();
+    await page.keyboard.press('End');
+    assert.deepEqual((await getProposal({ ...options, proposalId })).proposal, restored);
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const manual = (await getProposal({ ...options, proposalId })).proposal;
     assert.notEqual(manual.revision_id, before.revision_id);
     assert.equal(manual.operations.find(operation => operation.operation_id === firstOutcome.operation_id)?.candidate_text,
@@ -292,9 +323,29 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     const wholeCandidate = page.locator(`[data-proposal-id="${wholeOutcome.proposal_id}"]`).first();
     await expect(wholeCandidate.locator('[data-proposal-accept]')).toBeVisible();
     await page.screenshot({path:join(repositoryRoot,'target/382-multi-pending.png')});
+    phase = "accept-secondary-edit";
+    // Acceptance of a manually edited secondary candidate applies the edited text (#886).
+    const wholeSecondary = wholeRun.decision.locations?.[1];
+    assert.ok(wholeSecondary && wholeSecondary.outcome.kind !== 'refused');
+    assert.equal(wholeSecondary.outcome.proposal_id, wholeOutcome.proposal_id);
+    const wholeSecondaryOutcome = wholeSecondary.outcome;
+    const wholeBefore = (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal;
+    const wholeHistory = await retainedHistory(wholeBefore.revision_id);
+    await page.locator(`[data-proposal-location="${wholeSecondaryOutcome.operation_id}"]`).click();
+    const wholeSecondaryCandidate = page.locator(`[data-proposal-id="${wholeOutcome.proposal_id}"][data-proposal-operation-id="${wholeSecondaryOutcome.operation_id}"]`);
+    await expect(wholeSecondaryCandidate).toHaveAttribute('data-proposal-focused', 'true');
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.anchorNode?.parentElement
+      ?.closest('[data-proposal-operation-id]')?.getAttribute('data-proposal-operation-id'))).toBe(wholeSecondaryOutcome.operation_id);
+    await page.keyboard.press('End');
+    await page.keyboard.insertText(' Accepted manual edit.');
+    const acceptedText = `${wholeSecondary.candidate_text} Accepted manual edit.`;
+    await expect.poll(async () => (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal.operations
+      .find(operation => operation.operation_id === wholeSecondaryOutcome.operation_id)?.candidate_text).toBe(acceptedText);
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const bodies: string[] = [];
     const keys: string[] = [];
     const proposal = (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal;
+    assert.notEqual(proposal.revision_id, wholeBefore.revision_id);
     assert.ok(proposal.validation_receipt.kind === 'present');
     assert.ok(editorSessionId);
     const frozen: AcceptProposalRequest = { command_schema: 'storyos.command.accept-proposal.request.v1',
@@ -333,6 +384,11 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
     assert.deepEqual(keys, [keys[0], keys[0], keys[0]]);
     await expect.poll(async () => (await getProposal({ ...options, proposalId: wholeOutcome.proposal_id })).proposal.operations
       .map(operation => operation.resolution)).toEqual(['applied', 'applied']);
+    const acceptedBlocks = (await getChapter({ ...options, chapterId: whole.chapter_id })).chapter.current_revision.blocks;
+    assert.deepEqual([whole, wholeSecondary].map(location => acceptedBlocks
+      .find(block => block.manuscript_block_id === location.manuscript_block_id)?.text),
+      [proposal.operations.find(operation => operation.operation_id === wholeOutcome.operation_id)?.candidate_text, acceptedText]);
+    assert.deepEqual(await retainedHistory(wholeBefore.revision_id), wholeHistory);
     await page.screenshot({ path: join(repositoryRoot, 'target/382-multi-settled.png') });
     assert.deepEqual(chapters.sort(),[...new Set(run.decision.locations?.map(l=>l.chapter_id))].sort());
   } catch (error) {

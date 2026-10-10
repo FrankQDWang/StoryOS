@@ -155,8 +155,7 @@ impl ProjectCommand for AcceptProposal {
                 && loaded.inline_base_slice_matches
                 && loaded.current_head_revision_id.as_deref()
                     == Some(input.expected_authoritative_revision_id.as_str()),
-            candidate_unaltered: loaded.receipt_candidate_text.as_deref()
-                == Some(loaded.candidate_text.as_str()),
+            candidate_unaltered: loaded.candidate_unaltered(),
         });
         let condition_refs = match &outcome {
             TransitionOutcome::Conflicted(_) => vec![self.condition_id.clone()],

@@ -58,7 +58,7 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 | Forward command kind and applied variant | Author Undo Disposition |
 | --- | --- |
 | `applyAuthorEdit`, `authoritative_applied` | Compensation. It restores the prior Revision. It reopens a Refused Edit Draft that the edit superseded. |
-| `applyAuthorEdit`, `proposal_revised` | Compensation. It appends a Proposal Revision with the parent candidate text. |
+| `applyAuthorEdit`, `proposal_revised` | Compensation. It appends a Proposal Revision that restores the candidate of the edited Operation before the edit. |
 | `acceptProposal` | Compensation when the Head is a Safe Compensation Head. Otherwise the Undo Acceptance outcome is reversal required or unavailable. |
 | `createVolume`, `updateVolume`, `deleteVolume`, `createChapter`, `updateChapter`, `deleteChapter` | Compensation ([ADR 0030](0030-restore-prior-identities-for-structure-compensation.md)). |
 | `setCurrentChapter` | Compensation when the prior Chapter is a lawful target. Otherwise Barrier. |
@@ -76,6 +76,15 @@ At `main` `5470896d`, the three commands use hand-written transactions:
 - On 2026-10-07 the author decided two details of these three compensations. The appended Proposal Revision also gets a copy of the validation receipt of the earlier revision. An Acceptance conflict condition stays on the earlier revision, because its identity and its Acceptance Receipt bind it to that revision. Thus after an Undo of a Replan, the Proposal shows the validation of the earlier revision without the conflict. A new Acceptance finds the conflict again.
 - After an Undo of a reopen, the author cannot reopen the same withdrawal or rejection again, because the reopen records stay. [Decide if Author Undo of a Proposal Reopen Lets the Author Reopen Again](https://github.com/FrankQDWang/StoryOS/issues/1051) owns this question.
 - A Barrier stops Author Undo, and Author Undo never skips it. Thus a Barrier frontier also stops Author Undo of all earlier Forward actions. A later decision can change a Barrier to a Compensation.
+
+### A Proposal edit binds its exact Operation
+
+- On 2026-10-10 the author decided this ([issue 886](https://github.com/FrankQDWang/StoryOS/issues/886), [issue 971](https://github.com/FrankQDWang/StoryOS/issues/971)). An Author Edit can change the candidate of a secondary Operation. A secondary Operation is on a Block that is not the Block of the Proposal. Before, the Acceptance and the Author Undo of that edit used only the candidate of the primary Operation.
+- Migration 0085 adds two columns to `proposal_revisions`: `edited_operation_id` and `prior_operation_candidate_text`. The two columns are both empty or both set. When an Author Edit appends a Proposal Revision, the Revision records the edited Operation and its candidate before the edit. The candidate text of the Revision stays the candidate of the primary Operation.
+- The Proposal edit Compensation restores the recorded candidate to the recorded Operation in a new Proposal Revision with a new Validation Receipt. The other Operations do not change.
+- A Revision from before migration 0085 has empty columns. If its Validation Receipt identifies the Block of the Proposal, the Compensation restores the parent candidate text to the primary Operation, as before. Otherwise the candidate before the edit is not known. Then the Forward action is a Barrier, Author Undo is unavailable, and the source action stays uncompensated.
+- Acceptance compares the candidate of the Validation Receipt with the current candidate of the Block that the Receipt identifies. That is the candidate of the Operation of that Block. When the Proposal has no Operation for that Block, it is the candidate text of the Revision. Acceptance also requires that the candidate text of the Revision is the candidate of the primary Operation.
+- The Project archive export contains the two new columns.
 
 ### Project setting commands stay outside Author Undo Order
 

@@ -13,7 +13,7 @@ use crate::undo_compensation::{
 };
 use crate::undo_latest_author_action::{undo_database_error, undo_from_author_edit};
 
-/// Appends a Proposal Revision with the candidate text of the parent of the current head.
+/// Appends a Proposal Revision that restores the candidate of the edited Operation.
 pub(crate) struct ProposalEditCompensation;
 
 impl CompensationAdapter for ProposalEditCompensation {
@@ -62,7 +62,7 @@ impl CompensationAdapter for ProposalEditCompensation {
         let context = ProposalEditContext {
             structured_candidate: false,
             proposal_id: frontier.proposal_id.clone(),
-            operation_id: None,
+            operation_id: frontier.operation_id.clone(),
             prior_revision_id: frontier.current_revision_id.clone(),
             manuscript_block_id: frontier.manuscript_block_id.clone(),
             base_authoritative_revision_id: frontier.base_authoritative_revision_id.clone(),
@@ -177,6 +177,9 @@ pub(crate) struct ObservedProposalFrontier {
     pub chapter_id: String,
     pub proposal_id: String,
     pub current_revision_id: String,
+    /// The edited Operation. `None` for a Revision from before migration 0085 that edited the
+    /// primary Block.
+    pub operation_id: Option<String>,
     pub restored_candidate_text: String,
     pub manuscript_block_id: String,
     pub base_authoritative_revision_id: String,
@@ -190,9 +193,11 @@ async fn load_proposal_frontier(
     let row = client
         .query_opt(
             "SELECT proposal.chapter_id::text, proposal.proposal_id::text,
-                    head.current_revision_id::text, parent.candidate_text,
-                    proposal.manuscript_block_id::text,
-                    revision.base_authoritative_revision_id::text
+                    head.current_revision_id::text,
+                    COALESCE(revision.prior_operation_candidate_text, parent.candidate_text),
+                    COALESCE(edited.manuscript_block_id, proposal.manuscript_block_id)::text,
+                    revision.base_authoritative_revision_id::text,
+                    revision.edited_operation_id::text
                FROM storyos.author_action_entries AS action
                JOIN storyos.domain_receipts AS receipt
                  ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
@@ -214,6 +219,16 @@ async fn load_proposal_frontier(
                      parent.revision_id) =
                     (revision.owner_user_id, revision.project_id, revision.proposal_id,
                      revision.parent_revision_id)
+              LEFT JOIN storyos.proposal_operations AS edited
+                ON (edited.owner_user_id, edited.project_id, edited.proposal_id,
+                    edited.operation_id) =
+                   (revision.owner_user_id, revision.project_id, revision.proposal_id,
+                    revision.edited_operation_id)
+              LEFT JOIN storyos.validation_receipts AS validation
+                ON (validation.owner_user_id, validation.project_id, validation.proposal_id,
+                    validation.proposal_revision_id) =
+                   (revision.owner_user_id, revision.project_id, revision.proposal_id,
+                    revision.revision_id)
               LEFT JOIN storyos.author_action_entries AS compensation
                 ON compensation.owner_user_id = action.owner_user_id
                AND compensation.project_id = action.project_id
@@ -224,7 +239,10 @@ async fn load_proposal_frontier(
                 AND action.author_action_sequence = $3::text::numeric
                 AND action.disposition = 'forward'
                 AND receipt.result_kind = 'proposal_revised'
-                AND compensation.author_action_sequence IS NULL",
+                AND compensation.author_action_sequence IS NULL
+                -- Without the edited Operation, only the primary candidate is exact.
+                AND (revision.edited_operation_id IS NOT NULL
+                  OR validation.manuscript_block_id = proposal.manuscript_block_id)",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -242,5 +260,6 @@ async fn load_proposal_frontier(
         restored_candidate_text: row.get(/*idx*/ 3),
         manuscript_block_id: row.get(/*idx*/ 4),
         base_authoritative_revision_id: row.get(/*idx*/ 5),
+        operation_id: row.get(/*idx*/ 6),
     }))
 }
