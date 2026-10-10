@@ -24,6 +24,22 @@ impl DestinationRequest {
             Self::Abort(request) => &request.attempt,
         }
     }
+
+    pub fn route(&self) -> &RequestRoute {
+        match self {
+            Self::Create(request) => &request.route,
+            Self::Retrieve(request) => &request.route,
+            Self::Abort(request) => &request.route,
+        }
+    }
+}
+
+/// The adapter of the Model Registration that the AgentRun pinned, and the Credential Reference
+/// of its use binding.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RequestRoute {
+    pub adapter: ModelAdapter,
+    pub credential_reference: Option<CredentialReference>,
 }
 
 /// Whether a request still needs its dispatch claim.
@@ -39,6 +55,7 @@ pub enum RequestAttempt {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CreateRequest {
     pub attempt: RequestAttempt,
+    pub route: RequestRoute,
     pub author_message: String,
     pub chapter_id: String,
     pub passage_resolution: Option<OrdinaryPassageResolution>,
@@ -75,6 +92,7 @@ impl DeclaredTarget {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RetrieveRequest {
     pub attempt: RequestAttempt,
+    pub route: RequestRoute,
     pub purpose: RetrievePurpose,
     pub original_model_attempt_id: String,
     pub response_reference: String,
@@ -92,6 +110,7 @@ pub enum RetrievePurpose {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AbortRequest {
     pub attempt: RequestAttempt,
+    pub route: RequestRoute,
     pub ticket: AbortTicket,
     pub response_reference: Option<String>,
 }
@@ -116,12 +135,14 @@ pub struct CommittedCancellation {
     pub response_reference: Option<String>,
     /// The Abort Destination Attempt that a lost claim already committed, if any.
     pub abort_attempt: RequestAttempt,
+    pub route: RequestRoute,
 }
 
 impl CommittedCancellation {
     pub(crate) fn into_abort(self) -> DestinationRequest {
         DestinationRequest::Abort(AbortRequest {
             attempt: self.abort_attempt,
+            route: self.route,
             ticket: AbortTicket {
                 model_attempt_id: self.model_attempt_id,
             },

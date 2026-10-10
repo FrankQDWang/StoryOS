@@ -12,9 +12,18 @@ path = "src/main.rs"
 storyos-adapter-diagnostics = { path = "../storyos-adapter-diagnostics" }
 storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
 storyos-adapter-postgres = { path = "../storyos-adapter-postgres" }
+storyos-adapter-volcengine-responses = { path = "../storyos-adapter-volcengine-responses" }
 storyos-application = { path = "../storyos-application" }
+storyos-core = { path = "../storyos-core" }
 storyos-worker = { path = "../storyos-worker" }
 tokio = { workspace = true, features = ["time"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = { version = "=3.7.0", default-features = false }
 
 [lints]
 workspace = true

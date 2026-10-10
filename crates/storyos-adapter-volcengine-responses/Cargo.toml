@@ -1,0 +1,16 @@
+[package]
+name = "storyos-adapter-volcengine-responses"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+storyos-application = { path = "../storyos-application" }
+storyos-core = { path = "../storyos-core" }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

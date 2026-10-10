@@ -223,7 +223,7 @@ test("the Diagnostic Projection of Worker claims and dispatches holds no author 
   const dispatches = closedSpans(lines, "dispatch");
   assert.ok(dispatches.some((line) => line.span?.request_kind === "create"
     && line.span.observation === "terminal"
-    && line.span.adapter === "storyos_adapter_fake_destination::FakeDestination"), workerStderr);
+    && line.span.adapter === "host_fake"), workerStderr);
   for (const name of ["prepare", "exchange", "commit_dispatch_claim", "record"]) {
     assert.ok(closedSpans(lines, name).length > 0, `no ${name} span in ${workerStderr}`);
   }

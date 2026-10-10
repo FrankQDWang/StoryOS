@@ -17,6 +17,12 @@ impl ModelAdapter {
             Self::VolcengineAgentPlanResponses => "volcengine_agent_plan_responses",
         }
     }
+
+    pub fn parse(kind: &str) -> Option<Self> {
+        [Self::HostFake, Self::VolcengineAgentPlanResponses]
+            .into_iter()
+            .find(|adapter| adapter.kind() == kind)
+    }
 }
 
 /// One host-owned global Model Registration revision. It holds no Project data, endpoint

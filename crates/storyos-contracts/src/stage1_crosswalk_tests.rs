@@ -284,6 +284,7 @@ fn expected_provenance_evidence() -> Value {
                 "crates/storyos-adapter-diagnostics",
                 "crates/storyos-adapter-fake-destination",
                 "crates/storyos-adapter-postgres",
+                "crates/storyos-adapter-volcengine-responses",
                 "crates/storyos-application",
                 "crates/storyos-contracts",
                 "crates/storyos-core",
