@@ -167,10 +167,11 @@ pub(super) async fn seed_run(admin: &Client, scope: &ProjectScope, run_id: &str,
                (owner_user_id, project_id, run_id, project_agent_id, conversation_id,
                 memory_settings_revision, grant_id, project_model_use_binding_revision,
                 chapter_id, author_message, status, receipt_id, lease_expires_at,
-                wakeup_pending)
+                wakeup_pending, model_registration_revision)
              VALUES ('{owner}', '{project}', '{run_id}', '{agent}', '{conversation}',
                      '{memory}', '{grant}', '{binding}', '{chapter}', 'Continue',
-                     '{status}', '{receipt}', now() + interval '1 minute', true);
+                     '{status}', '{receipt}', now() + interval '1 minute', true,
+                     gen_random_uuid());
              COMMIT;",
             owner = scope.owner_user_id.as_ref(),
             project = scope.project_id.as_ref(),

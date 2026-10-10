@@ -2,7 +2,9 @@
 
 use std::future::Future;
 
-use storyos_core::{ModelOutput, NativeStreamItem, OrdinaryPassageResolution, RetrievalBounds};
+use storyos_core::{
+    ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution, RetrievalBounds,
+};
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
 
@@ -288,6 +290,9 @@ pub trait ModelStreamSink: Send {
 
 /// The protocol projection of one destination. It cannot decide retry, fallback, or selection.
 pub trait ModelProviderAdapter: Sync {
+    /// The adapters of the Model Registrations whose AgentRuns this value can serve.
+    const ADAPTERS: &'static [ModelAdapter];
+
     /// The single-use value of one preparation. It may hold a resolved credential.
     type Prepared: Send;
 

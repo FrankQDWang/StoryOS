@@ -5,7 +5,7 @@ use storyos_application::{
     ProjectScope, UpdateProjectAssistanceInput, UpdateProjectAssistanceSettlement,
 };
 use storyos_core::{
-    AssistanceAvailability, AssistanceBindingPresence,
+    AssistanceAvailability, AssistanceBindingPresence, HOST_FAKE_REGISTRATION,
     UpdateProjectAssistance as CoreUpdateProjectAssistance, UpdateProjectAssistanceApplied,
     UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect, update_project_assistance,
 };
@@ -19,9 +19,6 @@ use crate::command_sequence::{
     ProjectCommand, RateLimitedChallenge, ReplayEffect, settle_project_command, unavailable,
 };
 use crate::{PostgresProjectReader, read_error};
-
-pub(crate) const HOST_FAKE_MODEL_REGISTRATION_REVISION: &str =
-    "018f0000-0000-7001-8000-00000000fa01";
 
 impl PostgresProjectReader {
     /// Settles one Project assistance setting and keeps the assistance record for exact retry.
@@ -104,7 +101,14 @@ impl ProjectCommand for UpdateProjectAssistanceInput {
                 availability,
                 revision,
             } => {
-                insert_policy_revision(client, envelope, availability, revision).await?;
+                insert_policy_revision(
+                    client,
+                    envelope,
+                    availability,
+                    revision,
+                    /*decision*/ None,
+                )
+                .await?;
                 (availability, revision)
             }
         };
@@ -147,26 +151,27 @@ pub(crate) async fn read_assistance_record(
             "SELECT policy.availability,
                     policy.policy_revision::text,
                     binding.model_registration_revision::text,
-                    identity.processing_destination_identity::text,
+                    evidence.processing_destination_identity::text,
                     evidence.evidence_revision::text,
                     binding.project_model_use_binding_revision::text,
                     binding.grant_id::text,
                     decision.external_compatibility_decision::text
                FROM storyos.project_policy_revisions AS policy
-               JOIN storyos.processing_destination_identities AS identity
-                 ON (identity.owner_user_id, identity.project_id) =
-                    (policy.owner_user_id, policy.project_id)
+               JOIN storyos.external_contract_compatibility_decisions AS decision
+                 ON (decision.owner_user_id, decision.project_id,
+                     decision.external_compatibility_decision) =
+                    (policy.owner_user_id, policy.project_id,
+                     policy.external_compatibility_decision)
                JOIN storyos.project_external_use_binding_revisions AS binding
-                 ON (binding.owner_user_id, binding.project_id) =
-                    (policy.owner_user_id, policy.project_id)
+                 ON (binding.owner_user_id, binding.project_id,
+                     binding.project_model_use_binding_revision) =
+                    (decision.owner_user_id, decision.project_id,
+                     decision.project_model_use_binding_revision)
                JOIN storyos.processing_destination_identity_evidence_revisions AS evidence
                  ON (evidence.owner_user_id, evidence.project_id,
                      evidence.processing_destination_identity, evidence.evidence_revision) =
                     (binding.owner_user_id, binding.project_id,
                      binding.processing_destination_identity, binding.evidence_revision)
-               JOIN storyos.external_contract_compatibility_decisions AS decision
-                 ON (decision.owner_user_id, decision.project_id) =
-                    (policy.owner_user_id, policy.project_id)
               WHERE policy.owner_user_id = $1::text::uuid
                 AND policy.project_id = $2::text::uuid
                 AND policy.policy_revision = (
@@ -202,24 +207,7 @@ async fn initialize_host_fake_binding(
     availability: AssistanceAvailability,
     revision: u64,
 ) -> Result<(), ProjectCommandError> {
-    client
-        .execute(
-            "INSERT INTO storyos.model_registration_revisions
-               (model_registration_revision, model_kind)
-             VALUES ($1::text::uuid, 'host_fake')
-             ON CONFLICT (model_registration_revision) DO NOTHING",
-            &[&HOST_FAKE_MODEL_REGISTRATION_REVISION],
-        )
-        .await
-        .map_err(unavailable)?;
-    client
-        .execute(
-            "INSERT INTO storyos.model_registration_heads
-               (model_kind, model_registration_revision)
-             VALUES ('host_fake', $1::text::uuid)
-             ON CONFLICT (model_kind) DO NOTHING",
-            &[&HOST_FAKE_MODEL_REGISTRATION_REVISION],
-        )
+    crate::model_registration::insert_model_registration(client, &HOST_FAKE_REGISTRATION)
         .await
         .map_err(unavailable)?;
     let identity = Uuid::now_v7().to_string();
@@ -281,7 +269,7 @@ async fn initialize_host_fake_binding(
                 &binding_revision,
                 &identity,
                 &grant_id,
-                &HOST_FAKE_MODEL_REGISTRATION_REVISION,
+                &HOST_FAKE_REGISTRATION.revision,
             ],
         )
         .await
@@ -302,26 +290,43 @@ async fn initialize_host_fake_binding(
         )
         .await
         .map_err(unavailable)?;
-    insert_policy_revision(client, envelope, availability, revision).await
+    insert_policy_revision(
+        client,
+        envelope,
+        availability,
+        revision,
+        Some(decision.as_str()),
+    )
+    .await
 }
 
+/// Inserts the next policy revision. `None` keeps the compatibility Decision of the prior one.
 async fn insert_policy_revision(
     client: &Client,
     envelope: &ProjectCommandEnvelope,
     availability: AssistanceAvailability,
     revision: u64,
+    decision: Option<&str>,
 ) -> Result<(), ProjectCommandError> {
     client
         .execute(
             "INSERT INTO storyos.project_policy_revisions
-               (owner_user_id, project_id, policy_revision, availability, receipt_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4, $5::text::uuid)",
+               (owner_user_id, project_id, policy_revision, availability, receipt_id,
+                external_compatibility_decision)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4, $5::text::uuid,
+                     COALESCE($6::text::uuid, (
+                       SELECT prior.external_compatibility_decision
+                         FROM storyos.project_policy_revisions AS prior
+                        WHERE prior.owner_user_id = $1::text::uuid
+                          AND prior.project_id = $2::text::uuid
+                          AND prior.policy_revision = $3::text::numeric - 1)))",
             &[
                 &envelope.project_scope.owner_user_id.as_ref(),
                 &envelope.project_scope.project_id.as_ref(),
                 &revision.to_string(),
                 &availability_text(availability),
                 &envelope.ids.receipt_id,
+                &decision,
             ],
         )
         .await

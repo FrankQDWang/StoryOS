@@ -61,7 +61,7 @@ pub async fn run_once<A: ModelProviderAdapter, O: ContractFaultObserver>(
             archive_export_claim(store, &claim, /*attempts*/ 1).await?;
             Ok(())
         }
-        None => match claim_next_agent_run(store).await? {
+        None => match claim_next_agent_run(store, A::ADAPTERS).await? {
             Some(claim) => {
                 match agent_run_claim(store, destination, &claim, /*attempts*/ 1).await {
                     Ok(_) | Err(CompleteAgentRunError::StaleFence) => Ok(()),
@@ -73,13 +73,13 @@ pub async fn run_once<A: ModelProviderAdapter, O: ContractFaultObserver>(
     }
 }
 
-pub async fn claim_only(
+pub async fn claim_only<A: ModelProviderAdapter>(
     store: &impl WorkerStore,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if claim_next_export_work(store).await?.is_some() {
         return Ok(());
     }
-    claim_next_agent_run(store).await?;
+    claim_next_agent_run(store, A::ADAPTERS).await?;
     Ok(())
 }
 
@@ -96,7 +96,7 @@ async fn step<A: ModelProviderAdapter, O: ContractFaultObserver>(
             archive_export_claim(store, &claim, ATTEMPTS).await,
             Ok(_) | Err(CompleteArchiveExportError::StaleFence)
         ),
-        Ok(None) => match claim_next_agent_run(store).await {
+        Ok(None) => match claim_next_agent_run(store, A::ADAPTERS).await {
             Ok(Some(claim)) => matches!(
                 agent_run_claim(store, destination, &claim, ATTEMPTS).await,
                 Ok(_) | Err(CompleteAgentRunError::StaleFence)

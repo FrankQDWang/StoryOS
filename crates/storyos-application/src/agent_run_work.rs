@@ -1,5 +1,7 @@
 use std::future::Future;
 
+use storyos_core::ModelAdapter;
+
 use crate::{ProjectReadError, ProjectScope};
 
 /// One fenced Worker claim of a queued AgentRun.
@@ -44,13 +46,16 @@ impl std::error::Error for CompleteAgentRunError {
 
 /// Claims one queued or lease-expired AgentRun for the Worker.
 pub trait AgentRunWorkStore: Sync {
+    /// Claims only an AgentRun whose Model Registration binds one of `adapters`.
     fn claim_next_agent_run(
         &self,
+        adapters: &[ModelAdapter],
     ) -> impl Future<Output = Result<Option<ClaimedAgentRun>, ProjectReadError>> + Send;
 }
 
 pub async fn claim_next_agent_run(
     store: &impl AgentRunWorkStore,
+    adapters: &[ModelAdapter],
 ) -> Result<Option<ClaimedAgentRun>, ProjectReadError> {
-    store.claim_next_agent_run().await
+    store.claim_next_agent_run(adapters).await
 }

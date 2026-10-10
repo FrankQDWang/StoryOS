@@ -24,14 +24,14 @@ const CHAPTER_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter 
 
 /// The durable dispatch evidence of one AgentRun.
 #[derive(Debug, PartialEq)]
-struct DispatchEvidence {
-    status: String,
-    settlement: Option<String>,
-    model_attempts: i64,
-    disclosure_events: i64,
-    destination_manifests: i64,
-    items: Option<String>,
-    decision_id: Option<String>,
+pub(crate) struct DispatchEvidence {
+    pub(crate) status: String,
+    pub(crate) settlement: Option<String>,
+    pub(crate) model_attempts: i64,
+    pub(crate) disclosure_events: i64,
+    pub(crate) destination_manifests: i64,
+    pub(crate) items: Option<String>,
+    pub(crate) decision_id: Option<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -67,6 +67,7 @@ struct ProbingDestination<'a> {
 }
 
 impl ModelProviderAdapter for ProbingDestination<'_> {
+    const ADAPTERS: &'static [storyos_core::ModelAdapter] = FakeDestination::ADAPTERS;
     type Prepared = <FakeDestination as ModelProviderAdapter>::Prepared;
 
     async fn prepare(
@@ -196,6 +197,12 @@ fn digest(kind: &str, bytes: &[u8]) -> String {
     )
 }
 
+/// The destination binding of the Project of one test AgentRun.
+pub(crate) enum ProjectBinding {
+    HostFake,
+    AgentPlan,
+}
+
 /// Admits one fake-model AgentRun on a new chapter, then claims it with a known fence. The lease
 /// is already expired, so a later Worker can drain a Run that a test leaves claimed.
 async fn claimed_run(
@@ -203,6 +210,35 @@ async fn claimed_run(
     admin: &Client,
     prefix: &str,
 ) -> ClaimedAgentRun {
+    let (scope, run_id) = queued_run(store, admin, prefix, ProjectBinding::HostFake).await;
+    let fence_token = admin
+        .query_one(
+            "UPDATE storyos.agent_runs
+                SET claim_generation = claim_generation + 1,
+                    fence_token = claim_generation + 1,
+                    lease_expires_at = clock_timestamp(),
+                    status = 'claimed'
+              WHERE run_id = $1::text::uuid
+          RETURNING fence_token",
+            &[&run_id],
+        )
+        .await
+        .unwrap()
+        .get(/*idx*/ 0);
+    ClaimedAgentRun {
+        project_scope: scope,
+        run_id,
+        fence_token,
+    }
+}
+
+/// Admits one queued AgentRun on a new chapter of a new Project with `binding`.
+pub(crate) async fn queued_run(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+    binding: ProjectBinding,
+) -> (ProjectScope, String) {
     let scope: ProjectScope = seed_project(store, &format!("{prefix}0")).await;
     let assistance = named_issue(
         &scope,
@@ -230,6 +266,12 @@ async fn claimed_run(
         .update_project_assistance(&assistance_call.envelope, &assistance_call.input)
         .await
         .unwrap();
+    match binding {
+        ProjectBinding::HostFake => {}
+        ProjectBinding::AgentPlan => {
+            crate::model_registration::tests::bind_agent_plan(admin, &scope).await;
+        }
+    }
     let volume_id = apply_volume(
         store,
         &scope,
@@ -280,28 +322,10 @@ async fn claimed_run(
         .create_agent_run(&call.envelope, &call.input)
         .await
         .unwrap();
-    let fence_token = admin
-        .query_one(
-            "UPDATE storyos.agent_runs
-                SET claim_generation = claim_generation + 1,
-                    fence_token = claim_generation + 1,
-                    lease_expires_at = clock_timestamp(),
-                    status = 'claimed'
-              WHERE run_id = $1::text::uuid
-          RETURNING fence_token",
-            &[&call.input.run_id],
-        )
-        .await
-        .unwrap()
-        .get(0);
-    ClaimedAgentRun {
-        project_scope: scope,
-        run_id: call.input.run_id,
-        fence_token,
-    }
+    (scope, call.input.run_id)
 }
 
-async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {
+pub(crate) async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {
     let row = admin
         .query_one(
             "SELECT run.status, run.settlement::text,
@@ -333,7 +357,7 @@ async fn dispatch_evidence(admin: &Client, run_id: &str) -> DispatchEvidence {
     }
 }
 
-async fn stores() -> (PostgresProjectReader, Client) {
+pub(crate) async fn stores() -> (PostgresProjectReader, Client) {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
