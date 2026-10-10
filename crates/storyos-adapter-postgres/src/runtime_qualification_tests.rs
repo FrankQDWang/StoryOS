@@ -250,8 +250,8 @@ async fn an_authorized_qualification_rebinds_and_dispatches_each_request_once_wi
     assert_eq!(
         qualification_evidence(&admin, &unknown_run).await,
         [
-            text("?"),
-            None,
+            text("waiting"),
+            text(r#"{"kind": "outcome_unknown", "reason": "missing_reference"}"#),
             text("1"),
             text("qualification_authorized"),
             text("true"),
