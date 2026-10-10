@@ -38,19 +38,23 @@ pub(super) struct LoadedOperation {
 }
 
 impl LoadedProposal {
-    /// The Validation Receipt identifies the current candidate of its Block: the candidate of the
-    /// Operation of that Block, or else the candidate of the Revision.
+    /// The Validation Receipt identifies the current candidate of its Block, and the candidate
+    /// of the Revision is the candidate of the primary Operation. The current candidate of a
+    /// Block is the candidate of its Operation, or else the candidate of the Revision.
     pub(super) fn candidate_unaltered(&self) -> bool {
-        let current = self
-            .operations
-            .iter()
-            .find(|operation| {
-                Some(&operation.manuscript_block_id) == self.receipt_block_id.as_ref()
-            })
-            .map_or(self.candidate_text.as_str(), |operation| {
-                operation.candidate_text.as_str()
-            });
-        self.receipt_candidate_text.as_deref() == Some(current)
+        let operation_candidate = |block_id: &str| {
+            self.operations
+                .iter()
+                .find(|operation| operation.manuscript_block_id == block_id)
+                .map(|operation| operation.candidate_text.as_str())
+        };
+        let revision_matches = operation_candidate(&self.manuscript_block_id)
+            .is_none_or(|candidate| candidate == self.candidate_text);
+        let receipt_matches = self.receipt_block_id.as_deref().is_some_and(|block_id| {
+            self.receipt_candidate_text.as_deref()
+                == Some(operation_candidate(block_id).unwrap_or(&self.candidate_text))
+        });
+        revision_matches && receipt_matches
     }
 
     pub(super) fn accepted_body(
