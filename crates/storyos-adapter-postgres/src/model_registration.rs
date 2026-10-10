@@ -6,15 +6,16 @@ use tokio_postgres::Client;
 
 use crate::agent_run_work::complete_database_error;
 
-/// The adapter of the Registration that the claimed AgentRun pinned, and the Credential
-/// Reference of its use binding.
+/// The adapter and model of the Registration that the claimed AgentRun pinned, and the endpoint
+/// and Credential Reference of its use binding.
 pub(crate) async fn request_route(
     client: &Client,
     claim: &ClaimedAgentRun,
 ) -> Result<RequestRoute, CompleteAgentRunError> {
     let row = client
         .query_one(
-            "SELECT registration.model_kind, binding.credential_reference
+            "SELECT registration.model_kind, binding.credential_reference,
+                    registration.provider_model_id, evidence.endpoint
                FROM storyos.agent_runs AS run
                JOIN storyos.model_registration_revisions AS registration
                  ON registration.model_registration_revision = run.model_registration_revision
@@ -22,6 +23,11 @@ pub(crate) async fn request_route(
                  ON (binding.owner_user_id, binding.project_id,
                      binding.project_model_use_binding_revision) =
                     (run.owner_user_id, run.project_id, run.project_model_use_binding_revision)
+               JOIN storyos.processing_destination_identity_evidence_revisions AS evidence
+                 ON (evidence.owner_user_id, evidence.project_id,
+                     evidence.processing_destination_identity, evidence.evidence_revision) =
+                    (binding.owner_user_id, binding.project_id,
+                     binding.processing_destination_identity, binding.evidence_revision)
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
@@ -39,9 +45,12 @@ pub(crate) async fn request_route(
                 "The Model Registration adapter is damaged",
             )))
         })?,
+        provider_model_id: row.get(/*idx*/ 2),
+        endpoint: row.get(/*idx*/ 3),
         credential_reference: row
             .get::<_, Option<String>>(/*idx*/ 1)
             .map(CredentialReference),
+        bounds: None,
     })
 }
 
