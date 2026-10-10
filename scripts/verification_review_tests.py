@@ -225,7 +225,7 @@ sys.exit({error!r})
     def gh_calls(self):
         return json.loads((self.root / 'target/gh-calls.json').read_text())
 
-    def review_round(self, verdicts, comments=(), checks=None, faults=None):
+    def review_round(self, verdicts, comments=(), checks=None, faults=None, job_status='completed'):
         """Run the review round command with a mocked gh and a mocked Codex plugin."""
         import os
         import subprocess
@@ -234,7 +234,8 @@ sys.exit({error!r})
         (tools / 'gh').rename(tools / 'gh-api')
         state = self.root / 'target/round.json'
         state.write_text(json.dumps({'comments': [{'body': body, 'url': f'https://example.invalid/pull/745#comment-{n}'}
-                                                 for n, body in enumerate(comments, 1)], 'verdicts': verdicts, 'node': []}))
+                                                 for n, body in enumerate(comments, 1)], 'verdicts': verdicts, 'node': [],
+                                     'job_status': job_status}))
         if checks is not None:
             checks = [{**check, 'head_sha': self.head} for check in checks]
             self.live.write_text(json.dumps({**json.loads(self.live.read_text()), 'checks': checks}))
@@ -263,10 +264,12 @@ state, (script, command, *args) = Path("target/round.json"), sys.argv[1:]
 s = json.loads(state.read_text())
 s["node"].append([script, command, *args])
 state.write_text(json.dumps(s))
-if command == "task":
+if command == "SessionEnd":
+    pass
+elif command == "task":
     print(json.dumps({{"jobId": "standards" if "Axis: `standards`" in Path(args[args.index("--prompt-file") + 1]).read_text() else "spec"}}))
 elif command == "status":
-    print(json.dumps({{"job": {{"id": args[0], "status": "completed"}}, "waitTimedOut": False}}))
+    print(json.dumps({{"job": {{"id": args[0], "status": s.get("job_status", "completed")}}, "waitTimedOut": False}}))
 else:
     print(json.dumps({{"job": {{"id": args[0]}}, "storedJob": {{"threadId": "thread-" + args[0], "result": {{"rawOutput": "Done.\\n```json\\n" + json.dumps(s["verdicts"][args[0]]) + "\\n```"}}}}}}))
 ''')
@@ -305,7 +308,9 @@ else:
             f"Request digest: `{request['digest']}`. Request `guards`: {guards}.\n\n"
             '### Blocking\n\nNone.\n\n### Non-blocking\n\nNone.\n\n### Evidence\n\n- Read the diff.\n'))
         self.assertIn('### Non-blocking\n\n1. Wording.\n', state['comments'][1]['body'])
-        self.assertEqual([call[0].split('/codex/')[1] for call in state['node']], ['1.0.10/scripts/codex-companion.mjs'] * 6)
+        self.assertEqual([call[0].split('/codex/')[1] for call in state['node']],
+                         ['1.0.10/scripts/codex-companion.mjs'] * 6 + ['1.0.10/scripts/session-lifecycle-hook.mjs'])
+        self.assertEqual(state['node'][-1][1:], ['SessionEnd'])
         self.assertEqual([call[1:4] for call in state['node'] if call[1] == 'task'], [['task', '--background', '--fresh']] * 2)
         self.assertNotIn('--write', sum(state['node'], []))
         for axis in ('standards', 'spec'):
@@ -325,6 +330,11 @@ else:
         self.assertIn('### Blocking\n\n1. Criterion 2 is not met.\n', state['comments'][4]['body'])
         self.assertIn('Spec: FAIL', result.stdout)
         self.assertIn('Next: fix the blocking findings', result.stdout)
+
+    def test_failed_review_job_still_stops_the_codex_broker(self):
+        result, state = self.review_round({}, job_status='failed')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((state['comments'], state['node'][-1][1:]), ([], ['SessionEnd']))
 
     def refused_round(self, comments):
         result, state = self.review_round({}, comments=comments)

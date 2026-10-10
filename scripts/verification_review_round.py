@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -20,13 +21,27 @@ WAITS = 6
 gh = verification_github.gh
 
 
-def codex(*args):
-    """Run one command of the newest installed Codex plugin version and return its JSON."""
+def codex_scripts():
+    """The scripts directory of the newest installed Codex plugin version."""
     versions = sorted(Path.home().glob('.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs'),
                       key=lambda p: [int(n) if n.isdecimal() else 0 for n in re.split(r'[.-]', p.parents[1].name)])
     if not versions:
         raise ValueError('The Codex plugin is not installed; run /codex:setup')
-    return json.loads(subprocess.check_output(['node', str(versions[-1]), *args, '--json'], text=True))
+    return versions[-1].parent
+
+
+def codex(*args):
+    """Run one command of the newest installed Codex plugin version and return its JSON."""
+    return json.loads(subprocess.check_output(['node', str(codex_scripts() / 'codex-companion.mjs'), *args, '--json'],
+                                              text=True))
+
+
+def stop_codex_broker():
+    """Stop the broker of this workspace and its app server, as the plugin does when a Claude session ends."""
+    stopped = subprocess.run(['node', str(codex_scripts() / 'session-lifecycle-hook.mjs'), 'SessionEnd'],
+                             input=json.dumps({'cwd': os.getcwd()}), text=True, capture_output=True)
+    if stopped.returncode != 0:
+        print(f'Warning: the Codex broker did not stop: exit {stopped.returncode}', file=sys.stderr)
 
 
 def verify_ready(route, head):
@@ -125,11 +140,14 @@ def run(root, pr, executor):
     request = json.loads(path.read_text())
     contract(pull, path.parent)
     jobs = {}
-    for axis in ('standards', 'spec'):
-        prompt = path.parent / f'{axis}-prompt.md'
-        prompt.write_text(TEMPLATE.read_text().replace('{{axis}}', axis).replace('{{request}}', str(path)))
-        jobs[axis] = codex('task', '--background', '--fresh', '--prompt-file', str(prompt))['jobId']
-    verdicts, results = {axis: review(job) for axis, job in jobs.items()}, {}
+    try:
+        for axis in ('standards', 'spec'):
+            prompt = path.parent / f'{axis}-prompt.md'
+            prompt.write_text(TEMPLATE.read_text().replace('{{axis}}', axis).replace('{{request}}', str(path)))
+            jobs[axis] = codex('task', '--background', '--fresh', '--prompt-file', str(prompt))['jobId']
+        verdicts, results = {axis: review(job) for axis, job in jobs.items()}, {}
+    finally:
+        stop_codex_broker()
     for axis, verdict in verdicts.items():
         verdict['result'], verdict['context'] = 'FAIL' if verdict['blocking'] else 'PASS', f'codex-{axis}-pr{pr}'
         # The admission glob reads <axis>-*.json in this directory, so the local record uses another name.
