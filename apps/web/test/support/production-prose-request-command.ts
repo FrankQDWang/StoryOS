@@ -60,7 +60,8 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.locator("[data-project-id]").waitFor();
     const projectId = await page.locator("[data-project-id]").getAttribute("data-project-id");
     assert.ok(projectId !== null && UUID.test(projectId), `Project id: ${projectId}`);
-    await page.locator('[data-assistant-availability="unavailable"]').waitFor();
+    // The deployment offers the fake destination, so a Project without a binding is available (ADR 0048).
+    await page.locator('[data-assistant-availability="available"]').waitFor();
     assert.equal(await page.locator(".composer button").isDisabled(), true);
     await page.locator("[data-add-chapter]").click();
     await page.locator("[data-create-volume-action]").click();

@@ -526,9 +526,11 @@ start_ai_disabled_exact_dist_server
 # The authority oracle compares the receipts of the exact-dist journeys of the fake destination.
 # The Stage 2 AI-independent journeys run first, without a model destination and the oracle.
 export STORYOS_STAGE1_AUTHORITY_ORACLE=1
-exclusions=""
-for journey in $exact_dist_ai_disabled_journeys; do
-  exclusions="$exclusions --exclude $journey"
+# The vitest --exclude option does not apply to a workspace project, so the second run names its files.
+journeys=""
+for path in apps/web/test/browser-exact-dist/*.test.ts; do
+  journey=${path#apps/web/}
+  exact_dist_ai_disabled_journey "$journey" || journeys="$journeys $journey"
 done
 # shellcheck disable=SC2086
 timed_stage exact-dist -- sh -c '
@@ -537,7 +539,7 @@ timed_stage exact-dist -- sh -c '
   env -u STORYOS_STAGE1_AUTHORITY_ORACLE STORYOS_DEV_SERVER="$STORYOS_AI_DISABLED_SERVER" \
     pnpm --dir apps/web exec vitest run --project browser-exact-dist $ai_disabled &&
     pnpm --dir apps/web exec vitest run --project browser-exact-dist "$@"
-' exact-dist "$exact_dist_ai_disabled_journeys" $exclusions
+' exact-dist "$exact_dist_ai_disabled_journeys" $journeys
 stop_exact_dist_server
 echo "Running isolated Recovery Copy restore and Recovery Visibility Proof"
 STORYOS_RECOVERY_DRILL=fixture-only timed_stage recovery-fixture -- "$repository_root/scripts/verify-recovery-hold.sh"
