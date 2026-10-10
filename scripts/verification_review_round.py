@@ -2,8 +2,10 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 
@@ -15,18 +17,59 @@ TEMPLATE = SCRIPTS.parent / 'docs/agents/review-prompt.md'
 VERDICT = re.compile(r'## (Standards|Spec) review, round (\d+): (PASS|FAIL)')
 TREE = re.compile(r'^Candidate: head `[0-9a-f]+`, base `[0-9a-f]+`, tree `([0-9a-f]{40})`\.$', re.M)
 ROUNDS = 3
+BROKER_COMMAND = 'openai-codex/codex/.*/scripts/app-server-broker.mjs'
 WAIT_MS = 600000
 WAITS = 6
 gh = verification_github.gh
 
 
-def codex(*args):
-    """Run one command of the newest installed Codex plugin version and return its JSON."""
+def codex_scripts():
+    """The scripts directory of the newest installed Codex plugin version."""
     versions = sorted(Path.home().glob('.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs'),
                       key=lambda p: [int(n) if n.isdecimal() else 0 for n in re.split(r'[.-]', p.parents[1].name)])
     if not versions:
         raise ValueError('The Codex plugin is not installed; run /codex:setup')
-    return json.loads(subprocess.check_output(['node', str(versions[-1]), *args, '--json'], text=True))
+    return versions[-1].parent
+
+
+def codex(*args):
+    """Run one command of the newest installed Codex plugin version and return its JSON."""
+    return json.loads(subprocess.check_output(['node', str(codex_scripts() / 'codex-companion.mjs'), *args, '--json'],
+                                              text=True))
+
+
+def stop_codex_broker():
+    """Stop the brokers of this workspace and their app servers after the review jobs.
+
+    The plugin teardown of a Claude session end stops the broker that the plugin state records. Two
+    review jobs can start two brokers at the same time, and the state keeps only one, so the other
+    brokers of this workspace stop by their working directory. A failure writes one warning and never
+    stops the round, so the completed verdicts are still imported and posted."""
+    try:
+        stopped = subprocess.run(['node', str(codex_scripts() / 'session-lifecycle-hook.mjs'), 'SessionEnd'],
+                                 input=json.dumps({'cwd': os.getcwd()}), text=True, capture_output=True)
+        if stopped.returncode != 0:
+            print(f'Warning: the Codex broker did not stop: exit {stopped.returncode}', file=sys.stderr)
+        workspace = os.path.realpath(os.getcwd())
+        found = subprocess.run(['pgrep', '-f', BROKER_COMMAND], capture_output=True, text=True).stdout.split()
+        parents = [line.split() for line in subprocess.check_output(['ps', '-eo', 'pid=,ppid='], text=True).splitlines()]
+        for broker in (int(pid) for pid in found if process_directory(int(pid)) == workspace):
+            for pid in [int(child) for child, parent in parents if int(parent) == broker] + [broker]:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        print(f'Warning: the Codex broker did not stop: {type(error).__name__}', file=sys.stderr)
+
+
+def process_directory(pid):
+    """The working directory of a process, or None when it is not readable."""
+    try:
+        return os.path.realpath(os.readlink(f'/proc/{pid}/cwd'))
+    except OSError:
+        listed = subprocess.run(['lsof', '-a', '-p', str(pid), '-d', 'cwd', '-Fn'], capture_output=True, text=True)
+        return next((os.path.realpath(line[1:]) for line in listed.stdout.splitlines() if line.startswith('n')), None)
 
 
 def verify_ready(route, head):
@@ -125,11 +168,14 @@ def run(root, pr, executor):
     request = json.loads(path.read_text())
     contract(pull, path.parent)
     jobs = {}
-    for axis in ('standards', 'spec'):
-        prompt = path.parent / f'{axis}-prompt.md'
-        prompt.write_text(TEMPLATE.read_text().replace('{{axis}}', axis).replace('{{request}}', str(path)))
-        jobs[axis] = codex('task', '--background', '--fresh', '--prompt-file', str(prompt))['jobId']
-    verdicts, results = {axis: review(job) for axis, job in jobs.items()}, {}
+    try:
+        for axis in ('standards', 'spec'):
+            prompt = path.parent / f'{axis}-prompt.md'
+            prompt.write_text(TEMPLATE.read_text().replace('{{axis}}', axis).replace('{{request}}', str(path)))
+            jobs[axis] = codex('task', '--background', '--fresh', '--prompt-file', str(prompt))['jobId']
+        verdicts, results = {axis: review(job) for axis, job in jobs.items()}, {}
+    finally:
+        stop_codex_broker()
     for axis, verdict in verdicts.items():
         verdict['result'], verdict['context'] = 'FAIL' if verdict['blocking'] else 'PASS', f'codex-{axis}-pr{pr}'
         # The admission glob reads <axis>-*.json in this directory, so the local record uses another name.
