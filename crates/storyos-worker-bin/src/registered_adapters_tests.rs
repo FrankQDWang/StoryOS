@@ -10,6 +10,8 @@ use storyos_application::{
 use storyos_core::ModelAdapter;
 
 use super::RegisteredAdapters;
+use crate::credential::{EnvironmentResolver, WorkerCredentials};
+use crate::keychain::KeychainResolver;
 
 const REFERENCE: &str = "macos-keychain:storyos-volcengine-agent-plan/frankqdwang";
 const CREDENTIAL_CANARY: &str = "storyos-credential-canary-7f3c";
@@ -139,19 +141,32 @@ async fn a_resolved_credential_never_reaches_the_diagnostic_projection() {
         .finish();
     let _default = tracing::subscriber::set_default(subscriber);
 
-    let prepared = prepare(
-        /*available*/ true,
-        create(ModelAdapter::VolcengineAgentPlanResponses, Some(REFERENCE)),
-    )
-    .await;
+    let adapters = RegisteredAdapters {
+        fake: FakeDestination,
+        agent_plan: AgentPlanResponses {
+            resolver: WorkerCredentials {
+                keychain: KeychainResolver,
+                environment: EnvironmentResolver {
+                    lookup: |_name: &str| Some(CREDENTIAL_CANARY.to_owned()),
+                },
+            },
+        },
+    };
+    let prepared = adapters
+        .prepare(&create(
+            ModelAdapter::VolcengineAgentPlanResponses,
+            Some("env:STORYOS_AGENT_PLAN_API_KEY"),
+        ))
+        .await
+        .map(|prepared| prepared.projection);
 
     let lines = String::from_utf8(projection.0.lock().unwrap().clone()).unwrap();
     assert_eq!(
         (
-            prepared.0,
+            prepared.map(|projection| format!("{projection:?}").contains(CREDENTIAL_CANARY)),
             lines.contains(r#""name":"prepare""#),
             lines.contains(CREDENTIAL_CANARY),
         ),
-        (Ok(()), true, false)
+        (Ok(false), true, false)
     );
 }
