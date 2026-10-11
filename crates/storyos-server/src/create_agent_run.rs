@@ -205,7 +205,7 @@ pub(super) async fn get_agent_run(
             })
             .collect(),
         status: inspect_status(record.status),
-        context: inspect_context(&record.context),
+        context: inspect_context(&record.context, record.adapter),
         decision: inspect_decision(&record.decision),
         model_attempt: inspect_model(record.model.as_ref()),
         active_compaction: inspect_active_compaction(record.active_compaction.as_ref()),
@@ -654,6 +654,7 @@ fn inspect_availability(
 
 fn inspect_context(
     context: &storyos_application::AgentRunContext,
+    adapter: storyos_core::ModelAdapter,
 ) -> contracts::AgentRunContextInspect {
     use storyos_core::{ContextBlockReason, ContextSufficiency, RejectionReason};
     let record = &context.record;
@@ -768,10 +769,12 @@ fn inspect_context(
         outbound_disclosure_manifest: optional_manifest(
             context.outbound_disclosure_manifest_id.as_deref(),
         ),
-        destination_io: if dispatched {
-            contracts::DestinationIo::HostFake
-        } else {
-            contracts::DestinationIo::None
+        destination_io: match (dispatched, adapter) {
+            (false, _) => contracts::DestinationIo::None,
+            (true, storyos_core::ModelAdapter::HostFake) => contracts::DestinationIo::HostFake,
+            (true, storyos_core::ModelAdapter::VolcengineAgentPlanResponses) => {
+                contracts::DestinationIo::VolcengineAgentPlan
+            }
         },
         current_availability: contracts::CurrentAvailabilityInspect {
             working_target: match &context.working_target_availability {

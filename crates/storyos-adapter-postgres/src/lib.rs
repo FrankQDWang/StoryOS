@@ -163,6 +163,7 @@ mod proposal_decision_compensation;
 mod proposal_generation_decision;
 mod prose_change_decision;
 mod prose_change_location_read;
+mod provider_evidence;
 mod readable_export;
 mod readable_export_work;
 mod refused_edit_draft;

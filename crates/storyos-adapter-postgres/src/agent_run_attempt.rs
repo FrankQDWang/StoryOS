@@ -71,6 +71,15 @@ pub(crate) async fn persist_uncertain_attempt(
             continuation.known_prior_binding_id.as_deref(),
         )
     });
+    if crate::provider_evidence::real_route(&payload)
+        && let Some(evidence) = payload["evidence"].as_array_mut()
+    {
+        for item in evidence.iter_mut() {
+            if item["kind"] == "provider_report" {
+                item["report"] = serde_json::json!(crate::provider_evidence::PENDING_REPORT);
+            }
+        }
+    }
     if assistance.runtime_qualification == RuntimeQualification::QualificationAuthorized {
         payload["runtime_qualification"] =
             serde_json::json!(assistance.runtime_qualification.as_str());

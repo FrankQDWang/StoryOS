@@ -374,3 +374,145 @@ async fn a_cancelled_qualification_request_refuses_its_abort_once_before_dispatc
         )
     );
 }
+
+/// Returns a test value that is not a real credential.
+struct TestCredential;
+
+impl storyos_application::CredentialResolver for TestCredential {
+    async fn resolve(
+        &self,
+        _reference: &storyos_application::CredentialReference,
+    ) -> Option<storyos_application::ResolvedCredential> {
+        Some(storyos_application::ResolvedCredential::new(
+            "storyos-test-credential".to_owned(),
+        ))
+    }
+}
+
+/// Answers one Responses request on a local port with `body`, and returns the endpoint.
+async fn scripted_endpoint(body: String) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = Vec::new();
+        let mut chunk = [0_u8; 4096];
+        while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+            let read = stream.read(&mut chunk).await.unwrap();
+            request.extend_from_slice(&chunk[..read]);
+        }
+        let head = format!(
+            "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.write_all((head + &body).as_bytes()).await.unwrap();
+    });
+    endpoint
+}
+
+/// The Provider evidence of the AgentRun that the real adapter settles through `endpoint`.
+async fn real_attempt_evidence(
+    store: &crate::PostgresProjectReader,
+    admin: &Client,
+    prefix: &str,
+    body: serde_json::Value,
+) -> (
+    ModelAdapter,
+    String,
+    Vec<storyos_application::AgentRunEvidence>,
+) {
+    let (scope, _, run_id) = queued_run(store, prefix, authorized()).await;
+    let endpoint = scripted_endpoint(body.to_string()).await;
+    admin
+        .execute(
+            "UPDATE storyos.processing_destination_identity_evidence_revisions
+                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
+            &[&scope.project_id.as_ref(), &endpoint],
+        )
+        .await
+        .unwrap();
+    let adapter = storyos_adapter_volcengine_responses::AgentPlanResponses {
+        resolver: TestCredential,
+    };
+    let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
+    complete_agent_run(store, &adapter, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+    let record = storyos_application::open_agent_run(store, &scope, &run_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let model = record.model.unwrap();
+    (
+        record.adapter,
+        model.admission.adapter_mapping,
+        model.evidence,
+    )
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_reference() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let response = |id: &str, usage: Option<serde_json::Value>| {
+        let mut body = serde_json::json!({"id": id, "status": "completed", "output": [
+            {"id": "msg_01", "type": "message", "role": "assistant", "status": "completed",
+             "content": [{"type": "output_text", "text": "{\"kind\":\"advisory\",\"text\":\"Keep it.\"}"}]}
+        ]});
+        if let Some(usage) = usage {
+            body["usage"] = usage;
+        }
+        body
+    };
+    let reported = real_attempt_evidence(
+        &store,
+        &admin,
+        "e9f",
+        response(
+            "resp_e9f",
+            Some(serde_json::json!({"input_tokens": 12, "output_tokens": 3})),
+        ),
+    )
+    .await;
+    let unknown = real_attempt_evidence(&store, &admin, "e9g", response("resp_e9g", None)).await;
+    let facts = |(adapter, mapping, evidence): (
+        ModelAdapter,
+        String,
+        Vec<storyos_application::AgentRunEvidence>,
+    )| {
+        let known: Vec<_> = evidence
+            .into_iter()
+            .filter_map(|item| match item {
+                storyos_application::AgentRunEvidence::StoredReference { reference_id, .. } => {
+                    Some(reference_id)
+                }
+                storyos_application::AgentRunEvidence::ProviderReport { report, .. } => {
+                    Some(report)
+                }
+                _ => None,
+            })
+            .filter(|fact| !fact.starts_with("01"))
+            .collect();
+        (adapter, mapping, known)
+    };
+
+    assert_eq!(
+        [facts(reported), facts(unknown)],
+        [
+            (
+                ModelAdapter::VolcengineAgentPlanResponses,
+                storyos_core::AGENT_PLAN_MAPPING_REVISION.to_owned(),
+                vec!["resp_e9f".to_owned(), "provider_usage_reported".to_owned()],
+            ),
+            (
+                ModelAdapter::VolcengineAgentPlanResponses,
+                storyos_core::AGENT_PLAN_MAPPING_REVISION.to_owned(),
+                vec!["resp_e9g".to_owned(), "provider_usage_unknown".to_owned()],
+            ),
+        ]
+    );
+}

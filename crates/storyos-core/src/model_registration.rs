@@ -23,7 +23,18 @@ impl ModelAdapter {
             .into_iter()
             .find(|adapter| adapter.kind() == kind)
     }
+
+    /// The wire mapping revision of the adapter.
+    pub fn mapping_revision(self) -> &'static str {
+        match self {
+            Self::HostFake => crate::HOST_FAKE_MAPPING_REVISION,
+            Self::VolcengineAgentPlanResponses => AGENT_PLAN_MAPPING_REVISION,
+        }
+    }
 }
+
+/// The wire mapping revision of the Agent Plan Responses Create request.
+pub const AGENT_PLAN_MAPPING_REVISION: &str = "storyos.volcengine-agent-plan.responses.create.v1";
 
 /// One host-owned global Model Registration revision. It holds no Project data, endpoint
 /// account, Credential Reference, grant, or compatibility admission.

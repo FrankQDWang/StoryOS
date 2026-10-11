@@ -132,7 +132,11 @@ pub(crate) fn current_identity(
             .processing_destination_identity_evidence_revision
             .to_string(),
         registration: assistance.model_registration_revision.clone(),
-        adapter_mapping: HOST_FAKE_MAPPING_REVISION.to_owned(),
+        adapter_mapping: model_registration(&assistance.model_registration_revision)
+            .map_or(HOST_FAKE_MAPPING_REVISION, |registration| {
+                registration.adapter.mapping_revision()
+            })
+            .to_owned(),
         use_binding: assistance.project_model_use_binding_revision.clone(),
         compatibility: assistance.external_compatibility_decision.clone(),
         covered_copy_restricted: false,
