@@ -39,10 +39,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             multiple_mapping_allowance,
         )?;
     let challenge_secret = settings.required_challenge_secret()?;
-    let assets = storyos_server::WebAssetSet::load(web_root)?;
     let database_url = settings.database_url.clone().ok_or_else(|| {
         "STORYOS_DATABASE_URL is required for Release 1 Storage Activation".to_owned()
     })?;
+    if !storyos_adapter_postgres::database_url_parses(database_url.expose_secret()) {
+        return Err(storyos_settings::SettingsError::new(
+            "STORYOS_DATABASE_URL",
+            /*env_file*/ None,
+        )
+        .into());
+    }
+    let assets = storyos_server::WebAssetSet::load(web_root)?;
     or_exit(
         require_release1_storage_activation_proof(database_url.expose_secret()).await,
         "storage_activation",

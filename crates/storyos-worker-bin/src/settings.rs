@@ -1,4 +1,4 @@
-use secrecy::SecretString;
+use secrecy::{ExposeSecret as _, SecretString};
 use serde::Deserialize;
 use storyos_settings::{EnvFile, Loaded, SettingsError, optional_number};
 
@@ -28,13 +28,23 @@ impl WorkerSettings {
     /// read.
     pub(crate) fn load() -> Result<Loaded<Self>, SettingsError> {
         let loaded: Loaded<Self> = storyos_settings::load(KEYS, EnvFile::RealRoute)?;
-        if loaded.settings.model_destination.as_deref() == Some("volcengine_agent_plan")
-            && loaded.settings.agent_plan_api_key.is_none()
+        let refused =
+            |variable: &str| Err(SettingsError::new(variable, loaded.env_file.as_deref()));
+        match (
+            loaded.settings.model_destination.as_deref(),
+            &loaded.settings.agent_plan_api_key,
+        ) {
+            (Some("volcengine_agent_plan"), None) => return refused("STORYOS_AGENT_PLAN_API_KEY"),
+            (None | Some("host_fake" | "volcengine_agent_plan"), _) => {}
+            (Some(_), _) => return refused("STORYOS_MODEL_DESTINATION"),
+        }
+        if loaded
+            .settings
+            .database_url
+            .as_ref()
+            .is_some_and(|url| !storyos_adapter_postgres::database_url_parses(url.expose_secret()))
         {
-            return Err(SettingsError::new(
-                "STORYOS_AGENT_PLAN_API_KEY",
-                loaded.env_file.as_deref(),
-            ));
+            return refused("STORYOS_DATABASE_URL");
         }
         Ok(loaded)
     }
