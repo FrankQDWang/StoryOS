@@ -103,7 +103,7 @@ export async function verifyProductionMultiProposal(context: BrowserContext, ori
       const completed = await getAgentRun({ ...options, runId });
       assert.equal(completed.status, 'completed');
       assert.ok(completed.decision.kind === 'prose_change', JSON.stringify(completed.decision));
-      await page.locator('[data-assistant-inspect]').click();
+      await expect(page.locator('[data-assistant-inspect]')).toHaveCount(0);
       return completed;
     };
     const requestMessage = 'Rewrite the first 2 paragraphs of chapter 1 and the first paragraph of chapter 2';

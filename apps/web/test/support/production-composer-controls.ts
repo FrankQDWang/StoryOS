@@ -91,7 +91,6 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     const proposalId = first.decision.opened_proposal.proposal_id;
     const proposal = (await getProposal({ ...options, proposalId })).proposal;
     const revision = (await getChapter({ ...options, chapterId })).chapter.current_revision;
-    await page.locator('[data-assistant-inspect]').click();
     await expect(page.locator('[data-assistant-inspect]')).toHaveCount(0);
     await composer.fill("Help with this passage.");
     await page.getByRole("button", { name: "发送", exact: true }).click();
@@ -152,7 +151,6 @@ export async function verifyProductionComposerControls(context: BrowserContext, 
     assert.equal(consumed.context.selected.find(item => item.source_class === "author_instruction")?.content,
       ["Help with this passage.", guidance].join("\n"));
     assert.deepEqual((await getProposal({ ...options, proposalId })).proposal, proposal);
-    await page.locator('[data-assistant-inspect]').click();
     await expect(page.locator('[data-assistant-inspect]')).toHaveCount(0);
     await expect(page.locator('.assistant-author-message').filter({ hasText: guidance })).toHaveCount(1);
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0 WHERE project_id = '${projectId}'::uuid`);
