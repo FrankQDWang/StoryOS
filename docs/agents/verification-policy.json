@@ -286,6 +286,7 @@
     {"pattern": "package.json", "kind": "configuration", "group": "complete"},
     {"pattern": "pnpm-*.yaml", "kind": "configuration", "group": "complete"},
     {"pattern": "Makefile", "kind": "verification", "group": "complete"},
-    {"pattern": ".gitignore", "kind": "configuration", "group": "complete"}
+    {"pattern": ".gitignore", "kind": "configuration", "group": "complete"},
+    {"pattern": ".env.example", "kind": "documentation-input", "group": "contracts"}
   ]
 }
