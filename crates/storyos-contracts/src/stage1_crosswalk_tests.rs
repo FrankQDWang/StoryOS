@@ -290,6 +290,7 @@ fn expected_provenance_evidence() -> Value {
                 "crates/storyos-core",
                 "crates/storyos-literal-guard",
                 "crates/storyos-server",
+                "crates/storyos-settings",
                 "crates/storyos-worker",
                 "crates/storyos-worker-bin"
             ],
