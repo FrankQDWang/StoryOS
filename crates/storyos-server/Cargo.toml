@@ -7,6 +7,7 @@ rust-version.workspace = true
 axum.workspace = true
 hmac.workspace = true
 mime.workspace = true
+secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -16,6 +17,7 @@ storyos-adapter-postgres = { path = "../storyos-adapter-postgres" }
 storyos-application = { path = "../storyos-application" }
 storyos-contracts = { path = "../storyos-contracts" }
 storyos-core = { path = "../storyos-core" }
+storyos-settings = { path = "../storyos-settings" }
 storyos-worker = { path = "../storyos-worker" }
 tokio.workspace = true
 tracing.workspace = true

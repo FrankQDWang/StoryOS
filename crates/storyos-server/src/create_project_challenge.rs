@@ -47,8 +47,7 @@ pub(super) async fn create_project_challenge(
     valid_uuid(&request.create_project_input.correlation_id)?;
     let secret = state
         .config
-        .project_command_challenge_secret
-        .as_deref()
+        .challenge_secret()
         .ok_or_else(challenge_store_unavailable)?;
     if secret.len() < 32 {
         return Err(challenge_store_unavailable());

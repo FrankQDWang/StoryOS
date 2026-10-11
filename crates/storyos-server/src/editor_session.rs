@@ -65,8 +65,7 @@ pub(super) async fn create_editor_session(
     }
     let secret = state
         .config
-        .project_command_challenge_secret
-        .as_deref()
+        .challenge_secret()
         .filter(|secret| secret.len() >= 32)
         .ok_or_else(challenge_store_unavailable)?;
     let binding_ref = session_binding_ref(secret, session_handle);
@@ -150,8 +149,7 @@ pub(super) async fn get_editor_session(
         .ok_or_else(authentication_required)?;
     let secret = state
         .config
-        .project_command_challenge_secret
-        .as_deref()
+        .challenge_secret()
         .filter(|secret| secret.len() >= 32)
         .ok_or_else(challenge_store_unavailable)?;
     let binding_ref = session_binding_ref(secret, session_handle);

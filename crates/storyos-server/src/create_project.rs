@@ -50,8 +50,7 @@ pub(super) async fn create_project(
     }
     let secret = state
         .config
-        .project_command_challenge_secret
-        .as_deref()
+        .challenge_secret()
         .filter(|secret| secret.len() >= 32)
         .ok_or_else(challenge_store_unavailable)?;
     let binding_ref = session_binding_ref(secret, session_handle);

@@ -9,7 +9,6 @@ use crate::agent_run_dispatch::tests::{DispatchEvidence, dispatch_evidence, queu
 
 pub(crate) fn agent_plan() -> DeploymentDestination {
     DeploymentDestination::VolcengineAgentPlan {
-        credential_reference: "macos-keychain:storyos-volcengine-agent-plan/frankqdwang".to_owned(),
         qualification_authorization: None,
     }
 }

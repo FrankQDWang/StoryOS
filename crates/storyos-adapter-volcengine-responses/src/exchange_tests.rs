@@ -114,7 +114,9 @@ fn route(endpoint: &str) -> RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
         endpoint: Some(endpoint.to_owned()),
-        credential_reference: Some(CredentialReference("macos-keychain:s/a".to_owned())),
+        credential_reference: Some(CredentialReference(
+            storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned(),
+        )),
         bounds: Some(RequestBounds {
             max_output_tokens: 8192,
             timeout: Duration::from_secs(/*secs*/ 1),

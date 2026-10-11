@@ -10,10 +10,9 @@ use storyos_application::{
 use storyos_core::ModelAdapter;
 
 use super::RegisteredAdapters;
-use crate::credential::{EnvironmentResolver, WorkerCredentials};
-use crate::keychain::KeychainResolver;
+use crate::credential::SettingsCredentials;
 
-const REFERENCE: &str = "macos-keychain:storyos-volcengine-agent-plan/frankqdwang";
+const REFERENCE: &str = storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE;
 const CREDENTIAL_CANARY: &str = "storyos-credential-canary-7f3c";
 
 /// Records each resolved reference and returns a test value that is not a real credential.
@@ -144,18 +143,15 @@ async fn a_resolved_credential_never_reaches_the_diagnostic_projection() {
     let adapters = RegisteredAdapters {
         fake: FakeDestination,
         agent_plan: AgentPlanResponses {
-            resolver: WorkerCredentials {
-                keychain: KeychainResolver,
-                environment: EnvironmentResolver {
-                    lookup: |_name: &str| Some(CREDENTIAL_CANARY.to_owned()),
-                },
+            resolver: SettingsCredentials {
+                agent_plan_api_key: Some(CREDENTIAL_CANARY.into()),
             },
         },
     };
     let prepared = adapters
         .prepare(&create(
             ModelAdapter::VolcengineAgentPlanResponses,
-            Some("env:STORYOS_AGENT_PLAN_API_KEY"),
+            Some(REFERENCE),
         ))
         .await
         .map(|prepared| prepared.projection);

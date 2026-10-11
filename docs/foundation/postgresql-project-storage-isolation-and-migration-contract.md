@@ -614,12 +614,12 @@ catalog family into narrower tables, but it must preserve the family identity,
 transaction group, immutable/head/projection property, and all catalogued
 dependencies.
 
-An external model, Tool, MCP server, embedding service, Keychain, filesystem,
-or network is never part of the Core transaction. Before external I/O the
-Context Assembly Manifest, non-secret Application Wire Record/Projection,
-pending Destination Attempt, fenced dispatch claim, and OutcomeUnknown
-Disclosure Event must be committed in the order already specified in section
-5.6. A lost acknowledgement is reconciled from the typed Receipt and
+An external model, Tool, MCP server, embedding service, secret source,
+filesystem, or network is never part of the Core transaction. Before external
+I/O, five records must commit in the order of section 5.6. They are the Context
+Assembly Manifest, the non-secret Application Wire Record/Projection, the
+pending Destination Attempt, the fenced dispatch claim, and the OutcomeUnknown
+Disclosure Event. A lost acknowledgement is reconciled from the typed Receipt and
 idempotency result reference, plus Activity and Attempt records only when the
 typed result requires them. It is never interpreted as a negative outcome.
 
@@ -633,8 +633,8 @@ all canonical facts, current normalized state, sequence movement, immutable
 Receipt, projection invalidation, and required outbox or wakeup intent, then
 commits once. Success is published only after commit.
 
-An external model, embedding, Tool, MCP, network, filesystem, Keychain, or
-Provider call never occurs inside that transaction and never decides whether
+An external model, embedding, Tool, MCP, network, filesystem, secret source,
+or Provider call never occurs inside that transaction and never decides whether
 it committed. A pre-commit crash exposes none of its rows. A post-commit lost
 acknowledgement is resolved through the idempotency outcome and Receipt.
 
@@ -1118,12 +1118,14 @@ availability evidence, and exact authorized Project Scope. They never store a
 secret value, value digest, decrypting key, authorization header, or
 credential-bearing transport bytes.
 
-The Foundation-local resolver uses macOS Keychain. Environment variables are
-development/test inputs only. A later controlled-cloud resolver uses a managed
-secret service through the same backend-neutral contract without changing
-Registration, attempt, or Project semantics. Secret resolution occurs only at
-the narrow execution boundary after durable admission and is redacted from
-errors, tracing, panic reports, support bundles, backups, and exports.
+On the author's Mac local deployment, the Worker resolves the Agent Plan
+Credential Reference from its typed settings. A real-route run reads these
+settings from the git-ignored `.env` file (ADR 0050). A later controlled-cloud
+resolver uses a managed secret service through the same backend-neutral
+contract. It does not change Registration, attempt, or Project semantics.
+Secret resolution occurs only at the narrow execution boundary after durable
+admission. Errors, tracing, panic reports, support bundles, backups, and
+exports never contain the secret.
 
 A Project Restore preserves reference identity and non-secret metadata but
 marks any unresolved binding Unbound. Only an authorized explicit rebind may
@@ -1351,9 +1353,9 @@ durability enabled. It takes a daily physical base backup and archives WAL into
 a failure domain independent of the database host with a tested emission,
 transfer, and gap-detection interval that keeps the latest recoverable point no
 more than fifteen minutes behind. The chain includes
-the non-secret PostgreSQL configuration and role/grant manifest that physical
-WAL backup does not supply, while deployment credentials and Keychain material
-remain separate. Every release candidate must restore an isolated instance,
+the non-secret PostgreSQL configuration and the role/grant manifest, which
+physical WAL backup does not supply. Deployment credentials and local secret
+files stay separate. Every release candidate must restore an isolated instance,
 replay to a chosen point, run schema and invariant validation, and record a
 successful `restore_proof`. A backup file without a completed restore proof is
 not recovery evidence.

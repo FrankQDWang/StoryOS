@@ -17,6 +17,7 @@ expected = [
     root / "crates/storyos-core/Cargo.toml",
     root / "crates/storyos-literal-guard/Cargo.toml",
     root / "crates/storyos-server/Cargo.toml",
+    root / "crates/storyos-settings/Cargo.toml",
     root / "crates/storyos-worker/Cargo.toml",
     root / "crates/storyos-worker-bin/Cargo.toml",
 ]

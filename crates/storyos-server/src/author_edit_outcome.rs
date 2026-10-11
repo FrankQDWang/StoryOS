@@ -68,8 +68,7 @@ async fn resolve_outcome_response(
         .ok_or_else(authentication_required)?;
     let secret = state
         .config
-        .project_command_challenge_secret
-        .as_deref()
+        .challenge_secret()
         .filter(|secret| secret.len() >= 32)
         .ok_or_else(challenge_store_unavailable)?;
     let store = project_reader(state).await?;

@@ -1,0 +1,16 @@
+[package]
+name = "storyos-settings"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+dotenvy.workspace = true
+figment.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+secrecy.workspace = true
+
+[lints]
+workspace = true

@@ -25,16 +25,10 @@ pub struct ModelDestination<A, O> {
     pub observer: O,
 }
 
-pub fn in_process_loop_enabled() -> bool {
-    std::env::var("STORYOS_WORKER").ok().as_deref() != Some("0")
-}
-
-pub fn readable_export_lease_ttl_from_env() -> Duration {
-    std::env::var("STORYOS_EXPORT_LEASE_TTL_SECS")
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .map(Duration::from_secs)
-        .unwrap_or(Duration::from_secs(30))
+/// The lease of a readable export claim: the `STORYOS_EXPORT_LEASE_TTL_SECS` setting, or 30
+/// seconds.
+pub fn readable_export_lease_ttl(seconds: Option<u64>) -> Duration {
+    Duration::from_secs(seconds.unwrap_or(/*default*/ 30))
 }
 
 pub async fn run<A: ModelProviderAdapter, O: ContractFaultObserver>(
