@@ -183,9 +183,9 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 .await
                 .unwrap();
             (
-                row.get::<_, String>(0),
-                row.get::<_, Option<String>>(1),
-                row.get::<_, String>(2),
+                row.get::<_, String>(/*idx*/ 0),
+                row.get::<_, Option<String>>(/*idx*/ 1),
+                row.get::<_, String>(/*idx*/ 2),
             )
         }
     };
