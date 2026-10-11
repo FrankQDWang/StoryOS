@@ -2,6 +2,8 @@
 
 use std::future::Future;
 
+use secrecy::{ExposeSecret, SecretString};
+
 pub use storyos_core::RequestBounds;
 use storyos_core::{
     ContextSourceClass, ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
@@ -354,15 +356,16 @@ pub trait ModelProviderAdapter: Sync {
 pub struct CredentialReference(pub String);
 
 /// A resolved credential value. It cannot be copied, printed, or serialized.
-pub struct ResolvedCredential(String);
+pub struct ResolvedCredential(SecretString);
 
 impl ResolvedCredential {
-    pub fn new(value: String) -> Self {
-        Self(value)
+    pub fn new(value: impl Into<SecretString>) -> Self {
+        Self(value.into())
     }
 
+    /// The value, at the place that sends it.
     pub fn expose(&self) -> &str {
-        &self.0
+        self.0.expose_secret()
     }
 }
 

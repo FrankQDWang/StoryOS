@@ -96,6 +96,8 @@ ADR 0007 permits a co-located Worker. The Worker loop inside the Server process 
 
 Therefore Stage 4 qualification and the real-author journey run on the author's Mac local deployment with Keychain. The real route on the Linux VPS stays unavailable. A later ADR must select the resolver for that deployment under the ADR 0004 contract before that route can be enabled.
 
+> Superseded on 2026-10-11 by [ADR 0050](0050-load-server-and-worker-settings-through-one-typed-settings-layer.md): the Keychain resolver is removed. The local real route takes its key from the typed Worker settings and the git-ignored `.env` file.
+
 ### Contract Fault Points
 
 After each commit, the Model Gateway module reports the reached Contract Fault Point to an injected observer. Production uses an observer that does nothing. Rust tests use a deterministic barrier. Process tests use an observer that the composition root builds from test configuration.
@@ -123,5 +125,6 @@ The remaining phase logic stays in `storyos-adapter-postgres` for now. These rul
 - A prerequisite specification delivers this seam before S4-02, S4-04, and S4-06. It changes no Stage 3 behavior. The existing Stage 3 tests prove it with the fake adapter, and it needs no Provider authorization.
 - Recovery tests get retrieval results, late results, and reference expiry as fake adapter observations. They do not patch the Model Attempt payload with SQL.
 - S4-01 and S4-02 connect the Volcengine adapter and the Keychain resolver through these ports. They do not add another dispatch path.
+  > Superseded on 2026-10-11 by [ADR 0050](0050-load-server-and-worker-settings-through-one-typed-settings-layer.md): the Keychain resolver is removed. The local real route takes its key from the typed Worker settings and the git-ignored `.env` file.
 - For a local real-route session, the Server starts with its in-process Worker disabled, and the separate Worker binary starts.
 - The Linux VPS resolver and the production real route remain open. This decision does not authorize an external account, spend, or deployment change.

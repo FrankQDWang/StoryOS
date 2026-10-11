@@ -12,6 +12,8 @@ At `main` `7b131cee`, migration 0045 permits only the Contract-Faithful Fake Des
 
 [ADR 0033](0033-use-volcengine-responses-for-the-first-real-model-path.md) selects the Volcengine Agent Plan Responses route for the first real path. [ADR 0039](0039-open-the-model-gateway-seam-between-committed-dispatch-boundaries.md) puts the real route only on the author's Mac local deployment, with the macOS Keychain resolver in the `storyos-worker` composition root. The Agent Plan terms permit only personal, non-commercial use.
 
+> Superseded on 2026-10-11 by [ADR 0050](0050-load-server-and-worker-settings-through-one-typed-settings-layer.md): the Keychain resolver is removed. The local real route takes its key from the typed Worker settings and the git-ignored `.env` file.
+
 ## Decision
 
 ### One destination for each deployment
@@ -32,6 +34,7 @@ The `ProjectExternalUseBindingRevision` records the source of its Credential Ref
 ### Stage 4 scope
 
 - Stage 4 implements only the operator quota. On the author's Mac local deployment, the credential is a macOS Keychain generic password in the login keychain. Its service is `storyos-volcengine-agent-plan`, and its account is `frankqdwang`. The author is also the operator of this deployment.
+  > Superseded on 2026-10-11 by [ADR 0050](0050-load-server-and-worker-settings-through-one-typed-settings-layer.md): the Keychain resolver is removed. The local real route takes its key from the typed Worker settings and the git-ignored `.env` file.
 - The Agent Plan route is a personal, non-commercial test route that keeps costs low. Before a public release, the operator quota moves to the pay-per-token Ark `/api/v3` route or to a commercial agreement. That move needs its own ADR.
 - BYOK, its key entry view, and the quota of more than one user are deferred. A later ADR selects the BYOK credential store.
 
@@ -45,5 +48,6 @@ The `ProjectExternalUseBindingRevision` records the source of its Credential Ref
 
 - S4-01 changes the per-Project uniqueness of the binding records so that a Project can move to a new destination.
 - The in-process Server Worker claims only AgentRuns whose Model Registration binds the fake adapter. AgentRuns of the real route go only to the Worker binary that resolves the Keychain credential.
+  > Superseded on 2026-10-11 by [ADR 0050](0050-load-server-and-worker-settings-through-one-typed-settings-layer.md): the Keychain resolver is removed. The local real route takes its key from the typed Worker settings and the git-ignored `.env` file.
 - The Linux VPS real route stays unavailable until a later ADR selects its resolver (ADR 0039).
 - This decision authorizes no external account, spend, or deployment change.

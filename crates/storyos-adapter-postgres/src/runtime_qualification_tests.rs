@@ -17,11 +17,10 @@ use crate::agent_run_dispatch::tests::{admit_run, admit_run_in, claim_run, queue
 
 const AUTHORIZATION: &str =
     "https://github.com/FrankQDWang/StoryOS/issues/393#issuecomment-6098554693";
-const REFERENCE: &str = "macos-keychain:storyos-volcengine-agent-plan/frankqdwang";
+const REFERENCE: &str = storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE;
 
 fn authorized() -> DeploymentDestination {
     DeploymentDestination::VolcengineAgentPlan {
-        credential_reference: REFERENCE.to_owned(),
         qualification_authorization: Some(AUTHORIZATION.to_owned()),
     }
 }
@@ -112,7 +111,6 @@ async fn an_authorized_qualification_rebinds_and_dispatches_each_request_once_wi
         .await;
     let (store, admin) = stores().await;
     let pending = DeploymentDestination::VolcengineAgentPlan {
-        credential_reference: REFERENCE.to_owned(),
         qualification_authorization: None,
     };
     let (scope, chapter_id, pending_run) = queued_run(&store, "e9a", pending).await;

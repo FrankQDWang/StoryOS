@@ -43,6 +43,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a89cbf775b137e9b968e67227ef7f775587cde3fd31b0d8599dbd0f598a48340"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -188,6 +197,12 @@ name = "bytecount"
 version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
+
+[[package]]
+name = "bytemuck"
+version = "1.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
 
 [[package]]
 name = "byteorder"
@@ -340,6 +355,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dotenvy"
+version = "0.15.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
+
+[[package]]
 name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -381,6 +402,18 @@ dependencies = [
  "bit-set",
  "regex-automata",
  "regex-syntax",
+]
+
+[[package]]
+name = "figment"
+version = "0.10.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cb01cd46b0cf372153850f4c6c272d9cbea2da513e07538405148f95bd789f3"
+dependencies = [
+ "atomic",
+ "serde",
+ "uncased",
+ "version_check",
 ]
 
 [[package]]
@@ -1621,6 +1654,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "secrecy"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e891af845473308773346dc847b2c23ee78fe442e0472ac50e22a18a93d3ae5a"
+dependencies = [
+ "serde",
+ "zeroize",
+]
+
+[[package]]
 name = "security-framework"
 version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1853,6 +1896,7 @@ dependencies = [
 name = "storyos-application"
 version = "0.1.0"
 dependencies = [
+ "secrecy",
  "serde_json",
  "sha2",
  "storyos-contracts",
@@ -1899,6 +1943,7 @@ dependencies = [
  "axum",
  "hmac",
  "mime",
+ "secrecy",
  "serde",
  "serde_json",
  "sha2",
@@ -1908,12 +1953,23 @@ dependencies = [
  "storyos-application",
  "storyos-contracts",
  "storyos-core",
+ "storyos-settings",
  "storyos-worker",
  "tokio",
  "tower",
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "storyos-settings"
+version = "0.1.0"
+dependencies = [
+ "dotenvy",
+ "figment",
+ "secrecy",
+ "serde",
 ]
 
 [[package]]
@@ -1929,13 +1985,15 @@ dependencies = [
 name = "storyos-worker-bin"
 version = "0.1.0"
 dependencies = [
- "security-framework",
+ "secrecy",
+ "serde",
  "storyos-adapter-diagnostics",
  "storyos-adapter-fake-destination",
  "storyos-adapter-postgres",
  "storyos-adapter-volcengine-responses",
  "storyos-application",
  "storyos-core",
+ "storyos-settings",
  "storyos-worker",
  "tokio",
  "tracing",
@@ -2297,6 +2355,15 @@ name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+
+[[package]]
+name = "uncased"
+version = "0.9.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1b88fcfe09e89d3866a5c11019378088af2d24c3fbd4f0543f96b479ec90697"
+dependencies = [
+ "version_check",
+]
 
 [[package]]
 name = "unicode-bidi"

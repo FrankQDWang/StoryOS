@@ -1,47 +1,45 @@
 //! The StoryOS Worker binary: the Worker loop with the PostgreSQL store, the fake and Agent Plan
-//! adapters, and the Keychain and environment credential resolvers.
+//! adapters, and the credential resolver of the Worker settings.
 
 mod contract_fault_holds;
 mod credential;
-mod keychain;
 mod registered_adapters;
+mod settings;
 
 use std::env;
 
+use secrecy::ExposeSecret as _;
 use storyos_adapter_diagnostics::or_exit;
 use storyos_adapter_fake_destination::FakeDestination;
 use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_activation_proof};
 use storyos_adapter_volcengine_responses::AgentPlanResponses;
 use storyos_worker::ModelDestination;
 
-type WorkerAdapters = registered_adapters::RegisteredAdapters<
-    credential::WorkerCredentials<fn(&str) -> Option<String>>,
->;
-
-/// The value of one variable of the Worker process environment.
-fn process_variable(name: &str) -> Option<String> {
-    env::var(name).ok()
-}
+type WorkerAdapters = registered_adapters::RegisteredAdapters<credential::SettingsCredentials>;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    storyos_adapter_diagnostics::install(
-        env::var(storyos_adapter_diagnostics::LOG_LEVEL_VARIABLE)
-            .ok()
-            .as_deref(),
-    )?;
+    let storyos_settings::Loaded { settings, env_file } = settings::WorkerSettings::load()?;
+    storyos_adapter_diagnostics::install(settings.log.as_deref())?;
     storyos_application::register_sql_state(storyos_adapter_postgres::sql_state);
     let arguments = env::args().skip(/*n*/ 1).collect::<Vec<_>>();
     if arguments.iter().any(|argument| argument == "--check") {
         return Ok(());
     }
-    let database_url = env::var("STORYOS_DATABASE_URL")?;
+    let database_url = settings
+        .database_url
+        .as_ref()
+        .ok_or_else(|| {
+            storyos_settings::SettingsError::new("STORYOS_DATABASE_URL", env_file.as_deref())
+        })?
+        .expose_secret();
     or_exit(
-        require_release1_storage_activation_proof(&database_url).await,
+        require_release1_storage_activation_proof(database_url).await,
         "storage_activation",
     );
-    let store = PostgresProjectReader::new(database_url)
-        .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl_from_env());
+    let store = PostgresProjectReader::new(database_url).with_readable_export_lease_ttl(
+        storyos_worker::readable_export_lease_ttl(settings.export_lease_ttl_secs),
+    );
     if arguments.iter().any(|argument| argument == "--claim-only") {
         or_exit(
             storyos_worker::claim_only::<WorkerAdapters>(&store).await,
@@ -53,11 +51,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         adapter: WorkerAdapters {
             fake: FakeDestination,
             agent_plan: AgentPlanResponses {
-                resolver: credential::WorkerCredentials {
-                    keychain: keychain::KeychainResolver,
-                    environment: credential::EnvironmentResolver {
-                        lookup: process_variable,
-                    },
+                resolver: credential::SettingsCredentials {
+                    agent_plan_api_key: settings.agent_plan_api_key,
                 },
             },
         },

@@ -9,6 +9,8 @@ use crate::{
 pub const AGENT_PLAN_ENDPOINT: &str = "https://ark.cn-beijing.volces.com/api/plan/v3";
 pub const AGENT_PLAN_ACCOUNT_BOUNDARY: &str =
     "The Volcengine account of the deployment operator that holds the Agent Plan subscription";
+/// The Credential Reference of the operator-quota key: the Worker setting that holds it (ADR 0050).
+pub const AGENT_PLAN_CREDENTIAL_REFERENCE: &str = "settings:STORYOS_AGENT_PLAN_API_KEY";
 pub const AGENT_PLAN_ELIGIBILITY_EVIDENCE: &str =
     "https://github.com/FrankQDWang/StoryOS/issues/392#issuecomment-5978758415";
 
@@ -17,9 +19,8 @@ pub const AGENT_PLAN_ELIGIBILITY_EVIDENCE: &str =
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeploymentDestination {
     HostFake,
-    /// The operator-quota credential is the opaque `credential_reference`, never its value.
+    /// The operator-quota credential is `AGENT_PLAN_CREDENTIAL_REFERENCE`, never its value.
     VolcengineAgentPlan {
-        credential_reference: String,
         /// The link to the author authorization of the runtime qualification (ADR 0049).
         qualification_authorization: Option<String>,
     },
@@ -176,13 +177,10 @@ impl DeploymentDestination {
         }
     }
 
-    pub fn credential_reference(&self) -> Option<&str> {
+    pub fn credential_reference(&self) -> Option<&'static str> {
         match self {
             Self::HostFake => None,
-            Self::VolcengineAgentPlan {
-                credential_reference,
-                ..
-            } => Some(credential_reference),
+            Self::VolcengineAgentPlan { .. } => Some(AGENT_PLAN_CREDENTIAL_REFERENCE),
         }
     }
 
