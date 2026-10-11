@@ -103,17 +103,61 @@ async fn settle(
         .unwrap();
 }
 
+/// Returns the Project to the binding of S4-01: the pending Agent Plan Registration, a pending
+/// Decision, and that Registration as the head of its adapter. `run_id` pinned it.
+async fn pin_pending_registration(admin: &Client, scope: &ProjectScope, run_id: &str) {
+    let pending = &storyos_core::AGENT_PLAN_PENDING_REGISTRATION;
+    let profile = serde_json::to_string(pending.capability_profile).unwrap();
+    admin
+        .batch_execute(&format!(
+            "INSERT INTO storyos.model_capability_profiles (capability_profile_revision, profile)
+             VALUES ('{profile_revision}', '{profile}'::jsonb) ON CONFLICT DO NOTHING;
+             INSERT INTO storyos.model_registration_revisions
+               (model_registration_revision, model_kind, api_surface, provider_model_id,
+                capability_profile_revision)
+             VALUES ('{revision}', 'volcengine_agent_plan_responses', '{surface}',
+                     'doubao-seed-2.1-pro', '{profile_revision}') ON CONFLICT DO NOTHING;
+             SET session_replication_role = replica;
+             UPDATE storyos.project_external_use_binding_revisions
+                SET model_registration_revision = '{revision}'
+              WHERE project_id = '{project}' AND credential_source = 'operator_quota';
+             UPDATE storyos.agent_runs SET model_registration_revision = '{revision}'
+              WHERE run_id = '{run_id}';
+             UPDATE storyos.external_contract_compatibility_decisions
+                SET runtime_qualification = 'pending'
+              WHERE project_id = '{project}' AND decision_kind = 'volcengine_agent_plan_compatible';
+             SET session_replication_role = DEFAULT;
+             UPDATE storyos.model_registration_heads SET model_registration_revision = '{revision}'
+              WHERE model_kind = 'volcengine_agent_plan_responses';",
+            profile_revision = pending.capability_profile.revision,
+            revision = pending.revision,
+            surface = pending.api_surface,
+            project = scope.project_id.as_ref(),
+        ))
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn an_authorized_qualification_rebinds_and_dispatches_each_request_once_with_its_bounds() {
+async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_request_once() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let pending = DeploymentDestination::VolcengineAgentPlan {
-        qualification_authorization: None,
-    };
-    let (scope, chapter_id, pending_run) = queued_run(&store, "e9a", pending).await;
+    let (scope, chapter_id, early_run) = queued_run(&store, "e9a", authorized()).await;
+    pin_pending_registration(&admin, &scope, &early_run).await;
+    let earlier = open_project_assistance(&store, &scope)
+        .await
+        .unwrap()
+        .unwrap();
+    // Another Project binds the qualified Registration, so it becomes the head again.
+    let (other_scope, _, other_run) = queued_run(&store, "ed1", authorized()).await;
+    let unknown = ScriptedAgentPlan::new(Observation::OutcomeUnknown {
+        response_reference: None,
+    });
+    settle(&store, &admin, &scope, &early_run, &unknown).await;
+    settle(&store, &admin, &other_scope, &other_run, &unknown).await;
     let unknown_run = admit_run(&store, &scope, &chapter_id, "e9b", authorized(), "Help.").await;
     let current = open_project_assistance(&store, &scope)
         .await
@@ -123,11 +167,35 @@ async fn an_authorized_qualification_rebinds_and_dispatches_each_request_once_wi
         UserId::new("018f0000-0000-7001-8000-0000000e9f01"),
         scope.project_id.clone(),
     );
+    let decision_facts = |decision: String| {
+        let admin = &admin;
+        async move {
+            let row = admin
+                .query_one(
+                    "SELECT decision.runtime_qualification, decision.qualification_authorization,
+                            binding.model_registration_revision::text
+                       FROM storyos.external_contract_compatibility_decisions AS decision
+                       JOIN storyos.project_external_use_binding_revisions AS binding
+                         USING (owner_user_id, project_id, project_model_use_binding_revision)
+                      WHERE decision.external_compatibility_decision = $1::text::uuid",
+                    &[&decision],
+                )
+                .await
+                .unwrap();
+            (
+                row.get::<_, String>(0),
+                row.get::<_, Option<String>>(1),
+                row.get::<_, String>(2),
+            )
+        }
+    };
 
     assert_eq!(
         (
             current.clone(),
             open_project_assistance(&store, &wrong_scope).await.unwrap(),
+            decision_facts(current.external_compatibility_decision.clone()).await,
+            decision_facts(earlier.external_compatibility_decision.clone()).await,
         ),
         (
             ProjectAssistanceRecord {
@@ -135,30 +203,30 @@ async fn an_authorized_qualification_rebinds_and_dispatches_each_request_once_wi
                 revision: 3,
                 model_registration_revision: AGENT_PLAN_REGISTRATION.revision.to_owned(),
                 destination: DestinationKind::VolcengineAgentPlan,
-                runtime_qualification: RuntimeQualification::QualificationAuthorized,
+                runtime_qualification: RuntimeQualification::Qualified,
                 ..current.clone()
             },
             None,
+            (
+                "qualified".to_owned(),
+                None,
+                AGENT_PLAN_REGISTRATION.revision.to_owned()
+            ),
+            (
+                "pending".to_owned(),
+                None,
+                storyos_core::AGENT_PLAN_PENDING_REGISTRATION
+                    .revision
+                    .to_owned()
+            ),
         )
     );
-    let authorization: Option<String> = admin
-        .query_one(
-            "SELECT qualification_authorization
-               FROM storyos.external_contract_compatibility_decisions
-              WHERE external_compatibility_decision = $1::text::uuid",
-            &[&current.external_compatibility_decision],
-        )
-        .await
-        .unwrap()
-        .get(/*idx*/ 0);
-    assert_eq!(authorization.as_deref(), Some(AUTHORIZATION));
+    assert_ne!(
+        current.project_model_use_binding_revision,
+        earlier.project_model_use_binding_revision
+    );
 
-    let unknown = ScriptedAgentPlan::new(Observation::OutcomeUnknown {
-        response_reference: None,
-    });
-    settle(&store, &admin, &scope, &pending_run, &unknown).await;
     settle(&store, &admin, &scope, &unknown_run, &unknown).await;
-
     let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
         items: Vec::new(),
         output: Some(ModelOutput {
@@ -208,53 +276,47 @@ async fn an_authorized_qualification_rebinds_and_dispatches_each_request_once_wi
             .collect::<Vec<_>>()
     };
     let text = |value: &str| Some(value.to_owned());
+    let completed = |mapping: &str| {
+        [
+            text("completed"),
+            None,
+            text("1"),
+            None,
+            text("true"),
+            text(mapping),
+        ]
+    };
     assert_eq!(
         (
             sent(unknown),
             sent(advisory),
-            qualification_evidence(&admin, &pending_run).await,
+            qualification_evidence(&admin, &early_run).await,
+            qualification_evidence(&admin, &unknown_run).await,
             qualification_evidence(&admin, &first).await,
             qualification_evidence(&admin, &next).await,
         ),
         (
-            vec![(route.clone(), None)],
+            vec![(route.clone(), None), (route.clone(), None)],
             vec![(route.clone(), None), (route, None)],
             [
                 text("refused"),
-                text(r#"{"kind": "execution_refused", "capability": "model_use_binding_stale"}"#),
+                text(r#"{"kind": "execution_refused", "capability": "model_registration_drift"}"#),
                 text("0"),
                 None,
                 None,
                 None,
             ],
             [
-                text("completed"),
-                None,
+                text("waiting"),
+                text(r#"{"kind": "outcome_unknown", "reason": "missing_reference"}"#),
                 text("1"),
-                text("qualification_authorized"),
+                None,
                 text("true"),
                 text("none"),
             ],
-            [
-                text("completed"),
-                None,
-                text("1"),
-                text("qualification_authorized"),
-                text("true"),
-                text("full"),
-            ],
+            completed("none"),
+            completed("full"),
         )
-    );
-    assert_eq!(
-        qualification_evidence(&admin, &unknown_run).await,
-        [
-            text("waiting"),
-            text(r#"{"kind": "outcome_unknown", "reason": "missing_reference"}"#),
-            text("1"),
-            text("qualification_authorized"),
-            text("true"),
-            text("none")
-        ]
     );
 }
 

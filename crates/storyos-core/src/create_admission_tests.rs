@@ -1,5 +1,8 @@
 use super::{RouteFacts, admit_route};
-use crate::{AGENT_PLAN_REGISTRATION, BudgetBounds, HOST_FAKE_REGISTRATION, RuntimeQualification};
+use crate::{
+    AGENT_PLAN_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION, BudgetBounds, HOST_FAKE_REGISTRATION,
+    RuntimeQualification,
+};
 
 fn route(
     revision: &'static str,
@@ -16,8 +19,8 @@ fn route(
 }
 
 #[test]
-fn only_an_authorized_qualification_with_known_bounds_admits_a_pending_profile() {
-    let agent_plan = AGENT_PLAN_REGISTRATION.revision;
+fn a_qualified_profile_or_an_authorized_qualification_with_known_bounds_admits_create() {
+    let agent_plan = AGENT_PLAN_PENDING_REGISTRATION.revision;
 
     assert_eq!(
         [
@@ -41,6 +44,11 @@ fn only_an_authorized_qualification_with_known_bounds_admits_a_pending_profile()
                 RuntimeQualification::QualificationAuthorized,
                 BudgetBounds::Unqualified,
             )),
+            admit_route(&route(
+                AGENT_PLAN_REGISTRATION.revision,
+                RuntimeQualification::Qualified,
+                BudgetBounds::AgentPlanRequestV1,
+            )),
             admit_route(&RouteFacts {
                 binding_current: false,
                 ..route(
@@ -55,6 +63,7 @@ fn only_an_authorized_qualification_with_known_bounds_admits_a_pending_profile()
             Err("model_runtime_qualification_pending"),
             Ok(()),
             Err("model_request_bounds_unknown"),
+            Ok(()),
             Err("model_use_binding_stale"),
         ]
     );

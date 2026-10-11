@@ -37,8 +37,10 @@ fn qualified_members_qualify_only_with_a_qualified_combination() {
         [
             documented.qualifies(CREATE_REQUIREMENT),
             qualified.qualifies(CREATE_REQUIREMENT),
+            AGENT_PLAN_PENDING_CAPABILITY_PROFILE.qualifies(CREATE_REQUIREMENT),
             AGENT_PLAN_CAPABILITY_PROFILE.qualifies(CREATE_REQUIREMENT),
+            AGENT_PLAN_CAPABILITY_PROFILE.qualifies(&[ModelCapability::Continuation]),
         ],
-        [false, true, false]
+        [false, true, false, true, false]
     );
 }

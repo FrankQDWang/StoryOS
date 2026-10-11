@@ -113,7 +113,7 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
             revision: 2,
             model_registration_revision: AGENT_PLAN_REGISTRATION.revision.to_owned(),
             destination: DestinationKind::VolcengineAgentPlan,
-            runtime_qualification: RuntimeQualification::Pending,
+            runtime_qualification: RuntimeQualification::Qualified,
             ..current.clone()
         }
     );
@@ -140,7 +140,7 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
             credential_source: "operator_quota".to_owned(),
             credential_reference: Some(storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned()),
             budget_bounds: "agent_plan_request_v1".to_owned(),
-            runtime_qualification: "pending".to_owned(),
+            runtime_qualification: "qualified".to_owned(),
         }
     );
     assert_eq!(

@@ -13,7 +13,7 @@ pub(crate) fn agent_plan() -> DeploymentDestination {
     }
 }
 
-/// An adapter of the Agent Plan Registration that admission must never reach.
+/// An adapter of the Agent Plan Registration whose credential is unavailable.
 struct UnreachableAgentPlan;
 
 impl ModelProviderAdapter for UnreachableAgentPlan {
@@ -24,17 +24,17 @@ impl ModelProviderAdapter for UnreachableAgentPlan {
         &self,
         _request: &DestinationRequest,
     ) -> Result<PreparedRequest<()>, PreDispatchRefusal> {
-        panic!("Create admission must refuse a pending profile before preparation");
+        Err(PreDispatchRefusal::CredentialUnavailable)
     }
 
     async fn exchange(&self, _prepared: (), _sink: &mut impl ModelStreamSink) -> Observation {
-        panic!("Create admission must refuse a pending profile before the exchange");
+        panic!("a refused preparation sends nothing");
     }
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn fake_worker_skips_an_agent_plan_run_that_create_admission_refuses() {
+async fn fake_worker_skips_an_agent_plan_run_that_only_the_agent_plan_worker_claims() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -74,7 +74,7 @@ async fn fake_worker_skips_an_agent_plan_run_that_create_admission_refuses() {
         DispatchEvidence {
             status: "refused".to_owned(),
             settlement: Some(
-                r#"{"kind": "execution_refused", "capability": "model_runtime_qualification_pending"}"#
+                r#"{"kind": "execution_refused", "capability": "destination_credential_unavailable"}"#
                     .to_owned()
             ),
             model_attempts: 0,
