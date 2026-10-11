@@ -34,6 +34,9 @@ fn a_short_challenge_secret_refuses_startup_with_its_name_and_no_value() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success());
     assert!(!stdout.contains("STORYOS_SERVER_URL="), "{stdout}{stderr}");
-    assert!(stderr.contains("STORYOS_CHALLENGE_SECRET"), "{stdout}{stderr}");
+    assert!(
+        stderr.contains("STORYOS_CHALLENGE_SECRET"),
+        "{stdout}{stderr}"
+    );
     assert!(!stderr.contains(short), "{stdout}{stderr}");
 }

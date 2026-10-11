@@ -47,14 +47,14 @@ impl ServerSettings {
         self.challenge_secret
             .clone()
             .filter(|secret| secret.expose_secret().len() >= 32)
-            .ok_or_else(|| SettingsError::new("STORYOS_CHALLENGE_SECRET", None))
+            .ok_or_else(|| SettingsError::new("STORYOS_CHALLENGE_SECRET", /*env_file*/ None))
     }
 
     /// The deployment model destination (ADR 0048). An absent value offers no assistance.
     pub fn model_destination(
         &self,
     ) -> Result<Option<storyos_core::DeploymentDestination>, SettingsError> {
-        let refused = |variable: &str| SettingsError::new(variable, None);
+        let refused = |variable: &str| SettingsError::new(variable, /*env_file*/ None);
         let authorization = self.model_qualification_authorization.clone();
         match (self.model_destination.as_deref(), &authorization) {
             (None, None) => Ok(None),
