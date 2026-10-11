@@ -1,6 +1,6 @@
 use secrecy::SecretString;
 use serde::Deserialize;
-use storyos_settings::{Loaded, SettingsError, optional_number};
+use storyos_settings::{EnvFile, Loaded, SettingsError, optional_number};
 
 const KEYS: &[&str] = &[
     "log",
@@ -27,7 +27,7 @@ impl WorkerSettings {
     /// Loads the settings. A real-route run without the key refuses with the env file that it
     /// read.
     pub(crate) fn load() -> Result<Loaded<Self>, SettingsError> {
-        let loaded: Loaded<Self> = storyos_settings::load(KEYS)?;
+        let loaded: Loaded<Self> = storyos_settings::load(KEYS, EnvFile::RealRoute)?;
         if loaded.settings.model_destination.as_deref() == Some("volcengine_agent_plan")
             && loaded.settings.agent_plan_api_key.is_none()
         {

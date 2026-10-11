@@ -51,6 +51,14 @@ impl fmt::Display for SettingsError {
 
 impl std::error::Error for SettingsError {}
 
+/// Whether a binary can read the env file. Only the Worker, which takes the Agent Plan key,
+/// reads it (ADR 0050).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EnvFile {
+    Never,
+    RealRoute,
+}
+
 /// The settings of one binary, and the env file that they read.
 #[derive(Debug)]
 pub struct Loaded<T> {
@@ -61,18 +69,23 @@ pub struct Loaded<T> {
 /// Loads `T` from the process environment and, for a real-route run, the env file. Only the
 /// variables whose lowercase names without the `STORYOS_` prefix are in `keys` enter the
 /// settings.
-pub fn load<T: DeserializeOwned>(keys: &[&str]) -> Result<Loaded<T>, SettingsError> {
-    load_from(std::env::vars(), keys, discover_env_file)
+pub fn load<T: DeserializeOwned>(
+    keys: &[&str],
+    env_file: EnvFile,
+) -> Result<Loaded<T>, SettingsError> {
+    load_from(std::env::vars(), keys, env_file, discover_env_file)
 }
 
 /// Loads `T` from `environment` in place of the process environment. `discover` finds the env
 /// file when the environment does not name one.
 ///
-/// Only an explicit `STORYOS_ENV_FILE` or `STORYOS_MODEL_DESTINATION=volcengine_agent_plan` in
-/// the environment reads an env file. Thus a test or a fake-destination run never reads the key.
+/// With `EnvFile::RealRoute`, only an explicit `STORYOS_ENV_FILE` or
+/// `STORYOS_MODEL_DESTINATION=volcengine_agent_plan` in the environment reads an env file. Thus
+/// a test or a fake-destination run never reads the key.
 pub fn load_from<T: DeserializeOwned>(
     environment: impl IntoIterator<Item = (String, String)>,
     keys: &[&str],
+    policy: EnvFile,
     discover: impl FnOnce() -> Option<PathBuf>,
 ) -> Result<Loaded<T>, SettingsError> {
     let environment: Vec<_> = environment.into_iter().collect();
@@ -82,13 +95,18 @@ pub fn load_from<T: DeserializeOwned>(
             .find(|(name, _)| name == variable)
             .map(|(_, value)| value.as_str())
     };
-    let env_file = match (value(ENV_FILE_VARIABLE), value(DESTINATION_VARIABLE)) {
-        (Some(path), _) => Some(PathBuf::from(path)),
-        (None, Some(REAL_DESTINATION)) => discover(),
-        (None, _) => None,
+    let env_file = match (
+        policy,
+        value(ENV_FILE_VARIABLE),
+        value(DESTINATION_VARIABLE),
+    ) {
+        (EnvFile::Never, _, _) => None,
+        (EnvFile::RealRoute, Some(path), _) => Some(PathBuf::from(path)),
+        (EnvFile::RealRoute, None, Some(REAL_DESTINATION)) => discover(),
+        (EnvFile::RealRoute, None, _) => None,
     };
     let file = match &env_file {
-        Some(path) => read_env_file(path)?,
+        Some(path) => read_env_file(path, keys)?,
         None => Vec::new(),
     };
     let settings = Figment::new()
@@ -124,23 +142,31 @@ fn discover_env_file() -> Option<PathBuf> {
     Some(git("--git-common-dir")?.parent()?.join(".env"))
 }
 
-fn read_env_file(path: &Path) -> Result<Vec<(String, String)>, SettingsError> {
+/// The lines of the env file whose variables are in `keys`. Each other line is dropped as it is
+/// read.
+fn read_env_file(path: &Path, keys: &[&str]) -> Result<Vec<(String, String)>, SettingsError> {
     let refused = || SettingsError::new(ENV_FILE_VARIABLE, Some(path));
-    dotenvy::from_path_iter(path)
-        .map_err(|_| refused())?
-        .collect::<Result<_, _>>()
-        .map_err(|_| refused())
+    let mut declared = Vec::new();
+    for line in dotenvy::from_path_iter(path).map_err(|_| refused())? {
+        let (name, value) = line.map_err(|_| refused())?;
+        if declared_key(&name, keys).is_some() {
+            declared.push((name, value));
+        }
+    }
+    Ok(declared)
+}
+
+/// The settings key of a declared `STORYOS_` variable.
+fn declared_key(name: &str, keys: &[&str]) -> Option<String> {
+    let key = name.strip_prefix(PREFIX)?.to_ascii_lowercase();
+    keys.contains(&key.as_str()).then_some(key)
 }
 
 /// Each value stays a string, so a secret that looks like a number keeps its text.
 fn settings_dict(pairs: Vec<(String, String)>, keys: &[&str]) -> Dict {
     pairs
         .into_iter()
-        .filter_map(|(name, value)| {
-            let key = name.strip_prefix(PREFIX)?.to_ascii_lowercase();
-            keys.contains(&key.as_str())
-                .then(|| (key, Value::from(value)))
-        })
+        .filter_map(|(name, value)| Some((declared_key(&name, keys)?, Value::from(value))))
         .collect()
 }
 
