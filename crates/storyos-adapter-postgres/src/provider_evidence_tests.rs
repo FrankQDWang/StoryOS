@@ -31,8 +31,8 @@ fn a_real_attempt_reports_its_usage_kind_and_its_response_reference() {
             "report": format!("provider_usage_{kind}")
         })
     };
-    let sent = payload(true)["evidence"][0].clone();
-    let opaque = payload(true)["evidence"][2].clone();
+    let sent = payload(/*network_io*/ true)["evidence"][0].clone();
+    let opaque = payload(/*network_io*/ true)["evidence"][2].clone();
     let reference = serde_json::json!({
         "kind": "stored_reference", "attempt_id": "a1", "availability": "current",
         "reference_id": "resp_01"

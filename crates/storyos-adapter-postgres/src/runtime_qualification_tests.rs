@@ -398,7 +398,10 @@ async fn scripted_endpoint(body: String) -> String {
         let (mut stream, _) = listener.accept().await.unwrap();
         let mut request = Vec::new();
         let mut chunk = [0_u8; 4096];
-        while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+        while !request
+            .windows(/*size*/ 4)
+            .any(|window| window == b"\r\n\r\n")
+        {
             let read = stream.read(&mut chunk).await.unwrap();
             request.extend_from_slice(&chunk[..read]);
         }
@@ -478,7 +481,8 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
         ),
     )
     .await;
-    let unknown = real_attempt_evidence(&store, &admin, "e9g", response("resp_e9g", None)).await;
+    let unknown =
+        real_attempt_evidence(&store, &admin, "e9g", response("resp_e9g", /*usage*/ None)).await;
     let facts = |(adapter, mapping, evidence): (
         ModelAdapter,
         String,
