@@ -30,11 +30,15 @@ impl WorkerSettings {
         let loaded: Loaded<Self> = storyos_settings::load(KEYS, EnvFile::RealRoute)?;
         let refused =
             |variable: &str| Err(SettingsError::new(variable, loaded.env_file.as_deref()));
-        match (
-            loaded.settings.model_destination.as_deref(),
-            &loaded.settings.agent_plan_api_key,
-        ) {
-            (Some("volcengine_agent_plan"), None) => return refused("STORYOS_AGENT_PLAN_API_KEY"),
+        let key = loaded
+            .settings
+            .agent_plan_api_key
+            .as_ref()
+            .map(|key| key.expose_secret().is_empty());
+        match (loaded.settings.model_destination.as_deref(), key) {
+            (_, Some(true)) | (Some("volcengine_agent_plan"), None) => {
+                return refused("STORYOS_AGENT_PLAN_API_KEY");
+            }
             (None | Some("host_fake" | "volcengine_agent_plan"), _) => {}
             (Some(_), _) => return refused("STORYOS_MODEL_DESTINATION"),
         }

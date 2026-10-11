@@ -37,7 +37,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         storyos_server::packaged_session_mappings(
             settings.bootstrap_sessions.as_deref(),
             multiple_mapping_allowance,
-        )?;
+        )
+        .map_err(|_| {
+            storyos_settings::SettingsError::new(
+                "STORYOS_BOOTSTRAP_SESSIONS",
+                /*env_file*/ None,
+            )
+        })?;
     let challenge_secret = settings.required_challenge_secret()?;
     let database_url = settings.database_url.clone().ok_or_else(|| {
         "STORYOS_DATABASE_URL is required for Release 1 Storage Activation".to_owned()

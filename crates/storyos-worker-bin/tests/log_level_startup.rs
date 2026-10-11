@@ -55,7 +55,12 @@ fn an_unknown_destination_or_a_malformed_database_url_names_its_variable_and_no_
         [
             refusal("STORYOS_MODEL_DESTINATION", format!("volcengine-{canary}")),
             refusal("STORYOS_DATABASE_URL", format!("not a url {canary}")),
+            refusal("STORYOS_AGENT_PLAN_API_KEY", String::new()),
         ],
-        [(false, true, false), (false, true, false)]
+        [
+            (false, true, false),
+            (false, true, false),
+            (false, true, false)
+        ]
     );
 }
