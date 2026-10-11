@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 
-use super::{ENV_FILE_VARIABLE, SettingsError, load_from, optional_number};
+use super::{ENV_FILE_VARIABLE, EnvFile, SettingsError, load_from, optional_number};
 
 const CANARY: &str = "storyos-settings-canary-7c21";
 
@@ -49,6 +49,7 @@ fn settings_take_only_their_keys_and_debug_shows_no_secret() {
             ("HOME", "/Users/author"),
         ]),
         KEYS,
+        EnvFile::RealRoute,
         undiscovered,
     )
     .unwrap();
@@ -62,7 +63,7 @@ fn settings_take_only_their_keys_and_debug_shows_no_secret() {
 #[test]
 fn a_refusal_names_the_variable_and_holds_no_value() {
     let refusal = |values: &[(&str, &str)]| {
-        let refused = load_from::<Sample>(pairs(values), KEYS, undiscovered)
+        let refused = load_from::<Sample>(pairs(values), KEYS, EnvFile::RealRoute, undiscovered)
             .err()
             .unwrap();
         (
@@ -87,7 +88,7 @@ fn a_refusal_names_the_variable_and_holds_no_value() {
 }
 
 #[test]
-fn only_a_real_route_run_or_an_explicit_path_reads_the_env_file() {
+fn only_a_real_route_worker_run_or_an_explicit_path_reads_the_env_file() {
     let path = std::env::temp_dir().join(format!("storyos-settings-{}.env", std::process::id()));
     std::fs::write(
         &path,
@@ -101,12 +102,28 @@ fn only_a_real_route_run_or_an_explicit_path_reads_the_env_file() {
             ("STORYOS_LOG", "warn"),
         ]),
         KEYS,
+        EnvFile::RealRoute,
         || Some(path.clone()),
     );
-    let explicit = load_from::<Sample>(pairs(&[(ENV_FILE_VARIABLE, &file)]), KEYS, undiscovered);
+    let explicit = load_from::<Sample>(
+        pairs(&[(ENV_FILE_VARIABLE, &file)]),
+        KEYS,
+        EnvFile::RealRoute,
+        undiscovered,
+    );
+    let never = load_from::<Sample>(
+        pairs(&[
+            (ENV_FILE_VARIABLE, &file),
+            ("STORYOS_MODEL_DESTINATION", "volcengine_agent_plan"),
+        ]),
+        KEYS,
+        EnvFile::Never,
+        undiscovered,
+    );
     let missing = load_from::<Sample>(
         pairs(&[(ENV_FILE_VARIABLE, "/nonexistent/storyos.env")]),
         KEYS,
+        EnvFile::RealRoute,
         undiscovered,
     );
     std::fs::remove_file(&path).unwrap();
@@ -123,11 +140,13 @@ fn only_a_real_route_run_or_an_explicit_path_reads_the_env_file() {
         (
             discovered.map(|loaded| (summary(&loaded.settings), loaded.env_file)),
             explicit.map(|loaded| summary(&loaded.settings)),
+            never.err(),
             missing.err(),
         ),
         (
             Ok((from_file("warn"), Some(path.clone()))),
             Ok(from_file("debug")),
+            Some(SettingsError::new("STORYOS_DATABASE_URL", None)),
             Some(SettingsError::new(
                 ENV_FILE_VARIABLE,
                 Some(std::path::Path::new("/nonexistent/storyos.env"))

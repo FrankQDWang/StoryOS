@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let storyos_settings::Loaded { settings, env_file } = storyos_server::ServerSettings::load()?;
+    let settings = storyos_server::ServerSettings::load()?.settings;
     storyos_adapter_diagnostics::install(settings.log.as_deref())?;
     storyos_application::register_sql_state(storyos_adapter_postgres::sql_state);
     let arguments = env::args().skip(/*n*/ 1).collect::<Vec<_>>();
@@ -38,6 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             settings.bootstrap_sessions.as_deref(),
             multiple_mapping_allowance,
         )?;
+    let challenge_secret = settings.required_challenge_secret()?;
     let assets = storyos_server::WebAssetSet::load(web_root)?;
     let database_url = settings.database_url.clone().ok_or_else(|| {
         "STORYOS_DATABASE_URL is required for Release 1 Storage Activation".to_owned()
@@ -89,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok((handle, binding))
         })
         .collect::<Result<HashMap<_, _>, uuid::Error>>()?;
-    let model_destination = settings.model_destination(env_file.as_deref())?;
+    let model_destination = settings.model_destination()?;
     let config = storyos_server::ServerConfig {
         database_url: Some(database_url),
         session_bindings,
@@ -98,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         accepted_security_policy_revision: Some(security_policy_revision),
         allowed_host: Some(allowed_host),
         allowed_origin: Some(allowed_origin),
-        project_command_challenge_secret: settings.challenge_secret.clone(),
+        project_command_challenge_secret: Some(challenge_secret),
         trusted_local_session_bootstrap,
         session_cookie_secure: match transport {
             storyos_server::PackagedTransportPlan::LocalHttp => {

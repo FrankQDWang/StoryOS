@@ -21,14 +21,15 @@ Development runs in git worktrees. A worktree has no copy of the git-ignored `.e
 - The `storyos-settings` crate loads the `STORYOS_` variables into the typed settings of each binary. It takes only the variables that the binary declares. Thus the Server never takes `STORYOS_AGENT_PLAN_API_KEY`.
 - Each value enters the settings as text. A setting that is a number is parsed and validated at startup.
 - Each secret is a `SecretString`: `STORYOS_CHALLENGE_SECRET`, `STORYOS_DATABASE_URL`, and `STORYOS_AGENT_PLAN_API_KEY`. A secret leaves the type only at the place that uses it.
-- A wrong or missing setting stops startup with a message that names the variable and the env file that the settings read. The message never holds a value.
+- A wrong or missing setting stops startup with a message that names the variable and the env file that the settings read. The message never holds a value. The Server requires `STORYOS_CHALLENGE_SECRET` with at least 32 bytes before it starts.
 - Test-only hold variables stay outside the settings.
 
 ### The env file of a real-route run
 
-- Only a run that needs the key reads an env file. That is a run with `STORYOS_MODEL_DESTINATION=volcengine_agent_plan`, or a run with an explicit `STORYOS_ENV_FILE`. Both values come from the process environment. A test, a verification command, and a fake-destination run read no env file. Thus none of them can get the key or send a live request by accident.
+- Only the Worker reads an env file. The Server reads its settings from its process environment only, so it never reads the key, not even as a line of the file.
+- The Worker reads an env file only in a run that needs the key. That is a run with `STORYOS_MODEL_DESTINATION=volcengine_agent_plan`, or a run with an explicit `STORYOS_ENV_FILE`. Both values come from the process environment. A test, a verification command, and a fake-destination run read no env file. Thus none of them can get the key or send a live request by accident.
 - The lookup order has three steps. First, the path in `STORYOS_ENV_FILE`. Second, the `.env` of the current checkout. Third, the `.env` of the main checkout, in the parent directory of `git rev-parse --git-common-dir`. Nothing copies or links `.env` into a worktree.
-- `dotenvy` reads the file into the settings. It does not change the process environment. A process variable takes precedence over the same variable in the file.
+- `dotenvy` reads the file into the settings, and the settings layer drops each line that the Worker does not declare as it reads it. It does not change the process environment. A process variable takes precedence over the same variable in the file.
 - The `.env` file has mode 600, and git ignores it. The committed `.env.example` lists each product variable with a placeholder value only. The key is never exported in a shell profile, because each agent shell loads the profile of the author. Agents never read, print, or search `.env`.
 
 ### The credential of the Agent Plan route
