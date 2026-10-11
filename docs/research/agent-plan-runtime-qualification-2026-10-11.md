@@ -51,3 +51,21 @@ An earlier attempt on 2026-10-10 sent nothing: the removed Keychain resolver wai
 - The `getAgentRun` query of a real Attempt still showed labels of the fake destination: `destination_io` was `host_fake`, the continuation admission named `storyos.host-fake.mapping.v1`, and the Provider report evidence was `host_fake_no_provider_usage`. The response reference was not in the evidence list.
 - When the Worker is a separate process and a request waits in the queue, the panel can stop at its waiting state until the page reloads.
 - The reasoning summary of the model is in English, while the reply follows the manuscript language.
+
+## Request on the qualified route
+
+After the profile revision `storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v2` and the Model Registration `018f0000-0000-7001-8000-00000000fa03` cited this record ([S4-02c: Enable the Qualified Agent Plan Route](https://github.com/FrankQDWang/StoryOS/issues/1097)), one author request ran on the qualified route. The plan was 1 request, and 1 was sent.
+
+| Fact | Value |
+| --- | --- |
+| Build | Release package from commit `bf22445357c356a0a739c2323ccc5f8bfb551751` |
+| Decision | `runtime_qualification = qualified`, no authorization link |
+| Time (UTC) | 2026-10-11T15:46:10Z, approximately 96 s |
+| Model Attempt | `01a12ba4-9aec-7c73-97fe-ac6ec77676c8` |
+| Wire digest | `sha256:98db90948cc49a8cb5ccf289ef9f1ae097eabf8a8477937e16b9c7f790a7c83a` |
+| Response reference | `resp_021791733570112185f554c98e4e9934305289bae83dd8529809b` |
+| Reported usage | 460 input and 4960 output tokens, within the 8192 bound |
+| Outcome | A Prose Change with two validated locations opened Proposal `01a12ba6-12ef-7841-9948-72f70f50e37a`. The panel showed the result with no page reload. The author view accepted the first location and rejected the second, which made one acceptance Receipt and one rejection Receipt. |
+| Query facts | `getProjectAssistance` answered `qualified`. `getAgentRun` answered the `volcengine_agent_plan` destination I/O kind, the Agent Plan mapping revision, `provider_usage_reported`, and the response reference as a known reference. |
+
+The output token count of this request was higher than the counts of the two qualification requests. The reasoning of the model used most of it.
