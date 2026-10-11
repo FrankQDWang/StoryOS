@@ -474,15 +474,15 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
     let reported = real_attempt_evidence(
         &store,
         &admin,
-        "e9f",
+        "eb1",
         response(
-            "resp_e9f",
+            "resp_eb1",
             Some(serde_json::json!({"input_tokens": 12, "output_tokens": 3})),
         ),
     )
     .await;
     let unknown =
-        real_attempt_evidence(&store, &admin, "e9g", response("resp_e9g", /*usage*/ None)).await;
+        real_attempt_evidence(&store, &admin, "eb2", response("resp_eb2", /*usage*/ None)).await;
     let facts = |(adapter, mapping, evidence): (
         ModelAdapter,
         String,
@@ -510,12 +510,12 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
             (
                 ModelAdapter::VolcengineAgentPlanResponses,
                 storyos_core::AGENT_PLAN_MAPPING_REVISION.to_owned(),
-                vec!["resp_e9f".to_owned(), "provider_usage_reported".to_owned()],
+                vec!["resp_eb1".to_owned(), "provider_usage_reported".to_owned()],
             ),
             (
                 ModelAdapter::VolcengineAgentPlanResponses,
                 storyos_core::AGENT_PLAN_MAPPING_REVISION.to_owned(),
-                vec!["resp_e9g".to_owned(), "provider_usage_unknown".to_owned()],
+                vec!["resp_eb2".to_owned(), "provider_usage_unknown".to_owned()],
             ),
         ]
     );
