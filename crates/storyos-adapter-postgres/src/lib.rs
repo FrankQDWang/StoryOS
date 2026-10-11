@@ -212,6 +212,12 @@ pub use storage_activation_proof::{
     StorageActivationProofError, require_release1_storage_activation_proof,
 };
 
+/// Whether `url` is a PostgreSQL connection string that the client can parse. A binary checks
+/// it at startup, before storage activation (ADR 0050).
+pub fn database_url_parses(url: &str) -> bool {
+    url.parse::<tokio_postgres::Config>().is_ok()
+}
+
 /// Returns the SQLSTATE code of a PostgreSQL error, for the Diagnostic Projection (ADR 0047).
 pub fn sql_state(error: &(dyn std::error::Error + 'static)) -> Option<String> {
     let code = error.downcast_ref::<tokio_postgres::Error>()?.code()?;
