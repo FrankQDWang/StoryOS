@@ -247,6 +247,7 @@ pub enum ContextRejectionReason {
 pub enum DestinationIo {
     None,
     HostFake,
+    VolcengineAgentPlan,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

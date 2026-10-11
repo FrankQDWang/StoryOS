@@ -14,7 +14,6 @@ use storyos_application::{
 use storyos_core::ModelAdapter;
 
 const EXECUTION_PROFILE: &str = "storyos.volcengine-agent-plan.execution.v1";
-const MAPPING_REVISION: &str = "storyos.volcengine-agent-plan.responses.create.v1";
 
 /// Sends each admitted Create request once, with no streaming, retry, redirect, or fallback.
 /// It resolves the Credential Reference of each request through `resolver` before the dispatch
@@ -58,7 +57,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let body = wire::create_body(create, &route.provider_model_id, bounds);
         let projection = WirePayloadProjection {
             execution_profile: EXECUTION_PROFILE.to_owned(),
-            mapping_revision: MAPPING_REVISION.to_owned(),
+            mapping_revision: storyos_core::AGENT_PLAN_MAPPING_REVISION.to_owned(),
             digest: format!("sha256:{}", storyos_core::hex_sha256(body.as_bytes())),
             serialized_payload: Some(body.clone()),
         };

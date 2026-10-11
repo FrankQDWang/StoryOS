@@ -25,8 +25,11 @@ pub(super) async fn load_agent_run(
                     attempt.outbound_disclosure_event_id::text,
                     attempt.model_invocation_id::text, attempt.dispatch_state,
                     attempt.decision_id::text, attempt.continuation_binding_id::text,
-                    attempt.payload::text, settings.use_enabled, settings.contribution_enabled, COALESCE(attempt.decision_position,run.active_decision_position)::text
+                    attempt.payload::text, settings.use_enabled, settings.contribution_enabled, COALESCE(attempt.decision_position,run.active_decision_position)::text,
+                    registration.model_kind
                FROM storyos.agent_runs AS run
+               JOIN storyos.model_registration_revisions AS registration
+                 ON registration.model_registration_revision = run.model_registration_revision
                LEFT JOIN storyos.conversation_memory_settings AS settings
                  ON (settings.owner_user_id, settings.project_id, settings.conversation_id,
                      settings.memory_settings_revision) =
@@ -115,6 +118,11 @@ pub(super) async fn load_agent_run(
         None => None,
     };
     let mut record = AgentRunRecord {
+        adapter: storyos_core::ModelAdapter::parse(row.get(/*idx*/ 17)).ok_or_else(|| {
+            CreateAgentRunError::Unavailable(Box::new(std::io::Error::other(
+                "The Model Registration adapter is damaged",
+            )))
+        })?,
         project_agent_id: row.get(0),
         conversation_id: row.get(1),
         memory_settings_revision: row.get(2),

@@ -484,7 +484,7 @@ export type ContextBlockReason = { "kind": "exact_required_over_limit", source_c
 
 export type ContextRejectionReason = { "kind": "over_item_token_limit" } | { "kind": "required_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
 
-export type DestinationIo = { "kind": "none" } | { "kind": "host_fake" };
+export type DestinationIo = { "kind": "none" } | { "kind": "host_fake" } | { "kind": "volcengine_agent_plan" };
 
 export type OptionalManifestRef = { "kind": "absent" } | { "kind": "present", manifest_id: string, };
 

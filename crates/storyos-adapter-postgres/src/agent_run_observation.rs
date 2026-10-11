@@ -134,6 +134,13 @@ pub(crate) async fn persist_create_result(
     if let Some(reference) = result.response_reference {
         payload["response_reference"] = serde_json::json!(reference);
     }
+    if matches!(result.settlement, CreateSettlement::Response) {
+        let usage_kind = payload["usage"]["kind"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_owned();
+        crate::provider_evidence::settle(&mut payload, &usage_kind, result.response_reference);
+    }
     match result.settlement {
         CreateSettlement::Response => {}
         CreateSettlement::NotSubmitted => {

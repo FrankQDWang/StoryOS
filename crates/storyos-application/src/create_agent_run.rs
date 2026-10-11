@@ -66,6 +66,8 @@ pub struct AgentRunSteeringInspect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunRecord {
+    /// The adapter of the Model Registration that the AgentRun pinned.
+    pub adapter: storyos_core::ModelAdapter,
     pub project_agent_id: String,
     pub conversation_id: String,
     pub memory_settings_revision: String,

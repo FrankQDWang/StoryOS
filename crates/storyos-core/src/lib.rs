@@ -149,10 +149,10 @@ pub use model_output::{
     OutputPhase, StreamItemRole, StreamItemState, validate_agent_decision,
 };
 pub use model_registration::{
-    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_REGISTRATION, CREATE_REQUIREMENT,
-    CapabilityCombination, CapabilityEntries, CapabilityEvidence, HOST_FAKE_CAPABILITY_PROFILE,
-    HOST_FAKE_REGISTRATION, ModelAdapter, ModelCapability, ModelCapabilityProfile,
-    ModelRegistration, model_registration,
+    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_MAPPING_REVISION, AGENT_PLAN_REGISTRATION,
+    CREATE_REQUIREMENT, CapabilityCombination, CapabilityEntries, CapabilityEvidence,
+    HOST_FAKE_CAPABILITY_PROFILE, HOST_FAKE_REGISTRATION, ModelAdapter, ModelCapability,
+    ModelCapabilityProfile, ModelRegistration, model_registration,
 };
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
