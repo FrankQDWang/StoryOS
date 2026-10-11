@@ -1,7 +1,8 @@
 //! The StoryOS Worker binary: the Worker loop with the PostgreSQL store, the fake and Agent Plan
-//! adapters, and the Keychain credential resolver.
+//! adapters, and the Keychain and environment credential resolvers.
 
 mod contract_fault_holds;
+mod credential;
 mod keychain;
 mod registered_adapters;
 
@@ -13,7 +14,14 @@ use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_a
 use storyos_adapter_volcengine_responses::AgentPlanResponses;
 use storyos_worker::ModelDestination;
 
-type WorkerAdapters = registered_adapters::RegisteredAdapters<keychain::KeychainResolver>;
+type WorkerAdapters = registered_adapters::RegisteredAdapters<
+    credential::WorkerCredentials<fn(&str) -> Option<String>>,
+>;
+
+/// The value of one variable of the Worker process environment.
+fn process_variable(name: &str) -> Option<String> {
+    env::var(name).ok()
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -45,7 +53,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         adapter: WorkerAdapters {
             fake: FakeDestination,
             agent_plan: AgentPlanResponses {
-                resolver: keychain::KeychainResolver,
+                resolver: credential::WorkerCredentials {
+                    keychain: keychain::KeychainResolver,
+                    environment: credential::EnvironmentResolver {
+                        lookup: process_variable,
+                    },
+                },
             },
         },
         observer: contract_fault_holds::ContractFaultHolds::from_env(),

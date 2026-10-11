@@ -112,6 +112,7 @@ pub enum ProjectModelDestination {
 pub enum ModelRuntimeQualification {
     Qualified,
     Pending,
+    QualificationAuthorized,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -2,6 +2,7 @@
 
 use std::future::Future;
 
+pub use storyos_core::RequestBounds;
 use storyos_core::{
     ContextSourceClass, ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
     RetrievalBounds,
@@ -46,14 +47,6 @@ pub struct RequestRoute {
     pub credential_reference: Option<CredentialReference>,
     /// `None` is an unknown bound, which blocks a real request.
     pub bounds: Option<RequestBounds>,
-}
-
-/// The author-adopted bounds of one real destination request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RequestBounds {
-    /// The output token bound, reasoning tokens included.
-    pub max_output_tokens: u32,
-    pub timeout: std::time::Duration,
 }
 
 /// Whether a request still needs its dispatch claim.

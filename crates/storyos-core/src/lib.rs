@@ -130,7 +130,7 @@ pub use delete_volume::{
 };
 pub use deployment_destination::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_ELIGIBILITY_EVIDENCE, AGENT_PLAN_ENDPOINT,
-    DeploymentDestination, DestinationKind, RuntimeQualification,
+    BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds, RuntimeQualification,
 };
 pub use host_fake_profile::{
     ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,

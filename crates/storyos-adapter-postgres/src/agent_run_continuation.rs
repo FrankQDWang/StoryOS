@@ -4,7 +4,8 @@ use storyos_application::{
 };
 use storyos_core::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
-    HOST_FAKE_MAPPING_REVISION, continuation_mapping_can_represent, map_continuation_input,
+    HOST_FAKE_MAPPING_REVISION, ModelCapability, continuation_mapping_can_represent,
+    map_continuation_input, model_registration,
 };
 
 pub(crate) struct ContinuationWire {
@@ -27,7 +28,15 @@ pub(crate) async fn decide_continuation(
     let mapping = map_continuation_input(&ContinuationMappingInput {
         current: admission.clone(),
         prior: prior.as_ref().map(|loaded| loaded.identity.clone()),
-        mapping_can_represent: continuation_mapping_can_represent(author_message),
+        // An unqualified continuation sends the full current input (ADR 0033).
+        mapping_can_represent: continuation_mapping_can_represent(author_message)
+            && model_registration(&assistance.model_registration_revision).is_some_and(
+                |registration| {
+                    registration
+                        .capability_profile
+                        .qualifies(&[ModelCapability::Continuation])
+                },
+            ),
     });
     let prior_binding_id = match mapping {
         ContinuationInputMapping::Incremental => known_prior_binding_id.clone(),
