@@ -68,7 +68,7 @@ async fn fake_worker_skips_an_agent_plan_run_that_only_the_agent_plan_worker_cla
         .await
         .unwrap();
 
-    assert_eq!(refused.ok(), Some(CompleteAgentRun::Settled));
+    assert_eq!(refused.ok(), Some(CompleteAgentRun::AlreadySettled));
     assert_eq!(
         dispatch_evidence(&admin, &agent_plan_run).await,
         DispatchEvidence {
