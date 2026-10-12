@@ -443,7 +443,10 @@ async fn commit_retrieve(
         .await
         .map_err(complete_database_error)?
         .get::<_, i64>(0);
-    if claimed > 0 || (run.settled() && run.status != "cancelled") {
+    if claimed > 0
+        || (run.settled() && run.status != "cancelled")
+        || !crate::agent_run_work::grant_admitted(run)
+    {
         return Ok(None);
     }
     crate::agent_run_retrieval_dispatch::commit(client, claim, run, request, projection)

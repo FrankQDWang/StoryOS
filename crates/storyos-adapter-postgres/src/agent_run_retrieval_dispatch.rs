@@ -60,6 +60,7 @@ pub(crate) async fn commit(
         "decision": null,
         "usage": { "kind": "unknown" },
         "reservation": { "kind": "worst_case", "released": false },
+        "disclosure_grant": { "grant_id": run.grant_id, "grant_scope": run.grant_scope },
         "evidence": [
             {
                 "kind": "stored_reference",
@@ -135,6 +136,7 @@ pub(crate) async fn record_original_result(
         attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
         conversation_id: &run.conversation_id,
         run_status: &run.status,
+        grant_admitted: crate::agent_run_work::grant_admitted(run),
     };
     let fenced = run.status == "cancelled";
     let retrieved = RetrievedResult::from(observation);
@@ -345,9 +347,10 @@ async fn copy_retrieval_context(
                (owner_user_id, project_id, context_assembly_manifest_id,
                 operation_requirement_id, run_id, sufficiency,
                 destination_context_manifest_id, outbound_disclosure_manifest_id,
-                payload, receipt_id, manifest_role)
+                payload, receipt_id, manifest_role, disclosure_grant_id, disclosure_grant_scope)
              SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, 'retrieval'
+                    sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, 'retrieval',
+                    disclosure_grant_id, disclosure_grant_scope
                FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid

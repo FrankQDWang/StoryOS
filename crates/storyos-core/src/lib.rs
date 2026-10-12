@@ -19,6 +19,7 @@ mod delete_volume;
 mod deployment_destination;
 mod draft_retry;
 mod expand_refused_edit_draft;
+mod grant_scope;
 mod host_fake_profile;
 mod model_output;
 mod model_registration;
@@ -133,6 +134,7 @@ pub use deployment_destination::{
     AGENT_PLAN_ENDPOINT, BudgetBounds, DeploymentDestination, DestinationKind, RequestBounds,
     RuntimeQualification,
 };
+pub use grant_scope::{GrantFacts, GrantScope, admit_disclosure};
 pub use host_fake_profile::{
     ADVISORY_TEXT, ExecutionCapability, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
     INLINE_PROSE_CHANGE_TEXT, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT,

@@ -1,7 +1,7 @@
 use storyos_application::{ProjectCommandEnvelope, ProjectScope};
 use storyos_core::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_ELIGIBILITY_EVIDENCE, AGENT_PLAN_ENDPOINT,
-    DeploymentDestination,
+    DeploymentDestination, GrantScope,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -66,8 +66,9 @@ pub(crate) async fn insert_destination_binding(
              ), destination_grant AS (
                INSERT INTO storyos.project_destination_grants
                  (owner_user_id, project_id, grant_id, processing_destination_identity,
-                  grant_kind)
-               VALUES ($1::text::uuid, $2::text::uuid, $4::text::uuid, $3::text::uuid, $12)
+                  grant_kind, grant_scope)
+               VALUES ($1::text::uuid, $2::text::uuid, $4::text::uuid, $3::text::uuid, $12,
+                       $20)
              ), binding AS (
                INSERT INTO storyos.project_external_use_binding_revisions
                  (owner_user_id, project_id, project_model_use_binding_revision,
@@ -103,6 +104,7 @@ pub(crate) async fn insert_destination_binding(
                 &shape.decision_kind,
                 &destination.runtime_qualification().as_str(),
                 &destination.qualification_authorization(),
+                &GrantScope::CURRENT.as_str(),
             ],
         )
         .await?;
@@ -110,8 +112,8 @@ pub(crate) async fn insert_destination_binding(
 }
 
 /// Whether the current binding of the Project has the records that `destination` writes. A
-/// changed destination, Registration, Credential Reference, bound, or qualification needs new
-/// binding records (ADR 0048, ADR 0049).
+/// changed destination, Registration, Credential Reference, bound, qualification, or grant scope
+/// needs new binding records (ADR 0048, ADR 0049, ADR 0051).
 pub(crate) async fn current_binding_offers(
     client: &Client,
     scope: &ProjectScope,
@@ -121,7 +123,8 @@ pub(crate) async fn current_binding_offers(
         .query_opt(
             "SELECT identity.destination_kind, binding.model_registration_revision::text,
                     binding.credential_reference, binding.budget_bounds,
-                    decision.runtime_qualification, decision.qualification_authorization
+                    decision.runtime_qualification, decision.qualification_authorization,
+                    destination_grant.grant_scope
                FROM storyos.project_policy_revisions AS policy
                JOIN storyos.external_contract_compatibility_decisions AS decision
                  ON (decision.owner_user_id, decision.project_id,
@@ -133,6 +136,12 @@ pub(crate) async fn current_binding_offers(
                      binding.project_model_use_binding_revision) =
                     (decision.owner_user_id, decision.project_id,
                      decision.project_model_use_binding_revision)
+               JOIN storyos.project_destination_grants AS destination_grant
+                 ON (destination_grant.owner_user_id, destination_grant.project_id,
+                     destination_grant.grant_id) =
+                    (binding.owner_user_id, binding.project_id, binding.grant_id)
+                AND destination_grant.processing_destination_identity =
+                    binding.processing_destination_identity
                JOIN storyos.processing_destination_identities AS identity
                  ON (identity.owner_user_id, identity.project_id,
                      identity.processing_destination_identity) =
@@ -155,6 +164,7 @@ pub(crate) async fn current_binding_offers(
         row.get::<_, &str>(/*idx*/ 3),
         row.get::<_, &str>(/*idx*/ 4),
         row.get::<_, Option<&str>>(/*idx*/ 5),
+        row.get::<_, Option<&str>>(/*idx*/ 6),
     ) == (
         destination.kind().as_str(),
         destination.registration().revision,
@@ -162,6 +172,7 @@ pub(crate) async fn current_binding_offers(
         destination.budget_bounds().as_str(),
         destination.runtime_qualification().as_str(),
         destination.qualification_authorization(),
+        Some(GrantScope::CURRENT.as_str()),
     ))
 }
 
@@ -172,3 +183,7 @@ mod tests;
 #[cfg(test)]
 #[path = "runtime_qualification_tests.rs"]
 mod qualification_tests;
+
+#[cfg(test)]
+#[path = "grant_scope_tests.rs"]
+mod grant_scope_tests;

@@ -114,6 +114,10 @@ pub(crate) async fn commit(
             /*known_prior_binding_id*/ None,
         )
     });
+    // The admitted successor pins the binding, and thus the grant, of its predecessor.
+    if let Some(grant) = row.payload.get("disclosure_grant") {
+        successor_payload["disclosure_grant"] = grant.clone();
+    }
     if let Some(wire) = crate::agent_run_continuation::parse_wire(&row.payload) {
         successor_payload["continuation"] = crate::agent_run_continuation::encode_wire(&wire);
     }
@@ -393,9 +397,10 @@ async fn copy_manifest(
                (owner_user_id, project_id, context_assembly_manifest_id,
                 operation_requirement_id, run_id, sufficiency,
                 destination_context_manifest_id, outbound_disclosure_manifest_id,
-                payload, receipt_id, manifest_role)
+                payload, receipt_id, manifest_role, disclosure_grant_id, disclosure_grant_scope)
              SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, 'successor'
+                    sufficiency, $6::text::uuid, $7::text::uuid, payload, receipt_id, 'successor',
+                    disclosure_grant_id, disclosure_grant_scope
                FROM storyos.context_assembly_manifests
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid

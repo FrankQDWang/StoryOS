@@ -122,6 +122,14 @@ pub(crate) struct RunPhaseRow {
     pub binding_revision: String,
     pub registration_current: bool,
     pub budget_bounds: String,
+    pub owner_user_id: String,
+    pub project_id: String,
+    pub grant_id: Option<String>,
+    pub grant_scope: Option<String>,
+    pub grant_identity: Option<String>,
+    pub binding_identity: Option<String>,
+    /// The decoded decision Context Assembly, or `None` when it does not decode.
+    pub disclosure_request: Option<storyos_core::CurrentPassageAssemblyRecord>,
 }
 
 impl RunPhaseRow {
@@ -161,13 +169,21 @@ pub(crate) async fn load_run_phase(
                                run.model_registration_revision
                          AND head.model_registration_revision = run.model_registration_revision
                     ) AS registration_current,
-                    (SELECT binding.budget_bounds
-                       FROM storyos.project_external_use_binding_revisions AS binding
-                      WHERE (binding.owner_user_id, binding.project_id,
-                             binding.project_model_use_binding_revision) =
-                            (run.owner_user_id, run.project_id,
-                             run.project_model_use_binding_revision)) AS budget_bounds
+                    binding.budget_bounds,
+                    run.owner_user_id::text AS owner_user_id, run.project_id::text AS project_id,
+                    destination_grant.grant_id::text AS grant_id, destination_grant.grant_scope,
+                    destination_grant.processing_destination_identity::text AS grant_identity,
+                    binding.processing_destination_identity::text AS binding_identity
                FROM storyos.agent_runs AS run
+               LEFT JOIN storyos.project_external_use_binding_revisions AS binding
+                 ON (binding.owner_user_id, binding.project_id,
+                     binding.project_model_use_binding_revision) =
+                    (run.owner_user_id, run.project_id, run.project_model_use_binding_revision)
+               LEFT JOIN storyos.project_destination_grants AS destination_grant
+                 ON (destination_grant.owner_user_id, destination_grant.project_id,
+                     destination_grant.grant_id) =
+                    (run.owner_user_id, run.project_id, run.grant_id)
+                AND destination_grant.grant_id = binding.grant_id
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
@@ -193,6 +209,7 @@ pub(crate) async fn load_run_phase(
     else {
         return Err(CompleteAgentRunError::StaleFence);
     };
+    let assembly_payload: String = row.get("assembly_payload");
     Ok(RunPhaseRow {
         status: row.get("status"),
         author_message: row.get("author_message"),
@@ -206,11 +223,21 @@ pub(crate) async fn load_run_phase(
         continuation_id: row.get("continuation_id"),
         attempt_payload: row.get("attempt_payload"),
         decision_position: row.get("decision_position"),
-        assembly_payload: row.get("assembly_payload"),
         model_registration_revision: row.get("model_registration_revision"),
         binding_revision: row.get("binding_revision"),
         registration_current: row.get("registration_current"),
         budget_bounds: row.get("budget_bounds"),
+        owner_user_id: row.get("owner_user_id"),
+        project_id: row.get("project_id"),
+        grant_id: row.get("grant_id"),
+        grant_scope: row.get("grant_scope"),
+        grant_identity: row.get("grant_identity"),
+        binding_identity: row.get("binding_identity"),
+        disclosure_request: serde_json::from_str(&assembly_payload)
+            .ok()
+            .as_ref()
+            .and_then(storyos_core::decode_assembly_record),
+        assembly_payload,
     })
 }
 
@@ -234,7 +261,24 @@ pub(crate) fn route_facts<'a>(
             record.runtime_qualification
         }),
         budget_bounds: BudgetBounds::parse(&run.budget_bounds).unwrap_or(BudgetBounds::Unqualified),
+        grant: grant_facts(run),
     }
+}
+
+fn grant_facts(run: &RunPhaseRow) -> storyos_core::GrantFacts<'_> {
+    storyos_core::GrantFacts {
+        owner_user_id: &run.owner_user_id,
+        project_id: &run.project_id,
+        grant_scope: run.grant_scope.as_deref(),
+        grant_identity: run.grant_identity.as_deref(),
+        binding_identity: run.binding_identity.as_deref(),
+        request: run.disclosure_request.as_ref(),
+    }
+}
+
+/// Whether the scope of the grant that `run` pinned covers its disclosure (ADR 0051).
+pub(crate) fn grant_admitted(run: &RunPhaseRow) -> bool {
+    storyos_core::admit_disclosure(&grant_facts(run)).is_ok()
 }
 
 /// Refuses a blocked or capability request before dispatch, or admits one new Model Attempt.

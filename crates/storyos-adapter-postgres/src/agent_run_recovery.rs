@@ -34,6 +34,7 @@ pub(crate) async fn advance(
                 attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
                 conversation_id: &run.conversation_id,
                 run_status: &run.status,
+                grant_admitted: crate::agent_run_work::grant_admitted(run),
             },
             RetrievalFence::Open,
             if follow_successor {
@@ -89,6 +90,7 @@ pub(crate) async fn settle_cancelled(
                 attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
                 conversation_id: &run.conversation_id,
                 run_status: &run.status,
+                grant_admitted: crate::agent_run_work::grant_admitted(run),
             },
             RetrievalFence::Fenced,
             RetrievalRunWrite::Write,

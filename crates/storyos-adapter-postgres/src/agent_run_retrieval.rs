@@ -27,6 +27,8 @@ pub(crate) struct RetrievalAdvance<'a> {
     pub attempt_id: &'a str,
     pub conversation_id: &'a str,
     pub run_status: &'a str,
+    /// The scope of the pinned grant covers the disclosure of the Run (ADR 0051).
+    pub grant_admitted: bool,
 }
 
 pub(crate) enum RetrievalWork {
@@ -174,6 +176,7 @@ pub(crate) async fn decide(
         claim,
         advance.conversation_id,
         &assistance.processing_destination_identity,
+        advance.grant_admitted,
         fenced || advance.run_status == "cancelled",
         retrieved,
     )))
@@ -497,6 +500,7 @@ fn facts(
     claim: &ClaimedAgentRun,
     conversation_id: &str,
     destination_identity: &str,
+    grant_admitted: bool,
     run_fenced: bool,
     retrieved: RetrievedOriginalResult,
 ) -> OriginalResultRetrievalFacts {
@@ -517,7 +521,8 @@ fn facts(
             == Some(claim.project_scope.owner_user_id.as_ref())
             && text(subject, "project_id") == Some(claim.project_scope.project_id.as_ref()),
         conversation_permitted: text(subject, "conversation_id") == Some(conversation_id),
-        destination_permitted: text(subject, "destination_identity") == Some(destination_identity),
+        destination_permitted: grant_admitted
+            && text(subject, "destination_identity") == Some(destination_identity),
         mapping_permitted: text(subject, "mapping_revision") == Some(HOST_FAKE_MAPPING_REVISION),
         retrieved,
         run_fenced,

@@ -1,7 +1,8 @@
 //! The Host decision before the dispatch claim of a new Create request.
 
 use crate::{
-    BudgetBounds, CREATE_REQUIREMENT, ExecutionCapability, RuntimeQualification, model_registration,
+    BudgetBounds, CREATE_REQUIREMENT, ExecutionCapability, GrantFacts, RuntimeQualification,
+    admit_disclosure, model_registration,
 };
 
 /// The facts of one claimed AgentRun that Create admission examines.
@@ -26,6 +27,8 @@ pub struct RouteFacts<'a> {
     pub qualification: RuntimeQualification,
     /// The request bounds of the pinned use binding.
     pub budget_bounds: BudgetBounds,
+    /// The pinned grant and the request that it must cover (ADR 0051).
+    pub grant: GrantFacts<'a>,
 }
 
 /// Dispatch, or a refusal before the dispatch claim with its recorded capability reason.
@@ -80,7 +83,7 @@ pub fn admit_route(route: &RouteFacts<'_>) -> Result<(), &'static str> {
     if !route.budget_bounds.known() {
         return Err("model_request_bounds_unknown");
     }
-    Ok(())
+    admit_disclosure(&route.grant).map(|_| ())
 }
 
 #[cfg(test)]

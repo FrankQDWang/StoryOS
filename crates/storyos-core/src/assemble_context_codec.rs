@@ -14,6 +14,7 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
             "run_id": record.operation_requirement.run_id,
             "owner_user_id": record.operation_requirement.owner_user_id,
             "project_id": record.operation_requirement.project_id,
+            "purpose": encode_purpose(record.operation_requirement.purpose),
             "chapter_id": record.operation_requirement.chapter_id,
             "chapter_revision_id": record.operation_requirement.chapter_revision_id,
             "proposal_target_block_ids": record.operation_requirement.proposal_target_block_ids,
@@ -87,7 +88,11 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
             run_id: requirement.get("run_id")?.as_str()?.to_owned(),
             owner_user_id: requirement.get("owner_user_id")?.as_str()?.to_owned(),
             project_id: requirement.get("project_id")?.as_str()?.to_owned(),
-            purpose: ContextPurpose::CurrentPassageAssistance,
+            // A record from before the Purpose field has only the current-passage Purpose.
+            purpose: match requirement.get("purpose") {
+                None => ContextPurpose::CurrentPassageAssistance,
+                Some(value) => decode_purpose(value.as_str()?)?,
+            },
             cause: ContextCause::AuthorRequest,
             chapter_id: requirement.get("chapter_id")?.as_str()?.to_owned(),
             chapter_revision_id: match requirement.get("chapter_revision_id")? {
@@ -303,6 +308,19 @@ fn decode_rejected(value: &serde_json::Value) -> Option<RejectedSource> {
             _ => return None,
         },
     })
+}
+
+fn encode_purpose(purpose: ContextPurpose) -> &'static str {
+    match purpose {
+        ContextPurpose::CurrentPassageAssistance => "current_passage_assistance",
+    }
+}
+
+fn decode_purpose(value: &str) -> Option<ContextPurpose> {
+    match value {
+        "current_passage_assistance" => Some(ContextPurpose::CurrentPassageAssistance),
+        _ => None,
+    }
 }
 
 fn encode_source_class(class: ContextSourceClass) -> &'static str {
