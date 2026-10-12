@@ -140,6 +140,8 @@ pub(crate) async fn current_binding_offers(
                  ON (destination_grant.owner_user_id, destination_grant.project_id,
                      destination_grant.grant_id) =
                     (binding.owner_user_id, binding.project_id, binding.grant_id)
+                AND destination_grant.processing_destination_identity =
+                    binding.processing_destination_identity
                JOIN storyos.processing_destination_identities AS identity
                  ON (identity.owner_user_id, identity.project_id,
                      identity.processing_destination_identity) =

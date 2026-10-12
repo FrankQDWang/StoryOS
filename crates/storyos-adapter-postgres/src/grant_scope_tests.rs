@@ -268,8 +268,10 @@ async fn the_dispatch_claim_checks_the_current_grant_again_and_sends_nothing() {
           WHERE grant_id = '{grant_id}'",
     ];
     let mut observed = Vec::new();
+    let mut changed = Vec::new();
     for (prefix, statement) in ["d5e", "d6a"].into_iter().zip(changes) {
-        let (scope, _, run_id) = queued_run(&store, prefix, DeploymentDestination::HostFake).await;
+        let (scope, chapter_id, run_id) =
+            queued_run(&store, prefix, DeploymentDestination::HostFake).await;
         let adapter = ChangeGrantAtPrepare {
             admin: &admin,
             statement,
@@ -277,9 +279,30 @@ async fn the_dispatch_claim_checks_the_current_grant_again_and_sends_nothing() {
             stage: Stage::Create,
         };
         observed.push(settle(&store, &admin, &adapter, &scope, &run_id).await);
+        changed.push((scope, chapter_id, adapter.grant_id));
     }
+    // The next createAgentRun replaces a binding whose grant names another identity.
+    let (scope, chapter_id, mismatched_grant) = &changed[1];
+    let rebound_run = admit_run(
+        &store,
+        scope,
+        chapter_id,
+        "d6f",
+        DeploymentDestination::HostFake,
+        "Help with this passage.",
+    )
+    .await;
+    let rebound = settle(&store, &admin, &FakeDestination, scope, &rebound_run).await;
 
     assert_eq!(observed, [refused_before_claim(), refused_before_claim()]);
+    assert_ne!(
+        &current_grant(&store, &admin, scope).await.0,
+        mismatched_grant
+    );
+    assert_eq!(
+        (rebound.status.as_str(), rebound.model_attempts),
+        ("completed", 1)
+    );
 }
 
 #[tokio::test]
