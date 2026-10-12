@@ -1,6 +1,7 @@
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, ProjectAssistanceRecord, WirePayloadProjection,
 };
+use storyos_core::{DestinationKind, RuntimeQualification};
 use uuid::Uuid;
 
 use crate::agent_run_expiry::RebuildDispatch;
@@ -50,7 +51,7 @@ pub(crate) async fn persist_uncertain_attempt(
         "execution_profile": {
             "profile_revision": projection.execution_profile,
             "mapping_revision": projection.mapping_revision,
-            "network_io": false,
+            "network_io": assistance.destination != DestinationKind::HostFake,
             "provider_bound": "unknown"
         },
         "wire": {
@@ -70,6 +71,19 @@ pub(crate) async fn persist_uncertain_attempt(
             continuation.known_prior_binding_id.as_deref(),
         )
     });
+    if crate::provider_evidence::real_route(&payload)
+        && let Some(evidence) = payload["evidence"].as_array_mut()
+    {
+        for item in evidence.iter_mut() {
+            if item["kind"] == "provider_report" {
+                item["report"] = serde_json::json!(crate::provider_evidence::PENDING_REPORT);
+            }
+        }
+    }
+    if assistance.runtime_qualification == RuntimeQualification::QualificationAuthorized {
+        payload["runtime_qualification"] =
+            serde_json::json!(assistance.runtime_qualification.as_str());
+    }
     if let Some(bytes) = &projection.serialized_payload {
         payload["wire"]["serialized_payload"] = serde_json::json!(bytes);
         payload["evidence"][0]["content"] = serde_json::json!(bytes);

@@ -59,7 +59,7 @@ export type ProjectAssistanceAvailability = "available" | "unavailable";
 
 export type ProjectModelDestination = "host_fake" | "volcengine_agent_plan";
 
-export type ModelRuntimeQualification = "qualified" | "pending";
+export type ModelRuntimeQualification = "qualified" | "pending" | "qualification_authorized";
 
 export type ProjectAssistanceBinding = { availability: ProjectAssistanceAvailability, revision: string, model_registration_revision: string, processing_destination_identity: string, processing_destination_identity_evidence_revision: string, project_model_use_binding_revision: string, external_compatibility_decision: string, destination: ProjectModelDestination, runtime_qualification: ModelRuntimeQualification, };
 
@@ -484,7 +484,7 @@ export type ContextBlockReason = { "kind": "exact_required_over_limit", source_c
 
 export type ContextRejectionReason = { "kind": "over_item_token_limit" } | { "kind": "required_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
 
-export type DestinationIo = { "kind": "none" } | { "kind": "host_fake" };
+export type DestinationIo = { "kind": "none" } | { "kind": "host_fake" } | { "kind": "volcengine_agent_plan" };
 
 export type OptionalManifestRef = { "kind": "absent" } | { "kind": "present", manifest_id: string, };
 

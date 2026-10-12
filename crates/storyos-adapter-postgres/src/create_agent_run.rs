@@ -157,10 +157,12 @@ impl ProjectCommand for CreateAgentRunInput {
                 .ok_or(RefusableCommandError::RefusedBeforeAdmission(
                     CreateAgentRunRefusal::AssistanceUnavailable,
                 ))?;
+        let offered =
+            crate::project_destination_binding::current_binding_offers(client, scope, &destination)
+                .await
+                .map_err(unavailable)?;
         let assistance = match assistance {
-            Some(record) if record.destination == destination.kind() => {
-                AssistancePlan::Current(record)
-            }
+            Some(record) if offered => AssistancePlan::Current(record),
             Some(record) => AssistancePlan::Bind {
                 revision: record.revision + 1,
                 destination,
@@ -250,7 +252,7 @@ impl ProjectCommand for CreateAgentRunInput {
 /// The assistance record whose grant and Model Use Binding revision the Run captures.
 pub(crate) enum AssistancePlan {
     Current(ProjectAssistanceRecord),
-    /// The Project has no binding, or its binding has another destination than the deployment.
+    /// The Project has no binding, or its binding records differ from the deployment destination.
     Bind {
         revision: u64,
         destination: storyos_core::DeploymentDestination,

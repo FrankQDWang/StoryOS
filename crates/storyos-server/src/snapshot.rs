@@ -64,8 +64,7 @@ pub(super) async fn activity_stream(
         authorized_snapshot_lookup(&state, &headers, &project_id, &query.snapshot_id).await?;
     let secret = state
         .config
-        .project_command_challenge_secret
-        .as_deref()
+        .challenge_secret()
         .filter(|secret| secret.len() >= 32)
         .ok_or_else(challenge_store_unavailable)?;
     let snapshot = storyos_application::activity_stream_resume(&store, &lookup)

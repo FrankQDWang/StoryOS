@@ -1,3 +1,5 @@
+use secrecy::SecretString;
+
 use super::project_command_challenge::secret_digest;
 use super::*;
 use axum::body::{Body, to_bytes};
@@ -246,7 +248,7 @@ async fn public_challenge_route_rejects_malformed_json_content_types() {
 fn server_config_debug_redacts_the_challenge_secret() {
     let secret = b"debug-must-not-disclose-this-challenge-secret";
     let config = ServerConfig {
-        project_command_challenge_secret: Some(secret.to_vec()),
+        project_command_challenge_secret: Some(SecretString::from(str::from_utf8(secret).unwrap())),
         ..ServerConfig::default()
     };
 

@@ -207,7 +207,8 @@
       "description": "Whether attributable runtime evidence qualifies the route of the current binding.",
       "enum": [
         "qualified",
-        "pending"
+        "pending",
+        "qualification_authorized"
       ],
       "type": "string"
     },

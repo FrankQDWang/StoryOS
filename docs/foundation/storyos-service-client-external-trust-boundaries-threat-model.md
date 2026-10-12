@@ -793,12 +793,12 @@ model context.
 **Affected assets.** External accounts, all data reachable with their tokens,
 Project Isolation, disclosure authorization, and trustworthy audit evidence.
 
-**Accepted controls.** PostgreSQL stores only opaque Credential References;
-Keychain and a future cloud secret service implement one resolver contract;
-the value is injected only at the final transport boundary and never enters
-canonical payloads, events, prompts, Tool arguments/results, exports, or
-backups. [S4] Platform secret stores enforce access policy but do not replace
-StoryOS authorization. [K1]
+**Accepted controls.** PostgreSQL stores only opaque Credential References.
+The typed Worker settings of the local deployment (ADR 0050) and a future
+cloud secret service implement one resolver contract. The value goes in only at
+the final transport boundary. It never enters canonical payloads, events,
+prompts, Tool arguments/results, exports, or backups. [S4] Platform secret stores enforce access policy but do not replace
+StoryOS authorization.
 
 **Required structural mitigation.** Resolution requires the already-admitted
 { owner_user_id, project_id }, destination, purpose, operation/Attempt,
@@ -1630,8 +1630,6 @@ external capability evidence remains distinct from exact account acceptance.
   documented retrieval/deletion behavior, not cancellation or create-idempotency proof.
 - **[E7]** [Official ArkCLI helper](https://github.com/volcengine/ark-cli/blob/main/skills/arkcli-helper/references/arkcli-helper.md):
   independently configured search MCP and Harness capability boundaries.
-- **[K1]** [Apple Keychain Services](https://developer.apple.com/documentation/security/keychain-services/):
-  protected credential storage and controlled item access on the local host.
 - **[F1]** [Python tarfile extraction filters](https://docs.python.org/3/library/tarfile.html#extraction-filters):
   path, link, device, metadata, and denial-of-service hazards when extracting
   untrusted archives.

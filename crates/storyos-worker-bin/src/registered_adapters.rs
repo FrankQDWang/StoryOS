@@ -1,7 +1,5 @@
-use std::convert::Infallible;
-
 use storyos_adapter_fake_destination::{FakeDestination, FakeExchange};
-use storyos_adapter_volcengine_responses::AgentPlanResponses;
+use storyos_adapter_volcengine_responses::{AgentPlanExchange, AgentPlanResponses};
 use storyos_application::{
     CredentialResolver, DestinationRequest, ModelProviderAdapter, ModelStreamSink, Observation,
     PreDispatchRefusal, PreparedRequest,
@@ -17,7 +15,7 @@ pub(crate) struct RegisteredAdapters<R> {
 
 pub(crate) enum RegisteredExchange {
     Fake(FakeExchange),
-    AgentPlan(Infallible),
+    AgentPlan(AgentPlanExchange),
 }
 
 impl<R: CredentialResolver> ModelProviderAdapter for RegisteredAdapters<R> {
@@ -56,7 +54,9 @@ impl<R: CredentialResolver> ModelProviderAdapter for RegisteredAdapters<R> {
     ) -> Observation {
         match prepared {
             RegisteredExchange::Fake(exchange) => self.fake.exchange(exchange, sink).await,
-            RegisteredExchange::AgentPlan(exchange) => match exchange {},
+            RegisteredExchange::AgentPlan(exchange) => {
+                self.agent_plan.exchange(exchange, sink).await
+            }
         }
     }
 }

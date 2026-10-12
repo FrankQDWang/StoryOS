@@ -17,6 +17,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 storyos-adapter-fake-destination = { path = "../storyos-adapter-fake-destination" }
+storyos-adapter-volcengine-responses = { path = "../storyos-adapter-volcengine-responses" }
 
 [build-dependencies]
 serde_json.workspace = true

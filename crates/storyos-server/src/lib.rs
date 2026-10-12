@@ -9,6 +9,7 @@ use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing};
+use secrecy::{ExposeSecret, SecretString};
 use storyos_adapter_postgres::{PostgresProjectReader, StorageActivationProofError};
 use storyos_application::{
     DiagnosticField as _, ProjectCommandChallengeError, ProjectId,
@@ -57,6 +58,7 @@ mod request_origin;
 mod request_span;
 mod session_bootstrap;
 mod set_current_chapter;
+mod settings;
 mod snapshot;
 mod steer_agent_run;
 mod takeover;
@@ -78,6 +80,7 @@ pub use session_bootstrap::{
     TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS, TrustedLocalSessionBootstrap,
     packaged_session_mappings,
 };
+pub use settings::ServerSettings;
 pub use storyos_contracts::RELEASE_1_SECURITY_POLICY_REVISION;
 pub use web_assets::WebAssetSet;
 pub use web_host::router_with_web;
@@ -141,41 +144,26 @@ pub struct ClientSessionBinding {
 
 #[derive(Clone, Default)]
 pub struct ServerConfig {
-    pub database_url: Option<String>,
+    pub database_url: Option<SecretString>,
     pub session_bindings: HashMap<String, ClientSessionBinding>,
     pub current_session_generation: u64,
     pub accepted_client_contract_revision: Option<String>,
     pub accepted_security_policy_revision: Option<String>,
     pub allowed_host: Option<String>,
     pub allowed_origin: Option<String>,
-    pub project_command_challenge_secret: Option<Vec<u8>>,
+    pub project_command_challenge_secret: Option<SecretString>,
     pub trusted_local_session_bootstrap: TrustedLocalSessionBootstrap,
     pub session_cookie_secure: SessionCookieSecure,
     /// The one model destination that this deployment offers. `None` offers no assistance.
     pub model_destination: Option<storyos_core::DeploymentDestination>,
 }
 
-pub const MODEL_DESTINATION_VARIABLE: &str = "STORYOS_MODEL_DESTINATION";
-pub const MODEL_CREDENTIAL_REFERENCE_VARIABLE: &str = "STORYOS_MODEL_CREDENTIAL_REFERENCE";
-
-/// Reads the deployment model destination (ADR 0048). An absent value offers no assistance.
-pub fn model_destination(
-    destination: Option<&str>,
-    credential_reference: Option<String>,
-) -> Result<Option<storyos_core::DeploymentDestination>, &'static str> {
-    match (destination, credential_reference) {
-        (None, None) => Ok(None),
-        (Some("host_fake"), None) => Ok(Some(storyos_core::DeploymentDestination::HostFake)),
-        (Some("volcengine_agent_plan"), Some(credential_reference))
-            if !credential_reference.is_empty() =>
-        {
-            Ok(Some(
-                storyos_core::DeploymentDestination::VolcengineAgentPlan {
-                    credential_reference,
-                },
-            ))
-        }
-        _ => Err("The model destination configuration is invalid"),
+impl ServerConfig {
+    /// The bytes of the command challenge secret, at the place that derives a challenge value.
+    pub(crate) fn challenge_secret(&self) -> Option<&[u8]> {
+        self.project_command_challenge_secret
+            .as_ref()
+            .map(|secret| secret.expose_secret().as_bytes())
     }
 }
 
@@ -211,8 +199,8 @@ impl ServerState {
             .and_then(TupleOrigin::from_allowed_origin);
         let project_store = config
             .database_url
-            .as_deref()
-            .map(PostgresProjectReader::new);
+            .as_ref()
+            .map(|url| PostgresProjectReader::new(url.expose_secret()));
         let session_allowed_origins = config
             .session_bindings
             .iter()

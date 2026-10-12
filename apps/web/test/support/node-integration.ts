@@ -64,10 +64,10 @@ export async function startStoryOSServer(options: {
   if (databaseUrl !== undefined) {
     env.STORYOS_DATABASE_URL = databaseUrl;
   }
+  env.STORYOS_CHALLENGE_SECRET = options.extraEnv?.STORYOS_CHALLENGE_SECRET
+    ?? "test-only-challenge-secret-that-is-at-least-thirty-two-bytes";
   if (sessions !== undefined) {
     env.STORYOS_BOOTSTRAP_SESSIONS = JSON.stringify(sessions);
-    env.STORYOS_CHALLENGE_SECRET = options.extraEnv?.STORYOS_CHALLENGE_SECRET
-      ?? "test-only-challenge-secret-that-is-at-least-thirty-two-bytes";
     if (Object.keys(sessions).length !== 1) {
       env.STORYOS_TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS = "1";
     }

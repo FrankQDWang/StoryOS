@@ -2,7 +2,7 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRunError, CreateRequest, DeclaredTarget, DispatchClaim,
-    ModelUsage, Observation, RequestAttempt,
+    ModelUsage, Observation, RequestAttempt, RequestContextItem,
 };
 use storyos_core::{AgentDecisionOutcome, validate_agent_decision};
 
@@ -113,14 +113,11 @@ pub(crate) async fn create_request(
     attempt: RequestAttempt,
     prior_context: PriorContext,
 ) -> Result<CreateRequest, CompleteAgentRunError> {
-    let passage_resolution = storyos_core::decode_assembly_record(record)
-        .ok_or_else(|| {
-            CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
-                "Invalid retained Context",
-            )))
-        })?
-        .operation_requirement
-        .ordinary_resolution;
+    let assembly = storyos_core::decode_assembly_record(record).ok_or_else(|| {
+        CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+            "Invalid retained Context",
+        )))
+    })?;
     let declared_targets =
         crate::admitted_proposal_target::load_admitted_targets(client, claim, &run.chapter_id)
             .await?
@@ -130,6 +127,7 @@ pub(crate) async fn create_request(
                 block_id: target.block_id,
                 base_revision_id: target.revision_id,
                 collection: target.collection,
+                block_text: target.block_text,
             })
             .collect();
     let candidate_revision = crate::candidate_revision_target::admitted(client, claim)
@@ -152,8 +150,16 @@ pub(crate) async fn create_request(
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
         chapter_id: run.chapter_id.clone(),
-        passage_resolution,
+        passage_resolution: assembly.operation_requirement.ordinary_resolution,
         passage_input: crate::passage_collection::passage_input(record, &run.author_message),
+        context: assembly
+            .selected
+            .into_iter()
+            .map(|item| RequestContextItem {
+                source_class: item.source_class,
+                content: item.content,
+            })
+            .collect(),
         declared_targets,
         candidate_revision,
         previous_response_reference: previous_response_reference(client, claim, run, prior_context)

@@ -138,10 +138,8 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
             account_boundary: Some(storyos_core::AGENT_PLAN_ACCOUNT_BOUNDARY.to_owned()),
             eligibility_evidence: Some(storyos_core::AGENT_PLAN_ELIGIBILITY_EVIDENCE.to_owned()),
             credential_source: "operator_quota".to_owned(),
-            credential_reference: Some(
-                "macos-keychain:storyos-volcengine-agent-plan/frankqdwang".to_owned()
-            ),
-            budget_bounds: "unqualified".to_owned(),
+            credential_reference: Some(storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned()),
+            budget_bounds: "agent_plan_request_v1".to_owned(),
             runtime_qualification: "pending".to_owned(),
         }
     );

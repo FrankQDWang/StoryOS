@@ -2,8 +2,12 @@
 
 use std::future::Future;
 
+use secrecy::{ExposeSecret, SecretString};
+
+pub use storyos_core::RequestBounds;
 use storyos_core::{
-    ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution, RetrievalBounds,
+    ContextSourceClass, ModelAdapter, ModelOutput, NativeStreamItem, OrdinaryPassageResolution,
+    RetrievalBounds,
 };
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
@@ -34,12 +38,17 @@ impl DestinationRequest {
     }
 }
 
-/// The adapter of the Model Registration that the AgentRun pinned, and the Credential Reference
-/// of its use binding.
+/// The adapter and exact model of the Model Registration that the AgentRun pinned, and the
+/// endpoint, Credential Reference, and request bounds of its use binding.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RequestRoute {
     pub adapter: ModelAdapter,
+    pub provider_model_id: String,
+    /// The endpoint of the Processing Destination Identity evidence. The fake has none.
+    pub endpoint: Option<String>,
     pub credential_reference: Option<CredentialReference>,
+    /// `None` is an unknown bound, which blocks a real request.
+    pub bounds: Option<RequestBounds>,
 }
 
 /// Whether a request still needs its dispatch claim.
@@ -60,12 +69,21 @@ pub struct CreateRequest {
     pub chapter_id: String,
     pub passage_resolution: Option<OrdinaryPassageResolution>,
     pub passage_input: Option<serde_json::Value>,
+    /// The selected items of the active decision Context Assembly, in order.
+    pub context: Vec<RequestContextItem>,
     pub declared_targets: Vec<DeclaredTarget>,
     pub candidate_revision: Option<String>,
     /// The destination reference of the prior response that an incremental continuation sends.
     pub previous_response_reference: Option<String>,
     /// The unknown predecessor Model Attempt that this one bounded successor replaces.
     pub successor_of: Option<String>,
+}
+
+/// One selected Context Assembly item that the request sends.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RequestContextItem {
+    pub source_class: ContextSourceClass,
+    pub content: String,
 }
 
 /// One admitted Proposal target that the request declares to the destination.
@@ -75,6 +93,8 @@ pub struct DeclaredTarget {
     pub block_id: String,
     pub base_revision_id: String,
     pub collection: bool,
+    /// The text of the block at its base revision.
+    pub block_text: String,
 }
 
 impl DeclaredTarget {
@@ -336,15 +356,16 @@ pub trait ModelProviderAdapter: Sync {
 pub struct CredentialReference(pub String);
 
 /// A resolved credential value. It cannot be copied, printed, or serialized.
-pub struct ResolvedCredential(String);
+pub struct ResolvedCredential(SecretString);
 
 impl ResolvedCredential {
-    pub fn new(value: String) -> Self {
-        Self(value)
+    pub fn new(value: impl Into<SecretString>) -> Self {
+        Self(value.into())
     }
 
+    /// The value, at the place that sends it.
     pub fn expose(&self) -> &str {
-        &self.0
+        self.0.expose_secret()
     }
 }
 

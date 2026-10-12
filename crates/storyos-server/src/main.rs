@@ -4,6 +4,7 @@ use std::io::{self, Write as _};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use secrecy::ExposeSecret as _;
 use storyos_adapter_diagnostics::or_exit;
 use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_activation_proof};
 use storyos_application::{DiagnosticField as _, UserId};
@@ -12,11 +13,8 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    storyos_adapter_diagnostics::install(
-        env::var(storyos_adapter_diagnostics::LOG_LEVEL_VARIABLE)
-            .ok()
-            .as_deref(),
-    )?;
+    let settings = storyos_server::ServerSettings::load()?.settings;
+    storyos_adapter_diagnostics::install(settings.log.as_deref())?;
     storyos_application::register_sql_state(storyos_adapter_postgres::sql_state);
     let arguments = env::args().skip(/*n*/ 1).collect::<Vec<_>>();
     if let [flag, root] = arguments.as_slice()
@@ -26,28 +24,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let (bind_address, web_root) = server_options(&arguments)?;
-    let transport = storyos_server::packaged_transport_plan(
-        env::var("STORYOS_PUBLIC_ORIGIN").ok().as_deref(),
-        bind_address,
-    )
-    .map_err(|error| error.to_string())?;
+    let transport =
+        storyos_server::packaged_transport_plan(settings.public_origin.as_deref(), bind_address)
+            .map_err(|error| error.to_string())?;
     let multiple_mapping_allowance =
-        if env::var(storyos_server::TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS).as_deref() == Ok("1") {
+        if settings.test_allow_multiple_bootstrap_sessions.as_deref() == Some("1") {
             storyos_server::MultipleMappingAllowance::IsolationTestsDisableIssuance
         } else {
             storyos_server::MultipleMappingAllowance::Refuse
         };
     let (session_users, trusted_local_session_bootstrap) =
         storyos_server::packaged_session_mappings(
-            env::var("STORYOS_BOOTSTRAP_SESSIONS").ok().as_deref(),
+            settings.bootstrap_sessions.as_deref(),
             multiple_mapping_allowance,
-        )?;
-    let assets = storyos_server::WebAssetSet::load(web_root)?;
-    let database_url = env::var("STORYOS_DATABASE_URL").map_err(|_| {
+        )
+        .map_err(|_| {
+            storyos_settings::SettingsError::new(
+                "STORYOS_BOOTSTRAP_SESSIONS",
+                /*env_file*/ None,
+            )
+        })?;
+    let challenge_secret = settings.required_challenge_secret()?;
+    let database_url = settings.database_url.clone().ok_or_else(|| {
         "STORYOS_DATABASE_URL is required for Release 1 Storage Activation".to_owned()
     })?;
+    if !storyos_adapter_postgres::database_url_parses(database_url.expose_secret()) {
+        return Err(storyos_settings::SettingsError::new(
+            "STORYOS_DATABASE_URL",
+            /*env_file*/ None,
+        )
+        .into());
+    }
+    let assets = storyos_server::WebAssetSet::load(web_root)?;
     or_exit(
-        require_release1_storage_activation_proof(&database_url).await,
+        require_release1_storage_activation_proof(database_url.expose_secret()).await,
         "storage_activation",
     );
     let listener = or_exit(TcpListener::bind(bind_address).await, "bind");
@@ -93,15 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok((handle, binding))
         })
         .collect::<Result<HashMap<_, _>, uuid::Error>>()?;
-    let model_destination = or_exit(
-        storyos_server::model_destination(
-            env::var(storyos_server::MODEL_DESTINATION_VARIABLE)
-                .ok()
-                .as_deref(),
-            env::var(storyos_server::MODEL_CREDENTIAL_REFERENCE_VARIABLE).ok(),
-        ),
-        "model_destination",
-    );
+    let model_destination = settings.model_destination()?;
     let config = storyos_server::ServerConfig {
         database_url: Some(database_url),
         session_bindings,
@@ -110,9 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         accepted_security_policy_revision: Some(security_policy_revision),
         allowed_host: Some(allowed_host),
         allowed_origin: Some(allowed_origin),
-        project_command_challenge_secret: env::var("STORYOS_CHALLENGE_SECRET")
-            .ok()
-            .map(String::into_bytes),
+        project_command_challenge_secret: Some(challenge_secret),
         trusted_local_session_bootstrap,
         session_cookie_secure: match transport {
             storyos_server::PackagedTransportPlan::LocalHttp => {
@@ -126,11 +126,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("STORYOS_SERVER_URL={printed_server_url}");
     or_exit(io::stdout().flush(), "startup_line");
-    if storyos_worker::in_process_loop_enabled()
+    if settings.in_process_worker()
         && let Some(database_url) = config.database_url.clone()
     {
-        let store = PostgresProjectReader::new(database_url)
-            .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl_from_env());
+        let store = PostgresProjectReader::new(database_url.expose_secret())
+            .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl(
+                settings.export_lease_ttl_secs,
+            ));
         let destination = storyos_worker::ModelDestination {
             adapter: storyos_adapter_fake_destination::FakeDestination,
             observer: storyos_application::NoContractFaults,

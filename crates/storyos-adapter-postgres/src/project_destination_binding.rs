@@ -1,25 +1,23 @@
-use storyos_application::ProjectCommandEnvelope;
+use storyos_application::{ProjectCommandEnvelope, ProjectScope};
 use storyos_core::{
     AGENT_PLAN_ACCOUNT_BOUNDARY, AGENT_PLAN_ELIGIBILITY_EVIDENCE, AGENT_PLAN_ENDPOINT,
-    CREATE_REQUIREMENT, DeploymentDestination, RuntimeQualification,
+    DeploymentDestination,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
 
 /// The kind and evidence columns of the binding records of one deployment destination.
-struct BindingShape<'a> {
+struct BindingShape {
     evidence_kind: &'static str,
     endpoint: Option<&'static str>,
     account_boundary: Option<&'static str>,
     eligibility_evidence: Option<&'static str>,
     grant_kind: &'static str,
     credential_source: &'static str,
-    credential_reference: Option<&'a str>,
-    budget_bounds: &'static str,
     decision_kind: &'static str,
 }
 
-fn binding_shape(destination: &DeploymentDestination) -> BindingShape<'_> {
+fn binding_shape(destination: &DeploymentDestination) -> BindingShape {
     match destination {
         DeploymentDestination::HostFake => BindingShape {
             evidence_kind: "host_fake_boundary",
@@ -28,21 +26,15 @@ fn binding_shape(destination: &DeploymentDestination) -> BindingShape<'_> {
             eligibility_evidence: None,
             grant_kind: "host_fake_use",
             credential_source: "none",
-            credential_reference: None,
-            budget_bounds: "not_required",
             decision_kind: "host_fake_compatible",
         },
-        DeploymentDestination::VolcengineAgentPlan {
-            credential_reference,
-        } => BindingShape {
+        DeploymentDestination::VolcengineAgentPlan { .. } => BindingShape {
             evidence_kind: "volcengine_agent_plan_boundary",
             endpoint: Some(AGENT_PLAN_ENDPOINT),
             account_boundary: Some(AGENT_PLAN_ACCOUNT_BOUNDARY),
             eligibility_evidence: Some(AGENT_PLAN_ELIGIBILITY_EVIDENCE),
             grant_kind: "volcengine_agent_plan_use",
             credential_source: "operator_quota",
-            credential_reference: Some(credential_reference),
-            budget_bounds: "unqualified",
             decision_kind: "volcengine_agent_plan_compatible",
         },
     }
@@ -59,14 +51,6 @@ pub(crate) async fn insert_destination_binding(
     let registration = destination.registration();
     crate::model_registration::insert_model_registration(client, registration).await?;
     let shape = binding_shape(destination);
-    let qualification = if registration
-        .capability_profile
-        .qualifies(CREATE_REQUIREMENT)
-    {
-        RuntimeQualification::Qualified
-    } else {
-        RuntimeQualification::Pending
-    };
     let [identity, grant, binding, decision] = [(); 4].map(|()| Uuid::now_v7().to_string());
     client
         .execute(
@@ -95,8 +79,10 @@ pub(crate) async fn insert_destination_binding(
              )
              INSERT INTO storyos.external_contract_compatibility_decisions
                (owner_user_id, project_id, external_compatibility_decision,
-                project_model_use_binding_revision, decision_kind, runtime_qualification)
-             VALUES ($1::text::uuid, $2::text::uuid, $6::text::uuid, $5::text::uuid, $17, $18)",
+                project_model_use_binding_revision, decision_kind, runtime_qualification,
+                qualification_authorization)
+             VALUES ($1::text::uuid, $2::text::uuid, $6::text::uuid, $5::text::uuid, $17, $18,
+                     $19)",
             &[
                 &envelope.project_scope.owner_user_id.as_ref(),
                 &envelope.project_scope.project_id.as_ref(),
@@ -112,16 +98,77 @@ pub(crate) async fn insert_destination_binding(
                 &shape.grant_kind,
                 &registration.revision,
                 &shape.credential_source,
-                &shape.credential_reference,
-                &shape.budget_bounds,
+                &destination.credential_reference(),
+                &destination.budget_bounds().as_str(),
                 &shape.decision_kind,
-                &qualification.as_str(),
+                &destination.runtime_qualification().as_str(),
+                &destination.qualification_authorization(),
             ],
         )
         .await?;
     Ok(decision)
 }
 
+/// Whether the current binding of the Project has the records that `destination` writes. A
+/// changed destination, Registration, Credential Reference, bound, or qualification needs new
+/// binding records (ADR 0048, ADR 0049).
+pub(crate) async fn current_binding_offers(
+    client: &Client,
+    scope: &ProjectScope,
+    destination: &DeploymentDestination,
+) -> Result<bool, tokio_postgres::Error> {
+    let Some(row) = client
+        .query_opt(
+            "SELECT identity.destination_kind, binding.model_registration_revision::text,
+                    binding.credential_reference, binding.budget_bounds,
+                    decision.runtime_qualification, decision.qualification_authorization
+               FROM storyos.project_policy_revisions AS policy
+               JOIN storyos.external_contract_compatibility_decisions AS decision
+                 ON (decision.owner_user_id, decision.project_id,
+                     decision.external_compatibility_decision) =
+                    (policy.owner_user_id, policy.project_id,
+                     policy.external_compatibility_decision)
+               JOIN storyos.project_external_use_binding_revisions AS binding
+                 ON (binding.owner_user_id, binding.project_id,
+                     binding.project_model_use_binding_revision) =
+                    (decision.owner_user_id, decision.project_id,
+                     decision.project_model_use_binding_revision)
+               JOIN storyos.processing_destination_identities AS identity
+                 ON (identity.owner_user_id, identity.project_id,
+                     identity.processing_destination_identity) =
+                    (binding.owner_user_id, binding.project_id,
+                     binding.processing_destination_identity)
+              WHERE policy.owner_user_id = $1::text::uuid
+                AND policy.project_id = $2::text::uuid
+              ORDER BY policy.policy_revision DESC
+              LIMIT 1",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await?
+    else {
+        return Ok(false);
+    };
+    Ok((
+        row.get::<_, &str>(/*idx*/ 0),
+        row.get::<_, &str>(/*idx*/ 1),
+        row.get::<_, Option<&str>>(/*idx*/ 2),
+        row.get::<_, &str>(/*idx*/ 3),
+        row.get::<_, &str>(/*idx*/ 4),
+        row.get::<_, Option<&str>>(/*idx*/ 5),
+    ) == (
+        destination.kind().as_str(),
+        destination.registration().revision,
+        destination.credential_reference(),
+        destination.budget_bounds().as_str(),
+        destination.runtime_qualification().as_str(),
+        destination.qualification_authorization(),
+    ))
+}
+
 #[cfg(test)]
 #[path = "project_destination_binding_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "runtime_qualification_tests.rs"]
+mod qualification_tests;

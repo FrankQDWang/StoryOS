@@ -361,8 +361,7 @@ fn challenge_headers<'a>(
     }
     let secret = state
         .config
-        .project_command_challenge_secret
-        .as_deref()
+        .challenge_secret()
         .filter(|secret| secret.len() >= 32)
         .ok_or_else(challenge_store_unavailable)?;
     Ok((idempotency_key, nonce, secret))
