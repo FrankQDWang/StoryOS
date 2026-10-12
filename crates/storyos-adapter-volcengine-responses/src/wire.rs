@@ -25,6 +25,7 @@ pub(crate) fn create_body(
     request: &CreateRequest,
     provider_model_id: &str,
     bounds: RequestBounds,
+    stream: bool,
 ) -> String {
     let mut body = serde_json::json!({
         "model": provider_model_id,
@@ -34,7 +35,7 @@ pub(crate) fn create_body(
             "content": [{"type": "input_text", "text": request_text(request)}],
         }],
         "max_output_tokens": bounds.max_output_tokens,
-        "stream": false,
+        "stream": stream,
         "store": true,
     });
     if let Some(reference) = &request.previous_response_reference {

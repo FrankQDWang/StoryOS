@@ -289,7 +289,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
     let route = RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
-        mapping_revision: storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
+        mapping_revision: AGENT_PLAN_REGISTRATION.mapping_revision.to_owned(),
         endpoint: Some(AGENT_PLAN_ENDPOINT.to_owned()),
         credential_reference: Some(storyos_application::CredentialReference(
             REFERENCE.to_owned(),
@@ -702,7 +702,8 @@ impl storyos_application::CredentialResolver for TestCredential {
     }
 }
 
-/// Answers one Responses request on a local port with `body`, and returns the endpoint.
+/// Answers one streamed Responses request on a local port with one terminal event that holds
+/// `body`, and returns the endpoint.
 async fn scripted_endpoint(body: String) -> String {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -718,11 +719,13 @@ async fn scripted_endpoint(body: String) -> String {
             let read = stream.read(&mut chunk).await.unwrap();
             request.extend_from_slice(&chunk[..read]);
         }
-        let head = format!(
-            "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
-            body.len()
-        );
-        stream.write_all((head + &body).as_bytes()).await.unwrap();
+        let event = format!("data: {{\"type\":\"response.completed\",\"response\":{body}}}\n\n");
+        let head =
+            "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
+        stream
+            .write_all((head.to_owned() + &event).as_bytes())
+            .await
+            .unwrap();
     });
     endpoint
 }
@@ -832,7 +835,7 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
         [
             (
                 ModelAdapter::VolcengineAgentPlanResponses,
-                storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
+                AGENT_PLAN_REGISTRATION.mapping_revision.to_owned(),
                 vec!["resp_eb1".to_owned(), "provider_usage_reported".to_owned()],
                 cache(storyos_application::CacheUse::Reported {
                     cached_input_tokens: 8,
@@ -840,7 +843,7 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
             ),
             (
                 ModelAdapter::VolcengineAgentPlanResponses,
-                storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
+                AGENT_PLAN_REGISTRATION.mapping_revision.to_owned(),
                 vec!["resp_eb2".to_owned(), "provider_usage_unknown".to_owned()],
                 cache(storyos_application::CacheUse::Unknown),
             ),
