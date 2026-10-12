@@ -3,7 +3,7 @@ use crate::assemble_context::{ProjectionMode, SelectedProjection};
 use crate::{
     ContextSourceClass, CurrentPassageAssembly, CurrentPassageAssemblyRecord,
     InstructionBindingInput, PassageContextTarget, assemble_current_passage_context,
-    assemble_passage_collection,
+    assemble_passage_collection, decode_assembly_record, encode_assembly_record,
 };
 
 fn passage(chapter_id: &str, body: &str) -> CurrentPassageAssembly {
@@ -111,5 +111,23 @@ fn each_request_outside_the_scope_refuses() {
         ]
         .map(|facts| admit_disclosure(&facts)),
         [Err("disclosure_outside_grant"); 9]
+    );
+}
+
+#[test]
+fn a_stored_purpose_that_the_scope_does_not_name_decodes_to_no_request() {
+    let request = assemble_current_passage_context(&passage("ch-1", "The tide turned."));
+    let mut stored = encode_assembly_record(&request);
+    let current = decode_assembly_record(&stored);
+    stored["operation_requirement"]["purpose"] = serde_json::json!("research");
+
+    assert_eq!(current.as_ref(), Some(&request));
+    assert_eq!(decode_assembly_record(&stored), None);
+    assert_eq!(
+        admit_disclosure(&GrantFacts {
+            request: None,
+            ..facts(&request)
+        }),
+        Err("disclosure_outside_grant")
     );
 }

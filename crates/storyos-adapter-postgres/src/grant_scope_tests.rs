@@ -395,3 +395,26 @@ async fn a_retrieve_after_an_unknown_create_checks_the_current_grant_and_sends_n
         )
     );
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_recorded_purpose_outside_the_scope_refuses_before_dispatch() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, _, run_id) = queued_run(&store, "d7a", DeploymentDestination::HostFake).await;
+    admin
+        .execute(
+            "UPDATE storyos.context_assembly_manifests
+                SET payload = jsonb_set(payload, '{operation_requirement,purpose}', '\"research\"')
+              WHERE run_id = $1::text::uuid AND manifest_role = 'decision'",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+
+    let evidence = settle(&store, &admin, &FakeDestination, &scope, &run_id).await;
+
+    assert_eq!(evidence, refused_before_claim());
+}
