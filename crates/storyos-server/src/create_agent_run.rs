@@ -263,8 +263,40 @@ pub(super) async fn get_agent_run(
                 .map(|model| model.usage_kind.clone())
                 .unwrap_or_else(|| "unknown".to_owned()),
         },
+        cache: inspect_cache(record.model.as_ref().and_then(|model| model.cache)),
         redaction_profile: "storyos.author.v1".to_owned(),
     }))
+}
+
+fn inspect_cache(
+    cache: Option<storyos_application::AttemptCache>,
+) -> contracts::AttemptCacheInspect {
+    let Some(cache) = cache else {
+        return contracts::AttemptCacheInspect::NotRecorded;
+    };
+    let (implicit_cache, explicit_cache) = match cache.setting {
+        storyos_application::CacheSetting::DestinationDefault => {
+            ("destination_default", "not_requested")
+        }
+    };
+    // A count that the contract cannot hold is unknown, never a smaller number.
+    let cached_input_tokens = match cache.observed {
+        storyos_application::CacheUse::Reported {
+            cached_input_tokens,
+        } => u32::try_from(cached_input_tokens).ok(),
+        storyos_application::CacheUse::Unknown => None,
+    };
+    contracts::AttemptCacheInspect::Recorded {
+        implicit_cache: implicit_cache.to_owned(),
+        explicit_cache: explicit_cache.to_owned(),
+        observed_use: if cached_input_tokens.is_some() {
+            "reported"
+        } else {
+            "unknown"
+        }
+        .to_owned(),
+        cached_input_tokens,
+    }
 }
 
 fn inspect_original_result_retrieval(

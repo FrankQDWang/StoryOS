@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use serde_json::json;
 use storyos_application::{
-    CreateRequest, CredentialReference, CredentialResolver, DeclaredTarget, DestinationRequest,
-    DispatchClaim, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage, Observation,
-    PreDispatchRefusal, RequestAttempt, RequestBounds, RequestContextItem, RequestRoute,
-    ResolvedCredential, RetrievePurpose, RetrieveRequest, StreamControl,
+    CacheSetting, CacheUse, CreateRequest, CredentialReference, CredentialResolver, DeclaredTarget,
+    DestinationRequest, DispatchClaim, ModelProviderAdapter, ModelResponse, ModelStreamSink,
+    ModelUsage, Observation, PreDispatchRefusal, RequestAttempt, RequestBounds, RequestContextItem,
+    RequestRoute, ResolvedCredential, RetrievePurpose, RetrieveRequest, StreamControl,
 };
 use storyos_core::{
     ContextSourceClass, DecisionCandidate, ModelAdapter, ModelOutput, NativeStreamItem,
@@ -113,6 +113,7 @@ fn route(endpoint: &str) -> RequestRoute {
     RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
         endpoint: Some(endpoint.to_owned()),
         credential_reference: Some(CredentialReference(
             storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned(),
@@ -246,6 +247,7 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
                     input_tokens: 412,
                     output_tokens: 133,
                 },
+                cache_use: CacheUse::Unknown,
                 response_reference: Some("resp_01".to_owned()),
             }),
             items,
@@ -266,6 +268,117 @@ async fn a_completed_response_maps_to_native_items_and_the_sent_body_is_the_proj
     );
     assert!(instructions.is_some_and(|text| text.as_str().is_some_and(|text| !text.is_empty())));
     assert!(!body.contains(CREDENTIAL_CANARY));
+}
+
+#[tokio::test]
+async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_and_target() {
+    let reply = json!({"id": "resp_02", "status": "completed", "output": [
+        message(r#"{"kind":"advisory","text":"Keep it."}"#),
+    ], "usage": {"input_tokens": 1900, "output_tokens": 40,
+                 "input_tokens_details": {"cached_tokens": 1024}}});
+    let (base, served) = destination(Reply::Http(200, reply.to_string())).await;
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let continued = |route: RequestRoute| {
+        let DestinationRequest::Create(request) = create(route, RequestAttempt::New) else {
+            unreachable!("create() makes a Create request")
+        };
+        DestinationRequest::Create(CreateRequest {
+            previous_response_reference: Some("resp_01".to_owned()),
+            ..request
+        })
+    };
+    let create_mapping = RequestRoute {
+        mapping_revision: storyos_core::AGENT_PLAN_MAPPING_REVISION.to_owned(),
+        ..route(&base)
+    };
+    let refused = adapter.prepare(&continued(create_mapping)).await.err();
+    let prepared = adapter
+        .prepare(&continued(route(&base)))
+        .await
+        .ok()
+        .unwrap();
+    let projection = prepared.projection.clone();
+    let observation = adapter
+        .exchange(prepared.prepared, &mut RecordingSink::default())
+        .await;
+    let (_, _, body) = served.await.unwrap();
+    let sent: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let Observation::Terminal(response) = observation else {
+        panic!("a completed response is terminal");
+    };
+
+    assert_eq!(
+        (
+            refused,
+            projection.mapping_revision,
+            projection.cache_setting,
+            sent["previous_response_id"].clone(),
+            sent["instructions"] == json!(crate::wire::HOST_INSTRUCTIONS),
+            sent["input"][0]["content"][0]["text"]
+                .as_str()
+                .is_some_and(|text| text.ends_with("The rain fell hard on the old roof.")),
+            response.usage,
+            response.cache_use,
+        ),
+        (
+            Some(PreDispatchRefusal::UnsupportedRequest),
+            storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
+            Some(CacheSetting::DestinationDefault),
+            json!("resp_01"),
+            true,
+            true,
+            ModelUsage::Reported {
+                input_tokens: 1900,
+                output_tokens: 40,
+            },
+            CacheUse::Reported {
+                cached_input_tokens: 1024,
+            },
+        )
+    );
+}
+
+#[tokio::test]
+async fn only_a_continuation_maps_a_missing_prior_response_to_an_unusable_reference() {
+    let not_found =
+        r#"{"error":{"code":"InvalidParameter.PreviousResponseNotFound","message":"resp_x"}}"#;
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let observe = |reference: Option<&str>| {
+        let adapter = &adapter;
+        let reference = reference.map(str::to_owned);
+        async move {
+            let (base, _served) = destination(Reply::Http(400, not_found.to_owned())).await;
+            let DestinationRequest::Create(request) = create(route(&base), RequestAttempt::New)
+            else {
+                unreachable!("create() makes a Create request")
+            };
+            let request = DestinationRequest::Create(CreateRequest {
+                previous_response_reference: reference,
+                ..request
+            });
+            let prepared = adapter.prepare(&request).await.ok().unwrap();
+            adapter
+                .exchange(prepared.prepared, &mut RecordingSink::default())
+                .await
+        }
+    };
+
+    assert_eq!(
+        [observe(Some("resp_01")).await, observe(None).await],
+        [
+            Observation::Rejected {
+                reason: "continuation_unusable:http_400:InvalidParameter.PreviousResponseNotFound"
+                    .to_owned(),
+            },
+            Observation::Rejected {
+                reason: "http_400:InvalidParameter.PreviousResponseNotFound".to_owned(),
+            },
+        ]
+    );
 }
 
 #[test]

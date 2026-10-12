@@ -112,15 +112,19 @@ impl ModelDispatchStore for PostgresProjectReader {
                     "Dispatch requires current assistance admission",
                 )))
             })?;
-            let model_attempt_id = crate::agent_run_attempt::persist_uncertain_attempt(
+            let Some(model_attempt_id) = crate::agent_run_attempt::persist_uncertain_attempt(
                 client,
                 claim,
                 &run,
                 &assistance,
                 rebuild.as_deref(),
+                request,
                 projection,
             )
-            .await?;
+            .await?
+            else {
+                return Ok(None);
+            };
             if let Some(dispatch) = rebuild.as_deref() {
                 crate::agent_run_expiry::insert_recovery(
                     client,

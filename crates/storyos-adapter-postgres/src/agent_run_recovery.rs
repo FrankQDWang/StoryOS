@@ -47,7 +47,7 @@ pub(crate) async fn advance(
         match work {
             RetrievalWork::Retrieve(request) => {
                 return Ok(WorkPhase::Dispatch(Box::new(DestinationRequest::Retrieve(
-                    request,
+                    *request,
                 ))));
             }
             RetrievalWork::Done(result) if !follow_successor => {
@@ -98,7 +98,7 @@ pub(crate) async fn settle_cancelled(
         .await?;
         if let RetrievalWork::Retrieve(request) = work {
             return Ok(WorkPhase::Dispatch(Box::new(DestinationRequest::Retrieve(
-                request,
+                *request,
             ))));
         }
     }
@@ -197,16 +197,35 @@ pub(crate) async fn record_cancelled_create(
         )
         .await?;
     }
+    // A late terminal response keeps its usage and cache use as evidence only.
+    let (usage, cache_use) = match &observation {
+        Observation::Terminal(response) => (
+            Some(crate::agent_run_observation::encode_usage(response.usage)),
+            Some(crate::provider_evidence::encode_cache_use(
+                response.cache_use,
+            )),
+        ),
+        Observation::NotSubmitted
+        | Observation::Rejected { .. }
+        | Observation::OutcomeUnknown { .. } => (None, None),
+    };
     client
         .execute(
             "UPDATE storyos.model_attempts
-                SET payload = payload || '{\"observed_after_cancellation\": true}'::jsonb
+                SET payload = CASE WHEN $5::text IS NOT NULL AND payload ? 'cache'
+                                   THEN jsonb_set(payload, '{cache,observed}', $5::text::jsonb)
+                                   ELSE payload END
+                              || '{\"observed_after_cancellation\": true}'::jsonb
+                              || CASE WHEN $4::text IS NULL THEN '{}'::jsonb
+                                      ELSE jsonb_build_object('usage', $4::text::jsonb) END
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND model_attempt_id = $3::text::uuid",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &dispatch.model_attempt_id,
+                &usage.map(|value| value.to_string()),
+                &cache_use.map(|value| value.to_string()),
             ],
         )
         .await

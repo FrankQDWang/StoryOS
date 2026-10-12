@@ -2,9 +2,7 @@
 
 use std::time::Duration;
 
-use crate::{
-    AGENT_PLAN_REGISTRATION, CREATE_REQUIREMENT, HOST_FAKE_REGISTRATION, ModelRegistration,
-};
+use crate::{AGENT_PLAN_REGISTRATION, HOST_FAKE_REGISTRATION, ModelRegistration};
 
 pub const AGENT_PLAN_ENDPOINT: &str = "https://ark.cn-beijing.volces.com/api/plan/v3";
 pub const AGENT_PLAN_ACCOUNT_BOUNDARY: &str =
@@ -156,13 +154,7 @@ impl DeploymentDestination {
     /// The qualification of a new compatibility Decision for this destination.
     pub fn runtime_qualification(&self) -> RuntimeQualification {
         match self {
-            _ if self
-                .registration()
-                .capability_profile
-                .qualifies(CREATE_REQUIREMENT) =>
-            {
-                RuntimeQualification::Qualified
-            }
+            _ if self.registration().qualified() => RuntimeQualification::Qualified,
             Self::VolcengineAgentPlan {
                 qualification_authorization: Some(_),
                 ..

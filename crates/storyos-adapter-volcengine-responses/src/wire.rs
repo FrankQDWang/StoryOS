@@ -4,7 +4,7 @@ use storyos_application::{CreateRequest, RequestBounds};
 use storyos_core::ContextSourceClass;
 
 /// The Host instructions and the reply contract that `decision::map_output` reads.
-const HOST_INSTRUCTIONS: &str = "\
+pub(crate) const HOST_INSTRUCTIONS: &str = "\
 You are the writing assistant of one novel author. The author keeps authority over the novel: \
 you only suggest, and the author decides. Answer the author request with the supplied text. \
 Write in the language of the manuscript.
@@ -19,13 +19,14 @@ new text of that block>\",\"explanation\":\"<one sentence that tells why>\"}]}
 Use \"prose_change\" only when the request has target blocks. Then give exactly one change for \
 each target block, with its exact block_id. Do not change text outside the target blocks.";
 
-/// The canonical JSON body, which is also the committed Wire Payload Projection.
+/// The canonical JSON body, which is also the committed Wire Payload Projection. Instructions do
+/// not carry forward with a prior response reference, so each request sends them.
 pub(crate) fn create_body(
     request: &CreateRequest,
     provider_model_id: &str,
     bounds: RequestBounds,
 ) -> String {
-    storyos_core::canonical_json(&serde_json::json!({
+    let mut body = serde_json::json!({
         "model": provider_model_id,
         "instructions": HOST_INSTRUCTIONS,
         "input": [{
@@ -35,7 +36,11 @@ pub(crate) fn create_body(
         "max_output_tokens": bounds.max_output_tokens,
         "stream": false,
         "store": true,
-    }))
+    });
+    if let Some(reference) = &request.previous_response_reference {
+        body["previous_response_id"] = serde_json::json!(reference);
+    }
+    storyos_core::canonical_json(&body)
 }
 
 /// The author request, the selected Context, and the declared targets as one user message.

@@ -114,6 +114,9 @@ pub(super) async fn load_agent_run(
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("unknown")
                 .to_owned(),
+            cache: payload
+                .as_ref()
+                .and_then(crate::provider_evidence::decode_cache),
         }),
         None => None,
     };

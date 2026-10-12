@@ -704,6 +704,20 @@ pub struct AgentRunUsageInspect {
     pub kind: String,
 }
 
+/// The cache setting of a real Model Attempt and the cache use that the destination reported.
+/// No field claims a cache hit or a saving.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AttemptCacheInspect {
+    NotRecorded,
+    Recorded {
+        implicit_cache: String,
+        explicit_cache: String,
+        observed_use: String,
+        cached_input_tokens: Option<u32>,
+    },
+}
+
 /// Settings evidence from the exact revision captured by this Run.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -749,5 +763,6 @@ pub struct GetAgentRunResponse {
     pub evidence: Vec<AttemptEvidence>,
     pub items: Vec<AgentRunStreamItemInspect>,
     pub usage: AgentRunUsageInspect,
+    pub cache: AttemptCacheInspect,
     pub redaction_profile: String,
 }

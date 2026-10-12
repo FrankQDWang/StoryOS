@@ -5,7 +5,7 @@ mod prose_changes;
 mod recovery_plan;
 
 use storyos_application::{
-    DestinationRequest, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
+    CacheUse, DestinationRequest, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
     Observation, PreDispatchRefusal, PreparedRequest, ResponseReference, StreamControl,
     WirePayloadProjection,
 };
@@ -52,6 +52,7 @@ impl ModelProviderAdapter for FakeDestination {
                             items: Vec::new(),
                             output: None,
                             usage: ModelUsage::Unknown,
+                            cache_use: CacheUse::Unknown,
                             response_reference: abort.response_reference.clone(),
                         },
                     ))),
@@ -145,6 +146,7 @@ impl ModelProviderAdapter for FakeDestination {
             items: planned.items,
             output: planned.output,
             usage: ModelUsage::Unknown,
+            cache_use: CacheUse::Unknown,
             response_reference: Some(reference),
         })
     }
@@ -156,6 +158,7 @@ fn projection(digest: String, serialized_payload: Option<String>) -> WirePayload
         mapping_revision: HOST_FAKE_MAPPING_REVISION.to_owned(),
         digest,
         serialized_payload,
+        cache_setting: None,
     }
 }
 

@@ -1,6 +1,8 @@
 //! The Provider evidence of a Model Attempt on a real route. The fake destination keeps its own
 //! report, because it reaches no Provider.
 
+use storyos_application::{AttemptCache, CacheSetting, CacheUse};
+
 /// The report of a real Attempt before its exchange settles.
 pub(crate) const PENDING_REPORT: &str = "provider_usage_pending";
 
@@ -51,6 +53,46 @@ pub(crate) fn settle(
             }),
         );
     }
+}
+
+/// The cache setting of a real request, before the destination reports its cache use.
+pub(crate) fn encode_cache_setting(setting: CacheSetting) -> serde_json::Value {
+    match setting {
+        CacheSetting::DestinationDefault => serde_json::json!({
+            "implicit": "destination_default",
+            "explicit": "not_requested",
+            "observed": encode_cache_use(CacheUse::Unknown)
+        }),
+    }
+}
+
+/// The reported cache use. StoryOS infers no cache hit and no saving from it.
+pub(crate) fn encode_cache_use(cache_use: CacheUse) -> serde_json::Value {
+    match cache_use {
+        CacheUse::Reported {
+            cached_input_tokens,
+        } => serde_json::json!({ "kind": "reported", "cached_input_tokens": cached_input_tokens }),
+        CacheUse::Unknown => serde_json::json!({ "kind": "unknown" }),
+    }
+}
+
+/// The cache facts of an Attempt payload. `None` when the Attempt recorded no cache setting.
+pub(crate) fn decode_cache(payload: &serde_json::Value) -> Option<AttemptCache> {
+    let cache = payload.get("cache")?;
+    let setting = match (
+        cache.get("implicit")?.as_str()?,
+        cache.get("explicit")?.as_str()?,
+    ) {
+        ("destination_default", "not_requested") => CacheSetting::DestinationDefault,
+        _ => return None,
+    };
+    let observed = match cache.pointer("/observed/kind")?.as_str()? {
+        "reported" => CacheUse::Reported {
+            cached_input_tokens: cache.pointer("/observed/cached_input_tokens")?.as_u64()?,
+        },
+        _ => CacheUse::Unknown,
+    };
+    Some(AttemptCache { setting, observed })
 }
 
 #[cfg(test)]

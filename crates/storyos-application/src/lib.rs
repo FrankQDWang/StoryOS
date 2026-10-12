@@ -112,12 +112,12 @@ pub use create_agent_run::{
     ActiveCompactionMappingKind, AgentRunContext, AgentRunContinuationAdmission,
     AgentRunDecisionInspect, AgentRunEvidence, AgentRunInputMapping, AgentRunModelInspect,
     AgentRunReadSelection, AgentRunReadStore, AgentRunRecord, AgentRunStatus,
-    AgentRunSteeringInspect, AgentRunStreamItem, CapturedMemorySettings, ConversationSelection,
-    CreateAgentRunApplied, CreateAgentRunCommandError, CreateAgentRunError, CreateAgentRunInput,
-    CreateAgentRunSettlement, EvidenceAvailability, OriginalResultRetrievalDisposition,
-    OriginalResultRetrievalInspect, ReferenceRecoveryDisposition, ReferenceRecoveryInspect,
-    UnknownCreateSuccessorDisposition, UnknownCreateSuccessorInspect, WorkingTargetAvailability,
-    inspect_agent_run, open_agent_run,
+    AgentRunSteeringInspect, AgentRunStreamItem, AttemptCache, CapturedMemorySettings,
+    ConversationSelection, CreateAgentRunApplied, CreateAgentRunCommandError, CreateAgentRunError,
+    CreateAgentRunInput, CreateAgentRunSettlement, EvidenceAvailability,
+    OriginalResultRetrievalDisposition, OriginalResultRetrievalInspect,
+    ReferenceRecoveryDisposition, ReferenceRecoveryInspect, UnknownCreateSuccessorDisposition,
+    UnknownCreateSuccessorInspect, WorkingTargetAvailability, inspect_agent_run, open_agent_run,
 };
 pub use create_project::{
     CreateProjectCommand, CreateProjectError, CreateProjectSettlement, CreateProjectStore,
@@ -158,13 +158,14 @@ pub use manuscript_tree::{
 };
 pub use model_gateway::complete_agent_run;
 pub use model_gateway_ports::{
-    AbortRequest, AbortTicket, CommittedCancellation, ContractFaultObserver, ContractFaultPoint,
-    CreateRequest, CredentialReference, CredentialResolver, DeclaredTarget, DestinationRequest,
-    DispatchClaim, DispatchRecord, ModelDispatchStore, ModelProviderAdapter, ModelResponse,
-    ModelStreamSink, ModelUsage, NextDispatchWork, NoContractFaults, Observation,
-    PreDispatchRefusal, PreparedRequest, ReferenceRetrieval, ReportedBinding, RequestAttempt,
-    RequestBounds, RequestContextItem, RequestRoute, ResolvedCredential, ResponseReference,
-    RetrievePurpose, RetrieveRequest, StreamControl, StreamStop, WirePayloadProjection,
+    AbortRequest, AbortTicket, CacheSetting, CacheUse, CommittedCancellation,
+    ContractFaultObserver, ContractFaultPoint, CreateRequest, CredentialReference,
+    CredentialResolver, DeclaredTarget, DestinationRequest, DispatchClaim, DispatchRecord,
+    ModelDispatchStore, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
+    NextDispatchWork, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
+    ReferenceRetrieval, ReportedBinding, RequestAttempt, RequestBounds, RequestContextItem,
+    RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose, RetrieveRequest,
+    StreamControl, StreamStop, WirePayloadProjection,
 };
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,
