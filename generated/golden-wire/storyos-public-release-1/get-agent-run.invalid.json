@@ -2,6 +2,9 @@
   "active_compaction": {
     "kind": "absent"
   },
+  "cache": {
+    "kind": "not_recorded"
+  },
   "captured_memory_settings": {
     "contribution_enabled": true,
     "kind": "available",

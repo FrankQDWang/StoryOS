@@ -290,6 +290,57 @@
       ],
       "type": "object"
     },
+    "AttemptCacheInspect": {
+      "description": "The cache setting of a real Model Attempt and the cache use that the destination reported.\nNo field claims a cache hit or a saving.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "not_recorded",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cached_input_tokens": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "explicit_cache": {
+              "type": "string"
+            },
+            "implicit_cache": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "recorded",
+              "type": "string"
+            },
+            "observed_use": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "implicit_cache",
+            "explicit_cache",
+            "observed_use"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "AttemptEvidence": {
       "oneOf": [
         {
@@ -1938,6 +1989,9 @@
     "active_compaction": {
       "$ref": "#/$defs/OptionalActiveCompactionInspect"
     },
+    "cache": {
+      "$ref": "#/$defs/AttemptCacheInspect"
+    },
     "captured_memory_settings": {
       "$ref": "#/$defs/CapturedMemorySettingsInspect"
     },
@@ -2035,6 +2089,7 @@
     "evidence",
     "items",
     "usage",
+    "cache",
     "redaction_profile"
   ],
   "title": "StoryOS Agent Run Response",

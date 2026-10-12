@@ -37,10 +37,16 @@ fn qualified_members_qualify_only_with_a_qualified_combination() {
         [
             documented.qualifies(CREATE_REQUIREMENT),
             qualified.qualifies(CREATE_REQUIREMENT),
-            AGENT_PLAN_PENDING_CAPABILITY_PROFILE.qualifies(CREATE_REQUIREMENT),
-            AGENT_PLAN_CAPABILITY_PROFILE.qualifies(CREATE_REQUIREMENT),
-            AGENT_PLAN_CAPABILITY_PROFILE.qualifies(&[ModelCapability::Continuation]),
+            AGENT_PLAN_PENDING_REGISTRATION.qualified(),
+            AGENT_PLAN_CREATE_REGISTRATION.qualified(),
+            AGENT_PLAN_CREATE_CAPABILITY_PROFILE.qualifies(&[ModelCapability::Continuation]),
+            AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION.qualified(),
+            AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION
+                .capability_profile
+                .qualifies(CREATE_REQUIREMENT),
+            AGENT_PLAN_REGISTRATION.qualified(),
+            HOST_FAKE_REGISTRATION.qualified(),
         ],
-        [false, true, false, true, false]
+        [false, true, false, true, false, false, true, true, true]
     );
 }

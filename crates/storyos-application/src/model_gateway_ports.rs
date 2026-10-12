@@ -44,6 +44,8 @@ impl DestinationRequest {
 pub struct RequestRoute {
     pub adapter: ModelAdapter,
     pub provider_model_id: String,
+    /// The wire mapping revision of the pinned Registration.
+    pub mapping_revision: String,
     /// The endpoint of the Processing Destination Identity evidence. The fake has none.
     pub endpoint: Option<String>,
     pub credential_reference: Option<CredentialReference>,
@@ -184,6 +186,22 @@ pub struct WirePayloadProjection {
     pub mapping_revision: String,
     pub digest: String,
     pub serialized_payload: Option<String>,
+    /// The cache setting of a real request. The fake destination has no cache.
+    pub cache_setting: Option<CacheSetting>,
+}
+
+/// The cache that a request asks for. A setting proves no cache hit and no saving.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CacheSetting {
+    /// The destination applies its default implicit cache. The request asks for no explicit cache.
+    DestinationDefault,
+}
+
+/// The cache use that the destination reports for one response. Unknown is never zero.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CacheUse {
+    Reported { cached_input_tokens: u64 },
+    Unknown,
 }
 
 /// One preparation: the projection to commit, and the single-use value for the exchange.
@@ -240,6 +258,7 @@ pub struct ModelResponse {
     pub items: Vec<NativeStreamItem>,
     pub output: Option<ModelOutput>,
     pub usage: ModelUsage,
+    pub cache_use: CacheUse,
     pub response_reference: Option<String>,
 }
 

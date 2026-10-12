@@ -1,8 +1,8 @@
 //! The Host decision before the dispatch claim of a new Create request.
 
 use crate::{
-    BudgetBounds, CREATE_REQUIREMENT, ExecutionCapability, GrantFacts, RuntimeQualification,
-    admit_disclosure, model_registration,
+    BudgetBounds, ExecutionCapability, GrantFacts, RuntimeQualification, admit_disclosure,
+    model_registration,
 };
 
 /// The facts of one claimed AgentRun that Create admission examines.
@@ -73,9 +73,7 @@ pub fn admit_route(route: &RouteFacts<'_>) -> Result<(), &'static str> {
         return Err("model_registration_unknown");
     };
     // An authorized qualification admits a pending profile, and does not report it as qualified.
-    if !registration
-        .capability_profile
-        .qualifies(CREATE_REQUIREMENT)
+    if !registration.qualified()
         && route.qualification != RuntimeQualification::QualificationAuthorized
     {
         return Err("model_runtime_qualification_pending");

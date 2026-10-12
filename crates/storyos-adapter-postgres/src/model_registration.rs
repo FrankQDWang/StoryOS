@@ -15,7 +15,8 @@ pub(crate) async fn request_route(
     let row = client
         .query_one(
             "SELECT registration.model_kind, binding.credential_reference,
-                    registration.provider_model_id, evidence.endpoint, binding.budget_bounds
+                    registration.provider_model_id, evidence.endpoint, binding.budget_bounds,
+                    run.model_registration_revision::text
                FROM storyos.agent_runs AS run
                JOIN storyos.model_registration_revisions AS registration
                  ON registration.model_registration_revision = run.model_registration_revision
@@ -46,6 +47,14 @@ pub(crate) async fn request_route(
             )))
         })?,
         provider_model_id: row.get(/*idx*/ 2),
+        mapping_revision: storyos_core::model_registration(row.get(/*idx*/ 5))
+            .ok_or_else(|| {
+                CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+                    "The Model Registration revision is unknown",
+                )))
+            })?
+            .mapping_revision
+            .to_owned(),
         endpoint: row.get(/*idx*/ 3),
         credential_reference: row
             .get::<_, Option<String>>(/*idx*/ 1)

@@ -544,13 +544,15 @@ export type AgentRunStreamItemInspect = { item_id: string, role: string, state: 
 
 export type AgentRunUsageInspect = { kind: string, };
 
+export type AttemptCacheInspect = { "kind": "not_recorded" } | { "kind": "recorded", implicit_cache: string, explicit_cache: string, observed_use: string, cached_input_tokens: number | null, };
+
 export type GetAgentRunRequest = { model_attempt_id?: string | null, };
 
 export type CapturedMemorySettingsInspect = { "kind": "available", memory_settings_revision: string, use_enabled: boolean, contribution_enabled: boolean, } | { "kind": "unavailable" };
 
 export type AgentRunSteeringInspect = { steering_input_id: string, input_position: string, author_message: string, input_snapshot_id: string | null, model_attempt_id: string | null, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, captured_memory_settings: CapturedMemorySettingsInspect, steering_inputs: Array<AgentRunSteeringInspect>, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, reference_recovery: OptionalReferenceRecoveryInspect, original_result_retrieval: OptionalOriginalResultRetrievalInspect, unknown_create_successor: OptionalUnknownCreateSuccessorInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, cache: AttemptCacheInspect, redaction_profile: string, };
 
 export type OriginalResultRetrievalDisposition = "kept_unknown" | "evidence_only" | "settled";
 
