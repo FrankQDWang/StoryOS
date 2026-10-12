@@ -6,7 +6,10 @@ use storyos_application::{
 };
 
 use crate::agent_run_work::RunPhaseRow;
-use storyos_core::{CompactionRecordState, CompactionStep, next_compaction_step};
+use storyos_core::{
+    BudgetBounds, CompactionRecordState, CompactionStep, CompactionTrigger, ModelAdapter,
+    compaction_due, model_registration, next_compaction_step,
+};
 
 pub(crate) enum CompactionAdvance {
     /// Send the summary request.
@@ -39,11 +42,14 @@ pub(crate) async fn advance_active_compaction(
         CompactionRecordState::Absent => summary::prior_chain(client, claim, run).await?,
         _ => None,
     };
+    let requested = chain
+        .as_ref()
+        .is_some_and(|chain| compaction_requested(run, chain));
     let ordinary = Ok(CompactionAdvance::Decide {
         later_request: false,
     });
     match (
-        next_compaction_step(&run.author_message, chain.is_some(), record),
+        next_compaction_step(requested, chain.is_some(), record),
         staged,
         summary,
         chain,
@@ -88,6 +94,33 @@ pub(crate) async fn advance_active_compaction(
         | (CompactionStep::InstallOrRefuse, None, _, _)
         | (CompactionStep::OrdinaryRequest, _, _, _) => ordinary,
     }
+}
+
+/// Whether the decision request compacts first. The expected input can reach the threshold of
+/// the pinned profile and use binding. Or the author message can ask the Host fake to compact.
+fn compaction_requested(run: &RunPhaseRow, chain: &summary::PriorChain) -> bool {
+    let Some(registration) = model_registration(&run.model_registration_revision) else {
+        return false;
+    };
+    let new_turn_tokens = run
+        .disclosure_request
+        .as_ref()
+        .map_or(/*default*/ 0, |record| {
+            record.selected.iter().map(|item| item.token_count).sum()
+        });
+    (registration.adapter == ModelAdapter::HostFake
+        && storyos_core::requests_active_compaction(&run.author_message))
+        || compaction_due(&CompactionTrigger {
+            window_tokens: registration
+                .capability_profile
+                .context_window
+                .map(|window| window.tokens),
+            output_bound: BudgetBounds::parse(&run.budget_bounds)
+                .and_then(BudgetBounds::request_bounds)
+                .map(|bounds| u64::from(bounds.max_output_tokens)),
+            prior_reported_tokens: chain.reported_tokens,
+            new_turn_tokens,
+        })
 }
 
 pub(crate) async fn load_active_compaction(

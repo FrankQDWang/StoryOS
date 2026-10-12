@@ -168,8 +168,31 @@ fn streamed(reference: &str, text: &str) -> Vec<serde_json::Value> {
 
 const ADVICE: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
 
+/// The events of `streamed`, with the reported usage that the terminal event gives.
+fn with_usage(
+    mut events: Vec<serde_json::Value>,
+    input: u64,
+    output: u64,
+) -> Vec<serde_json::Value> {
+    if let Some(terminal) = events.last_mut() {
+        terminal["response"]["usage"] =
+            serde_json::json!({"input_tokens": input, "output_tokens": output});
+    }
+    events
+}
+
+/// A first response whose reported usage puts the next turn above the threshold. The threshold
+/// is (262,144 - 32,768) x 80 percent = 183,500 tokens.
+fn near_threshold() -> Vec<serde_json::Value> {
+    with_usage(
+        streamed("resp_decision", ADVICE),
+        /*input*/ 183_400,
+        /*output*/ 200,
+    )
+}
+
 /// Settles the first AgentRun of a new Conversation on a local scripted Agent Plan destination
-/// that answers with `replies` in order. Then settles one compaction request in the same
+/// that answers with `replies` in order. Then settles one more request in the same
 /// Conversation, and returns the identity of the second AgentRun.
 async fn compact_on_agent_plan(
     store: &PostgresProjectReader,
@@ -203,7 +226,7 @@ async fn compact_on_agent_plan(
         &chapter_id,
         prefixes[1],
         destination,
-        ACTIVE_COMPACTION_REQUEST_PREFIX,
+        "Help again.",
         ConversationSelection::Existing {
             conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
@@ -229,7 +252,7 @@ async fn a_streamed_agent_plan_summary_installs_for_the_later_decision_request()
         &admin,
         ["ec3", "ec4"],
         vec![
-            streamed("resp_decision", ADVICE),
+            near_threshold(),
             streamed("resp_summary", summary),
             streamed("resp_later", ADVICE),
         ],
@@ -304,11 +327,7 @@ async fn a_dropped_summary_stream_keeps_its_items_and_the_decision_continues_the
         &store,
         &admin,
         ["ec5", "ec6"],
-        vec![
-            streamed("resp_decision", ADVICE),
-            dropped,
-            streamed("resp_next", ADVICE),
-        ],
+        vec![near_threshold(), dropped, streamed("resp_next", ADVICE)],
     )
     .await;
     let summary_attempt = admin
@@ -510,6 +529,38 @@ async fn a_source_restricted_after_the_install_check_keeps_the_summary_unsent() 
             Some("restricted_source".to_owned()),
             Some("new_transport".to_owned()),
             Some("decision".to_owned()),
+        ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_chain_below_the_threshold_continues_with_no_compaction() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    // The first response reports 52 tokens, far below the threshold of 183,500 tokens.
+    let run_id = compact_on_agent_plan(
+        &store,
+        &admin,
+        ["ecb", "ecc"],
+        vec![
+            streamed("resp_decision", ADVICE),
+            streamed("resp_next", ADVICE),
+        ],
+    )
+    .await;
+
+    assert_eq!(
+        compaction_facts(&admin, &run_id).await,
+        [
+            Some("completed".to_owned()),
+            Some("incremental".to_owned()),
+            Some("0".to_owned()),
+            None,
+            None,
+            None,
         ]
     );
 }
