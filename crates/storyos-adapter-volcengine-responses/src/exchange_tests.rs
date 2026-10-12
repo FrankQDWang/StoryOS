@@ -22,7 +22,7 @@ const BLOCK: &str = "018f0000-0000-7001-8000-0000000000b1";
 
 /// Returns a test value that is not a real credential, and counts each resolution.
 #[derive(Default)]
-struct CanaryResolver(Mutex<usize>);
+pub(crate) struct CanaryResolver(Mutex<usize>);
 
 impl CredentialResolver for CanaryResolver {
     async fn resolve(&self, _reference: &CredentialReference) -> Option<ResolvedCredential> {
@@ -42,17 +42,21 @@ impl ModelStreamSink for RecordingSink {
 }
 
 /// What the scripted destination does after it reads one complete request.
-enum Reply {
+pub(crate) enum Reply {
     Http(u16, String),
+    /// Server-sent events, each as one `data` line, and then the end of the connection.
+    Events(Vec<serde_json::Value>),
+    /// Server-sent events, and then no more bytes on an open connection.
+    Stall(Vec<serde_json::Value>),
     Drop,
     Hold,
 }
 
 /// The request line, the `Authorization` header, and the body that the destination received.
-type Received = (String, Option<String>, String);
+pub(crate) type Received = (String, Option<String>, String);
 
 /// Serves one connection with `reply`, and returns its base URL and the received request.
-async fn destination(reply: Reply) -> (String, tokio::task::JoinHandle<Received>) {
+pub(crate) async fn destination(reply: Reply) -> (String, tokio::task::JoinHandle<Received>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
     let served = tokio::spawn(async move {
@@ -75,12 +79,35 @@ async fn destination(reply: Reply) -> (String, tokio::task::JoinHandle<Received>
                 );
                 stream.write_all((head + &body).as_bytes()).await.unwrap();
             }
+            Reply::Events(events) => {
+                stream
+                    .write_all(event_stream(&events).as_bytes())
+                    .await
+                    .unwrap();
+            }
+            Reply::Stall(events) => {
+                stream
+                    .write_all(event_stream(&events).as_bytes())
+                    .await
+                    .unwrap();
+                std::future::pending::<()>().await;
+            }
             Reply::Drop => drop(stream),
             Reply::Hold => std::future::pending::<()>().await,
         }
         received
     });
     (base, served)
+}
+
+fn event_stream(events: &[serde_json::Value]) -> String {
+    let mut body = String::from(
+        "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n",
+    );
+    for event in events {
+        body.push_str(&format!("event: {}\ndata: {event}\n\n", event["type"]));
+    }
+    body
 }
 
 fn complete_request(bytes: &[u8]) -> Option<Received> {
@@ -109,7 +136,7 @@ fn target() -> DeclaredTarget {
     }
 }
 
-fn route(endpoint: &str) -> RequestRoute {
+pub(crate) fn route(endpoint: &str) -> RequestRoute {
     RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
@@ -125,7 +152,7 @@ fn route(endpoint: &str) -> RequestRoute {
     }
 }
 
-fn create(route: RequestRoute, attempt: RequestAttempt) -> DestinationRequest {
+pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> DestinationRequest {
     let item = |source_class, content: &str| RequestContextItem {
         source_class,
         content: content.to_owned(),
@@ -172,7 +199,11 @@ async fn exchange(reply: Reply) -> Observation {
     exchange_at(&base).await.0
 }
 
-fn item(item_id: &str, role: StreamItemRole, state: StreamItemState) -> NativeStreamItem {
+pub(crate) fn item(
+    item_id: &str,
+    role: StreamItemRole,
+    state: StreamItemState,
+) -> NativeStreamItem {
     NativeStreamItem {
         item_id: item_id.to_owned(),
         role,
@@ -186,12 +217,12 @@ fn item(item_id: &str, role: StreamItemRole, state: StreamItemState) -> NativeSt
     }
 }
 
-fn message(text: &str) -> serde_json::Value {
+pub(crate) fn message(text: &str) -> serde_json::Value {
     json!({"id": "msg_01", "type": "message", "role": "assistant", "status": "completed",
            "content": [{"type": "output_text", "text": text}]})
 }
 
-fn final_answer(
+pub(crate) fn final_answer(
     candidate: DecisionCandidate,
     changes: Option<Vec<ProseChangeCandidate>>,
 ) -> ModelOutput {

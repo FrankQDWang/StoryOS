@@ -32,6 +32,10 @@ pub const AGENT_PLAN_MAPPING_REVISION: &str = "storyos.volcengine-agent-plan.res
 pub const AGENT_PLAN_CONTINUATION_MAPPING_REVISION: &str =
     "storyos.volcengine-agent-plan.responses.create.v2";
 
+/// The continuation mapping that also streams the response as typed server-sent events.
+pub const AGENT_PLAN_STREAMING_MAPPING_REVISION: &str =
+    "storyos.volcengine-agent-plan.responses.create.v3";
+
 /// One host-owned global Model Registration revision. It holds no Project data, endpoint
 /// account, Credential Reference, grant, or compatibility admission.
 #[derive(Debug, Eq, PartialEq)]
@@ -142,6 +146,14 @@ pub const CONTINUATION_REQUIREMENT: &[ModelCapability] = &[
     ModelCapability::Transport,
     ModelCapability::NativeText,
     ModelCapability::Continuation,
+];
+
+/// The capabilities that one streamed Create request with a prior response reference needs.
+pub const STREAMING_REQUIREMENT: &[ModelCapability] = &[
+    ModelCapability::Transport,
+    ModelCapability::NativeText,
+    ModelCapability::Continuation,
+    ModelCapability::Streaming,
 ];
 
 impl ModelCapabilityProfile {
@@ -336,16 +348,84 @@ const AGENT_PLAN_CONTINUATION_QUALIFICATION: CapabilityEvidence = CapabilityEvid
 
 /// The profile after the continuation qualification. Transport, native text, continuation, and
 /// their combination are qualified. Each other entry keeps its earlier evidence.
+pub const AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v4",
+        entries: CapabilityEntries {
+            continuation: AGENT_PLAN_CONTINUATION_QUALIFICATION,
+            ..AGENT_PLAN_CREATE_CAPABILITY_PROFILE.entries
+        },
+        combinations: &[
+            CapabilityCombination {
+                members: CONTINUATION_REQUIREMENT,
+                evidence: AGENT_PLAN_CONTINUATION_QUALIFICATION,
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::Continuation,
+                    ModelCapability::ExplicitCache,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::ExplicitCache,
+                    ModelCapability::StructuredText,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+        ],
+    };
+
+/// The streaming profile before its runtime qualification. The continuation combination keeps
+/// its qualification, and the combination with streaming is pending.
+pub const AGENT_PLAN_STREAMING_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v5",
+        entries: AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE.entries,
+        combinations: &[
+            CapabilityCombination {
+                members: CONTINUATION_REQUIREMENT,
+                evidence: AGENT_PLAN_CONTINUATION_QUALIFICATION,
+            },
+            CapabilityCombination {
+                members: STREAMING_REQUIREMENT,
+                evidence: documented(ARK_RESPONSE_LIFECYCLE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::Continuation,
+                    ModelCapability::ExplicitCache,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::ExplicitCache,
+                    ModelCapability::StructuredText,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+        ],
+    };
+
+const AGENT_PLAN_STREAMING_QUALIFICATION: CapabilityEvidence = CapabilityEvidence::Qualified {
+    evidence: "Authorized streaming qualification on 2026-10-12, three admitted live requests: \
+               docs/research/agent-plan-streaming-qualification-2026-10-12.md",
+};
+
+/// The profile after the streaming qualification. Transport, native text, continuation,
+/// streaming, and their combination are qualified. Each other entry keeps its earlier evidence.
 pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
-    revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v4",
+    revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v6",
     entries: CapabilityEntries {
-        continuation: AGENT_PLAN_CONTINUATION_QUALIFICATION,
-        ..AGENT_PLAN_CREATE_CAPABILITY_PROFILE.entries
+        streaming: AGENT_PLAN_STREAMING_QUALIFICATION,
+        ..AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE.entries
     },
     combinations: &[
         CapabilityCombination {
-            members: CONTINUATION_REQUIREMENT,
-            evidence: AGENT_PLAN_CONTINUATION_QUALIFICATION,
+            members: STREAMING_REQUIREMENT,
+            evidence: AGENT_PLAN_STREAMING_QUALIFICATION,
         },
         CapabilityCombination {
             members: &[
@@ -403,11 +483,28 @@ pub const AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION: ModelRegistration = Mode
     ..AGENT_PLAN_PENDING_REGISTRATION
 };
 
-/// The current Agent Plan Registration: the continuation mapping, with the qualified profile.
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// The continuation mapping with the qualified profile and no streaming.
+pub const AGENT_PLAN_CONTINUATION_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa05",
-    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    capability_profile: &AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE,
     ..AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION
+};
+
+/// The streaming mapping with its pending profile. An AgentRun that pinned it refuses with
+/// Registration drift.
+pub const AGENT_PLAN_STREAMING_PENDING_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa06",
+    mapping_revision: AGENT_PLAN_STREAMING_MAPPING_REVISION,
+    requirement: STREAMING_REQUIREMENT,
+    capability_profile: &AGENT_PLAN_STREAMING_PENDING_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_PENDING_REGISTRATION
+};
+
+/// The current Agent Plan Registration: the streaming mapping, with the qualified profile.
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa07",
+    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_STREAMING_PENDING_REGISTRATION
 };
 
 /// The known Registration of a stored revision. `None` is an unknown or damaged revision.
@@ -417,6 +514,8 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
         &AGENT_PLAN_PENDING_REGISTRATION,
         &AGENT_PLAN_CREATE_REGISTRATION,
         &AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION,
+        &AGENT_PLAN_CONTINUATION_REGISTRATION,
+        &AGENT_PLAN_STREAMING_PENDING_REGISTRATION,
         &AGENT_PLAN_REGISTRATION,
     ]
     .into_iter()

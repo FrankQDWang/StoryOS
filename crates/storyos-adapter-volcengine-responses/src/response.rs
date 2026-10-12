@@ -12,7 +12,12 @@ pub(crate) fn observe(body: &[u8], targets: &[DeclaredTarget]) -> Observation {
             response_reference: None,
         };
     };
-    let Some(status) = response_state(&response) else {
+    observe_value(&response, targets)
+}
+
+/// The observation of one Responses object, from a body or from a terminal stream event.
+pub(crate) fn observe_value(response: &Value, targets: &[DeclaredTarget]) -> Observation {
+    let Some(status) = response_state(response) else {
         return Observation::OutcomeUnknown {
             response_reference: None,
         };
@@ -32,8 +37,8 @@ pub(crate) fn observe(body: &[u8], targets: &[DeclaredTarget]) -> Observation {
     Observation::Terminal(ModelResponse {
         items,
         output,
-        usage: usage(&response),
-        cache_use: cache_use(&response),
+        usage: usage(response),
+        cache_use: cache_use(response),
         response_reference: response
             .get("id")
             .and_then(Value::as_str)
@@ -52,7 +57,11 @@ fn response_state(response: &Value) -> Option<StreamItemState> {
     }
 }
 
-fn native_item(index: usize, item: &Value, response_state: StreamItemState) -> NativeStreamItem {
+pub(crate) fn native_item(
+    index: usize,
+    item: &Value,
+    response_state: StreamItemState,
+) -> NativeStreamItem {
     let text_of = |key: &str, kind: &str, field: &str| {
         let parts: Vec<_> = item
             .get(key)

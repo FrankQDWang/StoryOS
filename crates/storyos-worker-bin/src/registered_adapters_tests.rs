@@ -35,7 +35,9 @@ fn create(adapter: ModelAdapter, reference: Option<&str>) -> DestinationRequest 
         route: RequestRoute {
             adapter,
             provider_model_id: "doubao-seed-2.1-pro".to_owned(),
-            mapping_revision: storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
+            mapping_revision: storyos_core::AGENT_PLAN_REGISTRATION
+                .mapping_revision
+                .to_owned(),
             endpoint: Some(storyos_core::AGENT_PLAN_ENDPOINT.to_owned()),
             credential_reference: reference.map(|value| CredentialReference(value.to_owned())),
             bounds: Some(RequestBounds {

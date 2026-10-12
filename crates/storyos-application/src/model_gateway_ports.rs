@@ -12,6 +12,15 @@ use storyos_core::{
 
 use crate::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError};
 
+/// The most provisional Model Stream Events that an adapter sends to the sink in one commit
+/// (ADR 0039, ADR 0054). Each terminal item event commits at once.
+pub const PROVISIONAL_STREAM_EVENT_BOUND: usize = 64;
+
+/// The longest time between two commits of one streamed exchange, also when no event arrives.
+/// Thus the exchange sees a stale fence or a cancellation within this time (ADR 0054).
+pub const PROVISIONAL_STREAM_COMMIT_INTERVAL: std::time::Duration =
+    std::time::Duration::from_millis(/*millis*/ 500);
+
 /// One closed model destination request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DestinationRequest {
