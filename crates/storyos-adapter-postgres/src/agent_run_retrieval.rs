@@ -33,7 +33,7 @@ pub(crate) struct RetrievalAdvance<'a> {
 
 pub(crate) enum RetrievalWork {
     Done(CompleteAgentRun),
-    Retrieve(RetrieveRequest),
+    Retrieve(Box<RetrieveRequest>),
 }
 
 /// The retained retrieval subject of one unknown create, from the reference it reported.
@@ -140,7 +140,7 @@ pub(crate) async fn advance_original_result_retrieval(
         )
         .await
         .map_err(unavailable)?;
-    Ok(RetrievalWork::Retrieve(RetrieveRequest {
+    Ok(RetrievalWork::Retrieve(Box::new(RetrieveRequest {
         route: crate::model_registration::request_route(client, claim).await?,
         attempt: match existing {
             Some(row) => RequestAttempt::Claimed(DispatchClaim {
@@ -151,7 +151,7 @@ pub(crate) async fn advance_original_result_retrieval(
         purpose: RetrievePurpose::OriginalResult,
         original_model_attempt_id: advance.attempt_id.to_owned(),
         response_reference: text(subject, "reference_id").unwrap_or_default().to_owned(),
-    }))
+    })))
 }
 
 /// Decides one subject with the current assistance admission and the retrieved result.

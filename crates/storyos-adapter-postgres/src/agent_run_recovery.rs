@@ -47,7 +47,7 @@ pub(crate) async fn advance(
         match work {
             RetrievalWork::Retrieve(request) => {
                 return Ok(WorkPhase::Dispatch(Box::new(DestinationRequest::Retrieve(
-                    request,
+                    *request,
                 ))));
             }
             RetrievalWork::Done(result) if !follow_successor => {
@@ -98,7 +98,7 @@ pub(crate) async fn settle_cancelled(
         .await?;
         if let RetrievalWork::Retrieve(request) = work {
             return Ok(WorkPhase::Dispatch(Box::new(DestinationRequest::Retrieve(
-                request,
+                *request,
             ))));
         }
     }
