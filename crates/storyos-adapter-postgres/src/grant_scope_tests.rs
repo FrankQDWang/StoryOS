@@ -120,7 +120,7 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
 
     assert_eq!(
         grant_scope.as_deref(),
-        Some("project_writing_assistance_v1")
+        Some("project_writing_assistance_v2")
     );
     assert_eq!(
         (evidence.model_attempts, evidence.disclosure_events),
@@ -128,7 +128,7 @@ async fn an_ordinary_request_dispatches_with_no_prompt_and_records_its_grant_sco
     );
     let admitted = serde_json::json!({
         "grant_id": grant_id,
-        "grant_scope": "project_writing_assistance_v1"
+        "grant_scope": "project_writing_assistance_v2"
     });
     assert_eq!(
         grant_evidence(&admin, &run_id).await,
@@ -183,10 +183,10 @@ async fn a_grant_without_a_scope_refuses_before_dispatch_and_the_next_run_rebind
         }
     );
     assert_ne!(new_grant, old_grant);
-    assert_eq!(new_scope.as_deref(), Some("project_writing_assistance_v1"));
+    assert_eq!(new_scope.as_deref(), Some("project_writing_assistance_v2"));
     let admitted = serde_json::json!({
         "grant_id": new_grant,
-        "grant_scope": "project_writing_assistance_v1"
+        "grant_scope": "project_writing_assistance_v2"
     });
     assert_eq!(
         grant_evidence(&admin, &rebound_run).await,

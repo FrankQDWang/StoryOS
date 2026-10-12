@@ -1,5 +1,5 @@
 use storyos_application::{
-    ClaimedAgentRun, CommittedCancellation, CompleteAgentRun, CompleteAgentRunError,
+    ClaimedAgentRun, CommittedCancellation, CompleteAgentRun, CompleteAgentRunError, CreatePurpose,
     DestinationRequest, DispatchClaim, DispatchRecord, ModelDispatchStore, NextDispatchWork,
     PreDispatchRefusal, RequestAttempt, RetrievePurpose, StreamStop, WirePayloadProjection,
 };
@@ -67,6 +67,14 @@ impl ModelDispatchStore for PostgresProjectReader {
         let claimed = async {
             let run = load_run_phase(client, claim).await?;
             let request = match request {
+                DestinationRequest::Create(create)
+                    if create.purpose == CreatePurpose::CompactionSummary =>
+                {
+                    return crate::agent_run_compaction::summary::commit_claim(
+                        client, claim, &run, projection,
+                    )
+                    .await;
+                }
                 DestinationRequest::Create(create) if create.successor_of.is_some() => {
                     let assistance = read_assistance_record(client, &claim.project_scope)
                         .await
@@ -180,7 +188,8 @@ impl ModelDispatchStore for PostgresProjectReader {
                     "SELECT payload::text FROM storyos.model_attempts
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                         AND run_id = $3::text::uuid AND model_attempt_id = $4::text::uuid
-                        AND attempt_role IN ('decision', 'successor') AND decision_id IS NULL",
+                        AND attempt_role IN ('decision', 'successor', 'compaction')
+                        AND decision_id IS NULL",
                     &[
                         &claim.project_scope.owner_user_id.as_ref(),
                         &claim.project_scope.project_id.as_ref(),
@@ -278,6 +287,17 @@ impl ModelDispatchStore for PostgresProjectReader {
                     if run.settled() {
                         return Ok(settled);
                     }
+                    // After a settled decision, only a compaction summary request can refuse. The
+                    // AgentRun then completes with no compaction.
+                    if run.decision_id.is_some()
+                        && storyos_core::requests_active_compaction(&run.author_message)
+                    {
+                        crate::agent_run_compaction::summary::mark_refused(
+                            client, claim, &run, capability,
+                        )
+                        .await?;
+                        return Ok(WorkPhase::Hold("compaction"));
+                    }
                     update_run(
                         client,
                         claim,
@@ -290,6 +310,23 @@ impl ModelDispatchStore for PostgresProjectReader {
                     )
                     .await?;
                     WorkPhase::Done(CompleteAgentRun::Settled)
+                }
+                DispatchRecord::Exchange {
+                    claim: dispatch,
+                    request: DestinationRequest::Create(request),
+                    observation,
+                } if request.purpose == CreatePurpose::CompactionSummary => {
+                    if run.settled() {
+                        return Ok(settled);
+                    }
+                    crate::agent_run_compaction::summary::record(
+                        client,
+                        claim,
+                        &run,
+                        dispatch,
+                        observation,
+                    )
+                    .await?
                 }
                 DispatchRecord::Exchange {
                     claim: dispatch,

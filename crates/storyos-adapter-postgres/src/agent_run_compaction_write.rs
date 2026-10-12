@@ -1,8 +1,8 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{
     CompactionInstallFacts, CompactionKnownInput, CompactionSource, ContextSufficiency,
-    CurrentPassageAssembly, InstructionBindingInput, active_context_input_digest,
-    assemble_current_passage_context, decide_compaction_install, stage_host_fake_compaction,
+    CurrentPassageAssembly, InstructionBindingInput, StagedCompaction, active_context_input_digest,
+    assemble_current_passage_context, decide_compaction_install,
 };
 use uuid::Uuid;
 
@@ -12,63 +12,33 @@ use super::{
     CompactionState, DecisionSource, json_string, load_decision_source, unavailable, work_error,
 };
 
-pub(super) async fn stage_compaction(
+/// The summary Attempt that produced one compaction result.
+pub(super) struct Producer {
+    pub model_attempt_id: String,
+    pub manifest_id: String,
+    pub invocation_id: String,
+    pub usage_kind: &'static str,
+}
+
+/// Inserts the compaction record of one summary result: staged, or refused with no summary.
+pub(super) async fn insert_staged(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     author_message: &str,
+    source: &DecisionSource,
+    staged: &StagedCompaction,
+    producer: &Producer,
 ) -> Result<(), CompleteAgentRunError> {
-    let source = load_decision_source(client, claim).await?;
     let (revision_id, body) = current_target(client, claim, &source.chapter_id).await?;
     let admission = source
         .payload
         .pointer("/continuation/admission")
         .cloned()
         .ok_or_else(|| unavailable("Compaction requires the current admission"))?;
-    let staged = stage_host_fake_compaction(&compaction_source(&source));
-    let known_inputs = known_input_values(&staged.known_inputs);
-    let loss_facts = serde_json::json!(staged.loss_facts);
-    let producer_attempt_id = Uuid::now_v7().to_string();
-    let producer_manifest_id = Uuid::now_v7().to_string();
-    let copy = AssemblyCopy {
-        requirement_role: "compaction",
-        manifest_role: "compaction",
-        requirement_id: Uuid::now_v7().to_string(),
-        snapshot_id: Uuid::now_v7().to_string(),
-        manifest_id: producer_manifest_id.clone(),
-        destination_manifest_id: Uuid::now_v7().to_string(),
-        outbound_manifest_id: Uuid::now_v7().to_string(),
-        receipt_id: source.receipt_id.clone(),
+    let (install_state, refusal_reason) = match staged.refusal {
+        None => ("staged", None),
+        Some(reason) => ("refused", Some(reason)),
     };
-    insert_assembly_copy(client, claim, &copy).await?;
-    let producer_invocation_id = Uuid::now_v7().to_string();
-    insert_attempt(
-        client,
-        claim,
-        &AttemptInsert {
-            attempt_id: producer_attempt_id.clone(),
-            destination_attempt_id: Uuid::now_v7().to_string(),
-            outbound_event_id: Uuid::now_v7().to_string(),
-            destination_manifest_id: copy.destination_manifest_id.clone(),
-            outbound_manifest_id: copy.outbound_manifest_id.clone(),
-            wire_projection_id: Uuid::now_v7().to_string(),
-            invocation_id: producer_invocation_id.clone(),
-            conversation_id: source.conversation_id.clone(),
-            attempt_role: "compaction",
-            payload: serde_json::json!({
-                "execution_profile": source.payload.get("execution_profile").cloned().unwrap_or(serde_json::json!({})),
-                "usage": { "kind": "unknown" },
-                "producer": staged.producer,
-                "mapping_kind": "host_managed",
-                "mapping_revision": staged.mapping_revision,
-                "known_inputs": known_inputs,
-                "output_text": staged.output_text,
-                "loss_facts": loss_facts,
-                "admission": admission,
-                "items": source.payload.get("items").cloned().unwrap_or(serde_json::json!([]))
-            }),
-        },
-    )
-    .await?;
     client
         .execute(
             "INSERT INTO storyos.active_context_compactions
@@ -76,12 +46,12 @@ pub(super) async fn stage_compaction(
                 prior_manifest_id, prior_run_step_id, producer_model_attempt_id,
                 producer_manifest_id, producer_invocation_id, producer, mapping_kind,
                 mapping_revision, known_inputs, output_text, usage_kind, loss_facts,
-                input_digest, install_state, preserved_item_ids, admission)
+                input_digest, install_state, preserved_item_ids, admission, refusal_reason)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
                      $9::text::uuid, $10::text::uuid, $11, 'host_managed', $12,
-                     $13::text::jsonb, $14, 'unknown', $15::text::jsonb, $16, 'staged',
-                     $17::text::jsonb, $18::text::jsonb)",
+                     $13::text::jsonb, $14, $15, $16::text::jsonb, $17, $18,
+                     $19::text::jsonb, $20::text::jsonb, $21)",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -90,17 +60,20 @@ pub(super) async fn stage_compaction(
                 &source.model_attempt_id,
                 &source.manifest_id,
                 &Uuid::now_v7().to_string(),
-                &producer_attempt_id,
-                &producer_manifest_id,
-                &producer_invocation_id,
+                &producer.model_attempt_id,
+                &producer.manifest_id,
+                &producer.invocation_id,
                 &staged.producer,
                 &staged.mapping_revision,
-                &known_inputs.to_string(),
+                &known_input_values(&staged.known_inputs).to_string(),
                 &staged.output_text,
-                &loss_facts.to_string(),
+                &producer.usage_kind,
+                &serde_json::json!(staged.loss_facts).to_string(),
                 &active_context_input_digest(author_message, &revision_id, &body),
+                &install_state,
                 &serde_json::json!(staged.preserved_item_ids).to_string(),
                 &admission.to_string(),
+                &refusal_reason,
             ],
         )
         .await
@@ -373,7 +346,7 @@ async fn insert_attempt(
 }
 
 /// The submitted Attempt, its manifest, its selected projections, and its stream item ids.
-fn compaction_source(source: &DecisionSource) -> CompactionSource {
+pub(super) fn compaction_source(source: &DecisionSource) -> CompactionSource {
     let text = |item: &serde_json::Value, field: &str| {
         item.get(field)
             .and_then(serde_json::Value::as_str)

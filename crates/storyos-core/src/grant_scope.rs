@@ -8,40 +8,55 @@ use crate::{ContextSourceClass, CurrentPassageAssemblyRecord};
 pub enum GrantScope {
     /// All current content of the Project for writing assistance on the grant destination.
     ProjectWritingAssistanceV1,
+    /// The first scope, the active compaction of the current Conversation, and the Host-managed
+    /// summary of the same Conversation.
+    ProjectWritingAssistanceV2,
 }
 
 impl GrantScope {
     /// The scope that each new grant records.
-    pub const CURRENT: Self = Self::ProjectWritingAssistanceV1;
+    pub const CURRENT: Self = Self::ProjectWritingAssistanceV2;
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ProjectWritingAssistanceV1 => "project_writing_assistance_v1",
+            Self::ProjectWritingAssistanceV2 => "project_writing_assistance_v2",
         }
     }
 
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "project_writing_assistance_v1" => Some(Self::ProjectWritingAssistanceV1),
+            "project_writing_assistance_v2" => Some(Self::ProjectWritingAssistanceV2),
             _ => None,
         }
     }
 
     fn names_purpose(self, purpose: ContextPurpose) -> bool {
         match (self, purpose) {
-            (Self::ProjectWritingAssistanceV1, ContextPurpose::CurrentPassageAssistance) => true,
+            (
+                Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2,
+                ContextPurpose::CurrentPassageAssistance,
+            )
+            | (Self::ProjectWritingAssistanceV2, ContextPurpose::ActiveContextCompaction) => true,
+            (Self::ProjectWritingAssistanceV1, ContextPurpose::ActiveContextCompaction) => false,
         }
     }
 
     fn names_source_class(self, class: ContextSourceClass) -> bool {
         match (self, class) {
             (
-                Self::ProjectWritingAssistanceV1,
+                Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2,
                 ContextSourceClass::AuthorInstruction
                 | ContextSourceClass::WorkingTarget
                 | ContextSourceClass::InstructionBinding,
-            ) => true,
-            (Self::ProjectWritingAssistanceV1, ContextSourceClass::HostControl) => false,
+            )
+            | (Self::ProjectWritingAssistanceV2, ContextSourceClass::ConversationSummary) => true,
+            (
+                Self::ProjectWritingAssistanceV1 | Self::ProjectWritingAssistanceV2,
+                ContextSourceClass::HostControl,
+            )
+            | (Self::ProjectWritingAssistanceV1, ContextSourceClass::ConversationSummary) => false,
         }
     }
 }

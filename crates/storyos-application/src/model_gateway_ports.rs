@@ -71,10 +71,21 @@ pub enum RequestAttempt {
     Claimed(DispatchClaim),
 }
 
+/// What one Create request asks for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CreatePurpose {
+    /// The candidate of the active decision.
+    Decision,
+    /// The Host-managed summary of the Conversation for an active compaction. The request sends
+    /// one Host instruction with the prior response reference, and no project content.
+    CompactionSummary,
+}
+
 /// One provider-neutral Create request for the active decision of one claimed AgentRun.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CreateRequest {
     pub attempt: RequestAttempt,
+    pub purpose: CreatePurpose,
     pub route: RequestRoute,
     pub author_message: String,
     pub chapter_id: String,
@@ -411,6 +422,8 @@ pub trait CredentialResolver: Sync {
 pub enum ContractFaultPoint {
     DispatchClaimed,
     StreamCommitted,
+    /// The store recorded the result of a compaction summary request.
+    CompactionStaged,
 }
 
 /// Receives each reached Contract Fault Point. Production uses `NoContractFaults`.

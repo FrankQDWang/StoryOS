@@ -44,6 +44,35 @@ pub(crate) fn create_body(
     storyos_core::canonical_json(&body)
 }
 
+/// The Host instruction of a compaction summary request. The prior response reference supplies
+/// the history, and the request sends no project content.
+pub(crate) const SUMMARY_INSTRUCTIONS: &str = "\
+You help one novel author. Summarize the conversation so far for a later request that will not \
+see it. Keep the decisions of the author, the constraints, the open questions, the pending work, \
+and the state of the manuscript passages that the conversation discussed. Write in the language \
+of the manuscript. Reply with the summary text only, with no JSON and no other text.";
+
+/// The body of a compaction summary request: the summary instruction and the prior reference.
+pub(crate) fn summary_body(
+    reference: &str,
+    provider_model_id: &str,
+    bounds: RequestBounds,
+    stream: bool,
+) -> String {
+    storyos_core::canonical_json(&serde_json::json!({
+        "model": provider_model_id,
+        "instructions": SUMMARY_INSTRUCTIONS,
+        "input": [{
+            "role": "user",
+            "content": [{"type": "input_text", "text": "Summarize the conversation so far."}],
+        }],
+        "previous_response_id": reference,
+        "max_output_tokens": bounds.max_output_tokens,
+        "stream": stream,
+        "store": true,
+    }))
+}
+
 /// The author request, the selected Context, and the declared targets as one user message.
 fn request_text(request: &CreateRequest) -> String {
     let mut sections = Vec::new();
@@ -53,6 +82,7 @@ fn request_text(request: &CreateRequest) -> String {
             ContextSourceClass::AuthorInstruction => "Author request",
             ContextSourceClass::WorkingTarget => "Working text",
             ContextSourceClass::InstructionBinding => "Project instruction",
+            ContextSourceClass::ConversationSummary => "Summary of the earlier conversation",
         };
         sections.push(format!("{heading}:\n{}", item.content));
     }

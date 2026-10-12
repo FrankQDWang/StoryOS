@@ -3,10 +3,11 @@ use std::time::Duration;
 
 use serde_json::json;
 use storyos_application::{
-    CacheSetting, CacheUse, CreateRequest, CredentialReference, CredentialResolver, DeclaredTarget,
-    DestinationRequest, DispatchClaim, ModelProviderAdapter, ModelResponse, ModelStreamSink,
-    ModelUsage, Observation, PreDispatchRefusal, RequestAttempt, RequestBounds, RequestContextItem,
-    RequestRoute, ResolvedCredential, RetrievePurpose, RetrieveRequest, StreamControl,
+    CacheSetting, CacheUse, CreatePurpose, CreateRequest, CredentialReference, CredentialResolver,
+    DeclaredTarget, DestinationRequest, DispatchClaim, ModelProviderAdapter, ModelResponse,
+    ModelStreamSink, ModelUsage, Observation, PreDispatchRefusal, RequestAttempt, RequestBounds,
+    RequestContextItem, RequestRoute, ResolvedCredential, RetrievePurpose, RetrieveRequest,
+    StreamControl,
 };
 use storyos_core::{
     ContextSourceClass, DecisionCandidate, ModelAdapter, ModelOutput, NativeStreamItem,
@@ -159,6 +160,7 @@ pub(crate) fn create(route: RequestRoute, attempt: RequestAttempt) -> Destinatio
     };
     DestinationRequest::Create(CreateRequest {
         attempt,
+        purpose: CreatePurpose::Decision,
         route,
         author_message: "Tighten this paragraph.".to_owned(),
         chapter_id: target().chapter_id,
@@ -409,6 +411,57 @@ async fn only_a_continuation_maps_a_missing_prior_response_to_an_unusable_refere
                 reason: "http_400:InvalidParameter.PreviousResponseNotFound".to_owned(),
             },
         ]
+    );
+}
+
+#[tokio::test]
+async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_reference() {
+    let reply = json!({"id": "resp_03", "status": "completed",
+                       "output": [message("The author keeps the rain scene.")]});
+    let (base, served) = destination(Reply::Http(200, reply.to_string())).await;
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let summary = |reference: Option<&str>| {
+        let DestinationRequest::Create(request) = create(route(&base), RequestAttempt::New) else {
+            unreachable!("create() makes a Create request")
+        };
+        DestinationRequest::Create(CreateRequest {
+            purpose: CreatePurpose::CompactionSummary,
+            context: Vec::new(),
+            declared_targets: Vec::new(),
+            previous_response_reference: reference.map(str::to_owned),
+            ..request
+        })
+    };
+    let refused = adapter.prepare(&summary(/*reference*/ None)).await.err();
+    let prepared = adapter
+        .prepare(&summary(Some("resp_02")))
+        .await
+        .ok()
+        .unwrap();
+    adapter
+        .exchange(prepared.prepared, &mut RecordingSink::default())
+        .await;
+    let (_, _, body) = served.await.unwrap();
+    let sent: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+    assert_eq!(
+        (refused, sent),
+        (
+            Some(PreDispatchRefusal::UnsupportedRequest),
+            json!({
+                "model": "doubao-seed-2.1-pro",
+                "instructions": crate::wire::SUMMARY_INSTRUCTIONS,
+                "input": [{"role": "user", "content": [
+                    {"type": "input_text", "text": "Summarize the conversation so far."}
+                ]}],
+                "previous_response_id": "resp_02",
+                "max_output_tokens": 8192,
+                "stream": false,
+                "store": true,
+            }),
+        )
     );
 }
 
