@@ -97,7 +97,8 @@ pub(crate) async fn persist_uncertain_attempt(
         .execute(
             "UPDATE storyos.context_assembly_manifests
                 SET destination_context_manifest_id = $4::text::uuid,
-                    outbound_disclosure_manifest_id = $5::text::uuid
+                    outbound_disclosure_manifest_id = $5::text::uuid,
+                    disclosure_grant_id = $7::text::uuid, disclosure_grant_scope = $8
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
@@ -110,6 +111,8 @@ pub(crate) async fn persist_uncertain_attempt(
                 &destination_context_manifest_id,
                 &outbound_disclosure_manifest_id,
                 &assembly_manifest_id,
+                &run.grant_id,
+                &run.grant_scope,
             ],
         )
         .await

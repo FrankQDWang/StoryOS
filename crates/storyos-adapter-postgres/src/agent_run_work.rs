@@ -261,15 +261,24 @@ pub(crate) fn route_facts<'a>(
             record.runtime_qualification
         }),
         budget_bounds: BudgetBounds::parse(&run.budget_bounds).unwrap_or(BudgetBounds::Unqualified),
-        grant: storyos_core::GrantFacts {
-            owner_user_id: &run.owner_user_id,
-            project_id: &run.project_id,
-            grant_scope: run.grant_scope.as_deref(),
-            grant_identity: run.grant_identity.as_deref(),
-            binding_identity: run.binding_identity.as_deref(),
-            request: run.disclosure_request.as_ref(),
-        },
+        grant: grant_facts(run),
     }
+}
+
+fn grant_facts(run: &RunPhaseRow) -> storyos_core::GrantFacts<'_> {
+    storyos_core::GrantFacts {
+        owner_user_id: &run.owner_user_id,
+        project_id: &run.project_id,
+        grant_scope: run.grant_scope.as_deref(),
+        grant_identity: run.grant_identity.as_deref(),
+        binding_identity: run.binding_identity.as_deref(),
+        request: run.disclosure_request.as_ref(),
+    }
+}
+
+/// Whether the scope of the grant that `run` pinned covers its disclosure (ADR 0051).
+pub(crate) fn grant_admitted(run: &RunPhaseRow) -> bool {
+    storyos_core::admit_disclosure(&grant_facts(run)).is_ok()
 }
 
 /// Refuses a blocked or capability request before dispatch, or admits one new Model Attempt.
