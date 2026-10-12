@@ -416,14 +416,15 @@ async fn only_a_continuation_maps_a_missing_prior_response_to_an_unusable_refere
 
 #[tokio::test]
 async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_reference() {
-    let reply = json!({"id": "resp_03", "status": "completed",
-                       "output": [message("The author keeps the rain scene.")]});
-    let (base, served) = destination(Reply::Http(200, reply.to_string())).await;
     let adapter = AgentPlanResponses {
         resolver: CanaryResolver::default(),
     };
-    let summary = |reference: Option<&str>| {
-        let DestinationRequest::Create(request) = create(route(&base), RequestAttempt::New) else {
+    let summary = |mapping: &str, reference: Option<&str>| {
+        let route = RequestRoute {
+            mapping_revision: mapping.to_owned(),
+            ..route("http://127.0.0.1:9")
+        };
+        let DestinationRequest::Create(request) = create(route, RequestAttempt::New) else {
             unreachable!("create() makes a Create request")
         };
         DestinationRequest::Create(CreateRequest {
@@ -434,22 +435,32 @@ async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_refe
             ..request
         })
     };
-    let refused = adapter.prepare(&summary(/*reference*/ None)).await.err();
+    let compaction = storyos_core::AGENT_PLAN_COMPACTION_MAPPING_REVISION;
+    let refused = [
+        adapter
+            .prepare(&summary(compaction, /*reference*/ None))
+            .await
+            .err(),
+        adapter
+            .prepare(&summary(
+                storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION,
+                Some("resp_02"),
+            ))
+            .await
+            .err(),
+    ];
     let prepared = adapter
-        .prepare(&summary(Some("resp_02")))
+        .prepare(&summary(compaction, Some("resp_02")))
         .await
         .ok()
         .unwrap();
-    adapter
-        .exchange(prepared.prepared, &mut RecordingSink::default())
-        .await;
-    let (_, _, body) = served.await.unwrap();
-    let sent: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let sent: serde_json::Value =
+        serde_json::from_str(prepared.projection.serialized_payload.as_deref().unwrap()).unwrap();
 
     assert_eq!(
         (refused, sent),
         (
-            Some(PreDispatchRefusal::UnsupportedRequest),
+            [Some(PreDispatchRefusal::UnsupportedRequest); 2],
             json!({
                 "model": "doubao-seed-2.1-pro",
                 "instructions": crate::wire::SUMMARY_INSTRUCTIONS,
@@ -458,7 +469,7 @@ async fn a_summary_request_sends_only_the_summary_instruction_and_the_prior_refe
                 ]}],
                 "previous_response_id": "resp_02",
                 "max_output_tokens": 8192,
-                "stream": false,
+                "stream": true,
                 "store": true,
             }),
         )
