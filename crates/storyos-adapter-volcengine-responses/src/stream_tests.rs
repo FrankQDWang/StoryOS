@@ -198,6 +198,18 @@ async fn a_stop_from_the_sink_ends_the_exchange_before_the_next_commit() {
 }
 
 #[tokio::test]
+async fn a_stop_at_the_terminal_response_event_is_unknown_with_its_reference() {
+    let mut events = started("resp_s5");
+    events.push(
+        json!({"type": "response.completed", "sequence_number": 4, "response": {
+        "id": "resp_s5", "status": "completed", "output": [message(ADVISORY)]}}),
+    );
+    let (observation, batches, _) = stream(events, Some(1)).await;
+
+    assert_eq!((observation, batches.len()), (unknown("resp_s5"), 1));
+}
+
+#[tokio::test]
 async fn a_stalled_stream_commits_its_pending_events_and_learns_a_stop_after_the_interval() {
     let (base, _served) = destination(Reply::Stall(started("resp_s4"))).await;
     let response = reqwest::Client::new()
