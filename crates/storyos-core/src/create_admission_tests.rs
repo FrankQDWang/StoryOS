@@ -1,9 +1,10 @@
 use super::{RouteFacts, admit_route};
 use crate::{
     AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION, AGENT_PLAN_CONTINUATION_REGISTRATION,
-    AGENT_PLAN_CREATE_REGISTRATION, AGENT_PLAN_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION,
-    BudgetBounds, CurrentPassageAssembly, GrantFacts, HOST_FAKE_REGISTRATION,
-    InstructionBindingInput, RuntimeQualification, assemble_current_passage_context,
+    AGENT_PLAN_CREATE_REGISTRATION, AGENT_PLAN_PENDING_REGISTRATION,
+    AGENT_PLAN_STREAMING_REGISTRATION, BudgetBounds, CurrentPassageAssembly, GrantFacts,
+    HOST_FAKE_REGISTRATION, InstructionBindingInput, RuntimeQualification,
+    assemble_current_passage_context,
 };
 
 /// A current-passage request that the standing grant scope covers.
@@ -107,7 +108,7 @@ fn a_qualified_profile_or_an_authorized_qualification_with_known_bounds_admits_c
                 BudgetBounds::AgentPlanRequestV1,
             )),
             admit_route(&route(
-                AGENT_PLAN_REGISTRATION.revision,
+                AGENT_PLAN_STREAMING_REGISTRATION.revision,
                 RuntimeQualification::Qualified,
                 BudgetBounds::AgentPlanRequestV1,
             )),

@@ -359,9 +359,12 @@ pub(crate) async fn settle_one_phase(
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let Some(attempt_id) = run.attempt_id.clone() else {
-        // Compaction occurs before the first decision request of the AgentRun.
+        // Compaction occurs before the first decision request of the AgentRun, when the mapping
+        // of the pinned Registration compacts.
         let compacted = if run.decision_position == "0"
             && storyos_core::requests_active_compaction(&run.author_message)
+            && storyos_core::model_registration(&run.model_registration_revision)
+                .is_some_and(storyos_core::ModelRegistration::compacts)
         {
             match crate::agent_run_compaction::advance_active_compaction(client, claim, &run)
                 .await?
