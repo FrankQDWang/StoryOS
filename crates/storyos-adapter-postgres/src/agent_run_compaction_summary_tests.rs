@@ -220,3 +220,73 @@ async fn a_streamed_agent_plan_summary_commits_its_events_and_stages_its_text() 
         )
     );
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_dropped_summary_stream_keeps_its_committed_items_and_reference() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let destination = DeploymentDestination::VolcengineAgentPlan {
+        qualification_authorization: None,
+    };
+    let (scope, chapter_id, _) = queued_run(&store, "ec5", destination.clone()).await;
+    let run_id = admit_run(
+        &store,
+        &scope,
+        &chapter_id,
+        "ec6",
+        destination,
+        ACTIVE_COMPACTION_REQUEST_PREFIX,
+    )
+    .await;
+    // The summary stream ends after its first delta, with no terminal event.
+    let mut dropped = streamed("resp_dropped", "The author keeps the rain.");
+    dropped.truncate(/*len*/ 3);
+    let endpoint = scripted_stream_endpoint(vec![
+        streamed("resp_decision", r#"{"kind":"advisory","text":"Keep it."}"#),
+        dropped,
+    ])
+    .await;
+    admin
+        .execute(
+            "UPDATE storyos.processing_destination_identity_evidence_revisions
+                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
+            &[&scope.project_id.as_ref(), &endpoint],
+        )
+        .await
+        .unwrap();
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    complete_agent_run(
+        &store,
+        &storyos_adapter_volcengine_responses::AgentPlanResponses {
+            resolver: TestCredential,
+        },
+        &NoContractFaults,
+        &claim,
+    )
+    .await
+    .unwrap();
+    let summary_attempt = admin
+        .query_one(
+            "SELECT payload->>'response_reference', payload->'items'->0->>'text',
+                    payload->>'observation', record.refusal_reason
+               FROM storyos.model_attempts AS attempt
+               JOIN storyos.active_context_compactions AS record ON record.run_id = attempt.run_id
+              WHERE attempt.run_id = $1::text::uuid AND attempt.attempt_role = 'compaction'",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        [0, 1, 2, 3].map(|index| summary_attempt.get::<_, Option<String>>(index)),
+        [
+            Some("resp_dropped".to_owned()),
+            Some("The author keeps the rain.".to_owned()),
+            Some("outcome_unknown".to_owned()),
+            Some("summary_unavailable".to_owned()),
+        ]
+    );
+}

@@ -94,76 +94,40 @@ pub(crate) async fn commit_claim(
     if admit(run, assistance.as_ref(), &record).is_err() {
         return Ok(None);
     }
-    let [
-        requirement_id,
-        snapshot_id,
-        manifest_id,
-        destination_manifest_id,
-        outbound_manifest_id,
-    ] = [(); 5].map(|()| Uuid::now_v7().to_string());
-    let mut manifest_payload = encode_assembly_record(&record);
-    manifest_payload["operation_requirement"]["operation_requirement_id"] =
-        serde_json::json!(requirement_id);
-    manifest_payload["operation_requirement"]["input_snapshot_id"] = serde_json::json!(snapshot_id);
-    let decision_requirement = &decision_record
-        .operation_requirement
-        .operation_requirement_id;
-    let scope = [
-        &claim.project_scope.owner_user_id.as_ref(),
-        &claim.project_scope.project_id.as_ref(),
-    ];
-    let inserted = client
-        .execute(
-            "INSERT INTO storyos.operation_requirements
-               (owner_user_id, project_id, operation_requirement_id, run_id, input_snapshot_id,
-                receipt_id, payload, requirement_role)
-             SELECT owner_user_id, project_id, $4::text::uuid, run_id, $5::text::uuid,
-                    receipt_id, $6::text::jsonb, 'compaction'
-               FROM storyos.operation_requirements
+    let [destination_manifest_id, outbound_manifest_id] =
+        [(); 2].map(|()| Uuid::now_v7().to_string());
+    // The Context Assembly Manifest committed in the next work phase (ADR 0039). The claim adds
+    // the destination and disclosure manifests and the grant that admitted it.
+    let Some(manifest) = client
+        .query_opt(
+            "UPDATE storyos.context_assembly_manifests
+                SET destination_context_manifest_id = $4::text::uuid,
+                    outbound_disclosure_manifest_id = $5::text::uuid,
+                    disclosure_grant_id = $6::text::uuid, disclosure_grant_scope = $7
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND operation_requirement_id = $3::text::uuid",
+                AND run_id = $3::text::uuid AND manifest_role = 'compaction'
+                AND destination_context_manifest_id IS NULL
+          RETURNING context_assembly_manifest_id::text",
             &[
-                scope[0],
-                scope[1],
-                decision_requirement,
-                &requirement_id,
-                &snapshot_id,
-                &manifest_payload["operation_requirement"].to_string(),
-            ],
-        )
-        .await
-        .map_err(work_error)?;
-    let manifest = client
-        .execute(
-            "INSERT INTO storyos.context_assembly_manifests
-               (owner_user_id, project_id, context_assembly_manifest_id,
-                operation_requirement_id, run_id, sufficiency, destination_context_manifest_id,
-                outbound_disclosure_manifest_id, payload, receipt_id, manifest_role,
-                disclosure_grant_id, disclosure_grant_scope)
-             SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
-                    sufficiency, $6::text::uuid, $7::text::uuid, $8::text::jsonb, receipt_id,
-                    'compaction', $9::text::uuid, $10
-               FROM storyos.context_assembly_manifests
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND context_assembly_manifest_id = $3::text::uuid",
-            &[
-                scope[0],
-                scope[1],
-                &run.assembly_manifest_id,
-                &manifest_id,
-                &requirement_id,
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
                 &destination_manifest_id,
                 &outbound_manifest_id,
-                &manifest_payload.to_string(),
                 &run.grant_id,
                 &run.grant_scope,
             ],
         )
         .await
-        .map_err(work_error)?;
-    if inserted != 1 || manifest != 1 {
-        return Err(unavailable("The decision Context Assembly is missing"));
-    }
+        .map_err(work_error)?
+    else {
+        return Ok(None);
+    };
+    let manifest_id: String = manifest.get(/*idx*/ 0);
+    let scope = [
+        &claim.project_scope.owner_user_id.as_ref(),
+        &claim.project_scope.project_id.as_ref(),
+    ];
     let model_attempt_id = Uuid::now_v7().to_string();
     let mut payload = serde_json::json!({
         "execution_profile": {
@@ -218,6 +182,89 @@ pub(crate) async fn commit_claim(
         .await
         .map_err(work_error)?;
     Ok(Some(DispatchClaim { model_attempt_id }))
+}
+
+/// Commits the operation requirement and the manifest of the summary request, with no project
+/// content. This occurs before the store returns the request (ADR 0005 gate six, ADR 0039). The
+/// dispatch claim adds the destination and disclosure manifests later.
+pub(crate) async fn commit_assembly(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+) -> Result<(), CompleteAgentRunError> {
+    let decision_record = run
+        .disclosure_request
+        .as_ref()
+        .ok_or_else(|| unavailable("Compaction requires the decision Context Assembly"))?;
+    let scope = [
+        &claim.project_scope.owner_user_id.as_ref(),
+        &claim.project_scope.project_id.as_ref(),
+    ];
+    let committed = client
+        .query_opt(
+            "SELECT 1 FROM storyos.context_assembly_manifests
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid AND manifest_role = 'compaction'",
+            &[scope[0], scope[1], &claim.run_id],
+        )
+        .await
+        .map_err(work_error)?;
+    if committed.is_some() {
+        return Ok(());
+    }
+    let [requirement_id, snapshot_id, manifest_id] = [(); 3].map(|()| Uuid::now_v7().to_string());
+    let mut manifest_payload = encode_assembly_record(&compaction_assembly_record(decision_record));
+    manifest_payload["operation_requirement"]["operation_requirement_id"] =
+        serde_json::json!(requirement_id);
+    manifest_payload["operation_requirement"]["input_snapshot_id"] = serde_json::json!(snapshot_id);
+    let inserted = client
+        .execute(
+            "INSERT INTO storyos.operation_requirements
+               (owner_user_id, project_id, operation_requirement_id, run_id, input_snapshot_id,
+                receipt_id, payload, requirement_role)
+             SELECT owner_user_id, project_id, $4::text::uuid, run_id, $5::text::uuid,
+                    receipt_id, $6::text::jsonb, 'compaction'
+               FROM storyos.operation_requirements
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND operation_requirement_id = $3::text::uuid",
+            &[
+                scope[0],
+                scope[1],
+                &decision_record
+                    .operation_requirement
+                    .operation_requirement_id,
+                &requirement_id,
+                &snapshot_id,
+                &manifest_payload["operation_requirement"].to_string(),
+            ],
+        )
+        .await
+        .map_err(work_error)?;
+    let manifest = client
+        .execute(
+            "INSERT INTO storyos.context_assembly_manifests
+               (owner_user_id, project_id, context_assembly_manifest_id,
+                operation_requirement_id, run_id, sufficiency, payload, receipt_id, manifest_role)
+             SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
+                    sufficiency, $6::text::jsonb, receipt_id, 'compaction'
+               FROM storyos.context_assembly_manifests
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND context_assembly_manifest_id = $3::text::uuid",
+            &[
+                scope[0],
+                scope[1],
+                &run.assembly_manifest_id,
+                &manifest_id,
+                &requirement_id,
+                &manifest_payload.to_string(),
+            ],
+        )
+        .await
+        .map_err(work_error)?;
+    if inserted != 1 || manifest != 1 {
+        return Err(unavailable("The decision Context Assembly is missing"));
+    }
+    Ok(())
 }
 
 /// The current admission of the summary request: the pinned route and the grant scope over its
@@ -330,6 +377,23 @@ pub(crate) async fn record(
             (Vec::new(), ModelUsage::Unknown, None, None, None)
         }
     };
+    let stored: String = client
+        .query_one(
+            "SELECT (payload->'items')::text FROM storyos.model_attempts
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND model_attempt_id = $3::text::uuid AND attempt_role = 'compaction'",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &dispatch.model_attempt_id,
+            ],
+        )
+        .await
+        .map_err(work_error)?
+        .get::<_, Option<String>>(/*idx*/ 0)
+        .unwrap_or_else(|| "[]".to_owned());
+    let stored: serde_json::Value = serde_json::from_str(&stored)
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let row = client
         .query_one(
             "UPDATE storyos.model_attempts
@@ -346,8 +410,7 @@ pub(crate) async fn record(
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &dispatch.model_attempt_id,
-                &crate::agent_run_observation::merge_items(&serde_json::json!([]), &items)
-                    .to_string(),
+                &crate::agent_run_observation::merge_items(&stored, &items).to_string(),
                 &crate::agent_run_observation::encode_usage(usage).to_string(),
                 &observation_kind(&observation),
                 &reference,

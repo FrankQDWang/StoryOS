@@ -47,6 +47,7 @@ pub(crate) async fn advance_active_compaction(
             if !summary::admit_or_mark(client, claim, run).await? {
                 return Ok(CompactionAdvance::ReadyToComplete);
             }
+            summary::commit_assembly(client, claim, run).await?;
             Ok(CompactionAdvance::Dispatch(Box::new(
                 summary::summary_request(client, claim, run, RequestAttempt::New).await?,
             )))
