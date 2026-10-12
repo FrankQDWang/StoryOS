@@ -204,13 +204,13 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 revision: 3,
                 model_registration_revision: AGENT_PLAN_REGISTRATION.revision.to_owned(),
                 destination: DestinationKind::VolcengineAgentPlan,
-                runtime_qualification: RuntimeQualification::QualificationAuthorized,
+                runtime_qualification: RuntimeQualification::Qualified,
                 ..current.clone()
             },
             None,
             (
-                "qualification_authorized".to_owned(),
-                Some(AUTHORIZATION.to_owned()),
+                "qualified".to_owned(),
+                None,
                 AGENT_PLAN_REGISTRATION.revision.to_owned()
             ),
             (
@@ -254,10 +254,37 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         "e9d",
         authorized(),
         "Help again.",
-        ConversationSelection::Existing { conversation_id },
+        ConversationSelection::Existing {
+            conversation_id: conversation_id.clone(),
+        },
     )
     .await;
     settle(&store, &admin, &scope, &next, &advisory).await;
+    // The prior binding of the Conversation came from the earlier Registration of the route.
+    admin
+        .execute(
+            "UPDATE storyos.model_attempts
+                SET payload = jsonb_set(payload, '{produced_binding,model_registration_revision}',
+                                        to_jsonb($2::text))
+              WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+            &[
+                &next,
+                &storyos_core::AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION.revision,
+            ],
+        )
+        .await
+        .unwrap();
+    let upgraded = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        "ea7",
+        authorized(),
+        "Help once more.",
+        ConversationSelection::Existing { conversation_id },
+    )
+    .await;
+    settle(&store, &admin, &scope, &upgraded, &advisory).await;
 
     let route = RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
@@ -297,10 +324,15 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
             qualification_evidence(&admin, &unknown_run).await,
             qualification_evidence(&admin, &first).await,
             qualification_evidence(&admin, &next).await,
+            qualification_evidence(&admin, &upgraded).await,
         ),
         (
             vec![(route.clone(), None), (route.clone(), None)],
-            vec![(route.clone(), None), (route, Some("resp_01".to_owned()))],
+            vec![
+                (route.clone(), None),
+                (route.clone(), Some("resp_01".to_owned())),
+                (route, None)
+            ],
             [
                 text("refused"),
                 text(r#"{"kind": "execution_refused", "capability": "model_registration_drift"}"#),
@@ -319,6 +351,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
             ],
             completed("none"),
             completed("incremental"),
+            completed("new_transport"),
         )
     );
 }

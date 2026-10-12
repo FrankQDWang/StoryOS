@@ -340,6 +340,47 @@ async fn a_continuation_sends_the_prior_reference_with_the_current_instructions_
     );
 }
 
+#[tokio::test]
+async fn only_a_continuation_maps_a_missing_prior_response_to_an_unusable_reference() {
+    let not_found =
+        r#"{"error":{"code":"InvalidParameter.PreviousResponseNotFound","message":"resp_x"}}"#;
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let observe = |reference: Option<&str>| {
+        let adapter = &adapter;
+        let reference = reference.map(str::to_owned);
+        async move {
+            let (base, _served) = destination(Reply::Http(400, not_found.to_owned())).await;
+            let DestinationRequest::Create(request) = create(route(&base), RequestAttempt::New)
+            else {
+                unreachable!("create() makes a Create request")
+            };
+            let request = DestinationRequest::Create(CreateRequest {
+                previous_response_reference: reference,
+                ..request
+            });
+            let prepared = adapter.prepare(&request).await.ok().unwrap();
+            adapter
+                .exchange(prepared.prepared, &mut RecordingSink::default())
+                .await
+        }
+    };
+
+    assert_eq!(
+        [observe(Some("resp_01")).await, observe(None).await],
+        [
+            Observation::Rejected {
+                reason: "continuation_unusable:http_400:InvalidParameter.PreviousResponseNotFound"
+                    .to_owned(),
+            },
+            Observation::Rejected {
+                reason: "http_400:InvalidParameter.PreviousResponseNotFound".to_owned(),
+            },
+        ]
+    );
+}
+
 #[test]
 fn complete_text_maps_to_its_contract_candidate_and_other_text_to_an_advisory() {
     let advisory = |text: &str| {

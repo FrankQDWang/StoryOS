@@ -32,11 +32,12 @@ pub(crate) async fn record_create(
             )
             .await;
         }
+        // A real adapter appends the native code after the condition.
         Observation::Rejected { reason }
             if request.previous_response_reference.is_some()
                 && matches!(
-                    reason.as_str(),
-                    "continuation_expired" | "continuation_unusable"
+                    reason.split(':').next(),
+                    Some("continuation_expired" | "continuation_unusable")
                 ) =>
         {
             return record_continuation_rejection(client, claim, run, dispatch, request, &reason)
@@ -245,7 +246,7 @@ async fn record_continuation_rejection(
     request: &CreateRequest,
     reason: &str,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let condition = if reason == "continuation_expired" {
+    let condition = if reason.starts_with("continuation_expired") {
         "confirmed_expired"
     } else {
         "confirmed_unusable"

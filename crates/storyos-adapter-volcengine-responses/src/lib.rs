@@ -15,6 +15,10 @@ use storyos_core::ModelAdapter;
 
 const EXECUTION_PROFILE: &str = "storyos.volcengine-agent-plan.execution.v1";
 
+/// The rejection of a prior response reference that the destination does not have
+/// (live observation, 2026-10-12). It does not tell an expired reference from another one.
+const PREVIOUS_RESPONSE_NOT_FOUND: &str = "http_400:InvalidParameter.PreviousResponseNotFound";
+
 /// Sends each admitted Create request once, with no streaming, retry, redirect, or fallback. It
 /// asks for no explicit cache.
 /// It resolves the Credential Reference of each request through `resolver` before the dispatch
@@ -33,6 +37,7 @@ enum Exchange {
         credential: ResolvedCredential,
         timeout: Duration,
         targets: Vec<DeclaredTarget>,
+        continues: bool,
     },
     /// A lost claim committed this Attempt. The request is not sent again.
     Reobserve,
@@ -89,6 +94,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 credential,
                 timeout: bounds.timeout,
                 targets: create.declared_targets.clone(),
+                continues: create.previous_response_reference.is_some(),
             }),
         })
     }
@@ -105,13 +111,20 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             credential,
             timeout,
             targets,
+            continues,
         } = prepared.0
         else {
             return Observation::OutcomeUnknown {
                 response_reference: None,
             };
         };
-        let observation = send(&url, body, &credential, timeout, &targets).await;
+        let mut observation = send(&url, body, &credential, timeout, &targets).await;
+        if let Observation::Rejected { reason } = &mut observation
+            && continues
+            && reason.as_str() == PREVIOUS_RESPONSE_NOT_FOUND
+        {
+            *reason = format!("continuation_unusable:{reason}");
+        }
         if let Observation::Terminal(response) = &observation
             && !response.items.is_empty()
         {
