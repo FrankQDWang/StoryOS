@@ -2399,7 +2399,7 @@ not expose routine limit controls.
 | concurrent App View Instances per Client Session | 32 |
 | one non-secret external semantic request or validated Tool input | 8 MiB |
 | one external result before referenced-payload handling | 64 MiB |
-| one model-visible Context item | 10,000 tokens under the admitted Token Counting Profile |
+| one model-visible Context item | 32,000 tokens under the admitted Token Counting Profile |
 | items selected into one Effective Destination Context | 4,096 |
 | total model input for one Destination Attempt | 1,000,000 tokens under the admitted Token Counting Profile |
 | requested model output for one Destination Attempt | 128,000 tokens under the admitted Token Counting Profile |
@@ -2417,9 +2417,12 @@ not expose routine limit controls.
 
 Provider or Adapter limits, current model context, author-granted budget, and
 deployment capacity usually make effective values materially smaller. The
-10,000-token per-item ceiling is also a repository invariant; introducing a
-new context item kind that can exceed 1,000 tokens requires explicit design
-review even though the absolute ceiling is higher.
+32,000-token per-item ceiling is also a repository invariant
+([ADR 0052](../adr/0052-set-the-context-item-limit-from-the-measured-model-input.md)).
+It is the measured accepted input of the qualified route minus the output
+reserve and the other parts of one request. Introducing a new context item kind
+that can exceed 1,000 tokens requires explicit design review even though the
+absolute ceiling is higher.
 
 Token ceilings are not evaluated by an unspecified tokenizer or character
 estimate. Every token-limited admission pins:

@@ -236,7 +236,7 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     await page.reload();
     assert.deepEqual((await inspect(successorId)).unknown_create_successor, prohibited.unknown_create_successor);
     await openCase("d");
-    const omitted = "This passage is outside the usable range. " + "a".repeat(10_001);
+    const omitted = "This passage is outside the usable range. " + "a".repeat(32_001);
     await editor.click();
     await page.keyboard.insertText(omitted);
     await saved.waitFor();

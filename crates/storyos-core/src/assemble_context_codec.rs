@@ -1,10 +1,12 @@
 use super::{
-    CONTEXT_ITEM_TOKEN_LIMIT, ConsideredSource, ContextBlockReason, ContextCause, ContextPurpose,
-    ContextSourceClass, ContextSufficiency, CurrentPassageAssemblyRecord, DestinationIo,
-    HostControlRecord, InstructionBindingInput, ManifestCommit, OperationRequirementRecord,
-    ProjectionMode, RejectedSource, RejectionReason, SelectedProjection,
-    TOKEN_COUNTING_PROFILE_REVISION,
+    ConsideredSource, ContextBlockReason, ContextCause, ContextPurpose, ContextSourceClass,
+    ContextSufficiency, CurrentPassageAssemblyRecord, DestinationIo, HostControlRecord,
+    InstructionBindingInput, ManifestCommit, OperationRequirementRecord, ProjectionMode,
+    RejectedSource, RejectionReason, SelectedProjection, TOKEN_COUNTING_PROFILE_REVISION,
 };
+
+/// A record from before ADR 0052 names no limit. Its assembly ran under 10,000 tokens.
+const LEGACY_CONTEXT_ITEM_TOKEN_LIMIT: u64 = 10_000;
 
 pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_json::Value {
     let mut payload = serde_json::json!({
@@ -20,6 +22,7 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
             "proposal_target_block_ids": record.operation_requirement.proposal_target_block_ids,
             "instruction": encode_instruction(&record.operation_requirement.instruction),
             "destination_identity": record.operation_requirement.destination_identity,
+            "item_token_limit": record.operation_requirement.item_token_limit,
         },
         "sufficiency": encode_sufficiency(&record.sufficiency),
         "considered": record.considered.iter().map(encode_considered).collect::<Vec<_>>(),
@@ -129,7 +132,10 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
                 .get("destination_identity")?
                 .as_str()?
                 .to_owned(),
-            item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,
+            item_token_limit: match requirement.get("item_token_limit") {
+                Some(limit) => limit.as_u64()?,
+                None => LEGACY_CONTEXT_ITEM_TOKEN_LIMIT,
+            },
             token_counting_profile_revision: TOKEN_COUNTING_PROFILE_REVISION.to_owned(),
         },
         sufficiency: decode_sufficiency(value.get("sufficiency")?)?,

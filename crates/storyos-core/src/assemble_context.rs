@@ -4,7 +4,8 @@ use super::count_stored_text;
 
 pub const TOKEN_COUNTING_PROFILE_REVISION: &str = "storyos.token-counting.unicode-scalar.v1";
 pub const TOKEN_COUNTING_ALGORITHM_REVISION: &str = "storyos.statistics.unicode-16.0.0.v1";
-pub const CONTEXT_ITEM_TOKEN_LIMIT: u64 = 10_000;
+/// The per-item limit of ADR 0052: the measured accepted input minus the output reserve.
+pub const CONTEXT_ITEM_TOKEN_LIMIT: u64 = 32_000;
 
 /// Count one StoryOS-injected Context item under the admitted Token Counting Profile.
 pub fn count_context_item_tokens(text: &str) -> u64 {

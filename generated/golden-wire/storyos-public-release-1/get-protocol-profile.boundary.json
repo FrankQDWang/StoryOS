@@ -14,7 +14,7 @@
     "contract_graph_digest": "sha256:05f14fd967c818a5722370d6c769d9d0eefeef7e1e4dc3c7cfbd2e9cea9e4f58",
     "contract_graph_revision": "release1-wire-catalog-2026-09-27-expiry-rebuild",
     "envelope_profile": "storyos.public.envelope.v1",
-    "fixture_corpus_digest": "sha256:c3a3106246f3c95a2a09222fdcbbf5d7824c970f7b7e6e259431d994855903e0",
+    "fixture_corpus_digest": "sha256:8986d099a38a067368ee45f11255e68d37ed49996e8464005b479a405c8af90a",
     "generated_client_revision": "storyos.typescript-client.release-0.v1",
     "json_schema_catalog_digest": "sha256:c61f26568ec6d6e3c45cc01af8e3a24563e55fecf3be823b98b2b9324ea7bac6",
     "limit_profile_revision": "storyos.foundation.absolute.v1",
