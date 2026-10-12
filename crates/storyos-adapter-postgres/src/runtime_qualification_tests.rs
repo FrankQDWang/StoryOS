@@ -473,6 +473,221 @@ async fn a_cancelled_qualification_request_refuses_its_abort_once_before_dispatc
     );
 }
 
+/// An Agent Plan adapter whose exchange cancels the AgentRun with the same fence. Then it
+/// reports a complete response, as a response after a cancellation does.
+struct LateResponseAgentPlan<'a> {
+    admin: &'a Client,
+    run_id: String,
+}
+
+impl ModelProviderAdapter for LateResponseAgentPlan<'_> {
+    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
+    type Prepared = ();
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<()>, PreDispatchRefusal> {
+        let DestinationRequest::Create(_) = request else {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        };
+        let mut prepared = ScriptedAgentPlan::new(Observation::NotSubmitted)
+            .prepare(request)
+            .await?;
+        prepared.projection.cache_setting =
+            Some(storyos_application::CacheSetting::DestinationDefault);
+        Ok(prepared)
+    }
+
+    async fn exchange(&self, _prepared: (), _sink: &mut impl ModelStreamSink) -> Observation {
+        self.admin
+            .execute(
+                "UPDATE storyos.agent_runs SET status = 'cancelled'
+                  WHERE run_id = $1::text::uuid AND status = 'claimed'",
+                &[&self.run_id],
+            )
+            .await
+            .unwrap();
+        Observation::Terminal(ModelResponse {
+            items: Vec::new(),
+            output: Some(ModelOutput {
+                phase: OutputPhase::FinalAnswer,
+                candidate: DecisionCandidate::Advisory {
+                    text: "Too late.".to_owned(),
+                },
+                prose_changes: None,
+            }),
+            usage: ModelUsage::Reported {
+                input_tokens: 300,
+                output_tokens: 20,
+            },
+            cache_use: storyos_application::CacheUse::Reported {
+                cached_input_tokens: 128,
+            },
+            response_reference: Some("resp_late".to_owned()),
+        })
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_response_after_cancellation_keeps_its_usage_and_cache_use_and_supplies_no_decision() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, _, run_id) = queued_run(&store, "ea8", authorized()).await;
+    let adapter = LateResponseAgentPlan {
+        admin: &admin,
+        run_id: run_id.clone(),
+    };
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let _settled = complete_agent_run(&store, &adapter, &NoContractFaults, &claim).await;
+    let row = admin
+        .query_one(
+            "SELECT run.status, attempt.decision_id::text, attempt.payload->>'usage',
+                    attempt.payload->>'cache', attempt.payload->>'observed_after_cancellation'
+               FROM storyos.agent_runs AS run
+               JOIN storyos.model_attempts AS attempt
+                 ON attempt.run_id = run.run_id AND attempt.attempt_role = 'decision'
+              WHERE run.run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            row.get::<_, String>(0),
+            row.get::<_, Option<String>>(1),
+            serde_json::from_str::<serde_json::Value>(&row.get::<_, String>(2)).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&row.get::<_, String>(3)).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&row.get::<_, String>(4)).unwrap(),
+        ),
+        (
+            "cancelled".to_owned(),
+            None,
+            serde_json::json!({"kind": "reported", "input_tokens": 300, "output_tokens": 20}),
+            serde_json::json!({
+                "implicit": "destination_default",
+                "explicit": "not_requested",
+                "observed": {"kind": "reported", "cached_input_tokens": 128}
+            }),
+            serde_json::json!(true),
+        )
+    );
+}
+
+/// An Agent Plan adapter that replaces the stored reference of the prior binding during the
+/// first preparation. This is a concurrent change before the dispatch claim.
+struct ReferenceChangingAgentPlan<'a> {
+    admin: &'a Client,
+    prior_run_id: String,
+    seen: Mutex<Vec<Option<String>>>,
+}
+
+impl ModelProviderAdapter for ReferenceChangingAgentPlan<'_> {
+    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
+    type Prepared = ();
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<()>, PreDispatchRefusal> {
+        let DestinationRequest::Create(create) = request else {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        };
+        let first = {
+            let mut seen = self.seen.lock().unwrap();
+            seen.push(create.previous_response_reference.clone());
+            seen.len() == 1
+        };
+        if first {
+            self.admin
+                .execute(
+                    "UPDATE storyos.model_attempts
+                        SET payload = jsonb_set(payload, '{response_reference}', '\"resp_02\"')
+                      WHERE run_id = $1::text::uuid AND attempt_role = 'decision'",
+                    &[&self.prior_run_id],
+                )
+                .await
+                .unwrap();
+        }
+        ScriptedAgentPlan::new(Observation::NotSubmitted)
+            .prepare(request)
+            .await
+    }
+
+    async fn exchange(&self, _prepared: (), _sink: &mut impl ModelStreamSink) -> Observation {
+        Observation::NotSubmitted
+    }
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_preparation() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, first) = queued_run(&store, "ea9", authorized()).await;
+    let advisory = ScriptedAgentPlan::new(Observation::Terminal(ModelResponse {
+        items: Vec::new(),
+        output: Some(ModelOutput {
+            phase: OutputPhase::FinalAnswer,
+            candidate: DecisionCandidate::Advisory {
+                text: "Keep it.".to_owned(),
+            },
+            prose_changes: None,
+        }),
+        usage: ModelUsage::Unknown,
+        cache_use: storyos_application::CacheUse::Unknown,
+        response_reference: Some("resp_01".to_owned()),
+    }));
+    settle(&store, &admin, &scope, &first, &advisory).await;
+    let next = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        "eab",
+        authorized(),
+        "Help again.",
+        ConversationSelection::Existing {
+            conversation_id: "018f0000-0000-7001-8000-00000006ea96".to_owned(),
+        },
+    )
+    .await;
+    let adapter = ReferenceChangingAgentPlan {
+        admin: &admin,
+        prior_run_id: first,
+        seen: Mutex::default(),
+    };
+    let claim = claim_run(&admin, scope.clone(), next.clone()).await;
+    complete_agent_run(&store, &adapter, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+    let attempts: Vec<Option<String>> = admin
+        .query(
+            "SELECT payload->'wire'->>'prior_continuation_binding_id' IS NOT NULL
+                    AND payload->'continuation'->>'input_mapping' = 'incremental'
+               FROM storyos.model_attempts WHERE run_id = $1::text::uuid",
+            &[&next],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| Some(row.get::<_, bool>(/*idx*/ 0).to_string()))
+        .collect();
+
+    assert_eq!(
+        (adapter.seen.into_inner().unwrap(), attempts),
+        (
+            vec![Some("resp_01".to_owned()), Some("resp_02".to_owned())],
+            vec![Some("true".to_owned())],
+        )
+    );
+}
+
 /// Returns a test value that is not a real credential.
 struct TestCredential;
 
