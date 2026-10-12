@@ -1,7 +1,7 @@
 //! Map one complete Responses object to the typed Model Gateway observation.
 
 use serde_json::Value;
-use storyos_application::{DeclaredTarget, ModelResponse, ModelUsage, Observation};
+use storyos_application::{CacheUse, DeclaredTarget, ModelResponse, ModelUsage, Observation};
 use storyos_core::{NativeStreamItem, StreamItemRole, StreamItemState};
 
 /// The observation of a successful HTTP response body. A body that is not a Responses object
@@ -33,6 +33,7 @@ pub(crate) fn observe(body: &[u8], targets: &[DeclaredTarget]) -> Observation {
         items,
         output,
         usage: usage(&response),
+        cache_use: cache_use(&response),
         response_reference: response
             .get("id")
             .and_then(Value::as_str)
@@ -132,5 +133,18 @@ fn usage(response: &Value) -> ModelUsage {
             output_tokens,
         },
         _ => ModelUsage::Unknown,
+    }
+}
+
+/// The cached input tokens that the destination reports. Absent cache use is unknown, never zero.
+fn cache_use(response: &Value) -> CacheUse {
+    match response
+        .pointer("/usage/input_tokens_details/cached_tokens")
+        .and_then(Value::as_u64)
+    {
+        Some(cached_input_tokens) => CacheUse::Reported {
+            cached_input_tokens,
+        },
+        None => CacheUse::Unknown,
     }
 }

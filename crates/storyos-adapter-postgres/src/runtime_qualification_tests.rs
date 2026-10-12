@@ -58,6 +58,7 @@ impl ModelProviderAdapter for ScriptedAgentPlan {
                 mapping_revision: "storyos.volcengine-agent-plan.responses.create.v1".to_owned(),
                 digest: "sha256:scripted".to_owned(),
                 serialized_payload: None,
+                cache_setting: None,
             },
             prepared: (),
         })
@@ -203,13 +204,13 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 revision: 3,
                 model_registration_revision: AGENT_PLAN_REGISTRATION.revision.to_owned(),
                 destination: DestinationKind::VolcengineAgentPlan,
-                runtime_qualification: RuntimeQualification::Qualified,
+                runtime_qualification: RuntimeQualification::QualificationAuthorized,
                 ..current.clone()
             },
             None,
             (
-                "qualified".to_owned(),
-                None,
+                "qualification_authorized".to_owned(),
+                Some(AUTHORIZATION.to_owned()),
                 AGENT_PLAN_REGISTRATION.revision.to_owned()
             ),
             (
@@ -240,6 +241,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
             input_tokens: 412,
             output_tokens: 133,
         },
+        cache_use: storyos_application::CacheUse::Unknown,
         response_reference: Some("resp_01".to_owned()),
     }));
     let first = admit_run(&store, &scope, &chapter_id, "e9c", authorized(), "Help.").await;
@@ -260,6 +262,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
     let route = RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
         provider_model_id: "doubao-seed-2.1-pro".to_owned(),
+        mapping_revision: storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
         endpoint: Some(AGENT_PLAN_ENDPOINT.to_owned()),
         credential_reference: Some(storyos_application::CredentialReference(
             REFERENCE.to_owned(),
@@ -297,7 +300,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         ),
         (
             vec![(route.clone(), None), (route.clone(), None)],
-            vec![(route.clone(), None), (route, None)],
+            vec![(route.clone(), None), (route, Some("resp_01".to_owned()))],
             [
                 text("refused"),
                 text(r#"{"kind": "execution_refused", "capability": "model_registration_drift"}"#),
@@ -315,7 +318,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 text("none"),
             ],
             completed("none"),
-            completed("full"),
+            completed("incremental"),
         )
     );
 }
@@ -486,6 +489,7 @@ async fn real_attempt_evidence(
     ModelAdapter,
     String,
     Vec<storyos_application::AgentRunEvidence>,
+    Option<storyos_application::AttemptCache>,
 ) {
     let (scope, _, run_id) = queued_run(store, prefix, authorized()).await;
     let endpoint = scripted_endpoint(body.to_string()).await;
@@ -513,6 +517,7 @@ async fn real_attempt_evidence(
         record.adapter,
         model.admission.adapter_mapping,
         model.evidence,
+        model.cache,
     )
 }
 
@@ -539,16 +544,18 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
         "eb1",
         response(
             "resp_eb1",
-            Some(serde_json::json!({"input_tokens": 12, "output_tokens": 3})),
+            Some(serde_json::json!({"input_tokens": 12, "output_tokens": 3,
+                                    "input_tokens_details": {"cached_tokens": 8}})),
         ),
     )
     .await;
     let unknown =
         real_attempt_evidence(&store, &admin, "eb2", response("resp_eb2", /*usage*/ None)).await;
-    let facts = |(adapter, mapping, evidence): (
+    let facts = |(adapter, mapping, evidence, cache): (
         ModelAdapter,
         String,
         Vec<storyos_application::AgentRunEvidence>,
+        Option<storyos_application::AttemptCache>,
     )| {
         let known: Vec<_> = evidence
             .into_iter()
@@ -563,7 +570,13 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
             })
             .filter(|fact| !fact.starts_with("01"))
             .collect();
-        (adapter, mapping, known)
+        (adapter, mapping, known, cache)
+    };
+    let cache = |observed| {
+        Some(storyos_application::AttemptCache {
+            setting: storyos_application::CacheSetting::DestinationDefault,
+            observed,
+        })
     };
 
     assert_eq!(
@@ -571,13 +584,17 @@ async fn a_real_adapter_attempt_records_its_mapping_usage_report_and_response_re
         [
             (
                 ModelAdapter::VolcengineAgentPlanResponses,
-                storyos_core::AGENT_PLAN_MAPPING_REVISION.to_owned(),
+                storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
                 vec!["resp_eb1".to_owned(), "provider_usage_reported".to_owned()],
+                cache(storyos_application::CacheUse::Reported {
+                    cached_input_tokens: 8,
+                }),
             ),
             (
                 ModelAdapter::VolcengineAgentPlanResponses,
-                storyos_core::AGENT_PLAN_MAPPING_REVISION.to_owned(),
+                storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION.to_owned(),
                 vec!["resp_eb2".to_owned(), "provider_usage_unknown".to_owned()],
+                cache(storyos_application::CacheUse::Unknown),
             ),
         ]
     );

@@ -1,7 +1,7 @@
 //! Records Create observations and builds the Create request of the active decision.
 
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, CreateRequest, DeclaredTarget, DispatchClaim,
+    CacheUse, ClaimedAgentRun, CompleteAgentRunError, CreateRequest, DeclaredTarget, DispatchClaim,
     ModelUsage, Observation, RequestAttempt, RequestContextItem,
 };
 use storyos_core::{AgentDecisionOutcome, validate_agent_decision};
@@ -77,6 +77,7 @@ pub(crate) async fn record_create(
             .as_ref()
             .and_then(|output| output.prose_changes.as_deref()),
         usage: response.usage,
+        cache_use: response.cache_use,
         response_reference: response.response_reference.as_deref(),
         settlement: CreateSettlement::Response,
     };
@@ -93,6 +94,7 @@ fn no_response<'a>(
         outcome: AgentDecisionOutcome::NoDecision,
         producer_output: None,
         usage: ModelUsage::Unknown,
+        cache_use: CacheUse::Unknown,
         response_reference: None,
         settlement,
     }
@@ -205,9 +207,18 @@ async fn previous_response_reference(
             }
         }
     };
-    let Some(binding) = prior_binding else {
-        return Ok(None);
-    };
+    match prior_binding {
+        Some(binding) => binding_reference(client, claim, &binding).await,
+        None => Ok(None),
+    }
+}
+
+/// The destination reference that the Model Attempt of one continuation binding produced.
+pub(crate) async fn binding_reference(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    binding: &str,
+) -> Result<Option<String>, CompleteAgentRunError> {
     Ok(client
         .query_opt(
             "SELECT payload->>'response_reference' FROM storyos.model_attempts

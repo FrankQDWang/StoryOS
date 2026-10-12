@@ -23,18 +23,14 @@ impl ModelAdapter {
             .into_iter()
             .find(|adapter| adapter.kind() == kind)
     }
-
-    /// The wire mapping revision of the adapter.
-    pub fn mapping_revision(self) -> &'static str {
-        match self {
-            Self::HostFake => crate::HOST_FAKE_MAPPING_REVISION,
-            Self::VolcengineAgentPlanResponses => AGENT_PLAN_MAPPING_REVISION,
-        }
-    }
 }
 
 /// The wire mapping revision of the Agent Plan Responses Create request.
 pub const AGENT_PLAN_MAPPING_REVISION: &str = "storyos.volcengine-agent-plan.responses.create.v1";
+
+/// The Agent Plan mapping that also sends the prior response reference of the Conversation.
+pub const AGENT_PLAN_CONTINUATION_MAPPING_REVISION: &str =
+    "storyos.volcengine-agent-plan.responses.create.v2";
 
 /// One host-owned global Model Registration revision. It holds no Project data, endpoint
 /// account, Credential Reference, grant, or compatibility admission.
@@ -45,7 +41,23 @@ pub struct ModelRegistration {
     pub api_surface: &'static str,
     /// The exact provider model identifier. It is never an alias such as "latest".
     pub provider_model_id: &'static str,
+    /// The exact wire mapping revision of the adapter.
+    pub mapping_revision: &'static str,
+    /// The capabilities that the mapping uses in each Create request.
+    pub requirement: &'static [ModelCapability],
     pub capability_profile: &'static ModelCapabilityProfile,
+}
+
+impl ModelRegistration {
+    /// True when the profile qualifies each capability that the mapping uses, together.
+    pub fn qualified(&self) -> bool {
+        self.capability_profile.qualifies(self.requirement)
+    }
+
+    /// Whether the mapping can send the prior response reference of the Conversation.
+    pub fn continues(&self) -> bool {
+        self.requirement.contains(&ModelCapability::Continuation)
+    }
 }
 
 /// One capability of a Model Capability Profile. Each capability has its own evidence.
@@ -124,6 +136,13 @@ pub struct ModelCapabilityProfile {
 /// The capabilities that one Create request needs together.
 pub const CREATE_REQUIREMENT: &[ModelCapability] =
     &[ModelCapability::Transport, ModelCapability::NativeText];
+
+/// The capabilities that one Create request with a prior response reference needs together.
+pub const CONTINUATION_REQUIREMENT: &[ModelCapability] = &[
+    ModelCapability::Transport,
+    ModelCapability::NativeText,
+    ModelCapability::Continuation,
+];
 
 impl ModelCapabilityProfile {
     pub fn evidence(&self, capability: ModelCapability) -> CapabilityEvidence {
@@ -249,7 +268,7 @@ const AGENT_PLAN_RUNTIME_QUALIFICATION: CapabilityEvidence = CapabilityEvidence:
 
 /// The profile after the runtime qualification. Only transport, native text, and their Create
 /// combination are qualified. Each other entry keeps its earlier evidence.
-pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
+pub const AGENT_PLAN_CREATE_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v2",
     entries: CapabilityEntries {
         transport: AGENT_PLAN_RUNTIME_QUALIFICATION,
@@ -278,11 +297,45 @@ pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilit
     ],
 };
 
+/// The continuation profile before its runtime qualification. The Create combination keeps its
+/// qualification, and the combination with continuation is pending.
+pub const AGENT_PLAN_CONTINUATION_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v3",
+        entries: AGENT_PLAN_CREATE_CAPABILITY_PROFILE.entries,
+        combinations: &[
+            CapabilityCombination {
+                members: CREATE_REQUIREMENT,
+                evidence: AGENT_PLAN_RUNTIME_QUALIFICATION,
+            },
+            CapabilityCombination {
+                members: CONTINUATION_REQUIREMENT,
+                evidence: documented(ARK_CREATE_RESPONSE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::Continuation,
+                    ModelCapability::ExplicitCache,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::ExplicitCache,
+                    ModelCapability::StructuredText,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+        ],
+    };
+
 pub const HOST_FAKE_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa01",
     adapter: ModelAdapter::HostFake,
     api_surface: "storyos.host-fake",
     provider_model_id: "host-fake",
+    mapping_revision: crate::HOST_FAKE_MAPPING_REVISION,
+    requirement: CONTINUATION_REQUIREMENT,
     capability_profile: &HOST_FAKE_CAPABILITY_PROFILE,
 };
 
@@ -293,13 +346,24 @@ pub const AGENT_PLAN_PENDING_REGISTRATION: ModelRegistration = ModelRegistration
     adapter: ModelAdapter::VolcengineAgentPlanResponses,
     api_surface: "volcengine.agent-plan.responses./api/plan/v3",
     provider_model_id: "doubao-seed-2.1-pro",
+    mapping_revision: AGENT_PLAN_MAPPING_REVISION,
+    requirement: CREATE_REQUIREMENT,
     capability_profile: &AGENT_PLAN_PENDING_CAPABILITY_PROFILE,
 };
 
-/// The current Agent Plan Registration, with the qualified profile.
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// The Agent Plan Registration with the qualified Create profile and no continuation.
+pub const AGENT_PLAN_CREATE_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa03",
-    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    capability_profile: &AGENT_PLAN_CREATE_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_PENDING_REGISTRATION
+};
+
+/// The current Agent Plan Registration: the continuation mapping, with its pending profile.
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa04",
+    mapping_revision: AGENT_PLAN_CONTINUATION_MAPPING_REVISION,
+    requirement: CONTINUATION_REQUIREMENT,
+    capability_profile: &AGENT_PLAN_CONTINUATION_PENDING_CAPABILITY_PROFILE,
     ..AGENT_PLAN_PENDING_REGISTRATION
 };
 
@@ -308,6 +372,7 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
     [
         &HOST_FAKE_REGISTRATION,
         &AGENT_PLAN_PENDING_REGISTRATION,
+        &AGENT_PLAN_CREATE_REGISTRATION,
         &AGENT_PLAN_REGISTRATION,
     ]
     .into_iter()
