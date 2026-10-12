@@ -634,6 +634,7 @@ fn get_fixture() -> Value {
         "evidence": [],
         "items": [],
         "usage": { "kind": "unknown" },
+        "cache": { "kind": "not_recorded" },
         "redaction_profile": "storyos.author.v1"
     })
 }
