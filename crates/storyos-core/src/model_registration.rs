@@ -36,6 +36,11 @@ pub const AGENT_PLAN_CONTINUATION_MAPPING_REVISION: &str =
 pub const AGENT_PLAN_STREAMING_MAPPING_REVISION: &str =
     "storyos.volcengine-agent-plan.responses.create.v3";
 
+/// The streaming mapping that also sends a Host-managed compaction summary request, and then the
+/// decision request with the summary and a new transport.
+pub const AGENT_PLAN_COMPACTION_MAPPING_REVISION: &str =
+    "storyos.volcengine-agent-plan.responses.create.v4";
+
 /// One host-owned global Model Registration revision. It holds no Project data, endpoint
 /// account, Credential Reference, grant, or compatibility admission.
 #[derive(Debug, Eq, PartialEq)]
@@ -61,6 +66,11 @@ impl ModelRegistration {
     /// Whether the mapping can send the prior response reference of the Conversation.
     pub fn continues(&self) -> bool {
         self.requirement.contains(&ModelCapability::Continuation)
+    }
+
+    /// Whether the mapping can replace the prior response with a Host-managed summary.
+    pub fn compacts(&self) -> bool {
+        self.requirement.contains(&ModelCapability::HostCompaction)
     }
 }
 
@@ -154,6 +164,16 @@ pub const STREAMING_REQUIREMENT: &[ModelCapability] = &[
     ModelCapability::NativeText,
     ModelCapability::Continuation,
     ModelCapability::Streaming,
+];
+
+/// The capabilities that a streamed request with a prior response reference, a Host-managed
+/// summary request, and the later request with that summary need together.
+pub const COMPACTION_REQUIREMENT: &[ModelCapability] = &[
+    ModelCapability::Transport,
+    ModelCapability::NativeText,
+    ModelCapability::Continuation,
+    ModelCapability::Streaming,
+    ModelCapability::HostCompaction,
 ];
 
 impl ModelCapabilityProfile {
@@ -416,16 +436,85 @@ const AGENT_PLAN_STREAMING_QUALIFICATION: CapabilityEvidence = CapabilityEvidenc
 
 /// The profile after the streaming qualification. Transport, native text, continuation,
 /// streaming, and their combination are qualified. Each other entry keeps its earlier evidence.
+pub const AGENT_PLAN_STREAMING_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v6",
+        entries: CapabilityEntries {
+            streaming: AGENT_PLAN_STREAMING_QUALIFICATION,
+            ..AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE.entries
+        },
+        combinations: &[
+            CapabilityCombination {
+                members: STREAMING_REQUIREMENT,
+                evidence: AGENT_PLAN_STREAMING_QUALIFICATION,
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::Continuation,
+                    ModelCapability::ExplicitCache,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::ExplicitCache,
+                    ModelCapability::StructuredText,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+        ],
+    };
+
+/// The compaction profile before its runtime qualification. The streaming combination keeps its
+/// qualification, and the combination with Host-managed compaction is pending.
+pub const AGENT_PLAN_COMPACTION_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v7",
+        entries: AGENT_PLAN_STREAMING_CAPABILITY_PROFILE.entries,
+        combinations: &[
+            CapabilityCombination {
+                members: STREAMING_REQUIREMENT,
+                evidence: AGENT_PLAN_STREAMING_QUALIFICATION,
+            },
+            CapabilityCombination {
+                members: COMPACTION_REQUIREMENT,
+                evidence: CapabilityEvidence::Unknown,
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::Continuation,
+                    ModelCapability::ExplicitCache,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::ExplicitCache,
+                    ModelCapability::StructuredText,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+        ],
+    };
+
+const AGENT_PLAN_COMPACTION_QUALIFICATION: CapabilityEvidence = CapabilityEvidence::Qualified {
+    evidence: "Authorized compaction qualification on 2026-10-12, three admitted live requests: \
+               docs/research/agent-plan-compaction-qualification-2026-10-12.md",
+};
+
+/// The profile after the compaction qualification. Host-managed compaction and its combination
+/// with transport, native text, continuation, and streaming are qualified. Each other entry
+/// keeps its earlier evidence.
 pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
-    revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v6",
+    revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v8",
     entries: CapabilityEntries {
-        streaming: AGENT_PLAN_STREAMING_QUALIFICATION,
-        ..AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE.entries
+        host_compaction: AGENT_PLAN_COMPACTION_QUALIFICATION,
+        ..AGENT_PLAN_STREAMING_CAPABILITY_PROFILE.entries
     },
     combinations: &[
         CapabilityCombination {
-            members: STREAMING_REQUIREMENT,
-            evidence: AGENT_PLAN_STREAMING_QUALIFICATION,
+            members: COMPACTION_REQUIREMENT,
+            evidence: AGENT_PLAN_COMPACTION_QUALIFICATION,
         },
         CapabilityCombination {
             members: &[
@@ -450,7 +539,7 @@ pub const HOST_FAKE_REGISTRATION: ModelRegistration = ModelRegistration {
     api_surface: "storyos.host-fake",
     provider_model_id: "host-fake",
     mapping_revision: crate::HOST_FAKE_MAPPING_REVISION,
-    requirement: CONTINUATION_REQUIREMENT,
+    requirement: COMPACTION_REQUIREMENT,
     capability_profile: &HOST_FAKE_CAPABILITY_PROFILE,
 };
 
@@ -500,11 +589,28 @@ pub const AGENT_PLAN_STREAMING_PENDING_REGISTRATION: ModelRegistration = ModelRe
     ..AGENT_PLAN_PENDING_REGISTRATION
 };
 
-/// The current Agent Plan Registration: the streaming mapping, with the qualified profile.
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// The Agent Plan Registration with the streaming mapping and the qualified profile.
+pub const AGENT_PLAN_STREAMING_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa07",
-    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    capability_profile: &AGENT_PLAN_STREAMING_CAPABILITY_PROFILE,
     ..AGENT_PLAN_STREAMING_PENDING_REGISTRATION
+};
+
+/// The compaction mapping with its pending profile. An AgentRun that pinned it refuses with
+/// Registration drift.
+pub const AGENT_PLAN_COMPACTION_PENDING_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa08",
+    mapping_revision: AGENT_PLAN_COMPACTION_MAPPING_REVISION,
+    requirement: COMPACTION_REQUIREMENT,
+    capability_profile: &AGENT_PLAN_COMPACTION_PENDING_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_STREAMING_REGISTRATION
+};
+
+/// The current Agent Plan Registration: the compaction mapping, with the qualified profile.
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa09",
+    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_COMPACTION_PENDING_REGISTRATION
 };
 
 /// The known Registration of a stored revision. `None` is an unknown or damaged revision.
@@ -516,6 +622,8 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
         &AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION,
         &AGENT_PLAN_CONTINUATION_REGISTRATION,
         &AGENT_PLAN_STREAMING_PENDING_REGISTRATION,
+        &AGENT_PLAN_STREAMING_REGISTRATION,
+        &AGENT_PLAN_COMPACTION_PENDING_REGISTRATION,
         &AGENT_PLAN_REGISTRATION,
     ]
     .into_iter()

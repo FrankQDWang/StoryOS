@@ -4,7 +4,7 @@ use super::{
     CompactionInstallFacts, CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState,
     CompactionSource, CompactionStep, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
     StagedCompaction, SummaryObservation, active_context_input_digest, decide_compaction_install,
-    next_compaction_step, requests_active_compaction, stage_compaction,
+    later_request_record, next_compaction_step, requests_active_compaction, stage_compaction,
 };
 
 fn facts(
@@ -18,6 +18,7 @@ fn facts(
         exact_required_satisfied,
         staged_input_digest: staged_input_digest.to_owned(),
         current_input_digest: current_input_digest.to_owned(),
+        summary_within_item_limit: true,
     }
 }
 
@@ -36,7 +37,7 @@ fn input_digest_binds_the_exact_message_revision_and_body() {
 }
 
 #[test]
-fn install_refuses_a_restricted_changed_or_incomplete_exact_input() {
+fn install_refuses_a_restricted_changed_or_incomplete_exact_input_or_a_large_summary() {
     let staged = "sha256:staged";
     assert_eq!(
         decide_compaction_install(&facts(
@@ -70,35 +71,99 @@ fn install_refuses_a_restricted_changed_or_incomplete_exact_input() {
         )),
         Err(CompactionInstallRefusal::ChangedInput)
     );
+    assert_eq!(
+        decide_compaction_install(&CompactionInstallFacts {
+            summary_within_item_limit: false,
+            ..facts(
+                /*source_restricted*/ false, /*exact_required_satisfied*/ true, staged,
+                staged,
+            )
+        }),
+        Err(CompactionInstallRefusal::SummaryOverItemLimit)
+    );
 }
 
 #[test]
-fn a_requested_compaction_requests_one_summary_then_installs_or_refuses_once() {
+fn a_requested_compaction_summarizes_the_prior_response_once_before_the_decision_request() {
     let requested = ACTIVE_COMPACTION_REQUEST_PREFIX;
     let states = [
         CompactionRecordState::Absent,
         CompactionRecordState::SummaryClaimed,
-        CompactionRecordState::SummaryRefused,
         CompactionRecordState::Staged,
+        CompactionRecordState::Accepted,
         CompactionRecordState::Installed,
         CompactionRecordState::Refused,
     ];
 
     assert_eq!(
         (
-            states.map(|state| next_compaction_step(requested, state)),
-            states.map(|state| next_compaction_step("Help with this passage.", state)),
+            states
+                .map(|state| next_compaction_step(requested, /*prior_response*/ true, state)),
+            next_compaction_step(
+                requested,
+                /*prior_response*/ false,
+                CompactionRecordState::Absent
+            ),
+            states.map(|state| {
+                next_compaction_step(
+                    "Help with this passage.",
+                    /*prior_response*/ true,
+                    state,
+                )
+            }),
         ),
         (
             [
                 CompactionStep::RequestSummary,
                 CompactionStep::ReobserveSummary,
-                CompactionStep::Complete,
                 CompactionStep::InstallOrRefuse,
-                CompactionStep::Complete,
-                CompactionStep::Complete,
+                CompactionStep::LaterRequest,
+                CompactionStep::LaterRequest,
+                CompactionStep::OrdinaryRequest,
             ],
-            [CompactionStep::Complete; 6],
+            CompactionStep::OrdinaryRequest,
+            [CompactionStep::OrdinaryRequest; 6],
+        )
+    );
+}
+
+#[test]
+fn the_later_request_selects_the_summary_first_as_a_derived_summary() {
+    let decision = crate::assemble_current_passage_context(&crate::CurrentPassageAssembly {
+        operation_requirement_id: "requirement-1".to_owned(),
+        input_snapshot_id: "snapshot-1".to_owned(),
+        run_id: "run-1".to_owned(),
+        owner_user_id: "owner-1".to_owned(),
+        project_id: "project-1".to_owned(),
+        author_message: "Help again.".to_owned(),
+        chapter_id: "chapter-1".to_owned(),
+        chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: None,
+        chapter_body: "Passage.".to_owned(),
+        instruction: crate::InstructionBindingInput::Absent,
+        destination_identity: "destination-1".to_owned(),
+    });
+    let later = later_request_record(&decision, "compaction-1", "The author keeps the rain.");
+    let first = &later.selected[0];
+
+    assert_eq!(
+        (
+            first.source_class,
+            first.source_version.as_str(),
+            first.projection_mode,
+            first.content.as_str(),
+            later.selected.len(),
+            later.considered[0].eligible,
+            later.sufficiency == decision.sufficiency,
+        ),
+        (
+            crate::ContextSourceClass::ConversationSummary,
+            "compaction-1",
+            crate::ProjectionMode::DerivedSummary,
+            "The author keeps the rain.",
+            decision.selected.len() + 1,
+            true,
+            true,
         )
     );
 }

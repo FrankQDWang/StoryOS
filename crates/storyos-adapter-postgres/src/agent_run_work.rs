@@ -9,6 +9,7 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
+use crate::agent_run_compaction::CompactionAdvance;
 use crate::agent_run_create_dispatch::PriorContext;
 
 use super::*;
@@ -128,6 +129,8 @@ pub(crate) struct RunPhaseRow {
     pub grant_scope: Option<String>,
     pub grant_identity: Option<String>,
     pub binding_identity: Option<String>,
+    /// Whether the active Context Assembly is the one of the later request of a compaction.
+    pub later_request: bool,
     /// The decoded decision Context Assembly, or `None` when it does not decode.
     pub disclosure_request: Option<storyos_core::CurrentPassageAssemblyRecord>,
 }
@@ -143,6 +146,7 @@ impl RunPhaseRow {
 }
 
 /// Locks the fenced AgentRun row with its active decision Context Assembly and Model Attempt.
+/// When a compaction committed the Context Assembly of the later request, that one is active.
 pub(crate) async fn load_run_phase(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -173,7 +177,8 @@ pub(crate) async fn load_run_phase(
                     run.owner_user_id::text AS owner_user_id, run.project_id::text AS project_id,
                     destination_grant.grant_id::text AS grant_id, destination_grant.grant_scope,
                     destination_grant.processing_destination_identity::text AS grant_identity,
-                    binding.processing_destination_identity::text AS binding_identity
+                    binding.processing_destination_identity::text AS binding_identity,
+                    assembly.manifest_role = 'later_request' AS later_request
                FROM storyos.agent_runs AS run
                LEFT JOIN storyos.project_external_use_binding_revisions AS binding
                  ON (binding.owner_user_id, binding.project_id,
@@ -184,10 +189,20 @@ pub(crate) async fn load_run_phase(
                      destination_grant.grant_id) =
                     (run.owner_user_id, run.project_id, run.grant_id)
                 AND destination_grant.grant_id = binding.grant_id
-               JOIN storyos.context_assembly_manifests AS assembly
-                 ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
-                    (run.owner_user_id, run.project_id, run.run_id)
-                AND assembly.manifest_role = 'decision' AND assembly.decision_position=run.active_decision_position
+               JOIN LATERAL (
+                 SELECT * FROM storyos.context_assembly_manifests AS active
+                  WHERE (active.owner_user_id, active.project_id, active.run_id) =
+                        (run.owner_user_id, run.project_id, run.run_id)
+                    AND active.manifest_role IN ('decision', 'later_request')
+                    AND active.decision_position = run.active_decision_position
+                    AND NOT (active.manifest_role = 'later_request' AND EXISTS (
+                      SELECT 1 FROM storyos.active_context_compactions AS refused
+                       WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
+                             (run.owner_user_id, run.project_id, run.run_id)
+                         AND refused.install_state = 'refused'))
+                  ORDER BY active.manifest_role = 'later_request' DESC
+                  LIMIT 1
+               ) AS assembly ON true
                LEFT JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
@@ -233,6 +248,7 @@ pub(crate) async fn load_run_phase(
         grant_scope: row.get("grant_scope"),
         grant_identity: row.get("grant_identity"),
         binding_identity: row.get("binding_identity"),
+        later_request: row.get("later_request"),
         disclosure_request: serde_json::from_str(&assembly_payload)
             .ok()
             .as_ref()
@@ -347,9 +363,32 @@ pub(crate) async fn settle_one_phase(
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let record: serde_json::Value = serde_json::from_str(&run.assembly_payload)
-        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let Some(attempt_id) = run.attempt_id.clone() else {
+        // Compaction occurs before the first decision request of the AgentRun, when the mapping
+        // of the pinned Registration compacts.
+        let compacted = if run.decision_position == "0"
+            && storyos_core::requests_active_compaction(&run.author_message)
+            && storyos_core::model_registration(&run.model_registration_revision)
+                .is_some_and(storyos_core::ModelRegistration::compacts)
+        {
+            match crate::agent_run_compaction::advance_active_compaction(client, claim, &run)
+                .await?
+            {
+                CompactionAdvance::Dispatch(request) => return Ok(WorkPhase::Dispatch(request)),
+                CompactionAdvance::Decide { later_request } => later_request,
+            }
+        } else {
+            false
+        };
+        // An install commits the Context Assembly of the later request, and a refusal after it
+        // leaves the decision Context Assembly. Read the active one again.
+        let run = if compacted != run.later_request {
+            load_run_phase(client, claim).await?
+        } else {
+            run
+        };
+        let record: serde_json::Value = serde_json::from_str(&run.assembly_payload)
+            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
         return Ok(
             match admit_create(client, claim, &run, assistance.as_ref()).await? {
                 CreateAdmission::Settled => WorkPhase::Done(CompleteAgentRun::Settled),
@@ -362,6 +401,7 @@ pub(crate) async fn settle_one_phase(
                             &record,
                             RequestAttempt::New,
                             match rebuild {
+                                _ if run.later_request => PriorContext::Summary,
                                 Some(_) => PriorContext::Rebuild,
                                 None => PriorContext::Continue,
                             },
@@ -372,6 +412,8 @@ pub(crate) async fn settle_one_phase(
             },
         );
     };
+    let record: serde_json::Value = serde_json::from_str(&run.assembly_payload)
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     let RunPhaseRow {
         author_message,
         chapter_id,
@@ -472,22 +514,15 @@ pub(crate) async fn settle_one_phase(
             )
             .await
             .map_err(complete_database_error)?;
-        return complete_or_compact(client, claim, &run).await;
+        return complete(client, claim).await;
     }
-    complete_or_compact(client, claim, &run).await
+    complete(client, claim).await
 }
 
-pub(crate) async fn complete_or_compact(
+pub(crate) async fn complete(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    run: &RunPhaseRow,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    if storyos_core::requests_active_compaction(&run.author_message)
-        && let crate::agent_run_compaction::CompactionAdvance::Dispatch(request) =
-            crate::agent_run_compaction::advance_active_compaction(client, claim, run).await?
-    {
-        return Ok(WorkPhase::Dispatch(request));
-    }
     update_run(
         client,
         claim,

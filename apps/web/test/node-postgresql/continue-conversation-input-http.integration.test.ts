@@ -153,11 +153,9 @@ test.each([FIRST, "Compact active context between calls."])("ordered guidance is
     assert.equal(queried.conversation_id, created.conversation_id);
     assert.deepEqual(queried.steering_inputs.map((item) => [item.input_position, item.author_message, item.model_attempt_id !== null]),
       corrections.map((text, index) => [String(index + 1), text, true]));
-    if (original.startsWith("Compact")) {
-      assert.equal(queried.active_compaction.kind, "present");
-      if (queried.active_compaction.kind !== "present") throw new Error("expected active compaction");
-      assert.equal(queried.active_compaction.prior_model_attempt_id, attempt(queried).model_attempt_id);
-    }
+    // Compaction occurs before the first decision request, and a new Conversation has no prior
+    // response to compact.
+    assert.equal(queried.active_compaction.kind, "absent");
     assert.equal(selected(queried, "author_instruction"), [original, ...corrections].join("\n"));
     assert.deepEqual(queried.evidence.find((item) => item.kind === "sent_content"), {
       kind: "sent_content", attempt_id: attempt(queried).model_attempt_id,

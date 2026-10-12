@@ -63,7 +63,11 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
-        let streams = route.mapping_revision == storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION;
+        // The compaction mapping streams and continues like the streaming mapping.
+        let compacts =
+            route.mapping_revision == storyos_core::AGENT_PLAN_COMPACTION_MAPPING_REVISION;
+        let streams = compacts
+            || route.mapping_revision == storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION;
         // Only a continuation mapping can send a prior response reference.
         if create.previous_response_reference.is_some()
             && !streams
@@ -75,11 +79,12 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             (CreatePurpose::Decision, _) => {
                 wire::create_body(create, &route.provider_model_id, bounds, streams)
             }
-            (CreatePurpose::CompactionSummary, Some(reference)) => {
+            (CreatePurpose::CompactionSummary, Some(reference)) if compacts => {
                 wire::summary_body(reference, &route.provider_model_id, bounds, streams)
             }
-            // A summary needs the continuation chain of the Conversation.
-            (CreatePurpose::CompactionSummary, None) => {
+            // A summary needs the compaction mapping and the continuation chain of the
+            // Conversation.
+            (CreatePurpose::CompactionSummary, _) => {
                 return Err(PreDispatchRefusal::UnsupportedRequest);
             }
         };

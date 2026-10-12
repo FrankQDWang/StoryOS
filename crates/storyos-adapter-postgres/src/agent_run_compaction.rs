@@ -9,10 +9,13 @@ use crate::agent_run_work::RunPhaseRow;
 use storyos_core::{CompactionRecordState, CompactionStep, next_compaction_step};
 
 pub(crate) enum CompactionAdvance {
+    /// Send the summary request.
     Dispatch(Box<DestinationRequest>),
-    ReadyToComplete,
+    /// Send the decision request. It is the later request when the summary installed.
+    Decide { later_request: bool },
 }
 
+/// Advances the active compaction of the claimed AgentRun before its first decision request.
 pub(crate) async fn advance_active_compaction(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -20,53 +23,70 @@ pub(crate) async fn advance_active_compaction(
 ) -> Result<CompactionAdvance, CompleteAgentRunError> {
     let staged = load_compaction_state(client, claim).await?;
     let summary = summary::load_summary_attempt(client, claim).await?;
-    let refused_before_claim = run
-        .attempt_payload
-        .as_deref()
-        .and_then(|payload| serde_json::from_str::<serde_json::Value>(payload).ok())
-        .is_some_and(|payload| payload.get("compaction_summary_refused").is_some());
     let record = match (
         staged.as_ref().map(|state| state.install_state.as_str()),
         &summary,
     ) {
+        (Some("staged"), _) if run.later_request => CompactionRecordState::Accepted,
         (Some("staged"), _) => CompactionRecordState::Staged,
         (Some("installed"), _) => CompactionRecordState::Installed,
         (Some("refused"), _) => CompactionRecordState::Refused,
         (Some(_), _) => return Err(unavailable("The compaction state is unknown")),
         (None, Some(_)) => CompactionRecordState::SummaryClaimed,
-        (None, None) if refused_before_claim => CompactionRecordState::SummaryRefused,
         (None, None) => CompactionRecordState::Absent,
     };
-    let author_message = run.author_message.as_str();
+    let chain = match record {
+        CompactionRecordState::Absent => summary::prior_chain(client, claim, run).await?,
+        _ => None,
+    };
+    let ordinary = Ok(CompactionAdvance::Decide {
+        later_request: false,
+    });
     match (
-        next_compaction_step(author_message, record),
+        next_compaction_step(&run.author_message, chain.is_some(), record),
         staged,
         summary,
+        chain,
     ) {
-        (CompactionStep::RequestSummary, _, _) => {
-            if !summary::admit_or_mark(client, claim, run).await? {
-                return Ok(CompactionAdvance::ReadyToComplete);
+        (CompactionStep::RequestSummary, _, _, Some(chain)) => {
+            // A refused summary request leaves the ordinary continuation for the decision request.
+            if !summary::admitted(client, claim, run).await? {
+                return ordinary;
             }
             summary::commit_assembly(client, claim, run).await?;
             Ok(CompactionAdvance::Dispatch(Box::new(
-                summary::summary_request(client, claim, run, RequestAttempt::New).await?,
+                summary::summary_request(client, claim, run, RequestAttempt::New, chain.reference)
+                    .await?,
             )))
         }
-        (CompactionStep::ReobserveSummary, _, Some(summary)) => {
+        (CompactionStep::ReobserveSummary, _, Some(summary), _) => {
             let attempt = RequestAttempt::Claimed(DispatchClaim {
                 model_attempt_id: summary.model_attempt_id,
             });
             Ok(CompactionAdvance::Dispatch(Box::new(
-                summary::summary_request(client, claim, run, attempt).await?,
+                summary::summary_request(client, claim, run, attempt, summary.prior_reference)
+                    .await?,
             )))
         }
-        (CompactionStep::InstallOrRefuse, Some(staged), _) => {
-            write::install_or_refuse(client, claim, author_message, &staged).await?;
-            Ok(CompactionAdvance::ReadyToComplete)
+        (CompactionStep::InstallOrRefuse, Some(staged), _, _) => Ok(CompactionAdvance::Decide {
+            later_request: write::install_or_refuse(client, claim, run, &staged).await?,
+        }),
+        // The source can become restricted after the install check. Check it again before the
+        // later request goes out.
+        (CompactionStep::LaterRequest, Some(staged), _, _)
+            if record == CompactionRecordState::Accepted =>
+        {
+            Ok(CompactionAdvance::Decide {
+                later_request: write::source_still_eligible(client, claim, &staged).await?,
+            })
         }
-        (CompactionStep::ReobserveSummary, _, None)
-        | (CompactionStep::InstallOrRefuse, None, _)
-        | (CompactionStep::Complete, _, _) => Ok(CompactionAdvance::ReadyToComplete),
+        (CompactionStep::LaterRequest, _, _, _) => Ok(CompactionAdvance::Decide {
+            later_request: true,
+        }),
+        (CompactionStep::RequestSummary, _, _, None)
+        | (CompactionStep::ReobserveSummary, _, None, _)
+        | (CompactionStep::InstallOrRefuse, None, _, _)
+        | (CompactionStep::OrdinaryRequest, _, _, _) => ordinary,
     }
 }
 
@@ -104,6 +124,8 @@ struct CompactionState {
     compaction_id: String,
     install_state: String,
     input_digest: String,
+    prior_model_attempt_id: String,
+    output_text: String,
 }
 
 async fn load_compaction_state(
@@ -112,7 +134,8 @@ async fn load_compaction_state(
 ) -> Result<Option<CompactionState>, CompleteAgentRunError> {
     let row = client
         .query_opt(
-            "SELECT compaction_id::text, install_state, input_digest
+            "SELECT compaction_id::text, install_state, input_digest,
+                    prior_model_attempt_id::text, output_text
                FROM storyos.active_context_compactions
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -126,69 +149,61 @@ async fn load_compaction_state(
         .await
         .map_err(work_error)?;
     Ok(row.map(|row| CompactionState {
-        compaction_id: row.get(0),
-        install_state: row.get(1),
-        input_digest: row.get(2),
+        compaction_id: row.get(/*idx*/ 0),
+        install_state: row.get(/*idx*/ 1),
+        input_digest: row.get(/*idx*/ 2),
+        prior_model_attempt_id: row.get(/*idx*/ 3),
+        output_text: row.get(/*idx*/ 4),
     }))
 }
 
-struct DecisionSource {
-    receipt_id: String,
-    conversation_id: String,
-    chapter_id: String,
+/// The prior decision Attempt of the Conversation that a compaction summarizes, with the Context
+/// Assembly Manifest that its request disclosed.
+struct ChainSource {
     model_attempt_id: String,
     manifest_id: String,
     payload: serde_json::Value,
     manifest_payload: serde_json::Value,
 }
 
-async fn load_decision_source(
+async fn load_chain_source(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-) -> Result<DecisionSource, CompleteAgentRunError> {
+    model_attempt_id: &str,
+) -> Result<ChainSource, CompleteAgentRunError> {
     let row = client
         .query_opt(
-            "SELECT run.receipt_id::text, run.conversation_id::text, run.chapter_id::text,
-                    attempt.model_attempt_id::text, attempt.payload::text,
-                    assembly.context_assembly_manifest_id::text, assembly.payload::text
-               FROM storyos.agent_runs AS run
-               JOIN storyos.model_attempts AS attempt
-                 ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
-                    (run.owner_user_id, run.project_id, run.run_id)
-                AND attempt.attempt_role = 'decision' AND attempt.decision_position = run.active_decision_position
+            "SELECT attempt.payload::text, assembly.context_assembly_manifest_id::text,
+                    assembly.payload::text
+               FROM storyos.model_attempts AS attempt
                JOIN storyos.context_assembly_manifests AS assembly
-                 ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
-                    (run.owner_user_id, run.project_id, run.run_id)
-                AND assembly.manifest_role = 'decision' AND assembly.decision_position = run.active_decision_position
-              WHERE run.owner_user_id = $1::text::uuid
-                AND run.project_id = $2::text::uuid
-                AND run.run_id = $3::text::uuid
-                AND run.fence_token = $4",
+                 ON (assembly.owner_user_id, assembly.project_id,
+                     assembly.destination_context_manifest_id) =
+                    (attempt.owner_user_id, attempt.project_id,
+                     attempt.destination_context_manifest_id)
+              WHERE attempt.owner_user_id = $1::text::uuid
+                AND attempt.project_id = $2::text::uuid
+                AND attempt.model_attempt_id = $3::text::uuid",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &claim.fence_token,
+                &model_attempt_id,
             ],
         )
         .await
         .map_err(work_error)?
-        .ok_or_else(|| unavailable("The submitted Attempt is missing"))?;
-    let payload = parse_json(&row.get::<_, String>(4))?;
-    let manifest_payload = parse_json(&row.get::<_, String>(6))?;
-    Ok(DecisionSource {
-        receipt_id: row.get(0),
-        conversation_id: row.get(1),
-        chapter_id: row.get(2),
-        model_attempt_id: row.get(3),
-        manifest_id: row.get(5),
-        payload,
-        manifest_payload,
+        .ok_or_else(|| unavailable("The prior decision Attempt is missing"))?;
+    Ok(ChainSource {
+        model_attempt_id: model_attempt_id.to_owned(),
+        manifest_id: row.get(/*idx*/ 1),
+        payload: parse_json(&row.get::<_, String>(/*idx*/ 0))?,
+        manifest_payload: parse_json(&row.get::<_, String>(/*idx*/ 2))?,
     })
 }
 
 #[path = "agent_run_compaction_write.rs"]
 mod write;
+pub(crate) use write::{mark_installed, source_restricted_now};
 
 #[path = "agent_run_compaction_summary.rs"]
 pub(crate) mod summary;

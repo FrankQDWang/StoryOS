@@ -1699,7 +1699,8 @@
     },
     "ProjectionMode": {
       "enum": [
-        "exact_required"
+        "exact_required",
+        "derived_summary"
       ],
       "type": "string"
     },

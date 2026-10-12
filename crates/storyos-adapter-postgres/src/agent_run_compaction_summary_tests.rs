@@ -1,15 +1,56 @@
-use storyos_application::{NoContractFaults, complete_agent_run};
+use storyos_application::{
+    ConversationSelection, ModelProviderAdapter, NoContractFaults, ProjectScope, complete_agent_run,
+};
 use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination};
 use tokio_postgres::Client;
 
-use crate::agent_run_dispatch::tests::{admit_run, claim_run, queued_run, stores};
+use crate::PostgresProjectReader;
+use crate::agent_run_dispatch::tests::{admit_run_in, claim_run, queued_run, stores};
 
-/// The run status, the refusal mark of the decision Attempt, the compaction Attempt count, and
+/// Settles the first AgentRun of a new Conversation, then settles one compaction request in the
+/// same Conversation, and returns the identity of the second AgentRun.
+async fn compact_after_first_run(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    prefixes: [&str; 2],
+    destination: DeploymentDestination,
+    adapter: &impl ModelProviderAdapter,
+    before_compaction: &str,
+) -> (ProjectScope, String) {
+    let (scope, chapter_id, first) = queued_run(store, prefixes[0], destination.clone()).await;
+    let claim = claim_run(admin, scope.clone(), first).await;
+    complete_agent_run(store, adapter, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+    let run_id = admit_run_in(
+        store,
+        &scope,
+        &chapter_id,
+        prefixes[1],
+        destination,
+        ACTIVE_COMPACTION_REQUEST_PREFIX,
+        ConversationSelection::Existing {
+            conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
+        },
+    )
+    .await;
+    admin
+        .batch_execute(&before_compaction.replace("{project}", scope.project_id.as_ref()))
+        .await
+        .unwrap();
+    let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
+    complete_agent_run(store, adapter, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+    (scope, run_id)
+}
+
+/// The run status, the input mapping of the decision Attempt, the compaction Attempt count, and
 /// the compaction record of one AgentRun.
 async fn compaction_facts(admin: &Client, run_id: &str) -> [Option<String>; 6] {
     let row = admin
         .query_one(
-            "SELECT run.status, decision.payload->>'compaction_summary_refused',
+            "SELECT run.status, decision.payload->'continuation'->>'input_mapping',
                     (SELECT count(*)::text FROM storyos.model_attempts AS summary
                       WHERE summary.run_id = run.run_id AND summary.attempt_role = 'compaction'),
                     record.install_state, record.producer, record.output_text
@@ -28,48 +69,31 @@ async fn compaction_facts(admin: &Client, run_id: &str) -> [Option<String>; 6] {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_summary_outside_the_pinned_grant_scope_refuses_once_and_the_run_completes() {
+async fn a_summary_outside_the_pinned_grant_scope_leaves_the_ordinary_continuation() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let (scope, chapter_id, _) = queued_run(&store, "ec1", DeploymentDestination::HostFake).await;
-    let run_id = admit_run(
+    // The pinned grant has the first scope, which does not name the compaction Purpose.
+    let (_, run_id) = compact_after_first_run(
         &store,
-        &scope,
-        &chapter_id,
-        "ec2",
+        &admin,
+        ["ec1", "ec2"],
         DeploymentDestination::HostFake,
-        ACTIVE_COMPACTION_REQUEST_PREFIX,
+        &storyos_adapter_fake_destination::FakeDestination,
+        "SET session_replication_role = replica;
+         UPDATE storyos.project_destination_grants
+            SET grant_scope = 'project_writing_assistance_v1'
+          WHERE project_id = '{project}';
+         SET session_replication_role = DEFAULT;",
     )
     .await;
-    // The pinned grant has the first scope, which does not name the compaction Purpose.
-    admin
-        .batch_execute(&format!(
-            "SET session_replication_role = replica;
-             UPDATE storyos.project_destination_grants
-                SET grant_scope = 'project_writing_assistance_v1'
-              WHERE project_id = '{project}';
-             SET session_replication_role = DEFAULT;",
-            project = scope.project_id.as_ref(),
-        ))
-        .await
-        .unwrap();
-    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(
-        &store,
-        &storyos_adapter_fake_destination::FakeDestination,
-        &NoContractFaults,
-        &claim,
-    )
-    .await
-    .unwrap();
 
     assert_eq!(
         compaction_facts(&admin, &run_id).await,
         [
             Some("completed".to_owned()),
-            Some("disclosure_outside_grant".to_owned()),
+            Some("incremental".to_owned()),
             Some("0".to_owned()),
             None,
             None,
@@ -142,32 +166,22 @@ fn streamed(reference: &str, text: &str) -> Vec<serde_json::Value> {
     ]
 }
 
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_streamed_agent_plan_summary_commits_its_events_and_stages_its_text() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
+const ADVICE: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
+
+/// Settles the first AgentRun of a new Conversation on a local scripted Agent Plan destination
+/// that answers with `replies` in order. Then settles one compaction request in the same
+/// Conversation, and returns the identity of the second AgentRun.
+async fn compact_on_agent_plan(
+    store: &PostgresProjectReader,
+    admin: &Client,
+    prefixes: [&str; 2],
+    replies: Vec<Vec<serde_json::Value>>,
+) -> String {
+    let endpoint = scripted_stream_endpoint(replies).await;
     let destination = DeploymentDestination::VolcengineAgentPlan {
         qualification_authorization: None,
     };
-    let (scope, chapter_id, _) = queued_run(&store, "ec3", destination.clone()).await;
-    let run_id = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "ec4",
-        destination,
-        ACTIVE_COMPACTION_REQUEST_PREFIX,
-    )
-    .await;
-    let summary = "The author keeps the rain scene and the open letter.";
-    let endpoint = scripted_stream_endpoint(vec![
-        streamed("resp_decision", r#"{"kind":"advisory","text":"Keep it."}"#),
-        streamed("resp_summary", summary),
-    ])
-    .await;
+    let (scope, chapter_id, first) = queued_run(store, prefixes[0], destination.clone()).await;
     admin
         .execute(
             "UPDATE storyos.processing_destination_identity_evidence_revisions
@@ -176,23 +190,74 @@ async fn a_streamed_agent_plan_summary_commits_its_events_and_stages_its_text() 
         )
         .await
         .unwrap();
-    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(
-        &store,
-        &storyos_adapter_volcengine_responses::AgentPlanResponses {
-            resolver: TestCredential,
+    let adapter = storyos_adapter_volcengine_responses::AgentPlanResponses {
+        resolver: TestCredential,
+    };
+    let claim = claim_run(admin, scope.clone(), first).await;
+    complete_agent_run(store, &adapter, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+    let run_id = admit_run_in(
+        store,
+        &scope,
+        &chapter_id,
+        prefixes[1],
+        destination,
+        ACTIVE_COMPACTION_REQUEST_PREFIX,
+        ConversationSelection::Existing {
+            conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
         },
-        &NoContractFaults,
-        &claim,
     )
-    .await
-    .unwrap();
-    let summary_attempt = admin
+    .await;
+    let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
+    complete_agent_run(store, &adapter, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+    run_id
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_streamed_agent_plan_summary_installs_for_the_later_decision_request() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let summary = "The author keeps the rain scene and the open letter.";
+    let run_id = compact_on_agent_plan(
+        &store,
+        &admin,
+        ["ec3", "ec4"],
+        vec![
+            streamed("resp_decision", ADVICE),
+            streamed("resp_summary", summary),
+            streamed("resp_later", ADVICE),
+        ],
+    )
+    .await;
+    let later = admin
         .query_one(
-            "SELECT payload->>'response_reference', jsonb_array_length(payload->'items'),
-                    (payload->'wire'->>'serialized_payload')::jsonb->>'previous_response_id'
-               FROM storyos.model_attempts
-              WHERE run_id = $1::text::uuid AND attempt_role = 'compaction'",
+            "SELECT summary.payload->>'response_reference',
+                    (summary.payload->'wire'->>'serialized_payload')::jsonb
+                      ->>'previous_response_id',
+                    (decision.payload->'wire'->>'serialized_payload')::jsonb
+                      ? 'previous_response_id',
+                    strpos((decision.payload->'wire'->>'serialized_payload')::jsonb
+                             #>> '{input,0,content,0,text}',
+                           'Summary of the earlier conversation:') = 1,
+                    record.installed_model_attempt_id = decision.model_attempt_id
+                      AND record.installed_model_invocation_id = decision.model_invocation_id
+                      AND record.installed_run_step_id IS NOT NULL,
+                    assembly.manifest_role, assembly.payload->'selected'->0->>'projection_mode'
+               FROM storyos.model_attempts AS summary
+               JOIN storyos.model_attempts AS decision
+                 ON decision.run_id = summary.run_id AND decision.attempt_role = 'decision'
+               JOIN storyos.active_context_compactions AS record
+                 ON record.run_id = summary.run_id
+               JOIN storyos.context_assembly_manifests AS assembly
+                 ON assembly.destination_context_manifest_id =
+                    decision.destination_context_manifest_id
+              WHERE summary.run_id = $1::text::uuid AND summary.attempt_role = 'compaction'",
             &[&run_id],
         )
         .await
@@ -201,79 +266,61 @@ async fn a_streamed_agent_plan_summary_commits_its_events_and_stages_its_text() 
     assert_eq!(
         (
             compaction_facts(&admin, &run_id).await,
-            summary_attempt.get::<_, Option<String>>(/*idx*/ 0),
-            summary_attempt.get::<_, Option<i32>>(/*idx*/ 1),
-            summary_attempt.get::<_, Option<String>>(/*idx*/ 2),
+            later.get::<_, Option<String>>(/*idx*/ 0),
+            later.get::<_, Option<String>>(/*idx*/ 1),
+            [2, 3, 4].map(|index| later.get::<_, bool>(index)),
+            later.get::<_, String>(/*idx*/ 5),
+            later.get::<_, Option<String>>(/*idx*/ 6),
         ),
         (
             [
                 Some("completed".to_owned()),
-                None,
+                Some("new_transport".to_owned()),
                 Some("1".to_owned()),
                 Some("installed".to_owned()),
                 Some("agent_plan_summary".to_owned()),
                 Some(summary.to_owned()),
             ],
             Some("resp_summary".to_owned()),
-            Some(1),
             Some("resp_decision".to_owned()),
+            [false, true, true],
+            "later_request".to_owned(),
+            Some("derived_summary".to_owned()),
         )
     );
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_dropped_summary_stream_keeps_its_committed_items_and_reference() {
+async fn a_dropped_summary_stream_keeps_its_items_and_the_decision_continues_the_prior_response() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
     let (store, admin) = stores().await;
-    let destination = DeploymentDestination::VolcengineAgentPlan {
-        qualification_authorization: None,
-    };
-    let (scope, chapter_id, _) = queued_run(&store, "ec5", destination.clone()).await;
-    let run_id = admit_run(
-        &store,
-        &scope,
-        &chapter_id,
-        "ec6",
-        destination,
-        ACTIVE_COMPACTION_REQUEST_PREFIX,
-    )
-    .await;
     // The summary stream ends after its first delta, with no terminal event.
     let mut dropped = streamed("resp_dropped", "The author keeps the rain.");
     dropped.truncate(/*len*/ 3);
-    let endpoint = scripted_stream_endpoint(vec![
-        streamed("resp_decision", r#"{"kind":"advisory","text":"Keep it."}"#),
-        dropped,
-    ])
-    .await;
-    admin
-        .execute(
-            "UPDATE storyos.processing_destination_identity_evidence_revisions
-                SET endpoint = $2 WHERE project_id = $1::text::uuid AND endpoint IS NOT NULL",
-            &[&scope.project_id.as_ref(), &endpoint],
-        )
-        .await
-        .unwrap();
-    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(
+    let run_id = compact_on_agent_plan(
         &store,
-        &storyos_adapter_volcengine_responses::AgentPlanResponses {
-            resolver: TestCredential,
-        },
-        &NoContractFaults,
-        &claim,
+        &admin,
+        ["ec5", "ec6"],
+        vec![
+            streamed("resp_decision", ADVICE),
+            dropped,
+            streamed("resp_next", ADVICE),
+        ],
     )
-    .await
-    .unwrap();
+    .await;
     let summary_attempt = admin
         .query_one(
-            "SELECT payload->>'response_reference', payload->'items'->0->>'text',
-                    payload->>'observation', record.refusal_reason
+            "SELECT attempt.payload->>'response_reference', attempt.payload->'items'->0->>'text',
+                    attempt.payload->>'observation', record.refusal_reason,
+                    (decision.payload->'wire'->>'serialized_payload')::jsonb
+                      ->>'previous_response_id'
                FROM storyos.model_attempts AS attempt
                JOIN storyos.active_context_compactions AS record ON record.run_id = attempt.run_id
+               JOIN storyos.model_attempts AS decision
+                 ON decision.run_id = attempt.run_id AND decision.attempt_role = 'decision'
               WHERE attempt.run_id = $1::text::uuid AND attempt.attempt_role = 'compaction'",
             &[&run_id],
         )
@@ -281,12 +328,188 @@ async fn a_dropped_summary_stream_keeps_its_committed_items_and_reference() {
         .unwrap();
 
     assert_eq!(
-        [0, 1, 2, 3].map(|index| summary_attempt.get::<_, Option<String>>(index)),
+        [0, 1, 2, 3, 4].map(|index| summary_attempt.get::<_, Option<String>>(index)),
         [
             Some("resp_dropped".to_owned()),
             Some("The author keeps the rain.".to_owned()),
             Some("outcome_unknown".to_owned()),
             Some("summary_unavailable".to_owned()),
+            Some("resp_decision".to_owned()),
+        ]
+    );
+}
+
+/// The Host fake, with one SQL statement that the admin connection runs at the first
+/// preparation of the request that `at` selects. This is a concurrent change at that moment.
+struct ChangingFake<'a> {
+    admin: &'a Client,
+    at: fn(&storyos_application::CreateRequest) -> bool,
+    statement: String,
+    done: std::sync::Mutex<bool>,
+}
+
+impl storyos_application::ModelProviderAdapter for ChangingFake<'_> {
+    const ADAPTERS: &'static [storyos_core::ModelAdapter] = &[storyos_core::ModelAdapter::HostFake];
+    type Prepared =
+        <storyos_adapter_fake_destination::FakeDestination as ModelProviderAdapter>::Prepared;
+
+    async fn prepare(
+        &self,
+        request: &storyos_application::DestinationRequest,
+    ) -> Result<
+        storyos_application::PreparedRequest<Self::Prepared>,
+        storyos_application::PreDispatchRefusal,
+    > {
+        if let storyos_application::DestinationRequest::Create(create) = request
+            && (self.at)(create)
+            && !std::mem::replace(&mut *self.done.lock().unwrap(), /*src*/ true)
+        {
+            self.admin.batch_execute(&self.statement).await.unwrap();
+        }
+        storyos_adapter_fake_destination::FakeDestination
+            .prepare(request)
+            .await
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+        sink: &mut impl storyos_application::ModelStreamSink,
+    ) -> storyos_application::Observation {
+        storyos_adapter_fake_destination::FakeDestination
+            .exchange(prepared, sink)
+            .await
+    }
+}
+
+/// Settles a first AgentRun and then a compaction request in the same Conversation, with the
+/// concurrent change of `adapter`. Returns the compaction refusal, the input mapping of the
+/// decision Attempt, and the role of the Context Assembly Manifest that its request disclosed.
+async fn compact_with_change(
+    prefixes: [&str; 2],
+    at: fn(&storyos_application::CreateRequest) -> bool,
+    statement: &str,
+) -> [Option<String>; 4] {
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, first) =
+        queued_run(&store, prefixes[0], DeploymentDestination::HostFake).await;
+    let claim = claim_run(&admin, scope.clone(), first.clone()).await;
+    complete_agent_run(
+        &store,
+        &storyos_adapter_fake_destination::FakeDestination,
+        &NoContractFaults,
+        &claim,
+    )
+    .await
+    .unwrap();
+    let run_id = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        prefixes[1],
+        DeploymentDestination::HostFake,
+        ACTIVE_COMPACTION_REQUEST_PREFIX,
+        ConversationSelection::Existing {
+            conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
+        },
+    )
+    .await;
+    let adapter = ChangingFake {
+        admin: &admin,
+        at,
+        statement: statement
+            .replace("{project}", scope.project_id.as_ref())
+            .replace("{chapter}", &chapter_id)
+            .replace("{first}", &first),
+        done: std::sync::Mutex::default(),
+    };
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    complete_agent_run(&store, &adapter, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+    let row = admin
+        .query_one(
+            "SELECT record.install_state, record.refusal_reason,
+                    decision.payload->'continuation'->>'input_mapping', assembly.manifest_role
+               FROM storyos.active_context_compactions AS record
+               JOIN storyos.model_attempts AS decision
+                 ON decision.run_id = record.run_id AND decision.attempt_role = 'decision'
+               JOIN storyos.context_assembly_manifests AS assembly
+                 ON assembly.destination_context_manifest_id =
+                    decision.destination_context_manifest_id
+              WHERE record.run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+    [0, 1, 2, 3].map(|index| row.get(index))
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_edit_during_the_summary_request_refuses_the_install() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    // The Working Target changes after the decision Context Assembly and before the summary
+    // returns. The later request copies that assembly, so the install must refuse.
+    let facts = compact_with_change(
+        ["ec7", "ec8"],
+        |create| create.purpose == storyos_application::CreatePurpose::CompactionSummary,
+        "UPDATE storyos.authoritative_payloads AS payload
+            SET canonical_bytes = convert_to('An edit during the summary.', 'UTF8')
+           FROM storyos.authoritative_heads AS head
+           JOIN storyos.authoritative_revisions AS revision
+             ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+                 revision.revision_id) =
+                (head.owner_user_id, head.project_id, head.manuscript_object_id,
+                 head.current_revision_id)
+          WHERE (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                (revision.owner_user_id, revision.project_id, revision.payload_id)
+            AND head.project_id = '{project}'::uuid
+            AND head.manuscript_object_id = '{chapter}'::uuid",
+    )
+    .await;
+
+    assert_eq!(
+        facts,
+        [
+            Some("refused".to_owned()),
+            Some("changed_input".to_owned()),
+            Some("incremental".to_owned()),
+            Some("decision".to_owned()),
+        ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_source_restricted_after_the_install_check_keeps_the_summary_unsent() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    // The prior Attempt becomes restricted while the later request is prepared, before its
+    // dispatch claim.
+    let facts = compact_with_change(
+        ["ec9", "eca"],
+        |create| {
+            create.purpose == storyos_application::CreatePurpose::Decision
+                && create.context.first().map(|item| item.source_class)
+                    == Some(storyos_core::ContextSourceClass::ConversationSummary)
+        },
+        "UPDATE storyos.model_attempts
+            SET payload = jsonb_set(payload, '{produced_binding,covered_copy_restricted}', 'true')
+          WHERE run_id = '{first}'::uuid AND attempt_role = 'decision'",
+    )
+    .await;
+
+    assert_eq!(
+        facts,
+        [
+            Some("refused".to_owned()),
+            Some("restricted_source".to_owned()),
+            Some("new_transport".to_owned()),
+            Some("decision".to_owned()),
         ]
     );
 }

@@ -476,7 +476,7 @@ export type ContextPurpose = "current_passage_assistance";
 
 export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding" | "conversation_summary";
 
-export type ProjectionMode = "exact_required";
+export type ProjectionMode = "exact_required" | "derived_summary";
 
 export type ContextSufficiency = { "kind": "complete" } | { "kind": "blocked", reasons: Array<ContextBlockReason>, };
 
