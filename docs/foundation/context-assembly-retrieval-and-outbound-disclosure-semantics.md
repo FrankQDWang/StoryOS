@@ -839,6 +839,12 @@ settings. It enables one exact Processing Destination Identity for named
 ordinary Purposes, outbound data categories, and hard bounds under one Project
 Scope.
 
+[ADR 0051](../adr/0051-record-the-standing-grant-scope-and-refuse-a-disclosure-outside-it.md)
+records the current standing scope `project_writing_assistance_v1`: all
+current content of the Project for writing assistance on the grant
+destination, with no length bound. Each grant records its scope, and a
+request outside it refuses before the dispatch claim.
+
 Destination Attempts for ordinary model and embedding operations inside the
 effective Grant proceed without individual confirmation. They still require
 all seven gates, current

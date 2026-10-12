@@ -248,6 +248,9 @@ test.each(["", "chinese", " SCRIPT:reverse_locations"])("one collection request 
     const retained = JSON.parse(await queryPostgres(`SELECT payload->'wire' FROM storyos.model_attempts WHERE run_id='${run.run_id}'::uuid;`));
     assert.equal(retained.serialized_payload, sent.content);
     assert.equal(retained.digest, `sha256:${createHash("sha256").update(sent.content).digest("hex")}`);
+    // ADR 0051: the standing grant covers a cross-Chapter collection with no prompt.
+    assert.deepEqual(JSON.parse(await queryPostgres(`SELECT attempt.payload->'disclosure_grant'->'grant_scope'
+      FROM storyos.model_attempts AS attempt WHERE attempt.run_id='${run.run_id}'::uuid;`)), "project_writing_assistance_v1");
     const proposals = await Promise.all([...new Set(run.decision.locations!.map((location) => {
       if (location.outcome.kind !== "opened") throw new Error("expected eligible location");
       return location.outcome.proposal_id;

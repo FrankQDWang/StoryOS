@@ -114,6 +114,10 @@ pub(crate) async fn commit(
             /*known_prior_binding_id*/ None,
         )
     });
+    // The admitted successor pins the binding, and thus the grant, of its predecessor.
+    if let Some(grant) = row.payload.get("disclosure_grant") {
+        successor_payload["disclosure_grant"] = grant.clone();
+    }
     if let Some(wire) = crate::agent_run_continuation::parse_wire(&row.payload) {
         successor_payload["continuation"] = crate::agent_run_continuation::encode_wire(&wire);
     }

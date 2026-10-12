@@ -80,6 +80,11 @@ pub(crate) async fn persist_uncertain_attempt(
             }
         }
     }
+    // ADR 0051: the grant and the scope that admitted this disclosure.
+    payload["disclosure_grant"] = serde_json::json!({
+        "grant_id": run.grant_id,
+        "grant_scope": run.grant_scope,
+    });
     if assistance.runtime_qualification == RuntimeQualification::QualificationAuthorized {
         payload["runtime_qualification"] =
             serde_json::json!(assistance.runtime_qualification.as_str());
