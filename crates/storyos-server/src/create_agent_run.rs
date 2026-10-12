@@ -765,7 +765,14 @@ fn inspect_context(
             .map(|source| contracts::ContextProjectionInspect {
                 source_class: inspect_source_class(source.source_class),
                 source_version: source.source_version.clone(),
-                projection_mode: contracts::ProjectionMode::ExactRequired,
+                projection_mode: match source.projection_mode {
+                    storyos_core::ProjectionMode::ExactRequired => {
+                        contracts::ProjectionMode::ExactRequired
+                    }
+                    storyos_core::ProjectionMode::DerivedSummary => {
+                        contracts::ProjectionMode::DerivedSummary
+                    }
+                },
                 token_count: source.token_count.to_string(),
                 content: source.content.clone(),
             })

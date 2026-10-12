@@ -13,6 +13,7 @@ pub enum CompactionInstallRefusal {
     RestrictedSource,
     ExactRequiredUnsatisfied,
     ChangedInput,
+    SummaryOverItemLimit,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -21,9 +22,11 @@ pub struct CompactionInstallFacts {
     pub exact_required_satisfied: bool,
     pub staged_input_digest: String,
     pub current_input_digest: String,
+    /// Whether the summary fits the item token limit of the later request.
+    pub summary_within_item_limit: bool,
 }
 
-/// Author text that asks the Host-fake path to compact before the next request.
+/// Author text that asks the Host-fake path to compact before the decision request.
 pub fn requests_active_compaction(author_message: &str) -> bool {
     author_message.starts_with(ACTIVE_COMPACTION_REQUEST_PREFIX)
 }
@@ -47,7 +50,8 @@ pub fn active_context_input_digest(
     )
 }
 
-/// Install only when the staged input is still current, unrestricted, and exact-required complete.
+/// Install only when the staged input is still current, unrestricted, and exact-required complete,
+/// and the summary fits one Context item.
 pub fn decide_compaction_install(
     facts: &CompactionInstallFacts,
 ) -> Result<(), CompactionInstallRefusal> {
@@ -60,6 +64,9 @@ pub fn decide_compaction_install(
     if facts.staged_input_digest != facts.current_input_digest {
         return Err(CompactionInstallRefusal::ChangedInput);
     }
+    if !facts.summary_within_item_limit {
+        return Err(CompactionInstallRefusal::SummaryOverItemLimit);
+    }
     Ok(())
 }
 
@@ -70,6 +77,7 @@ impl CompactionInstallRefusal {
             Self::RestrictedSource => "restricted_source",
             Self::ExactRequiredUnsatisfied => "exact_required_unsatisfied",
             Self::ChangedInput => "changed_input",
+            Self::SummaryOverItemLimit => "summary_over_item_limit",
         }
     }
 }
@@ -80,38 +88,49 @@ pub enum CompactionRecordState {
     Absent,
     /// The summary request has a dispatch claim and no recorded result.
     SummaryClaimed,
-    /// The summary request refused before its dispatch claim, so no record exists.
-    SummaryRefused,
     Staged,
+    /// The install check passed, and the Context Assembly of the later request is committed.
+    Accepted,
     Installed,
     Refused,
 }
 
-/// The next step of the active compaction phase after a settled decision.
+/// The step of the active compaction phase before the decision request of the AgentRun.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompactionStep {
-    /// No compaction is requested, or it is already installed or refused: the AgentRun completes.
-    Complete,
+    /// No compaction applies, or the install refused: send the decision request with the
+    /// ordinary continuation.
+    OrdinaryRequest,
     /// Send the summary request through the Model Gateway, and stage its result.
     RequestSummary,
     /// Observe the summary request that a lost claim committed. It sends nothing again.
     ReobserveSummary,
-    /// Install the staged result for a later request, or refuse it.
+    /// Install the staged result for the decision request, or refuse it.
     InstallOrRefuse,
+    /// Send the decision request as the later request: the summary and a new transport.
+    LaterRequest,
 }
 
-/// Decides the next compaction step from the author request and the record state.
-pub fn next_compaction_step(author_message: &str, record: CompactionRecordState) -> CompactionStep {
+/// Decides the next compaction step from the author request, the response chain of the
+/// Conversation, and the record state. With no prior response, nothing is to be compacted.
+pub fn next_compaction_step(
+    author_message: &str,
+    prior_response: bool,
+    record: CompactionRecordState,
+) -> CompactionStep {
     if !requests_active_compaction(author_message) {
-        return CompactionStep::Complete;
+        return CompactionStep::OrdinaryRequest;
     }
     match record {
-        CompactionRecordState::Absent => CompactionStep::RequestSummary,
+        CompactionRecordState::Absent if prior_response => CompactionStep::RequestSummary,
+        CompactionRecordState::Absent | CompactionRecordState::Refused => {
+            CompactionStep::OrdinaryRequest
+        }
         CompactionRecordState::SummaryClaimed => CompactionStep::ReobserveSummary,
         CompactionRecordState::Staged => CompactionStep::InstallOrRefuse,
-        CompactionRecordState::SummaryRefused
-        | CompactionRecordState::Installed
-        | CompactionRecordState::Refused => CompactionStep::Complete,
+        CompactionRecordState::Accepted | CompactionRecordState::Installed => {
+            CompactionStep::LaterRequest
+        }
     }
 }
 
@@ -130,7 +149,7 @@ pub enum CompactionKnownInput {
     },
 }
 
-/// The facts of the submitted decision Attempt that a compaction summarizes.
+/// The facts of the prior decision Attempt of the Conversation that a compaction summarizes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompactionSource {
     pub model_attempt_id: String,
@@ -165,7 +184,7 @@ pub struct SummaryObservation {
 /// The reason of a compaction that has no summary: the request got no complete result.
 pub const COMPACTION_SUMMARY_UNAVAILABLE: &str = "summary_unavailable";
 
-/// The Host-managed result of one summary request. Its known inputs are the submitted decision
+/// The Host-managed result of one summary request. Its known inputs are the prior decision
 /// Attempt, its manifest, and each selected projection. Its semantic preservation is unknown.
 pub fn stage_compaction(
     source: &CompactionSource,
@@ -241,6 +260,44 @@ pub fn compaction_assembly_record(
     record.considered.clear();
     record.selected.clear();
     record.rejected.clear();
+    record
+}
+
+/// Whether the summary fits the item token limit of the decision Context Assembly.
+pub fn summary_fits_item(decision: &crate::CurrentPassageAssemblyRecord, summary: &str) -> bool {
+    crate::assemble_context::count_context_item_tokens(summary)
+        <= decision.operation_requirement.item_token_limit
+}
+
+/// The Context Assembly of the later request: the decision Context Assembly with the summary of
+/// the same Conversation as the first selected item. The summary is a Derived Summary, so the
+/// sufficiency of the Exact Required input does not change.
+pub fn later_request_record(
+    decision: &crate::CurrentPassageAssemblyRecord,
+    compaction_id: &str,
+    summary: &str,
+) -> crate::CurrentPassageAssemblyRecord {
+    let mut record = decision.clone();
+    let token_count = crate::assemble_context::count_context_item_tokens(summary);
+    record.considered.insert(
+        /*index*/ 0,
+        crate::assemble_context::ConsideredSource {
+            source_class: crate::ContextSourceClass::ConversationSummary,
+            source_version: compaction_id.to_owned(),
+            token_count,
+            eligible: true,
+        },
+    );
+    record.selected.insert(
+        /*index*/ 0,
+        crate::assemble_context::SelectedProjection {
+            source_class: crate::ContextSourceClass::ConversationSummary,
+            source_version: compaction_id.to_owned(),
+            projection_mode: crate::assemble_context::ProjectionMode::DerivedSummary,
+            token_count,
+            content: summary.to_owned(),
+        },
+    );
     record
 }
 

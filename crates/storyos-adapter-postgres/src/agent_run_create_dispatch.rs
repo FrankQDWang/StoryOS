@@ -105,6 +105,9 @@ fn no_response<'a>(
 pub(crate) enum PriorContext {
     Continue,
     Rebuild,
+    /// The later request of a compaction: the summary replaces the prior response, and the
+    /// request starts a new transport.
+    Summary,
 }
 
 /// Builds the provider-neutral Create request for the active decision.
@@ -185,7 +188,7 @@ async fn previous_response_reference(
             .pointer("/wire/prior_continuation_binding_id")
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned),
-        (None, PriorContext::Rebuild) => None,
+        (None, PriorContext::Rebuild | PriorContext::Summary) => None,
         (None, PriorContext::Continue) => {
             match crate::update_project_assistance::read_assistance_record(
                 client,

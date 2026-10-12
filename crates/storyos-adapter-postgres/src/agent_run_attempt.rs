@@ -50,6 +50,11 @@ pub(crate) async fn persist_uncertain_attempt(
         }
         None => Uuid::now_v7().to_string(),
     };
+    // The later request of a compaction sends the summary in place of the prior response.
+    if run.later_request {
+        continuation.mapping = storyos_core::ContinuationInputMapping::NewTransport;
+        continuation.prior_binding_id = None;
+    }
     let decided_reference = match &continuation.prior_binding_id {
         Some(binding) => {
             crate::agent_run_create_dispatch::binding_reference(client, claim, binding).await?
