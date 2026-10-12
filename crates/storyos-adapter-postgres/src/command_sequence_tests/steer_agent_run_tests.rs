@@ -73,18 +73,20 @@ async fn a_steering_refusal_before_admission_writes_no_row_and_keeps_the_challen
     let scope = seed_project(&store, "c700").await;
     let run_id = Uuid::now_v7().to_string();
     seed_run(&admin, &scope, &run_id, "waiting").await;
-    let first = issued(
-        &store,
-        &scope,
-        /*suffix*/ 0xc701,
-        &STEER_AGENT_RUN,
-        steering(&admin, &run_id, /*characters*/ 30_000).await,
-    )
-    .await;
-    steer_agent_run(&store, &first).await.unwrap();
-    // The Run message and the first input count 8 + 30,000 + 1 characters, so 1990 more
+    for suffix in [0xc701, 0xc706, 0xc707] {
+        let retained = issued(
+            &store,
+            &scope,
+            suffix,
+            &STEER_AGENT_RUN,
+            steering(&admin, &run_id, /*characters*/ 8000).await,
+        )
+        .await;
+        steer_agent_run(&store, &retained).await.unwrap();
+    }
+    // The Run message and the three inputs count 8 + 3 * (8000 + 1) characters, so 7988 more
     // characters reach the Context item bound.
-    let within = steering(&admin, &run_id, /*characters*/ 1990).await;
+    let within = steering(&admin, &run_id, /*characters*/ 7988).await;
     let refused = [
         SteerAgentRunInput {
             run_id: Uuid::now_v7().to_string(),
@@ -95,7 +97,7 @@ async fn a_steering_refusal_before_admission_writes_no_row_and_keeps_the_challen
             ..within.clone()
         },
         SteerAgentRunInput {
-            author_message: "a".repeat(/*n*/ 1991),
+            author_message: "a".repeat(/*n*/ 7989),
             ..within.clone()
         },
     ];
@@ -132,7 +134,7 @@ async fn a_steering_refusal_before_admission_writes_no_row_and_keeps_the_challen
         Some(SteeringRetained {
             run_id,
             steering_input_id: boundary.envelope.ids.author_command_admission_id,
-            input_position: 2,
+            input_position: 4,
         })
     );
 }
