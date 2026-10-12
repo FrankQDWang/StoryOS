@@ -113,9 +113,27 @@ fn assembles_complete_current_passage_context_without_destination_io() {
 }
 
 #[test]
+fn selects_a_working_target_at_the_item_limit() {
+    let mut input = complete_input();
+    input.chapter_body = "a".repeat(/*n*/ 32_000);
+    let record = assemble_current_passage_context(&input);
+    assert_eq!(record.sufficiency, ContextSufficiency::Complete);
+    assert_eq!(
+        record.selected[1],
+        SelectedProjection {
+            source_class: ContextSourceClass::WorkingTarget,
+            source_version: "rev-1".to_owned(),
+            projection_mode: ProjectionMode::ExactRequired,
+            token_count: 32_000,
+            content: input.chapter_body,
+        }
+    );
+}
+
+#[test]
 fn blocks_exact_required_working_target_over_the_item_limit() {
     let mut input = complete_input();
-    input.chapter_body = "a".repeat(10_001);
+    input.chapter_body = "a".repeat(CONTEXT_ITEM_TOKEN_LIMIT as usize + 1);
     assert_eq!(
         assemble_current_passage_context(&input),
         CurrentPassageAssemblyRecord {
@@ -141,7 +159,7 @@ fn blocks_exact_required_working_target_over_the_item_limit() {
                 ConsideredSource {
                     source_class: ContextSourceClass::WorkingTarget,
                     source_version: "rev-1".to_owned(),
-                    token_count: 10_001,
+                    token_count: CONTEXT_ITEM_TOKEN_LIMIT + 1,
                     eligible: false,
                 },
                 ConsideredSource {
@@ -161,7 +179,7 @@ fn blocks_exact_required_working_target_over_the_item_limit() {
             rejected: vec![RejectedSource {
                 source_class: ContextSourceClass::WorkingTarget,
                 source_version: "rev-1".to_owned(),
-                token_count: 10_001,
+                token_count: CONTEXT_ITEM_TOKEN_LIMIT + 1,
                 reason: RejectionReason::OverItemTokenLimit,
             }],
             host_control: HostControlRecord {
@@ -348,6 +366,24 @@ fn historical_assembly_without_block_selection_remains_readable() {
     assert_eq!(
         decode_assembly_record(&encode_assembly_record(&decoded)),
         Some(decoded)
+    );
+}
+
+#[test]
+fn historical_assembly_keeps_the_item_limit_of_its_assembly() {
+    let record = assemble_current_passage_context(&complete_input());
+    let mut payload = encode_assembly_record(&record);
+    payload["operation_requirement"]
+        .as_object_mut()
+        .expect("requirement")
+        .remove("item_token_limit");
+    let decoded = decode_assembly_record(&payload).expect("historical payload");
+    assert_eq!(
+        (
+            record.operation_requirement.item_token_limit,
+            decoded.operation_requirement.item_token_limit
+        ),
+        (32_000, 10_000)
     );
 }
 

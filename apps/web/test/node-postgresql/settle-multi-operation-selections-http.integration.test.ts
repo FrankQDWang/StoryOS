@@ -311,7 +311,7 @@ test.each(["deleted", "foreign", "stale", "missing_block", "over_budget", "reser
   const started = await startRealServer();
   try {
     const ns = randomBytes(3).toString("hex");
-    const setup = await collectionSetup(started.baseUrl, ns, boundary === "over_budget" ? "a".repeat(10_000) : undefined);
+    const setup = await collectionSetup(started.baseUrl, ns, boundary === "over_budget" ? "a".repeat(32_000) : undefined);
     if (boundary === "deleted") {
     const tree = await getManuscriptTree({ baseUrl: started.baseUrl, ...setup });
     const request = { command_schema: "storyos.command.delete-chapter.request.v1",

@@ -567,7 +567,7 @@ fn get_fixture() -> Value {
             "token_counting_profile": {
                 "profile_revision": "storyos.token-counting.unicode-scalar.v1",
                 "algorithm_revision": "storyos.statistics.unicode-16.0.0.v1",
-                "item_token_limit": "10000"
+                "item_token_limit": "32000"
             },
             "sufficiency": { "kind": "complete" },
             "considered": [

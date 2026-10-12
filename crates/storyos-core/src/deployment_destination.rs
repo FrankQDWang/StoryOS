@@ -91,6 +91,8 @@ pub enum BudgetBounds {
     Unqualified,
     /// The bounds that the author adopted for the qualification on 2026-10-10 (ADR 0049).
     AgentPlanRequestV1,
+    /// The bounds that the author adopted for a long Chapter on 2026-10-12 (ADR 0052).
+    AgentPlanRequestV2,
 }
 
 impl BudgetBounds {
@@ -99,6 +101,7 @@ impl BudgetBounds {
             Self::NotRequired => "not_required",
             Self::Unqualified => "unqualified",
             Self::AgentPlanRequestV1 => "agent_plan_request_v1",
+            Self::AgentPlanRequestV2 => "agent_plan_request_v2",
         }
     }
 
@@ -107,6 +110,7 @@ impl BudgetBounds {
             Self::NotRequired,
             Self::Unqualified,
             Self::AgentPlanRequestV1,
+            Self::AgentPlanRequestV2,
         ]
         .into_iter()
         .find(|bounds| bounds.as_str() == value)
@@ -118,6 +122,10 @@ impl BudgetBounds {
             Self::AgentPlanRequestV1 => Some(RequestBounds {
                 max_output_tokens: 8192,
                 timeout: Duration::from_secs(/*secs*/ 180),
+            }),
+            Self::AgentPlanRequestV2 => Some(RequestBounds {
+                max_output_tokens: 32_768,
+                timeout: Duration::from_secs(/*secs*/ 600),
             }),
         }
     }
@@ -179,7 +187,7 @@ impl DeploymentDestination {
     pub fn budget_bounds(&self) -> BudgetBounds {
         match self {
             Self::HostFake => BudgetBounds::NotRequired,
-            Self::VolcengineAgentPlan { .. } => BudgetBounds::AgentPlanRequestV1,
+            Self::VolcengineAgentPlan { .. } => BudgetBounds::AgentPlanRequestV2,
         }
     }
 }

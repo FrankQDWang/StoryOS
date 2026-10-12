@@ -357,7 +357,7 @@ test("confirmed reference expiry rebuilds eligible context and keeps the old run
     await confirmByProbe(started.baseUrl, prepared, id("e467"), missingFirst.conversation_id, missingBinding);
     await queryPostgres(`
       UPDATE storyos.authoritative_payloads AS payload
-         SET canonical_bytes = convert_to(repeat('a', 10001), 'UTF8')
+         SET canonical_bytes = convert_to(repeat('a', 32001), 'UTF8')
         FROM storyos.authoritative_heads AS head
         JOIN storyos.authoritative_revisions AS revision
           ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id, revision.revision_id)

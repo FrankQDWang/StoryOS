@@ -139,7 +139,7 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
             eligibility_evidence: Some(storyos_core::AGENT_PLAN_ELIGIBILITY_EVIDENCE.to_owned()),
             credential_source: "operator_quota".to_owned(),
             credential_reference: Some(storyos_core::AGENT_PLAN_CREDENTIAL_REFERENCE.to_owned()),
-            budget_bounds: "agent_plan_request_v1".to_owned(),
+            budget_bounds: "agent_plan_request_v2".to_owned(),
             runtime_qualification: "qualified".to_owned(),
         }
     );
@@ -190,6 +190,55 @@ async fn a_new_deployment_destination_rebinds_the_project_and_refuses_stale_and_
             Some("model_use_binding_stale"),
             Some("model_registration_drift")
         )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_binding_with_the_qualification_bounds_gets_the_long_chapter_bounds() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, _) = queued_run(&store, "e7f", agent_plan()).await;
+    let qualified = open_project_assistance(&store, &scope)
+        .await
+        .unwrap()
+        .unwrap();
+    // A binding from before migration 0091 has the bounds of ADR 0049.
+    admin
+        .execute(
+            "UPDATE storyos.project_external_use_binding_revisions
+                SET budget_bounds = 'agent_plan_request_v1'
+              WHERE project_model_use_binding_revision = $1::text::uuid",
+            &[&qualified.project_model_use_binding_revision],
+        )
+        .await
+        .unwrap();
+
+    admit_run(
+        &store,
+        &scope,
+        &chapter_id,
+        "e80",
+        agent_plan(),
+        "Help with this passage.",
+    )
+    .await;
+    let current = open_project_assistance(&store, &scope)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_ne!(
+        current.project_model_use_binding_revision,
+        qualified.project_model_use_binding_revision
+    );
+    assert_eq!(
+        binding_facts(&admin, &current.external_compatibility_decision)
+            .await
+            .budget_bounds,
+        "agent_plan_request_v2"
     );
 }
 

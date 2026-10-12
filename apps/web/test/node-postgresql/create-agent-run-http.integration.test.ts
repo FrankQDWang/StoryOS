@@ -436,7 +436,7 @@ test("createAgentRun admits one conversation and keeps query scope closed", asyn
       queried.context.token_counting_profile.profile_revision,
       "storyos.token-counting.unicode-scalar.v1",
     );
-    assert.equal(queried.context.token_counting_profile.item_token_limit, "10000");
+    assert.equal(queried.context.token_counting_profile.item_token_limit, "32000");
     assert.equal(queried.context.current_availability.working_target.kind, "current");
     assert.deepEqual(
       queried.context.selected.map((item) => item.source_class),
@@ -985,7 +985,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
   }
 });
 
-test("createAgentRun blocks an over-limit Working Target before destination I/O", async () => {
+test("createAgentRun admits a Working Target at the item limit and blocks one above it before dispatch", async () => {
   const started = await startRealServer();
   try {
     const prepared = await createEmpty(started.baseUrl, "session-a", id("ac30"), "Limit Novel", id("ac10"));
@@ -995,9 +995,9 @@ test("createAgentRun blocks an over-limit Working Target before destination I/O"
       prepared.projectId,
       "c2",
     );
-    await queryPostgres(`
+    const setChapterLength = (length: number) => queryPostgres(`
       UPDATE storyos.authoritative_payloads AS payload
-         SET canonical_bytes = convert_to(repeat('a', 10001), 'UTF8')
+         SET canonical_bytes = convert_to(repeat('a', ${length}), 'UTF8')
         FROM storyos.authoritative_heads AS head
         JOIN storyos.authoritative_revisions AS revision
           ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
@@ -1009,6 +1009,7 @@ test("createAgentRun blocks an over-limit Working Target before destination I/O"
          AND head.project_id = '${prepared.projectId}'::uuid
          AND head.manuscript_object_id = '${chapterId}'::uuid;
     `);
+    await setChapterLength(32001);
     const created = await postRun(
       started.baseUrl,
       prepared.fetchImpl,
@@ -1038,17 +1039,40 @@ test("createAgentRun blocks an over-limit Working Target before destination I/O"
     );
     assert.deepEqual(
       queried.context.rejected.map((item) => [item.source_class, item.reason.kind, item.token_count]),
-      [["working_target", "over_item_token_limit", "10001"]],
+      [["working_target", "over_item_token_limit", "32001"]],
     );
     const assembly = await queryPostgres(`
       SELECT sufficiency || ' ' ||
              (destination_context_manifest_id IS NULL)::text || ' ' ||
-             (outbound_disclosure_manifest_id IS NULL)::text
-        FROM storyos.context_assembly_manifests
+             (outbound_disclosure_manifest_id IS NULL)::text || ' ' ||
+             (SELECT count(*) FROM storyos.model_attempts AS attempt
+               WHERE attempt.run_id = assembly.run_id)::text
+        FROM storyos.context_assembly_manifests AS assembly
        WHERE project_id = '${prepared.projectId}'::uuid
          AND run_id = '${created.admitted.effect.run_id}'::uuid;
     `);
-    assert.equal(assembly, "blocked true true");
+    assert.equal(assembly, "blocked true true 0");
+
+    await setChapterLength(32000);
+    const atLimit = await postRun(
+      started.baseUrl,
+      prepared.fetchImpl,
+      prepared.projectId,
+      "018f0000-0000-7001-8000-000000000c34",
+      runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000c33"),
+    );
+    if (atLimit.admitted.effect.kind !== "admitted") throw new Error("expected admitted");
+    const admitted = await getAgentRun({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      runId: atLimit.admitted.effect.run_id,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(admitted.context.sufficiency.kind, "complete");
+    assert.deepEqual(
+      admitted.context.selected.map((item) => [item.source_class, item.token_count]),
+      [["author_instruction", "23"], ["working_target", "32000"]],
+    );
   } finally {
     await stopRealServer(started.server);
   }

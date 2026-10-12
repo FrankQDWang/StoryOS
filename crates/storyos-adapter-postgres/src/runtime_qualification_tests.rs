@@ -294,7 +294,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
         credential_reference: Some(storyos_application::CredentialReference(
             REFERENCE.to_owned(),
         )),
-        bounds: BudgetBounds::AgentPlanRequestV1.request_bounds(),
+        bounds: BudgetBounds::AgentPlanRequestV2.request_bounds(),
     };
     let sent = |adapter: ScriptedAgentPlan| {
         adapter
