@@ -141,8 +141,8 @@ pub(super) async fn install_or_refuse(
     Ok(false)
 }
 
-/// Commits the operation requirement and the Context Assembly Manifest of the later request: a
-/// new Step Snapshot whose Context selects the summary before the decision Context.
+/// Commits the operation requirement and the Context Assembly Manifest of the later request. Its
+/// new Step Snapshot selects the summary before the decision Context.
 async fn insert_later_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,

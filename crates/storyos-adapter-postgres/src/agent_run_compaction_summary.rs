@@ -44,8 +44,8 @@ pub(crate) async fn load_summary_attempt(
     }))
 }
 
-/// The response chain that the decision request would continue: the prior decision Attempt of
-/// the Conversation and its response reference.
+/// The response chain that the ordinary decision request continues: the prior decision Attempt
+/// of the Conversation and its response reference.
 pub(crate) struct PriorChain {
     pub model_attempt_id: String,
     pub reference: Option<String>,
