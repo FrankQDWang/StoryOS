@@ -93,6 +93,9 @@ export async function verifyProductionRunEvidence(context: BrowserContext): Prom
     };
     for (const [suffix, installed] of [["2", true], ["3", false]] as const) {
       await openCase(suffix);
+      // Compaction summarizes the prior response of the Conversation before the decision request.
+      await submit("Help with this passage.");
+      await settleOnce();
       const runId = await submit("Compact active context between calls.");
       const hold = join(repositoryRoot, "target/issue-877/compaction.hold");
       writeFileSync(hold, "hold");

@@ -2,14 +2,17 @@ use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{
     CompactionInstallFacts, CompactionKnownInput, CompactionSource, ContextSufficiency,
     CurrentPassageAssembly, InstructionBindingInput, StagedCompaction, active_context_input_digest,
-    assemble_current_passage_context, decide_compaction_install,
+    assemble_current_passage_context, decide_compaction_install, encode_assembly_record,
+    later_request_record, summary_fits_item,
 };
 use uuid::Uuid;
 
+use crate::agent_run_work::RunPhaseRow;
 use crate::create_agent_run::context::load_working_target;
 
 use super::{
-    CompactionState, DecisionSource, json_string, load_decision_source, unavailable, work_error,
+    ChainSource, CompactionState, json_string, load_chain_source, parse_json, unavailable,
+    work_error,
 };
 
 /// The summary Attempt that produced one compaction result.
@@ -20,21 +23,22 @@ pub(super) struct Producer {
     pub usage_kind: &'static str,
 }
 
-/// Inserts the compaction record of one summary result: staged, or refused with no summary.
+/// Inserts the compaction record of one summary result: staged, or refused with no summary. The
+/// input digest binds the author message and the Working Target of the claimed AgentRun.
 pub(super) async fn insert_staged(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    author_message: &str,
-    source: &DecisionSource,
+    run: &RunPhaseRow,
+    source: &ChainSource,
     staged: &StagedCompaction,
     producer: &Producer,
 ) -> Result<(), CompleteAgentRunError> {
-    let (revision_id, body) = current_target(client, claim, &source.chapter_id).await?;
+    let (revision_id, body) = current_target(client, claim, &run.chapter_id).await?;
     let admission = source
         .payload
         .pointer("/continuation/admission")
         .cloned()
-        .ok_or_else(|| unavailable("Compaction requires the current admission"))?;
+        .ok_or_else(|| unavailable("Compaction requires the prior admission"))?;
     let (install_state, refusal_reason) = match staged.refusal {
         None => ("staged", None),
         Some(reason) => ("refused", Some(reason)),
@@ -69,7 +73,7 @@ pub(super) async fn insert_staged(
                 &staged.output_text,
                 &producer.usage_kind,
                 &serde_json::json!(staged.loss_facts).to_string(),
-                &active_context_input_digest(author_message, &revision_id, &body),
+                &active_context_input_digest(&run.author_message, &revision_id, &body),
                 &install_state,
                 &serde_json::json!(staged.preserved_item_ids).to_string(),
                 &admission.to_string(),
@@ -81,31 +85,39 @@ pub(super) async fn insert_staged(
     Ok(())
 }
 
+/// Decides the install of the staged summary for the decision request. An install commits the
+/// Context Assembly of the later request and returns `true`. A refusal records its reason, and
+/// the decision request then uses the ordinary continuation.
 pub(super) async fn install_or_refuse(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    author_message: &str,
+    run: &RunPhaseRow,
     staged: &CompactionState,
-) -> Result<(), CompleteAgentRunError> {
-    let source = load_decision_source(client, claim).await?;
-    let (revision_id, body) = current_target(client, claim, &source.chapter_id).await?;
+) -> Result<bool, CompleteAgentRunError> {
+    let source = load_chain_source(client, claim, &staged.prior_model_attempt_id).await?;
+    let decision = run
+        .disclosure_request
+        .as_ref()
+        .ok_or_else(|| unavailable("Compaction requires the decision Context Assembly"))?;
+    let (revision_id, body) = current_target(client, claim, &run.chapter_id).await?;
     let assembled = assemble_current_passage_context(&assembly_input(
         claim,
-        author_message,
-        &source,
+        run,
+        &parse_json(&run.assembly_payload)?,
         revision_id.clone(),
         body.clone(),
     )?);
-    let decision = decide_compaction_install(&CompactionInstallFacts {
+    let checked = decide_compaction_install(&CompactionInstallFacts {
         source_restricted: source_restricted(&source.payload),
         exact_required_satisfied: matches!(assembled.sufficiency, ContextSufficiency::Complete),
         staged_input_digest: staged.input_digest.clone(),
-        current_input_digest: active_context_input_digest(author_message, &revision_id, &body),
+        current_input_digest: active_context_input_digest(&run.author_message, &revision_id, &body),
+        summary_within_item_limit: summary_fits_item(decision, &staged.output_text),
     });
-    let Err(refusal) = decision else {
-        return install_later_request(client, claim, author_message, staged, &source).await;
+    let Err(refusal) = checked else {
+        insert_later_request(client, claim, run, staged, decision).await?;
+        return Ok(true);
     };
-    let reason = refusal.code();
     let updated = client
         .execute(
             "UPDATE storyos.active_context_compactions
@@ -118,7 +130,7 @@ pub(super) async fn install_or_refuse(
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
-                &reason,
+                &refusal.code(),
             ],
         )
         .await
@@ -126,74 +138,103 @@ pub(super) async fn install_or_refuse(
     if updated != 1 {
         return Err(unavailable("The staged compaction did not refuse"));
     }
+    Ok(false)
+}
+
+/// Commits the operation requirement and the Context Assembly Manifest of the later request. Its
+/// new Step Snapshot selects the summary before the decision Context.
+async fn insert_later_request(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+    staged: &CompactionState,
+    decision: &storyos_core::CurrentPassageAssemblyRecord,
+) -> Result<(), CompleteAgentRunError> {
+    let [requirement_id, snapshot_id, manifest_id] = [(); 3].map(|()| Uuid::now_v7().to_string());
+    let mut record = later_request_record(decision, &staged.compaction_id, &staged.output_text);
+    record.operation_requirement.operation_requirement_id = requirement_id.clone();
+    record.operation_requirement.input_snapshot_id = snapshot_id.clone();
+    let payload = encode_assembly_record(&record);
+    let scope = [
+        &claim.project_scope.owner_user_id.as_ref(),
+        &claim.project_scope.project_id.as_ref(),
+    ];
+    let requirement = client
+        .execute(
+            "INSERT INTO storyos.operation_requirements
+               (owner_user_id, project_id, operation_requirement_id, run_id, input_snapshot_id,
+                receipt_id, payload, requirement_role, decision_position)
+             SELECT owner_user_id, project_id, $4::text::uuid, run_id, $5::text::uuid,
+                    receipt_id, $6::text::jsonb, 'later_request', decision_position
+               FROM storyos.operation_requirements
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND operation_requirement_id = $3::text::uuid",
+            &[
+                scope[0],
+                scope[1],
+                &decision.operation_requirement.operation_requirement_id,
+                &requirement_id,
+                &snapshot_id,
+                &payload["operation_requirement"].to_string(),
+            ],
+        )
+        .await
+        .map_err(work_error)?;
+    let manifest = client
+        .execute(
+            "INSERT INTO storyos.context_assembly_manifests
+               (owner_user_id, project_id, context_assembly_manifest_id,
+                operation_requirement_id, run_id, sufficiency, payload, receipt_id,
+                manifest_role, decision_position)
+             SELECT owner_user_id, project_id, $4::text::uuid, $5::text::uuid, run_id,
+                    sufficiency, $6::text::jsonb, receipt_id, 'later_request', decision_position
+               FROM storyos.context_assembly_manifests
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND context_assembly_manifest_id = $3::text::uuid",
+            &[
+                scope[0],
+                scope[1],
+                &run.assembly_manifest_id,
+                &manifest_id,
+                &requirement_id,
+                &payload.to_string(),
+            ],
+        )
+        .await
+        .map_err(work_error)?;
+    if requirement != 1 || manifest != 1 {
+        return Err(unavailable("The decision Context Assembly is missing"));
+    }
     Ok(())
 }
 
-async fn install_later_request(
+/// Records the install in the dispatch claim of the later request: its new RunStep, and the
+/// Model Invocation and Model Attempt of the claim.
+pub(crate) async fn mark_installed(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    author_message: &str,
-    staged: &CompactionState,
-    source: &DecisionSource,
+    model_attempt_id: &str,
 ) -> Result<(), CompleteAgentRunError> {
-    let attempt_id = Uuid::now_v7().to_string();
-    let invocation_id = Uuid::now_v7().to_string();
-    let run_step_id = Uuid::now_v7().to_string();
-    let copy = AssemblyCopy {
-        requirement_role: "later_request",
-        manifest_role: "later_request",
-        requirement_id: Uuid::now_v7().to_string(),
-        snapshot_id: Uuid::now_v7().to_string(),
-        manifest_id: Uuid::now_v7().to_string(),
-        destination_manifest_id: Uuid::now_v7().to_string(),
-        outbound_manifest_id: Uuid::now_v7().to_string(),
-        receipt_id: source.receipt_id.clone(),
-    };
-    insert_assembly_copy(client, claim, &copy).await?;
-    insert_attempt(
-        client,
-        claim,
-        &AttemptInsert {
-            attempt_id: attempt_id.clone(),
-            destination_attempt_id: Uuid::now_v7().to_string(),
-            outbound_event_id: Uuid::now_v7().to_string(),
-            destination_manifest_id: copy.destination_manifest_id,
-            outbound_manifest_id: copy.outbound_manifest_id,
-            wire_projection_id: Uuid::now_v7().to_string(),
-            invocation_id: invocation_id.clone(),
-            conversation_id: source.conversation_id.clone(),
-            attempt_role: "later_request",
-            payload: serde_json::json!({
-                "execution_profile": source.payload.get("execution_profile").cloned().unwrap_or(serde_json::json!({})),
-                "usage": { "kind": "unknown" },
-                "author_message": author_message,
-                "chapter_id": source.chapter_id,
-                "compaction_id": staged.compaction_id,
-                "run_step_id": run_step_id,
-                "items": source.payload.get("items").cloned().unwrap_or(serde_json::json!([])),
-                "decision": null
-            }),
-        },
-    )
-    .await?;
     let updated = client
         .execute(
-            "UPDATE storyos.active_context_compactions
+            "UPDATE storyos.active_context_compactions AS record
                 SET install_state = 'installed',
-                    installed_run_step_id = $4::text::uuid,
-                    installed_model_invocation_id = $5::text::uuid,
-                    installed_model_attempt_id = $6::text::uuid
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND compaction_id = $3::text::uuid
-                AND install_state = 'staged'",
+                    installed_run_step_id = $5::text::uuid,
+                    installed_model_invocation_id = attempt.model_invocation_id,
+                    installed_model_attempt_id = attempt.model_attempt_id
+               FROM storyos.model_attempts AS attempt
+              WHERE record.owner_user_id = $1::text::uuid
+                AND record.project_id = $2::text::uuid
+                AND record.run_id = $3::text::uuid
+                AND record.install_state = 'staged'
+                AND (attempt.owner_user_id, attempt.project_id, attempt.model_attempt_id) =
+                    (record.owner_user_id, record.project_id, $4::text::uuid)",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
-                &staged.compaction_id,
-                &run_step_id,
-                &invocation_id,
-                &attempt_id,
+                &claim.run_id,
+                &model_attempt_id,
+                &Uuid::now_v7().to_string(),
             ],
         )
         .await
@@ -204,149 +245,8 @@ async fn install_later_request(
     Ok(())
 }
 
-struct AssemblyCopy {
-    requirement_role: &'static str,
-    manifest_role: &'static str,
-    requirement_id: String,
-    snapshot_id: String,
-    manifest_id: String,
-    destination_manifest_id: String,
-    outbound_manifest_id: String,
-    receipt_id: String,
-}
-
-async fn insert_assembly_copy(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    copy: &AssemblyCopy,
-) -> Result<(), CompleteAgentRunError> {
-    let rebound = "jsonb_set(jsonb_set(jsonb_set(payload, \
-        '{operation_requirement,run_id}', to_jsonb($3::text), true), \
-        '{operation_requirement,operation_requirement_id}', to_jsonb($5::text), true), \
-        '{operation_requirement,input_snapshot_id}', to_jsonb($6::text), true)";
-    let requirement = client
-        .execute(
-            &format!(
-                "INSERT INTO storyos.operation_requirements
-                   (owner_user_id, project_id, operation_requirement_id, run_id,
-                    input_snapshot_id, receipt_id, payload, requirement_role)
-                 SELECT owner_user_id, project_id, $5::text::uuid, run_id,
-                        $6::text::uuid, $4::text::uuid, {rebound}, $7
-                   FROM storyos.operation_requirements
-                  WHERE owner_user_id = $1::text::uuid
-                    AND project_id = $2::text::uuid
-                    AND run_id = $3::text::uuid
-                    AND requirement_role = 'primary' AND decision_position = (SELECT active_decision_position FROM storyos.agent_runs
-                      WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND run_id=$3::text::uuid)"
-            ),
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &copy.receipt_id,
-                &copy.requirement_id,
-                &copy.snapshot_id,
-                &copy.requirement_role,
-            ],
-        )
-        .await
-        .map_err(work_error)?;
-    if requirement != 1 {
-        return Err(unavailable("The primary Context Assembly is missing"));
-    }
-    let manifest = client
-        .execute(
-            &format!(
-                "INSERT INTO storyos.context_assembly_manifests
-                   (owner_user_id, project_id, context_assembly_manifest_id,
-                    operation_requirement_id, run_id, sufficiency,
-                    destination_context_manifest_id, outbound_disclosure_manifest_id,
-                    payload, receipt_id, manifest_role)
-                 SELECT owner_user_id, project_id, $7::text::uuid, $5::text::uuid, run_id,
-                        sufficiency, $8::text::uuid, $9::text::uuid, {rebound},
-                        $4::text::uuid, $10
-                   FROM storyos.context_assembly_manifests
-                  WHERE owner_user_id = $1::text::uuid
-                    AND project_id = $2::text::uuid
-                    AND run_id = $3::text::uuid
-                    AND manifest_role = 'decision' AND decision_position = (SELECT active_decision_position FROM storyos.agent_runs
-                      WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND run_id=$3::text::uuid)"
-            ),
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &copy.receipt_id,
-                &copy.requirement_id,
-                &copy.snapshot_id,
-                &copy.manifest_id,
-                &copy.destination_manifest_id,
-                &copy.outbound_manifest_id,
-                &copy.manifest_role,
-            ],
-        )
-        .await
-        .map_err(work_error)?;
-    if manifest != 1 {
-        return Err(unavailable(
-            "The primary Context Assembly Manifest is missing",
-        ));
-    }
-    Ok(())
-}
-
-struct AttemptInsert {
-    attempt_id: String,
-    destination_attempt_id: String,
-    outbound_event_id: String,
-    destination_manifest_id: String,
-    outbound_manifest_id: String,
-    wire_projection_id: String,
-    invocation_id: String,
-    conversation_id: String,
-    attempt_role: &'static str,
-    payload: serde_json::Value,
-}
-
-async fn insert_attempt(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    attempt: &AttemptInsert,
-) -> Result<(), CompleteAgentRunError> {
-    client
-        .execute(
-            "INSERT INTO storyos.model_attempts
-               (owner_user_id, project_id, run_id, model_attempt_id, destination_attempt_id,
-                outbound_disclosure_event_id, destination_context_manifest_id,
-                outbound_disclosure_manifest_id, wire_payload_projection_id,
-                model_invocation_id, conversation_id, dispatch_state, payload, attempt_role)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
-                     $9::text::uuid, $10::text::uuid, $11::text::uuid, 'settled',
-                     $12::text::jsonb, $13)",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &attempt.attempt_id,
-                &attempt.destination_attempt_id,
-                &attempt.outbound_event_id,
-                &attempt.destination_manifest_id,
-                &attempt.outbound_manifest_id,
-                &attempt.wire_projection_id,
-                &attempt.invocation_id,
-                &attempt.conversation_id,
-                &attempt.payload.to_string(),
-                &attempt.attempt_role,
-            ],
-        )
-        .await
-        .map_err(work_error)?;
-    Ok(())
-}
-
-/// The submitted Attempt, its manifest, its selected projections, and its stream item ids.
-pub(super) fn compaction_source(source: &DecisionSource) -> CompactionSource {
+/// The prior Attempt, its manifest, its selected projections, and its stream item ids.
+pub(super) fn compaction_source(source: &ChainSource) -> CompactionSource {
     let text = |item: &serde_json::Value, field: &str| {
         item.get(field)
             .and_then(serde_json::Value::as_str)
@@ -409,13 +309,12 @@ fn source_restricted(payload: &serde_json::Value) -> bool {
 
 fn assembly_input(
     claim: &ClaimedAgentRun,
-    author_message: &str,
-    source: &DecisionSource,
+    run: &RunPhaseRow,
+    decision_payload: &serde_json::Value,
     chapter_revision_id: String,
     chapter_body: String,
 ) -> Result<CurrentPassageAssembly, CompleteAgentRunError> {
-    let requirement = source
-        .manifest_payload
+    let requirement = decision_payload
         .get("operation_requirement")
         .ok_or_else(|| unavailable("The primary operation requirement is missing"))?;
     Ok(CurrentPassageAssembly {
@@ -424,8 +323,8 @@ fn assembly_input(
         run_id: claim.run_id.clone(),
         owner_user_id: claim.project_scope.owner_user_id.as_ref().to_owned(),
         project_id: claim.project_scope.project_id.as_ref().to_owned(),
-        author_message: author_message.to_owned(),
-        chapter_id: source.chapter_id.clone(),
+        author_message: run.author_message.clone(),
+        chapter_id: run.chapter_id.clone(),
         chapter_revision_id: Some(chapter_revision_id).filter(|revision| revision != "unavailable"),
         proposal_target_block_ids: requirement
             .get("proposal_target_block_ids")

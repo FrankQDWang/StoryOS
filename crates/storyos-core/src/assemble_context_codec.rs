@@ -266,6 +266,7 @@ fn encode_selected(source: &SelectedProjection) -> serde_json::Value {
         "source_version": source.source_version,
         "projection_mode": match source.projection_mode {
             ProjectionMode::ExactRequired => "exact_required",
+            ProjectionMode::DerivedSummary => "derived_summary",
         },
         "token_count": source.token_count,
         "content": source.content,
@@ -278,6 +279,7 @@ fn decode_selected(value: &serde_json::Value) -> Option<SelectedProjection> {
         source_version: value.get("source_version")?.as_str()?.to_owned(),
         projection_mode: match value.get("projection_mode")?.as_str()? {
             "exact_required" => ProjectionMode::ExactRequired,
+            "derived_summary" => ProjectionMode::DerivedSummary,
             _ => return None,
         },
         token_count: value.get("token_count")?.as_u64()?,

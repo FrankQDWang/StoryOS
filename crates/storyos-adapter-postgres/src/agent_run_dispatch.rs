@@ -71,7 +71,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                     if create.purpose == CreatePurpose::CompactionSummary =>
                 {
                     return crate::agent_run_compaction::summary::commit_claim(
-                        client, claim, &run, projection,
+                        client, claim, &run, create, projection,
                     )
                     .await;
                 }
@@ -133,6 +133,10 @@ impl ModelDispatchStore for PostgresProjectReader {
             else {
                 return Ok(None);
             };
+            if run.later_request {
+                crate::agent_run_compaction::mark_installed(client, claim, &model_attempt_id)
+                    .await?;
+            }
             if let Some(dispatch) = rebuild.as_deref() {
                 crate::agent_run_expiry::insert_recovery(
                     client,
@@ -286,17 +290,6 @@ impl ModelDispatchStore for PostgresProjectReader {
                     }
                     if run.settled() {
                         return Ok(settled);
-                    }
-                    // After a settled decision, only a compaction summary request can refuse. The
-                    // AgentRun then completes with no compaction.
-                    if run.decision_id.is_some()
-                        && storyos_core::requests_active_compaction(&run.author_message)
-                    {
-                        crate::agent_run_compaction::summary::mark_refused(
-                            client, claim, &run, capability,
-                        )
-                        .await?;
-                        return Ok(WorkPhase::Hold("compaction"));
                     }
                     update_run(
                         client,

@@ -347,6 +347,7 @@ fn late_check_reference(payload: &serde_json::Value, marker: &serde_json::Value)
         .flatten()
 }
 
+/// Copies the first decision Context Assembly, or the one of the later request of a compaction.
 async fn copy_requirement(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -364,7 +365,9 @@ async fn copy_requirement(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND requirement_role = 'primary' AND decision_position = 0",
+                AND requirement_role IN ('primary', 'later_request') AND decision_position = 0
+              ORDER BY requirement_role = 'later_request' DESC
+              LIMIT 1",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -405,7 +408,9 @@ async fn copy_manifest(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
-                AND manifest_role = 'decision' AND decision_position = 0",
+                AND manifest_role IN ('decision', 'later_request') AND decision_position = 0
+              ORDER BY manifest_role = 'later_request' DESC
+              LIMIT 1",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),

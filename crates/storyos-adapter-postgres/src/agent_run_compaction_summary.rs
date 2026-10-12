@@ -10,13 +10,14 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
-use super::{load_decision_source, unavailable, work_error, write};
+use super::{load_chain_source, unavailable, work_error, write};
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, route_facts};
 use crate::update_project_assistance::read_assistance_record;
 
-/// The summary Attempt of the claimed AgentRun.
+/// The summary Attempt of the claimed AgentRun, and the prior response reference that it sent.
 pub(crate) struct SummaryAttempt {
     pub model_attempt_id: String,
+    pub prior_reference: Option<String>,
 }
 
 pub(crate) async fn load_summary_attempt(
@@ -25,7 +26,8 @@ pub(crate) async fn load_summary_attempt(
 ) -> Result<Option<SummaryAttempt>, CompleteAgentRunError> {
     let row = client
         .query_opt(
-            "SELECT model_attempt_id::text FROM storyos.model_attempts
+            "SELECT model_attempt_id::text, payload->'wire'->>'prior_response_reference'
+               FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid AND attempt_role = 'compaction'",
             &[
@@ -38,19 +40,69 @@ pub(crate) async fn load_summary_attempt(
         .map_err(work_error)?;
     Ok(row.map(|row| SummaryAttempt {
         model_attempt_id: row.get(/*idx*/ 0),
+        prior_reference: row.get(/*idx*/ 1),
     }))
 }
 
-/// The summary request: no project content, and the response reference of the settled decision.
+/// The response chain that the ordinary decision request continues: the prior decision Attempt
+/// of the Conversation and its response reference.
+pub(crate) struct PriorChain {
+    pub model_attempt_id: String,
+    pub reference: Option<String>,
+}
+
+/// The prior binding that the current continuation decision selects, or `None` when the decision
+/// request continues no prior response. Then nothing is to be compacted.
+pub(crate) async fn prior_chain(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+) -> Result<Option<PriorChain>, CompleteAgentRunError> {
+    let Some(assistance) = read_assistance_record(client, &claim.project_scope)
+        .await
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
+    else {
+        return Ok(None);
+    };
+    let continuation = crate::agent_run_continuation::decide_continuation(
+        client,
+        claim,
+        &run.conversation_id,
+        &run.author_message,
+        &assistance,
+    )
+    .await?;
+    let Some(binding) = continuation.prior_binding_id else {
+        return Ok(None);
+    };
+    let row = client
+        .query_opt(
+            "SELECT model_attempt_id::text, payload->>'response_reference'
+               FROM storyos.model_attempts
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND continuation_binding_id = $3::text::uuid",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &binding,
+            ],
+        )
+        .await
+        .map_err(work_error)?;
+    Ok(row.map(|row| PriorChain {
+        model_attempt_id: row.get(/*idx*/ 0),
+        reference: row.get(/*idx*/ 1),
+    }))
+}
+
+/// The summary request: no project content, and the response reference of the prior chain.
 pub(crate) async fn summary_request(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     attempt: RequestAttempt,
+    previous_response_reference: Option<String>,
 ) -> Result<DestinationRequest, CompleteAgentRunError> {
-    let decision: serde_json::Value =
-        serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
-            .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     Ok(DestinationRequest::Create(CreateRequest {
         attempt,
         purpose: CreatePurpose::CompactionSummary,
@@ -62,26 +114,33 @@ pub(crate) async fn summary_request(
         context: Vec::new(),
         declared_targets: Vec::new(),
         candidate_revision: None,
-        previous_response_reference: decision
-            .get("response_reference")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned),
+        previous_response_reference,
         successor_of: None,
     }))
 }
 
 /// Commits the dispatch claim of the summary request: its Context Assembly, manifests, and Model
-/// Attempt. A request that the current admission refuses marks the decision Attempt, so the
-/// AgentRun completes with no compaction. `None` means that the work changed.
+/// Attempt. `None` means that the work changed: the current admission refuses the request, or the
+/// prior chain is not the chain of the prepared request.
 pub(crate) async fn commit_claim(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
+    request: &CreateRequest,
     projection: &WirePayloadProjection,
 ) -> Result<Option<DispatchClaim>, CompleteAgentRunError> {
-    if run.settled() || load_summary_attempt(client, claim).await?.is_some() {
+    if run.settled()
+        || run.attempt_id.is_some()
+        || load_summary_attempt(client, claim).await?.is_some()
+    {
         return Ok(None);
     }
+    let Some(chain) = prior_chain(client, claim, run)
+        .await?
+        .filter(|chain| chain.reference == request.previous_response_reference)
+    else {
+        return Ok(None);
+    };
     let decision_record = run
         .disclosure_request
         .as_ref()
@@ -141,7 +200,8 @@ pub(crate) async fn commit_claim(
         "assembly_manifest_id": manifest_id,
         "wire": {
             "digest": projection.digest,
-            "prior_response_reference": record_reference(run)
+            "prior_response_reference": chain.reference,
+            "prior_model_attempt_id": chain.model_attempt_id
         },
         "items": [],
         "usage": { "kind": "unknown" },
@@ -282,9 +342,9 @@ fn admit(
     storyos_core::admit_route(&facts)
 }
 
-/// Decides the admission of the summary request before its dispatch claim. A refusal marks the
-/// decision Attempt in the same committed phase, and the AgentRun completes with no compaction.
-pub(crate) async fn admit_or_mark(
+/// Whether the current admission admits the summary request before its dispatch claim. A
+/// refused summary request leaves the decision request with the ordinary continuation.
+pub(crate) async fn admitted(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
@@ -296,55 +356,12 @@ pub(crate) async fn admit_or_mark(
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    match admit(
+    Ok(admit(
         run,
         assistance.as_ref(),
         &compaction_assembly_record(decision_record),
-    ) {
-        Ok(()) => Ok(true),
-        Err(capability) => {
-            mark_refused(client, claim, run, capability).await?;
-            Ok(false)
-        }
-    }
-}
-
-/// Marks the decision Attempt when the summary request refuses before its dispatch claim. The
-/// AgentRun then completes with no compaction.
-pub(crate) async fn mark_refused(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    run: &RunPhaseRow,
-    capability: &str,
-) -> Result<(), CompleteAgentRunError> {
-    let decision_attempt = run
-        .attempt_id
-        .as_deref()
-        .ok_or_else(|| unavailable("Compaction requires the decision Attempt"))?;
-    client
-        .execute(
-            "UPDATE storyos.model_attempts
-                SET payload = payload || jsonb_build_object('compaction_summary_refused', $4::text)
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND model_attempt_id = $3::text::uuid",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &decision_attempt,
-                &capability,
-            ],
-        )
-        .await
-        .map_err(work_error)?;
-    Ok(())
-}
-
-fn record_reference(run: &RunPhaseRow) -> Option<String> {
-    serde_json::from_str::<serde_json::Value>(run.attempt_payload.as_deref()?)
-        .ok()?
-        .get("response_reference")?
-        .as_str()
-        .map(str::to_owned)
+    )
+    .is_ok())
 }
 
 /// Settles the summary Attempt with its observation, and stages its result: the summary, or a
@@ -439,7 +456,11 @@ pub(crate) async fn record(
     }
     let registration = model_registration(&run.model_registration_revision)
         .ok_or_else(|| unavailable("The Model Registration revision is unknown"))?;
-    let source = load_decision_source(client, claim).await?;
+    let prior_attempt = payload
+        .pointer("/wire/prior_model_attempt_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| unavailable("The summary source is missing"))?;
+    let source = load_chain_source(client, claim, prior_attempt).await?;
     let staged = stage_compaction(
         &write::compaction_source(&source),
         SummaryObservation {
@@ -455,7 +476,7 @@ pub(crate) async fn record(
     write::insert_staged(
         client,
         claim,
-        &run.author_message,
+        run,
         &source,
         &staged,
         &write::Producer {

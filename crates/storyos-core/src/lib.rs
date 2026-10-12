@@ -89,7 +89,7 @@ pub use archive_project::{
 pub use assemble_context::{
     CONTEXT_ITEM_TOKEN_LIMIT, ContextBlockReason, ContextSourceClass, ContextSufficiency,
     CurrentPassageAssembly, CurrentPassageAssemblyRecord, DestinationIo, InstructionBindingInput,
-    PassageContextTarget, RejectionReason, assemble_current_passage_context,
+    PassageContextTarget, ProjectionMode, RejectionReason, assemble_current_passage_context,
     assemble_passage_collection, decode_assembly_record, encode_assembly_record,
 };
 pub use compact_active_context::{
@@ -98,8 +98,8 @@ pub use compact_active_context::{
     CompactionInstallFacts, CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState,
     CompactionSource, CompactionStep, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
     StagedCompaction, SummaryObservation, active_context_input_digest, compaction_assembly_record,
-    decide_compaction_install, next_compaction_step, requests_active_compaction, stage_compaction,
-    summary_text,
+    decide_compaction_install, later_request_record, next_compaction_step,
+    requests_active_compaction, stage_compaction, summary_fits_item, summary_text,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,

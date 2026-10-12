@@ -218,6 +218,7 @@ pub enum ContextSourceClass {
 #[serde(rename_all = "snake_case")]
 pub enum ProjectionMode {
     ExactRequired,
+    DerivedSummary,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -62,6 +62,8 @@ pub enum ContextSourceClass {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProjectionMode {
     ExactRequired,
+    /// A Host-managed summary of earlier content. It does not satisfy Exact Required input.
+    DerivedSummary,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
