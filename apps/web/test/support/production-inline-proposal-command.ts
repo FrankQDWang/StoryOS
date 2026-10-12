@@ -107,7 +107,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       assert.equal(proposal.kind, "inline_edit");
       assert.equal(proposal.validation, "valid");
 
-      await page.locator('[data-assistant-inspect]').last().click();
+      await expect(page.locator('[data-assistant-inspect]')).toHaveCount(0);
       return { proposalId, proposal };
     };
     const { proposalId, proposal } = await openInline();
@@ -185,7 +185,7 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
     assert.notEqual(aiEdited.revision_id, edited.revision_id);
     assert.equal(aiEdited.operations[0]!.operation_id, edited.operations[0]!.operation_id);
     edited = aiEdited;
-    await page.locator('[data-assistant-inspect]').last().click();
+    await expect(page.locator('[data-assistant-inspect]')).toHaveCount(0);
     await expect(candidate).toHaveText("narraxxtor tone Keep the voice consistent.");
     await expect(candidate).toHaveAttribute("data-proposal-revision-id", edited.revision_id);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);

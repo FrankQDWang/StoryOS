@@ -44,6 +44,16 @@ type RequestReference = {
   history?: TranscriptExchange[];
 };
 
+/** Calls `refresh` later, and returns a function that cancels the call. */
+export type RefreshSchedule = (refresh: () => void) => () => void;
+
+const RUN_REFRESH_MS = 2000;
+
+const scheduleRunRefresh: RefreshSchedule = (refresh) => {
+  const timer = setTimeout(refresh, RUN_REFRESH_MS);
+  return () => clearTimeout(timer);
+};
+
 export type AssistantContext = {
   scope: ProjectScope;
   chapterId?: string;
@@ -169,8 +179,10 @@ const runLabels: Record<GetAgentRunResponse["status"], string> = {
 };
 
 export function WritingAssistantPanel({
-  collapsed, context, onOpenedProposal, onNavigateProposal,
+  collapsed, context, onOpenedProposal, onNavigateProposal, scheduleRefresh = scheduleRunRefresh,
 }: {
+  /** Schedules the next read of a Run that has not settled. Tests inject their own clock. */
+  scheduleRefresh?: RefreshSchedule;
   onNavigateProposal?: ((destination: ProposalDestination) => void) | undefined;
   collapsed: boolean;
   context?: AssistantContext | undefined;
@@ -186,6 +198,7 @@ export function WritingAssistantPanel({
   const [refused, setRefused] = useState(false);
   const [resultUnavailable, setResultUnavailable] = useState(false);
   const inspectSequence = useRef(0);
+  const [failedReads, setFailedReads] = useState(0);
 
   useEffect(() => {
     if (context === undefined) {
@@ -295,6 +308,18 @@ export function WritingAssistantPanel({
 
   const terminal = run !== undefined
     && (run.status === "completed" || run.status === "refused" || run.status === "cancelled");
+
+  // A Run can wait in the queue of a separate Worker, so read it again until it settles. A failed
+  // read schedules the next read too.
+  useEffect(() => {
+    if (reference?.runId === undefined || terminal || context === undefined) return;
+    return scheduleRefresh(() => {
+      void inspect(reference).catch(() => {
+        setStatus("无法确认请求结果，请稍后检查。");
+        setFailedReads((count) => count + 1);
+      });
+    });
+  }, [reference?.runId, run, terminal, failedReads]);
   const unresolved = reference !== undefined && (!terminal || reference.conversationId === undefined);
 
   const submit = (message: string, onAdmitted: () => void) => {

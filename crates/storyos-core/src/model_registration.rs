@@ -204,8 +204,8 @@ const ARK_CONTEXT_CACHE: &str = "General Ark context cache, docs.volcengine.com/
 const ARK_RETRIEVE_RESPONSE: &str =
     "General Ark Query Response, docs.volcengine.com/docs/82379/1783709, not the Agent Plan route";
 
-/// Each runtime entry is pending. S4-02 owns the first evidence-backed qualification.
-pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
+/// The first profile, before the runtime qualification. Each runtime entry is pending.
+pub const AGENT_PLAN_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v1",
     entries: CapabilityEntries {
         transport: documented(AGENT_PLAN_RESPONSES_GUIDE),
@@ -242,6 +242,42 @@ pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilit
     ],
 };
 
+const AGENT_PLAN_RUNTIME_QUALIFICATION: CapabilityEvidence = CapabilityEvidence::Qualified {
+    evidence: "Authorized runtime qualification on 2026-10-11, two admitted live requests: \
+               docs/research/agent-plan-runtime-qualification-2026-10-11.md",
+};
+
+/// The profile after the runtime qualification. Only transport, native text, and their Create
+/// combination are qualified. Each other entry keeps its earlier evidence.
+pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
+    revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v2",
+    entries: CapabilityEntries {
+        transport: AGENT_PLAN_RUNTIME_QUALIFICATION,
+        native_text: AGENT_PLAN_RUNTIME_QUALIFICATION,
+        ..AGENT_PLAN_PENDING_CAPABILITY_PROFILE.entries
+    },
+    combinations: &[
+        CapabilityCombination {
+            members: CREATE_REQUIREMENT,
+            evidence: AGENT_PLAN_RUNTIME_QUALIFICATION,
+        },
+        CapabilityCombination {
+            members: &[
+                ModelCapability::Continuation,
+                ModelCapability::ExplicitCache,
+            ],
+            evidence: documented(ARK_CONTEXT_CACHE),
+        },
+        CapabilityCombination {
+            members: &[
+                ModelCapability::ExplicitCache,
+                ModelCapability::StructuredText,
+            ],
+            evidence: documented(ARK_CONTEXT_CACHE),
+        },
+    ],
+};
+
 pub const HOST_FAKE_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa01",
     adapter: ModelAdapter::HostFake,
@@ -250,19 +286,32 @@ pub const HOST_FAKE_REGISTRATION: ModelRegistration = ModelRegistration {
     capability_profile: &HOST_FAKE_CAPABILITY_PROFILE,
 };
 
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// The first Agent Plan Registration, with the pending profile. An AgentRun that pinned it
+/// refuses with Registration drift.
+pub const AGENT_PLAN_PENDING_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa02",
     adapter: ModelAdapter::VolcengineAgentPlanResponses,
     api_surface: "volcengine.agent-plan.responses./api/plan/v3",
     provider_model_id: "doubao-seed-2.1-pro",
+    capability_profile: &AGENT_PLAN_PENDING_CAPABILITY_PROFILE,
+};
+
+/// The current Agent Plan Registration, with the qualified profile.
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa03",
     capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_PENDING_REGISTRATION
 };
 
 /// The known Registration of a stored revision. `None` is an unknown or damaged revision.
 pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> {
-    [&HOST_FAKE_REGISTRATION, &AGENT_PLAN_REGISTRATION]
-        .into_iter()
-        .find(|registration| registration.revision == revision)
+    [
+        &HOST_FAKE_REGISTRATION,
+        &AGENT_PLAN_PENDING_REGISTRATION,
+        &AGENT_PLAN_REGISTRATION,
+    ]
+    .into_iter()
+    .find(|registration| registration.revision == revision)
 }
 
 #[cfg(test)]

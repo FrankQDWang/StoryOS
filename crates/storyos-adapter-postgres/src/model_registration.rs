@@ -54,7 +54,8 @@ pub(crate) async fn request_route(
     })
 }
 
-/// Inserts one global Model Registration with its Capability Profile and head, if absent.
+/// Inserts one global Model Registration with its Capability Profile, if absent, and makes it the
+/// head Registration of its adapter. An AgentRun that pinned an earlier head refuses with drift.
 pub(crate) async fn insert_model_registration(
     client: &Client,
     registration: &ModelRegistration,
@@ -89,7 +90,8 @@ pub(crate) async fn insert_model_registration(
         .execute(
             "INSERT INTO storyos.model_registration_heads (model_kind, model_registration_revision)
              VALUES ($1, $2::text::uuid)
-             ON CONFLICT (model_kind) DO NOTHING",
+             ON CONFLICT (model_kind)
+             DO UPDATE SET model_registration_revision = EXCLUDED.model_registration_revision",
             &[&registration.adapter.kind(), &registration.revision],
         )
         .await?;
