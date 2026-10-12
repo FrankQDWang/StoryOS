@@ -2,6 +2,7 @@
 
 mod decision;
 mod response;
+mod stream;
 mod wire;
 
 use std::time::Duration;
@@ -19,8 +20,8 @@ const EXECUTION_PROFILE: &str = "storyos.volcengine-agent-plan.execution.v1";
 /// (live observation, 2026-10-12). It does not tell an expired reference from another one.
 const PREVIOUS_RESPONSE_NOT_FOUND: &str = "http_400:InvalidParameter.PreviousResponseNotFound";
 
-/// Sends each admitted Create request once, with no streaming, retry, redirect, or fallback. It
-/// asks for no explicit cache.
+/// Sends each admitted Create request once, with no retry, redirect, or fallback. It asks for
+/// no explicit cache. The streaming mapping reads typed server-sent events.
 /// It resolves the Credential Reference of each request through `resolver` before the dispatch
 /// claim.
 pub struct AgentPlanResponses<R> {
@@ -38,6 +39,8 @@ enum Exchange {
         timeout: Duration,
         targets: Vec<DeclaredTarget>,
         continues: bool,
+        /// The mapping revision of a streamed request, `None` for a request that is not streamed.
+        stream: Option<String>,
     },
     /// A lost claim committed this Attempt. The request is not sent again.
     Reobserve,
@@ -60,13 +63,15 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         };
-        // Only the continuation mapping can send a prior response reference.
+        let streams = route.mapping_revision == storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION;
+        // Only a continuation mapping can send a prior response reference.
         if create.previous_response_reference.is_some()
+            && !streams
             && route.mapping_revision != storyos_core::AGENT_PLAN_CONTINUATION_MAPPING_REVISION
         {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
-        let body = wire::create_body(create, &route.provider_model_id, bounds);
+        let body = wire::create_body(create, &route.provider_model_id, bounds, streams);
         let projection = WirePayloadProjection {
             execution_profile: EXECUTION_PROFILE.to_owned(),
             mapping_revision: route.mapping_revision.clone(),
@@ -95,6 +100,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 timeout: bounds.timeout,
                 targets: create.declared_targets.clone(),
                 continues: create.previous_response_reference.is_some(),
+                stream: streams.then(|| route.mapping_revision.clone()),
             }),
         })
     }
@@ -112,13 +118,34 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
             timeout,
             targets,
             continues,
+            stream,
         } = prepared.0
         else {
             return Observation::OutcomeUnknown {
                 response_reference: None,
             };
         };
-        let mut observation = send(&url, body, &credential, timeout, &targets).await;
+        let mut observation = match send(&url, body, &credential, timeout).await {
+            Sent::Settled(observation) => observation,
+            Sent::Accepted(response) => match stream {
+                Some(mapping_revision) => {
+                    return stream::observe(
+                        response,
+                        &targets,
+                        &mapping_revision,
+                        storyos_application::PROVISIONAL_STREAM_EVENT_BOUND,
+                        sink,
+                    )
+                    .await;
+                }
+                None => match response.bytes().await {
+                    Ok(bytes) => response::observe(&bytes, &targets),
+                    Err(_) => Observation::OutcomeUnknown {
+                        response_reference: None,
+                    },
+                },
+            },
+        };
         if let Observation::Rejected { reason } = &mut observation
             && continues
             && reason.as_str() == PREVIOUS_RESPONSE_NOT_FOUND
@@ -135,14 +162,14 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
     }
 }
 
+/// The result of one POST: a successful status with its unread body, or a settled observation.
+enum Sent {
+    Accepted(reqwest::Response),
+    Settled(Observation),
+}
+
 /// One POST with no retry. A failure before the request leaves this process is NotSubmitted.
-async fn send(
-    url: &str,
-    body: String,
-    credential: &ResolvedCredential,
-    timeout: Duration,
-    targets: &[DeclaredTarget],
-) -> Observation {
+async fn send(url: &str, body: String, credential: &ResolvedCredential, timeout: Duration) -> Sent {
     let unknown = Observation::OutcomeUnknown {
         response_reference: None,
     };
@@ -155,7 +182,7 @@ async fn send(
         .timeout(timeout)
         .build()
     else {
-        return Observation::NotSubmitted;
+        return Sent::Settled(Observation::NotSubmitted);
     };
     let sent = client
         .post(url)
@@ -166,23 +193,22 @@ async fn send(
         .await;
     let response = match sent {
         Ok(response) => response,
-        Err(error) if error.is_connect() || error.is_builder() => return Observation::NotSubmitted,
-        Err(_) => return unknown,
+        Err(error) if error.is_connect() || error.is_builder() => {
+            return Sent::Settled(Observation::NotSubmitted);
+        }
+        Err(_) => return Sent::Settled(unknown),
     };
     let status = response.status();
     if status.is_server_error() {
-        return unknown;
+        return Sent::Settled(unknown);
     }
-    let bytes = response.bytes().await;
     if !status.is_success() {
-        return Observation::Rejected {
+        let bytes = response.bytes().await;
+        return Sent::Settled(Observation::Rejected {
             reason: rejection_reason(status.as_u16(), bytes.as_deref().unwrap_or_default()),
-        };
+        });
     }
-    match bytes {
-        Ok(bytes) => response::observe(&bytes, targets),
-        Err(_) => unknown,
-    }
+    Sent::Accepted(response)
 }
 
 /// The HTTP status and the native error code. The Provider message text is not kept.
