@@ -68,8 +68,9 @@ pub(crate) async fn observe(
             match state.apply(&event, targets) {
                 Step::Continue => {}
                 Step::Terminal(observation) => {
-                    // The terminal observation carries each item, so a stop changes nothing.
-                    state.flush(sink).await;
+                    if state.flush(sink).await == StreamControl::Stop {
+                        return state.unknown(mapping_revision);
+                    }
                     return observation;
                 }
                 Step::Commit => {
@@ -79,11 +80,18 @@ pub(crate) async fn observe(
                     }
                 }
             }
-            if state.pending.len() >= policy.bound || Instant::now() >= deadline {
+            // An expired interval commits also with no pending event, so the sink examines the fence.
+            let control = if Instant::now() >= deadline {
                 deadline = Instant::now() + policy.interval;
-                if state.flush(sink).await == StreamControl::Stop {
-                    return state.unknown(mapping_revision);
-                }
+                state.commit(sink).await
+            } else if state.pending.len() >= policy.bound {
+                deadline = Instant::now() + policy.interval;
+                state.flush(sink).await
+            } else {
+                StreamControl::Continue
+            };
+            if control == StreamControl::Stop {
+                return state.unknown(mapping_revision);
             }
         }
     }
