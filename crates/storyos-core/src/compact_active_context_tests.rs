@@ -1,6 +1,9 @@
 use super::{
-    ACTIVE_COMPACTION_REQUEST_PREFIX, CompactionInstallFacts, CompactionInstallRefusal,
-    active_context_input_digest, decide_compaction_install, requests_active_compaction,
+    ACTIVE_COMPACTION_REQUEST_PREFIX, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
+    CompactionInstallFacts, CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState,
+    CompactionSource, CompactionStep, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
+    StagedCompaction, active_context_input_digest, decide_compaction_install, next_compaction_step,
+    requests_active_compaction, stage_host_fake_compaction,
 };
 
 fn facts(
@@ -65,5 +68,65 @@ fn install_refuses_a_restricted_changed_or_incomplete_exact_input() {
             "sha256:other",
         )),
         Err(CompactionInstallRefusal::ChangedInput)
+    );
+}
+
+#[test]
+fn a_requested_compaction_stages_once_then_installs_or_refuses_once() {
+    let requested = ACTIVE_COMPACTION_REQUEST_PREFIX;
+    let states = [
+        CompactionRecordState::Absent,
+        CompactionRecordState::Staged,
+        CompactionRecordState::Installed,
+        CompactionRecordState::Refused,
+    ];
+
+    assert_eq!(
+        (
+            states.map(|state| next_compaction_step(requested, state)),
+            states.map(|state| next_compaction_step("Help with this passage.", state)),
+        ),
+        (
+            [
+                CompactionStep::Stage,
+                CompactionStep::InstallOrRefuse,
+                CompactionStep::Complete,
+                CompactionStep::Complete,
+            ],
+            [CompactionStep::Complete; 4],
+        )
+    );
+}
+
+#[test]
+fn the_fake_result_names_its_known_inputs_and_unknown_preservation() {
+    let staged = stage_host_fake_compaction(&CompactionSource {
+        model_attempt_id: "attempt-1".to_owned(),
+        manifest_id: "manifest-1".to_owned(),
+        selected: vec![("working_target".to_owned(), "rev-1".to_owned())],
+        item_ids: vec!["item-1".to_owned()],
+    });
+
+    assert_eq!(
+        staged,
+        StagedCompaction {
+            producer: HOST_FAKE_COMPACTION_PRODUCER,
+            mapping_revision: crate::HOST_FAKE_MAPPING_REVISION,
+            output_text: HOST_FAKE_COMPACTION_OUTPUT,
+            loss_facts: vec![COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN],
+            known_inputs: vec![
+                CompactionKnownInput::ModelAttempt {
+                    id: "attempt-1".to_owned()
+                },
+                CompactionKnownInput::Manifest {
+                    id: "manifest-1".to_owned()
+                },
+                CompactionKnownInput::Projection {
+                    source_class: "working_target".to_owned(),
+                    source_version: "rev-1".to_owned()
+                },
+            ],
+            preserved_item_ids: vec!["item-1".to_owned()],
+        }
     );
 }

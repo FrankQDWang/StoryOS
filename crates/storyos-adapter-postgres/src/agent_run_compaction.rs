@@ -3,6 +3,7 @@ use storyos_application::{
     ActiveCompactionMappingKind, AgentRunContinuationAdmission, ClaimedAgentRun,
     CompleteAgentRunError, CreateAgentRunError, ProjectScope,
 };
+use storyos_core::{CompactionRecordState, CompactionStep, next_compaction_step};
 
 pub(crate) enum CompactionAdvance {
     Hold,
@@ -14,14 +15,27 @@ pub(crate) async fn advance_active_compaction(
     claim: &ClaimedAgentRun,
     author_message: &str,
 ) -> Result<CompactionAdvance, CompleteAgentRunError> {
-    let Some(staged) = load_compaction_state(client, claim).await? else {
-        write::stage_compaction(client, claim, author_message).await?;
-        return Ok(CompactionAdvance::Hold);
+    let staged = load_compaction_state(client, claim).await?;
+    let record = match staged.as_ref().map(|state| state.install_state.as_str()) {
+        None => CompactionRecordState::Absent,
+        Some("staged") => CompactionRecordState::Staged,
+        Some("installed") => CompactionRecordState::Installed,
+        Some("refused") => CompactionRecordState::Refused,
+        Some(_) => return Err(unavailable("The compaction state is unknown")),
     };
-    if staged.install_state == "staged" {
-        write::install_or_refuse(client, claim, author_message, &staged).await?;
+    match (next_compaction_step(author_message, record), staged) {
+        (CompactionStep::Stage, _) => {
+            write::stage_compaction(client, claim, author_message).await?;
+            Ok(CompactionAdvance::Hold)
+        }
+        (CompactionStep::InstallOrRefuse, Some(staged)) => {
+            write::install_or_refuse(client, claim, author_message, &staged).await?;
+            Ok(CompactionAdvance::ReadyToComplete)
+        }
+        (CompactionStep::InstallOrRefuse, None) | (CompactionStep::Complete, _) => {
+            Ok(CompactionAdvance::ReadyToComplete)
+        }
     }
-    Ok(CompactionAdvance::ReadyToComplete)
 }
 
 pub(crate) async fn load_active_compaction(
