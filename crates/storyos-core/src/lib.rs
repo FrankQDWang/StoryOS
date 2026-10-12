@@ -94,9 +94,10 @@ pub use assemble_context::{
 };
 pub use compact_active_context::{
     ACTIVE_COMPACTION_REQUEST_PREFIX, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
-    CompactionInstallFacts, CompactionInstallRefusal, HOST_FAKE_COMPACTION_OUTPUT,
-    HOST_FAKE_COMPACTION_PRODUCER, active_context_input_digest, decide_compaction_install,
-    requests_active_compaction,
+    CompactionInstallFacts, CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState,
+    CompactionSource, CompactionStep, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
+    StagedCompaction, active_context_input_digest, decide_compaction_install, next_compaction_step,
+    requests_active_compaction, stage_host_fake_compaction,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,

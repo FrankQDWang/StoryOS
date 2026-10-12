@@ -1,10 +1,8 @@
 use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{
-    COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN, CompactionInstallFacts,
-    CompactionInstallRefusal, ContextSufficiency, CurrentPassageAssembly,
-    HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER, HOST_FAKE_MAPPING_REVISION,
-    InstructionBindingInput, active_context_input_digest, assemble_current_passage_context,
-    decide_compaction_install,
+    CompactionInstallFacts, CompactionKnownInput, CompactionSource, ContextSufficiency,
+    CurrentPassageAssembly, InstructionBindingInput, active_context_input_digest,
+    assemble_current_passage_context, decide_compaction_install, stage_host_fake_compaction,
 };
 use uuid::Uuid;
 
@@ -26,8 +24,9 @@ pub(super) async fn stage_compaction(
         .pointer("/continuation/admission")
         .cloned()
         .ok_or_else(|| unavailable("Compaction requires the current admission"))?;
-    let known_inputs = known_input_values(&source);
-    let preserved_item_ids = item_ids(&source.payload);
+    let staged = stage_host_fake_compaction(&compaction_source(&source));
+    let known_inputs = known_input_values(&staged.known_inputs);
+    let loss_facts = serde_json::json!(staged.loss_facts);
     let producer_attempt_id = Uuid::now_v7().to_string();
     let producer_manifest_id = Uuid::now_v7().to_string();
     let copy = AssemblyCopy {
@@ -58,12 +57,12 @@ pub(super) async fn stage_compaction(
             payload: serde_json::json!({
                 "execution_profile": source.payload.get("execution_profile").cloned().unwrap_or(serde_json::json!({})),
                 "usage": { "kind": "unknown" },
-                "producer": HOST_FAKE_COMPACTION_PRODUCER,
+                "producer": staged.producer,
                 "mapping_kind": "host_managed",
-                "mapping_revision": HOST_FAKE_MAPPING_REVISION,
+                "mapping_revision": staged.mapping_revision,
                 "known_inputs": known_inputs,
-                "output_text": HOST_FAKE_COMPACTION_OUTPUT,
-                "loss_facts": [COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN],
+                "output_text": staged.output_text,
+                "loss_facts": loss_facts,
                 "admission": admission,
                 "items": source.payload.get("items").cloned().unwrap_or(serde_json::json!([]))
             }),
@@ -94,13 +93,13 @@ pub(super) async fn stage_compaction(
                 &producer_attempt_id,
                 &producer_manifest_id,
                 &producer_invocation_id,
-                &HOST_FAKE_COMPACTION_PRODUCER,
-                &HOST_FAKE_MAPPING_REVISION,
+                &staged.producer,
+                &staged.mapping_revision,
                 &known_inputs.to_string(),
-                &HOST_FAKE_COMPACTION_OUTPUT,
-                &serde_json::json!([COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN]).to_string(),
+                &staged.output_text,
+                &loss_facts.to_string(),
                 &active_context_input_digest(author_message, &revision_id, &body),
-                &serde_json::Value::Array(preserved_item_ids).to_string(),
+                &serde_json::json!(staged.preserved_item_ids).to_string(),
                 &admission.to_string(),
             ],
         )
@@ -133,11 +132,7 @@ pub(super) async fn install_or_refuse(
     let Err(refusal) = decision else {
         return install_later_request(client, claim, author_message, staged, &source).await;
     };
-    let reason = match refusal {
-        CompactionInstallRefusal::RestrictedSource => "restricted_source",
-        CompactionInstallRefusal::ExactRequiredUnsatisfied => "exact_required_unsatisfied",
-        CompactionInstallRefusal::ChangedInput => "changed_input",
-    };
+    let reason = refusal.code();
     let updated = client
         .execute(
             "UPDATE storyos.active_context_compactions
@@ -377,34 +372,54 @@ async fn insert_attempt(
     Ok(())
 }
 
-fn known_input_values(source: &DecisionSource) -> serde_json::Value {
-    let mut values = vec![
-        serde_json::json!({"kind": "model_attempt", "id": source.model_attempt_id}),
-        serde_json::json!({"kind": "manifest", "id": source.manifest_id}),
-    ];
-    if let Some(selected) = source
-        .manifest_payload
-        .get("selected")
-        .and_then(serde_json::Value::as_array)
-    {
-        for item in selected {
-            values.push(serde_json::json!({
-                "kind": "projection",
-                "source_class": item.get("source_class").and_then(serde_json::Value::as_str).unwrap_or_default(),
-                "source_version": item.get("source_version").and_then(serde_json::Value::as_str).unwrap_or_default()
-            }));
-        }
+/// The submitted Attempt, its manifest, its selected projections, and its stream item ids.
+fn compaction_source(source: &DecisionSource) -> CompactionSource {
+    let text = |item: &serde_json::Value, field: &str| {
+        item.get(field)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let list = |value: &serde_json::Value, field: &str| {
+        value
+            .get(field)
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    CompactionSource {
+        model_attempt_id: source.model_attempt_id.clone(),
+        manifest_id: source.manifest_id.clone(),
+        selected: list(&source.manifest_payload, "selected")
+            .iter()
+            .map(|item| (text(item, "source_class"), text(item, "source_version")))
+            .collect(),
+        item_ids: list(&source.payload, "items")
+            .iter()
+            .filter_map(|item| item.get("item_id")?.as_str().map(str::to_owned))
+            .collect(),
     }
-    serde_json::Value::Array(values)
 }
 
-fn item_ids(payload: &serde_json::Value) -> Vec<serde_json::Value> {
-    payload
-        .get("items")
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|item| item.get("item_id").cloned())
+fn known_input_values(inputs: &[CompactionKnownInput]) -> serde_json::Value {
+    inputs
+        .iter()
+        .map(|input| match input {
+            CompactionKnownInput::ModelAttempt { id } => {
+                serde_json::json!({"kind": "model_attempt", "id": id})
+            }
+            CompactionKnownInput::Manifest { id } => {
+                serde_json::json!({"kind": "manifest", "id": id})
+            }
+            CompactionKnownInput::Projection {
+                source_class,
+                source_version,
+            } => serde_json::json!({
+                "kind": "projection",
+                "source_class": source_class,
+                "source_version": source_version
+            }),
+        })
         .collect()
 }
 
