@@ -280,7 +280,7 @@ test("active context compaction stages, then installs or refuses for a later req
       () => inspect(started.baseUrl, prepared, exact.effect.run_id),
       (current) => current.active_compaction.kind === "present" && current.active_compaction.install_state === "staged",
     );
-    await rewriteChapter(prepared.projectId, prepared.chapterId, "repeat('a', 10001)");
+    await rewriteChapter(prepared.projectId, prepared.chapterId, "repeat('a', 32001)");
     unlinkSync(hold);
     await exactWorker;
     const exactInspect = await inspect(started.baseUrl, prepared, exact.effect.run_id);

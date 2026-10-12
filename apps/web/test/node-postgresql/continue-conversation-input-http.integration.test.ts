@@ -306,7 +306,7 @@ test("continuation consumes an eligible prior binding and keeps current input in
       conversation_id: first.conversation_id,
     });
     assert.equal(attempt(await inspect(started.baseUrl, prepared, restricted.effect.run_id)).input_mapping, "new_transport");
-    await rewriteChapter(prepared.projectId, prepared.chapterId, "repeat('a', 10001)");
+    await rewriteChapter(prepared.projectId, prepared.chapterId, "repeat('a', 32001)");
     const blocked = await admit(started.baseUrl, prepared, id("c43d"), CORRECTION, {
       kind: "existing",
       conversation_id: first.conversation_id,

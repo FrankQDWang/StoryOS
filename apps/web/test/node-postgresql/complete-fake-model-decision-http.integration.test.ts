@@ -328,7 +328,7 @@ test("Worker refuses Tool, MCP, research, embedding, Memory, Skill, Subrun, and 
     const blocked = await prepare(started.baseUrl, id("e161"), "Blocked Novel", "e7");
     await queryPostgres(`
       UPDATE storyos.authoritative_payloads AS payload
-         SET canonical_bytes = convert_to(repeat('a', 10001), 'UTF8')
+         SET canonical_bytes = convert_to(repeat('a', 32001), 'UTF8')
         FROM storyos.authoritative_heads AS head
         JOIN storyos.authoritative_revisions AS revision
           ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id, revision.revision_id) =
