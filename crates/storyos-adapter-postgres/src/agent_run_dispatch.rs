@@ -98,6 +98,14 @@ impl ModelDispatchStore for PostgresProjectReader {
                         .await;
                 }
             };
+            // A source that became restricted after the install check refuses the claim. The
+            // next work phase refuses the install, and the decision request does not go out
+            // with the summary.
+            if run.later_request
+                && crate::agent_run_compaction::source_restricted_now(client, claim).await?
+            {
+                return Ok(None);
+            }
             if run.settled()
                 || run.attempt_id.is_some()
                 || run.author_message != request.author_message
