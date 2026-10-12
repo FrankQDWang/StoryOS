@@ -1,8 +1,8 @@
 //! Scripted unknown creates and the results that their references return later.
 
 use storyos_application::{
-    ModelResponse, ModelUsage, Observation, ReferenceRetrieval, ReportedBinding, ResponseReference,
-    RetrievePurpose, RetrieveRequest,
+    CacheUse, ModelResponse, ModelUsage, Observation, ReferenceRetrieval, ReportedBinding,
+    ResponseReference, RetrievePurpose, RetrieveRequest,
 };
 use storyos_core::{
     ADVISORY_TEXT, DecisionCandidate, HOST_FAKE_MAPPING_REVISION, ModelOutput, OutputPhase,
@@ -154,6 +154,7 @@ pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
                 prose_changes: None,
             }),
             usage,
+            cache_use: CacheUse::Unknown,
             response_reference: Some(request.response_reference.clone()),
         })
     };
@@ -174,6 +175,7 @@ pub(crate) fn retrieve(request: &RetrieveRequest) -> Observation {
             )],
             output: None,
             usage: ModelUsage::Unknown,
+            cache_use: CacheUse::Unknown,
             response_reference: Some(request.response_reference.clone()),
         }),
         (Some(3 | 4), _) => unknown,

@@ -287,6 +287,15 @@ pub struct AgentRunModelInspect {
     pub evidence: Vec<AgentRunEvidence>,
     pub items: Vec<AgentRunStreamItem>,
     pub usage_kind: String,
+    /// `None` for an Attempt that reaches no Provider.
+    pub cache: Option<AttemptCache>,
+}
+
+/// The cache setting of one real Model Attempt and the cache use that the destination reported.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttemptCache {
+    pub setting: crate::CacheSetting,
+    pub observed: crate::CacheUse,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

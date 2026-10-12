@@ -4,23 +4,24 @@ use ts_rs::{Config, TS};
 use crate::release1_agent_run::{
     ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
-    AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
-    CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
-    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, CapturedMemorySettingsInspect, ContextBlockReason,
-    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
-    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
-    ContinuationInputMappingInspect, ConversationSelection, CreateAgentRunEffect,
-    CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
-    DestinationIo, EvidenceAvailability, GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
-    GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect,
-    InstructionBinding, OptionalActiveCompactionInspect, OptionalCompactionInstallInspect,
-    OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
-    OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
-    OptionalOriginalResultRetrievalInspect, OptionalReferenceRecoveryInspect,
-    OptionalUnknownCreateSuccessorInspect, OriginalResultRetrievalDisposition, PassageTarget,
-    ProjectionMode, ProposalCandidateTarget, ProseChangeLocationCurrent,
-    ProseChangeLocationInspect, ProseChangeLocationOutcome, ReferenceRecoveryDisposition,
-    SourceAvailability, TokenCountingProfileInspect, UnknownCreateSuccessorDisposition,
+    AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptCacheInspect,
+    AttemptEvidence, AuthorMessage, CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE,
+    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    CapturedMemorySettingsInspect, ContextBlockReason, ContextProjectionInspect, ContextPurpose,
+    ContextRejectionInspect, ContextRejectionReason, ContextSourceClass, ContextSourceInspect,
+    ContextSufficiency, ContinuationAdmissionInspect, ContinuationInputMappingInspect,
+    ConversationSelection, CreateAgentRunEffect, CreateAgentRunInput, CreateAgentRunRequest,
+    CreateAgentRunResponse, CurrentAvailabilityInspect, DestinationIo, EvidenceAvailability,
+    GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    GetAgentRunRequest, GetAgentRunResponse, HostControlInspect, InstructionBinding,
+    OptionalActiveCompactionInspect, OptionalCompactionInstallInspect, OptionalContinuationInspect,
+    OptionalDecisionInspect, OptionalManifestRef, OptionalModelAttemptInspect,
+    OptionalOpenedProposalInspect, OptionalOriginalResultRetrievalInspect,
+    OptionalReferenceRecoveryInspect, OptionalUnknownCreateSuccessorInspect,
+    OriginalResultRetrievalDisposition, PassageTarget, ProjectionMode, ProposalCandidateTarget,
+    ProseChangeLocationCurrent, ProseChangeLocationInspect, ProseChangeLocationOutcome,
+    ReferenceRecoveryDisposition, SourceAvailability, TokenCountingProfileInspect,
+    UnknownCreateSuccessorDisposition,
 };
 use crate::release1_operation_registry::{
     OpenApiMethod, OperationArtifacts, RegisteredOperation, fixture_triple, operation_schemas,
@@ -367,7 +368,7 @@ pub(super) fn openapi() -> Vec<OpenApiMethod> {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
@@ -417,6 +418,7 @@ pub(super) fn typescript_type_declarations() -> String {
         OptionalReferenceRecoveryInspect::decl(&config),
         AgentRunStreamItemInspect::decl(&config),
         AgentRunUsageInspect::decl(&config),
+        AttemptCacheInspect::decl(&config),
         GetAgentRunRequest::decl(&config),
         CapturedMemorySettingsInspect::decl(&config),
         crate::release1_agent_run::AgentRunSteeringInspect::decl(&config),
@@ -632,6 +634,7 @@ fn get_fixture() -> Value {
         "evidence": [],
         "items": [],
         "usage": { "kind": "unknown" },
+        "cache": { "kind": "not_recorded" },
         "redaction_profile": "storyos.author.v1"
     })
 }

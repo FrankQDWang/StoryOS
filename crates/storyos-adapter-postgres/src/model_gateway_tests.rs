@@ -130,6 +130,7 @@ impl ModelProviderAdapter for ProbingDestination<'_> {
                         prose_changes: Some(Vec::new()),
                     }),
                     usage: ModelUsage::Unknown,
+                    cache_use: storyos_application::CacheUse::Unknown,
                     response_reference: None,
                 });
             }

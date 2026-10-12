@@ -1,4 +1,6 @@
-use storyos_application::{ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ModelUsage};
+use storyos_application::{
+    CacheUse, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ModelUsage,
+};
 use storyos_core::{
     AgentDecisionKind, AgentDecisionOutcome, NativeStreamItem, ProseChangeCandidate,
     StreamItemRole, StreamItemState, stream_batch_plan,
@@ -16,6 +18,7 @@ pub(crate) struct CreateResult<'a> {
     pub outcome: AgentDecisionOutcome,
     pub producer_output: Option<&'a [ProseChangeCandidate]>,
     pub usage: ModelUsage,
+    pub cache_use: CacheUse,
     pub response_reference: Option<&'a str>,
     pub settlement: CreateSettlement<'a>,
 }
@@ -131,6 +134,9 @@ pub(crate) async fn persist_create_result(
         _ => serde_json::Value::Null,
     };
     payload["usage"] = encode_usage(result.usage);
+    if let Some(cache) = payload.get_mut("cache") {
+        cache["observed"] = crate::provider_evidence::encode_cache_use(result.cache_use);
+    }
     if let Some(reference) = result.response_reference {
         payload["response_reference"] = serde_json::json!(reference);
     }

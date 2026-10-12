@@ -4,7 +4,7 @@ use storyos_application::{
 };
 use storyos_core::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
-    HOST_FAKE_MAPPING_REVISION, ModelCapability, continuation_mapping_can_represent,
+    HOST_FAKE_MAPPING_REVISION, ModelRegistration, continuation_mapping_can_represent,
     map_continuation_input, model_registration,
 };
 
@@ -28,15 +28,11 @@ pub(crate) async fn decide_continuation(
     let mapping = map_continuation_input(&ContinuationMappingInput {
         current: admission.clone(),
         prior: prior.as_ref().map(|loaded| loaded.identity.clone()),
-        // An unqualified continuation sends the full current input (ADR 0033).
+        // Only a mapping that uses continuation sends a prior reference. Create admission refuses
+        // that mapping unless its profile qualifies it or a qualification is authorized.
         mapping_can_represent: continuation_mapping_can_represent(author_message)
-            && model_registration(&assistance.model_registration_revision).is_some_and(
-                |registration| {
-                    registration
-                        .capability_profile
-                        .qualifies(&[ModelCapability::Continuation])
-                },
-            ),
+            && model_registration(&assistance.model_registration_revision)
+                .is_some_and(ModelRegistration::continues),
     });
     let prior_binding_id = match mapping {
         ContinuationInputMapping::Incremental => known_prior_binding_id.clone(),
@@ -134,7 +130,7 @@ pub(crate) fn current_identity(
         registration: assistance.model_registration_revision.clone(),
         adapter_mapping: model_registration(&assistance.model_registration_revision)
             .map_or(HOST_FAKE_MAPPING_REVISION, |registration| {
-                registration.adapter.mapping_revision()
+                registration.mapping_revision
             })
             .to_owned(),
         use_binding: assistance.project_model_use_binding_revision.clone(),

@@ -1,5 +1,6 @@
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, ProjectAssistanceRecord, WirePayloadProjection,
+    ClaimedAgentRun, CompleteAgentRunError, CreateRequest, ProjectAssistanceRecord,
+    WirePayloadProjection,
 };
 use storyos_core::{DestinationKind, RuntimeQualification};
 use uuid::Uuid;
@@ -8,15 +9,17 @@ use crate::agent_run_expiry::RebuildDispatch;
 use crate::agent_run_work::{RunPhaseRow, complete_database_error};
 
 /// Commits the dispatch claim: the Model Attempt, its Wire Payload Projection, and its
-/// Outbound Disclosure Event, which starts as OutcomeUnknown.
+/// Outbound Disclosure Event, which starts as OutcomeUnknown. `None` means that the prior
+/// reference that the claim decides again is not the reference of the prepared request.
 pub(crate) async fn persist_uncertain_attempt(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     run: &RunPhaseRow,
     assistance: &ProjectAssistanceRecord,
     rebuild: Option<&RebuildDispatch>,
+    request: &CreateRequest,
     projection: &WirePayloadProjection,
-) -> Result<String, CompleteAgentRunError> {
+) -> Result<Option<String>, CompleteAgentRunError> {
     let RunPhaseRow {
         author_message,
         chapter_id,
@@ -47,6 +50,15 @@ pub(crate) async fn persist_uncertain_attempt(
         }
         None => Uuid::now_v7().to_string(),
     };
+    let decided_reference = match &continuation.prior_binding_id {
+        Some(binding) => {
+            crate::agent_run_create_dispatch::binding_reference(client, claim, binding).await?
+        }
+        None => None,
+    };
+    if decided_reference != request.previous_response_reference {
+        return Ok(None);
+    }
     let mut payload = serde_json::json!({
         "execution_profile": {
             "profile_revision": projection.execution_profile,
@@ -71,6 +83,9 @@ pub(crate) async fn persist_uncertain_attempt(
             continuation.known_prior_binding_id.as_deref(),
         )
     });
+    if let Some(setting) = projection.cache_setting {
+        payload["cache"] = crate::provider_evidence::encode_cache_setting(setting);
+    }
     if crate::provider_evidence::real_route(&payload)
         && let Some(evidence) = payload["evidence"].as_array_mut()
     {
@@ -147,7 +162,7 @@ pub(crate) async fn persist_uncertain_attempt(
         )
         .await
         .map_err(complete_database_error)?;
-    Ok(model_attempt_id)
+    Ok(Some(model_attempt_id))
 }
 
 pub(crate) fn evidence_values(
