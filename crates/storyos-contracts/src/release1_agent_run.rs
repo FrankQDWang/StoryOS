@@ -211,6 +211,7 @@ pub enum ContextSourceClass {
     AuthorInstruction,
     WorkingTarget,
     InstructionBinding,
+    ConversationSummary,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

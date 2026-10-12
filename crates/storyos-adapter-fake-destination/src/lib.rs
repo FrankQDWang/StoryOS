@@ -5,11 +5,11 @@ mod prose_changes;
 mod recovery_plan;
 
 use storyos_application::{
-    CacheUse, DestinationRequest, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
-    Observation, PreDispatchRefusal, PreparedRequest, ResponseReference, StreamControl,
-    WirePayloadProjection,
+    CacheUse, CreatePurpose, CreateRequest, DestinationRequest, ModelProviderAdapter,
+    ModelResponse, ModelStreamSink, ModelUsage, Observation, PreDispatchRefusal, PreparedRequest,
+    ResponseReference, StreamControl, WirePayloadProjection,
 };
-use storyos_core::{HOST_FAKE_MAPPING_REVISION, ModelAdapter};
+use storyos_core::{HOST_FAKE_MAPPING_REVISION, ModelAdapter, StreamItemState};
 
 const HOST_FAKE_EXECUTION_PROFILE: &str = "storyos.host-fake.execution.v1";
 
@@ -72,6 +72,9 @@ impl ModelProviderAdapter for FakeDestination {
                 });
             }
         };
+        if create.purpose == CreatePurpose::CompactionSummary {
+            return Ok(summary(create));
+        }
         let projection = match &create.passage_input {
             Some(input) => {
                 let mut wire = input.clone();
@@ -149,6 +152,31 @@ impl ModelProviderAdapter for FakeDestination {
             cache_use: CacheUse::Unknown,
             response_reference: Some(reference),
         })
+    }
+}
+
+/// The fixed Host-managed summary of the fake destination, as one complete assistant item.
+fn summary(create: &CreateRequest) -> PreparedRequest<FakeExchange> {
+    let digest = wire_digest(&serde_json::json!({
+        "operation": "compaction_summary",
+        "previous_response_reference": create.previous_response_reference,
+        "mapping_revision": HOST_FAKE_MAPPING_REVISION,
+    }));
+    let item = create_plan::assistant_item(
+        "summary",
+        StreamItemState::Complete,
+        storyos_core::HOST_FAKE_COMPACTION_OUTPUT,
+    );
+    let reference = recovery_plan::mint_reference(&digest, /*code*/ 0);
+    PreparedRequest {
+        projection: projection(digest, /*serialized_payload*/ None),
+        prepared: FakeExchange(FakePlan::Observed(Observation::Terminal(ModelResponse {
+            items: vec![item],
+            output: None,
+            usage: ModelUsage::Unknown,
+            cache_use: CacheUse::Unknown,
+            response_reference: Some(reference),
+        }))),
     }
 }
 

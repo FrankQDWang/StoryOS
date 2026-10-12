@@ -847,6 +847,9 @@ fn inspect_source_class(class: storyos_core::ContextSourceClass) -> contracts::C
         storyos_core::ContextSourceClass::InstructionBinding => {
             contracts::ContextSourceClass::InstructionBinding
         }
+        storyos_core::ContextSourceClass::ConversationSummary => {
+            contracts::ContextSourceClass::ConversationSummary
+        }
     }
 }
 

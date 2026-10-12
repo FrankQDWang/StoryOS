@@ -93,11 +93,13 @@ pub use assemble_context::{
     assemble_passage_collection, decode_assembly_record, encode_assembly_record,
 };
 pub use compact_active_context::{
-    ACTIVE_COMPACTION_REQUEST_PREFIX, COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN,
+    ACTIVE_COMPACTION_REQUEST_PREFIX, AGENT_PLAN_COMPACTION_PRODUCER,
+    COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN, COMPACTION_SUMMARY_UNAVAILABLE,
     CompactionInstallFacts, CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState,
     CompactionSource, CompactionStep, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
-    StagedCompaction, active_context_input_digest, decide_compaction_install, next_compaction_step,
-    requests_active_compaction, stage_host_fake_compaction,
+    StagedCompaction, SummaryObservation, active_context_input_digest, compaction_assembly_record,
+    decide_compaction_install, next_compaction_step, requests_active_compaction, stage_compaction,
+    summary_text,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,

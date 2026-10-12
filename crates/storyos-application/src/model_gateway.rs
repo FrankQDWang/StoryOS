@@ -3,9 +3,10 @@
 use storyos_core::NativeStreamItem;
 
 use crate::model_gateway_ports::{
-    CommittedCancellation, ContractFaultObserver, ContractFaultPoint, DestinationRequest,
-    DispatchClaim, DispatchRecord, ModelDispatchStore, ModelProviderAdapter, ModelStreamSink,
-    ModelUsage, NextDispatchWork, Observation, RequestAttempt, StreamControl, StreamStop,
+    CommittedCancellation, ContractFaultObserver, ContractFaultPoint, CreatePurpose,
+    DestinationRequest, DispatchClaim, DispatchRecord, ModelDispatchStore, ModelProviderAdapter,
+    ModelStreamSink, ModelUsage, NextDispatchWork, Observation, RequestAttempt, StreamControl,
+    StreamStop,
 };
 use crate::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DiagnosticField, DiagnosticId,
@@ -113,6 +114,11 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
                 },
             )
             .await?;
+        if let DestinationRequest::Create(create) = &request
+            && create.purpose == CreatePurpose::CompactionSummary
+        {
+            observer.reached(ContractFaultPoint::CompactionStaged).await;
+        }
         Ok(cancellation)
     }
 }
