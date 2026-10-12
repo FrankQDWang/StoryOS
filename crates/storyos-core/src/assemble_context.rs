@@ -40,6 +40,8 @@ pub enum InstructionBindingInput {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextPurpose {
     CurrentPassageAssistance,
+    /// The summary request of an active compaction of the current Conversation.
+    ActiveContextCompaction,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,6 +55,8 @@ pub enum ContextSourceClass {
     AuthorInstruction,
     WorkingTarget,
     InstructionBinding,
+    /// The Host-managed summary of the same Conversation.
+    ConversationSummary,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

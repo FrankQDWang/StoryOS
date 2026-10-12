@@ -32,6 +32,7 @@ impl CredentialResolver for RecordingResolver {
 fn create(adapter: ModelAdapter, reference: Option<&str>) -> DestinationRequest {
     DestinationRequest::Create(CreateRequest {
         attempt: RequestAttempt::New,
+        purpose: storyos_application::CreatePurpose::Decision,
         route: RequestRoute {
             adapter,
             provider_model_id: "doubao-seed-2.1-pro".to_owned(),

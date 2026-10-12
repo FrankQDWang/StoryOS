@@ -8,9 +8,9 @@ mod wire;
 use std::time::Duration;
 
 use storyos_application::{
-    CacheSetting, CredentialResolver, DeclaredTarget, DestinationRequest, ModelProviderAdapter,
-    ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest, RequestAttempt,
-    ResolvedCredential, WirePayloadProjection,
+    CacheSetting, CreatePurpose, CredentialResolver, DeclaredTarget, DestinationRequest,
+    ModelProviderAdapter, ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest,
+    RequestAttempt, ResolvedCredential, WirePayloadProjection,
 };
 use storyos_core::ModelAdapter;
 
@@ -71,7 +71,18 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         {
             return Err(PreDispatchRefusal::UnsupportedRequest);
         }
-        let body = wire::create_body(create, &route.provider_model_id, bounds, streams);
+        let body = match (create.purpose, &create.previous_response_reference) {
+            (CreatePurpose::Decision, _) => {
+                wire::create_body(create, &route.provider_model_id, bounds, streams)
+            }
+            (CreatePurpose::CompactionSummary, Some(reference)) => {
+                wire::summary_body(reference, &route.provider_model_id, bounds, streams)
+            }
+            // A summary needs the continuation chain of the Conversation.
+            (CreatePurpose::CompactionSummary, None) => {
+                return Err(PreDispatchRefusal::UnsupportedRequest);
+            }
+        };
         let projection = WirePayloadProjection {
             execution_profile: EXECUTION_PROFILE.to_owned(),
             mapping_revision: route.mapping_revision.clone(),

@@ -1,40 +1,66 @@
 use storyos_application::{
     ActiveCompactionInspect, ActiveCompactionInstallState, ActiveCompactionKnownInput,
     ActiveCompactionMappingKind, AgentRunContinuationAdmission, ClaimedAgentRun,
-    CompleteAgentRunError, CreateAgentRunError, ProjectScope,
+    CompleteAgentRunError, CreateAgentRunError, DestinationRequest, DispatchClaim, ProjectScope,
+    RequestAttempt,
 };
+
+use crate::agent_run_work::RunPhaseRow;
 use storyos_core::{CompactionRecordState, CompactionStep, next_compaction_step};
 
 pub(crate) enum CompactionAdvance {
-    Hold,
+    Dispatch(Box<DestinationRequest>),
     ReadyToComplete,
 }
 
 pub(crate) async fn advance_active_compaction(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    author_message: &str,
+    run: &RunPhaseRow,
 ) -> Result<CompactionAdvance, CompleteAgentRunError> {
     let staged = load_compaction_state(client, claim).await?;
-    let record = match staged.as_ref().map(|state| state.install_state.as_str()) {
-        None => CompactionRecordState::Absent,
-        Some("staged") => CompactionRecordState::Staged,
-        Some("installed") => CompactionRecordState::Installed,
-        Some("refused") => CompactionRecordState::Refused,
-        Some(_) => return Err(unavailable("The compaction state is unknown")),
+    let summary = summary::load_summary_attempt(client, claim).await?;
+    let refused_before_claim = run
+        .attempt_payload
+        .as_deref()
+        .and_then(|payload| serde_json::from_str::<serde_json::Value>(payload).ok())
+        .is_some_and(|payload| payload.get("compaction_summary_refused").is_some());
+    let record = match (
+        staged.as_ref().map(|state| state.install_state.as_str()),
+        &summary,
+    ) {
+        (Some("staged"), _) => CompactionRecordState::Staged,
+        (Some("installed"), _) => CompactionRecordState::Installed,
+        (Some("refused"), _) => CompactionRecordState::Refused,
+        (Some(_), _) => return Err(unavailable("The compaction state is unknown")),
+        (None, Some(_)) => CompactionRecordState::SummaryClaimed,
+        (None, None) if refused_before_claim => CompactionRecordState::SummaryRefused,
+        (None, None) => CompactionRecordState::Absent,
     };
-    match (next_compaction_step(author_message, record), staged) {
-        (CompactionStep::Stage, _) => {
-            write::stage_compaction(client, claim, author_message).await?;
-            Ok(CompactionAdvance::Hold)
+    let author_message = run.author_message.as_str();
+    match (
+        next_compaction_step(author_message, record),
+        staged,
+        summary,
+    ) {
+        (CompactionStep::RequestSummary, _, _) => Ok(CompactionAdvance::Dispatch(Box::new(
+            summary::summary_request(client, claim, run, RequestAttempt::New).await?,
+        ))),
+        (CompactionStep::ReobserveSummary, _, Some(summary)) => {
+            let attempt = RequestAttempt::Claimed(DispatchClaim {
+                model_attempt_id: summary.model_attempt_id,
+            });
+            Ok(CompactionAdvance::Dispatch(Box::new(
+                summary::summary_request(client, claim, run, attempt).await?,
+            )))
         }
-        (CompactionStep::InstallOrRefuse, Some(staged)) => {
+        (CompactionStep::InstallOrRefuse, Some(staged), _) => {
             write::install_or_refuse(client, claim, author_message, &staged).await?;
             Ok(CompactionAdvance::ReadyToComplete)
         }
-        (CompactionStep::InstallOrRefuse, None) | (CompactionStep::Complete, _) => {
-            Ok(CompactionAdvance::ReadyToComplete)
-        }
+        (CompactionStep::ReobserveSummary, _, None)
+        | (CompactionStep::InstallOrRefuse, None, _)
+        | (CompactionStep::Complete, _, _) => Ok(CompactionAdvance::ReadyToComplete),
     }
 }
 
@@ -157,6 +183,9 @@ async fn load_decision_source(
 
 #[path = "agent_run_compaction_write.rs"]
 mod write;
+
+#[path = "agent_run_compaction_summary.rs"]
+pub(crate) mod summary;
 
 fn inspect_row(row: &tokio_postgres::Row) -> Result<ActiveCompactionInspect, CreateAgentRunError> {
     let known_inputs = parse_json(&row.get::<_, String>(11)).map_err(read_error)?;

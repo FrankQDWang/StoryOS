@@ -472,26 +472,21 @@ pub(crate) async fn settle_one_phase(
             )
             .await
             .map_err(complete_database_error)?;
-        return complete_or_compact(client, claim, author_message).await;
+        return complete_or_compact(client, claim, &run).await;
     }
-    complete_or_compact(client, claim, author_message).await
+    complete_or_compact(client, claim, &run).await
 }
 
 pub(crate) async fn complete_or_compact(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
-    author_message: &str,
+    run: &RunPhaseRow,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    if storyos_core::requests_active_compaction(author_message) {
-        let advance =
-            crate::agent_run_compaction::advance_active_compaction(client, claim, author_message)
-                .await?;
-        if matches!(
-            advance,
-            crate::agent_run_compaction::CompactionAdvance::Hold
-        ) {
-            return Ok(WorkPhase::Hold("compaction_stage"));
-        }
+    if storyos_core::requests_active_compaction(&run.author_message)
+        && let crate::agent_run_compaction::CompactionAdvance::Dispatch(request) =
+            crate::agent_run_compaction::advance_active_compaction(client, claim, run).await?
+    {
+        return Ok(WorkPhase::Dispatch(request));
     }
     update_run(
         client,
@@ -552,7 +547,6 @@ pub(crate) async fn requeue_generation(
 pub(crate) async fn hold_if_requested(kind: &str) {
     let key = match kind {
         "decision" => "STORYOS_TEST_FAKE_DECISION_HOLD_PATH",
-        "compaction_stage" => "STORYOS_TEST_FAKE_COMPACTION_STAGE_HOLD_PATH",
         "successor_fence" => "STORYOS_TEST_FAKE_SUCCESSOR_FENCE_HOLD_PATH",
         "successor_late" => "STORYOS_TEST_FAKE_SUCCESSOR_LATE_HOLD_PATH",
         _ => return,

@@ -319,12 +319,14 @@ fn decode_rejected(value: &serde_json::Value) -> Option<RejectedSource> {
 fn encode_purpose(purpose: ContextPurpose) -> &'static str {
     match purpose {
         ContextPurpose::CurrentPassageAssistance => "current_passage_assistance",
+        ContextPurpose::ActiveContextCompaction => "active_context_compaction",
     }
 }
 
 fn decode_purpose(value: &str) -> Option<ContextPurpose> {
     match value {
         "current_passage_assistance" => Some(ContextPurpose::CurrentPassageAssistance),
+        "active_context_compaction" => Some(ContextPurpose::ActiveContextCompaction),
         _ => None,
     }
 }
@@ -335,6 +337,7 @@ fn encode_source_class(class: ContextSourceClass) -> &'static str {
         ContextSourceClass::AuthorInstruction => "author_instruction",
         ContextSourceClass::WorkingTarget => "working_target",
         ContextSourceClass::InstructionBinding => "instruction_binding",
+        ContextSourceClass::ConversationSummary => "conversation_summary",
     }
 }
 
@@ -344,6 +347,7 @@ fn decode_source_class(value: &str) -> Option<ContextSourceClass> {
         "author_instruction" => Some(ContextSourceClass::AuthorInstruction),
         "working_target" => Some(ContextSourceClass::WorkingTarget),
         "instruction_binding" => Some(ContextSourceClass::InstructionBinding),
+        "conversation_summary" => Some(ContextSourceClass::ConversationSummary),
         _ => None,
     }
 }

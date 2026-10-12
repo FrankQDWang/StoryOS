@@ -1,8 +1,8 @@
 //! Records Create observations and builds the Create request of the active decision.
 
 use storyos_application::{
-    CacheUse, ClaimedAgentRun, CompleteAgentRunError, CreateRequest, DeclaredTarget, DispatchClaim,
-    ModelUsage, Observation, RequestAttempt, RequestContextItem,
+    CacheUse, ClaimedAgentRun, CompleteAgentRunError, CreatePurpose, CreateRequest, DeclaredTarget,
+    DispatchClaim, ModelUsage, Observation, RequestAttempt, RequestContextItem,
 };
 use storyos_core::{AgentDecisionOutcome, validate_agent_decision};
 
@@ -150,6 +150,7 @@ pub(crate) async fn create_request(
         });
     Ok(CreateRequest {
         attempt,
+        purpose: CreatePurpose::Decision,
         route: crate::model_registration::request_route(client, claim).await?,
         author_message: run.author_message.clone(),
         chapter_id: run.chapter_id.clone(),

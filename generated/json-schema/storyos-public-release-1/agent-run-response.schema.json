@@ -652,7 +652,8 @@
         "host_control",
         "author_instruction",
         "working_target",
-        "instruction_binding"
+        "instruction_binding",
+        "conversation_summary"
       ],
       "type": "string"
     },

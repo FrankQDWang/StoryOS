@@ -131,3 +131,30 @@ fn a_stored_purpose_that_the_scope_does_not_name_decodes_to_no_request() {
         Err("disclosure_outside_grant")
     );
 }
+
+#[test]
+fn only_scope_v2_covers_the_compaction_summary_request() {
+    let decision = assemble_current_passage_context(&passage("ch-1", "The tide turned."));
+    let summary = crate::compaction_assembly_record(&decision);
+    let with_scope = |scope| GrantFacts {
+        grant_scope: Some(scope),
+        ..facts(&summary)
+    };
+
+    assert_eq!(
+        [
+            admit_disclosure(&with_scope("project_writing_assistance_v1")),
+            admit_disclosure(&with_scope("project_writing_assistance_v2")),
+            admit_disclosure(&GrantFacts {
+                grant_scope: Some("project_writing_assistance_v2"),
+                ..facts(&decision)
+            }),
+        ],
+        [
+            Err("disclosure_outside_grant"),
+            Ok(GrantScope::ProjectWritingAssistanceV2),
+            Ok(GrantScope::ProjectWritingAssistanceV2),
+        ]
+    );
+    assert!(summary.selected.is_empty());
+}

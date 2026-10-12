@@ -74,10 +74,14 @@ impl CompactionInstallRefusal {
     }
 }
 
-/// The durable state of the active compaction record of one AgentRun.
+/// The durable state of the active compaction of one AgentRun.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompactionRecordState {
     Absent,
+    /// The summary request has a dispatch claim and no recorded result.
+    SummaryClaimed,
+    /// The summary request refused before its dispatch claim, so no record exists.
+    SummaryRefused,
     Staged,
     Installed,
     Refused,
@@ -88,8 +92,10 @@ pub enum CompactionRecordState {
 pub enum CompactionStep {
     /// No compaction is requested, or it is already installed or refused: the AgentRun completes.
     Complete,
-    /// Stage one compaction result, then hold until the next phase.
-    Stage,
+    /// Send the summary request through the Model Gateway, and stage its result.
+    RequestSummary,
+    /// Observe the summary request that a lost claim committed. It sends nothing again.
+    ReobserveSummary,
     /// Install the staged result for a later request, or refuse it.
     InstallOrRefuse,
 }
@@ -100,11 +106,12 @@ pub fn next_compaction_step(author_message: &str, record: CompactionRecordState)
         return CompactionStep::Complete;
     }
     match record {
-        CompactionRecordState::Absent => CompactionStep::Stage,
+        CompactionRecordState::Absent => CompactionStep::RequestSummary,
+        CompactionRecordState::SummaryClaimed => CompactionStep::ReobserveSummary,
         CompactionRecordState::Staged => CompactionStep::InstallOrRefuse,
-        CompactionRecordState::Installed | CompactionRecordState::Refused => {
-            CompactionStep::Complete
-        }
+        CompactionRecordState::SummaryRefused
+        | CompactionRecordState::Installed
+        | CompactionRecordState::Refused => CompactionStep::Complete,
     }
 }
 
@@ -133,21 +140,37 @@ pub struct CompactionSource {
     pub item_ids: Vec<String>,
 }
 
-/// The content of one staged compaction result.
+/// The content of one compaction result from the observation of its summary request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StagedCompaction {
     pub producer: &'static str,
-    pub mapping_revision: &'static str,
-    pub output_text: &'static str,
+    pub mapping_revision: String,
+    pub output_text: String,
     pub loss_facts: Vec<&'static str>,
     pub known_inputs: Vec<CompactionKnownInput>,
     pub preserved_item_ids: Vec<String>,
+    /// `None` when the summary request supplied a summary, otherwise the refusal reason.
+    pub refusal: Option<&'static str>,
 }
 
-/// The Host-managed result of the Contract-Faithful Fake Destination: a fixed bounded summary
-/// whose semantic preservation is unknown. Its known inputs are the submitted Attempt, its
-/// manifest, and each selected projection.
-pub fn stage_host_fake_compaction(source: &CompactionSource) -> StagedCompaction {
+/// The summary that one exchange of the summary request supplied, as the destination reported.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SummaryObservation {
+    pub adapter: crate::ModelAdapter,
+    pub mapping_revision: String,
+    /// The complete summary text, or `None` for no complete result.
+    pub summary: Option<String>,
+}
+
+/// The reason of a compaction that has no summary: the request got no complete result.
+pub const COMPACTION_SUMMARY_UNAVAILABLE: &str = "summary_unavailable";
+
+/// The Host-managed result of one summary request. Its known inputs are the submitted decision
+/// Attempt, its manifest, and each selected projection. Its semantic preservation is unknown.
+pub fn stage_compaction(
+    source: &CompactionSource,
+    observation: SummaryObservation,
+) -> StagedCompaction {
     let mut known_inputs = vec![
         CompactionKnownInput::ModelAttempt {
             id: source.model_attempt_id.clone(),
@@ -167,14 +190,58 @@ pub fn stage_host_fake_compaction(source: &CompactionSource) -> StagedCompaction
                 },
             ),
     );
+    let producer = match observation.adapter {
+        crate::ModelAdapter::HostFake => HOST_FAKE_COMPACTION_PRODUCER,
+        crate::ModelAdapter::VolcengineAgentPlanResponses => AGENT_PLAN_COMPACTION_PRODUCER,
+    };
+    let refusal = observation
+        .summary
+        .is_none()
+        .then_some(COMPACTION_SUMMARY_UNAVAILABLE);
     StagedCompaction {
-        producer: HOST_FAKE_COMPACTION_PRODUCER,
-        mapping_revision: crate::HOST_FAKE_MAPPING_REVISION,
-        output_text: HOST_FAKE_COMPACTION_OUTPUT,
+        producer,
+        mapping_revision: observation.mapping_revision,
+        output_text: observation.summary.unwrap_or_default(),
         loss_facts: vec![COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN],
         known_inputs,
         preserved_item_ids: source.item_ids.clone(),
+        refusal,
     }
+}
+
+/// The text of the one complete assistant message of a summary response. A refusal, a tool or
+/// hosted item, or a missing or incomplete message supplies no summary.
+pub fn summary_text(items: &[crate::NativeStreamItem]) -> Option<String> {
+    if items
+        .iter()
+        .any(|item| item.refusal.is_some() || item.role != crate::StreamItemRole::Assistant)
+    {
+        return None;
+    }
+    let mut messages = items.iter().filter(|item| item.text.is_some());
+    let message = messages.next()?;
+    (messages.next().is_none() && message.state == crate::StreamItemState::Complete)
+        .then(|| message.text.clone())
+        .flatten()
+        .filter(|text| !text.trim().is_empty())
+}
+
+/// The producer of a summary that the Agent Plan route made.
+pub const AGENT_PLAN_COMPACTION_PRODUCER: &str = "agent_plan_summary";
+
+/// The Context Assembly of a summary request: the Purpose of active compaction and no selected
+/// project content. The request sends one Host instruction, and the continuation chain of the
+/// Conversation supplies the history.
+pub fn compaction_assembly_record(
+    decision: &crate::CurrentPassageAssemblyRecord,
+) -> crate::CurrentPassageAssemblyRecord {
+    let mut record = decision.clone();
+    record.operation_requirement.purpose =
+        crate::assemble_context::ContextPurpose::ActiveContextCompaction;
+    record.considered.clear();
+    record.selected.clear();
+    record.rejected.clear();
+    record
 }
 
 #[cfg(test)]
