@@ -78,11 +78,11 @@ async fn a_steering_refusal_before_admission_writes_no_row_and_keeps_the_challen
         &scope,
         /*suffix*/ 0xc701,
         &STEER_AGENT_RUN,
-        steering(&admin, &run_id, /*characters*/ 8000).await,
+        steering(&admin, &run_id, /*characters*/ 30_000).await,
     )
     .await;
     steer_agent_run(&store, &first).await.unwrap();
-    // The Run message and the first input count 8 + 8000 + 1 characters, so 1990 more
+    // The Run message and the first input count 8 + 30,000 + 1 characters, so 1990 more
     // characters reach the Context item bound.
     let within = steering(&admin, &run_id, /*characters*/ 1990).await;
     let refused = [

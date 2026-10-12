@@ -220,7 +220,7 @@ async fn a_binding_with_the_qualification_bounds_gets_the_long_chapter_bounds() 
         &store,
         &scope,
         &chapter_id,
-        "e7g",
+        "e80",
         agent_plan(),
         "Help with this passage.",
     )
