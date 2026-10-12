@@ -17,7 +17,7 @@ The author made this decision from the view of an author. The author writes all 
 - Each new Project Destination Grant records its `grant_scope`. The only scope is `project_writing_assistance_v1`. It names these items:
   - The Project Scope of the grant.
   - The Purpose `current_passage_assistance`.
-  - The source classes `author_instruction`, `working_target`, and `instruction_binding`. The Working Target can be the current Chapter, a collection of passages from more than one Chapter of the same Project, or a Proposal candidate of the same Project.
+  - The source classes `author_instruction`, `working_target`, and `instruction_binding`. The Working Target can be the current Chapter or a Proposal candidate. It can also be a collection of passages from more than one Chapter. Each is in the same Project.
   - The Processing Destination Identity of the grant.
 - The scope sets no length bound. The Context item limit and the request bounds of the binding (ADR 0049) stay technical limits.
 - A request inside the scope dispatches with no prompt. Create admission and the later dispatch claim examine the scope of the grant that the AgentRun pinned, also after a restart. A successor Attempt of ADR 0033 examines it again.
