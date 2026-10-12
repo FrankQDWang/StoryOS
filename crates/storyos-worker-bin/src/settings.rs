@@ -34,7 +34,7 @@ impl WorkerSettings {
             .settings
             .agent_plan_api_key
             .as_ref()
-            .map(|key| key.expose_secret().is_empty());
+            .map(|key| key.expose_secret().trim().is_empty());
         match (loaded.settings.model_destination.as_deref(), key) {
             (_, Some(true)) | (Some("volcengine_agent_plan"), None) => {
                 return refused("STORYOS_AGENT_PLAN_API_KEY");
