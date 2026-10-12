@@ -49,11 +49,20 @@ fn qualified_members_qualify_only_with_a_qualified_combination() {
             AGENT_PLAN_STREAMING_PENDING_REGISTRATION
                 .capability_profile
                 .qualifies(CONTINUATION_REQUIREMENT),
+            AGENT_PLAN_STREAMING_REGISTRATION.qualified(),
+            AGENT_PLAN_COMPACTION_PENDING_REGISTRATION.qualified(),
+            AGENT_PLAN_COMPACTION_PENDING_REGISTRATION
+                .capability_profile
+                .qualifies(STREAMING_REQUIREMENT),
             AGENT_PLAN_REGISTRATION.qualified(),
+            AGENT_PLAN_REGISTRATION.compacts(),
             HOST_FAKE_REGISTRATION.qualified(),
+            HOST_FAKE_REGISTRATION.compacts(),
+            AGENT_PLAN_STREAMING_REGISTRATION.compacts(),
         ],
         [
-            false, true, false, true, false, false, true, true, false, true, true, true
+            false, true, false, true, false, false, true, true, false, true, true, false, true,
+            true, true, true, true, false
         ]
     );
 }
