@@ -90,16 +90,8 @@ pub(crate) async fn commit_claim(
     let assistance = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    let mut facts = route_facts(run, assistance.as_ref());
-    facts.grant.request = Some(&record);
-    let available = assistance.as_ref().map(|record| record.availability)
-        == Some(AssistanceAvailability::Available);
-    let admission = match available {
-        true => storyos_core::admit_route(&facts),
-        false => Err("assistance_unavailable"),
-    };
-    if let Err(capability) = admission {
-        mark_refused(client, claim, run, capability).await?;
+    // The next phase decides a refusal durably, so a refusal here only means changed work.
+    if admit(run, assistance.as_ref(), &record).is_err() {
         return Ok(None);
     }
     let [
@@ -228,6 +220,48 @@ pub(crate) async fn commit_claim(
     Ok(Some(DispatchClaim { model_attempt_id }))
 }
 
+/// The current admission of the summary request: the pinned route and the grant scope over its
+/// Context Assembly.
+fn admit(
+    run: &RunPhaseRow,
+    assistance: Option<&storyos_application::ProjectAssistanceRecord>,
+    record: &storyos_core::CurrentPassageAssemblyRecord,
+) -> Result<(), &'static str> {
+    if assistance.map(|record| record.availability) != Some(AssistanceAvailability::Available) {
+        return Err("assistance_unavailable");
+    }
+    let mut facts = route_facts(run, assistance);
+    facts.grant.request = Some(record);
+    storyos_core::admit_route(&facts)
+}
+
+/// Decides the admission of the summary request before its dispatch claim. A refusal marks the
+/// decision Attempt in the same committed phase, and the AgentRun completes with no compaction.
+pub(crate) async fn admit_or_mark(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+) -> Result<bool, CompleteAgentRunError> {
+    let decision_record = run
+        .disclosure_request
+        .as_ref()
+        .ok_or_else(|| unavailable("Compaction requires the decision Context Assembly"))?;
+    let assistance = read_assistance_record(client, &claim.project_scope)
+        .await
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
+    match admit(
+        run,
+        assistance.as_ref(),
+        &compaction_assembly_record(decision_record),
+    ) {
+        Ok(()) => Ok(true),
+        Err(capability) => {
+            mark_refused(client, claim, run, capability).await?;
+            Ok(false)
+        }
+    }
+}
+
 /// Marks the decision Attempt when the summary request refuses before its dispatch claim. The
 /// AgentRun then completes with no compaction.
 pub(crate) async fn mark_refused(
@@ -283,9 +317,18 @@ pub(crate) async fn record(
             response.response_reference.clone(),
             summary_text(&response.items),
         ),
-        Observation::NotSubmitted
-        | Observation::Rejected { .. }
-        | Observation::OutcomeUnknown { .. } => (Vec::new(), ModelUsage::Unknown, None, None, None),
+        Observation::OutcomeUnknown { response_reference } => (
+            Vec::new(),
+            ModelUsage::Unknown,
+            None,
+            response_reference
+                .as_ref()
+                .map(|reference| reference.reference_id.clone()),
+            None,
+        ),
+        Observation::NotSubmitted | Observation::Rejected { .. } => {
+            (Vec::new(), ModelUsage::Unknown, None, None, None)
+        }
     };
     let row = client
         .query_one(
@@ -379,3 +422,7 @@ fn observation_kind(observation: &Observation) -> &'static str {
         Observation::OutcomeUnknown { .. } => "outcome_unknown",
     }
 }
+
+#[cfg(test)]
+#[path = "agent_run_compaction_summary_tests.rs"]
+mod tests;

@@ -188,7 +188,8 @@ impl ModelDispatchStore for PostgresProjectReader {
                     "SELECT payload::text FROM storyos.model_attempts
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                         AND run_id = $3::text::uuid AND model_attempt_id = $4::text::uuid
-                        AND attempt_role IN ('decision', 'successor') AND decision_id IS NULL",
+                        AND attempt_role IN ('decision', 'successor', 'compaction')
+                        AND decision_id IS NULL",
                     &[
                         &claim.project_scope.owner_user_id.as_ref(),
                         &claim.project_scope.project_id.as_ref(),

@@ -43,9 +43,14 @@ pub(crate) async fn advance_active_compaction(
         staged,
         summary,
     ) {
-        (CompactionStep::RequestSummary, _, _) => Ok(CompactionAdvance::Dispatch(Box::new(
-            summary::summary_request(client, claim, run, RequestAttempt::New).await?,
-        ))),
+        (CompactionStep::RequestSummary, _, _) => {
+            if !summary::admit_or_mark(client, claim, run).await? {
+                return Ok(CompactionAdvance::ReadyToComplete);
+            }
+            Ok(CompactionAdvance::Dispatch(Box::new(
+                summary::summary_request(client, claim, run, RequestAttempt::New).await?,
+            )))
+        }
         (CompactionStep::ReobserveSummary, _, Some(summary)) => {
             let attempt = RequestAttempt::Claimed(DispatchClaim {
                 model_attempt_id: summary.model_attempt_id,
