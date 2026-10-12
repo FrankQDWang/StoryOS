@@ -53,4 +53,5 @@ This record supersedes the 10,000-token per-item ceiling of the protocol, and th
 - An author can send a Chapter of up to 32,000 scalars as one Working Target.
 - One reply can rewrite approximately 12,000 to 13,000 scalars in full. A longer rewrite needs more than one request, each with a part of the Chapter as its target blocks.
 - A text of mostly emoji or rare CJK scalars can need up to approximately 4 Provider tokens for each counted token. Such a request can exceed the window of the route. The route then refuses it after dispatch. A later Token Counting Profile revision can close this gap.
+- The AgentRun claim lease (30 seconds by default) is shorter than the request timeout. The bounds of ADR 0049 already had this gap. The Worker loop does one claim at a time. Thus with one Worker that has the Agent Plan adapter, no other claim takes the run while its request waits. A deployment with more than one such Worker needs a lease renewal during the request first.
 - Streaming and continuation (S4-06) can change the timeout rule of a long reply in a later decision.
