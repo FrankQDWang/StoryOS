@@ -222,7 +222,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       run_evidence: {
         project_count: 13,
         receipts: { createProject: 13, createVolume: 13, createChapter: 13,
-          updateProjectAssistance: 13, applyAuthorEdit: 4, createAgentRun: 17,
+          updateProjectAssistance: 13, applyAuthorEdit: 4, createAgentRun: 19,
           cancelAgentRun: 2 },
         author_action_count: 30,
       },
