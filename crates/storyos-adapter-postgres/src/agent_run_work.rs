@@ -195,6 +195,11 @@ pub(crate) async fn load_run_phase(
                         (run.owner_user_id, run.project_id, run.run_id)
                     AND active.manifest_role IN ('decision', 'later_request')
                     AND active.decision_position = run.active_decision_position
+                    AND NOT (active.manifest_role = 'later_request' AND EXISTS (
+                      SELECT 1 FROM storyos.active_context_compactions AS refused
+                       WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
+                             (run.owner_user_id, run.project_id, run.run_id)
+                         AND refused.install_state = 'refused'))
                   ORDER BY active.manifest_role = 'later_request' DESC
                   LIMIT 1
                ) AS assembly ON true
@@ -375,8 +380,9 @@ pub(crate) async fn settle_one_phase(
         } else {
             false
         };
-        // An install commits the Context Assembly of the later request, so read it again.
-        let run = if compacted && !run.later_request {
+        // An install commits the Context Assembly of the later request, and a refusal after it
+        // leaves the decision Context Assembly. Read the active one again.
+        let run = if compacted != run.later_request {
             load_run_phase(client, claim).await?
         } else {
             run

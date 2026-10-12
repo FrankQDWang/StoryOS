@@ -71,6 +71,15 @@ pub(crate) async fn advance_active_compaction(
         (CompactionStep::InstallOrRefuse, Some(staged), _, _) => Ok(CompactionAdvance::Decide {
             later_request: write::install_or_refuse(client, claim, run, &staged).await?,
         }),
+        // The source can become restricted after the install check. Check it again before the
+        // later request goes out.
+        (CompactionStep::LaterRequest, Some(staged), _, _)
+            if record == CompactionRecordState::Accepted =>
+        {
+            Ok(CompactionAdvance::Decide {
+                later_request: write::source_still_eligible(client, claim, &staged).await?,
+            })
+        }
         (CompactionStep::LaterRequest, _, _, _) => Ok(CompactionAdvance::Decide {
             later_request: true,
         }),
@@ -194,7 +203,7 @@ async fn load_chain_source(
 
 #[path = "agent_run_compaction_write.rs"]
 mod write;
-pub(crate) use write::mark_installed;
+pub(crate) use write::{mark_installed, source_restricted_now};
 
 #[path = "agent_run_compaction_summary.rs"]
 pub(crate) mod summary;

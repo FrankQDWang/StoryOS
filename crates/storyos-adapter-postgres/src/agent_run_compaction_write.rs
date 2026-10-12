@@ -24,7 +24,8 @@ pub(super) struct Producer {
 }
 
 /// Inserts the compaction record of one summary result: staged, or refused with no summary. The
-/// input digest binds the author message and the Working Target of the claimed AgentRun.
+/// input digest binds the author message and the Working Target of the decision Context Assembly
+/// that the later request copies.
 pub(super) async fn insert_staged(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -33,7 +34,11 @@ pub(super) async fn insert_staged(
     staged: &StagedCompaction,
     producer: &Producer,
 ) -> Result<(), CompleteAgentRunError> {
-    let (revision_id, body) = current_target(client, claim, &run.chapter_id).await?;
+    let decision = run
+        .disclosure_request
+        .as_ref()
+        .ok_or_else(|| unavailable("Compaction requires the decision Context Assembly"))?;
+    let (revision_id, body) = decision_target(decision);
     let admission = source
         .payload
         .pointer("/continuation/admission")
@@ -73,7 +78,11 @@ pub(super) async fn insert_staged(
                 &staged.output_text,
                 &producer.usage_kind,
                 &serde_json::json!(staged.loss_facts).to_string(),
-                &active_context_input_digest(&run.author_message, &revision_id, &body),
+                &active_context_input_digest(
+                    &run.author_message,
+                    &revision_id,
+                    body.unwrap_or_default(),
+                ),
                 &install_state,
                 &serde_json::json!(staged.preserved_item_ids).to_string(),
                 &admission.to_string(),
@@ -107,17 +116,68 @@ pub(super) async fn install_or_refuse(
         revision_id.clone(),
         body.clone(),
     )?);
+    // A decision Context Assembly with no Working Target item binds only the revision.
+    let current_body = match decision_target(decision).1 {
+        Some(_) => body.as_str(),
+        None => "",
+    };
     let checked = decide_compaction_install(&CompactionInstallFacts {
         source_restricted: source_restricted(&source.payload),
         exact_required_satisfied: matches!(assembled.sufficiency, ContextSufficiency::Complete),
         staged_input_digest: staged.input_digest.clone(),
-        current_input_digest: active_context_input_digest(&run.author_message, &revision_id, &body),
+        current_input_digest: active_context_input_digest(
+            &run.author_message,
+            &revision_id,
+            current_body,
+        ),
         summary_within_item_limit: summary_fits_item(decision, &staged.output_text),
     });
     let Err(refusal) = checked else {
         insert_later_request(client, claim, run, staged, decision).await?;
         return Ok(true);
     };
+    refuse(client, claim, refusal.code()).await?;
+    Ok(false)
+}
+
+/// Whether the source of the accepted install is still eligible before the later request goes
+/// out. A source that became restricted refuses the install, and the decision request then uses
+/// the ordinary continuation.
+pub(super) async fn source_still_eligible(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    staged: &CompactionState,
+) -> Result<bool, CompleteAgentRunError> {
+    let source = load_chain_source(client, claim, &staged.prior_model_attempt_id).await?;
+    if !source_restricted(&source.payload) {
+        return Ok(true);
+    }
+    refuse(
+        client,
+        claim,
+        storyos_core::CompactionInstallRefusal::RestrictedSource.code(),
+    )
+    .await?;
+    Ok(false)
+}
+
+/// Whether the source of the staged install of the claimed AgentRun is restricted now.
+pub(crate) async fn source_restricted_now(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+) -> Result<bool, CompleteAgentRunError> {
+    let staged = super::load_compaction_state(client, claim)
+        .await?
+        .ok_or_else(|| unavailable("The staged compaction is missing"))?;
+    let source = load_chain_source(client, claim, &staged.prior_model_attempt_id).await?;
+    Ok(source_restricted(&source.payload))
+}
+
+async fn refuse(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    reason: &str,
+) -> Result<(), CompleteAgentRunError> {
     let updated = client
         .execute(
             "UPDATE storyos.active_context_compactions
@@ -130,7 +190,7 @@ pub(super) async fn install_or_refuse(
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
                 &claim.run_id,
-                &refusal.code(),
+                &reason,
             ],
         )
         .await
@@ -138,7 +198,26 @@ pub(super) async fn install_or_refuse(
     if updated != 1 {
         return Err(unavailable("The staged compaction did not refuse"));
     }
-    Ok(false)
+    Ok(())
+}
+
+/// The revision and the Working Target text of a decision Context Assembly. The text is `None`
+/// when the assembly selects no Working Target item.
+fn decision_target(
+    decision: &storyos_core::CurrentPassageAssemblyRecord,
+) -> (String, Option<&str>) {
+    (
+        decision
+            .operation_requirement
+            .chapter_revision_id
+            .clone()
+            .unwrap_or_else(|| "unavailable".to_owned()),
+        decision
+            .selected
+            .iter()
+            .find(|item| item.source_class == storyos_core::ContextSourceClass::WorkingTarget)
+            .map(|item| item.content.as_str()),
+    )
 }
 
 /// Commits the operation requirement and the Context Assembly Manifest of the later request. Its

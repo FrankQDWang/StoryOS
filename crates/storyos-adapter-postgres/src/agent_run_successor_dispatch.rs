@@ -366,6 +366,11 @@ async fn copy_requirement(
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
                 AND requirement_role IN ('primary', 'later_request') AND decision_position = 0
+                AND (requirement_role = 'primary' OR NOT EXISTS (
+                  SELECT 1 FROM storyos.active_context_compactions AS refused
+                   WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
+                         ($1::text::uuid, $2::text::uuid, $3::text::uuid)
+                     AND refused.install_state = 'refused'))
               ORDER BY requirement_role = 'later_request' DESC
               LIMIT 1",
             &[
@@ -409,6 +414,11 @@ async fn copy_manifest(
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
                 AND manifest_role IN ('decision', 'later_request') AND decision_position = 0
+                AND (manifest_role = 'decision' OR NOT EXISTS (
+                  SELECT 1 FROM storyos.active_context_compactions AS refused
+                   WHERE (refused.owner_user_id, refused.project_id, refused.run_id) =
+                         ($1::text::uuid, $2::text::uuid, $3::text::uuid)
+                     AND refused.install_state = 'refused'))
               ORDER BY manifest_role = 'later_request' DESC
               LIMIT 1",
             &[

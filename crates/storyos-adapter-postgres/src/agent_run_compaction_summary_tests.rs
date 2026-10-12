@@ -338,3 +338,178 @@ async fn a_dropped_summary_stream_keeps_its_items_and_the_decision_continues_the
         ]
     );
 }
+
+/// The Host fake, with one SQL statement that the admin connection runs at the first
+/// preparation of the request that `at` selects. This is a concurrent change at that moment.
+struct ChangingFake<'a> {
+    admin: &'a Client,
+    at: fn(&storyos_application::CreateRequest) -> bool,
+    statement: String,
+    done: std::sync::Mutex<bool>,
+}
+
+impl storyos_application::ModelProviderAdapter for ChangingFake<'_> {
+    const ADAPTERS: &'static [storyos_core::ModelAdapter] = &[storyos_core::ModelAdapter::HostFake];
+    type Prepared =
+        <storyos_adapter_fake_destination::FakeDestination as ModelProviderAdapter>::Prepared;
+
+    async fn prepare(
+        &self,
+        request: &storyos_application::DestinationRequest,
+    ) -> Result<
+        storyos_application::PreparedRequest<Self::Prepared>,
+        storyos_application::PreDispatchRefusal,
+    > {
+        if let storyos_application::DestinationRequest::Create(create) = request
+            && (self.at)(create)
+            && !std::mem::replace(&mut *self.done.lock().unwrap(), /*src*/ true)
+        {
+            self.admin.batch_execute(&self.statement).await.unwrap();
+        }
+        storyos_adapter_fake_destination::FakeDestination
+            .prepare(request)
+            .await
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+        sink: &mut impl storyos_application::ModelStreamSink,
+    ) -> storyos_application::Observation {
+        storyos_adapter_fake_destination::FakeDestination
+            .exchange(prepared, sink)
+            .await
+    }
+}
+
+/// Settles a first AgentRun and then a compaction request in the same Conversation, with the
+/// concurrent change of `adapter`. Returns the compaction refusal, the input mapping of the
+/// decision Attempt, and the role of the Context Assembly Manifest that its request disclosed.
+async fn compact_with_change(
+    prefixes: [&str; 2],
+    at: fn(&storyos_application::CreateRequest) -> bool,
+    statement: &str,
+) -> [Option<String>; 4] {
+    let (store, admin) = stores().await;
+    let (scope, chapter_id, first) =
+        queued_run(&store, prefixes[0], DeploymentDestination::HostFake).await;
+    let claim = claim_run(&admin, scope.clone(), first.clone()).await;
+    complete_agent_run(
+        &store,
+        &storyos_adapter_fake_destination::FakeDestination,
+        &NoContractFaults,
+        &claim,
+    )
+    .await
+    .unwrap();
+    let run_id = admit_run_in(
+        &store,
+        &scope,
+        &chapter_id,
+        prefixes[1],
+        DeploymentDestination::HostFake,
+        ACTIVE_COMPACTION_REQUEST_PREFIX,
+        ConversationSelection::Existing {
+            conversation_id: format!("018f0000-0000-7001-8000-00000006{}6", prefixes[0]),
+        },
+    )
+    .await;
+    let adapter = ChangingFake {
+        admin: &admin,
+        at,
+        statement: statement
+            .replace("{project}", scope.project_id.as_ref())
+            .replace("{chapter}", &chapter_id)
+            .replace("{first}", &first),
+        done: std::sync::Mutex::default(),
+    };
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    complete_agent_run(&store, &adapter, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+    let row = admin
+        .query_one(
+            "SELECT record.install_state, record.refusal_reason,
+                    decision.payload->'continuation'->>'input_mapping', assembly.manifest_role
+               FROM storyos.active_context_compactions AS record
+               JOIN storyos.model_attempts AS decision
+                 ON decision.run_id = record.run_id AND decision.attempt_role = 'decision'
+               JOIN storyos.context_assembly_manifests AS assembly
+                 ON assembly.destination_context_manifest_id =
+                    decision.destination_context_manifest_id
+              WHERE record.run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+    [0, 1, 2, 3].map(|index| row.get(index))
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_edit_during_the_summary_request_refuses_the_install() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    // The Working Target changes after the decision Context Assembly and before the summary
+    // returns. The later request copies that assembly, so the install must refuse.
+    let facts = compact_with_change(
+        ["ec7", "ec8"],
+        |create| create.purpose == storyos_application::CreatePurpose::CompactionSummary,
+        "UPDATE storyos.authoritative_payloads AS payload
+            SET canonical_bytes = convert_to('An edit during the summary.', 'UTF8')
+           FROM storyos.authoritative_heads AS head
+           JOIN storyos.authoritative_revisions AS revision
+             ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+                 revision.revision_id) =
+                (head.owner_user_id, head.project_id, head.manuscript_object_id,
+                 head.current_revision_id)
+          WHERE (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                (revision.owner_user_id, revision.project_id, revision.payload_id)
+            AND head.project_id = '{project}'::uuid
+            AND head.manuscript_object_id = '{chapter}'::uuid",
+    )
+    .await;
+
+    assert_eq!(
+        facts,
+        [
+            Some("refused".to_owned()),
+            Some("changed_input".to_owned()),
+            Some("incremental".to_owned()),
+            Some("decision".to_owned()),
+        ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_source_restricted_after_the_install_check_keeps_the_summary_unsent() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    // The prior Attempt becomes restricted while the later request is prepared, before its
+    // dispatch claim.
+    let facts = compact_with_change(
+        ["ec9", "eca"],
+        |create| {
+            create.purpose == storyos_application::CreatePurpose::Decision
+                && create.context.first().map(|item| item.source_class)
+                    == Some(storyos_core::ContextSourceClass::ConversationSummary)
+        },
+        "UPDATE storyos.model_attempts
+            SET payload = jsonb_set(payload, '{produced_binding,covered_copy_restricted}', 'true')
+          WHERE run_id = '{first}'::uuid AND attempt_role = 'decision'",
+    )
+    .await;
+
+    assert_eq!(
+        facts,
+        [
+            Some("refused".to_owned()),
+            Some("restricted_source".to_owned()),
+            Some("new_transport".to_owned()),
+            Some("decision".to_owned()),
+        ]
+    );
+}
