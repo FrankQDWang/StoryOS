@@ -32,6 +32,10 @@ impl ModelStreamSink for BatchSink {
 fn streaming_route(base: &str) -> RequestRoute {
     RequestRoute {
         mapping_revision: storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION.to_owned(),
+        bounds: Some(storyos_application::RequestBounds {
+            max_output_tokens: 8192,
+            timeout: std::time::Duration::from_secs(/*secs*/ 60),
+        }),
         ..route(base)
     }
 }
@@ -55,7 +59,20 @@ async fn stream(
     events: Vec<serde_json::Value>,
     stop_after: Option<usize>,
 ) -> (Observation, Vec<Vec<NativeStreamItem>>, String) {
-    let (base, served) = destination(Reply::Events(events)).await;
+    let (observation, batches, served) = exchange(Reply::Events(events), stop_after).await;
+    let (_, _, body) = served.await.unwrap();
+    (observation, batches, body)
+}
+
+async fn exchange(
+    reply: Reply,
+    stop_after: Option<usize>,
+) -> (
+    Observation,
+    Vec<Vec<NativeStreamItem>>,
+    tokio::task::JoinHandle<crate::tests::Received>,
+) {
+    let (base, served) = destination(reply).await;
     let adapter = AgentPlanResponses {
         resolver: CanaryResolver::default(),
     };
@@ -69,8 +86,7 @@ async fn stream(
         stop_after,
     };
     let observation = adapter.exchange(prepared.prepared, &mut sink).await;
-    let (_, _, body) = served.await.unwrap();
-    (observation, sink.batches, body)
+    (observation, sink.batches, served)
 }
 
 fn provisional(text: Option<&str>) -> NativeStreamItem {
@@ -179,4 +195,47 @@ async fn a_stop_from_the_sink_ends_the_exchange_before_the_next_commit() {
     let (observation, batches, _) = stream(started("resp_s3"), Some(1)).await;
 
     assert_eq!((observation, batches.len()), (unknown("resp_s3"), 1));
+}
+
+#[tokio::test]
+async fn a_stalled_stream_commits_its_pending_events_and_learns_a_stop_after_the_interval() {
+    let (base, _served) = destination(Reply::Stall(started("resp_s4"))).await;
+    let response = reqwest::Client::new()
+        .post(format!("{base}/responses"))
+        .body("{}")
+        .send()
+        .await
+        .unwrap();
+    let mut sink = BatchSink {
+        batches: Vec::new(),
+        stop_after: Some(2),
+    };
+    // The destination sends nothing more, so only the interval can start each commit.
+    let policy = super::CommitPolicy {
+        bound: PROVISIONAL_STREAM_EVENT_BOUND,
+        interval: std::time::Duration::from_millis(/*millis*/ 20),
+    };
+    let observation = super::observe(
+        response,
+        &[],
+        storyos_core::AGENT_PLAN_STREAMING_MAPPING_REVISION,
+        policy,
+        &mut sink,
+    )
+    .await;
+
+    assert_eq!(
+        (observation, sink.batches),
+        (
+            unknown("resp_s4"),
+            vec![
+                vec![
+                    provisional(None),
+                    provisional(Some(&ADVISORY[..10])),
+                    provisional(Some(ADVISORY)),
+                ],
+                Vec::new(),
+            ],
+        )
+    );
 }

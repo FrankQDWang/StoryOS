@@ -133,7 +133,10 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                         response,
                         &targets,
                         &mapping_revision,
-                        storyos_application::PROVISIONAL_STREAM_EVENT_BOUND,
+                        stream::CommitPolicy {
+                            bound: storyos_application::PROVISIONAL_STREAM_EVENT_BOUND,
+                            interval: storyos_application::PROVISIONAL_STREAM_COMMIT_INTERVAL,
+                        },
                         sink,
                     )
                     .await;

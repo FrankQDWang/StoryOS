@@ -1,6 +1,9 @@
 //! Read the typed server-sent events of one streamed Responses request (ADR 0033, ADR 0039).
 
 use std::collections::BTreeMap;
+use std::time::Duration;
+
+use tokio::time::Instant;
 
 use serde_json::Value;
 use storyos_application::{
@@ -17,13 +20,22 @@ struct StreamState {
     pending: Vec<NativeStreamItem>,
 }
 
-/// Commits each terminal item event at once, and provisional events in batches of `bound`. A
-/// stream that stops before its terminal response event is OutcomeUnknown.
+/// When the pending provisional events commit (ADR 0054).
+#[derive(Clone, Copy)]
+pub(crate) struct CommitPolicy {
+    pub bound: usize,
+    pub interval: Duration,
+}
+
+/// Commits each terminal item event at once. Provisional events commit at `bound` events or
+/// after `interval`, whichever comes first. A commit after `interval` also occurs with no event,
+/// so that a stale fence or a cancellation stops the exchange. A stream that stops before its
+/// terminal response event is OutcomeUnknown.
 pub(crate) async fn observe(
     mut response: reqwest::Response,
     targets: &[DeclaredTarget],
     mapping_revision: &str,
-    bound: usize,
+    policy: CommitPolicy,
     sink: &mut impl ModelStreamSink,
 ) -> Observation {
     let mut state = StreamState {
@@ -32,10 +44,18 @@ pub(crate) async fn observe(
         pending: Vec::new(),
     };
     let mut buffer = Vec::new();
+    let mut deadline = Instant::now() + policy.interval;
     loop {
-        let chunk = match response.chunk().await {
-            Ok(Some(chunk)) => chunk,
-            Ok(None) | Err(_) => break,
+        let chunk = match tokio::time::timeout_at(deadline, response.chunk()).await {
+            Ok(Ok(Some(chunk))) => chunk,
+            Ok(Ok(None) | Err(_)) => break,
+            Err(_elapsed) => {
+                deadline = Instant::now() + policy.interval;
+                if state.commit(sink).await == StreamControl::Stop {
+                    return state.unknown(mapping_revision);
+                }
+                continue;
+            }
         };
         buffer.extend_from_slice(&chunk);
         while let Some((event, rest)) = split_event(&buffer) {
@@ -53,13 +73,17 @@ pub(crate) async fn observe(
                     return observation;
                 }
                 Step::Commit => {
+                    deadline = Instant::now() + policy.interval;
                     if state.flush(sink).await == StreamControl::Stop {
                         return state.unknown(mapping_revision);
                     }
                 }
             }
-            if state.pending.len() >= bound && state.flush(sink).await == StreamControl::Stop {
-                return state.unknown(mapping_revision);
+            if state.pending.len() >= policy.bound || Instant::now() >= deadline {
+                deadline = Instant::now() + policy.interval;
+                if state.flush(sink).await == StreamControl::Stop {
+                    return state.unknown(mapping_revision);
+                }
             }
         }
     }
@@ -148,6 +172,11 @@ impl StreamState {
         if self.pending.is_empty() {
             return StreamControl::Continue;
         }
+        self.commit(sink).await
+    }
+
+    /// Commits the pending events, also none, and reports whether the exchange must stop.
+    async fn commit(&mut self, sink: &mut impl ModelStreamSink) -> StreamControl {
         let events = std::mem::take(&mut self.pending);
         sink.append(&events).await
     }

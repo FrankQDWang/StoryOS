@@ -46,6 +46,8 @@ pub(crate) enum Reply {
     Http(u16, String),
     /// Server-sent events, each as one `data` line, and then the end of the connection.
     Events(Vec<serde_json::Value>),
+    /// Server-sent events, and then no more bytes on an open connection.
+    Stall(Vec<serde_json::Value>),
     Drop,
     Hold,
 }
@@ -78,13 +80,17 @@ pub(crate) async fn destination(reply: Reply) -> (String, tokio::task::JoinHandl
                 stream.write_all((head + &body).as_bytes()).await.unwrap();
             }
             Reply::Events(events) => {
-                let mut body = String::from(
-                    "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n",
-                );
-                for event in events {
-                    body.push_str(&format!("event: {}\ndata: {event}\n\n", event["type"]));
-                }
-                stream.write_all(body.as_bytes()).await.unwrap();
+                stream
+                    .write_all(event_stream(&events).as_bytes())
+                    .await
+                    .unwrap();
+            }
+            Reply::Stall(events) => {
+                stream
+                    .write_all(event_stream(&events).as_bytes())
+                    .await
+                    .unwrap();
+                std::future::pending::<()>().await;
             }
             Reply::Drop => drop(stream),
             Reply::Hold => std::future::pending::<()>().await,
@@ -92,6 +98,16 @@ pub(crate) async fn destination(reply: Reply) -> (String, tokio::task::JoinHandl
         received
     });
     (base, served)
+}
+
+fn event_stream(events: &[serde_json::Value]) -> String {
+    let mut body = String::from(
+        "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n",
+    );
+    for event in events {
+        body.push_str(&format!("event: {}\ndata: {event}\n\n", event["type"]));
+    }
+    body
 }
 
 fn complete_request(bytes: &[u8]) -> Option<Received> {
