@@ -198,6 +198,7 @@ export function WritingAssistantPanel({
   const [refused, setRefused] = useState(false);
   const [resultUnavailable, setResultUnavailable] = useState(false);
   const inspectSequence = useRef(0);
+  const [failedReads, setFailedReads] = useState(0);
 
   useEffect(() => {
     if (context === undefined) {
@@ -308,13 +309,17 @@ export function WritingAssistantPanel({
   const terminal = run !== undefined
     && (run.status === "completed" || run.status === "refused" || run.status === "cancelled");
 
-  // A Run can wait in the queue of a separate Worker, so read it again until it settles.
+  // A Run can wait in the queue of a separate Worker, so read it again until it settles. A failed
+  // read schedules the next read too.
   useEffect(() => {
     if (reference?.runId === undefined || terminal || context === undefined) return;
     return scheduleRefresh(() => {
-      void inspect(reference).catch(() => setStatus("无法确认请求结果，请稍后检查。"));
+      void inspect(reference).catch(() => {
+        setStatus("无法确认请求结果，请稍后检查。");
+        setFailedReads((count) => count + 1);
+      });
     });
-  }, [reference?.runId, run, terminal]);
+  }, [reference?.runId, run, terminal, failedReads]);
   const unresolved = reference !== undefined && (!terminal || reference.conversationId === undefined);
 
   const submit = (message: string, onAdmitted: () => void) => {

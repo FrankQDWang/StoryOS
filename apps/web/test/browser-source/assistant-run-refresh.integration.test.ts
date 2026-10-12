@@ -8,7 +8,7 @@ import { CHAPTER, OWNER, PROJECT, jsonResponse } from "./scenario.ts";
 
 const RUN = "018f0000-0000-7001-8000-000000000c41";
 
-it("reads a queued Run again until it settles and shows the result with no reload", async () => {
+it("reads a queued Run again after a failed read until it settles and shows the result", async () => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({
     scope, message: "Help with this passage.", chapterId: CHAPTER,
@@ -17,7 +17,7 @@ it("reads a queued Run again until it settles and shows the result with no reloa
   }));
   const settled = { kind: "advisory", decision_id: "018f0000-0000-7001-8000-000000000c45", selected: true,
     text: "Keep the second sentence.", continuation: { kind: "absent" } };
-  const statuses = ["queued", "queued", "completed"] as const;
+  const statuses = ["queued", "unreadable", "completed"] as const;
   let reads = 0;
   const fetchImpl: typeof fetch = async (input) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname;
@@ -25,6 +25,7 @@ it("reads a queued Run again until it settles and shows the result with no reloa
     if (path.endsWith(`/agent-runs/${RUN}`)) {
       const status = statuses[Math.min(reads, statuses.length - 1)]!;
       reads += 1;
+      if (status === "unreadable") return jsonResponse({ code: "resource_unavailable" }, 503);
       return jsonResponse({ ...agentRunFixture, project_scope: scope, run_id: RUN, status,
         decision: status === "completed" ? settled : { kind: "absent" } });
     }
