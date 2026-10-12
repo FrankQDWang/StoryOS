@@ -64,3 +64,19 @@ fn a_malformed_database_url_refuses_startup_with_its_name_and_no_value() {
     assert!(stderr.contains("STORYOS_DATABASE_URL"), "{stderr}");
     assert!(!stderr.contains(canary), "{stderr}");
 }
+
+#[test]
+fn malformed_bootstrap_sessions_refuse_startup_with_their_name_and_no_value() {
+    let canary = "storyos-bootstrap-canary-0d7a";
+    let output = Command::new(env!("CARGO_BIN_EXE_storyos-server"))
+        .args(["--web-root", "/__storyos_missing_web"])
+        .env("STORYOS_BOOTSTRAP_SESSIONS", format!("{{{canary}"))
+        .env_remove("STORYOS_LOG")
+        .env_remove("STORYOS_PUBLIC_ORIGIN")
+        .output()
+        .expect("packaged storyos-server should execute");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(stderr.contains("STORYOS_BOOTSTRAP_SESSIONS"), "{stderr}");
+    assert!(!stderr.contains(canary), "{stderr}");
+}
