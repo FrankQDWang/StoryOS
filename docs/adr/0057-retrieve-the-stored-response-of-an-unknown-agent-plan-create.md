@@ -24,6 +24,15 @@ The general Ark reference documents `GET /responses/{id}`. It does not prove the
 - The Stage 3 decision of S3-23 decides each retrieved result. A Retrieve has its own Destination Attempt, Wire Payload Projection, and Outbound Disclosure Event, and the Host admits it once. It never repeats the create, resumes the stream, or proves create idempotency. An unknown or incomplete result keeps the unknown outcome and the reservation.
 - No author view shows a reference, a Retrieve, or a recovery classification ([ADR 0040](0040-show-assistance-results-not-run-internals-to-the-author.md)).
 
+## Abort on the route
+
+On 2026-10-13, [S4-04b: Qualify the Abort Behavior of the Real Route](https://github.com/FrankQDWang/StoryOS/issues/1130) added this section. The author asked for a probe of an undocumented cancel operation before the decision.
+
+- The route has no usable cancel or abort operation. The public Responses API of the route lists no cancel operation. Four probes of `POST /responses/{reference}/cancel` returned `http_400:InvalidParameter`. They used a stored, an unknown, a just closed, and an in-progress response. The in-progress response then continued to its terminal event. The fourth probe is an approved exception to the limit of 3 probes ([evidence record](../research/agent-plan-recovery-qualification-2026-10-13.md)).
+- The adapter refuses each Abort before its dispatch claim. No request leaves the Host, so the Abort has no Destination Attempt and no Outbound Disclosure Event.
+- The refusal records `provider_abort = unsupported` and `provider_confirmed = false` on the Model Attempt Cancellation of the cancelled Attempt. The other cancellation duties continue, so the fenced retrieval of a late result still occurs. Before this decision, the refusal ended all cancellation duties of the Run.
+- The closed stream at the cancellation, a local timeout, and the refused Abort never prove that the destination stopped. The cancelled Attempt keeps its unknown outcome and its reservation until a retrieved result reconciles its usage as evidence only.
+
 ## Considered options
 
 - A raw GET outside the Model Gateway was rejected. It has no admission or disclosure evidence (ADR 0049).
@@ -33,6 +42,6 @@ The general Ark reference documents `GET /responses/{id}`. It does not prove the
 
 - The live qualification sent 11 requests ([evidence record](../research/agent-plan-recovery-qualification-2026-10-13.md)). The route served a stored complete response, and the Host settled a selected Advisory from it.
 - Route fact: retrieval works only for a response that finished and that the destination stored. A streamed response whose connection closed before the terminal event returned `http_404:ResourceNotFound` later, also after 8.5 minutes. Such an Attempt keeps its unknown outcome and goes only to the one bounded successor of [S4-04c](https://github.com/FrankQDWang/StoryOS/issues/1131).
-- Route fact: the route does not recognize a cancel operation. `POST /responses/{reference}/cancel` returned `http_400:InvalidParameter` for a stored reference and for an unknown reference. [S4-04b](https://github.com/FrankQDWang/StoryOS/issues/1130) records the abort decision in this ADR.
+- Route fact: the route does not recognize a cancel operation. `POST /responses/{reference}/cancel` returned `http_400:InvalidParameter` for each of four references, also for an in-progress response. The section "Abort on the route" records the abort decision.
 - The committed reference makes a finished response retrievable after a Worker crash between the end of the stream and the record. Without it, only the observation carries the reference, and the crash loses it.
 - [S4-04c](https://github.com/FrankQDWang/StoryOS/issues/1131) settles a retrieved result of each decision kind. Until then, only a selected Advisory settles from a retrieved result.
