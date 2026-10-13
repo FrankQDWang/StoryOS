@@ -6,8 +6,8 @@ use storyos_application::{
     CacheSetting, CacheUse, CreatePurpose, CreateRequest, CredentialReference, CredentialResolver,
     DeclaredTarget, DestinationRequest, DispatchClaim, ModelProviderAdapter, ModelResponse,
     ModelStreamSink, ModelUsage, Observation, PreDispatchRefusal, RequestAttempt, RequestBounds,
-    RequestContextItem, RequestRoute, ResolvedCredential, RetrievePurpose, RetrieveRequest,
-    StreamControl,
+    RequestContextItem, RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose,
+    RetrieveRequest, StreamControl,
 };
 use storyos_core::{
     ContextSourceClass, DecisionCandidate, ModelAdapter, ModelOutput, NativeStreamItem,
@@ -38,6 +38,10 @@ struct RecordingSink(Vec<NativeStreamItem>);
 impl ModelStreamSink for RecordingSink {
     async fn append(&mut self, events: &[NativeStreamItem]) -> StreamControl {
         self.0.extend_from_slice(events);
+        StreamControl::Continue
+    }
+
+    async fn retain_reference(&mut self, _reference: &ResponseReference) -> StreamControl {
         StreamControl::Continue
     }
 }

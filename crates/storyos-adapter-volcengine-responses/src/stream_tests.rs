@@ -16,6 +16,7 @@ const ADVISORY: &str = r#"{"kind":"advisory","text":"Keep it."}"#;
 /// Records each committed batch. It tells the adapter to stop after `stop_after` batches.
 struct BatchSink {
     batches: Vec<Vec<NativeStreamItem>>,
+    references: Vec<ResponseReference>,
     stop_after: Option<usize>,
 }
 
@@ -26,6 +27,11 @@ impl ModelStreamSink for BatchSink {
             Some(limit) if self.batches.len() >= limit => StreamControl::Stop,
             Some(_) | None => StreamControl::Continue,
         }
+    }
+
+    async fn retain_reference(&mut self, reference: &ResponseReference) -> StreamControl {
+        self.references.push(reference.clone());
+        StreamControl::Continue
     }
 }
 
@@ -83,9 +89,25 @@ async fn exchange(
         .unwrap();
     let mut sink = BatchSink {
         batches: Vec::new(),
+        references: Vec::new(),
         stop_after,
     };
     let observation = adapter.exchange(prepared.prepared, &mut sink).await;
+    // Each stream reports its reference once, before its first batch.
+    let reported = match &observation {
+        Observation::Terminal(response) => response.response_reference.clone(),
+        Observation::OutcomeUnknown { response_reference } => response_reference
+            .as_ref()
+            .map(|reference| reference.reference_id.clone()),
+        Observation::NotSubmitted | Observation::Rejected { .. } => None,
+    };
+    assert_eq!(
+        sink.references
+            .iter()
+            .map(|reference| reference.reference_id.clone())
+            .collect::<Vec<_>>(),
+        Vec::from_iter(reported)
+    );
     (observation, sink.batches, served)
 }
 
@@ -222,6 +244,7 @@ async fn a_stalled_stream_commits_its_pending_events_and_learns_a_stop_after_the
         .unwrap();
     let mut sink = BatchSink {
         batches: Vec::new(),
+        references: Vec::new(),
         stop_after: Some(2),
     };
     // The destination sends nothing more, so only the interval can start each commit.
