@@ -116,3 +116,23 @@ Each Attempt has its own Outbound Disclosure Event.
 - The cancel operation returned `http_400:InvalidParameter` for an in-progress response (R21), and the response continued to its terminal event. With R7, R8, and R16, the four probes returned the same code for a stored, a discarded, a just closed, and an in-progress response. The route has no usable cancel operation.
 - A GET of an in-progress response returned `http_404:ResourceNotFound` (R20). Thus a response is retrievable only after it finished and the destination stored it.
 - Totals of the whole run: 21 requests plus the noted recovery Retrieve in the first attempt, 22 in all. Known usage of all Create requests: 1,267 input and 15,628 output tokens.
+
+## Journey: a recovered request on the qualified route, 2026-10-13
+
+Evidence of [S4-04d: Show the Author a Stopped Request Without a Result](https://github.com/FrankQDWang/StoryOS/issues/1132). The coordinator approved 2 requests with a cap of 4.
+
+| Fact | Value |
+| --- | --- |
+| Build | S4-04d branch commit `1d9833e2`, tree `29e69c82`, with the head Registration `fa13` (profile v12, qualified). No qualification authorization. |
+| Deployment | A new disposable database with the controlled fixture, Server with `STORYOS_WORKER=0` |
+
+| # | Time (UTC) | Purpose | Model Attempt | Outcome | Usage (input / output) |
+| --- | --- | --- | --- | --- | --- |
+| R22 | 10:34:26 | Create, a short Advisory. After the reference commit, the Worker was frozen with `SIGSTOP` at 10:34:29.0, with no stream item committed, and killed with `SIGKILL` at 10:35:29.1. | `01a134d3-ee16-74d2-b202-a3b6d53c3633` | Reference `resp_021791887666996e28a43f868cac88f2cf2873497029e3a9787c9` | 311 / 121 (from R23) |
+| R23 | 10:35:37 | Retrieve by a new Worker after the lease expired | `01a134d5-0445-7e12-b0b6-280e2b525282` | Terminal and complete. The Host settled the Advisory on the R22 Attempt, made the continuation binding, and completed the Run. The panel showed the answer. | (of R22) |
+
+Each Attempt has its own Outbound Disclosure Event. No database statement changed a record in this journey.
+
+The frozen Worker kept its connection open, so the destination finished and stored the short response. Then the kill closed the connection, and the stored response was retrievable. This is the path that a crash after the end of a stream takes.
+
+Totals of all S4-04 live work: 23 requests plus the noted recovery Retrieve, 24 in all.
