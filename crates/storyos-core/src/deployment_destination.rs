@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::{AGENT_PLAN_REGISTRATION, HOST_FAKE_REGISTRATION, ModelRegistration};
+use crate::{AGENT_PLAN_WINDOW_PENDING_REGISTRATION, HOST_FAKE_REGISTRATION, ModelRegistration};
 
 pub const AGENT_PLAN_ENDPOINT: &str = "https://ark.cn-beijing.volces.com/api/plan/v3";
 pub const AGENT_PLAN_ACCOUNT_BOUNDARY: &str =
@@ -147,7 +147,7 @@ impl DeploymentDestination {
     pub fn registration(&self) -> &'static ModelRegistration {
         match self {
             Self::HostFake => &HOST_FAKE_REGISTRATION,
-            Self::VolcengineAgentPlan { .. } => &AGENT_PLAN_REGISTRATION,
+            Self::VolcengineAgentPlan { .. } => &AGENT_PLAN_WINDOW_PENDING_REGISTRATION,
         }
     }
 
