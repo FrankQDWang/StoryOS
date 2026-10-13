@@ -4,8 +4,9 @@ use super::{
     CompactionInstallFacts, CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState,
     CompactionSource, CompactionStep, CompactionTrigger, HOST_FAKE_COMPACTION_OUTPUT,
     HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction, SummaryObservation,
-    active_context_input_digest, compaction_due, compaction_threshold, decide_compaction_install,
-    later_request_record, next_compaction_step, requests_active_compaction, stage_compaction,
+    active_context_input_digest, compaction_due, compaction_threshold, conversation_too_long,
+    decide_compaction_install, later_request_record, next_compaction_step,
+    requests_active_compaction, stage_compaction,
 };
 
 fn facts(
@@ -156,8 +157,19 @@ fn the_threshold_is_eighty_percent_of_the_window_after_the_output_bound() {
                 trigger(doubao.0, doubao.1, None, 3_500),
             ]
             .map(|facts| compaction_due(&facts)),
+            [
+                trigger(doubao.0, doubao.1, Some(229_000), 376),
+                trigger(doubao.0, doubao.1, Some(229_000), 375),
+                trigger(None, doubao.1, Some(300_000), 0),
+            ]
+            .map(|facts| conversation_too_long(&facts)),
         ),
-        (Some(183_500), None, [true, false, false, false, false])
+        (
+            Some(183_500),
+            None,
+            [true, false, false, false, false],
+            [true, false, false],
+        )
     );
 }
 

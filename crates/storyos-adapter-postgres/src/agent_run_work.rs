@@ -374,6 +374,20 @@ pub(crate) async fn settle_one_phase(
                 .await?
             {
                 CompactionAdvance::Dispatch(request) => return Ok(WorkPhase::Dispatch(request)),
+                CompactionAdvance::TooLong => {
+                    update_run(
+                        client,
+                        claim,
+                        "refused",
+                        Some(&serde_json::json!({
+                            "kind": "execution_refused",
+                            "capability": "conversation_too_long"
+                        })),
+                        /*clear_lease*/ true,
+                    )
+                    .await?;
+                    return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
+                }
                 CompactionAdvance::Decide { later_request } => later_request,
             }
         } else {

@@ -99,9 +99,9 @@ pub use compact_active_context::{
     CompactionKnownInput, CompactionRecordState, CompactionSource, CompactionStep,
     CompactionTrigger, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
     StagedCompaction, SummaryObservation, active_context_input_digest, compaction_assembly_record,
-    compaction_due, compaction_threshold, decide_compaction_install, later_request_record,
-    next_compaction_step, requests_active_compaction, stage_compaction, summary_fits_item,
-    summary_text,
+    compaction_due, compaction_threshold, conversation_too_long, decide_compaction_install,
+    later_request_record, next_compaction_step, requests_active_compaction, stage_compaction,
+    summary_fits_item, summary_text,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,

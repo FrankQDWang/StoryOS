@@ -564,3 +564,52 @@ async fn a_chain_below_the_threshold_continues_with_no_compaction() {
         ]
     );
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_chain_at_the_window_without_an_installed_summary_refuses_as_too_long() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    // The first response reports 229,400 tokens. The window after the output bound is 229,376
+    // tokens. The summary stream drops, so no summary installs.
+    let mut dropped = streamed("resp_dropped", "The author keeps the rain.");
+    dropped.truncate(/*len*/ 3);
+    let run_id = compact_on_agent_plan(
+        &store,
+        &admin,
+        ["ecd", "ece"],
+        vec![
+            with_usage(
+                streamed("resp_decision", ADVICE),
+                /*input*/ 229_300,
+                /*output*/ 100,
+            ),
+            dropped,
+        ],
+    )
+    .await;
+    let row = admin
+        .query_one(
+            "SELECT run.status, run.settlement->>'capability', record.refusal_reason,
+                    (SELECT count(*)::text FROM storyos.model_attempts AS decision
+                      WHERE decision.run_id = run.run_id AND decision.attempt_role = 'decision')
+               FROM storyos.agent_runs AS run
+               JOIN storyos.active_context_compactions AS record ON record.run_id = run.run_id
+              WHERE run.run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        [0, 1, 2, 3].map(|index| row.get::<_, Option<String>>(index)),
+        [
+            Some("refused".to_owned()),
+            Some("conversation_too_long".to_owned()),
+            Some("summary_unavailable".to_owned()),
+            Some("0".to_owned()),
+        ]
+    );
+}

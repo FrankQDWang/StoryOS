@@ -154,6 +154,21 @@ pub fn compaction_due(trigger: &CompactionTrigger) -> bool {
     }
 }
 
+/// Whether the expected input reaches the window after the output bound. Then a request that
+/// keeps the full chain cannot fit. An unknown window, output bound, or usage gives `false`.
+pub fn conversation_too_long(trigger: &CompactionTrigger) -> bool {
+    match (
+        trigger.window_tokens,
+        trigger.output_bound,
+        trigger.prior_reported_tokens,
+    ) {
+        (Some(window), Some(output_bound), Some(prior)) => {
+            prior.saturating_add(trigger.new_turn_tokens) >= window.saturating_sub(output_bound)
+        }
+        _ => false,
+    }
+}
+
 /// Decides the next compaction step from the compaction request, the response chain of the
 /// Conversation, and the record state. With no prior response, nothing is to be compacted. A
 /// compaction that has a record continues, also when the request changes.
