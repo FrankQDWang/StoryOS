@@ -10,7 +10,7 @@ use std::time::Duration;
 use storyos_application::{
     CacheSetting, CreatePurpose, CredentialResolver, DeclaredTarget, DestinationRequest,
     ModelProviderAdapter, ModelStreamSink, Observation, PreDispatchRefusal, PreparedRequest,
-    RequestAttempt, ResolvedCredential, WirePayloadProjection,
+    RequestAttempt, RequestRoute, ResolvedCredential, RetrieveRequest, WirePayloadProjection,
 };
 use storyos_core::ModelAdapter;
 
@@ -20,8 +20,9 @@ const EXECUTION_PROFILE: &str = "storyos.volcengine-agent-plan.execution.v1";
 /// (live observation, 2026-10-12). It does not tell an expired reference from another one.
 const PREVIOUS_RESPONSE_NOT_FOUND: &str = "http_400:InvalidParameter.PreviousResponseNotFound";
 
-/// Sends each admitted Create request once, with no retry, redirect, or fallback. It asks for
-/// no explicit cache. The streaming mapping reads typed server-sent events.
+/// Sends each admitted Create or Retrieve request once, with no retry, redirect, or fallback. It
+/// asks for no explicit cache. The streaming mapping reads typed server-sent events. The route
+/// has no abort operation, so it refuses each Abort before the dispatch claim.
 /// It resolves the Credential Reference of each request through `resolver` before the dispatch
 /// claim.
 pub struct AgentPlanResponses<R> {
@@ -42,6 +43,13 @@ enum Exchange {
         /// The mapping revision of a streamed request, `None` for a request that is not streamed.
         stream: Option<String>,
     },
+    /// One read of a stored response. It never sends the original request again.
+    Retrieve {
+        url: String,
+        credential: ResolvedCredential,
+        timeout: Duration,
+        targets: Vec<DeclaredTarget>,
+    },
     /// A lost claim committed this Attempt. The request is not sent again.
     Reobserve,
 }
@@ -55,9 +63,11 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         &self,
         request: &DestinationRequest,
     ) -> Result<PreparedRequest<AgentPlanExchange>, PreDispatchRefusal> {
-        // Retrieval and abort are not qualified for this route (S4-04).
-        let DestinationRequest::Create(create) = request else {
-            return Err(PreDispatchRefusal::UnsupportedRequest);
+        let create = match request {
+            DestinationRequest::Create(create) => create,
+            DestinationRequest::Retrieve(retrieve) => return self.prepare_retrieve(retrieve).await,
+            // The Responses API of the route has no cancel or abort operation (ADR 0057).
+            DestinationRequest::Abort(_) => return Err(PreDispatchRefusal::UnsupportedRequest),
         };
         let route = &create.route;
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
@@ -101,12 +111,7 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 prepared: AgentPlanExchange(Exchange::Reobserve),
             });
         }
-        let Some(reference) = &route.credential_reference else {
-            return Err(PreDispatchRefusal::CredentialUnavailable);
-        };
-        let Some(credential) = self.resolver.resolve(reference).await else {
-            return Err(PreDispatchRefusal::CredentialUnavailable);
-        };
+        let credential = self.credential(route).await?;
         Ok(PreparedRequest {
             projection,
             prepared: AgentPlanExchange(Exchange::Send {
@@ -127,21 +132,29 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         prepared: AgentPlanExchange,
         sink: &mut impl ModelStreamSink,
     ) -> Observation {
-        let Exchange::Send {
-            url,
-            body,
-            credential,
-            timeout,
-            targets,
-            continues,
-            stream,
-        } = prepared.0
-        else {
-            return Observation::OutcomeUnknown {
-                response_reference: None,
-            };
+        let (url, body, credential, timeout, targets, continues, stream) = match prepared.0 {
+            Exchange::Send {
+                url,
+                body,
+                credential,
+                timeout,
+                targets,
+                continues,
+                stream,
+            } => (url, body, credential, timeout, targets, continues, stream),
+            Exchange::Retrieve {
+                url,
+                credential,
+                timeout,
+                targets,
+            } => return retrieve(&url, &credential, timeout, &targets).await,
+            Exchange::Reobserve => {
+                return Observation::OutcomeUnknown {
+                    response_reference: None,
+                };
+            }
         };
-        let mut observation = match send(&url, body, &credential, timeout).await {
+        let mut observation = match send(Method::Post(body), &url, &credential, timeout).await {
             Sent::Settled(observation) => observation,
             Sent::Accepted(response) => match stream {
                 Some(mapping_revision) => {
@@ -181,14 +194,97 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
     }
 }
 
-/// The result of one POST: a successful status with its unread body, or a settled observation.
+impl<R: CredentialResolver> AgentPlanResponses<R> {
+    /// A GET of the stored response. The Host admits it only for a retained reference.
+    async fn prepare_retrieve(
+        &self,
+        retrieve: &RetrieveRequest,
+    ) -> Result<PreparedRequest<AgentPlanExchange>, PreDispatchRefusal> {
+        let route = &retrieve.route;
+        let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        };
+        let path = format!("/responses/{}", retrieve.response_reference);
+        let wire = storyos_core::canonical_json(&serde_json::json!({
+            "method": "GET",
+            "path": path,
+        }));
+        let projection = WirePayloadProjection {
+            execution_profile: EXECUTION_PROFILE.to_owned(),
+            mapping_revision: route.mapping_revision.clone(),
+            digest: format!("sha256:{}", storyos_core::hex_sha256(wire.as_bytes())),
+            serialized_payload: Some(wire),
+            cache_setting: None,
+        };
+        if let RequestAttempt::Claimed(_) = retrieve.attempt {
+            return Ok(PreparedRequest {
+                projection,
+                prepared: AgentPlanExchange(Exchange::Reobserve),
+            });
+        }
+        let credential = self.credential(route).await?;
+        Ok(PreparedRequest {
+            projection,
+            prepared: AgentPlanExchange(Exchange::Retrieve {
+                url: format!("{}{path}", endpoint.trim_end_matches('/')),
+                credential,
+                timeout: bounds.timeout,
+                targets: retrieve.declared_targets.clone(),
+            }),
+        })
+    }
+
+    async fn credential(
+        &self,
+        route: &RequestRoute,
+    ) -> Result<ResolvedCredential, PreDispatchRefusal> {
+        let Some(reference) = &route.credential_reference else {
+            return Err(PreDispatchRefusal::CredentialUnavailable);
+        };
+        self.resolver
+            .resolve(reference)
+            .await
+            .ok_or(PreDispatchRefusal::CredentialUnavailable)
+    }
+}
+
+/// One GET of a stored response. A response that is not terminal yet is OutcomeUnknown. A
+/// rejection keeps its native code, for example for a reference that the destination does not have.
+async fn retrieve(
+    url: &str,
+    credential: &ResolvedCredential,
+    timeout: Duration,
+    targets: &[DeclaredTarget],
+) -> Observation {
+    match send(Method::Get, url, credential, timeout).await {
+        Sent::Settled(observation) => observation,
+        Sent::Accepted(response) => match response.bytes().await {
+            Ok(bytes) => response::observe(&bytes, targets),
+            Err(_) => Observation::OutcomeUnknown {
+                response_reference: None,
+            },
+        },
+    }
+}
+
+enum Method {
+    Post(String),
+    Get,
+}
+
+/// The result of one request: a successful status with its unread body, or a settled observation.
 enum Sent {
     Accepted(reqwest::Response),
     Settled(Observation),
 }
 
-/// One POST with no retry. A failure before the request leaves this process is NotSubmitted.
-async fn send(url: &str, body: String, credential: &ResolvedCredential, timeout: Duration) -> Sent {
+/// One request with no retry. A failure before the request leaves this process is NotSubmitted.
+async fn send(
+    method: Method,
+    url: &str,
+    credential: &ResolvedCredential,
+    timeout: Duration,
+) -> Sent {
     let unknown = Observation::OutcomeUnknown {
         response_reference: None,
     };
@@ -203,13 +299,14 @@ async fn send(url: &str, body: String, credential: &ResolvedCredential, timeout:
     else {
         return Sent::Settled(Observation::NotSubmitted);
     };
-    let sent = client
-        .post(url)
-        .bearer_auth(credential.expose())
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(body)
-        .send()
-        .await;
+    let request = match method {
+        Method::Post(body) => client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body),
+        Method::Get => client.get(url),
+    };
+    let sent = request.bearer_auth(credential.expose()).send().await;
     let response = match sent {
         Ok(response) => response,
         Err(error) if error.is_connect() || error.is_builder() => {
