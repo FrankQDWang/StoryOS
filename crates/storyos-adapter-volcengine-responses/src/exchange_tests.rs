@@ -666,6 +666,22 @@ async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared
     };
     let (complete, received, wire) = retrieved(Reply::Http(200, stored("completed"))).await;
     let target = target();
+    let closed = {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        format!("http://{}/api/plan/v3", listener.local_addr().unwrap())
+    };
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let prepared = adapter
+        .prepare(&retrieve(&closed, RequestAttempt::New))
+        .await
+        .ok()
+        .unwrap();
+    // A failed read is unknown, never NotSubmitted.
+    let refused_connection = adapter
+        .exchange(prepared.prepared, &mut RecordingSink::default())
+        .await;
 
     assert_eq!(
         (
@@ -680,6 +696,7 @@ async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared
             .await
             .0,
             retrieved(Reply::Http(500, "{}".to_owned())).await.0,
+            refused_connection,
         ),
         (
             Observation::Terminal(ModelResponse {
@@ -721,6 +738,9 @@ async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared
             },
             Observation::Rejected {
                 reason: "http_404:InvalidParameter.ResponseNotFound".to_owned()
+            },
+            Observation::OutcomeUnknown {
+                response_reference: None
             },
             Observation::OutcomeUnknown {
                 response_reference: None

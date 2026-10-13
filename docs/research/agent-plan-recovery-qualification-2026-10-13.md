@@ -38,7 +38,7 @@ No other record changed. The database was removed after the run.
 | R2 | 05:47:18 | Retrieve of the R1 reference after a new claim | `01a133cd-0d0c-71b3-964e-ac9f87459dde` | `sha256:df358339…` | `http_404:ResourceNotFound`; subject kept `unknown_result`, Run waiting | unknown |
 | R3 | 05:48:40 | Create in a new Conversation | `01a133ce-4e29-7683-8a56-2377d80d26c7` | `sha256:bda87fe6…` | Terminal Clarification in 3.5 min, reference X `resp_0217918705210427dd244b6caaa2409295dae72fd71f679d2dda0` | 306 / 6,772 |
 | R4 | 05:52:37 | Create that continues R3, Worker killed after 2 s | `01a133d1-ea22-7e40-b9f9-dc11aa0676c4` | `sha256:baacc393…` | Reference `resp_0217918707575629147904061828da2e34644a32f13ef27a15be1`, replaced with X | unknown |
-| R5 | 05:53:20 | Retrieve of X | (row removed before R6) | | 200, terminal, each item complete, usage reported | 306 / 6,772 (of X) |
+| R5 | 05:53:20 | Retrieve of X, Run `01a133d1-c850-7f32-9286-8301ade7aa8b` | Not retained: the reset before R6 removed the row, and the Worker log has no Attempt ID | not retained | 200, terminal, each item complete, usage reported (Worker log) | 306 / 6,772 (of X) |
 | R6 | 05:53:40 | Retrieve of the R1 reference, 8.5 min after R1 | `01a133d2-e165-7f61-a0cf-cec5add7664b` | `sha256:df358339…` | `http_404:ResourceNotFound` | unknown |
 | R7 | 05:54:03 | Cancel probe `POST /responses/X/cancel` | `01a133d3-391f-7e20-a3ea-1550f8f1c0e3` | `sha256:9b403861…` | `http_400:InvalidParameter` | unknown |
 | R8 | 05:54:19 | Cancel probe `POST /responses/{R1 reference}/cancel` | `01a133d3-7878-7530-9266-d006101ecacc` | `sha256:a2046d7d…` | `http_400:InvalidParameter` | unknown |
@@ -59,6 +59,8 @@ Known usage of the Create requests: 617 input and 6,872 output tokens. The usage
 - A committed reference survives a Worker crash: the re-observation after the restart used it (R2, R5, R11).
 
 ## What this evidence qualifies
+
+The qualification of retrieval rests on R11, which has an attributable Model Attempt and Outbound Disclosure Event. R5 is a supporting observation only, because its Attempt row was not retained.
 
 - Retrieval of a stored response on the exact route, its mapping, and its settlement through the Model Gateway. Retrieval is a separate request with its own Attempt and Outbound Disclosure Event, and it repeats no create.
 - The rejection of the cancel probe. S4-04b records the abort decision.

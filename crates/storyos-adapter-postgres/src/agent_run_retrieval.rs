@@ -1,11 +1,11 @@
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DispatchClaim, ModelUsage,
-    ProjectScope, ReferenceRetrieval, RequestAttempt, ResponseReference, RetrievePurpose,
-    RetrieveRequest,
+    ProjectAssistanceRecord, ProjectScope, ReferenceRetrieval, RequestAttempt, ResponseReference,
+    RetrievePurpose, RetrieveRequest,
 };
 use storyos_core::{
-    OriginalResultRetrievalDecision, OriginalResultRetrievalFacts, RetainedResponseReference,
-    RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
+    AssistanceAvailability, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
+    RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
     decide_original_result_retrieval,
 };
 use uuid::Uuid;
@@ -32,6 +32,7 @@ pub(crate) struct RetrievalAdvance<'a> {
     pub grant_admitted: bool,
     /// The wire mapping revision of the pinned Registration.
     pub mapping_revision: &'a str,
+    pub run: &'a RunPhaseRow,
 }
 
 impl<'a> RetrievalAdvance<'a> {
@@ -44,8 +45,17 @@ impl<'a> RetrievalAdvance<'a> {
             grant_admitted: crate::agent_run_work::grant_admitted(run),
             mapping_revision: storyos_core::model_registration(&run.model_registration_revision)
                 .map_or("", |registration| registration.mapping_revision),
+            run,
         }
     }
+}
+
+/// Whether the current assistance admission still admits the pinned route of `run`. A changed
+/// binding or destination stops a Retrieve before it leaves the Host.
+pub(crate) fn route_admitted(run: &RunPhaseRow, assistance: &ProjectAssistanceRecord) -> bool {
+    assistance.availability == AssistanceAvailability::Available
+        && storyos_core::admit_route(&crate::agent_run_work::route_facts(run, Some(assistance)))
+            .is_ok()
 }
 
 pub(crate) enum RetrievalWork {
@@ -199,6 +209,7 @@ pub(crate) async fn decide(
         subject,
         claim,
         advance,
+        route_admitted(advance.run, &assistance),
         &assistance.processing_destination_identity,
         fenced || advance.run_status == "cancelled",
         retrieved,
@@ -522,6 +533,7 @@ fn facts(
     subject: &serde_json::Value,
     claim: &ClaimedAgentRun,
     advance: &RetrievalAdvance<'_>,
+    route_admitted: bool,
     destination_identity: &str,
     run_fenced: bool,
     retrieved: RetrievedOriginalResult,
@@ -544,6 +556,7 @@ fn facts(
             && text(subject, "project_id") == Some(claim.project_scope.project_id.as_ref()),
         conversation_permitted: text(subject, "conversation_id") == Some(advance.conversation_id),
         destination_permitted: advance.grant_admitted
+            && route_admitted
             && text(subject, "destination_identity") == Some(destination_identity),
         mapping_permitted: text(subject, "mapping_revision") == Some(advance.mapping_revision),
         retrieved,

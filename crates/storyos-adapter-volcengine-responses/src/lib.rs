@@ -299,6 +299,8 @@ async fn send(
     else {
         return Sent::Settled(Observation::NotSubmitted);
     };
+    // A failed read is OutcomeUnknown, also a timeout before the connection. It proves nothing.
+    let read = matches!(method, Method::Get);
     let request = match method {
         Method::Post(body) => client
             .post(url)
@@ -309,7 +311,7 @@ async fn send(
     let sent = request.bearer_auth(credential.expose()).send().await;
     let response = match sent {
         Ok(response) => response,
-        Err(error) if error.is_connect() || error.is_builder() => {
+        Err(error) if error.is_builder() || (error.is_connect() && !read) => {
             return Sent::Settled(Observation::NotSubmitted);
         }
         Err(_) => return Sent::Settled(unknown),
