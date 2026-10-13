@@ -65,6 +65,8 @@ impl ModelDispatchStore for PostgresProjectReader {
             .await
             .map_err(complete_challenge_error)?;
         let client = &transaction.client;
+        // A refused claim that recorded a pause commits that pause.
+        let paused = std::sync::atomic::AtomicBool::new(/*v*/ false);
         let claimed = async {
             let run = load_run_phase(client, claim).await?;
             let request = match request {
@@ -85,6 +87,12 @@ impl ModelDispatchStore for PostgresProjectReader {
                         == Some(storyos_core::AssistanceAvailability::Available);
                     // The successor gates run again with the current authority and pause it.
                     if run.settled() || !available || storyos_core::admit_route(&route).is_err() {
+                        return Ok(None);
+                    }
+                    if !crate::agent_run_successor_dispatch::same_request(client, claim, projection)
+                        .await?
+                    {
+                        paused.store(/*val*/ true, std::sync::atomic::Ordering::Relaxed);
                         return Ok(None);
                     }
                     return crate::agent_run_successor_dispatch::commit(client, claim, projection)
@@ -166,6 +174,13 @@ impl ModelDispatchStore for PostgresProjectReader {
                     .await
                     .map_err(complete_challenge_error)?;
                 Ok(Some(dispatch))
+            }
+            Ok(None) if paused.load(std::sync::atomic::Ordering::Relaxed) => {
+                transaction
+                    .commit()
+                    .await
+                    .map_err(complete_challenge_error)?;
+                Ok(None)
             }
             Ok(None) => {
                 let _rollback = transaction.rollback().await;
@@ -426,6 +441,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                         crate::agent_run_retrieval_dispatch::record_late_result(
                             client,
                             claim,
+                            &run,
                             dispatch,
                             observation,
                         )

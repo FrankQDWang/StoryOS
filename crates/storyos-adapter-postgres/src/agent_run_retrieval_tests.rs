@@ -12,7 +12,7 @@ use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
 
 const ADVISORY: &str = r#"{\"kind\":\"advisory\",\"text\":\"Keep it.\"}"#;
 
-struct TestCredential;
+pub(crate) struct TestCredential;
 
 impl CredentialResolver for TestCredential {
     async fn resolve(&self, _reference: &CredentialReference) -> Option<ResolvedCredential> {
@@ -22,7 +22,7 @@ impl CredentialResolver for TestCredential {
     }
 }
 
-fn adapter() -> AgentPlanResponses<TestCredential> {
+pub(crate) fn adapter() -> AgentPlanResponses<TestCredential> {
     AgentPlanResponses {
         resolver: TestCredential,
     }
@@ -30,9 +30,9 @@ fn adapter() -> AgentPlanResponses<TestCredential> {
 
 /// The real adapter. After its exchange, `statement` changes the disposable database, for
 /// example as a crash and the expiry of the lease do.
-struct AfterExchange<'a> {
-    admin: &'a Client,
-    statement: String,
+pub(crate) struct AfterExchange<'a> {
+    pub admin: &'a Client,
+    pub statement: String,
 }
 
 impl ModelProviderAdapter for AfterExchange<'_> {
@@ -58,7 +58,9 @@ impl ModelProviderAdapter for AfterExchange<'_> {
 }
 
 /// Serves one connection for each reply, in order. Returns the base URL and the request lines.
-async fn destination(replies: Vec<String>) -> (String, tokio::task::JoinHandle<Vec<String>>) {
+pub(crate) async fn destination(
+    replies: Vec<String>,
+) -> (String, tokio::task::JoinHandle<Vec<String>>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
     let served = tokio::spawn(async move {
@@ -84,7 +86,7 @@ async fn destination(replies: Vec<String>) -> (String, tokio::task::JoinHandle<V
 }
 
 /// A stream that reports `reference` and part of the text, and then ends with no terminal event.
-fn broken_stream(reference: &str) -> String {
+pub(crate) fn broken_stream(reference: &str) -> String {
     let events = [
         format!(
             r#"{{"type":"response.created","response":{{"id":"{reference}","status":"in_progress","output":[]}}}}"#
@@ -102,7 +104,7 @@ fn broken_stream(reference: &str) -> String {
 }
 
 /// The stored response that a Retrieve reads, with `status`.
-fn stored(reference: &str, status: &str) -> String {
+pub(crate) fn stored(reference: &str, status: &str) -> String {
     let body = format!(
         r#"{{"id":"{reference}","status":"{status}","output":[{{"id":"msg_01","type":"message","role":"assistant","status":"{status}","content":[{{"type":"output_text","text":"{ADVISORY}"}}]}}],"usage":{{"input_tokens":40,"output_tokens":12}}}}"#
     );
@@ -113,7 +115,7 @@ fn stored(reference: &str, status: &str) -> String {
 }
 
 /// Admits one Agent Plan AgentRun on the qualified head Registration and sends it to `base`.
-async fn real_run(
+pub(crate) async fn real_run(
     store: &crate::PostgresProjectReader,
     admin: &Client,
     prefix: &str,
@@ -139,7 +141,7 @@ async fn real_run(
 }
 
 /// The status, settlement, and decision of the Run, and the retrieval facts of its Attempts.
-async fn recovery(admin: &Client, run_id: &str) -> [Option<String>; 7] {
+pub(crate) async fn recovery(admin: &Client, run_id: &str) -> [Option<String>; 7] {
     let row = admin
         .query_one(
             "SELECT run.status, run.settlement::text,
@@ -218,44 +220,6 @@ async fn a_restarted_worker_retrieves_the_committed_reference_once_and_settles_t
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_dropped_stream_retrieves_once_and_keeps_an_unfinished_result_unknown() {
-    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
-        .lock()
-        .await;
-    let (store, admin) = stores().await;
-    let (base, served) = destination(vec![
-        broken_stream("resp_c42"),
-        stored("resp_c42", "in_progress"),
-    ])
-    .await;
-    let (scope, run_id) = real_run(&store, &admin, "c42", &base).await;
-    let claim = claim_run(&admin, scope, run_id.clone()).await;
-    complete_agent_run(&store, &adapter(), &NoContractFaults, &claim)
-        .await
-        .unwrap();
-
-    assert_eq!(
-        (recovery(&admin, &run_id).await, served.await.unwrap()),
-        (
-            [
-                Some("waiting".to_owned()),
-                Some(r#"{"kind": "outcome_unknown", "reason": "unknown_result"}"#.to_owned()),
-                None,
-                Some("kept_unknown".to_owned()),
-                Some("unknown_result".to_owned()),
-                Some("false".to_owned()),
-                Some("decision:true,retrieval:true".to_owned()),
-            ],
-            vec![
-                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
-                "GET /api/plan/v3/responses/resp_c42 HTTP/1.1".to_owned(),
-            ],
-        )
-    );
-}
-
-#[tokio::test]
-#[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_route_that_is_no_longer_admitted_keeps_the_result_unknown_and_sends_no_retrieve() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
@@ -282,8 +246,12 @@ async fn a_route_that_is_no_longer_admitted_keeps_the_result_unknown_and_sends_n
         (recovery(&admin, &run_id).await, served.await.unwrap()),
         (
             [
-                Some("waiting".to_owned()),
-                Some(r#"{"kind": "outcome_unknown", "reason": "destination_mismatch"}"#.to_owned()),
+                // The successor gate then pauses the Run, because assistance is off.
+                Some("paused".to_owned()),
+                Some(
+                    r#"{"kind": "unknown_create_successor", "reason": "authority_unavailable"}"#
+                        .to_owned()
+                ),
                 None,
                 Some("kept_unknown".to_owned()),
                 Some("destination_mismatch".to_owned()),

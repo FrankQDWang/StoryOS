@@ -52,9 +52,10 @@ pub enum SuccessorAllowance {
     Dispatched,
 }
 
-/// Scripted Host facts of the fake profile. The fake adapter reports the reference facts.
+/// The Host gates of one successor when the unknown create is recorded. The fake profile
+/// scripts them, and a real route derives them from its records.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ScriptedSuccessorConditions {
+pub struct SuccessorConditions {
     pub same_request: bool,
     pub same_route: bool,
     pub current_authority: bool,
@@ -130,10 +131,8 @@ pub fn unknown_create_script(author_message: &str) -> UnknownCreateScript {
 }
 
 /// Map one successor script to its scripted Host gates.
-pub fn scripted_successor_conditions(
-    script: UnknownCreateScript,
-) -> Option<ScriptedSuccessorConditions> {
-    let permitted = ScriptedSuccessorConditions {
+pub fn scripted_successor_conditions(script: UnknownCreateScript) -> Option<SuccessorConditions> {
+    let permitted = SuccessorConditions {
         same_request: true,
         same_route: true,
         current_authority: true,
@@ -147,35 +146,53 @@ pub fn scripted_successor_conditions(
         | UnknownCreateScript::Late
         | UnknownCreateScript::MissingReference
         | UnknownCreateScript::UnsupportedRetrieval => permitted,
-        UnknownCreateScript::Budget => ScriptedSuccessorConditions {
+        UnknownCreateScript::Budget => SuccessorConditions {
             budget_covers_both: false,
             ..permitted
         },
-        UnknownCreateScript::UnresolvedEffect => ScriptedSuccessorConditions {
+        UnknownCreateScript::UnresolvedEffect => SuccessorConditions {
             effect: SuccessorEffect::Unresolved,
             ..permitted
         },
-        UnknownCreateScript::AbsentEffect => ScriptedSuccessorConditions {
+        UnknownCreateScript::AbsentEffect => SuccessorConditions {
             effect: SuccessorEffect::AbsentUnsupported,
             ..permitted
         },
-        UnknownCreateScript::ContextChanged => ScriptedSuccessorConditions {
+        UnknownCreateScript::ContextChanged => SuccessorConditions {
             context_changed: true,
             ..permitted
         },
-        UnknownCreateScript::RequestChanged => ScriptedSuccessorConditions {
+        UnknownCreateScript::RequestChanged => SuccessorConditions {
             same_request: false,
             ..permitted
         },
-        UnknownCreateScript::RouteChanged => ScriptedSuccessorConditions {
+        UnknownCreateScript::RouteChanged => SuccessorConditions {
             same_route: false,
             ..permitted
         },
-        UnknownCreateScript::Authority => ScriptedSuccessorConditions {
+        UnknownCreateScript::Authority => SuccessorConditions {
             current_authority: false,
             ..permitted
         },
     })
+}
+
+/// The gates of the one successor on a real route. The successor sends the committed request
+/// again, so the request and its Context stay the same, and the dispatch claim compares the wire
+/// digest. The budget for both requests is a known request bound of the route (author decision,
+/// 2026-10-13). Each decision checks the route and the authority again.
+pub fn route_successor_conditions(
+    bounds: crate::BudgetBounds,
+    effect: SuccessorEffect,
+) -> SuccessorConditions {
+    SuccessorConditions {
+        same_request: true,
+        same_route: true,
+        current_authority: true,
+        budget_covers_both: bounds.request_bounds().is_some(),
+        effect,
+        context_changed: false,
+    }
 }
 
 /// Fence at most one successor, or pause. Lookup availability does not grant or ban it.

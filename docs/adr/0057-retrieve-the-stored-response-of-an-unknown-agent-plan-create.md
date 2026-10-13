@@ -33,6 +33,15 @@ On 2026-10-13, [S4-04b: Qualify the Abort Behavior of the Real Route](https://gi
 - The refusal records `provider_abort = unsupported` and `provider_confirmed = false` on the Model Attempt Cancellation of the cancelled Attempt. The other cancellation duties continue, so the fenced retrieval of a late result still occurs. Before this decision, the refusal ended all cancellation duties of the Run.
 - The closed stream at the cancellation, a local timeout, and the refused Abort never prove that the destination stopped. The cancelled Attempt keeps its unknown outcome and its reservation until a retrieved result reconciles its usage as evidence only.
 
+## Settlement and successor on the route
+
+On 2026-10-13, [S4-04c: Settle Retrieved Results and Decide the Real Successor](https://github.com/FrankQDWang/StoryOS/issues/1131) added this section.
+
+- A complete retrieved original result settles the original Attempt like a Create result, with the declared targets of the Create. An Advisory, a Clarification, and a prose change with its Proposal are each possible. A selected result releases the reservation, and no successor follows.
+- The Stage 3 successor decision of S3-24 decides the one successor on the route. Its gates come from the records of the route, not from a script. The request bound of the pinned use binding is the budget for both requests (author decision, 2026-10-13). A committed Tool or hosted item is an unresolved effect, because the request declares no Tool.
+- The dispatch claim of the successor compares its wire digest with the digest of the predecessor. A different digest commits a pause with `request_changed`, and nothing leaves the Host.
+- A late predecessor result after the successor dispatch reconciles usage as evidence only.
+
 ## Considered options
 
 - A raw GET outside the Model Gateway was rejected. It has no admission or disclosure evidence (ADR 0049).
