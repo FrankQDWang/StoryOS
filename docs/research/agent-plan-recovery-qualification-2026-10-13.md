@@ -76,6 +76,10 @@ The qualification of retrieval rests on R11, which has an attributable Model Att
 
 The Spec review of [S4-04b](https://github.com/FrankQDWang/StoryOS/issues/1130) asked for a cancel probe on a response that is still in progress. R7 and R8 did not satisfy this. The coordinator approved more requests: a cap of 16, then a cap of 21, with the same token caps. The same measurement build and a new disposable database with the controlled fixture ran these requests.
 
+### Approved exception to the limit of 3 cancel probes
+
+The author limited the cancel probes to 3. This run sent 4: R7, R8, R16, and R21. R16 was the third probe, and it did not reach an in-progress response, because the stream of A2 closed first. On 2026-10-13 the executor stopped and reported this. The coordinator then approved option (a) of that report: 4 more requests, which include one more cancel probe that reaches an in-progress response (R21). The author delegated this approval to the coordinator for the S4-04 live work. Thus R21 is an approved exception to the limit, and no other cancel probe was sent.
+
 ### Method
 
 - A long Create (A) streams through its own Worker, which stays connected to the end.
@@ -109,6 +113,6 @@ Each Attempt has its own Outbound Disclosure Event.
 
 ### Results of the addendum
 
-- The cancel operation returned `http_400:InvalidParameter` for an in-progress response, and the response continued to its terminal event. With R7 and R8, the operation returned the same code for a stored, a discarded, and an in-progress response. The route has no usable cancel operation.
+- The cancel operation returned `http_400:InvalidParameter` for an in-progress response (R21), and the response continued to its terminal event. With R7, R8, and R16, the four probes returned the same code for a stored, a discarded, a just closed, and an in-progress response. The route has no usable cancel operation.
 - A GET of an in-progress response returned `http_404:ResourceNotFound` (R20). Thus a response is retrievable only after it finished and the destination stored it.
 - Totals of the whole run: 21 requests plus the noted recovery Retrieve in the first attempt, 22 in all. Known usage of all Create requests: 1,267 input and 15,628 output tokens.
