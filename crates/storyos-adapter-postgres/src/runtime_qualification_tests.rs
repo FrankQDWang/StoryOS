@@ -400,7 +400,7 @@ impl ModelProviderAdapter for CancellingAgentPlan<'_> {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn a_cancelled_qualification_request_refuses_its_abort_once_before_dispatch() {
+async fn a_cancelled_qualification_request_refuses_its_abort_once_and_records_no_remote_stop() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
@@ -437,7 +437,8 @@ async fn a_cancelled_qualification_request_refuses_its_abort_once_before_dispatc
                     (SELECT count(*) FROM storyos.model_attempts AS attempt
                       WHERE attempt.run_id = run.run_id),
                     decision.decision_id::text,
-                    decision.payload->>'cancellation_duties_refused'
+                    decision.payload->>'cancellation_duties_refused',
+                    decision.payload->>'model_attempt_cancellation'
                FROM storyos.agent_runs AS run
                JOIN storyos.model_attempts AS decision
                  ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
@@ -460,6 +461,7 @@ async fn a_cancelled_qualification_request_refuses_its_abort_once_before_dispatc
             row.get::<_, i64>(2),
             row.get::<_, Option<String>>(3),
             row.get::<_, Option<String>>(4),
+            row.get::<_, Option<String>>(5),
         ),
         (
             Some(storyos_application::CompleteAgentRun::AlreadySettled),
@@ -468,7 +470,11 @@ async fn a_cancelled_qualification_request_refuses_its_abort_once_before_dispatc
             false,
             1,
             None,
-            Some("destination_request_unsupported".to_owned()),
+            None,
+            Some(
+                r#"{"provider_abort": "unsupported", "abort_attempt_id": null, "provider_confirmed": false}"#
+                    .to_owned()
+            ),
         )
     );
 }

@@ -321,7 +321,10 @@ pub enum StreamControl {
 
 /// One result that the store records after an exchange or a refusal.
 pub enum DispatchRecord<'a> {
-    Refusal(PreDispatchRefusal),
+    Refusal {
+        refusal: PreDispatchRefusal,
+        request: &'a DestinationRequest,
+    },
     Exchange {
         claim: &'a DispatchClaim,
         request: &'a DestinationRequest,
