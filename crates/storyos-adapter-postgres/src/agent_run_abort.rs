@@ -2,7 +2,7 @@
 
 use storyos_application::{
     AbortRequest, ClaimedAgentRun, CommittedCancellation, CompleteAgentRunError, DispatchClaim,
-    Observation, PreDispatchRefusal, RequestAttempt, WirePayloadProjection,
+    Observation, RequestAttempt, WirePayloadProjection,
 };
 use uuid::Uuid;
 
@@ -35,7 +35,6 @@ pub(crate) async fn pending(
                       AND attempt.decision_position = $4::text::numeric)
                      OR attempt.attempt_role = 'successor')
                 AND (abort.model_attempt_id IS NULL OR abort.payload->>'result' IS NULL)
-                AND NOT attempt.payload ? 'model_attempt_cancellation'
               ORDER BY attempt.attempt_role = 'successor'
               LIMIT 1",
             &[
@@ -86,7 +85,7 @@ pub(crate) async fn commit(
             "kind": "provider_report",
             "attempt_id": attempt_id,
             "availability": "current",
-            "report": format!("{}_abort", request.route.adapter.kind())
+            "report": "host_fake_abort"
         }]
     });
     let inserted = client
@@ -175,37 +174,4 @@ pub(crate) async fn record(
         .await
         .map_err(complete_database_error)?;
     Ok(WorkPhase::Hold("recovery"))
-}
-
-/// Records an Abort that the adapter refused before its dispatch claim. No request left the
-/// Host, so nothing proves that the destination stopped. The other cancellation duties go on.
-pub(crate) async fn record_unsupported(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    request: &AbortRequest,
-    refusal: PreDispatchRefusal,
-) -> Result<(), CompleteAgentRunError> {
-    let refused = match refusal {
-        PreDispatchRefusal::UnsupportedRequest => "unsupported",
-        PreDispatchRefusal::CredentialUnavailable => "credential_unavailable",
-    };
-    client
-        .execute(
-            "UPDATE storyos.model_attempts
-                SET payload = payload || jsonb_build_object(
-                      'model_attempt_cancellation', jsonb_build_object(
-                        'abort_attempt_id', NULL, 'provider_abort', $4::text,
-                        'provider_confirmed', false))
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND model_attempt_id = $3::text::uuid",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &request.ticket.model_attempt_id(),
-                &refused,
-            ],
-        )
-        .await
-        .map_err(complete_database_error)?;
-    Ok(())
 }

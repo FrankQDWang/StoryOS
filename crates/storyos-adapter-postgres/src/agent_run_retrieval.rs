@@ -4,8 +4,8 @@ use storyos_application::{
     RetrieveRequest,
 };
 use storyos_core::{
-    OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
-    RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
+    OriginalResultRetrievalDecision, OriginalResultRetrievalFacts, RetainedResponseReference,
+    RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
     decide_original_result_retrieval,
 };
 use uuid::Uuid;
@@ -135,6 +135,7 @@ pub(crate) async fn advance_original_result_retrieval(
             SettledRetrieval {
                 decision,
                 retrieval: None,
+                supplied: None,
                 usage: ModelUsage::Unknown,
                 fenced,
                 run_write,
@@ -282,6 +283,7 @@ pub(crate) async fn load_original_result_retrieval(
 pub(crate) struct SettledRetrieval {
     pub decision: OriginalResultRetrievalDecision,
     pub retrieval: Option<RecordedRetrieval>,
+    pub supplied: Option<SuppliedDecision>,
     /// The usage of the original response. It belongs to the original Attempt only.
     pub usage: ModelUsage,
     pub fenced: bool,
@@ -293,18 +295,24 @@ pub(crate) struct RecordedRetrieval {
     pub manifest_id: String,
 }
 
-/// Seals the subject and settles the original Attempt and the Run from one decision. A selected
-/// result returns the sealed payload, and the caller records its decision.
+/// The retrieved native items and advisory text that a selected original result supplies.
+pub(crate) struct SuppliedDecision {
+    pub items: serde_json::Value,
+    pub text: String,
+}
+
+/// Seals the subject and settles the original Attempt and the Run from one decision.
 pub(crate) async fn settle(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     payload: &serde_json::Value,
     advance: &RetrievalAdvance<'_>,
     settled: SettledRetrieval,
-) -> Result<Option<serde_json::Value>, CompleteAgentRunError> {
+) -> Result<(), CompleteAgentRunError> {
     let SettledRetrieval {
         decision,
         retrieval,
+        supplied,
         usage,
         fenced,
         run_write,
@@ -357,29 +365,95 @@ pub(crate) async fn settle(
     next["reservation"] =
         serde_json::json!({"kind": "worst_case", "released": reservation_released});
     next["usage"] = usage;
-    if supplies_decision {
-        // The caller settles the selected decision on the original Attempt like a Create result.
-        return Ok(Some(next));
+    if let (true, Some(supplied)) = (supplies_decision, supplied) {
+        let binding = Uuid::now_v7().to_string();
+        let decision_id = Uuid::now_v7().to_string();
+        next["items"] = supplied.items;
+        next["decision"] = serde_json::json!({
+            "kind": "advisory",
+            "decision_id": decision_id,
+            "selected": true,
+            "text": supplied.text,
+            "authoritative": false,
+            "advances_continuation": true
+        });
+        if let Some(wire) = crate::agent_run_continuation::parse_wire(payload) {
+            next["produced_binding"] = crate::agent_run_continuation::encode_produced_binding(
+                &binding,
+                advance.attempt_id,
+                &wire.admission,
+            );
+        }
+        write_settled_decision(client, claim, &decision_id, &binding, &next).await?;
+        if !fenced && !defer_run_status {
+            update_run(
+                client,
+                claim,
+                "completed",
+                /*settlement*/ None,
+                /*clear_lease*/ true,
+            )
+            .await?;
+        }
+    } else {
+        write_unsettled_payload(client, claim, advance.attempt_id, &next).await?;
+        if !fenced
+            && !defer_run_status
+            && matches!(
+                decision,
+                OriginalResultRetrievalDecision::KeepUnknown { .. }
+            )
+        {
+            let reason = keep_reason.unwrap_or("unknown_result");
+            update_run(
+                client,
+                claim,
+                "waiting",
+                Some(&serde_json::json!({"kind": "outcome_unknown", "reason": reason})),
+                /*clear_lease*/ true,
+            )
+            .await?;
+        }
     }
-    write_unsettled_payload(client, claim, advance.attempt_id, &next).await?;
-    if !fenced
-        && !defer_run_status
-        && matches!(
-            decision,
-            OriginalResultRetrievalDecision::KeepUnknown { .. }
+    Ok(())
+}
+
+async fn write_settled_decision(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    decision_id: &str,
+    binding_id: &str,
+    payload: &serde_json::Value,
+) -> Result<(), CompleteAgentRunError> {
+    let updated = client
+        .execute(
+            "UPDATE storyos.model_attempts
+                SET decision_id = $4::text::uuid,
+                    continuation_binding_id = $5::text::uuid,
+                    dispatch_state = 'settled',
+                    payload = $6::text::jsonb
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid
+                AND attempt_role = 'decision' AND decision_position = 0
+                AND decision_id IS NULL",
+            &[
+                &claim.project_scope.owner_user_id.as_ref(),
+                &claim.project_scope.project_id.as_ref(),
+                &claim.run_id,
+                &decision_id,
+                &binding_id,
+                &payload.to_string(),
+            ],
         )
-    {
-        let reason = keep_reason.unwrap_or("unknown_result");
-        update_run(
-            client,
-            claim,
-            "waiting",
-            Some(&serde_json::json!({"kind": "outcome_unknown", "reason": reason})),
-            /*clear_lease*/ true,
-        )
-        .await?;
+        .await
+        .map_err(unavailable)?;
+    if updated != 1 {
+        return Err(unavailable(std::io::Error::other(
+            "The original Attempt could not accept the retrieved Decision",
+        )));
     }
-    Ok(None)
+    Ok(())
 }
 
 async fn write_unsettled_payload(
@@ -512,3 +586,7 @@ fn read_error(
 ) -> storyos_application::CreateAgentRunError {
     storyos_application::CreateAgentRunError::Unavailable(Box::new(error))
 }
+
+#[cfg(test)]
+#[path = "agent_run_retrieval_tests.rs"]
+mod tests;

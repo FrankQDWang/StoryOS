@@ -443,10 +443,8 @@ pub(crate) async fn settle_one_phase(
     let payload: serde_json::Value =
         serde_json::from_str(run.attempt_payload.as_deref().unwrap_or("null"))
             .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
-    // A retrieved original result that settled the decision continues like a Create result.
-    if decision_id.is_none()
-        && (payload.get("original_result_retrieval").is_some()
-            || payload.get("unknown_create_successor").is_some())
+    if payload.get("original_result_retrieval").is_some()
+        || payload.get("unknown_create_successor").is_some()
     {
         return crate::agent_run_recovery::advance(
             client,

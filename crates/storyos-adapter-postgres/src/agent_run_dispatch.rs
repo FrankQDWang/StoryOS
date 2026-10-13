@@ -291,15 +291,7 @@ impl ModelDispatchStore for PostgresProjectReader {
             let run = load_run_phase(client, claim).await?;
             let settled = WorkPhase::Done(CompleteAgentRun::AlreadySettled);
             let phase = match record {
-                DispatchRecord::Refusal {
-                    refusal,
-                    request: DestinationRequest::Abort(abort),
-                } if run.status == "cancelled" => {
-                    crate::agent_run_abort::record_unsupported(client, claim, abort, refusal)
-                        .await?;
-                    WorkPhase::Hold("recovery")
-                }
-                DispatchRecord::Refusal { refusal, .. } => {
+                DispatchRecord::Refusal(refusal) => {
                     let capability = match refusal {
                         PreDispatchRefusal::CredentialUnavailable => {
                             "destination_credential_unavailable"
@@ -426,7 +418,6 @@ impl ModelDispatchStore for PostgresProjectReader {
                         crate::agent_run_retrieval_dispatch::record_late_result(
                             client,
                             claim,
-                            &run,
                             dispatch,
                             observation,
                         )

@@ -75,13 +75,7 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
             Err(refusal) => {
                 tracing::Span::current().record("observation", "pre_dispatch_refusal");
                 store
-                    .record(
-                        claim,
-                        DispatchRecord::Refusal {
-                            refusal,
-                            request: &request,
-                        },
-                    )
+.record(claim, DispatchRecord::Refusal(refusal))
                     .await?;
                 return Ok(None);
             }

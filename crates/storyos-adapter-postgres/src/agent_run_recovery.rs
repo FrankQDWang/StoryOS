@@ -252,14 +252,13 @@ async fn write_subject(
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
         .map(|record| record.processing_destination_identity)
         .unwrap_or_default();
-    payload["original_result_retrieval"] =
-        crate::agent_run_retrieval::subject(
-            reference,
-            claim,
-            &run.conversation_id,
-            &identity,
-            RetrievalAdvance::of(run).mapping_revision,
-        );
+    payload["original_result_retrieval"] = crate::agent_run_retrieval::subject(
+        reference,
+        claim,
+        &run.conversation_id,
+        &identity,
+        RetrievalAdvance::of(run).mapping_revision,
+    );
     let lookup = match reference.map(|reference| reference.retrieval) {
         None => SuccessorLookup::Unavailable {
             reason: LookupUnavailable::MissingReference,
