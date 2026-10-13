@@ -42,6 +42,22 @@ On 2026-10-13, [S4-04c: Settle Retrieved Results and Decide the Real Successor](
 - The dispatch claim of the successor compares its wire digest with the digest of the predecessor. A different digest commits a pause with `request_changed`, and nothing leaves the Host.
 - A late predecessor result after the successor dispatch reconciles usage as evidence only.
 
+## Author-visible result
+
+On 2026-10-13, [S4-04d: Show the Author a Stopped Request Without a Result](https://github.com/FrankQDWang/StoryOS/issues/1132) added this section. The author approved the two sentences on 2026-10-13, through the coordinator ([ADR 0040](0040-show-assistance-results-not-run-internals-to-the-author.md)).
+
+- A request whose recovery stopped without a result shows the sentence below. Such a request waits with an unknown outcome, has a paused successor, or has a successor that gave no result.
+
+  `没有收到这次的结果，正文没有改动。请开始新对话重试。`
+
+- The assistance panel treats such a request as stopped. It does not read the Run again, and it enables the new conversation action. A new message starts a new request, not a steering input.
+- A request in a Conversation whose latest Attempt has an unknown outcome is refused with `expiry_rebuild_unknown_create`. It shows the sentence below.
+
+  `上一条请求还没有结果，请开始新对话。`
+
+- No author view shows a reference, a retrieval, a successor, or a recovery classification.
+- The live journey on the qualified head Registration recovered one request after a Worker crash ([evidence record](../research/agent-plan-recovery-qualification-2026-10-13.md)).
+
 ## Considered options
 
 - A raw GET outside the Model Gateway was rejected. It has no admission or disclosure evidence (ADR 0049).
