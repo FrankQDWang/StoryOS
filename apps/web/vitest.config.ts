@@ -86,6 +86,7 @@ export default defineConfig({
           ...browserTest(),
           include: ["test/browser-source/**/*.test.ts"],
           name: "browser-source",
+          setupFiles: ["./test/browser-source/page-reset.ts"],
         },
       }),
       defineProject({
