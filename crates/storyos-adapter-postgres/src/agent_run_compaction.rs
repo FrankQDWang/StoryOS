@@ -7,8 +7,8 @@ use storyos_application::{
 
 use crate::agent_run_work::RunPhaseRow;
 use storyos_core::{
-    BudgetBounds, CompactionRecordState, CompactionStep, CompactionTrigger, ModelAdapter,
-    compaction_due, conversation_too_long, model_registration, next_compaction_step,
+    CompactionRecordState, CompactionRequestFacts, CompactionStep, DecisionRequestKind,
+    compaction_requested, decision_request_kind, next_compaction_step,
 };
 
 pub(crate) enum CompactionAdvance {
@@ -47,7 +47,7 @@ pub(crate) async fn advance_active_compaction(
     };
     let requested = chain
         .as_ref()
-        .is_some_and(|chain| compaction_requested(run, chain));
+        .is_some_and(|chain| compaction_requested(&request_facts(run, chain)));
     let ordinary = CompactionAdvance::Decide {
         later_request: false,
     };
@@ -103,48 +103,46 @@ pub(crate) async fn advance_active_compaction(
         | (CompactionStep::InstallOrRefuse, None, _, _)
         | (CompactionStep::OrdinaryRequest, _, _, _) => ordinary,
     };
-    // A requested compaction that did not install leaves the full chain. When the chain then
-    // reaches the window after the output bound, the decision request cannot fit.
-    if matches!(
-        advance,
-        CompactionAdvance::Decide {
-            later_request: false
-        }
-    ) && (requested || record != CompactionRecordState::Absent)
-        && summary::prior_chain(client, claim, run)
-            .await?
-            .is_some_and(|chain| conversation_too_long(&trigger(run, &chain)))
-    {
-        return Ok(CompactionAdvance::TooLong);
-    }
-    Ok(advance)
+    let CompactionAdvance::Decide { later_request } = advance else {
+        return Ok(advance);
+    };
+    let started = requested || record != CompactionRecordState::Absent;
+    let chain = if later_request || !started {
+        None
+    } else {
+        summary::prior_chain(client, claim, run).await?
+    };
+    Ok(
+        match decision_request_kind(
+            later_request,
+            started,
+            chain
+                .as_ref()
+                .map(|chain| request_facts(run, chain))
+                .as_ref(),
+        ) {
+            DecisionRequestKind::Later => CompactionAdvance::Decide {
+                later_request: true,
+            },
+            DecisionRequestKind::Ordinary => CompactionAdvance::Decide {
+                later_request: false,
+            },
+            DecisionRequestKind::TooLong => CompactionAdvance::TooLong,
+        },
+    )
 }
 
-/// Whether the decision request compacts first. The expected input can reach the threshold of
-/// the pinned profile and use binding. Or the author message can ask the Host fake to compact.
-fn compaction_requested(run: &RunPhaseRow, chain: &summary::PriorChain) -> bool {
-    (model_registration(&run.model_registration_revision)
-        .is_some_and(|registration| registration.adapter == ModelAdapter::HostFake)
-        && storyos_core::requests_active_compaction(&run.author_message))
-        || compaction_due(&trigger(run, chain))
-}
-
-/// The window, output bound, and expected input of the decision request that continues `chain`.
-fn trigger(run: &RunPhaseRow, chain: &summary::PriorChain) -> CompactionTrigger {
-    CompactionTrigger {
-        window_tokens: model_registration(&run.model_registration_revision)
-            .and_then(|registration| registration.capability_profile.context_window)
-            .map(|window| window.tokens),
-        output_bound: BudgetBounds::parse(&run.budget_bounds)
-            .and_then(BudgetBounds::request_bounds)
-            .map(|bounds| u64::from(bounds.max_output_tokens)),
+/// The loaded facts of the decision request of `run` that continues `chain`.
+fn request_facts<'a>(
+    run: &'a RunPhaseRow,
+    chain: &summary::PriorChain,
+) -> CompactionRequestFacts<'a> {
+    CompactionRequestFacts {
+        model_registration_revision: &run.model_registration_revision,
+        budget_bounds: &run.budget_bounds,
+        author_message: &run.author_message,
+        decision: run.disclosure_request.as_ref(),
         prior_reported_tokens: chain.reported_tokens,
-        new_turn_tokens: run
-            .disclosure_request
-            .as_ref()
-            .map_or(/*default*/ 0, |record| {
-                record.selected.iter().map(|item| item.token_count).sum()
-            }),
     }
 }
 

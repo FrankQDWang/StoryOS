@@ -1,6 +1,6 @@
 # Agent Plan automatic compaction qualification, 2026-10-13
 
-Evidence record of [S4-06c3: Compact the Conversation at a Threshold From the Model Window](https://github.com/FrankQDWang/StoryOS/issues/1116). It records the live requests that qualified the automatic compaction trigger and the context window of the Volcengine Agent Plan Responses route (ADR 0056). The profile revision `storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v10` cites it. It is not a claim about summary quality, semantic preservation, model quality, Provider attention, retention, training, or cache savings.
+Evidence record of [S4-06c3: Compact the Conversation at a Threshold From the Model Window](https://github.com/FrankQDWang/StoryOS/issues/1116). It records the live requests that qualified the automatic compaction trigger of the Volcengine Agent Plan Responses route (ADR 0056). The context window stays a documented value. The profile revision `storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v10` cites it. It is not a claim about summary quality, semantic preservation, model quality, Provider attention, retention, training, or cache savings.
 
 ## Authorization and plan
 
@@ -56,12 +56,12 @@ The author view showed the answers and no summary or compaction fact.
 
 ## What this evidence qualifies
 
-- The automatic trigger at 80 percent of the window after the output bound, with the reported usage of the chain, on the exact route.
+- The automatic trigger at 80 percent of the documented window after the output bound, with the reported usage of the chain, on the exact route.
 - A summary request at about 190,000 input tokens, and a later request with that summary and a new transport.
 - The combination of transport, native text, continuation, streaming, and Host-managed compaction with the automatic trigger.
 
 ## What it does not qualify
 
-- An input above the window, and the native rejection for it (#1110).
+- The full documented window of 262,144 tokens, an input above it, and the native rejection for it (#1110).
 - The semantic preservation or the quality of a summary.
 - Native compaction, retrieval, abort, explicit cache, a cache saving, Provider attention, retention, and training (S4-REQ-007).

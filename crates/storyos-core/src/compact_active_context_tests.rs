@@ -315,3 +315,51 @@ fn a_summary_is_the_one_complete_assistant_message() {
         ]
     );
 }
+
+#[test]
+fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
+    let facts = |revision, message, prior| super::CompactionRequestFacts {
+        model_registration_revision: revision,
+        budget_bounds: crate::BudgetBounds::AgentPlanRequestV2.as_str(),
+        author_message: message,
+        decision: None,
+        prior_reported_tokens: prior,
+    };
+    let agent_plan = crate::AGENT_PLAN_REGISTRATION.revision;
+    let host_fake = crate::HOST_FAKE_REGISTRATION.revision;
+    let near_window = facts(agent_plan, "Help again.", Some(229_400));
+
+    assert_eq!(
+        (
+            [
+                facts(agent_plan, "Help again.", Some(183_500)),
+                facts(agent_plan, "Help again.", Some(183_499)),
+                facts(agent_plan, ACTIVE_COMPACTION_REQUEST_PREFIX, Some(10)),
+                facts(host_fake, ACTIVE_COMPACTION_REQUEST_PREFIX, Some(10)),
+                facts(host_fake, "Help again.", Some(300_000)),
+            ]
+            .map(|facts| super::compaction_requested(&facts)),
+            [
+                super::decision_request_kind(true, true, Some(&near_window)),
+                super::decision_request_kind(false, true, Some(&near_window)),
+                super::decision_request_kind(false, false, Some(&near_window)),
+                super::decision_request_kind(
+                    false,
+                    true,
+                    Some(&facts(agent_plan, "Help again.", Some(229_375)))
+                ),
+                super::decision_request_kind(false, true, None),
+            ],
+        ),
+        (
+            [true, false, false, true, false],
+            [
+                super::DecisionRequestKind::Later,
+                super::DecisionRequestKind::TooLong,
+                super::DecisionRequestKind::Ordinary,
+                super::DecisionRequestKind::Ordinary,
+                super::DecisionRequestKind::Ordinary,
+            ],
+        )
+    );
+}
