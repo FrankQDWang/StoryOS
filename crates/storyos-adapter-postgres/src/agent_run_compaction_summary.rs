@@ -49,6 +49,8 @@ pub(crate) async fn load_summary_attempt(
 pub(crate) struct PriorChain {
     pub model_attempt_id: String,
     pub reference: Option<String>,
+    /// The reported input and output tokens of the prior response, or `None` when unreported.
+    pub reported_tokens: Option<u64>,
 }
 
 /// The prior binding that the current continuation decision selects, or `None` when the decision
@@ -77,7 +79,10 @@ pub(crate) async fn prior_chain(
     };
     let row = client
         .query_opt(
-            "SELECT model_attempt_id::text, payload->>'response_reference'
+            "SELECT model_attempt_id::text, payload->>'response_reference',
+                    CASE WHEN payload->'usage'->>'kind' = 'reported'
+                         THEN ((payload->'usage'->>'input_tokens')::bigint
+                               + (payload->'usage'->>'output_tokens')::bigint)::text END
                FROM storyos.model_attempts
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND continuation_binding_id = $3::text::uuid",
@@ -92,6 +97,9 @@ pub(crate) async fn prior_chain(
     Ok(row.map(|row| PriorChain {
         model_attempt_id: row.get(/*idx*/ 0),
         reference: row.get(/*idx*/ 1),
+        reported_tokens: row
+            .get::<_, Option<String>>(/*idx*/ 2)
+            .and_then(|tokens| tokens.parse().ok()),
     }))
 }
 

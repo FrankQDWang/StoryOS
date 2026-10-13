@@ -95,11 +95,14 @@ pub use assemble_context::{
 pub use compact_active_context::{
     ACTIVE_COMPACTION_REQUEST_PREFIX, AGENT_PLAN_COMPACTION_PRODUCER,
     COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN, COMPACTION_SUMMARY_UNAVAILABLE,
-    CompactionInstallFacts, CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState,
-    CompactionSource, CompactionStep, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
-    StagedCompaction, SummaryObservation, active_context_input_digest, compaction_assembly_record,
-    decide_compaction_install, later_request_record, next_compaction_step,
-    requests_active_compaction, stage_compaction, summary_fits_item, summary_text,
+    COMPACTION_THRESHOLD_PERCENT, CompactionInstallFacts, CompactionInstallRefusal,
+    CompactionKnownInput, CompactionRecordState, CompactionRequestFacts, CompactionSource,
+    CompactionStep, CompactionTrigger, DecisionRequestKind, HOST_FAKE_COMPACTION_OUTPUT,
+    HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction, SummaryObservation,
+    active_context_input_digest, compaction_assembly_record, compaction_due, compaction_requested,
+    compaction_threshold, conversation_too_long, decide_compaction_install, decision_request_kind,
+    later_request_record, next_compaction_step, requests_active_compaction, stage_compaction,
+    summary_fits_item, summary_text,
 };
 pub use continuation_input::{
     ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
@@ -154,8 +157,9 @@ pub use model_output::{
     OutputPhase, StreamItemRole, StreamItemState, validate_agent_decision,
 };
 pub use model_registration::{
-    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_COMPACTION_MAPPING_REVISION,
-    AGENT_PLAN_COMPACTION_PENDING_CAPABILITY_PROFILE, AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE,
+    AGENT_PLAN_CAPABILITY_PROFILE, AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE,
+    AGENT_PLAN_COMPACTION_MAPPING_REVISION, AGENT_PLAN_COMPACTION_PENDING_CAPABILITY_PROFILE,
+    AGENT_PLAN_COMPACTION_REGISTRATION, AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE,
     AGENT_PLAN_CONTINUATION_MAPPING_REVISION, AGENT_PLAN_CONTINUATION_PENDING_CAPABILITY_PROFILE,
     AGENT_PLAN_CONTINUATION_PENDING_REGISTRATION, AGENT_PLAN_CONTINUATION_REGISTRATION,
     AGENT_PLAN_CREATE_CAPABILITY_PROFILE, AGENT_PLAN_CREATE_REGISTRATION,
@@ -163,10 +167,11 @@ pub use model_registration::{
     AGENT_PLAN_PENDING_REGISTRATION, AGENT_PLAN_REGISTRATION,
     AGENT_PLAN_STREAMING_MAPPING_REVISION, AGENT_PLAN_STREAMING_PENDING_CAPABILITY_PROFILE,
     AGENT_PLAN_STREAMING_PENDING_REGISTRATION, AGENT_PLAN_STREAMING_REGISTRATION,
+    AGENT_PLAN_WINDOW_PENDING_CAPABILITY_PROFILE, AGENT_PLAN_WINDOW_PENDING_REGISTRATION,
     COMPACTION_REQUIREMENT, CONTINUATION_REQUIREMENT, CREATE_REQUIREMENT, CapabilityCombination,
-    CapabilityEntries, CapabilityEvidence, HOST_FAKE_CAPABILITY_PROFILE, HOST_FAKE_REGISTRATION,
-    ModelAdapter, ModelCapability, ModelCapabilityProfile, ModelRegistration,
-    STREAMING_REQUIREMENT, model_registration,
+    CapabilityEntries, CapabilityEvidence, ContextWindow, HOST_FAKE_CAPABILITY_PROFILE,
+    HOST_FAKE_REGISTRATION, ModelAdapter, ModelCapability, ModelCapabilityProfile,
+    ModelRegistration, STREAMING_REQUIREMENT, model_registration,
 };
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,

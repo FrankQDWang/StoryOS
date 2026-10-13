@@ -145,6 +145,17 @@ pub struct ModelCapabilityProfile {
     pub revision: &'static str,
     pub entries: CapabilityEntries,
     pub combinations: &'static [CapabilityCombination],
+    /// The context window of the model, which input and output share, or `None` when no
+    /// evidence states it. A profile with no window does not compact.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<ContextWindow>,
+}
+
+/// The context window of one model, in tokens, with its evidence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct ContextWindow {
+    pub tokens: u64,
+    pub evidence: CapabilityEvidence,
 }
 
 /// The capabilities that one Create request needs together.
@@ -228,6 +239,7 @@ pub const HOST_FAKE_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapability
         retrieval: STAGE_3_PROOF,
         abort: STAGE_3_PROOF,
     },
+    context_window: None,
     combinations: &[CapabilityCombination {
         members: &[
             ModelCapability::Transport,
@@ -252,6 +264,8 @@ const ARK_RESPONSE_LIFECYCLE: &str = "General Ark response lifecycle, docs.volce
      route";
 const ARK_CONTEXT_CACHE: &str = "General Ark context cache, docs.volcengine.com/docs/82379/1398933, \
      not the Agent Plan route";
+const ARK_MODEL_LIST: &str = "Ark model list, docs.volcengine.com/docs/82379/1799865: a 256K context \
+     window that input and output share";
 const ARK_RETRIEVE_RESPONSE: &str =
     "General Ark Query Response, docs.volcengine.com/docs/82379/1783709, not the Agent Plan route";
 
@@ -271,6 +285,7 @@ pub const AGENT_PLAN_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelC
         retrieval: documented(ARK_RETRIEVE_RESPONSE),
         abort: CapabilityEvidence::Unknown,
     },
+    context_window: None,
     combinations: &[
         CapabilityCombination {
             members: CREATE_REQUIREMENT,
@@ -307,6 +322,7 @@ pub const AGENT_PLAN_CREATE_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCa
         native_text: AGENT_PLAN_RUNTIME_QUALIFICATION,
         ..AGENT_PLAN_PENDING_CAPABILITY_PROFILE.entries
     },
+    context_window: None,
     combinations: &[
         CapabilityCombination {
             members: CREATE_REQUIREMENT,
@@ -335,6 +351,7 @@ pub const AGENT_PLAN_CONTINUATION_PENDING_CAPABILITY_PROFILE: ModelCapabilityPro
     ModelCapabilityProfile {
         revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v3",
         entries: AGENT_PLAN_CREATE_CAPABILITY_PROFILE.entries,
+        context_window: None,
         combinations: &[
             CapabilityCombination {
                 members: CREATE_REQUIREMENT,
@@ -375,6 +392,7 @@ pub const AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE: ModelCapabilityProfile =
             continuation: AGENT_PLAN_CONTINUATION_QUALIFICATION,
             ..AGENT_PLAN_CREATE_CAPABILITY_PROFILE.entries
         },
+        context_window: None,
         combinations: &[
             CapabilityCombination {
                 members: CONTINUATION_REQUIREMENT,
@@ -403,6 +421,7 @@ pub const AGENT_PLAN_STREAMING_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfil
     ModelCapabilityProfile {
         revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v5",
         entries: AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE.entries,
+        context_window: None,
         combinations: &[
             CapabilityCombination {
                 members: CONTINUATION_REQUIREMENT,
@@ -443,6 +462,7 @@ pub const AGENT_PLAN_STREAMING_CAPABILITY_PROFILE: ModelCapabilityProfile =
             streaming: AGENT_PLAN_STREAMING_QUALIFICATION,
             ..AGENT_PLAN_CONTINUATION_CAPABILITY_PROFILE.entries
         },
+        context_window: None,
         combinations: &[
             CapabilityCombination {
                 members: STREAMING_REQUIREMENT,
@@ -471,6 +491,7 @@ pub const AGENT_PLAN_COMPACTION_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfi
     ModelCapabilityProfile {
         revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v7",
         entries: AGENT_PLAN_STREAMING_CAPABILITY_PROFILE.entries,
+        context_window: None,
         combinations: &[
             CapabilityCombination {
                 members: STREAMING_REQUIREMENT,
@@ -505,16 +526,81 @@ const AGENT_PLAN_COMPACTION_QUALIFICATION: CapabilityEvidence = CapabilityEviden
 /// The profile after the compaction qualification. Host-managed compaction and its combination
 /// with transport, native text, continuation, and streaming are qualified. Each other entry
 /// keeps its earlier evidence.
+pub const AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v8",
+        entries: CapabilityEntries {
+            host_compaction: AGENT_PLAN_COMPACTION_QUALIFICATION,
+            ..AGENT_PLAN_STREAMING_CAPABILITY_PROFILE.entries
+        },
+        context_window: None,
+        combinations: &[
+            CapabilityCombination {
+                members: COMPACTION_REQUIREMENT,
+                evidence: AGENT_PLAN_COMPACTION_QUALIFICATION,
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::Continuation,
+                    ModelCapability::ExplicitCache,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::ExplicitCache,
+                    ModelCapability::StructuredText,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+        ],
+    };
+
+/// The documented context window of `doubao-seed-2.1-pro`: 262,144 tokens.
+const AGENT_PLAN_DOCUMENTED_WINDOW: ContextWindow = ContextWindow {
+    tokens: 262_144,
+    evidence: documented(ARK_MODEL_LIST),
+};
+
+/// The profile with the documented window, before the qualification of the automatic trigger.
+/// The streaming combination keeps its qualification, and the compaction combination is pending.
+pub const AGENT_PLAN_WINDOW_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v9",
+        entries: AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE.entries,
+        context_window: Some(AGENT_PLAN_DOCUMENTED_WINDOW),
+        combinations: &[
+            CapabilityCombination {
+                members: STREAMING_REQUIREMENT,
+                evidence: AGENT_PLAN_STREAMING_QUALIFICATION,
+            },
+            CapabilityCombination {
+                members: COMPACTION_REQUIREMENT,
+                evidence: documented(ARK_MODEL_LIST),
+            },
+        ],
+    };
+
+const AGENT_PLAN_THRESHOLD_QUALIFICATION: CapabilityEvidence = CapabilityEvidence::Qualified {
+    evidence: "Authorized qualification of the automatic compaction trigger on 2026-10-13: \
+               docs/research/agent-plan-compaction-threshold-qualification-2026-10-13.md",
+};
+
+/// The profile after the qualification of the automatic trigger. A summary request near the
+/// threshold qualified the trigger. The window and each other entry keep their earlier evidence.
 pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
-    revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v8",
+    revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v10",
     entries: CapabilityEntries {
-        host_compaction: AGENT_PLAN_COMPACTION_QUALIFICATION,
-        ..AGENT_PLAN_STREAMING_CAPABILITY_PROFILE.entries
+        host_compaction: AGENT_PLAN_THRESHOLD_QUALIFICATION,
+        ..AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE.entries
     },
+    // The qualification examined approximately 190,000 input tokens, not the full window, so
+    // the window keeps its documented evidence.
+    context_window: Some(AGENT_PLAN_DOCUMENTED_WINDOW),
     combinations: &[
         CapabilityCombination {
             members: COMPACTION_REQUIREMENT,
-            evidence: AGENT_PLAN_COMPACTION_QUALIFICATION,
+            evidence: AGENT_PLAN_THRESHOLD_QUALIFICATION,
         },
         CapabilityCombination {
             members: &[
@@ -606,11 +692,27 @@ pub const AGENT_PLAN_COMPACTION_PENDING_REGISTRATION: ModelRegistration = ModelR
     ..AGENT_PLAN_STREAMING_REGISTRATION
 };
 
-/// The current Agent Plan Registration: the compaction mapping, with the qualified profile.
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// The compaction mapping with the qualified profile and no window. It does not compact by itself.
+pub const AGENT_PLAN_COMPACTION_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa09",
-    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    capability_profile: &AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE,
     ..AGENT_PLAN_COMPACTION_PENDING_REGISTRATION
+};
+
+/// The compaction mapping with the documented window and the pending automatic trigger. An
+/// AgentRun that pinned it refuses with Registration drift.
+pub const AGENT_PLAN_WINDOW_PENDING_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa10",
+    capability_profile: &AGENT_PLAN_WINDOW_PENDING_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_COMPACTION_REGISTRATION
+};
+
+/// The current Agent Plan Registration: the compaction mapping, with the documented window and
+/// the qualified automatic trigger.
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa11",
+    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_COMPACTION_REGISTRATION
 };
 
 /// The known Registration of a stored revision. `None` is an unknown or damaged revision.
@@ -624,6 +726,8 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
         &AGENT_PLAN_STREAMING_PENDING_REGISTRATION,
         &AGENT_PLAN_STREAMING_REGISTRATION,
         &AGENT_PLAN_COMPACTION_PENDING_REGISTRATION,
+        &AGENT_PLAN_COMPACTION_REGISTRATION,
+        &AGENT_PLAN_WINDOW_PENDING_REGISTRATION,
         &AGENT_PLAN_REGISTRATION,
     ]
     .into_iter()

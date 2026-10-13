@@ -6,13 +6,19 @@ use storyos_application::{
 };
 
 use crate::agent_run_work::RunPhaseRow;
-use storyos_core::{CompactionRecordState, CompactionStep, next_compaction_step};
+use storyos_core::{
+    CompactionRecordState, CompactionRequestFacts, CompactionStep, DecisionRequestKind,
+    compaction_requested, decision_request_kind, next_compaction_step,
+};
 
 pub(crate) enum CompactionAdvance {
     /// Send the summary request.
     Dispatch(Box<DestinationRequest>),
     /// Send the decision request. It is the later request when the summary installed.
     Decide { later_request: bool },
+    /// The compaction did not install, and the expected input reaches the window after the
+    /// output bound. The AgentRun refuses with `conversation_too_long` before dispatch.
+    TooLong,
 }
 
 /// Advances the active compaction of the claimed AgentRun before its first decision request.
@@ -39,54 +45,104 @@ pub(crate) async fn advance_active_compaction(
         CompactionRecordState::Absent => summary::prior_chain(client, claim, run).await?,
         _ => None,
     };
-    let ordinary = Ok(CompactionAdvance::Decide {
+    let requested = chain
+        .as_ref()
+        .is_some_and(|chain| compaction_requested(&request_facts(run, chain)));
+    let ordinary = CompactionAdvance::Decide {
         later_request: false,
-    });
-    match (
-        next_compaction_step(&run.author_message, chain.is_some(), record),
+    };
+    let advance = match (
+        next_compaction_step(requested, chain.is_some(), record),
         staged,
         summary,
         chain,
     ) {
         (CompactionStep::RequestSummary, _, _, Some(chain)) => {
             // A refused summary request leaves the ordinary continuation for the decision request.
-            if !summary::admitted(client, claim, run).await? {
-                return ordinary;
-            }
-            summary::commit_assembly(client, claim, run).await?;
-            Ok(CompactionAdvance::Dispatch(Box::new(
-                summary::summary_request(client, claim, run, RequestAttempt::New, chain.reference)
+            if summary::admitted(client, claim, run).await? {
+                summary::commit_assembly(client, claim, run).await?;
+                return Ok(CompactionAdvance::Dispatch(Box::new(
+                    summary::summary_request(
+                        client,
+                        claim,
+                        run,
+                        RequestAttempt::New,
+                        chain.reference,
+                    )
                     .await?,
-            )))
+                )));
+            }
+            ordinary
         }
         (CompactionStep::ReobserveSummary, _, Some(summary), _) => {
             let attempt = RequestAttempt::Claimed(DispatchClaim {
                 model_attempt_id: summary.model_attempt_id,
             });
-            Ok(CompactionAdvance::Dispatch(Box::new(
+            return Ok(CompactionAdvance::Dispatch(Box::new(
                 summary::summary_request(client, claim, run, attempt, summary.prior_reference)
                     .await?,
-            )))
+            )));
         }
-        (CompactionStep::InstallOrRefuse, Some(staged), _, _) => Ok(CompactionAdvance::Decide {
+        (CompactionStep::InstallOrRefuse, Some(staged), _, _) => CompactionAdvance::Decide {
             later_request: write::install_or_refuse(client, claim, run, &staged).await?,
-        }),
+        },
         // The source can become restricted after the install check. Check it again before the
         // later request goes out.
         (CompactionStep::LaterRequest, Some(staged), _, _)
             if record == CompactionRecordState::Accepted =>
         {
-            Ok(CompactionAdvance::Decide {
+            CompactionAdvance::Decide {
                 later_request: write::source_still_eligible(client, claim, &staged).await?,
-            })
+            }
         }
-        (CompactionStep::LaterRequest, _, _, _) => Ok(CompactionAdvance::Decide {
+        (CompactionStep::LaterRequest, _, _, _) => CompactionAdvance::Decide {
             later_request: true,
-        }),
+        },
         (CompactionStep::RequestSummary, _, _, None)
         | (CompactionStep::ReobserveSummary, _, None, _)
         | (CompactionStep::InstallOrRefuse, None, _, _)
         | (CompactionStep::OrdinaryRequest, _, _, _) => ordinary,
+    };
+    let CompactionAdvance::Decide { later_request } = advance else {
+        return Ok(advance);
+    };
+    let started = requested || record != CompactionRecordState::Absent;
+    let chain = if later_request || !started {
+        None
+    } else {
+        summary::prior_chain(client, claim, run).await?
+    };
+    Ok(
+        match decision_request_kind(
+            later_request,
+            started,
+            chain
+                .as_ref()
+                .map(|chain| request_facts(run, chain))
+                .as_ref(),
+        ) {
+            DecisionRequestKind::Later => CompactionAdvance::Decide {
+                later_request: true,
+            },
+            DecisionRequestKind::Ordinary => CompactionAdvance::Decide {
+                later_request: false,
+            },
+            DecisionRequestKind::TooLong => CompactionAdvance::TooLong,
+        },
+    )
+}
+
+/// The loaded facts of the decision request of `run` that continues `chain`.
+fn request_facts<'a>(
+    run: &'a RunPhaseRow,
+    chain: &summary::PriorChain,
+) -> CompactionRequestFacts<'a> {
+    CompactionRequestFacts {
+        model_registration_revision: &run.model_registration_revision,
+        budget_bounds: &run.budget_bounds,
+        author_message: &run.author_message,
+        decision: run.disclosure_request.as_ref(),
+        prior_reported_tokens: chain.reported_tokens,
     }
 }
 
