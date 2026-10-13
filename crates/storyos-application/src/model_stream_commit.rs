@@ -96,7 +96,6 @@ impl<'a, S: ModelDispatchStore, O: ContractFaultObserver, C: GatewayClock>
             {
                 self.deferred += 1;
                 tracing::warn!(
-                    attempt = self.deferred.diagnostic(),
                     reason = error.diagnostic(),
                     sql_state = SqlState(&error).diagnostic(),
                     "Model Stream Event append deferred"
