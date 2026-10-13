@@ -154,6 +154,81 @@ pub fn compaction_due(trigger: &CompactionTrigger) -> bool {
     }
 }
 
+/// The loaded facts of the first decision request of an AgentRun and the prior response of its
+/// Conversation. The phase decides the compaction of the request from them.
+#[derive(Clone, Copy, Debug)]
+pub struct CompactionRequestFacts<'a> {
+    pub model_registration_revision: &'a str,
+    /// The stored request bounds of the use binding.
+    pub budget_bounds: &'a str,
+    pub author_message: &'a str,
+    /// The decision Context Assembly of the request, or `None` when it does not decode.
+    pub decision: Option<&'a crate::CurrentPassageAssemblyRecord>,
+    /// The reported input and output tokens of the prior response, or `None` when unreported.
+    pub prior_reported_tokens: Option<u64>,
+}
+
+impl CompactionTrigger {
+    /// The window of the pinned profile, the output bound of the use binding, and the expected
+    /// input of the request.
+    pub fn from_facts(facts: &CompactionRequestFacts<'_>) -> Self {
+        Self {
+            window_tokens: crate::model_registration(facts.model_registration_revision)
+                .and_then(|registration| registration.capability_profile.context_window)
+                .map(|window| window.tokens),
+            output_bound: crate::BudgetBounds::parse(facts.budget_bounds)
+                .and_then(crate::BudgetBounds::request_bounds)
+                .map(|bounds| u64::from(bounds.max_output_tokens)),
+            prior_reported_tokens: facts.prior_reported_tokens,
+            new_turn_tokens: facts.decision.map_or(/*default*/ 0, |record| {
+                record.selected.iter().map(|item| item.token_count).sum()
+            }),
+        }
+    }
+}
+
+/// Whether the decision request compacts first. The expected input can reach the threshold, or
+/// the author message can ask the Host fake to compact.
+pub fn compaction_requested(facts: &CompactionRequestFacts<'_>) -> bool {
+    (crate::model_registration(facts.model_registration_revision)
+        .is_some_and(|registration| registration.adapter == crate::ModelAdapter::HostFake)
+        && requests_active_compaction(facts.author_message))
+        || compaction_due(&CompactionTrigger::from_facts(facts))
+}
+
+/// The decision request after the compaction phase.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DecisionRequestKind {
+    /// The later request with the installed summary.
+    Later,
+    /// The request with the ordinary continuation.
+    Ordinary,
+    /// The AgentRun refuses before dispatch with `conversation_too_long`.
+    TooLong,
+}
+
+/// Decides the decision request after the compaction phase. A compaction that started and did
+/// not install leaves the full chain. When the expected input then reaches the window after the
+/// output bound, the request cannot fit.
+pub fn decision_request_kind(
+    installed: bool,
+    compaction_started: bool,
+    facts: Option<&CompactionRequestFacts<'_>>,
+) -> DecisionRequestKind {
+    if installed {
+        return DecisionRequestKind::Later;
+    }
+    match facts {
+        Some(facts)
+            if compaction_started
+                && conversation_too_long(&CompactionTrigger::from_facts(facts)) =>
+        {
+            DecisionRequestKind::TooLong
+        }
+        _ => DecisionRequestKind::Ordinary,
+    }
+}
+
 /// Whether the expected input reaches the window after the output bound. Then a request that
 /// keeps the full chain cannot fit. An unknown window, output bound, or usage gives `false`.
 pub fn conversation_too_long(trigger: &CompactionTrigger) -> bool {

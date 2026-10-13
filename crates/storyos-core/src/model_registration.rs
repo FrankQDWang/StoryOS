@@ -587,17 +587,16 @@ const AGENT_PLAN_THRESHOLD_QUALIFICATION: CapabilityEvidence = CapabilityEvidenc
 };
 
 /// The profile after the qualification of the automatic trigger. A summary request near the
-/// threshold of the window examined the window. Each other entry keeps its earlier evidence.
+/// threshold qualified the trigger. The window and each other entry keep their earlier evidence.
 pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v10",
     entries: CapabilityEntries {
         host_compaction: AGENT_PLAN_THRESHOLD_QUALIFICATION,
         ..AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE.entries
     },
-    context_window: Some(ContextWindow {
-        tokens: 262_144,
-        evidence: AGENT_PLAN_THRESHOLD_QUALIFICATION,
-    }),
+    // The qualification examined approximately 190,000 input tokens, not the full window, so
+    // the window keeps its documented evidence.
+    context_window: Some(AGENT_PLAN_DOCUMENTED_WINDOW),
     combinations: &[
         CapabilityCombination {
             members: COMPACTION_REQUIREMENT,
@@ -708,8 +707,8 @@ pub const AGENT_PLAN_WINDOW_PENDING_REGISTRATION: ModelRegistration = ModelRegis
     ..AGENT_PLAN_COMPACTION_REGISTRATION
 };
 
-/// The current Agent Plan Registration: the compaction mapping, with the qualified window and
-/// automatic trigger.
+/// The current Agent Plan Registration: the compaction mapping, with the documented window and
+/// the qualified automatic trigger.
 pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa11",
     capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
