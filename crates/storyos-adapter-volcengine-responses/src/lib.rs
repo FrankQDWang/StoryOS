@@ -50,6 +50,12 @@ enum Exchange {
         timeout: Duration,
         targets: Vec<DeclaredTarget>,
     },
+    /// Measurement only: the probe of a cancel operation.
+    Cancel {
+        url: String,
+        credential: ResolvedCredential,
+        timeout: Duration,
+    },
     /// A lost claim committed this Attempt. The request is not sent again.
     Reobserve,
 }
@@ -66,8 +72,8 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
         let create = match request {
             DestinationRequest::Create(create) => create,
             DestinationRequest::Retrieve(retrieve) => return self.prepare_retrieve(retrieve).await,
-            // The Responses API of the route has no cancel or abort operation (ADR 0057).
-            DestinationRequest::Abort(_) => return Err(PreDispatchRefusal::UnsupportedRequest),
+            // Measurement only: probe an undocumented cancel operation (S4-04b).
+            DestinationRequest::Abort(abort) => return self.prepare_cancel(abort).await,
         };
         let route = &create.route;
         let (Some(endpoint), Some(bounds)) = (&route.endpoint, route.bounds) else {
@@ -147,7 +153,60 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
                 credential,
                 timeout,
                 targets,
-            } => return retrieve(&url, &credential, timeout, &targets).await,
+            } => {
+                let observation = retrieve(&url, &credential, timeout, &targets).await;
+                // Measurement only: the native result of the Retrieve.
+                let probe = match &observation {
+                    Observation::Rejected { reason } => reason.clone(),
+                    Observation::Terminal(response) => format!(
+                        "terminal:{}:{:?}",
+                        response
+                            .items
+                            .iter()
+                            .map(|item| format!("{:?}", item.state))
+                            .collect::<Vec<_>>()
+                            .join(","),
+                        response.usage
+                    ),
+                    Observation::NotSubmitted => "not_submitted".to_owned(),
+                    Observation::OutcomeUnknown { .. } => "outcome_unknown".to_owned(),
+                };
+                eprintln!("STORYOS_MEASUREMENT_RETRIEVE_PROBE={probe}");
+                return observation;
+            }
+            Exchange::Cancel {
+                url,
+                credential,
+                timeout,
+            } => {
+                let observation =
+                    match send(Method::Post(String::new()), &url, &credential, timeout).await {
+                        Sent::Settled(observation) => observation,
+                        Sent::Accepted(response) => match response.bytes().await {
+                            Ok(bytes) => response::observe(&bytes, &[]),
+                            Err(_) => Observation::OutcomeUnknown {
+                                response_reference: None,
+                            },
+                        },
+                    };
+                // Measurement only: the native status and code of the probe.
+                let probe = match &observation {
+                    Observation::Rejected { reason } => reason.clone(),
+                    Observation::Terminal(response) => format!(
+                        "terminal:{}",
+                        response
+                            .items
+                            .iter()
+                            .map(|item| format!("{:?}", item.state))
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    ),
+                    Observation::NotSubmitted => "not_submitted".to_owned(),
+                    Observation::OutcomeUnknown { .. } => "outcome_unknown".to_owned(),
+                };
+                eprintln!("STORYOS_MEASUREMENT_CANCEL_PROBE={probe}");
+                return observation;
+            }
             Exchange::Reobserve => {
                 return Observation::OutcomeUnknown {
                     response_reference: None,
@@ -195,6 +254,46 @@ impl<R: CredentialResolver> ModelProviderAdapter for AgentPlanResponses<R> {
 }
 
 impl<R: CredentialResolver> AgentPlanResponses<R> {
+    /// Measurement only: a POST of `/responses/{reference}/cancel` with an empty body.
+    async fn prepare_cancel(
+        &self,
+        abort: &storyos_application::AbortRequest,
+    ) -> Result<PreparedRequest<AgentPlanExchange>, PreDispatchRefusal> {
+        let route = &abort.route;
+        let (Some(endpoint), Some(bounds), Some(reference)) =
+            (&route.endpoint, route.bounds, &abort.response_reference)
+        else {
+            return Err(PreDispatchRefusal::UnsupportedRequest);
+        };
+        let path = format!("/responses/{reference}/cancel");
+        let wire = storyos_core::canonical_json(&serde_json::json!({
+            "method": "POST",
+            "path": path,
+        }));
+        let projection = WirePayloadProjection {
+            execution_profile: EXECUTION_PROFILE.to_owned(),
+            mapping_revision: route.mapping_revision.clone(),
+            digest: format!("sha256:{}", storyos_core::hex_sha256(wire.as_bytes())),
+            serialized_payload: Some(wire),
+            cache_setting: None,
+        };
+        if let RequestAttempt::Claimed(_) = abort.attempt {
+            return Ok(PreparedRequest {
+                projection,
+                prepared: AgentPlanExchange(Exchange::Reobserve),
+            });
+        }
+        let credential = self.credential(route).await?;
+        Ok(PreparedRequest {
+            projection,
+            prepared: AgentPlanExchange(Exchange::Cancel {
+                url: format!("{}{path}", endpoint.trim_end_matches('/')),
+                credential,
+                timeout: bounds.timeout,
+            }),
+        })
+    }
+
     /// A GET of the stored response. The Host admits it only for a retained reference.
     async fn prepare_retrieve(
         &self,
