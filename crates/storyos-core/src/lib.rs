@@ -262,10 +262,10 @@ pub use undo_latest_author_action::{
     UndoLatestAuthorActionUnavailable, undo_latest_author_action,
 };
 pub use unknown_create_successor::{
-    LookupUnavailable, ScriptedSuccessorConditions, SuccessorAllowance, SuccessorEffect,
-    SuccessorLookup, SuccessorPauseReason, UnknownCreateScript, UnknownCreateSuccessorDecision,
-    UnknownCreateSuccessorFacts, decide_unknown_create_successor, scripted_successor_conditions,
-    unknown_create_script,
+    LookupUnavailable, SuccessorAllowance, SuccessorConditions, SuccessorEffect, SuccessorLookup,
+    SuccessorPauseReason, UnknownCreateScript, UnknownCreateSuccessorDecision,
+    UnknownCreateSuccessorFacts, decide_unknown_create_successor, route_successor_conditions,
+    scripted_successor_conditions, unknown_create_script,
 };
 pub use update_chapter::{
     ChapterJoin, UpdateChapter, UpdateChapterApplied, UpdateChapterConflict, UpdateChapterNoEffect,

@@ -4,9 +4,10 @@ use storyos_application::{
     UnknownCreateSuccessorInspect,
 };
 use storyos_core::{
-    AssistanceAvailability, LookupUnavailable, SuccessorAllowance, SuccessorEffect,
-    SuccessorLookup, UnknownCreateSuccessorDecision, UnknownCreateSuccessorFacts,
-    decide_unknown_create_successor, scripted_successor_conditions, unknown_create_script,
+    AssistanceAvailability, BudgetBounds, LookupUnavailable, ModelAdapter, SuccessorAllowance,
+    SuccessorConditions, SuccessorEffect, SuccessorLookup, SuccessorPauseReason,
+    UnknownCreateSuccessorDecision, UnknownCreateSuccessorFacts, decide_unknown_create_successor,
+    route_successor_conditions, scripted_successor_conditions, unknown_create_script,
 };
 use uuid::Uuid;
 
@@ -29,13 +30,45 @@ pub(crate) struct SuccessorSelection {
     pub continuation_binding_id: Option<String>,
 }
 
-/// The successor marker of one scripted unknown create, with the lookup its reference allows.
+/// The Host gates of the successor of one unknown create. The fake profile scripts them by the
+/// author message. A real route derives them from the pinned use binding and the committed items.
+pub(crate) fn conditions(
+    run: &RunPhaseRow,
+    payload: &serde_json::Value,
+) -> Option<SuccessorConditions> {
+    match storyos_core::model_registration(&run.model_registration_revision)
+        .map(|registration| registration.adapter)
+    {
+        Some(ModelAdapter::VolcengineAgentPlanResponses) => {
+            // The request declares no Tool, so only a committed Tool or hosted item is an effect.
+            let effect = payload
+                .get("items")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|item| matches!(text(item, "role"), Some("tool" | "hosted")));
+            Some(route_successor_conditions(
+                BudgetBounds::parse(&run.budget_bounds).unwrap_or(BudgetBounds::Unqualified),
+                if effect {
+                    SuccessorEffect::Unresolved
+                } else {
+                    SuccessorEffect::None
+                },
+            ))
+        }
+        Some(ModelAdapter::HostFake) | None => {
+            scripted_successor_conditions(unknown_create_script(&run.author_message))
+        }
+    }
+}
+
+/// The successor marker of one unknown create, with the lookup its reference allows.
 pub(crate) fn prepare_subject(
-    author_message: &str,
+    conditions: Option<SuccessorConditions>,
     origin: &SuccessorOrigin<'_>,
     lookup: SuccessorLookup,
 ) -> Option<serde_json::Value> {
-    let conditions = scripted_successor_conditions(unknown_create_script(author_message))?;
+    let conditions = conditions?;
     let lookup_reason = match lookup {
         SuccessorLookup::StillUnknown => serde_json::Value::Null,
         SuccessorLookup::Unavailable { reason } => serde_json::json!(reason.label()),
@@ -118,29 +151,7 @@ pub(crate) async fn advance(
             Ok(SuccessorWork::Done(CompleteAgentRun::Settled))
         }
         UnknownCreateSuccessorDecision::Pause { reason } => {
-            // A pause after the fence keeps the spent allowance and never resets it.
-            let consumed = flag(&marker, "allowance_consumed");
-            let fenced = flag(&marker, "predecessor_fenced");
-            seal(
-                &mut marker,
-                "paused",
-                Some(reason.label()),
-                consumed,
-                fenced,
-            );
-            row.payload["unknown_create_successor"] = marker;
-            write_decision_payload(client, claim, &row.attempt_id, &row.payload).await?;
-            update_run(
-                client,
-                claim,
-                "paused",
-                Some(&serde_json::json!({
-                    "kind": "unknown_create_successor",
-                    "reason": reason.label()
-                })),
-                /*clear_lease*/ true,
-            )
-            .await?;
+            pause(client, claim, &mut row, marker, reason).await?;
             Ok(SuccessorWork::Done(CompleteAgentRun::Settled))
         }
         UnknownCreateSuccessorDecision::FenceAndDispatch => {
@@ -162,6 +173,39 @@ pub(crate) async fn advance(
             crate::agent_run_successor_dispatch::successor_request(client, claim, run).await?,
         )),
     }
+}
+
+/// Pauses the successor recovery and the Run. A pause after the fence keeps the spent allowance
+/// and never resets it.
+pub(crate) async fn pause(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    row: &mut DecisionRow,
+    mut marker: serde_json::Value,
+    reason: SuccessorPauseReason,
+) -> Result<(), CompleteAgentRunError> {
+    let consumed = flag(&marker, "allowance_consumed");
+    let fenced = flag(&marker, "predecessor_fenced");
+    seal(
+        &mut marker,
+        "paused",
+        Some(reason.label()),
+        consumed,
+        fenced,
+    );
+    row.payload["unknown_create_successor"] = marker;
+    write_decision_payload(client, claim, &row.attempt_id, &row.payload).await?;
+    update_run(
+        client,
+        claim,
+        "paused",
+        Some(&serde_json::json!({
+            "kind": "unknown_create_successor",
+            "reason": reason.label()
+        })),
+        /*clear_lease*/ true,
+    )
+    .await
 }
 
 pub(crate) async fn prohibit_automatic_successor(
@@ -318,6 +362,7 @@ pub(crate) fn apply_late(
     marker: &mut serde_json::Value,
     payload: &mut serde_json::Value,
     usage: ModelUsage,
+    report: &str,
 ) {
     let released = !matches!(usage, ModelUsage::Unknown);
     payload["usage"] = crate::agent_run_observation::encode_usage(usage);
@@ -331,7 +376,7 @@ pub(crate) fn apply_late(
             "kind": "provider_report",
             "attempt_id": attempt_id,
             "availability": "current",
-            "report": "host_fake_late_predecessor"
+            "report": report
         }));
     }
     marker["late_evidence_applied"] = serde_json::json!(true);

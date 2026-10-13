@@ -327,7 +327,8 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
             qualification_evidence(&admin, &upgraded).await,
         ),
         (
-            vec![(route.clone(), None), (route.clone(), None)],
+            // The unknown create sends its one bounded successor, which is also unknown.
+            vec![(route.clone(), None); 4],
             vec![
                 (route.clone(), None),
                 (route.clone(), Some("resp_01".to_owned())),
@@ -342,9 +343,9 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
                 None,
             ],
             [
-                text("waiting"),
-                text(r#"{"kind": "outcome_unknown", "reason": "missing_reference"}"#),
-                text("1"),
+                text("completed"),
+                None,
+                text("2"),
                 None,
                 text("true"),
                 text("none"),
