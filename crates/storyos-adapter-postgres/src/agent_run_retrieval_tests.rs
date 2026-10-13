@@ -1,8 +1,8 @@
 use storyos_adapter_volcengine_responses::{AgentPlanExchange, AgentPlanResponses};
 use storyos_application::{
-    CredentialReference, CredentialResolver, DestinationRequest, ModelProviderAdapter,
-    ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
-    ResolvedCredential, complete_agent_run,
+    CompleteAgentRunError, CredentialReference, CredentialResolver, DestinationRequest,
+    ModelProviderAdapter, ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal,
+    PreparedRequest, ResolvedCredential, complete_agent_run,
 };
 use storyos_core::{DeploymentDestination, ModelAdapter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -28,13 +28,14 @@ fn adapter() -> AgentPlanResponses<TestCredential> {
     }
 }
 
-/// The real adapter. After its Create exchange, the author turns assistance off.
-struct AssistanceOffAfterExchange<'a> {
+/// The real adapter. After its exchange, `statement` changes the disposable database, for
+/// example as a crash and the expiry of the lease do.
+struct AfterExchange<'a> {
     admin: &'a Client,
-    project_id: String,
+    statement: String,
 }
 
-impl ModelProviderAdapter for AssistanceOffAfterExchange<'_> {
+impl ModelProviderAdapter for AfterExchange<'_> {
     const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
     type Prepared = AgentPlanExchange;
 
@@ -51,16 +52,7 @@ impl ModelProviderAdapter for AssistanceOffAfterExchange<'_> {
         sink: &mut impl ModelStreamSink,
     ) -> Observation {
         let observation = adapter().exchange(prepared, sink).await;
-        self.admin
-            .batch_execute(&format!(
-                "SET session_replication_role = replica;
-                 UPDATE storyos.project_policy_revisions SET availability = 'unavailable'
-                  WHERE project_id = '{}';
-                 SET session_replication_role = DEFAULT;",
-                self.project_id
-            ))
-            .await
-            .unwrap();
+        self.admin.batch_execute(&self.statement).await.unwrap();
         observation
     }
 }
@@ -173,6 +165,59 @@ async fn recovery(admin: &Client, run_id: &str) -> [Option<String>; 7] {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_restarted_worker_retrieves_the_committed_reference_once_and_settles_the_result() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (base, served) = destination(vec![
+        broken_stream("resp_c41"),
+        stored("resp_c41", "completed"),
+    ])
+    .await;
+    let (scope, run_id) = real_run(&store, &admin, "c41", &base).await;
+    let crash = AfterExchange {
+        admin: &admin,
+        statement: format!(
+            "UPDATE storyos.agent_runs SET fence_token = fence_token + 1 WHERE run_id = '{run_id}'"
+        ),
+    };
+    let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
+    let crashed = complete_agent_run(&store, &crash, &NoContractFaults, &claim).await;
+    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &claim)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            crashed
+                .err()
+                .map(|error| matches!(error, CompleteAgentRunError::StaleFence)),
+            recovery(&admin, &run_id).await,
+            served.await.unwrap(),
+        ),
+        (
+            Some(true),
+            [
+                Some("completed".to_owned()),
+                None,
+                Some("Keep it.".to_owned()),
+                Some("settled".to_owned()),
+                None,
+                Some("true".to_owned()),
+                Some("decision:true,retrieval:true".to_owned()),
+            ],
+            vec![
+                "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
+                "GET /api/plan/v3/responses/resp_c41 HTTP/1.1".to_owned(),
+            ],
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
 async fn a_dropped_stream_retrieves_once_and_keeps_an_unfinished_result_unknown() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
@@ -218,9 +263,15 @@ async fn a_route_that_is_no_longer_admitted_keeps_the_result_unknown_and_sends_n
     let (store, admin) = stores().await;
     let (base, served) = destination(vec![broken_stream("resp_c44")]).await;
     let (scope, run_id) = real_run(&store, &admin, "c44", &base).await;
-    let off = AssistanceOffAfterExchange {
+    let off = AfterExchange {
         admin: &admin,
-        project_id: scope.project_id.as_ref().to_owned(),
+        statement: format!(
+            "SET session_replication_role = replica;
+             UPDATE storyos.project_policy_revisions SET availability = 'unavailable'
+              WHERE project_id = '{}';
+             SET session_replication_role = DEFAULT;",
+            scope.project_id.as_ref()
+        ),
     };
     let claim = claim_run(&admin, scope, run_id.clone()).await;
     complete_agent_run(&store, &off, &NoContractFaults, &claim)

@@ -347,12 +347,14 @@ pub trait ModelDispatchStore: Sync {
         projection: &WirePayloadProjection,
     ) -> impl Future<Output = Result<Option<DispatchClaim>, CompleteAgentRunError>> + Send;
 
-    /// Commits one ordered batch of Model Stream Events, or tells the exchange to stop.
+    /// Commits one ordered batch of Model Stream Events, or tells the exchange to stop. A
+    /// `reference` is the response reference that the destination reported for the Attempt.
     fn append_model_stream_events(
         &self,
         claim: &ClaimedAgentRun,
         dispatch: &DispatchClaim,
         events: &[NativeStreamItem],
+        reference: Option<&ResponseReference>,
     ) -> impl Future<Output = Result<Option<StreamStop>, CompleteAgentRunError>> + Send;
 
     /// Commits one observation or one pre-dispatch refusal.
@@ -368,6 +370,13 @@ pub trait ModelStreamSink: Send {
     /// Commits the events; `Stop` tells the adapter to end the exchange.
     fn append(&mut self, events: &[NativeStreamItem])
     -> impl Future<Output = StreamControl> + Send;
+
+    /// Commits the response reference of the exchange as soon as the destination reports it, so
+    /// that a restart can still retrieve the original result.
+    fn retain_reference(
+        &mut self,
+        reference: &ResponseReference,
+    ) -> impl Future<Output = StreamControl> + Send;
 }
 
 /// The protocol projection of one destination. It cannot decide retry, fallback, or selection.
