@@ -5,6 +5,7 @@ use storyos_core::{ACTIVE_COMPACTION_REQUEST_PREFIX, DeploymentDestination};
 use tokio_postgres::Client;
 
 use crate::PostgresProjectReader;
+use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{admit_run_in, claim_run, queued_run, stores};
 
 /// Settles the first AgentRun of a new Conversation, then settles one compaction request in the
@@ -19,7 +20,7 @@ async fn compact_after_first_run(
 ) -> (ProjectScope, String) {
     let (scope, chapter_id, first) = queued_run(store, prefixes[0], destination.clone()).await;
     let claim = claim_run(admin, scope.clone(), first).await;
-    complete_agent_run(store, adapter, &NoContractFaults, &claim)
+    complete_agent_run(store, adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let run_id = admit_run_in(
@@ -39,7 +40,7 @@ async fn compact_after_first_run(
         .await
         .unwrap();
     let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(store, adapter, &NoContractFaults, &claim)
+    complete_agent_run(store, adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     (scope, run_id)
@@ -217,7 +218,7 @@ async fn compact_on_agent_plan(
         resolver: TestCredential,
     };
     let claim = claim_run(admin, scope.clone(), first).await;
-    complete_agent_run(store, &adapter, &NoContractFaults, &claim)
+    complete_agent_run(store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let run_id = admit_run_in(
@@ -233,7 +234,7 @@ async fn compact_on_agent_plan(
     )
     .await;
     let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(store, &adapter, &NoContractFaults, &claim)
+    complete_agent_run(store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     run_id
@@ -417,6 +418,7 @@ async fn compact_with_change(
         &store,
         &storyos_adapter_fake_destination::FakeDestination,
         &NoContractFaults,
+        &RuntimeClock,
         &claim,
     )
     .await
@@ -443,7 +445,7 @@ async fn compact_with_change(
         done: std::sync::Mutex::default(),
     };
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(&store, &adapter, &NoContractFaults, &claim)
+    complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let row = admin

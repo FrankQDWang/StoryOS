@@ -38,6 +38,7 @@ mod author_edit;
 mod author_edit_wire;
 mod model_gateway;
 mod model_gateway_ports;
+mod model_stream_commit;
 pub use author_edit_wire::{author_edit_units_from_wire, author_edit_units_to_wire};
 mod refused_edit_draft;
 pub use refused_edit_draft::{
@@ -161,12 +162,12 @@ pub use model_gateway_ports::{
     AbortRequest, AbortTicket, CacheSetting, CacheUse, CommittedCancellation,
     ContractFaultObserver, ContractFaultPoint, CreatePurpose, CreateRequest, CredentialReference,
     CredentialResolver, DeclaredTarget, DestinationRequest, DispatchClaim, DispatchRecord,
-    ModelDispatchStore, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
-    NextDispatchWork, NoContractFaults, Observation, PROVISIONAL_STREAM_COMMIT_INTERVAL,
-    PROVISIONAL_STREAM_EVENT_BOUND, PreDispatchRefusal, PreparedRequest, ReferenceRetrieval,
-    ReportedBinding, RequestAttempt, RequestBounds, RequestContextItem, RequestRoute,
-    ResolvedCredential, ResponseReference, RetrievePurpose, RetrieveRequest, StreamControl,
-    StreamStop, WirePayloadProjection,
+    GatewayClock, ModelDispatchStore, ModelProviderAdapter, ModelResponse, ModelStreamSink,
+    ModelUsage, NextDispatchWork, NoContractFaults, Observation,
+    PROVISIONAL_STREAM_COMMIT_INTERVAL, PROVISIONAL_STREAM_EVENT_BOUND, PreDispatchRefusal,
+    PreparedRequest, ReferenceRetrieval, ReportedBinding, RequestAttempt, RequestBounds,
+    RequestContextItem, RequestRoute, ResolvedCredential, ResponseReference, RetrievePurpose,
+    RetrieveRequest, StreamControl, StreamStop, WirePayloadProjection,
 };
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,

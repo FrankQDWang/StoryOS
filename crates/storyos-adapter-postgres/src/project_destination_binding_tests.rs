@@ -12,6 +12,7 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
+use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{admit_run, claim_run, queued_run, stores};
 use crate::model_registration::tests::agent_plan;
 
@@ -64,9 +65,15 @@ async fn refusal(
 ) -> Option<String> {
     let claim = claim_run(admin, scope.clone(), run_id.to_owned()).await;
     // The fake adapter is never reached: each of these runs is refused before preparation.
-    complete_agent_run(store, &FakeDestination, &NoContractFaults, &claim)
-        .await
-        .unwrap();
+    complete_agent_run(
+        store,
+        &FakeDestination,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await
+    .unwrap();
     admin
         .query_one(
             "SELECT settlement->>'capability' FROM storyos.agent_runs
@@ -324,7 +331,7 @@ async fn a_rebinding_after_an_unknown_create_pauses_its_successor_without_dispat
         rebound: Mutex::default(),
     };
 
-    complete_agent_run(&store, &FakeDestination, &observer, &claim)
+    complete_agent_run(&store, &FakeDestination, &observer, &RuntimeClock, &claim)
         .await
         .unwrap();
 
@@ -407,7 +414,7 @@ async fn disabled_assistance_during_successor_preparation_pauses_it_with_its_spe
         scope: &scope,
     };
 
-    complete_agent_run(&store, &adapter, &NoContractFaults, &claim)
+    complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
 

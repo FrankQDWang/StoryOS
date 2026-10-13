@@ -12,6 +12,7 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
+use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
 use crate::agent_run_retrieval::tests::{
     AfterExchange, adapter, broken_stream, destination, real_run, stored,
@@ -95,7 +96,7 @@ async fn an_unknown_real_create_sends_the_same_request_once_and_keeps_its_late_r
     .await;
     let (scope, run_id) = real_run(&store, &admin, "c46", &base).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
-    complete_agent_run(&store, &adapter(), &NoContractFaults, &claim)
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let digests: (String, String) = {
@@ -156,7 +157,7 @@ async fn a_committed_tool_item_or_a_changed_request_pauses_the_successor_before_
     .await;
     let (tool_scope, tool_run) = real_run(&store, &admin, "c47", &tool_base).await;
     let claim = claim_run(&admin, tool_scope, tool_run.clone()).await;
-    complete_agent_run(&store, &adapter(), &NoContractFaults, &claim)
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let (changed_base, changed_served) = destination(vec![
@@ -175,7 +176,7 @@ async fn a_committed_tool_item_or_a_changed_request_pauses_the_successor_before_
         ),
     };
     let claim = claim_run(&admin, changed_scope, changed_run.clone()).await;
-    complete_agent_run(&store, &changed, &NoContractFaults, &claim)
+    complete_agent_run(&store, &changed, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let paused = |reason: &str| {
@@ -340,7 +341,7 @@ async fn a_retrieved_prose_change_settles_with_its_proposal_and_sends_no_success
         declared: Mutex::default(),
     };
     let claim = claim_run(&admin, scope, run_id.clone()).await;
-    complete_agent_run(&store, &route, &NoContractFaults, &claim)
+    complete_agent_run(&store, &route, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let row = admin

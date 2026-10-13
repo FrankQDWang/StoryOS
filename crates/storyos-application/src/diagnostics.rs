@@ -136,6 +136,7 @@ impl DiagnosticField for crate::CompleteAgentRunError {
     fn diagnostic(&self) -> Self::Value<'_> {
         match self {
             Self::StaleFence => "stale_fence",
+            Self::Contended(_) => "contended",
             Self::Unavailable(_) => "unavailable",
         }
     }

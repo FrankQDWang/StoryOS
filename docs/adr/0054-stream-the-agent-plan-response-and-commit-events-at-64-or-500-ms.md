@@ -42,3 +42,7 @@ Each commit is one serializable Project transaction. At bound 1, a response at t
 - The measured rate is 0.55 to 0.82 events for each output token. Thus a response at the 8192 token bound needs approximately 100 commits for its provisional events. The time condition adds at most two commits each second.
 - A crash can lose at most the provisional events after the last commit. The response stays OutcomeUnknown in that case.
 - The Contract-Faithful Fake Destination keeps its own stream batches.
+
+## Amendment
+
+On 2026-10-13, [ADR 0058](0058-commit-model-stream-events-in-a-read-committed-transaction.md) changed the isolation of each stream commit to read committed. A contended commit now keeps its events for the next commit. The bound of 64 events or 500 ms does not change.

@@ -23,6 +23,8 @@ pub enum CompleteAgentRun {
 #[derive(Debug)]
 pub enum CompleteAgentRunError {
     StaleFence,
+    /// A serialization failure or a deadlock. The same transaction can run again.
+    Contended(Box<dyn std::error::Error + Send + Sync>),
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -30,6 +32,7 @@ impl std::fmt::Display for CompleteAgentRunError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::StaleFence => formatter.write_str("The AgentRun fence is stale"),
+            Self::Contended(_) => formatter.write_str("AgentRun work met a concurrent transaction"),
             Self::Unavailable(_) => formatter.write_str("AgentRun work is unavailable"),
         }
     }
@@ -38,7 +41,7 @@ impl std::fmt::Display for CompleteAgentRunError {
 impl std::error::Error for CompleteAgentRunError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Unavailable(source) => Some(source.as_ref()),
+            Self::Contended(source) | Self::Unavailable(source) => Some(source.as_ref()),
             Self::StaleFence => None,
         }
     }

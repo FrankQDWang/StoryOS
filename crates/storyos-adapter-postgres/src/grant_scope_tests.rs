@@ -6,6 +6,7 @@ use storyos_application::{
 use storyos_core::DeploymentDestination;
 use tokio_postgres::Client;
 
+use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{
     DispatchEvidence, admit_run, claim_run, dispatch_evidence, queued_run, stores,
 };
@@ -35,7 +36,7 @@ async fn settle(
     run_id: &str,
 ) -> DispatchEvidence {
     let claim = claim_run(admin, scope.clone(), run_id.to_owned()).await;
-    complete_agent_run(store, adapter, &NoContractFaults, &claim)
+    complete_agent_run(store, adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     dispatch_evidence(admin, run_id).await

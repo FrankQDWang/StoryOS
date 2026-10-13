@@ -11,6 +11,7 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
+use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
 
 const REFERENCE: &str = "resp_c45";
@@ -118,7 +119,7 @@ async fn a_refused_abort_keeps_the_fenced_retrieval_of_the_late_result() {
         aborts: Mutex::default(),
     };
     let claim = claim_run(&admin, scope, run_id.clone()).await;
-    complete_agent_run(&store, &adapter, &NoContractFaults, &claim)
+    complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let row = admin

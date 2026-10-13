@@ -1,6 +1,7 @@
 //! Ports and values of the Model Gateway dispatch sequence (ADR 0039).
 
 use std::future::Future;
+use std::time::Duration;
 
 use secrecy::{ExposeSecret, SecretString};
 
@@ -450,4 +451,11 @@ pub struct NoContractFaults;
 
 impl ContractFaultObserver for NoContractFaults {
     async fn reached(&self, _point: ContractFaultPoint) {}
+}
+
+/// The time source of the Model Gateway. The Worker waits on the runtime timer. A test supplies
+/// a Deterministic Test Scheduler, so that a retry delay or a lease renewal is a test step.
+pub trait GatewayClock: Sync {
+    /// Completes when `delay` has elapsed.
+    fn wait(&self, delay: Duration) -> impl Future<Output = ()> + Send;
 }

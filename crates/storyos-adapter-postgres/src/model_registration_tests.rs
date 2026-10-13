@@ -5,6 +5,7 @@ use storyos_application::{
 };
 use storyos_core::{DeploymentDestination, ModelAdapter};
 
+use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{DispatchEvidence, dispatch_evidence, queued_run, stores};
 
 pub(crate) fn agent_plan() -> DeploymentDestination {
@@ -61,12 +62,19 @@ async fn fake_worker_skips_an_agent_plan_run_that_only_the_agent_plan_worker_cla
         &store,
         &UnreachableAgentPlan,
         &NoContractFaults,
+        &RuntimeClock,
         &agent_plan_claim,
     )
     .await;
-    complete_agent_run(&store, &FakeDestination, &NoContractFaults, &fake_claim)
-        .await
-        .unwrap();
+    complete_agent_run(
+        &store,
+        &FakeDestination,
+        &NoContractFaults,
+        &RuntimeClock,
+        &fake_claim,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(refused.ok(), Some(CompleteAgentRun::AlreadySettled));
     assert_eq!(
