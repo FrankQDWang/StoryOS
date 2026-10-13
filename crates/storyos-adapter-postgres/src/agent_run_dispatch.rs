@@ -1,7 +1,8 @@
 use storyos_application::{
     ClaimedAgentRun, CommittedCancellation, CompleteAgentRun, CompleteAgentRunError, CreatePurpose,
     DestinationRequest, DispatchClaim, DispatchRecord, ModelDispatchStore, NextDispatchWork,
-    PreDispatchRefusal, RequestAttempt, RetrievePurpose, StreamStop, WirePayloadProjection,
+    PreDispatchRefusal, RequestAttempt, ResponseReference, RetrievePurpose, StreamStop,
+    WirePayloadProjection,
 };
 use storyos_core::NativeStreamItem;
 
@@ -184,6 +185,7 @@ impl ModelDispatchStore for PostgresProjectReader {
         claim: &ClaimedAgentRun,
         dispatch: &DispatchClaim,
         events: &[NativeStreamItem],
+        reference: Option<&ResponseReference>,
     ) -> Result<Option<StreamStop>, CompleteAgentRunError> {
         let transaction = self
             .begin_serializable_project_command_transaction(&claim.project_scope)
@@ -229,11 +231,17 @@ impl ModelDispatchStore for PostgresProjectReader {
             let committed = serde_json::from_str::<serde_json::Value>(&target.get::<_, String>(0))
                 .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
             let items = merge_items(&committed["items"], events);
+            let retained = reference.map(crate::agent_run_recovery::encode_retained_reference);
             transaction
                 .client
                 .execute(
                     "UPDATE storyos.model_attempts
                         SET payload = jsonb_set(payload, '{items}', $5::text::jsonb)
+                              || CASE WHEN $6::text IS NULL THEN '{}'::jsonb
+                                      ELSE jsonb_build_object(
+                                        'retained_reference', $6::text::jsonb,
+                                        'response_reference', $6::text::jsonb->>'reference_id')
+                                 END
                       WHERE owner_user_id = $1::text::uuid
                         AND project_id = $2::text::uuid
                         AND run_id = $3::text::uuid
@@ -244,6 +252,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                         &claim.run_id,
                         &dispatch.model_attempt_id,
                         &items.to_string(),
+                        &retained.map(|value| value.to_string()),
                     ],
                 )
                 .await
@@ -282,7 +291,15 @@ impl ModelDispatchStore for PostgresProjectReader {
             let run = load_run_phase(client, claim).await?;
             let settled = WorkPhase::Done(CompleteAgentRun::AlreadySettled);
             let phase = match record {
-                DispatchRecord::Refusal(refusal) => {
+                DispatchRecord::Refusal {
+                    refusal,
+                    request: DestinationRequest::Abort(abort),
+                } if run.status == "cancelled" => {
+                    crate::agent_run_abort::record_unsupported(client, claim, abort, refusal)
+                        .await?;
+                    WorkPhase::Hold("recovery")
+                }
+                DispatchRecord::Refusal { refusal, .. } => {
                     let capability = match refusal {
                         PreDispatchRefusal::CredentialUnavailable => {
                             "destination_credential_unavailable"
@@ -409,6 +426,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                         crate::agent_run_retrieval_dispatch::record_late_result(
                             client,
                             claim,
+                            &run,
                             dispatch,
                             observation,
                         )

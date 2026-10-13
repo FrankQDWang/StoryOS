@@ -1,20 +1,22 @@
 //! Claims and records the Retrieve requests of one unknown create.
 
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRunError, DispatchClaim, ModelUsage, Observation,
-    RetrievePurpose, RetrieveRequest, WirePayloadProjection,
+    ClaimedAgentRun, CompleteAgentRunError, DeclaredTarget, DispatchClaim, ModelResponse,
+    ModelUsage, Observation, RetrievePurpose, RetrieveRequest, WirePayloadProjection,
 };
 use storyos_core::{
-    AgentDecisionKind, AgentDecisionOutcome, OriginalResultKeepReason,
+    AgentDecisionOutcome, OriginalResultKeepReason,
     OriginalResultRetrievalDecision, RetrievedOriginalResult, StreamItemState,
     validate_agent_decision,
 };
 use uuid::Uuid;
 
-use crate::agent_run_observation::encode_items;
+use crate::agent_run_observation::{
+    CreateResult, CreateSettlement, encode_items, persist_create_result,
+};
 use crate::agent_run_retrieval::{
-    RecordedRetrieval, RetrievalAdvance, RetrievalRunWrite, SettledRetrieval, SuppliedDecision,
-    decide, settle, unavailable,
+    RecordedRetrieval, RetrievalAdvance, RetrievalRunWrite, SettledRetrieval, decide, settle,
+    unavailable,
 };
 use crate::agent_run_work::{RunPhaseRow, WorkPhase};
 
@@ -72,7 +74,7 @@ pub(crate) async fn commit(
                 "kind": "provider_report",
                 "attempt_id": attempt_id,
                 "availability": "current",
-                "report": "host_fake_original_result_retrieval"
+                "report": format!("{}_original_result_retrieval", request.route.adapter.kind())
             },
             {
                 "kind": "provider_opaque",
@@ -132,14 +134,15 @@ pub(crate) async fn record_original_result(
     let subject = payload
         .get("original_result_retrieval")
         .ok_or_else(|| unavailable(std::io::Error::other("The retrieval subject is missing")))?;
-    let advance = RetrievalAdvance {
-        attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
-        conversation_id: &run.conversation_id,
-        run_status: &run.status,
-        grant_admitted: crate::agent_run_work::grant_admitted(run),
-    };
+    let advance = RetrievalAdvance::of(run);
     let fenced = run.status == "cancelled";
-    let retrieved = RetrievedResult::from(observation);
+    let declared: Vec<_> =
+        crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+            .await?
+            .iter()
+            .map(DeclaredTarget::location)
+            .collect();
+    let retrieved = RetrievedResult::classify(observation, &declared);
     let decision = decide(client, claim, subject, &advance, fenced, retrieved.kind).await?;
     let dispatch_state = if matches!(
         decision,
@@ -180,7 +183,7 @@ pub(crate) async fn record_original_result(
         .await
         .map_err(unavailable)?
         .get(0);
-    settle(
+    let sealed = settle(
         client,
         claim,
         &payload,
@@ -191,7 +194,6 @@ pub(crate) async fn record_original_result(
                 attempt_id: dispatch.model_attempt_id.clone(),
                 manifest_id,
             }),
-            supplied: retrieved.supplied,
             usage: retrieved.usage,
             fenced,
             run_write: if payload.get("unknown_create_successor").is_some() {
@@ -202,13 +204,48 @@ pub(crate) async fn record_original_result(
         },
     )
     .await?;
-    Ok(WorkPhase::Hold("recovery"))
+    let (Some(mut sealed), Some(selected)) = (sealed, retrieved.selected) else {
+        return Ok(WorkPhase::Hold("recovery"));
+    };
+    let AgentDecisionOutcome::Decision {
+        advances_continuation,
+        ..
+    } = selected.outcome
+    else {
+        return Err(unavailable(std::io::Error::other(
+            "A selected original result has no Agent Decision",
+        )));
+    };
+    sealed["original_result_retrieval"]["advances_continuation"] =
+        serde_json::json!(advances_continuation);
+    let response = selected.response;
+    persist_create_result(
+        client,
+        claim,
+        run,
+        CreateResult {
+            attempt_id: advance.attempt_id,
+            items: &response.items,
+            outcome: selected.outcome,
+            producer_output: response
+                .output
+                .as_ref()
+                .and_then(|output| output.prose_changes.as_deref()),
+            usage: response.usage,
+            cache_use: response.cache_use,
+            response_reference: response.response_reference.as_deref(),
+            settlement: CreateSettlement::Response,
+        },
+        &sealed,
+    )
+    .await
 }
 
 /// Records the late Retrieve of the fenced predecessor. Only a complete result is evidence.
 pub(crate) async fn record_late_result(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
     dispatch: &DispatchClaim,
     observation: Observation,
 ) -> Result<(), CompleteAgentRunError> {
@@ -218,7 +255,13 @@ pub(crate) async fn record_late_result(
         .get("unknown_create_successor")
         .cloned()
         .ok_or_else(|| unavailable(std::io::Error::other("The successor marker is missing")))?;
-    let retrieved = RetrievedResult::from(observation);
+    let declared: Vec<_> =
+        crate::agent_run_create_dispatch::declared_targets(client, claim, &run.chapter_id)
+            .await?
+            .iter()
+            .map(DeclaredTarget::location)
+            .collect();
+    let retrieved = RetrievedResult::classify(observation, &declared);
     client
         .execute(
             "UPDATE storyos.model_attempts
@@ -243,7 +286,14 @@ pub(crate) async fn record_late_result(
         .await
         .map_err(unavailable)?;
     if retrieved.kind == RetrievedOriginalResult::CompleteSelected {
-        crate::agent_run_successor::apply_late(&mut marker, &mut row.payload, retrieved.usage);
+        let adapter = storyos_core::model_registration(&run.model_registration_revision)
+            .map_or("unknown", |registration| registration.adapter.kind());
+        crate::agent_run_successor::apply_late(
+            &mut marker,
+            &mut row.payload,
+            retrieved.usage,
+            &format!("{adapter}_late_predecessor"),
+        );
     }
     marker["late_result_checked"] = serde_json::json!(true);
     row.payload["unknown_create_successor"] = marker;
@@ -255,17 +305,24 @@ pub(crate) async fn record_late_result(
 pub(crate) struct RetrievedResult {
     pub kind: RetrievedOriginalResult,
     pub items: serde_json::Value,
-    pub supplied: Option<SuppliedDecision>,
+    pub selected: Option<SelectedResult>,
     pub usage: ModelUsage,
 }
 
-impl From<Observation> for RetrievedResult {
-    fn from(observation: Observation) -> Self {
+/// A complete original response whose Agent Decision core validation selected.
+pub(crate) struct SelectedResult {
+    pub response: ModelResponse,
+    pub outcome: AgentDecisionOutcome,
+}
+
+impl RetrievedResult {
+    /// Validates the original response against the targets that its Create declared.
+    pub(crate) fn classify(observation: Observation, declared: &[(String, String, String)]) -> Self {
         let Observation::Terminal(response) = observation else {
             return Self {
                 kind: RetrievedOriginalResult::Unknown,
                 items: serde_json::json!([]),
-                supplied: None,
+                selected: None,
                 usage: ModelUsage::Unknown,
             };
         };
@@ -274,28 +331,23 @@ impl From<Observation> for RetrievedResult {
             .items
             .iter()
             .all(|item| item.state == StreamItemState::Complete);
-        match validate_agent_decision(response.output.as_ref(), &[]) {
-            AgentDecisionOutcome::Decision {
-                kind: AgentDecisionKind::Advisory { text },
-                selected: true,
-                ..
-            } if complete => Self {
+        let usage = response.usage;
+        match validate_agent_decision(response.output.as_ref(), declared) {
+            outcome @ AgentDecisionOutcome::Decision { selected: true, .. } if complete => Self {
                 kind: RetrievedOriginalResult::CompleteSelected,
-                items: items.clone(),
-                supplied: Some(SuppliedDecision { items, text }),
-                usage: response.usage,
+                items,
+                selected: Some(SelectedResult { response, outcome }),
+                usage,
             },
             AgentDecisionOutcome::Decision { .. } | AgentDecisionOutcome::NoDecision => Self {
                 kind: RetrievedOriginalResult::Incomplete,
                 items,
-                supplied: None,
-                usage: response.usage,
+                selected: None,
+                usage,
             },
         }
     }
-}
 
-impl RetrievedResult {
     pub(crate) fn label(&self) -> &'static str {
         match self.kind {
             RetrievedOriginalResult::CompleteSelected => "complete_selected",

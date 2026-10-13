@@ -97,7 +97,7 @@ pub(crate) async fn advance(
     ));
     match decision {
         UnknownCreateSuccessorDecision::AlreadyDispatched => {
-            crate::agent_run_successor_dispatch::finish_dispatched(client, claim, &row, &marker)
+            crate::agent_run_successor_dispatch::finish_dispatched(client, claim, run, &row, &marker)
                 .await
         }
         UnknownCreateSuccessorDecision::ProhibitedByCancellation => {
@@ -316,6 +316,7 @@ pub(crate) fn apply_late(
     marker: &mut serde_json::Value,
     payload: &mut serde_json::Value,
     usage: ModelUsage,
+    report: &str,
 ) {
     let released = !matches!(usage, ModelUsage::Unknown);
     payload["usage"] = crate::agent_run_observation::encode_usage(usage);
@@ -329,7 +330,7 @@ pub(crate) fn apply_late(
             "kind": "provider_report",
             "attempt_id": attempt_id,
             "availability": "current",
-            "report": "host_fake_late_predecessor"
+            "report": report
         }));
     }
     marker["late_evidence_applied"] = serde_json::json!(true);

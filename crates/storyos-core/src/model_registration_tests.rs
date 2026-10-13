@@ -91,3 +91,21 @@ fn the_head_profile_records_the_window_and_the_pending_profile_does_not_qualify_
         ([Some(262_144), Some(262_144), None, None], false, true)
     );
 }
+
+#[test]
+fn only_a_qualified_profile_or_an_authorized_qualification_of_its_requirement_retrieves() {
+    use crate::RuntimeQualification::{Qualified, QualificationAuthorized};
+
+    assert_eq!(
+        [
+            HOST_FAKE_REGISTRATION.retrieves(Qualified),
+            AGENT_PLAN_THRESHOLD_REGISTRATION.retrieves(QualificationAuthorized),
+            AGENT_PLAN_RECOVERY_PENDING_REGISTRATION.retrieves(Qualified),
+            AGENT_PLAN_RECOVERY_PENDING_REGISTRATION.retrieves(QualificationAuthorized),
+            AGENT_PLAN_RECOVERY_PENDING_REGISTRATION.qualified(),
+            AGENT_PLAN_REGISTRATION.retrieves(Qualified),
+            AGENT_PLAN_REGISTRATION.qualified(),
+        ],
+        [true, false, false, true, false, true, true]
+    );
+}

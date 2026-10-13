@@ -4,13 +4,13 @@ use storyos_application::{
     RetrieveRequest,
 };
 use storyos_core::{
-    HOST_FAKE_MAPPING_REVISION, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
+    OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
     RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
     decide_original_result_retrieval,
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::update_run;
+use crate::agent_run_work::{RunPhaseRow, update_run};
 use crate::update_project_assistance::read_assistance_record;
 
 pub(crate) enum RetrievalFence {
@@ -26,9 +26,26 @@ pub(crate) enum RetrievalRunWrite {
 pub(crate) struct RetrievalAdvance<'a> {
     pub attempt_id: &'a str,
     pub conversation_id: &'a str,
+    pub chapter_id: &'a str,
     pub run_status: &'a str,
     /// The scope of the pinned grant covers the disclosure of the Run (ADR 0051).
     pub grant_admitted: bool,
+    /// The wire mapping revision of the pinned Registration.
+    pub mapping_revision: &'a str,
+}
+
+impl<'a> RetrievalAdvance<'a> {
+    pub(crate) fn of(run: &'a RunPhaseRow) -> Self {
+        Self {
+            attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
+            conversation_id: &run.conversation_id,
+            chapter_id: &run.chapter_id,
+            run_status: &run.status,
+            grant_admitted: crate::agent_run_work::grant_admitted(run),
+            mapping_revision: storyos_core::model_registration(&run.model_registration_revision)
+                .map_or("", |registration| registration.mapping_revision),
+        }
+    }
 }
 
 pub(crate) enum RetrievalWork {
@@ -42,6 +59,7 @@ pub(crate) fn subject(
     claim: &ClaimedAgentRun,
     conversation_id: &str,
     destination_identity: &str,
+    mapping_revision: &str,
 ) -> serde_json::Value {
     let binding = reference.map(|reference| &reference.reported_binding);
     let retrieval = reference.map(|reference| reference.retrieval);
@@ -59,7 +77,7 @@ pub(crate) fn subject(
             .and_then(|binding| binding.destination_identity.as_deref())
             .unwrap_or(destination_identity),
         "mapping_revision": binding
-            .map_or(HOST_FAKE_MAPPING_REVISION, |binding| binding.mapping_revision.as_str()),
+            .map_or(mapping_revision, |binding| binding.mapping_revision.as_str()),
         "capability": match retrieval {
             Some(ReferenceRetrieval::Unsupported) => "unsupported",
             Some(ReferenceRetrieval::Supported { .. }) | None => "supported",
@@ -117,7 +135,6 @@ pub(crate) async fn advance_original_result_retrieval(
             SettledRetrieval {
                 decision,
                 retrieval: None,
-                supplied: None,
                 usage: ModelUsage::Unknown,
                 fenced,
                 run_write,
@@ -151,6 +168,12 @@ pub(crate) async fn advance_original_result_retrieval(
         purpose: RetrievePurpose::OriginalResult,
         original_model_attempt_id: advance.attempt_id.to_owned(),
         response_reference: text(subject, "reference_id").unwrap_or_default().to_owned(),
+        declared_targets: crate::agent_run_create_dispatch::declared_targets(
+            client,
+            claim,
+            advance.chapter_id,
+        )
+        .await?,
     })))
 }
 
@@ -174,6 +197,7 @@ pub(crate) async fn decide(
     Ok(decide_original_result_retrieval(&facts(
         subject,
         claim,
+        advance.mapping_revision,
         advance.conversation_id,
         &assistance.processing_destination_identity,
         advance.grant_admitted,
@@ -258,7 +282,6 @@ pub(crate) async fn load_original_result_retrieval(
 pub(crate) struct SettledRetrieval {
     pub decision: OriginalResultRetrievalDecision,
     pub retrieval: Option<RecordedRetrieval>,
-    pub supplied: Option<SuppliedDecision>,
     /// The usage of the original response. It belongs to the original Attempt only.
     pub usage: ModelUsage,
     pub fenced: bool,
@@ -270,24 +293,18 @@ pub(crate) struct RecordedRetrieval {
     pub manifest_id: String,
 }
 
-/// The retrieved native items and advisory text that a selected original result supplies.
-pub(crate) struct SuppliedDecision {
-    pub items: serde_json::Value,
-    pub text: String,
-}
-
-/// Seals the subject and settles the original Attempt and the Run from one decision.
+/// Seals the subject and settles the original Attempt and the Run from one decision. A selected
+/// result returns the sealed payload, and the caller records its decision.
 pub(crate) async fn settle(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     payload: &serde_json::Value,
     advance: &RetrievalAdvance<'_>,
     settled: SettledRetrieval,
-) -> Result<(), CompleteAgentRunError> {
+) -> Result<Option<serde_json::Value>, CompleteAgentRunError> {
     let SettledRetrieval {
         decision,
         retrieval,
-        supplied,
         usage,
         fenced,
         run_write,
@@ -340,95 +357,29 @@ pub(crate) async fn settle(
     next["reservation"] =
         serde_json::json!({"kind": "worst_case", "released": reservation_released});
     next["usage"] = usage;
-    if let (true, Some(supplied)) = (supplies_decision, supplied) {
-        let binding = Uuid::now_v7().to_string();
-        let decision_id = Uuid::now_v7().to_string();
-        next["items"] = supplied.items;
-        next["decision"] = serde_json::json!({
-            "kind": "advisory",
-            "decision_id": decision_id,
-            "selected": true,
-            "text": supplied.text,
-            "authoritative": false,
-            "advances_continuation": true
-        });
-        if let Some(wire) = crate::agent_run_continuation::parse_wire(payload) {
-            next["produced_binding"] = crate::agent_run_continuation::encode_produced_binding(
-                &binding,
-                advance.attempt_id,
-                &wire.admission,
-            );
-        }
-        write_settled_decision(client, claim, &decision_id, &binding, &next).await?;
-        if !fenced && !defer_run_status {
-            update_run(
-                client,
-                claim,
-                "completed",
-                /*settlement*/ None,
-                /*clear_lease*/ true,
-            )
-            .await?;
-        }
-    } else {
-        write_unsettled_payload(client, claim, advance.attempt_id, &next).await?;
-        if !fenced
-            && !defer_run_status
-            && matches!(
-                decision,
-                OriginalResultRetrievalDecision::KeepUnknown { .. }
-            )
-        {
-            let reason = keep_reason.unwrap_or("unknown_result");
-            update_run(
-                client,
-                claim,
-                "waiting",
-                Some(&serde_json::json!({"kind": "outcome_unknown", "reason": reason})),
-                /*clear_lease*/ true,
-            )
-            .await?;
-        }
+    if supplies_decision {
+        // The caller settles the selected decision on the original Attempt like a Create result.
+        return Ok(Some(next));
     }
-    Ok(())
-}
-
-async fn write_settled_decision(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    decision_id: &str,
-    binding_id: &str,
-    payload: &serde_json::Value,
-) -> Result<(), CompleteAgentRunError> {
-    let updated = client
-        .execute(
-            "UPDATE storyos.model_attempts
-                SET decision_id = $4::text::uuid,
-                    continuation_binding_id = $5::text::uuid,
-                    dispatch_state = 'settled',
-                    payload = $6::text::jsonb
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid
-                AND attempt_role = 'decision' AND decision_position = 0
-                AND decision_id IS NULL",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &claim.run_id,
-                &decision_id,
-                &binding_id,
-                &payload.to_string(),
-            ],
+    write_unsettled_payload(client, claim, advance.attempt_id, &next).await?;
+    if !fenced
+        && !defer_run_status
+        && matches!(
+            decision,
+            OriginalResultRetrievalDecision::KeepUnknown { .. }
         )
-        .await
-        .map_err(unavailable)?;
-    if updated != 1 {
-        return Err(unavailable(std::io::Error::other(
-            "The original Attempt could not accept the retrieved Decision",
-        )));
+    {
+        let reason = keep_reason.unwrap_or("unknown_result");
+        update_run(
+            client,
+            claim,
+            "waiting",
+            Some(&serde_json::json!({"kind": "outcome_unknown", "reason": reason})),
+            /*clear_lease*/ true,
+        )
+        .await?;
     }
-    Ok(())
+    Ok(None)
 }
 
 async fn write_unsettled_payload(
@@ -498,6 +449,7 @@ async fn restore_reconciled(
 fn facts(
     subject: &serde_json::Value,
     claim: &ClaimedAgentRun,
+    mapping_revision: &str,
     conversation_id: &str,
     destination_identity: &str,
     grant_admitted: bool,
@@ -523,7 +475,7 @@ fn facts(
         conversation_permitted: text(subject, "conversation_id") == Some(conversation_id),
         destination_permitted: grant_admitted
             && text(subject, "destination_identity") == Some(destination_identity),
-        mapping_permitted: text(subject, "mapping_revision") == Some(HOST_FAKE_MAPPING_REVISION),
+        mapping_permitted: text(subject, "mapping_revision") == Some(mapping_revision),
         retrieved,
         run_fenced,
     }

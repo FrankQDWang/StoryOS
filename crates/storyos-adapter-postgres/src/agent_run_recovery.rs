@@ -2,10 +2,10 @@
 
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DestinationRequest, DispatchClaim,
-    Observation, ProjectAssistanceRecord, ProjectScope, ReferenceRetrieval, RequestAttempt,
-    ResponseReference,
+    Observation, ProjectAssistanceRecord, ProjectScope, ReferenceRetrieval, ReportedBinding,
+    RequestAttempt, ResponseReference,
 };
-use storyos_core::{LookupUnavailable, SuccessorLookup};
+use storyos_core::{LookupUnavailable, RetrievalBounds, RuntimeQualification, SuccessorLookup};
 
 use crate::agent_run_create_dispatch::PriorContext;
 use crate::agent_run_retrieval::{
@@ -30,12 +30,7 @@ pub(crate) async fn advance(
             client,
             claim,
             payload,
-            RetrievalAdvance {
-                attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
-                conversation_id: &run.conversation_id,
-                run_status: &run.status,
-                grant_admitted: crate::agent_run_work::grant_admitted(run),
-            },
+            RetrievalAdvance::of(run),
             RetrievalFence::Open,
             if follow_successor {
                 RetrievalRunWrite::Defer
@@ -86,12 +81,7 @@ pub(crate) async fn settle_cancelled(
             client,
             claim,
             &payload,
-            RetrievalAdvance {
-                attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
-                conversation_id: &run.conversation_id,
-                run_status: &run.status,
-                grant_admitted: crate::agent_run_work::grant_admitted(run),
-            },
+            RetrievalAdvance::of(run),
             RetrievalFence::Fenced,
             RetrievalRunWrite::Write,
         )
@@ -246,13 +236,30 @@ async fn write_subject(
     if payload.get("original_result_retrieval").is_some() {
         return Ok(());
     }
+    // A re-observation after a restart reports no reference; the stream committed it earlier.
+    let reference = reference
+        .cloned()
+        .or_else(|| decode_retained_reference(&payload))
+        .map(|mut reference| {
+            if !retrieval_permitted(run, &payload) {
+                reference.retrieval = ReferenceRetrieval::Unsupported;
+            }
+            reference
+        });
+    let reference = reference.as_ref();
     let identity = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
         .map(|record| record.processing_destination_identity)
         .unwrap_or_default();
     payload["original_result_retrieval"] =
-        crate::agent_run_retrieval::subject(reference, claim, &run.conversation_id, &identity);
+        crate::agent_run_retrieval::subject(
+            reference,
+            claim,
+            &run.conversation_id,
+            &identity,
+            RetrievalAdvance::of(run).mapping_revision,
+        );
     let lookup = match reference.map(|reference| reference.retrieval) {
         None => SuccessorLookup::Unavailable {
             reason: LookupUnavailable::MissingReference,
@@ -307,6 +314,64 @@ async fn write_subject(
         )));
     }
     Ok(())
+}
+
+/// Whether the pinned Registration lets the Host retrieve a stored response of this Attempt.
+fn retrieval_permitted(run: &RunPhaseRow, payload: &serde_json::Value) -> bool {
+    let qualification = payload
+        .get("runtime_qualification")
+        .and_then(serde_json::Value::as_str)
+        .and_then(RuntimeQualification::parse)
+        .unwrap_or(RuntimeQualification::Qualified);
+    storyos_core::model_registration(&run.model_registration_revision)
+        .is_some_and(|registration| registration.retrieves(qualification))
+}
+
+/// The response reference that a stream reported, as the Attempt retains it.
+pub(crate) fn encode_retained_reference(reference: &ResponseReference) -> serde_json::Value {
+    let binding = &reference.reported_binding;
+    serde_json::json!({
+        "reference_id": reference.reference_id,
+        "retrieval": match reference.retrieval {
+            ReferenceRetrieval::Unsupported => "unsupported",
+            ReferenceRetrieval::Supported { bounds: RetrievalBounds::DeclaredReadOnly } => {
+                "declared_read_only"
+            }
+            ReferenceRetrieval::Supported { bounds: RetrievalBounds::Unknown } => "unknown_bounds",
+        },
+        "owner_user_id": binding.owner_user_id,
+        "conversation_id": binding.conversation_id,
+        "destination_identity": binding.destination_identity,
+        "mapping_revision": binding.mapping_revision,
+    })
+}
+
+fn decode_retained_reference(payload: &serde_json::Value) -> Option<ResponseReference> {
+    let retained = payload.get("retained_reference")?;
+    let text = |field: &str| {
+        retained
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    Some(ResponseReference {
+        reference_id: text("reference_id")?,
+        retrieval: match text("retrieval")?.as_str() {
+            "declared_read_only" => ReferenceRetrieval::Supported {
+                bounds: RetrievalBounds::DeclaredReadOnly,
+            },
+            "unknown_bounds" => ReferenceRetrieval::Supported {
+                bounds: RetrievalBounds::Unknown,
+            },
+            _ => ReferenceRetrieval::Unsupported,
+        },
+        reported_binding: ReportedBinding {
+            owner_user_id: text("owner_user_id"),
+            conversation_id: text("conversation_id"),
+            destination_identity: text("destination_identity"),
+            mapping_revision: text("mapping_revision")?,
+        },
+    })
 }
 
 /// Whether a decision or successor Attempt of the Run is in flight: dispatched with an unknown

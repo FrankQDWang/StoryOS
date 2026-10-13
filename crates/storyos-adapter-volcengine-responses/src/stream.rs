@@ -10,7 +10,7 @@ use storyos_application::{
     DeclaredTarget, ModelStreamSink, Observation, ReferenceRetrieval, ReportedBinding,
     ResponseReference, StreamControl,
 };
-use storyos_core::{NativeStreamItem, StreamItemState};
+use storyos_core::{NativeStreamItem, RetrievalBounds, StreamItemState};
 
 /// The ordered items of one stream, and the provisional events that wait for their commit.
 struct StreamState {
@@ -67,6 +67,15 @@ pub(crate) async fn observe(
             };
             match state.apply(&event, targets) {
                 Step::Continue => {}
+                Step::Reference => {
+                    if sink
+                        .retain_reference(&state.reported(mapping_revision))
+                        .await
+                        == StreamControl::Stop
+                    {
+                        return state.unknown(mapping_revision);
+                    }
+                }
                 Step::Terminal(observation) => {
                     if state.flush(sink).await == StreamControl::Stop {
                         return state.unknown(mapping_revision);
@@ -101,6 +110,8 @@ pub(crate) async fn observe(
 
 enum Step {
     Continue,
+    /// The destination reported the response reference for the first time.
+    Reference,
     Commit,
     Terminal(Observation),
 }
@@ -114,10 +125,13 @@ impl StreamState {
             .and_then(|index| usize::try_from(index).ok());
         match text("type") {
             "response.created" | "response.in_progress" => {
-                if let Some(id) = event.pointer("/response/id").and_then(Value::as_str) {
-                    self.reference = Some(id.to_owned());
+                match event.pointer("/response/id").and_then(Value::as_str) {
+                    Some(id) if self.reference.is_none() => {
+                        self.reference = Some(id.to_owned());
+                        Step::Reference
+                    }
+                    Some(_) | None => Step::Continue,
                 }
-                Step::Continue
             }
             "response.completed" | "response.incomplete" | "response.failed" => {
                 match event.get("response") {
@@ -192,16 +206,27 @@ impl StreamState {
     /// A dropped, stopped, or timed-out stream. The destination can still complete the response.
     fn unknown(&self, mapping_revision: &str) -> Observation {
         Observation::OutcomeUnknown {
-            response_reference: self.reference.as_ref().map(|reference| ResponseReference {
-                reference_id: reference.clone(),
-                retrieval: ReferenceRetrieval::Unsupported,
-                reported_binding: ReportedBinding {
-                    owner_user_id: None,
-                    conversation_id: None,
-                    destination_identity: None,
-                    mapping_revision: mapping_revision.to_owned(),
-                },
-            }),
+            response_reference: self
+                .reference
+                .is_some()
+                .then(|| self.reported(mapping_revision)),
+        }
+    }
+
+    /// The reported reference. The destination documents a read-only GET of a stored response;
+    /// the Host decides from the Model Capability Profile whether it may send one.
+    fn reported(&self, mapping_revision: &str) -> ResponseReference {
+        ResponseReference {
+            reference_id: self.reference.clone().unwrap_or_default(),
+            retrieval: ReferenceRetrieval::Supported {
+                bounds: RetrievalBounds::DeclaredReadOnly,
+            },
+            reported_binding: ReportedBinding {
+                owner_user_id: None,
+                conversation_id: None,
+                destination_identity: None,
+                mapping_revision: mapping_revision.to_owned(),
+            },
         }
     }
 }
