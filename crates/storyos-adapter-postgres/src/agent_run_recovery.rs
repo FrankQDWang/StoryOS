@@ -283,7 +283,7 @@ async fn write_subject(
         .map_err(complete_database_error)?
         .get(0);
     if let Some(marker) = crate::agent_run_successor::prepare_subject(
-        &run.author_message,
+        crate::agent_run_successor::conditions(run, &payload),
         &crate::agent_run_successor::SuccessorOrigin {
             predecessor_attempt_id: &dispatch.model_attempt_id,
             model_invocation_id: &invocation_id,

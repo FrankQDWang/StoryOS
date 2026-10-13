@@ -4,7 +4,7 @@ use storyos_application::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateRequest, DispatchClaim,
     Observation, RequestAttempt, RetrievePurpose, RetrieveRequest, WirePayloadProjection,
 };
-use storyos_core::{AgentDecisionOutcome, validate_agent_decision};
+use storyos_core::{AgentDecisionOutcome, SuccessorPauseReason, validate_agent_decision};
 use uuid::Uuid;
 
 use crate::agent_run_create_dispatch::PriorContext;
@@ -53,6 +53,36 @@ pub(crate) async fn successor_request(
     .await?;
     request.successor_of = run.attempt_id.clone();
     Ok(request)
+}
+
+/// Whether the successor sends the same request as its predecessor. A different wire digest
+/// pauses the recovery with `request_changed` and sends nothing. Returns `false` after that pause.
+pub(crate) async fn same_request(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    projection: &WirePayloadProjection,
+) -> Result<bool, CompleteAgentRunError> {
+    let mut row = load_decision(client, claim).await?;
+    if row
+        .payload
+        .pointer("/wire/digest")
+        .and_then(serde_json::Value::as_str)
+        == Some(projection.digest.as_str())
+    {
+        return Ok(true);
+    }
+    let Some(marker) = row.payload.get("unknown_create_successor").cloned() else {
+        return Ok(true);
+    };
+    crate::agent_run_successor::pause(
+        client,
+        claim,
+        &mut row,
+        marker,
+        SuccessorPauseReason::RequestChanged,
+    )
+    .await?;
+    Ok(false)
 }
 
 /// Commits the successor Destination Attempt and Outbound Disclosure Event. The predecessor
@@ -447,3 +477,7 @@ async fn copy_manifest(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "agent_run_successor_route_tests.rs"]
+mod tests;

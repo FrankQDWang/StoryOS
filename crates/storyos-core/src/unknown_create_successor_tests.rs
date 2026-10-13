@@ -1,11 +1,16 @@
 use super::{
-    LookupUnavailable, SuccessorAllowance, SuccessorLookup, SuccessorPauseReason,
-    UnknownCreateScript, UnknownCreateSuccessorDecision, UnknownCreateSuccessorFacts,
-    decide_unknown_create_successor, scripted_successor_conditions, unknown_create_script,
+    LookupUnavailable, SuccessorAllowance, SuccessorConditions, SuccessorEffect, SuccessorLookup,
+    SuccessorPauseReason, UnknownCreateScript, UnknownCreateSuccessorDecision,
+    UnknownCreateSuccessorFacts, decide_unknown_create_successor, route_successor_conditions,
+    scripted_successor_conditions, unknown_create_script,
 };
+use crate::BudgetBounds;
 
 fn facts(script: UnknownCreateScript) -> UnknownCreateSuccessorFacts {
-    let conditions = scripted_successor_conditions(script).expect("successor script");
+    conditions_facts(scripted_successor_conditions(script).expect("successor script"))
+}
+
+fn conditions_facts(conditions: SuccessorConditions) -> UnknownCreateSuccessorFacts {
     UnknownCreateSuccessorFacts {
         lookup: SuccessorLookup::StillUnknown,
         same_request: conditions.same_request,
@@ -139,5 +144,34 @@ fn a_spent_allowance_pauses_when_current_authority_is_lost_before_dispatch() {
         UnknownCreateSuccessorDecision::Pause {
             reason: SuccessorPauseReason::AuthorityUnavailable,
         }
+    );
+}
+
+#[test]
+fn a_real_route_dispatches_one_successor_only_with_a_known_bound_and_no_unresolved_effect() {
+    let decide = |bounds, effect| {
+        decide_unknown_create_successor(&conditions_facts(route_successor_conditions(
+            bounds, effect,
+        )))
+    };
+
+    assert_eq!(
+        [
+            decide(BudgetBounds::AgentPlanRequestV2, SuccessorEffect::None),
+            decide(BudgetBounds::Unqualified, SuccessorEffect::None),
+            decide(
+                BudgetBounds::AgentPlanRequestV2,
+                SuccessorEffect::Unresolved
+            ),
+        ],
+        [
+            UnknownCreateSuccessorDecision::FenceAndDispatch,
+            UnknownCreateSuccessorDecision::Pause {
+                reason: SuccessorPauseReason::BudgetInsufficient,
+            },
+            UnknownCreateSuccessorDecision::Pause {
+                reason: SuccessorPauseReason::UnresolvedEffect,
+            },
+        ]
     );
 }
