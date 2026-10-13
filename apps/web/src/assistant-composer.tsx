@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { StoryOSProtocolError } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { GetAgentRunResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AssistantContext } from "./writing-assistant-panel.tsx";
+import { settledRun } from "./assistant-run-outcome.ts";
 import { clearRunControl, freezeRunControl, readRunControl, saveRunControl, submitRunControl,
   type RunControlIntent } from "./run-control-intent.ts";
 import { historicalAcknowledgementUnavailable, HISTORICAL_ACKNOWLEDGEMENT_MESSAGE }
@@ -26,7 +27,7 @@ export function AssistantComposer({ context, available, sending, current, run, o
   const recovered = useRef(false);
   const known = run !== undefined && run.run_id === current?.runId
     && run.conversation_id === current.conversationId;
-  const active = known && run.status !== "completed" && run.status !== "refused" && run.status !== "cancelled";
+  const active = known && !settledRun(run);
   const pause = active && run.status !== "paused" && message.trim().length === 0;
   const enabled = available && context?.canSubmit === true && context.chapterId !== undefined
     && !sending && !busy && pending === undefined && (current === undefined || known);

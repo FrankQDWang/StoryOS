@@ -13,6 +13,9 @@ import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
 import { AssistantComposer } from "./assistant-composer.tsx";
+import {
+  NO_RESULT_SENTENCE, PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, settledRun, stoppedWithoutResult,
+} from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
 import type { ProposalLocator } from "./block-proposal-display.tsx";
@@ -150,6 +153,7 @@ function withoutBinding(error: unknown): boolean {
 }
 
 function resultText(run: GetAgentRunResponse): string | undefined {
+  if (stoppedWithoutResult(run)) return NO_RESULT_SENTENCE;
   switch (run.decision.kind) {
     case "advisory":
       return run.decision.text;
@@ -167,6 +171,8 @@ function resultText(run: GetAgentRunResponse): string | undefined {
           return "这次请求超出了本项目允许发送给 AI 的范围，没有发送任何内容。你可以继续手动写作。";
         case "conversation_too_long":
           return "这段对话已经太长，请开始一个新对话。你可以继续手动写作。";
+        case "expiry_rebuild_unknown_create":
+          return PREVIOUS_REQUEST_UNRESOLVED_SENTENCE;
         default:
           return "本次请求未能执行。";
       }
@@ -313,8 +319,7 @@ export function WritingAssistantPanel({
     return () => { inspectSequence.current += 1; };
   }, [context?.scope.owner_user_id, context?.scope.project_id]);
 
-  const terminal = run !== undefined
-    && (run.status === "completed" || run.status === "refused" || run.status === "cancelled");
+  const terminal = run !== undefined && settledRun(run);
 
   // A Run can wait in the queue of a separate Worker, so read it again until it settles. A failed
   // read schedules the next read too.
