@@ -361,6 +361,13 @@ pub trait ModelDispatchStore: Sync {
         reference: Option<&ResponseReference>,
     ) -> impl Future<Output = Result<Option<StreamStop>, CompleteAgentRunError>> + Send;
 
+    /// Extends the Run Lease of the fenced claim. Returns the delay until the next renewal, or
+    /// `None` when the claim has lost its lease.
+    fn renew_agent_run_lease(
+        &self,
+        claim: &ClaimedAgentRun,
+    ) -> impl Future<Output = Result<Option<Duration>, CompleteAgentRunError>> + Send;
+
     /// Commits one observation or one pre-dispatch refusal.
     fn record(
         &self,

@@ -106,6 +106,7 @@ mod agent_run_continuation;
 mod agent_run_create_dispatch;
 mod agent_run_dispatch;
 mod agent_run_expiry;
+mod agent_run_lease;
 mod agent_run_observation;
 mod agent_run_recovery;
 mod agent_run_retrieval;

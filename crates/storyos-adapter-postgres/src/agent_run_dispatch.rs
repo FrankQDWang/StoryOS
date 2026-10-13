@@ -295,6 +295,14 @@ impl ModelDispatchStore for PostgresProjectReader {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
+    async fn renew_agent_run_lease(
+        &self,
+        claim: &ClaimedAgentRun,
+    ) -> Result<Option<std::time::Duration>, CompleteAgentRunError> {
+        self.renew_agent_run_lease_row(claim).await
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn record(
         &self,
         claim: &ClaimedAgentRun,

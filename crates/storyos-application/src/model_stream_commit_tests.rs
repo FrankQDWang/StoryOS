@@ -108,6 +108,13 @@ impl ModelDispatchStore for ScriptedStore {
         }
     }
 
+    async fn renew_agent_run_lease(
+        &self,
+        _claim: &ClaimedAgentRun,
+    ) -> Result<Option<Duration>, CompleteAgentRunError> {
+        Ok(None)
+    }
+
     async fn record(
         &self,
         _claim: &ClaimedAgentRun,
