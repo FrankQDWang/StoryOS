@@ -38,6 +38,7 @@ mod author_edit;
 mod author_edit_wire;
 mod model_gateway;
 mod model_gateway_ports;
+mod model_lease_renewal;
 mod model_stream_commit;
 pub use author_edit_wire::{author_edit_units_from_wire, author_edit_units_to_wire};
 mod refused_edit_draft;

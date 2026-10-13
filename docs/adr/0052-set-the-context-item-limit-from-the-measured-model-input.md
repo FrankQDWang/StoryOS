@@ -55,3 +55,7 @@ This record supersedes the 10,000-token per-item ceiling of the protocol, and th
 - A text of mostly emoji or rare CJK scalars can need up to approximately 4 Provider tokens for each counted token. Such a request can exceed the window of the route. The route then refuses it after dispatch. A later Token Counting Profile revision can close this gap.
 - The AgentRun claim lease (30 seconds by default) is shorter than the request timeout. The bounds of ADR 0049 already had this gap. The Worker loop does one claim at a time. Thus with one Worker that has the Agent Plan adapter, no other claim takes the run while its request waits. A deployment with more than one such Worker needs a lease renewal during the request first ([#1112](https://github.com/FrankQDWang/StoryOS/issues/1112)).
 - Streaming and continuation (S4-06) can change the timeout rule of a long reply in a later decision.
+
+## Amendment
+
+On 2026-10-13, [#1112](https://github.com/FrankQDWang/StoryOS/issues/1112) closed the lease gap of the Consequences. While a destination request is in progress, the Model Gateway renews the Run Lease at once, and then three times in each lease period. The renewal stops when the request settles, when the Worker stops, or when the claim has lost its lease. A renewal is a read committed update that requires the current fence (ADR 0058).

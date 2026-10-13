@@ -5,6 +5,7 @@ use crate::model_gateway_ports::{
     DestinationRequest, DispatchRecord, GatewayClock, ModelDispatchStore, ModelProviderAdapter,
     ModelUsage, NextDispatchWork, Observation, RequestAttempt,
 };
+use crate::model_lease_renewal::renew_while;
 use crate::model_stream_commit::GatewaySink;
 use crate::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DiagnosticField, DiagnosticId,
@@ -102,7 +103,8 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver, C
             }
         };
         let mut sink = GatewaySink::new(store, observer, clock, claim, &dispatch);
-        let observation = adapter.exchange(prepared.prepared, &mut sink).await;
+        let exchange = adapter.exchange(prepared.prepared, &mut sink);
+        let observation = renew_while(store, clock, claim, exchange).await;
         record_observation(&observation);
         let cancellation = sink.finish().await;
         store
