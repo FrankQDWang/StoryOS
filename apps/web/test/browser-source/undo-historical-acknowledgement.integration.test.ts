@@ -18,6 +18,7 @@ import {
 } from "./scenario.ts";
 
 const VOLUME = "018f0000-0000-7001-8000-000000000815";
+const ACTIVE_SESSION_KEY = `active_session:${OWNER}:${PROJECT}`;
 
 it("explains a historical Undo Latest Author Action acknowledgement and does not retry it", async () => {
   const scenario = createBrowserScenario();
@@ -91,6 +92,10 @@ it("explains a historical Undo Latest Author Action acknowledgement and does not
 
   const openDatabases = new Set<IDBDatabase>();
   await deleteJournal(scenario.journalName);
+  // All browser test files share one sessionStorage. An earlier file can keep an
+  // active Editor Session key, and then the editor reads that Session and does not
+  // create one. This test needs the create path and its Challenge.
+  sessionStorage.removeItem(ACTIVE_SESSION_KEY);
   try {
     document.body.innerHTML = '<main id="app"></main>';
     const loaded = await loadStoryOSWebState({
@@ -136,11 +141,14 @@ it("explains a historical Undo Latest Author Action acknowledgement and does not
     expect(methods.filter((entry) => entry.endsWith("/author-actions/undo"))).toEqual([
       `POST /api/v1/projects/${PROJECT}/author-actions/undo`,
     ]);
+    expect(methods.filter((entry) => entry.endsWith("/editor-sessions"))).toEqual([
+      `POST /api/v1/projects/${PROJECT}/editor-sessions`,
+    ]);
     expect(methods.filter((entry) => entry.includes("anti-forgery-challenges"))).toHaveLength(2);
   } finally {
     closeTrackedDatabases(openDatabases);
     document.body.replaceChildren();
-    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    sessionStorage.removeItem(ACTIVE_SESSION_KEY);
     await deleteJournal(scenario.journalName);
   }
 });
