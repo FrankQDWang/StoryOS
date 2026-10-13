@@ -120,7 +120,8 @@ fn complete_request(bytes: &[u8]) -> Option<Received> {
                 .then(|| value.trim().to_owned())
         })
     };
-    let length: usize = header("content-length")?.parse().ok()?;
+    // A GET has no body and no length.
+    let length: usize = header("content-length").map_or(Some(0), |length| length.parse().ok())?;
     (body.len() >= length).then(|| {
         let line = head.lines().next().unwrap_or_default().to_owned();
         (line, header("authorization"), body[..length].to_owned())
@@ -621,8 +622,135 @@ async fn each_transport_outcome_maps_to_rejected_not_submitted_or_outcome_unknow
     );
 }
 
+fn retrieve(base: &str, attempt: RequestAttempt) -> DestinationRequest {
+    DestinationRequest::Retrieve(RetrieveRequest {
+        attempt,
+        route: route(base),
+        purpose: RetrievePurpose::OriginalResult,
+        original_model_attempt_id: "018f0000-0000-7001-8000-0000000000d1".to_owned(),
+        response_reference: "resp_01".to_owned(),
+        declared_targets: vec![target()],
+    })
+}
+
+/// Retrieves `resp_01` from a destination that replies with `reply`.
+async fn retrieved(reply: Reply) -> (Observation, Received, Option<String>) {
+    let (base, served) = destination(reply).await;
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let prepared = adapter
+        .prepare(&retrieve(&base, RequestAttempt::New))
+        .await
+        .ok()
+        .unwrap();
+    let observation = adapter
+        .exchange(prepared.prepared, &mut RecordingSink::default())
+        .await;
+    (
+        observation,
+        served.await.unwrap(),
+        prepared.projection.serialized_payload,
+    )
+}
+
 #[tokio::test]
-async fn a_claimed_attempt_retrieval_and_an_unknown_bound_send_nothing() {
+async fn a_retrieve_reads_the_stored_response_once_and_maps_it_with_the_declared_targets() {
+    let change = format!(
+        r#"{{"kind":"prose_change","summary":"Shorter.","changes":[{{"block_id":"{BLOCK}","candidate_text":"Rain hit the roof.","explanation":"Shorter."}}]}}"#
+    );
+    let stored = |status: &str| {
+        json!({"id": "resp_01", "status": status, "output": [message(&change)],
+               "usage": {"input_tokens": 40, "output_tokens": 12}})
+        .to_string()
+    };
+    let (complete, received, wire) = retrieved(Reply::Http(200, stored("completed"))).await;
+    let target = target();
+    let closed = {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        format!("http://{}/api/plan/v3", listener.local_addr().unwrap())
+    };
+    let adapter = AgentPlanResponses {
+        resolver: CanaryResolver::default(),
+    };
+    let prepared = adapter
+        .prepare(&retrieve(&closed, RequestAttempt::New))
+        .await
+        .ok()
+        .unwrap();
+    // A failed read is unknown, never NotSubmitted.
+    let refused_connection = adapter
+        .exchange(prepared.prepared, &mut RecordingSink::default())
+        .await;
+
+    assert_eq!(
+        (
+            complete,
+            received,
+            wire,
+            retrieved(Reply::Http(200, stored("in_progress"))).await.0,
+            retrieved(Reply::Http(
+                404,
+                r#"{"error":{"code":"InvalidParameter.ResponseNotFound"}}"#.to_owned()
+            ))
+            .await
+            .0,
+            retrieved(Reply::Http(500, "{}".to_owned())).await.0,
+            refused_connection,
+        ),
+        (
+            Observation::Terminal(ModelResponse {
+                items: vec![NativeStreamItem {
+                    text: Some(change.clone()),
+                    ..item(
+                        "msg_01",
+                        StreamItemRole::Assistant,
+                        StreamItemState::Complete,
+                    )
+                }],
+                output: Some(final_answer(
+                    DecisionCandidate::ProseChange {
+                        text: "Shorter.".to_owned()
+                    },
+                    Some(vec![ProseChangeCandidate {
+                        chapter_id: target.chapter_id,
+                        base_authoritative_revision_id: target.base_revision_id,
+                        manuscript_block_id: BLOCK.to_owned(),
+                        candidate_text: "Rain hit the roof.".to_owned(),
+                        explanation: "Shorter.".to_owned(),
+                    }])
+                )),
+                usage: ModelUsage::Reported {
+                    input_tokens: 40,
+                    output_tokens: 12,
+                },
+                cache_use: CacheUse::Unknown,
+                response_reference: Some("resp_01".to_owned()),
+            }),
+            (
+                "GET /api/plan/v3/responses/resp_01 HTTP/1.1".to_owned(),
+                Some(format!("Bearer {CREDENTIAL_CANARY}")),
+                String::new(),
+            ),
+            Some(r#"{"method":"GET","path":"/responses/resp_01"}"#.to_owned()),
+            Observation::OutcomeUnknown {
+                response_reference: None
+            },
+            Observation::Rejected {
+                reason: "http_404:InvalidParameter.ResponseNotFound".to_owned()
+            },
+            Observation::OutcomeUnknown {
+                response_reference: None
+            },
+            Observation::OutcomeUnknown {
+                response_reference: None
+            },
+        )
+    );
+}
+
+#[tokio::test]
+async fn a_claimed_attempt_and_an_unknown_bound_send_nothing() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}/api/plan/v3", listener.local_addr().unwrap());
     let adapter = AgentPlanResponses {
@@ -631,21 +759,18 @@ async fn a_claimed_attempt_retrieval_and_an_unknown_bound_send_nothing() {
     let claimed = RequestAttempt::Claimed(DispatchClaim {
         model_attempt_id: "018f0000-0000-7001-8000-0000000000d1".to_owned(),
     });
-    let prepared = adapter
-        .prepare(&create(route(&base), claimed))
-        .await
-        .ok()
-        .unwrap();
-    let observation = adapter
-        .exchange(prepared.prepared, &mut RecordingSink::default())
-        .await;
-    let retrieve = DestinationRequest::Retrieve(RetrieveRequest {
-        attempt: RequestAttempt::New,
-        route: route(&base),
-        purpose: RetrievePurpose::OriginalResult,
-        original_model_attempt_id: "018f0000-0000-7001-8000-0000000000d1".to_owned(),
-        response_reference: "resp_01".to_owned(),
-    });
+    let mut observations = Vec::new();
+    for request in [
+        create(route(&base), claimed.clone()),
+        retrieve(&base, claimed),
+    ] {
+        let prepared = adapter.prepare(&request).await.ok().unwrap();
+        observations.push(
+            adapter
+                .exchange(prepared.prepared, &mut RecordingSink::default())
+                .await,
+        );
+    }
     let unbounded = create(
         RequestRoute {
             bounds: None,
@@ -653,10 +778,7 @@ async fn a_claimed_attempt_retrieval_and_an_unknown_bound_send_nothing() {
         },
         RequestAttempt::New,
     );
-    let refusals = [
-        adapter.prepare(&retrieve).await.err(),
-        adapter.prepare(&unbounded).await.err(),
-    ];
+    let refusal = adapter.prepare(&unbounded).await.err();
     let connected = tokio::select! {
         biased;
         accepted = listener.accept() => accepted.is_ok(),
@@ -665,16 +787,19 @@ async fn a_claimed_attempt_retrieval_and_an_unknown_bound_send_nothing() {
 
     assert_eq!(
         (
-            observation,
-            refusals,
+            observations,
+            refusal,
             connected,
             *adapter.resolver.0.lock().unwrap()
         ),
         (
-            Observation::OutcomeUnknown {
-                response_reference: None
-            },
-            [Some(PreDispatchRefusal::UnsupportedRequest); 2],
+            vec![
+                Observation::OutcomeUnknown {
+                    response_reference: None
+                };
+                2
+            ],
+            Some(PreDispatchRefusal::UnsupportedRequest),
             false,
             0
         )

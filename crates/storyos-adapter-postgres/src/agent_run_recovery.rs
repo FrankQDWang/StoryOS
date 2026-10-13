@@ -5,7 +5,7 @@ use storyos_application::{
     Observation, ProjectAssistanceRecord, ProjectScope, ReferenceRetrieval, RequestAttempt,
     ResponseReference,
 };
-use storyos_core::{LookupUnavailable, SuccessorLookup};
+use storyos_core::{LookupUnavailable, RuntimeQualification, SuccessorLookup};
 
 use crate::agent_run_create_dispatch::PriorContext;
 use crate::agent_run_retrieval::{
@@ -30,12 +30,7 @@ pub(crate) async fn advance(
             client,
             claim,
             payload,
-            RetrievalAdvance {
-                attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
-                conversation_id: &run.conversation_id,
-                run_status: &run.status,
-                grant_admitted: crate::agent_run_work::grant_admitted(run),
-            },
+            RetrievalAdvance::of(run),
             RetrievalFence::Open,
             if follow_successor {
                 RetrievalRunWrite::Defer
@@ -86,12 +81,7 @@ pub(crate) async fn settle_cancelled(
             client,
             claim,
             &payload,
-            RetrievalAdvance {
-                attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
-                conversation_id: &run.conversation_id,
-                run_status: &run.status,
-                grant_admitted: crate::agent_run_work::grant_admitted(run),
-            },
+            RetrievalAdvance::of(run),
             RetrievalFence::Fenced,
             RetrievalRunWrite::Write,
         )
@@ -246,13 +236,25 @@ async fn write_subject(
     if payload.get("original_result_retrieval").is_some() {
         return Ok(());
     }
+    let reference = reference.cloned().map(|mut reference| {
+        if !retrieval_permitted(run, &payload) {
+            reference.retrieval = ReferenceRetrieval::Unsupported;
+        }
+        reference
+    });
+    let reference = reference.as_ref();
     let identity = read_assistance_record(client, &claim.project_scope)
         .await
         .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?
         .map(|record| record.processing_destination_identity)
         .unwrap_or_default();
-    payload["original_result_retrieval"] =
-        crate::agent_run_retrieval::subject(reference, claim, &run.conversation_id, &identity);
+    payload["original_result_retrieval"] = crate::agent_run_retrieval::subject(
+        reference,
+        claim,
+        &run.conversation_id,
+        &identity,
+        RetrievalAdvance::of(run).mapping_revision,
+    );
     let lookup = match reference.map(|reference| reference.retrieval) {
         None => SuccessorLookup::Unavailable {
             reason: LookupUnavailable::MissingReference,
@@ -307,6 +309,17 @@ async fn write_subject(
         )));
     }
     Ok(())
+}
+
+/// Whether the pinned Registration lets the Host retrieve a stored response of this Attempt.
+fn retrieval_permitted(run: &RunPhaseRow, payload: &serde_json::Value) -> bool {
+    let qualification = payload
+        .get("runtime_qualification")
+        .and_then(serde_json::Value::as_str)
+        .and_then(RuntimeQualification::parse)
+        .unwrap_or(RuntimeQualification::Qualified);
+    storyos_core::model_registration(&run.model_registration_revision)
+        .is_some_and(|registration| registration.retrieves(qualification))
 }
 
 /// Whether a decision or successor Attempt of the Run is in flight: dispatched with an unknown

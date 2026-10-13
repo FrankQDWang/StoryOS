@@ -72,6 +72,15 @@ impl ModelRegistration {
     pub fn compacts(&self) -> bool {
         self.requirement.contains(&ModelCapability::HostCompaction)
     }
+
+    /// Whether the Host may read a stored response of an unknown create. Either the profile
+    /// qualifies retrieval, or an authorized runtime qualification examines a route that needs it.
+    pub fn retrieves(&self, qualification: crate::RuntimeQualification) -> bool {
+        self.capability_profile
+            .qualifies(&[ModelCapability::Retrieval])
+            || (qualification == crate::RuntimeQualification::QualificationAuthorized
+                && self.requirement.contains(&ModelCapability::Retrieval))
+    }
 }
 
 /// One capability of a Model Capability Profile. Each capability has its own evidence.
@@ -175,6 +184,17 @@ pub const STREAMING_REQUIREMENT: &[ModelCapability] = &[
     ModelCapability::NativeText,
     ModelCapability::Continuation,
     ModelCapability::Streaming,
+];
+
+/// The capabilities that the compaction requests and the retrieval of the stored response of an
+/// unknown create need together.
+pub const RECOVERY_REQUIREMENT: &[ModelCapability] = &[
+    ModelCapability::Transport,
+    ModelCapability::NativeText,
+    ModelCapability::Continuation,
+    ModelCapability::Streaming,
+    ModelCapability::HostCompaction,
+    ModelCapability::Retrieval,
 ];
 
 /// The capabilities that a streamed request with a prior response reference, a Host-managed
@@ -588,19 +608,75 @@ const AGENT_PLAN_THRESHOLD_QUALIFICATION: CapabilityEvidence = CapabilityEvidenc
 
 /// The profile after the qualification of the automatic trigger. A summary request near the
 /// threshold qualified the trigger. The window and each other entry keep their earlier evidence.
+pub const AGENT_PLAN_THRESHOLD_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v10",
+        entries: CapabilityEntries {
+            host_compaction: AGENT_PLAN_THRESHOLD_QUALIFICATION,
+            ..AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE.entries
+        },
+        // The qualification examined approximately 190,000 input tokens, not the full window, so
+        // the window keeps its documented evidence.
+        context_window: Some(AGENT_PLAN_DOCUMENTED_WINDOW),
+        combinations: &[
+            CapabilityCombination {
+                members: COMPACTION_REQUIREMENT,
+                evidence: AGENT_PLAN_THRESHOLD_QUALIFICATION,
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::Continuation,
+                    ModelCapability::ExplicitCache,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::ExplicitCache,
+                    ModelCapability::StructuredText,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+        ],
+    };
+
+/// The profile with the retrieval of a stored response pending. Each other entry and the
+/// compaction combination keep their qualification.
+pub const AGENT_PLAN_RECOVERY_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v11",
+        entries: AGENT_PLAN_THRESHOLD_CAPABILITY_PROFILE.entries,
+        context_window: Some(AGENT_PLAN_DOCUMENTED_WINDOW),
+        combinations: &[
+            CapabilityCombination {
+                members: COMPACTION_REQUIREMENT,
+                evidence: AGENT_PLAN_THRESHOLD_QUALIFICATION,
+            },
+            CapabilityCombination {
+                members: RECOVERY_REQUIREMENT,
+                evidence: documented(ARK_RETRIEVE_RESPONSE),
+            },
+        ],
+    };
+
+const AGENT_PLAN_RECOVERY_QUALIFICATION: CapabilityEvidence = CapabilityEvidence::Qualified {
+    evidence: "Authorized qualification of the retrieval of a stored response on 2026-10-13: \
+               docs/research/agent-plan-recovery-qualification-2026-10-13.md",
+};
+
+/// The profile after the qualification of retrieval. The route has no abort operation, so the
+/// abort entry stays unknown (ADR 0057).
 pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
-    revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v10",
+    revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v12",
     entries: CapabilityEntries {
-        host_compaction: AGENT_PLAN_THRESHOLD_QUALIFICATION,
-        ..AGENT_PLAN_COMPACTION_CAPABILITY_PROFILE.entries
+        retrieval: AGENT_PLAN_RECOVERY_QUALIFICATION,
+        ..AGENT_PLAN_THRESHOLD_CAPABILITY_PROFILE.entries
     },
-    // The qualification examined approximately 190,000 input tokens, not the full window, so
-    // the window keeps its documented evidence.
     context_window: Some(AGENT_PLAN_DOCUMENTED_WINDOW),
     combinations: &[
         CapabilityCombination {
-            members: COMPACTION_REQUIREMENT,
-            evidence: AGENT_PLAN_THRESHOLD_QUALIFICATION,
+            members: RECOVERY_REQUIREMENT,
+            evidence: AGENT_PLAN_RECOVERY_QUALIFICATION,
         },
         CapabilityCombination {
             members: &[
@@ -707,12 +783,27 @@ pub const AGENT_PLAN_WINDOW_PENDING_REGISTRATION: ModelRegistration = ModelRegis
     ..AGENT_PLAN_COMPACTION_REGISTRATION
 };
 
-/// The current Agent Plan Registration: the compaction mapping, with the documented window and
-/// the qualified automatic trigger.
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// The compaction mapping with the documented window and the qualified automatic trigger.
+pub const AGENT_PLAN_THRESHOLD_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa11",
-    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    capability_profile: &AGENT_PLAN_THRESHOLD_CAPABILITY_PROFILE,
     ..AGENT_PLAN_COMPACTION_REGISTRATION
+};
+
+/// The same mapping that also retrieves the stored response of an unknown create, with the
+/// pending profile. An AgentRun that pinned it refuses with Registration drift.
+pub const AGENT_PLAN_RECOVERY_PENDING_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa12",
+    requirement: RECOVERY_REQUIREMENT,
+    capability_profile: &AGENT_PLAN_RECOVERY_PENDING_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_THRESHOLD_REGISTRATION
+};
+
+/// The current Agent Plan Registration: the compaction mapping with qualified retrieval.
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa13",
+    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_RECOVERY_PENDING_REGISTRATION
 };
 
 /// The known Registration of a stored revision. `None` is an unknown or damaged revision.
@@ -728,6 +819,8 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
         &AGENT_PLAN_COMPACTION_PENDING_REGISTRATION,
         &AGENT_PLAN_COMPACTION_REGISTRATION,
         &AGENT_PLAN_WINDOW_PENDING_REGISTRATION,
+        &AGENT_PLAN_THRESHOLD_REGISTRATION,
+        &AGENT_PLAN_RECOVERY_PENDING_REGISTRATION,
         &AGENT_PLAN_REGISTRATION,
     ]
     .into_iter()

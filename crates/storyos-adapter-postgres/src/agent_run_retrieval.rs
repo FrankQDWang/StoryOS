@@ -1,16 +1,16 @@
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DispatchClaim, ModelUsage,
-    ProjectScope, ReferenceRetrieval, RequestAttempt, ResponseReference, RetrievePurpose,
-    RetrieveRequest,
+    ProjectAssistanceRecord, ProjectScope, ReferenceRetrieval, RequestAttempt, ResponseReference,
+    RetrievePurpose, RetrieveRequest,
 };
 use storyos_core::{
-    HOST_FAKE_MAPPING_REVISION, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
+    AssistanceAvailability, OriginalResultRetrievalDecision, OriginalResultRetrievalFacts,
     RetainedResponseReference, RetrievalBounds, RetrievalCapability, RetrievedOriginalResult,
     decide_original_result_retrieval,
 };
 use uuid::Uuid;
 
-use crate::agent_run_work::update_run;
+use crate::agent_run_work::{RunPhaseRow, update_run};
 use crate::update_project_assistance::read_assistance_record;
 
 pub(crate) enum RetrievalFence {
@@ -26,9 +26,36 @@ pub(crate) enum RetrievalRunWrite {
 pub(crate) struct RetrievalAdvance<'a> {
     pub attempt_id: &'a str,
     pub conversation_id: &'a str,
+    pub chapter_id: &'a str,
     pub run_status: &'a str,
     /// The scope of the pinned grant covers the disclosure of the Run (ADR 0051).
     pub grant_admitted: bool,
+    /// The wire mapping revision of the pinned Registration.
+    pub mapping_revision: &'a str,
+    pub run: &'a RunPhaseRow,
+}
+
+impl<'a> RetrievalAdvance<'a> {
+    pub(crate) fn of(run: &'a RunPhaseRow) -> Self {
+        Self {
+            attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
+            conversation_id: &run.conversation_id,
+            chapter_id: &run.chapter_id,
+            run_status: &run.status,
+            grant_admitted: crate::agent_run_work::grant_admitted(run),
+            mapping_revision: storyos_core::model_registration(&run.model_registration_revision)
+                .map_or("", |registration| registration.mapping_revision),
+            run,
+        }
+    }
+}
+
+/// Whether the current assistance admission still admits the pinned route of `run`. A changed
+/// binding or destination stops a Retrieve before it leaves the Host.
+pub(crate) fn route_admitted(run: &RunPhaseRow, assistance: &ProjectAssistanceRecord) -> bool {
+    assistance.availability == AssistanceAvailability::Available
+        && storyos_core::admit_route(&crate::agent_run_work::route_facts(run, Some(assistance)))
+            .is_ok()
 }
 
 pub(crate) enum RetrievalWork {
@@ -42,6 +69,7 @@ pub(crate) fn subject(
     claim: &ClaimedAgentRun,
     conversation_id: &str,
     destination_identity: &str,
+    mapping_revision: &str,
 ) -> serde_json::Value {
     let binding = reference.map(|reference| &reference.reported_binding);
     let retrieval = reference.map(|reference| reference.retrieval);
@@ -59,7 +87,7 @@ pub(crate) fn subject(
             .and_then(|binding| binding.destination_identity.as_deref())
             .unwrap_or(destination_identity),
         "mapping_revision": binding
-            .map_or(HOST_FAKE_MAPPING_REVISION, |binding| binding.mapping_revision.as_str()),
+            .map_or(mapping_revision, |binding| binding.mapping_revision.as_str()),
         "capability": match retrieval {
             Some(ReferenceRetrieval::Unsupported) => "unsupported",
             Some(ReferenceRetrieval::Supported { .. }) | None => "supported",
@@ -151,6 +179,12 @@ pub(crate) async fn advance_original_result_retrieval(
         purpose: RetrievePurpose::OriginalResult,
         original_model_attempt_id: advance.attempt_id.to_owned(),
         response_reference: text(subject, "reference_id").unwrap_or_default().to_owned(),
+        declared_targets: crate::agent_run_create_dispatch::declared_targets(
+            client,
+            claim,
+            advance.chapter_id,
+        )
+        .await?,
     })))
 }
 
@@ -174,9 +208,9 @@ pub(crate) async fn decide(
     Ok(decide_original_result_retrieval(&facts(
         subject,
         claim,
-        advance.conversation_id,
+        advance,
+        route_admitted(advance.run, &assistance),
         &assistance.processing_destination_identity,
-        advance.grant_admitted,
         fenced || advance.run_status == "cancelled",
         retrieved,
     )))
@@ -498,9 +532,9 @@ async fn restore_reconciled(
 fn facts(
     subject: &serde_json::Value,
     claim: &ClaimedAgentRun,
-    conversation_id: &str,
+    advance: &RetrievalAdvance<'_>,
+    route_admitted: bool,
     destination_identity: &str,
-    grant_admitted: bool,
     run_fenced: bool,
     retrieved: RetrievedOriginalResult,
 ) -> OriginalResultRetrievalFacts {
@@ -520,10 +554,11 @@ fn facts(
         scope_permitted: text(subject, "owner_user_id")
             == Some(claim.project_scope.owner_user_id.as_ref())
             && text(subject, "project_id") == Some(claim.project_scope.project_id.as_ref()),
-        conversation_permitted: text(subject, "conversation_id") == Some(conversation_id),
-        destination_permitted: grant_admitted
+        conversation_permitted: text(subject, "conversation_id") == Some(advance.conversation_id),
+        destination_permitted: advance.grant_admitted
+            && route_admitted
             && text(subject, "destination_identity") == Some(destination_identity),
-        mapping_permitted: text(subject, "mapping_revision") == Some(HOST_FAKE_MAPPING_REVISION),
+        mapping_permitted: text(subject, "mapping_revision") == Some(advance.mapping_revision),
         retrieved,
         run_fenced,
     }
@@ -560,3 +595,7 @@ fn read_error(
 ) -> storyos_application::CreateAgentRunError {
     storyos_application::CreateAgentRunError::Unavailable(Box::new(error))
 }
+
+#[cfg(test)]
+#[path = "agent_run_retrieval_tests.rs"]
+mod tests;

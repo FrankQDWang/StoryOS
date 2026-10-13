@@ -297,6 +297,7 @@ pub(crate) async fn record(
 pub(crate) async fn finish_dispatched(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
     row: &DecisionRow,
     marker: &serde_json::Value,
 ) -> Result<SuccessorWork, CompleteAgentRunError> {
@@ -326,6 +327,12 @@ pub(crate) async fn finish_dispatched(
             purpose: RetrievePurpose::LateResult,
             original_model_attempt_id: row.attempt_id.clone(),
             response_reference,
+            declared_targets: crate::agent_run_create_dispatch::declared_targets(
+                client,
+                claim,
+                &run.chapter_id,
+            )
+            .await?,
         }));
     }
     update_run(

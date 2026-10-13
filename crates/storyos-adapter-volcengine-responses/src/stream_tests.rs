@@ -104,7 +104,9 @@ fn unknown(reference: &str) -> Observation {
     Observation::OutcomeUnknown {
         response_reference: Some(ResponseReference {
             reference_id: reference.to_owned(),
-            retrieval: ReferenceRetrieval::Unsupported,
+            retrieval: ReferenceRetrieval::Supported {
+                bounds: storyos_core::RetrievalBounds::DeclaredReadOnly,
+            },
             reported_binding: ReportedBinding {
                 owner_user_id: None,
                 conversation_id: None,
