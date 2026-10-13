@@ -111,14 +111,73 @@ pub enum CompactionStep {
     LaterRequest,
 }
 
-/// Decides the next compaction step from the author request, the response chain of the
-/// Conversation, and the record state. With no prior response, nothing is to be compacted.
+/// The share, in percent, of the window after the output bound at which compaction starts
+/// (author decision on #1108).
+pub const COMPACTION_THRESHOLD_PERCENT: u64 = 80;
+
+/// The compaction threshold of one model and use binding: 80 percent of the window after the
+/// output bound. `None` when the output bound fills the window.
+pub fn compaction_threshold(window_tokens: u64, output_bound: u64) -> Option<u64> {
+    window_tokens
+        .checked_sub(output_bound)
+        .filter(|room| *room > 0)
+        .map(|room| room * COMPACTION_THRESHOLD_PERCENT / 100)
+}
+
+/// The facts that decide whether the next request compacts automatically.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompactionTrigger {
+    /// The context window of the profile, or `None` when no evidence states it.
+    pub window_tokens: Option<u64>,
+    /// The output bound of the use binding, or `None` when it is unknown.
+    pub output_bound: Option<u64>,
+    /// The reported input and output tokens of the last response of the chain, or `None` when
+    /// the destination did not report them.
+    pub prior_reported_tokens: Option<u64>,
+    /// The counted tokens of the new turn.
+    pub new_turn_tokens: u64,
+}
+
+/// Whether the expected input of the next request reaches the threshold. An unknown window, an
+/// unknown output bound, or unreported usage gives no automatic compaction.
+pub fn compaction_due(trigger: &CompactionTrigger) -> bool {
+    match (
+        trigger.window_tokens,
+        trigger.output_bound,
+        trigger.prior_reported_tokens,
+    ) {
+        (Some(window), Some(output_bound), Some(prior)) => {
+            compaction_threshold(window, output_bound)
+                .is_some_and(|threshold| prior.saturating_add(trigger.new_turn_tokens) >= threshold)
+        }
+        _ => false,
+    }
+}
+
+/// Whether the expected input reaches the window after the output bound. Then a request that
+/// keeps the full chain cannot fit. An unknown window, output bound, or usage gives `false`.
+pub fn conversation_too_long(trigger: &CompactionTrigger) -> bool {
+    match (
+        trigger.window_tokens,
+        trigger.output_bound,
+        trigger.prior_reported_tokens,
+    ) {
+        (Some(window), Some(output_bound), Some(prior)) => {
+            prior.saturating_add(trigger.new_turn_tokens) >= window.saturating_sub(output_bound)
+        }
+        _ => false,
+    }
+}
+
+/// Decides the next compaction step from the compaction request, the response chain of the
+/// Conversation, and the record state. With no prior response, nothing is to be compacted. A
+/// compaction that has a record continues, also when the request changes.
 pub fn next_compaction_step(
-    author_message: &str,
+    requested: bool,
     prior_response: bool,
     record: CompactionRecordState,
 ) -> CompactionStep {
-    if !requests_active_compaction(author_message) {
+    if !requested && record == CompactionRecordState::Absent {
         return CompactionStep::OrdinaryRequest;
     }
     match record {

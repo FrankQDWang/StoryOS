@@ -2,9 +2,11 @@ use super::{
     ACTIVE_COMPACTION_REQUEST_PREFIX, AGENT_PLAN_COMPACTION_PRODUCER,
     COMPACTION_LOSS_SEMANTIC_PRESERVATION_UNKNOWN, COMPACTION_SUMMARY_UNAVAILABLE,
     CompactionInstallFacts, CompactionInstallRefusal, CompactionKnownInput, CompactionRecordState,
-    CompactionSource, CompactionStep, HOST_FAKE_COMPACTION_OUTPUT, HOST_FAKE_COMPACTION_PRODUCER,
-    StagedCompaction, SummaryObservation, active_context_input_digest, decide_compaction_install,
-    later_request_record, next_compaction_step, requests_active_compaction, stage_compaction,
+    CompactionSource, CompactionStep, CompactionTrigger, HOST_FAKE_COMPACTION_OUTPUT,
+    HOST_FAKE_COMPACTION_PRODUCER, StagedCompaction, SummaryObservation,
+    active_context_input_digest, compaction_due, compaction_threshold, conversation_too_long,
+    decide_compaction_install, later_request_record, next_compaction_step,
+    requests_active_compaction, stage_compaction,
 };
 
 fn facts(
@@ -85,7 +87,6 @@ fn install_refuses_a_restricted_changed_or_incomplete_exact_input_or_a_large_sum
 
 #[test]
 fn a_requested_compaction_summarizes_the_prior_response_once_before_the_decision_request() {
-    let requested = ACTIVE_COMPACTION_REQUEST_PREFIX;
     let states = [
         CompactionRecordState::Absent,
         CompactionRecordState::SummaryClaimed,
@@ -97,18 +98,17 @@ fn a_requested_compaction_summarizes_the_prior_response_once_before_the_decision
 
     assert_eq!(
         (
-            states
-                .map(|state| next_compaction_step(requested, /*prior_response*/ true, state)),
+            states.map(|state| {
+                next_compaction_step(/*requested*/ true, /*prior_response*/ true, state)
+            }),
             next_compaction_step(
-                requested,
+                /*requested*/ true,
                 /*prior_response*/ false,
                 CompactionRecordState::Absent
             ),
             states.map(|state| {
                 next_compaction_step(
-                    "Help with this passage.",
-                    /*prior_response*/ true,
-                    state,
+                    /*requested*/ false, /*prior_response*/ true, state,
                 )
             }),
         ),
@@ -122,7 +122,53 @@ fn a_requested_compaction_summarizes_the_prior_response_once_before_the_decision
                 CompactionStep::OrdinaryRequest,
             ],
             CompactionStep::OrdinaryRequest,
-            [CompactionStep::OrdinaryRequest; 6],
+            // A compaction with a record continues when the request changes.
+            [
+                CompactionStep::OrdinaryRequest,
+                CompactionStep::ReobserveSummary,
+                CompactionStep::InstallOrRefuse,
+                CompactionStep::LaterRequest,
+                CompactionStep::LaterRequest,
+                CompactionStep::OrdinaryRequest,
+            ],
+        )
+    );
+}
+
+#[test]
+fn the_threshold_is_eighty_percent_of_the_window_after_the_output_bound() {
+    let trigger = |window, output_bound, prior, new_turn_tokens| CompactionTrigger {
+        window_tokens: window,
+        output_bound,
+        prior_reported_tokens: prior,
+        new_turn_tokens,
+    };
+    let doubao = (Some(262_144), Some(32_768));
+
+    assert_eq!(
+        (
+            compaction_threshold(/*window_tokens*/ 262_144, /*output_bound*/ 32_768),
+            compaction_threshold(/*window_tokens*/ 8_192, /*output_bound*/ 8_192),
+            [
+                trigger(doubao.0, doubao.1, Some(180_000), 3_500),
+                trigger(doubao.0, doubao.1, Some(180_000), 3_499),
+                trigger(None, doubao.1, Some(260_000), 3_500),
+                trigger(doubao.0, None, Some(260_000), 3_500),
+                trigger(doubao.0, doubao.1, None, 3_500),
+            ]
+            .map(|facts| compaction_due(&facts)),
+            [
+                trigger(doubao.0, doubao.1, Some(229_000), 376),
+                trigger(doubao.0, doubao.1, Some(229_000), 375),
+                trigger(None, doubao.1, Some(300_000), 0),
+            ]
+            .map(|facts| conversation_too_long(&facts)),
+        ),
+        (
+            Some(183_500),
+            None,
+            [true, false, false, false, false],
+            [true, false, false],
         )
     );
 }
