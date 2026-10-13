@@ -7,9 +7,9 @@ use storyos_application::{
     AgentRunWorkStore, ClaimedAgentRun, ClaimedArchiveExport, ClaimedExportWork,
     ClaimedReadableExport, CompleteAgentRun, CompleteAgentRunError, CompleteArchiveExport,
     CompleteArchiveExportError, CompleteReadableExport, CompleteReadableExportError,
-    ContractFaultObserver, DiagnosticField, DiagnosticId, ExportWorkStore, ModelDispatchStore,
-    ModelProviderAdapter, ProjectReadError, SqlState, claim_next_agent_run, claim_next_export_work,
-    complete_agent_run, complete_archive_export, complete_readable_export,
+    ContractFaultObserver, DiagnosticField, DiagnosticId, ExportWorkStore, GatewayClock,
+    ModelDispatchStore, ModelProviderAdapter, ProjectReadError, SqlState, claim_next_agent_run,
+    claim_next_export_work, complete_agent_run, complete_archive_export, complete_readable_export,
 };
 
 const ATTEMPTS: u64 = 4;
@@ -166,10 +166,27 @@ async fn agent_run_claim<A: ModelProviderAdapter, O: ContractFaultObserver>(
 ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
     retry(
         attempts,
-        || complete_agent_run(store, &destination.adapter, &destination.observer, claim),
+        || {
+            complete_agent_run(
+                store,
+                &destination.adapter,
+                &destination.observer,
+                &RuntimeClock,
+                claim,
+            )
+        },
         |error| matches!(error, CompleteAgentRunError::StaleFence),
     )
     .await
+}
+
+/// The Model Gateway waits on the runtime timer.
+struct RuntimeClock;
+
+impl GatewayClock for RuntimeClock {
+    async fn wait(&self, delay: Duration) {
+        tokio::time::sleep(delay).await;
+    }
 }
 
 /// Runs the completion until it succeeds, the fence is stale, or the attempts end.

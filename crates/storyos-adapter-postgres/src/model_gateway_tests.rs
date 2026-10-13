@@ -4,9 +4,9 @@ use storyos_adapter_fake_destination::FakeDestination;
 use storyos_application::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ContractFaultObserver,
     ContractFaultPoint, ConversationSelection, CreateAgentRunInput, DestinationRequest,
-    ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage, NoContractFaults,
-    Observation, PreDispatchRefusal, PreparedRequest, ProjectScope, UpdateProjectAssistanceInput,
-    complete_agent_run, issue_project_command_challenge,
+    GatewayClock, ModelProviderAdapter, ModelResponse, ModelStreamSink, ModelUsage,
+    NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest, ProjectScope,
+    UpdateProjectAssistanceInput, complete_agent_run, issue_project_command_challenge,
 };
 use storyos_core::{
     AssistanceAvailability, DecisionCandidate, DeploymentDestination, ModelOutput,
@@ -32,6 +32,15 @@ pub(crate) struct DispatchEvidence {
     pub(crate) destination_manifests: i64,
     pub(crate) items: Option<String>,
     pub(crate) decision_id: Option<String>,
+}
+
+/// The runtime timer, as the Worker supplies it.
+pub(crate) struct RuntimeClock;
+
+impl GatewayClock for RuntimeClock {
+    async fn wait(&self, delay: std::time::Duration) {
+        tokio::time::sleep(delay).await;
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -429,7 +438,7 @@ async fn prepare_refusal_records_no_dispatch_evidence() {
     };
     let points = RecordedPoints::default();
 
-    let result = complete_agent_run(&store, &destination, &points, &claim).await;
+    let result = complete_agent_run(&store, &destination, &points, &RuntimeClock, &claim).await;
 
     assert_eq!(
         (result.ok(), points.0.into_inner().unwrap()),
@@ -469,7 +478,7 @@ async fn dispatch_claim_commits_before_an_exchange_with_no_open_transaction() {
     };
     let points = RecordedPoints::default();
 
-    let result = complete_agent_run(&store, &destination, &points, &claim).await;
+    let result = complete_agent_run(&store, &destination, &points, &RuntimeClock, &claim).await;
 
     assert_eq!(
         (
@@ -518,7 +527,7 @@ async fn stale_run_lease_fence_rejects_the_observation() {
     };
     let points = RecordedPoints::default();
 
-    let result = complete_agent_run(&store, &destination, &points, &claim).await;
+    let result = complete_agent_run(&store, &destination, &points, &RuntimeClock, &claim).await;
 
     assert!(matches!(result, Err(CompleteAgentRunError::StaleFence)));
     assert_eq!(
@@ -555,7 +564,8 @@ async fn a_new_claim_of_a_cancelled_run_sends_one_abort_through_the_same_sequenc
         streamed: Mutex::default(),
     };
     let fenced_points = RecordedPoints::default();
-    let fenced = complete_agent_run(&store, &destination, &fenced_points, &claim).await;
+    let fenced =
+        complete_agent_run(&store, &destination, &fenced_points, &RuntimeClock, &claim).await;
     let fence_token = admin
         .query_one(
             "UPDATE storyos.agent_runs
@@ -575,7 +585,14 @@ async fn a_new_claim_of_a_cancelled_run_sends_one_abort_through_the_same_sequenc
     };
     let points = RecordedPoints::default();
 
-    let result = complete_agent_run(&store, &FakeDestination, &points, &cancelled_claim).await;
+    let result = complete_agent_run(
+        &store,
+        &FakeDestination,
+        &points,
+        &RuntimeClock,
+        &cancelled_claim,
+    )
+    .await;
 
     let abort = admin
         .query_one(
@@ -647,7 +664,7 @@ async fn stream_batches_keep_earlier_items_and_replace_by_item_id() {
     };
     let points = RecordedPoints::default();
 
-    let result = complete_agent_run(&store, &destination, &points, &claim).await;
+    let result = complete_agent_run(&store, &destination, &points, &RuntimeClock, &claim).await;
 
     let persisted: String = admin
         .query_one(
@@ -705,7 +722,14 @@ async fn a_refused_cancellation_duty_ends_the_cancelled_claim() {
         seen: Mutex::default(),
         streamed: Mutex::default(),
     };
-    let fenced = complete_agent_run(&store, &cancelling, &NoContractFaults, &claim).await;
+    let fenced = complete_agent_run(
+        &store,
+        &cancelling,
+        &NoContractFaults,
+        &RuntimeClock,
+        &claim,
+    )
+    .await;
     let fence_token = admin
         .query_one(
             "UPDATE storyos.agent_runs
@@ -731,6 +755,7 @@ async fn a_refused_cancellation_duty_ends_the_cancelled_claim() {
         &store,
         &refusing,
         &NoContractFaults,
+        &RuntimeClock,
         &ClaimedAgentRun {
             fence_token,
             ..claim.clone()

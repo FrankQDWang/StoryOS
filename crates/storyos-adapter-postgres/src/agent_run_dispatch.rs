@@ -193,7 +193,9 @@ impl ModelDispatchStore for PostgresProjectReader {
         }
     }
 
-    /// Appends the events in order. An event with a known item ID replaces that item.
+    /// Appends the events in order. An event with a known item ID replaces that item. The
+    /// transaction runs outside SSI (ADR 0058). The locks of the fenced Run row and of the target
+    /// Attempt row keep the fence check and the payload merge correct.
     #[tracing::instrument(skip_all, level = "debug")]
     async fn append_model_stream_events(
         &self,
@@ -203,7 +205,7 @@ impl ModelDispatchStore for PostgresProjectReader {
         reference: Option<&ResponseReference>,
     ) -> Result<Option<StreamStop>, CompleteAgentRunError> {
         let transaction = self
-            .begin_serializable_project_command_transaction(&claim.project_scope)
+            .begin_project_command_transaction(&claim.project_scope)
             .await
             .map_err(complete_challenge_error)?;
         let appended = async {
@@ -218,7 +220,8 @@ impl ModelDispatchStore for PostgresProjectReader {
                       WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                         AND run_id = $3::text::uuid AND model_attempt_id = $4::text::uuid
                         AND attempt_role IN ('decision', 'successor', 'compaction')
-                        AND decision_id IS NULL",
+                        AND decision_id IS NULL
+                      FOR UPDATE",
                     &[
                         &claim.project_scope.owner_user_id.as_ref(),
                         &claim.project_scope.project_id.as_ref(),
@@ -274,13 +277,14 @@ impl ModelDispatchStore for PostgresProjectReader {
                 .map_err(complete_database_error)?;
             Ok(None)
         }
-        .await;
+        .await
+        .map_err(contention);
         match appended {
             Ok(None) => {
                 transaction
                     .commit()
                     .await
-                    .map_err(complete_challenge_error)?;
+                    .map_err(|error| contention(complete_challenge_error(error)))?;
                 Ok(None)
             }
             stopped => {
@@ -478,6 +482,28 @@ impl PostgresProjectReader {
     }
 }
 
+/// Marks a serialization failure or a deadlock as contention, so that the stream sink runs the
+/// transaction again.
+fn contention(error: CompleteAgentRunError) -> CompleteAgentRunError {
+    let CompleteAgentRunError::Unavailable(source) = error else {
+        return error;
+    };
+    let mut next: Option<&(dyn std::error::Error + 'static)> = Some(source.as_ref());
+    while let Some(current) = next {
+        if let Some(
+            &tokio_postgres::error::SqlState::T_R_SERIALIZATION_FAILURE
+            | &tokio_postgres::error::SqlState::T_R_DEADLOCK_DETECTED,
+        ) = current
+            .downcast_ref::<tokio_postgres::Error>()
+            .and_then(tokio_postgres::Error::code)
+        {
+            return CompleteAgentRunError::Contended(source);
+        }
+        next = current.source();
+    }
+    CompleteAgentRunError::Unavailable(source)
+}
+
 async fn advance_steering(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -538,3 +564,7 @@ async fn commit_retrieve(
 #[cfg(test)]
 #[path = "model_gateway_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "stream_commit_contention_tests.rs"]
+mod stream_commit_contention_tests;

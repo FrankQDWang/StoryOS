@@ -8,6 +8,7 @@ use storyos_core::{DeploymentDestination, ModelAdapter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_postgres::Client;
 
+use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{claim_run, queued_run, stores};
 
 const ADVISORY: &str = r#"{\"kind\":\"advisory\",\"text\":\"Keep it.\"}"#;
@@ -185,9 +186,10 @@ async fn a_restarted_worker_retrieves_the_committed_reference_once_and_settles_t
         ),
     };
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let crashed = complete_agent_run(&store, &crash, &NoContractFaults, &claim).await;
+    let crashed =
+        complete_agent_run(&store, &crash, &NoContractFaults, &RuntimeClock, &claim).await;
     let claim = claim_run(&admin, scope, run_id.clone()).await;
-    complete_agent_run(&store, &adapter(), &NoContractFaults, &claim)
+    complete_agent_run(&store, &adapter(), &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
 
@@ -238,7 +240,7 @@ async fn a_route_that_is_no_longer_admitted_keeps_the_result_unknown_and_sends_n
         ),
     };
     let claim = claim_run(&admin, scope, run_id.clone()).await;
-    complete_agent_run(&store, &off, &NoContractFaults, &claim)
+    complete_agent_run(&store, &off, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
 

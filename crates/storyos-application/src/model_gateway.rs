@@ -1,16 +1,13 @@
 //! The Model Gateway: the only owner of the dispatch order for model destination requests.
 
-use storyos_core::NativeStreamItem;
-
 use crate::model_gateway_ports::{
     CommittedCancellation, ContractFaultObserver, ContractFaultPoint, CreatePurpose,
-    DestinationRequest, DispatchClaim, DispatchRecord, ModelDispatchStore, ModelProviderAdapter,
-    ModelStreamSink, ModelUsage, NextDispatchWork, Observation, RequestAttempt, ResponseReference,
-    StreamControl, StreamStop,
+    DestinationRequest, DispatchRecord, GatewayClock, ModelDispatchStore, ModelProviderAdapter,
+    ModelUsage, NextDispatchWork, Observation, RequestAttempt,
 };
+use crate::model_stream_commit::GatewaySink;
 use crate::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DiagnosticField, DiagnosticId,
-    SqlState,
 };
 
 /// Gets the next work, prepares, claims, exchanges with no open transaction, and records,
@@ -19,12 +16,14 @@ pub async fn complete_agent_run(
     store: &impl ModelDispatchStore,
     adapter: &impl ModelProviderAdapter,
     observer: &impl ContractFaultObserver,
+    clock: &impl GatewayClock,
     claim: &ClaimedAgentRun,
 ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
     let gateway = Gateway {
         store,
         adapter,
         observer,
+        clock,
         claim,
     };
     loop {
@@ -39,15 +38,16 @@ pub async fn complete_agent_run(
     }
 }
 
-struct Gateway<'a, S, A, O> {
+struct Gateway<'a, S, A, O, C> {
     store: &'a S,
     adapter: &'a A,
     observer: &'a O,
+    clock: &'a C,
     claim: &'a ClaimedAgentRun,
 }
 
-impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
-    Gateway<'_, S, A, O>
+impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver, C: GatewayClock>
+    Gateway<'_, S, A, O, C>
 {
     /// Sends one request in order. Returns the cancellation that stopped its stream, if any.
     #[tracing::instrument(skip_all, fields(
@@ -68,6 +68,7 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
             store,
             adapter,
             observer,
+            clock,
             claim,
         } = *self;
         let prepared = match adapter.prepare(&request).await {
@@ -100,16 +101,10 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
                 dispatch
             }
         };
-        let mut sink = GatewaySink {
-            store,
-            observer,
-            claim,
-            dispatch: &dispatch,
-            cancellation: None,
-        };
+        let mut sink = GatewaySink::new(store, observer, clock, claim, &dispatch);
         let observation = adapter.exchange(prepared.prepared, &mut sink).await;
         record_observation(&observation);
-        let cancellation = sink.cancellation;
+        let cancellation = sink.finish().await;
         store
             .record(
                 claim,
@@ -126,58 +121,6 @@ impl<S: ModelDispatchStore, A: ModelProviderAdapter, O: ContractFaultObserver>
             observer.reached(ContractFaultPoint::CompactionStaged).await;
         }
         Ok(cancellation)
-    }
-}
-
-struct GatewaySink<'a, S, O> {
-    store: &'a S,
-    observer: &'a O,
-    claim: &'a ClaimedAgentRun,
-    dispatch: &'a DispatchClaim,
-    cancellation: Option<CommittedCancellation>,
-}
-
-impl<S: ModelDispatchStore, O: ContractFaultObserver> ModelStreamSink for GatewaySink<'_, S, O> {
-    async fn append(&mut self, events: &[NativeStreamItem]) -> StreamControl {
-        self.commit(events, /*reference*/ None).await
-    }
-
-    async fn retain_reference(&mut self, reference: &ResponseReference) -> StreamControl {
-        self.commit(&[], Some(reference)).await
-    }
-}
-
-impl<S: ModelDispatchStore, O: ContractFaultObserver> GatewaySink<'_, S, O> {
-    async fn commit(
-        &mut self,
-        events: &[NativeStreamItem],
-        reference: Option<&ResponseReference>,
-    ) -> StreamControl {
-        match self
-            .store
-            .append_model_stream_events(self.claim, self.dispatch, events, reference)
-            .await
-        {
-            Ok(None) => {
-                self.observer
-                    .reached(ContractFaultPoint::StreamCommitted)
-                    .await;
-                StreamControl::Continue
-            }
-            Ok(Some(StreamStop::Cancelled(cancellation))) => {
-                self.cancellation = Some(cancellation);
-                StreamControl::Stop
-            }
-            Ok(Some(StreamStop::StaleFence)) => StreamControl::Stop,
-            Err(error) => {
-                tracing::warn!(
-                    reason = error.diagnostic(),
-                    sql_state = SqlState(&error).diagnostic(),
-                    "Model Stream Event append failed"
-                );
-                StreamControl::Stop
-            }
-        }
     }
 }
 

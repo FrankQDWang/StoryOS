@@ -13,6 +13,7 @@ use storyos_core::{
 };
 use tokio_postgres::Client;
 
+use crate::agent_run_dispatch::tests::RuntimeClock;
 use crate::agent_run_dispatch::tests::{admit_run, admit_run_in, claim_run, queued_run, stores};
 
 const AUTHORIZATION: &str =
@@ -99,7 +100,7 @@ async fn settle(
     adapter: &ScriptedAgentPlan,
 ) {
     let claim = claim_run(admin, scope.clone(), run_id.to_owned()).await;
-    complete_agent_run(store, adapter, &NoContractFaults, &claim)
+    complete_agent_run(store, adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
 }
@@ -413,7 +414,8 @@ async fn a_cancelled_qualification_request_refuses_its_abort_once_and_records_no
         aborts: Mutex::default(),
     };
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let fenced = complete_agent_run(&store, &adapter, &NoContractFaults, &claim).await;
+    let fenced =
+        complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim).await;
     let fence_token = admin
         .query_one(
             "UPDATE storyos.agent_runs
@@ -431,7 +433,14 @@ async fn a_cancelled_qualification_request_refuses_its_abort_once_and_records_no
         fence_token,
         ..claim
     };
-    let settled = complete_agent_run(&store, &adapter, &NoContractFaults, &cancelled).await;
+    let settled = complete_agent_run(
+        &store,
+        &adapter,
+        &NoContractFaults,
+        &RuntimeClock,
+        &cancelled,
+    )
+    .await;
     let row = admin
         .query_one(
             "SELECT run.status, run.wakeup_pending,
@@ -549,7 +558,8 @@ async fn a_response_after_cancellation_keeps_its_usage_and_cache_use_and_supplie
         run_id: run_id.clone(),
     };
     let claim = claim_run(&admin, scope.clone(), run_id.clone()).await;
-    let _settled = complete_agent_run(&store, &adapter, &NoContractFaults, &claim).await;
+    let _settled =
+        complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim).await;
     let row = admin
         .query_one(
             "SELECT run.status, attempt.decision_id::text, attempt.payload->>'usage',
@@ -670,7 +680,7 @@ async fn the_dispatch_claim_refuses_a_prior_reference_that_changed_after_prepara
         seen: Mutex::default(),
     };
     let claim = claim_run(&admin, scope.clone(), next.clone()).await;
-    complete_agent_run(&store, &adapter, &NoContractFaults, &claim)
+    complete_agent_run(&store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let attempts: Vec<Option<String>> = admin
@@ -763,7 +773,7 @@ async fn real_attempt_evidence(
         resolver: TestCredential,
     };
     let claim = claim_run(admin, scope.clone(), run_id.clone()).await;
-    complete_agent_run(store, &adapter, &NoContractFaults, &claim)
+    complete_agent_run(store, &adapter, &NoContractFaults, &RuntimeClock, &claim)
         .await
         .unwrap();
     let record = storyos_application::open_agent_run(store, &scope, &run_id)
