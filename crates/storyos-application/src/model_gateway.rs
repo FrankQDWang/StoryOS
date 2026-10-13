@@ -5,8 +5,8 @@ use storyos_core::NativeStreamItem;
 use crate::model_gateway_ports::{
     CommittedCancellation, ContractFaultObserver, ContractFaultPoint, CreatePurpose,
     DestinationRequest, DispatchClaim, DispatchRecord, ModelDispatchStore, ModelProviderAdapter,
-    ModelStreamSink, ModelUsage, NextDispatchWork, Observation, RequestAttempt, StreamControl,
-    StreamStop,
+    ModelStreamSink, ModelUsage, NextDispatchWork, Observation, RequestAttempt, ResponseReference,
+    StreamControl, StreamStop,
 };
 use crate::{
     ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, DiagnosticField, DiagnosticId,
@@ -133,9 +133,23 @@ struct GatewaySink<'a, S, O> {
 
 impl<S: ModelDispatchStore, O: ContractFaultObserver> ModelStreamSink for GatewaySink<'_, S, O> {
     async fn append(&mut self, events: &[NativeStreamItem]) -> StreamControl {
+        self.commit(events, /*reference*/ None).await
+    }
+
+    async fn retain_reference(&mut self, reference: &ResponseReference) -> StreamControl {
+        self.commit(&[], Some(reference)).await
+    }
+}
+
+impl<S: ModelDispatchStore, O: ContractFaultObserver> GatewaySink<'_, S, O> {
+    async fn commit(
+        &mut self,
+        events: &[NativeStreamItem],
+        reference: Option<&ResponseReference>,
+    ) -> StreamControl {
         match self
             .store
-            .append_model_stream_events(self.claim, self.dispatch, events)
+            .append_model_stream_events(self.claim, self.dispatch, events, reference)
             .await
         {
             Ok(None) => {
