@@ -1,6 +1,6 @@
 import { beforeAll } from "vitest";
 
-import { deleteJournal } from "./scenario.ts";
+import { deleteJournal } from "../browser-source/scenario.ts";
 
 /**
  * Clears the shared page state before each browser-source test file.
