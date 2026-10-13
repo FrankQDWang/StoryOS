@@ -5,15 +5,15 @@ use std::time::Duration;
 use storyos_core::{ModelAdapter, NativeStreamItem, StreamItemRole, StreamItemState};
 
 use crate::model_gateway_ports::{
-    DestinationRequest, DispatchClaim, DispatchRecord, GatewayClock, ModelDispatchStore,
-    ModelProviderAdapter, ModelStreamSink, NextDispatchWork, Observation, PreDispatchRefusal,
-    PreparedRequest, ReferenceRetrieval, ReportedBinding, RequestAttempt, RequestRoute,
-    ResponseReference, RetrievePurpose, RetrieveRequest, StreamControl, StreamStop,
-    WirePayloadProjection,
+    ContractFaultObserver, ContractFaultPoint, DestinationRequest, DispatchClaim, DispatchRecord,
+    GatewayClock, ModelDispatchStore, ModelProviderAdapter, ModelStreamSink, NextDispatchWork,
+    Observation, PreDispatchRefusal, PreparedRequest, ReferenceRetrieval, ReportedBinding,
+    RequestAttempt, RequestRoute, ResponseReference, RetrievePurpose, RetrieveRequest,
+    StreamControl, StreamStop, WirePayloadProjection,
 };
 use crate::{
-    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, NoContractFaults, ProjectId,
-    ProjectScope, UserId, complete_agent_run,
+    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, ProjectId, ProjectScope, UserId,
+    complete_agent_run,
 };
 
 /// One durable step that the store saw, in order.
@@ -23,6 +23,7 @@ enum Step {
         items: Vec<String>,
         reference: Option<String>,
     },
+    Reached(ContractFaultPoint),
     Record(Observation),
 }
 
@@ -119,6 +120,12 @@ impl ModelDispatchStore for ScriptedStore {
     }
 }
 
+impl ContractFaultObserver for ScriptedStore {
+    async fn reached(&self, point: ContractFaultPoint) {
+        self.steps.lock().unwrap().push(Step::Reached(point));
+    }
+}
+
 /// Streams the batches in order, one commit each, until the sink says stop.
 struct ScriptedStream {
     batches: Vec<Batch>,
@@ -206,7 +213,7 @@ async fn run(store: &ScriptedStore, stream: &ScriptedStream, clock: &RecordedClo
         fence_token: 1,
     };
     assert_eq!(
-        complete_agent_run(store, stream, &NoContractFaults, clock, &claim)
+        complete_agent_run(store, stream, store, clock, &claim)
             .await
             .unwrap(),
         CompleteAgentRun::Settled
@@ -219,6 +226,8 @@ fn append(items: &[&str], reference: Option<&str>) -> Step {
         reference: reference.map(str::to_owned),
     }
 }
+
+const COMMITTED: Step = Step::Reached(ContractFaultPoint::StreamCommitted);
 
 fn unknown() -> Step {
     Step::Record(Observation::OutcomeUnknown {
@@ -237,7 +246,13 @@ async fn a_contended_commit_runs_again_and_the_stream_continues() {
     assert_eq!(stream.controls(), vec![StreamControl::Continue; 2]);
     assert_eq!(
         store.steps(),
-        vec![append(&["a"], None), append(&["b"], None), unknown()]
+        vec![
+            append(&["a"], None),
+            COMMITTED,
+            append(&["b"], None),
+            COMMITTED,
+            unknown()
+        ]
     );
     assert_eq!(clock.waits(), 2);
 }
@@ -259,7 +274,9 @@ async fn exhausted_retries_keep_the_events_for_the_next_commit() {
         store.steps(),
         vec![
             append(&["a", "b"], Some("resp_1")),
+            COMMITTED,
             append(&["c"], None),
+            COMMITTED,
             unknown()
         ]
     );
@@ -274,7 +291,10 @@ async fn the_last_deferred_events_commit_before_the_observation() {
     run(&store, &stream, &clock).await;
 
     assert_eq!(stream.controls(), vec![StreamControl::Continue]);
-    assert_eq!(store.steps(), vec![append(&["a"], None), unknown()]);
+    assert_eq!(
+        store.steps(),
+        vec![append(&["a"], None), COMMITTED, unknown()]
+    );
 }
 
 #[tokio::test]

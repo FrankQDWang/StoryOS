@@ -62,7 +62,12 @@ impl<'a, S: ModelDispatchStore, O: ContractFaultObserver, C: GatewayClock>
             return self.cancellation;
         }
         match self.commit_pending().await {
-            Ok(None | Some(StreamStop::StaleFence)) => {}
+            Ok(None) => {
+                self.observer
+                    .reached(ContractFaultPoint::StreamCommitted)
+                    .await;
+            }
+            Ok(Some(StreamStop::StaleFence)) => {}
             Ok(Some(StreamStop::Cancelled(cancellation))) => self.cancellation = Some(cancellation),
             Err(error) => append_failed(&error),
         }

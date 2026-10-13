@@ -284,7 +284,7 @@ impl ModelDispatchStore for PostgresProjectReader {
                 transaction
                     .commit()
                     .await
-                    .map_err(complete_challenge_error)?;
+                    .map_err(|error| contention(complete_challenge_error(error)))?;
                 Ok(None)
             }
             stopped => {
