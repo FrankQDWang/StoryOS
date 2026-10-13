@@ -138,6 +138,8 @@ pub struct RetrieveRequest {
     pub purpose: RetrievePurpose,
     pub original_model_attempt_id: String,
     pub response_reference: String,
+    /// The Proposal targets that the original Create declared, so that its result maps the same.
+    pub declared_targets: Vec<DeclaredTarget>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

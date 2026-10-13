@@ -124,18 +124,7 @@ pub(crate) async fn create_request(
             "Invalid retained Context",
         )))
     })?;
-    let declared_targets =
-        crate::admitted_proposal_target::load_admitted_targets(client, claim, &run.chapter_id)
-            .await?
-            .into_iter()
-            .map(|target| DeclaredTarget {
-                chapter_id: target.chapter_id,
-                block_id: target.block_id,
-                base_revision_id: target.revision_id,
-                collection: target.collection,
-                block_text: target.block_text,
-            })
-            .collect();
+    let declared_targets = declared_targets(client, claim, &run.chapter_id).await?;
     let candidate_revision = crate::candidate_revision_target::admitted(client, claim)
         .await?
         .map(|candidate| {
@@ -173,6 +162,27 @@ pub(crate) async fn create_request(
             .await?,
         successor_of: None,
     })
+}
+
+/// The admitted Proposal targets that a request of the active decision declares.
+pub(crate) async fn declared_targets(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    chapter_id: &str,
+) -> Result<Vec<DeclaredTarget>, CompleteAgentRunError> {
+    Ok(
+        crate::admitted_proposal_target::load_admitted_targets(client, claim, chapter_id)
+            .await?
+            .into_iter()
+            .map(|target| DeclaredTarget {
+                chapter_id: target.chapter_id,
+                block_id: target.block_id,
+                base_revision_id: target.revision_id,
+                collection: target.collection,
+                block_text: target.block_text,
+            })
+            .collect(),
+    )
 }
 
 /// The destination reference of the prior binding that an incremental continuation sends.

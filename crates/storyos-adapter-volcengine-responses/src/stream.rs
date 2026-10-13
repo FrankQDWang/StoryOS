@@ -10,7 +10,7 @@ use storyos_application::{
     DeclaredTarget, ModelStreamSink, Observation, ReferenceRetrieval, ReportedBinding,
     ResponseReference, StreamControl,
 };
-use storyos_core::{NativeStreamItem, StreamItemState};
+use storyos_core::{NativeStreamItem, RetrievalBounds, StreamItemState};
 
 /// The ordered items of one stream, and the provisional events that wait for their commit.
 struct StreamState {
@@ -190,11 +190,15 @@ impl StreamState {
     }
 
     /// A dropped, stopped, or timed-out stream. The destination can still complete the response.
+    /// The destination documents a read-only GET of a stored response. The Host decides from the
+    /// Model Capability Profile whether it may send one.
     fn unknown(&self, mapping_revision: &str) -> Observation {
         Observation::OutcomeUnknown {
             response_reference: self.reference.as_ref().map(|reference| ResponseReference {
                 reference_id: reference.clone(),
-                retrieval: ReferenceRetrieval::Unsupported,
+                retrieval: ReferenceRetrieval::Supported {
+                    bounds: RetrievalBounds::DeclaredReadOnly,
+                },
                 reported_binding: ReportedBinding {
                     owner_user_id: None,
                     conversation_id: None,

@@ -72,7 +72,7 @@ pub(crate) async fn commit(
                 "kind": "provider_report",
                 "attempt_id": attempt_id,
                 "availability": "current",
-                "report": "host_fake_original_result_retrieval"
+                "report": format!("{}_original_result_retrieval", request.route.adapter.kind())
             },
             {
                 "kind": "provider_opaque",
@@ -132,12 +132,7 @@ pub(crate) async fn record_original_result(
     let subject = payload
         .get("original_result_retrieval")
         .ok_or_else(|| unavailable(std::io::Error::other("The retrieval subject is missing")))?;
-    let advance = RetrievalAdvance {
-        attempt_id: run.attempt_id.as_deref().unwrap_or_default(),
-        conversation_id: &run.conversation_id,
-        run_status: &run.status,
-        grant_admitted: crate::agent_run_work::grant_admitted(run),
-    };
+    let advance = RetrievalAdvance::of(run);
     let fenced = run.status == "cancelled";
     let retrieved = RetrievedResult::from(observation);
     let decision = decide(client, claim, subject, &advance, fenced, retrieved.kind).await?;

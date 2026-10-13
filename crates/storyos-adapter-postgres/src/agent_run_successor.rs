@@ -97,8 +97,10 @@ pub(crate) async fn advance(
     ));
     match decision {
         UnknownCreateSuccessorDecision::AlreadyDispatched => {
-            crate::agent_run_successor_dispatch::finish_dispatched(client, claim, &row, &marker)
-                .await
+            crate::agent_run_successor_dispatch::finish_dispatched(
+                client, claim, run, &row, &marker,
+            )
+            .await
         }
         UnknownCreateSuccessorDecision::ProhibitedByCancellation => {
             let consumed = flag(&marker, "allowance_consumed");
