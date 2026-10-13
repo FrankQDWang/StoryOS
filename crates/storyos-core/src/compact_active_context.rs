@@ -111,14 +111,148 @@ pub enum CompactionStep {
     LaterRequest,
 }
 
-/// Decides the next compaction step from the author request, the response chain of the
-/// Conversation, and the record state. With no prior response, nothing is to be compacted.
+/// The share, in percent, of the window after the output bound at which compaction starts
+/// (author decision on #1108).
+pub const COMPACTION_THRESHOLD_PERCENT: u64 = 80;
+
+/// The compaction threshold of one model and use binding: 80 percent of the window after the
+/// output bound. `None` when the output bound fills the window.
+pub fn compaction_threshold(window_tokens: u64, output_bound: u64) -> Option<u64> {
+    window_tokens
+        .checked_sub(output_bound)
+        .filter(|room| *room > 0)
+        .map(|room| room * COMPACTION_THRESHOLD_PERCENT / 100)
+}
+
+/// The facts that decide whether the next request compacts automatically.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompactionTrigger {
+    /// The context window of the profile, or `None` when no evidence states it.
+    pub window_tokens: Option<u64>,
+    /// The output bound of the use binding, or `None` when it is unknown.
+    pub output_bound: Option<u64>,
+    /// The reported input and output tokens of the last response of the chain, or `None` when
+    /// the destination did not report them.
+    pub prior_reported_tokens: Option<u64>,
+    /// The counted tokens of the new turn.
+    pub new_turn_tokens: u64,
+}
+
+/// Whether the expected input of the next request reaches the threshold. An unknown window, an
+/// unknown output bound, or unreported usage gives no automatic compaction.
+pub fn compaction_due(trigger: &CompactionTrigger) -> bool {
+    match (
+        trigger.window_tokens,
+        trigger.output_bound,
+        trigger.prior_reported_tokens,
+    ) {
+        (Some(window), Some(output_bound), Some(prior)) => {
+            compaction_threshold(window, output_bound)
+                .is_some_and(|threshold| prior.saturating_add(trigger.new_turn_tokens) >= threshold)
+        }
+        _ => false,
+    }
+}
+
+/// The loaded facts of the first decision request of an AgentRun and the prior response of its
+/// Conversation. The phase decides the compaction of the request from them.
+#[derive(Clone, Copy, Debug)]
+pub struct CompactionRequestFacts<'a> {
+    pub model_registration_revision: &'a str,
+    /// The stored request bounds of the use binding.
+    pub budget_bounds: &'a str,
+    pub author_message: &'a str,
+    /// The decision Context Assembly of the request, or `None` when it does not decode.
+    pub decision: Option<&'a crate::CurrentPassageAssemblyRecord>,
+    /// The reported input and output tokens of the prior response, or `None` when unreported.
+    pub prior_reported_tokens: Option<u64>,
+}
+
+impl CompactionTrigger {
+    /// The window of the pinned profile, the output bound of the use binding, and the expected
+    /// input of the request.
+    pub fn from_facts(facts: &CompactionRequestFacts<'_>) -> Self {
+        Self {
+            window_tokens: crate::model_registration(facts.model_registration_revision)
+                .and_then(|registration| registration.capability_profile.context_window)
+                .map(|window| window.tokens),
+            output_bound: crate::BudgetBounds::parse(facts.budget_bounds)
+                .and_then(crate::BudgetBounds::request_bounds)
+                .map(|bounds| u64::from(bounds.max_output_tokens)),
+            prior_reported_tokens: facts.prior_reported_tokens,
+            new_turn_tokens: facts.decision.map_or(/*default*/ 0, |record| {
+                record.selected.iter().map(|item| item.token_count).sum()
+            }),
+        }
+    }
+}
+
+/// Whether the decision request compacts first. The expected input can reach the threshold, or
+/// the author message can ask the Host fake to compact.
+pub fn compaction_requested(facts: &CompactionRequestFacts<'_>) -> bool {
+    (crate::model_registration(facts.model_registration_revision)
+        .is_some_and(|registration| registration.adapter == crate::ModelAdapter::HostFake)
+        && requests_active_compaction(facts.author_message))
+        || compaction_due(&CompactionTrigger::from_facts(facts))
+}
+
+/// The decision request after the compaction phase.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DecisionRequestKind {
+    /// The later request with the installed summary.
+    Later,
+    /// The request with the ordinary continuation.
+    Ordinary,
+    /// The AgentRun refuses before dispatch with `conversation_too_long`.
+    TooLong,
+}
+
+/// Decides the decision request after the compaction phase. A compaction that started and did
+/// not install leaves the full chain. When the expected input then reaches the window after the
+/// output bound, the request cannot fit.
+pub fn decision_request_kind(
+    installed: bool,
+    compaction_started: bool,
+    facts: Option<&CompactionRequestFacts<'_>>,
+) -> DecisionRequestKind {
+    if installed {
+        return DecisionRequestKind::Later;
+    }
+    match facts {
+        Some(facts)
+            if compaction_started
+                && conversation_too_long(&CompactionTrigger::from_facts(facts)) =>
+        {
+            DecisionRequestKind::TooLong
+        }
+        _ => DecisionRequestKind::Ordinary,
+    }
+}
+
+/// Whether the expected input reaches the window after the output bound. Then a request that
+/// keeps the full chain cannot fit. An unknown window, output bound, or usage gives `false`.
+pub fn conversation_too_long(trigger: &CompactionTrigger) -> bool {
+    match (
+        trigger.window_tokens,
+        trigger.output_bound,
+        trigger.prior_reported_tokens,
+    ) {
+        (Some(window), Some(output_bound), Some(prior)) => {
+            prior.saturating_add(trigger.new_turn_tokens) >= window.saturating_sub(output_bound)
+        }
+        _ => false,
+    }
+}
+
+/// Decides the next compaction step from the compaction request, the response chain of the
+/// Conversation, and the record state. With no prior response, nothing is to be compacted. A
+/// compaction that has a record continues, also when the request changes.
 pub fn next_compaction_step(
-    author_message: &str,
+    requested: bool,
     prior_response: bool,
     record: CompactionRecordState,
 ) -> CompactionStep {
-    if !requests_active_compaction(author_message) {
+    if !requested && record == CompactionRecordState::Absent {
         return CompactionStep::OrdinaryRequest;
     }
     match record {
