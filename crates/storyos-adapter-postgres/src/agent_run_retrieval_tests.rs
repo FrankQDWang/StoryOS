@@ -1,9 +1,10 @@
-use storyos_adapter_volcengine_responses::AgentPlanResponses;
+use storyos_adapter_volcengine_responses::{AgentPlanExchange, AgentPlanResponses};
 use storyos_application::{
-    CredentialReference, CredentialResolver, NoContractFaults, ResolvedCredential,
-    complete_agent_run,
+    CredentialReference, CredentialResolver, DestinationRequest, ModelProviderAdapter,
+    ModelStreamSink, NoContractFaults, Observation, PreDispatchRefusal, PreparedRequest,
+    ResolvedCredential, complete_agent_run,
 };
-use storyos_core::DeploymentDestination;
+use storyos_core::{DeploymentDestination, ModelAdapter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_postgres::Client;
 
@@ -24,6 +25,43 @@ impl CredentialResolver for TestCredential {
 fn adapter() -> AgentPlanResponses<TestCredential> {
     AgentPlanResponses {
         resolver: TestCredential,
+    }
+}
+
+/// The real adapter. After its Create exchange, the author turns assistance off.
+struct AssistanceOffAfterExchange<'a> {
+    admin: &'a Client,
+    project_id: String,
+}
+
+impl ModelProviderAdapter for AssistanceOffAfterExchange<'_> {
+    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
+    type Prepared = AgentPlanExchange;
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<AgentPlanExchange>, PreDispatchRefusal> {
+        adapter().prepare(request).await
+    }
+
+    async fn exchange(
+        &self,
+        prepared: AgentPlanExchange,
+        sink: &mut impl ModelStreamSink,
+    ) -> Observation {
+        let observation = adapter().exchange(prepared, sink).await;
+        self.admin
+            .batch_execute(&format!(
+                "SET session_replication_role = replica;
+                 UPDATE storyos.project_policy_revisions SET availability = 'unavailable'
+                  WHERE project_id = '{}';
+                 SET session_replication_role = DEFAULT;",
+                self.project_id
+            ))
+            .await
+            .unwrap();
+        observation
     }
 }
 
@@ -167,6 +205,41 @@ async fn a_dropped_stream_retrieves_once_and_keeps_an_unfinished_result_unknown(
                 "POST /api/plan/v3/responses HTTP/1.1".to_owned(),
                 "GET /api/plan/v3/responses/resp_c42 HTTP/1.1".to_owned(),
             ],
+        )
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_route_that_is_no_longer_admitted_keeps_the_result_unknown_and_sends_no_retrieve() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let (store, admin) = stores().await;
+    let (base, served) = destination(vec![broken_stream("resp_c44")]).await;
+    let (scope, run_id) = real_run(&store, &admin, "c44", &base).await;
+    let off = AssistanceOffAfterExchange {
+        admin: &admin,
+        project_id: scope.project_id.as_ref().to_owned(),
+    };
+    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    complete_agent_run(&store, &off, &NoContractFaults, &claim)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (recovery(&admin, &run_id).await, served.await.unwrap()),
+        (
+            [
+                Some("waiting".to_owned()),
+                Some(r#"{"kind": "outcome_unknown", "reason": "destination_mismatch"}"#.to_owned()),
+                None,
+                Some("kept_unknown".to_owned()),
+                Some("destination_mismatch".to_owned()),
+                Some("false".to_owned()),
+                Some("decision:true".to_owned()),
+            ],
+            vec!["POST /api/plan/v3/responses HTTP/1.1".to_owned()],
         )
     );
 }

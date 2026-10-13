@@ -485,9 +485,15 @@ async fn commit_retrieve(
         .await
         .map_err(complete_database_error)?
         .get::<_, i64>(0);
+    // The work phase decided with this admission. A change since then is changed work.
+    let assistance = read_assistance_record(client, &claim.project_scope)
+        .await
+        .map_err(|error| CompleteAgentRunError::Unavailable(Box::new(error)))?;
     if claimed > 0
         || (run.settled() && run.status != "cancelled")
         || !crate::agent_run_work::grant_admitted(run)
+        || !assistance
+            .is_some_and(|record| crate::agent_run_retrieval::route_admitted(run, &record))
     {
         return Ok(None);
     }
