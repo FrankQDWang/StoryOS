@@ -10,6 +10,7 @@
     "test/browser-exact-dist/**/*.ts",
     "test/support/browser-command-client.ts",
     "test/support/browser-command-contract.ts",
+    "test/support/browser-page-reset.ts",
     "test/support/manuscript-surface.ts"
   ]
 }

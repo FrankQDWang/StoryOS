@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 
 import type {
   DigestValue,
@@ -9,6 +9,8 @@ import { openEditorWorkspace } from "../../src/editor-session.ts";
 import type { PendingEditProjection } from "../../src/editor-types.ts";
 import { FIRST_APPEND_EDIT, SECOND_APPEND_EDIT } from "./local-edit-journal-append-fixture.ts";
 import {
+  OWNER,
+  PROJECT,
   SESSION,
   chapterRevision,
   closeTrackedDatabases,
@@ -24,6 +26,7 @@ import {
 } from "./scenario.ts";
 
 const APPLIED_REVISION = "018f0000-0000-7001-8000-000000000034";
+const ACTIVE_SESSION_KEY = `active_session:${OWNER}:${PROJECT}`;
 
 async function openRateLimitedEditor() {
   const scenario = createBrowserScenario();
@@ -106,10 +109,17 @@ async function openRateLimitedEditor() {
     async close() {
       idle.close();
       closeTrackedDatabases(openDatabases);
+      sessionStorage.removeItem(ACTIVE_SESSION_KEY);
       await deleteJournal(scenario.journalName);
     },
   };
 }
+
+// All browser test files share one sessionStorage. A later file must not read the
+// Editor Session of this file.
+afterAll(() => {
+  expect(sessionStorage.getItem(ACTIVE_SESSION_KEY)).toBeNull();
+});
 
 it("keeps an Author Edit saving through a Challenge rate limit and retries the same group", async () => {
   const editor = await openRateLimitedEditor();
