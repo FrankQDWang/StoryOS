@@ -430,7 +430,10 @@ impl ModelProviderAdapter for SuccessorProseChange {
             {
                 (
                     "sha256:retrieve",
-                    SuccessorPlan::Changes(changes(&retrieve.declared_targets, None)),
+                    SuccessorPlan::Changes(changes(
+                        &retrieve.declared_targets,
+                        /*block*/ None,
+                    )),
                 )
             }
             DestinationRequest::Retrieve(_) => ("sha256:retrieve", SuccessorPlan::Unknown),
