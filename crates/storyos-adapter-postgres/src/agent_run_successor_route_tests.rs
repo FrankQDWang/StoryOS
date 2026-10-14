@@ -498,9 +498,8 @@ impl ModelProviderAdapter for SuccessorProseChange {
     }
 }
 
-/// Completes one Run on `route`. Returns its status, the successor decision kind and Proposal
-/// kind, the Proposals of the Run as matches of the successor decision, the late evidence fact,
-/// and the Attempt roles.
+/// Completes one Run on `route` and returns its facts. Each Proposal of the Run shows if its
+/// source is the successor decision.
 async fn successor_proposal_facts(
     route: &SuccessorProseChange,
     prefix: &str,

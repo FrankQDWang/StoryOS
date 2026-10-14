@@ -190,7 +190,7 @@ pub(crate) async fn persist_create_result(
 /// Whether a selected prose change may open a streamed Proposal that holds the Run.
 pub(crate) enum ProposalStream {
     Permitted,
-    /// A successor settles its Run at once, so its Proposal opens whole.
+    /// A successor settles its Run at once, so all of its Proposal opens in one step.
     Excluded,
 }
 
