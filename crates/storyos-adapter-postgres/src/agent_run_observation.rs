@@ -155,10 +155,15 @@ pub(crate) async fn persist_create_result(
         }
         CreateSettlement::Rejected(reason) => {
             payload["rejection"] = serde_json::json!(reason);
-            // The author sees the refusal as one result sentence (ADR 0040).
+            // The author sees the refusal as one result sentence (ADR 0040). A real adapter
+            // appends the native code after the condition.
+            let capability = match reason.split(':').next() {
+                Some("input_too_long") => "conversation_too_long",
+                _ => "destination_refused",
+            };
             refusal = Some(serde_json::json!({
                 "kind": "execution_refused",
-                "capability": rejection_capability(reason)
+                "capability": capability
             }));
         }
     }
@@ -212,15 +217,6 @@ pub(crate) async fn persist_create_result(
         Some(kind) => WorkPhase::Hold(kind),
         None => WorkPhase::Done(CompleteAgentRun::Settled),
     })
-}
-
-/// The refused capability of a destination rejection of a Create. A real adapter appends the
-/// native code after the condition.
-fn rejection_capability(reason: &str) -> &'static str {
-    match reason.split(':').next() {
-        Some("input_too_long") => "conversation_too_long",
-        _ => "destination_refused",
-    }
 }
 
 /// Keeps the committed stream items in order. An item with a known item ID replaces that item.
