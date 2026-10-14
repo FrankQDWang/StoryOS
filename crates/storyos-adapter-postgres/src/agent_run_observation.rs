@@ -147,12 +147,25 @@ pub(crate) async fn persist_create_result(
             .to_owned();
         crate::provider_evidence::settle(&mut payload, &usage_kind, result.response_reference);
     }
+    let mut refusal = None;
     match result.settlement {
         CreateSettlement::Response => {}
         CreateSettlement::NotSubmitted => {
             payload["submission"] = serde_json::json!("not_submitted")
         }
-        CreateSettlement::Rejected(reason) => payload["rejection"] = serde_json::json!(reason),
+        CreateSettlement::Rejected(reason) => {
+            payload["rejection"] = serde_json::json!(reason);
+            // The author sees the refusal as one result sentence (ADR 0040). A real adapter
+            // appends the native code after the condition.
+            let capability = match reason.split(':').next() {
+                Some("input_too_long") => "conversation_too_long",
+                _ => "destination_refused",
+            };
+            refusal = Some(serde_json::json!({
+                "kind": "execution_refused",
+                "capability": capability
+            }));
+        }
     }
     crate::prose_change_decision::encode(
         &mut payload,
@@ -188,12 +201,12 @@ pub(crate) async fn persist_create_result(
     update_run(
         client,
         claim,
-        if hold.is_some() {
-            "claimed"
-        } else {
-            "completed"
+        match (&refusal, hold) {
+            (Some(_), _) => "refused",
+            (None, Some(_)) => "claimed",
+            (None, None) => "completed",
         },
-        /*settlement*/ None,
+        refusal.as_ref(),
         /*clear_lease*/ hold.is_none(),
     )
     .await?;

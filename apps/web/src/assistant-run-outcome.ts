@@ -6,6 +6,12 @@ export const NO_RESULT_SENTENCE = "没有收到这次的结果，正文没有改
 /** The sentence for a request after one without a result. The author approved it (ADR 0057). */
 export const PREVIOUS_REQUEST_UNRESOLVED_SENTENCE = "上一条请求还没有结果，请开始新对话。";
 
+/** The sentence for a request that the model destination refused. The author approved it (#1110). */
+export const DESTINATION_REFUSED_SENTENCE = "模型服务拒绝了这次请求，正文没有改动。你可以重试，或继续手动写作。";
+
+/** The sentence for a conversation that is too long for the model (ADR 0056). */
+export const CONVERSATION_TOO_LONG_SENTENCE = "这段对话已经太长，请开始一个新对话。你可以继续手动写作。";
+
 /**
  * A request whose recovery stopped without a result: an unknown outcome that waits, a paused
  * successor, or a successor that also gave no result. Nothing changes it later.

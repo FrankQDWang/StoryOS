@@ -603,10 +603,15 @@ async fn each_transport_outcome_maps_to_rejected_not_submitted_or_outcome_unknow
         response_reference: None,
     };
     let limited = r#"{"error":{"code":"RateLimitExceeded.EndpointRPM","message":"echo: Tighten"}}"#;
+    // The native body of an input above the window, as observed on 2026-10-14.
+    let too_long = r#"{"error":{"code":"InvalidParameter","message":"Total tokens of image and text exceed max message tokens. Request id: 0217","param":"","type":"BadRequest"}}"#;
+    let invalid = r#"{"error":{"code":"InvalidParameter","message":"The parameter is invalid."}}"#;
 
     assert_eq!(
         [
             exchange(Reply::Http(429, limited.to_owned())).await,
+            exchange(Reply::Http(400, too_long.to_owned())).await,
+            exchange(Reply::Http(400, invalid.to_owned())).await,
             exchange(Reply::Http(401, r#"{"error":{"code":"a b"}}"#.to_owned())).await,
             exchange(Reply::Http(500, "{}".to_owned())).await,
             exchange(Reply::Http(200, "not json".to_owned())).await,
@@ -616,6 +621,8 @@ async fn each_transport_outcome_maps_to_rejected_not_submitted_or_outcome_unknow
         ],
         [
             rejected("http_429:RateLimitExceeded.EndpointRPM"),
+            rejected("input_too_long:http_400:InvalidParameter"),
+            rejected("http_400:InvalidParameter"),
             rejected("http_401"),
             unknown.clone(),
             unknown.clone(),

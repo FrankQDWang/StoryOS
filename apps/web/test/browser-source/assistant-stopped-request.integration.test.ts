@@ -33,6 +33,12 @@ it.each([
   ["a request after one with no result", { status: "refused",
     decision: { kind: "execution_refused", capability: "expiry_rebuild_unknown_create" } },
   "上一条请求还没有结果，请开始新对话。"],
+  ["a request that the model destination refused", { status: "refused",
+    decision: { kind: "execution_refused", capability: "destination_refused" } },
+  "模型服务拒绝了这次请求，正文没有改动。你可以重试，或继续手动写作。"],
+  ["an input above the model window", { status: "refused",
+    decision: { kind: "execution_refused", capability: "conversation_too_long" } },
+  "这段对话已经太长，请开始一个新对话。你可以继续手动写作。"],
 ])("shows %s as a stopped request with one sentence and a new conversation", async (_, run, sentence) => {
   const scope = { owner_user_id: OWNER, project_id: PROJECT };
   sessionStorage.setItem(`prose_request:${OWNER}:${PROJECT}`, JSON.stringify({

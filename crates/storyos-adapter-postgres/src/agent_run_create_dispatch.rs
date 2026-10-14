@@ -303,3 +303,7 @@ async fn record_continuation_rejection(
         .map_err(crate::agent_run_work::complete_database_error)?;
     Ok(WorkPhase::Hold("rejection"))
 }
+
+#[cfg(test)]
+#[path = "agent_run_create_dispatch_tests.rs"]
+mod tests;
