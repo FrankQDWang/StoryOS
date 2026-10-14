@@ -438,8 +438,9 @@ export function createEditorSessionWritingController({
               return { proposalId };
             case "compensated":
               await refresh();
-              return { proposalId, currentChapterId: "project" in settled && settled.project.open.kind === "current_chapter"
-                ? settled.project.open.current_chapter_id : undefined };
+              // Input during the read abandons the Undo, so the editor keeps its Chapter (ADR 0038).
+              return { proposalId, currentChapterId: isCurrent() && "project" in settled
+                && settled.project.open.kind === "current_chapter" ? settled.project.open.current_chapter_id : undefined };
             default:
               onFailure(new Error("Author Undo did not compensate"));
               return undefined;
