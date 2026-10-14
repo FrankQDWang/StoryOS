@@ -87,10 +87,10 @@ async function waitWritableAndSynchronized(frame: HTMLIFrameElement): Promise<vo
 }
 
 // A new origin has no Journal database, so the client reads activity from the base snapshot.
-async function deleteJournalDatabases(): Promise<void> {
+async function deleteJournalDatabase(projectId: string): Promise<void> {
   const names = (await indexedDB.databases())
     .map((database) => database.name ?? "")
-    .filter((name) => name.startsWith(JOURNAL_DATABASE_PREFIX));
+    .filter((name) => name.startsWith(JOURNAL_DATABASE_PREFIX) && name.endsWith(`:${projectId}`));
   expect(names).toHaveLength(1);
   for (const name of names) {
     await new Promise<void>((resolve, reject) => {
@@ -138,7 +138,7 @@ it("synchronizes activity and keeps the editor writable after a takeover with no
     if (key.startsWith("active_session:") && key.endsWith(`:${projectId}`)) realm.sessionStorage.removeItem(key);
   }
   await unloadApplicationFrame(frame);
-  await deleteJournalDatabases();
+  await deleteJournalDatabase(projectId);
   const reloaded = nextFrameLoad(frame);
   frame.src = `/projects/${projectId}`;
   await reloaded;
