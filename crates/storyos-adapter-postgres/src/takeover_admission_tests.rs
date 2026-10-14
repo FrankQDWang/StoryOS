@@ -1,9 +1,10 @@
 use std::time::Duration;
 
 use storyos_application::{
-    AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId, IssueProjectCommandChallenge,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectCommandEnvelope, ProjectCommandError,
-    ProjectId, ProjectScope, TakeOverProjectWriterInput, TakeOverProjectWriterSettlement, UserId,
+    AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding, EditorSessionId,
+    IssueProjectCommandChallenge, OpenEditorSession, ProjectCommandChallengeBinding,
+    ProjectCommandEnvelope, ProjectCommandError, ProjectId, ProjectScope, SnapshotLookup,
+    SnapshotStore, TakeOverProjectWriterInput, TakeOverProjectWriterSettlement, UserId,
     WriterTakeover, create_editor_session, issue_project_command_challenge,
 };
 use storyos_core::{TakeOverProjectWriterNoEffect, TransitionOutcome};
@@ -422,7 +423,7 @@ fn assert_winner_base_handoff(
         base["snapshot_id"],
         before[resulting_editor_session_id]["snapshot_id"]
     );
-    assert_ne!(id, resulting_snapshot_id);
+    assert_eq!(id, resulting_snapshot_id);
     let mut expected = before.clone();
     expected[resulting_editor_session_id]["snapshot_id"] = base["snapshot_id"].clone();
     expected[resulting_editor_session_id]["created_at"] = base["created_at"].clone();
@@ -635,6 +636,30 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
     assert_complete_settlement(&settlement, &successful, &fixture);
     let settled_bases = base_rows(&admin, &fixture).await;
     assert_winner_base_handoff(&initial_bases, &settled_bases, &settlement);
+    let base_snapshot_id = settled_bases[&fixture.observer_one_session_id]["snapshot_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let resumed = store
+        .activity_resume(&SnapshotLookup {
+            project_scope: fixture.scope(),
+            snapshot_id: base_snapshot_id.clone(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        resumed,
+        CanonicalSnapshot {
+            snapshot_id: base_snapshot_id,
+            project_activity_position: 1,
+            replay_generation: 1,
+            floor_position: 0,
+            redaction_profile: "storyos.author.v1".to_owned(),
+            schema_profile: "storyos.public.release.1".to_owned(),
+            created_at: resumed.created_at.clone(),
+            expires_at: None,
+        }
+    );
     assert_eq!(
         take_over_project_writer(&store, &successful).await.unwrap(),
         settlement
