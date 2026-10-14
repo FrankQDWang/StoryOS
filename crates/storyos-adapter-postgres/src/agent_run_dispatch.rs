@@ -384,7 +384,9 @@ impl ModelDispatchStore for PostgresProjectReader {
                     crate::agent_run_successor_dispatch::record(
                         client,
                         claim,
+                        &run,
                         dispatch,
+                        request,
                         observation,
                     )
                     .await?
