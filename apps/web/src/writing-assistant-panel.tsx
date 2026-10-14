@@ -394,12 +394,22 @@ export function WritingAssistantPanel({
         const response = await getProposal({ baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
           projectId: context.scope.project_id, proposalId: selected.proposalId });
         if (response.project_scope.owner_user_id !== context.scope.owner_user_id
-          || response.project_scope.project_id !== context.scope.project_id
-          || response.proposal.chapter_id !== context.chapterId
-          || !response.proposal.operations.some((operation) => operation.operation_id === observedTarget.operationId
-            && operation.manuscript_block_id === observedTarget.blockId && operation.resolution === "pending"
-            && operation.reservation_state === "unresolved")) throw new Error("候选位置已变化。");
-        selected = { ...selected, revisionId: response.proposal.revision_id };
+          || response.project_scope.project_id !== context.scope.project_id) {
+          throw new Error("Working Target Scope mismatch");
+        }
+        const operation = response.proposal.operations.find((item) => item.operation_id === observedTarget.operationId);
+        if (response.proposal.closure !== "open"
+          || (operation !== undefined && operation.resolution !== "pending")) {
+          // A resolved candidate is not a Working Target, so the request goes to the Current Chapter.
+          selected = undefined;
+        } else if (operation === undefined || response.proposal.chapter_id !== context.chapterId
+          || operation.manuscript_block_id !== observedTarget.blockId
+          || operation.reservation_state !== "unresolved") {
+          setStatus("候选位置已变化。请在正文中重新选择候选，然后再发送。");
+          return;
+        } else {
+          selected = { ...selected, revisionId: response.proposal.revision_id };
+        }
       }
       const current: RequestReference = {
         scope: context.scope, message, chapterId: context.chapterId!,

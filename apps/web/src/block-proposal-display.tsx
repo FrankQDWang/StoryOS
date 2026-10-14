@@ -23,6 +23,7 @@ import { pendingReplanIds, replanDisplayedBlockProposal, retryPendingDisplayedRe
 import { authorWithdrawControlReady, dispatchDisplayedWithdraw, dispatchDisplayedWithdrawRetry,
   pendingWithdrawIds } from "./withdraw-block-proposal.ts";
 import { ProposalDecisionStatus } from "./proposal-decision-status.tsx";
+import { useCandidateFocusRelease } from "./candidate-focus-release.ts";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
@@ -85,6 +86,7 @@ export function BlockProposalDisplay({
   cryptoImpl: Crypto;
 }) {
   const [reads, setReads] = useState<ProposalRead[]>([]);
+  const onCandidateFocus = useCandidateFocusRelease(reads, editorProps.onCandidateFocus);
   const writing = useSyncExternalStore(editorProps.writing?.subscribe ?? ignoreChanges,
     () => editorProps.writing?.snapshot());
   const settlements = writing?.settlements ?? 0;
@@ -771,6 +773,7 @@ export function BlockProposalDisplay({
           && accepting === undefined
           && pendingAcceptances.length === 0}
         proposals={projections}
+        onCandidateFocus={onCandidateFocus}
         onCandidateSettled={(proposalId) => {
           if (typeof proposalId === "string" && proposalId.length > 0) {
             setRecoveredProposalIds((current) => current.includes(proposalId)
