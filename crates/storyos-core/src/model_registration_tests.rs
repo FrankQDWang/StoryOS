@@ -81,6 +81,8 @@ fn the_head_profile_records_the_window_and_the_pending_profile_does_not_qualify_
         (
             [
                 window(&AGENT_PLAN_REGISTRATION),
+                window(&AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION),
+                window(&AGENT_PLAN_RECOVERY_REGISTRATION),
                 window(&AGENT_PLAN_WINDOW_PENDING_REGISTRATION),
                 window(&AGENT_PLAN_COMPACTION_REGISTRATION),
                 window(&HOST_FAKE_REGISTRATION),
@@ -88,7 +90,18 @@ fn the_head_profile_records_the_window_and_the_pending_profile_does_not_qualify_
             AGENT_PLAN_WINDOW_PENDING_REGISTRATION.qualified(),
             AGENT_PLAN_REGISTRATION.qualified(),
         ),
-        ([Some(262_144), Some(262_144), None, None], false, true)
+        (
+            [
+                Some(1_048_576),
+                Some(1_048_576),
+                Some(262_144),
+                Some(262_144),
+                None,
+                None
+            ],
+            false,
+            true
+        )
     );
 }
 
@@ -103,9 +116,51 @@ fn only_a_qualified_profile_or_an_authorized_qualification_of_its_requirement_re
             AGENT_PLAN_RECOVERY_PENDING_REGISTRATION.retrieves(Qualified),
             AGENT_PLAN_RECOVERY_PENDING_REGISTRATION.retrieves(QualificationAuthorized),
             AGENT_PLAN_RECOVERY_PENDING_REGISTRATION.qualified(),
+            AGENT_PLAN_RECOVERY_REGISTRATION.retrieves(Qualified),
+            AGENT_PLAN_RECOVERY_REGISTRATION.qualified(),
+            AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION.retrieves(Qualified),
+            AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION.retrieves(QualificationAuthorized),
+            AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION.qualified(),
             AGENT_PLAN_REGISTRATION.retrieves(Qualified),
             AGENT_PLAN_REGISTRATION.qualified(),
         ],
-        [true, false, false, true, false, true, true]
+        [
+            true, false, false, true, false, true, true, false, true, false, true, true
+        ]
+    );
+}
+
+#[test]
+fn the_head_registration_pins_a_dated_version_and_each_revision_is_distinct() {
+    let agent_plan: Vec<_> = [
+        "fa02", "fa03", "fa04", "fa05", "fa06", "fa07", "fa08", "fa09", "fa10", "fa11", "fa12",
+        "fa13", "fa14", "fa15",
+    ]
+    .iter()
+    .map(|suffix| {
+        model_registration(&format!("018f0000-0000-7001-8000-00000000{suffix}"))
+            .map(|registration| registration.provider_model_id)
+    })
+    .collect();
+
+    assert_eq!(
+        (
+            agent_plan,
+            AGENT_PLAN_REGISTRATION.revision,
+            AGENT_PLAN_REGISTRATION.capability_profile.revision,
+            AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION
+                .capability_profile
+                .revision,
+        ),
+        (
+            [
+                vec![Some("doubao-seed-2.1-pro"); 12],
+                vec![Some("doubao-seed-2-1-pro-260915"); 2]
+            ]
+            .concat(),
+            "018f0000-0000-7001-8000-00000000fa15",
+            "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v2",
+            "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v1",
+        )
     );
 }

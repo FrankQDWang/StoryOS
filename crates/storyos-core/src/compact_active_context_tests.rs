@@ -148,6 +148,9 @@ fn the_threshold_is_eighty_percent_of_the_window_after_the_output_bound() {
     assert_eq!(
         (
             compaction_threshold(/*window_tokens*/ 262_144, /*output_bound*/ 32_768),
+            compaction_threshold(
+                /*window_tokens*/ 1_048_576, /*output_bound*/ 32_768
+            ),
             compaction_threshold(/*window_tokens*/ 8_192, /*output_bound*/ 8_192),
             [
                 trigger(doubao.0, doubao.1, Some(180_000), 3_500),
@@ -166,6 +169,7 @@ fn the_threshold_is_eighty_percent_of_the_window_after_the_output_bound() {
         ),
         (
             Some(183_500),
+            Some(812_646),
             None,
             [true, false, false, false, false],
             [true, false, false],
@@ -326,14 +330,17 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
         prior_reported_tokens: prior,
     };
     let agent_plan = crate::AGENT_PLAN_REGISTRATION.revision;
+    let undated = crate::AGENT_PLAN_RECOVERY_REGISTRATION.revision;
     let host_fake = crate::HOST_FAKE_REGISTRATION.revision;
-    let near_window = facts(agent_plan, "Help again.", Some(229_400));
+    let near_window = facts(agent_plan, "Help again.", Some(1_015_900));
 
     assert_eq!(
         (
             [
+                facts(agent_plan, "Help again.", Some(812_646)),
+                facts(agent_plan, "Help again.", Some(812_645)),
+                facts(undated, "Help again.", Some(183_500)),
                 facts(agent_plan, "Help again.", Some(183_500)),
-                facts(agent_plan, "Help again.", Some(183_499)),
                 facts(agent_plan, ACTIVE_COMPACTION_REQUEST_PREFIX, Some(10)),
                 facts(host_fake, ACTIVE_COMPACTION_REQUEST_PREFIX, Some(10)),
                 facts(host_fake, "Help again.", Some(300_000)),
@@ -346,13 +353,13 @@ fn the_phase_requests_compaction_from_the_threshold_or_the_host_fake_prefix() {
                 super::decision_request_kind(
                     false,
                     true,
-                    Some(&facts(agent_plan, "Help again.", Some(229_375)))
+                    Some(&facts(agent_plan, "Help again.", Some(1_015_807)))
                 ),
                 super::decision_request_kind(false, true, None),
             ],
         ),
         (
-            [true, false, false, true, false],
+            [true, false, true, false, false, true, false],
             [
                 super::DecisionRequestKind::Later,
                 super::DecisionRequestKind::TooLong,

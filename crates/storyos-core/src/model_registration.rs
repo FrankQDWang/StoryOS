@@ -48,7 +48,8 @@ pub struct ModelRegistration {
     pub revision: &'static str,
     pub adapter: ModelAdapter,
     pub api_surface: &'static str,
-    /// The exact provider model identifier. It is never an alias such as "latest".
+    /// The exact provider model identifier. When the provider publishes dated versions, it is a
+    /// dated version identifier, never an undated name or an alias such as "latest" (ADR 0059).
     pub provider_model_id: &'static str,
     /// The exact wire mapping revision of the adapter.
     pub mapping_revision: &'static str,
@@ -666,7 +667,7 @@ const AGENT_PLAN_RECOVERY_QUALIFICATION: CapabilityEvidence = CapabilityEvidence
 
 /// The profile after the qualification of retrieval. The route has no abort operation, so the
 /// abort entry stays unknown (ADR 0057).
-pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
+pub const AGENT_PLAN_RECOVERY_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
     revision: "storyos.volcengine-agent-plan.doubao-seed-2.1-pro.capability.v12",
     entries: CapabilityEntries {
         retrieval: AGENT_PLAN_RECOVERY_QUALIFICATION,
@@ -677,6 +678,87 @@ pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilit
         CapabilityCombination {
             members: RECOVERY_REQUIREMENT,
             evidence: AGENT_PLAN_RECOVERY_QUALIFICATION,
+        },
+        CapabilityCombination {
+            members: &[
+                ModelCapability::Continuation,
+                ModelCapability::ExplicitCache,
+            ],
+            evidence: documented(ARK_CONTEXT_CACHE),
+        },
+        CapabilityCombination {
+            members: &[
+                ModelCapability::ExplicitCache,
+                ModelCapability::StructuredText,
+            ],
+            evidence: documented(ARK_CONTEXT_CACHE),
+        },
+    ],
+};
+
+const ARK_MODEL_LIST_260915: &str = "Ark model list, docs.volcengine.com/docs/82379/1799865, \
+     updated 2026-10-09: doubao-seed-2-1-pro-260915 has a 1024K context window, a 1024K input, and \
+     a 256K answer";
+
+/// The documented context window of `doubao-seed-2-1-pro-260915`: 1024K, 1,048,576 tokens.
+const AGENT_PLAN_PINNED_VERSION_WINDOW: ContextWindow = ContextWindow {
+    tokens: 1_048_576,
+    evidence: documented(ARK_MODEL_LIST_260915),
+};
+
+/// The first profile of the dated version `doubao-seed-2-1-pro-260915`, before its runtime
+/// qualification. The evidence of the undated identifier does not apply to it (ADR 0059).
+pub const AGENT_PLAN_PINNED_VERSION_PENDING_CAPABILITY_PROFILE: ModelCapabilityProfile =
+    ModelCapabilityProfile {
+        revision: "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v1",
+        entries: AGENT_PLAN_PENDING_CAPABILITY_PROFILE.entries,
+        context_window: Some(AGENT_PLAN_PINNED_VERSION_WINDOW),
+        combinations: &[
+            CapabilityCombination {
+                members: RECOVERY_REQUIREMENT,
+                evidence: CapabilityEvidence::Unknown,
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::Continuation,
+                    ModelCapability::ExplicitCache,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+            CapabilityCombination {
+                members: &[
+                    ModelCapability::ExplicitCache,
+                    ModelCapability::StructuredText,
+                ],
+                evidence: documented(ARK_CONTEXT_CACHE),
+            },
+        ],
+    };
+
+const AGENT_PLAN_PINNED_VERSION_QUALIFICATION: CapabilityEvidence = CapabilityEvidence::Qualified {
+    evidence: "Authorized qualification of doubao-seed-2-1-pro-260915 on 2026-10-14: \
+               docs/research/agent-plan-pinned-version-qualification-2026-10-14.md",
+};
+
+/// The profile of the dated version after its runtime qualification. The route has no abort
+/// operation, so the abort entry stays unknown (ADR 0057). The window keeps its documented
+/// evidence.
+pub const AGENT_PLAN_CAPABILITY_PROFILE: ModelCapabilityProfile = ModelCapabilityProfile {
+    revision: "storyos.volcengine-agent-plan.doubao-seed-2-1-pro-260915.capability.v2",
+    entries: CapabilityEntries {
+        transport: AGENT_PLAN_PINNED_VERSION_QUALIFICATION,
+        native_text: AGENT_PLAN_PINNED_VERSION_QUALIFICATION,
+        continuation: AGENT_PLAN_PINNED_VERSION_QUALIFICATION,
+        streaming: AGENT_PLAN_PINNED_VERSION_QUALIFICATION,
+        host_compaction: AGENT_PLAN_PINNED_VERSION_QUALIFICATION,
+        retrieval: AGENT_PLAN_PINNED_VERSION_QUALIFICATION,
+        ..AGENT_PLAN_PENDING_CAPABILITY_PROFILE.entries
+    },
+    context_window: Some(AGENT_PLAN_PINNED_VERSION_WINDOW),
+    combinations: &[
+        CapabilityCombination {
+            members: RECOVERY_REQUIREMENT,
+            evidence: AGENT_PLAN_PINNED_VERSION_QUALIFICATION,
         },
         CapabilityCombination {
             members: &[
@@ -799,11 +881,29 @@ pub const AGENT_PLAN_RECOVERY_PENDING_REGISTRATION: ModelRegistration = ModelReg
     ..AGENT_PLAN_THRESHOLD_REGISTRATION
 };
 
-/// The current Agent Plan Registration: the compaction mapping with qualified retrieval.
-pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+/// The compaction mapping with qualified retrieval on the undated identifier. An AgentRun that
+/// pinned it refuses with Registration drift.
+pub const AGENT_PLAN_RECOVERY_REGISTRATION: ModelRegistration = ModelRegistration {
     revision: "018f0000-0000-7001-8000-00000000fa13",
-    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    capability_profile: &AGENT_PLAN_RECOVERY_CAPABILITY_PROFILE,
     ..AGENT_PLAN_RECOVERY_PENDING_REGISTRATION
+};
+
+/// The same mapping on the dated version `doubao-seed-2-1-pro-260915`, with the pending profile.
+/// An AgentRun that pinned it refuses with Registration drift.
+pub const AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa14",
+    provider_model_id: "doubao-seed-2-1-pro-260915",
+    capability_profile: &AGENT_PLAN_PINNED_VERSION_PENDING_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_RECOVERY_REGISTRATION
+};
+
+/// The current Agent Plan Registration: the dated version with the qualified profile. A later
+/// provider version is a new Registration that the author approves (ADR 0059).
+pub const AGENT_PLAN_REGISTRATION: ModelRegistration = ModelRegistration {
+    revision: "018f0000-0000-7001-8000-00000000fa15",
+    capability_profile: &AGENT_PLAN_CAPABILITY_PROFILE,
+    ..AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION
 };
 
 /// The known Registration of a stored revision. `None` is an unknown or damaged revision.
@@ -821,6 +921,8 @@ pub fn model_registration(revision: &str) -> Option<&'static ModelRegistration> 
         &AGENT_PLAN_WINDOW_PENDING_REGISTRATION,
         &AGENT_PLAN_THRESHOLD_REGISTRATION,
         &AGENT_PLAN_RECOVERY_PENDING_REGISTRATION,
+        &AGENT_PLAN_RECOVERY_REGISTRATION,
+        &AGENT_PLAN_PINNED_VERSION_PENDING_REGISTRATION,
         &AGENT_PLAN_REGISTRATION,
     ]
     .into_iter()
