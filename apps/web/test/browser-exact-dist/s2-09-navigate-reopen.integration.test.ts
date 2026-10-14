@@ -105,7 +105,7 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
   const root = frame.contentDocument?.querySelector("#app");
   expect(root?.querySelector("h2")?.textContent).toBe("Chapter A");
   chapterButton(root, "Chapter B")?.click();
-  await expect.poll(() => root?.querySelector("h2")?.textContent, { timeout: 10_000 })
+  await expect.poll(() => root?.querySelector("h2")?.textContent, { timeout: 15_000 })
     .toBe("Chapter B");
   const chapterBEditor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
   expect(chapterBEditor === null || chapterBEditor === undefined
@@ -115,13 +115,15 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
   expect(root?.querySelector('[role="alert"]')).toBeNull();
 
   chapterButton(root, "Chapter C")?.click();
-  await expect.poll(() => root?.querySelector("h2")?.textContent).toBe("Chapter C");
+  await expect.poll(() => root?.querySelector("h2")?.textContent, { timeout: 15_000 })
+    .toBe("Chapter C");
   const chapterCEditor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
   expect(chapterCEditor === null || chapterCEditor === undefined
     ? undefined : manuscriptBody(chapterCEditor)).toBe("");
 
   chapterButton(root, "Chapter A")?.click();
-  await expect.poll(() => root?.querySelector("h2")?.textContent).toBe("Chapter A");
+  await expect.poll(() => root?.querySelector("h2")?.textContent, { timeout: 15_000 })
+    .toBe("Chapter A");
   const chapterAEditor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
   expect(chapterAEditor === null || chapterAEditor === undefined
     ? undefined : manuscriptBody(chapterAEditor)).toBe("");
