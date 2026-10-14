@@ -57,7 +57,7 @@ fn a_prose_change_can_change_a_subset_of_the_declared_targets_once_each() {
     });
     let with_changes = |blocks: &[&str]| {
         let mut output = prose_change("block-1");
-        let template = output.prose_changes.take().unwrap().remove(0);
+        let template = output.prose_changes.take().unwrap().pop().unwrap();
         output.prose_changes = Some(
             blocks
                 .iter()

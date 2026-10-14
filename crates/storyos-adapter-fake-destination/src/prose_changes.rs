@@ -46,7 +46,7 @@ pub(crate) fn produce_fake_prose_changes(
     if author_message.ends_with("SCRIPT:reverse_locations") {
         candidates.reverse();
     } else if author_message.ends_with("SCRIPT:partial_location") {
-        candidates.drain(..candidates.len().saturating_sub(1));
+        candidates = candidates.pop().into_iter().collect();
     } else if author_message.ends_with("SCRIPT:duplicate_location")
         && let [first, second, ..] = candidates.as_mut_slice()
     {

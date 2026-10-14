@@ -70,7 +70,7 @@ async fn open_chapter(
             .filter(|target| candidate_by_block.contains_key(target.block_id.as_str()))
             .collect()
     } else {
-        targets.into_iter().take(1).collect()
+        targets.into_iter().take(/*n*/ 1).collect()
     };
     let mut locations = Vec::new();
     let mut validation_result = "invalid";
