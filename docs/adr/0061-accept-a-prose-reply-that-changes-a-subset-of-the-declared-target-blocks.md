@@ -8,17 +8,17 @@ On 2026-10-14, the author selected the coverage rule of a prose change reply. Th
 
 ## Context
 
-The Stage 3 rule required one change for each declared target block, and no other change. In the S4-05 live journey ([#396](https://github.com/FrankQDWang/StoryOS/issues/396)), the Working Target declared the two paragraphs of a Chapter, and the author asked to expand only the second paragraph. The model returned one valid change for the second paragraph. The validation refused the reply, no Proposal opened, and the author saw a sentence that did not tell the cause. The author paid for the request. An instruction that changes only a part of the target is a usual author request.
+The Stage 3 rule required one change for each declared target block, and no other change. Then the S4-05 live journey ([#396](https://github.com/FrankQDWang/StoryOS/issues/396)) sent a request with two paragraphs of a Chapter as the declared targets. The author asked to expand only the second paragraph. The model returned one valid change for the second paragraph. The validation refused the reply, no Proposal opened, and the author saw a sentence that did not tell the cause. An instruction that changes only a part of the target is a usual author request.
 
 ## Decision
 
 - A valid prose change reply changes a subset of the declared target blocks. It has at least one change.
 - Each change is for a declared target block, with the declared base revision of that block. Two changes for the same block are not valid.
-- A change for an undeclared block, a duplicate change, an empty change list, or a change that is not valid for another reason refuses the whole reply. Then no Proposal opens.
+- A change for an undeclared block makes the reply not valid. A duplicate change, a change that is not valid for another reason, or no change also makes the reply not valid. StoryOS refuses all of such a reply, and no Proposal opens.
 - A declared target block that the reply does not change keeps its text. It has no Proposal Operation and no location in the Agent Decision.
 - A Chapter of the Working Target that has no changed block gets no Proposal.
 - The first Create, the Retrieve of a stored response, and the successor Create use the same rule.
-- The Host instructions of the Agent Plan request tell the model to give one change for each target block that it changes, and to leave out each target block that it does not change.
+- The Host instructions of the Agent Plan request tell the model the rule. The model gives one change for each target block that it changes. It leaves out each target block that it does not change.
 
 ## Considered options
 

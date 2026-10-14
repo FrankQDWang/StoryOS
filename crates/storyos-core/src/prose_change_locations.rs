@@ -11,8 +11,8 @@ pub struct ProseChangeCandidate {
     pub explanation: String,
 }
 
-/// Validate the whole result before any candidate can open: one or more changes, each for a
-/// different declared target with its declared base (ADR 0061).
+/// Validate all of the result before any candidate can open (ADR 0061). Each change is for a
+/// different declared target with its declared base, and one or more changes are necessary.
 pub fn prose_changes_match_targets(
     targets: &[(String, String, String)],
     candidates: &[ProseChangeCandidate],
