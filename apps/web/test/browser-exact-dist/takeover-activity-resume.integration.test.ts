@@ -122,9 +122,11 @@ it("synchronizes activity and keeps the editor writable after a takeover with no
   await beginInlineChapterCreation(frame.contentDocument);
   await submitForm(frame, '#app form[data-create-chapter] input[name="chapter-title"]', "Chapter A");
   await expect.poll(() => appRoot(frame).getAttribute("data-boot-state")).toBe("project-ready");
+  const chapterSelector = 'nav[aria-label="稿件目录"] button[data-chapter-id]';
+  await expect.poll(() => appRoot(frame).querySelector(chapterSelector)?.getAttribute("data-chapter-id") ?? "")
+    .not.toBe("");
   const projectId = appRoot(frame).querySelector("[data-project-id]")?.getAttribute("data-project-id");
-  const chapterId = appRoot(frame).querySelector('nav[aria-label="稿件目录"] button[data-chapter-id]')
-    ?.getAttribute("data-chapter-id");
+  const chapterId = appRoot(frame).querySelector(chapterSelector)?.getAttribute("data-chapter-id");
   if (projectId === null || projectId === undefined || chapterId === null || chapterId === undefined) {
     throw new Error("the Project or Chapter identity is missing");
   }
