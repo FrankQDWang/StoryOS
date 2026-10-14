@@ -386,3 +386,205 @@ async fn a_retrieved_prose_change_settles_with_its_proposal_and_sends_no_success
         )
     );
 }
+
+/// An Agent Plan route whose first Create outcome stays unknown. The successor Create returns a
+/// prose change of `successor_block`, or of each declared target when it is `None`. The late
+/// Retrieve of the predecessor returns a complete prose change of each declared target.
+struct SuccessorProseChange {
+    successor_block: Option<&'static str>,
+}
+
+enum SuccessorPlan {
+    Unknown,
+    Changes(Vec<ProseChangeCandidate>),
+}
+
+impl ModelProviderAdapter for SuccessorProseChange {
+    const ADAPTERS: &'static [ModelAdapter] = &[ModelAdapter::VolcengineAgentPlanResponses];
+    type Prepared = SuccessorPlan;
+
+    async fn prepare(
+        &self,
+        request: &DestinationRequest,
+    ) -> Result<PreparedRequest<Self::Prepared>, PreDispatchRefusal> {
+        let changes = |targets: &[storyos_application::DeclaredTarget], block: Option<&str>| {
+            targets
+                .iter()
+                .map(|target| ProseChangeCandidate {
+                    chapter_id: target.chapter_id.clone(),
+                    base_authoritative_revision_id: target.base_revision_id.clone(),
+                    manuscript_block_id: block.unwrap_or(&target.block_id).to_owned(),
+                    candidate_text: "Rain hit the roof.".to_owned(),
+                    explanation: "Shorter.".to_owned(),
+                })
+                .collect()
+        };
+        let (digest, prepared) = match request {
+            DestinationRequest::Create(create) if create.successor_of.is_some() => (
+                "sha256:create",
+                SuccessorPlan::Changes(changes(&create.declared_targets, self.successor_block)),
+            ),
+            DestinationRequest::Create(_) => ("sha256:create", SuccessorPlan::Unknown),
+            DestinationRequest::Retrieve(retrieve)
+                if retrieve.purpose == storyos_application::RetrievePurpose::LateResult =>
+            {
+                (
+                    "sha256:retrieve",
+                    SuccessorPlan::Changes(changes(&retrieve.declared_targets, None)),
+                )
+            }
+            DestinationRequest::Retrieve(_) => ("sha256:retrieve", SuccessorPlan::Unknown),
+            DestinationRequest::Abort(_) => return Err(PreDispatchRefusal::UnsupportedRequest),
+        };
+        Ok(PreparedRequest {
+            projection: WirePayloadProjection {
+                execution_profile: "storyos.volcengine-agent-plan.execution.v1".to_owned(),
+                mapping_revision: AGENT_PLAN_REGISTRATION.mapping_revision.to_owned(),
+                digest: digest.to_owned(),
+                serialized_payload: None,
+                cache_setting: None,
+            },
+            prepared,
+        })
+    }
+
+    async fn exchange(
+        &self,
+        prepared: Self::Prepared,
+        _sink: &mut impl ModelStreamSink,
+    ) -> Observation {
+        let SuccessorPlan::Changes(changes) = prepared else {
+            return Observation::OutcomeUnknown {
+                response_reference: Some(ResponseReference {
+                    reference_id: "resp_1d".to_owned(),
+                    retrieval: ReferenceRetrieval::Supported {
+                        bounds: RetrievalBounds::DeclaredReadOnly,
+                    },
+                    reported_binding: ReportedBinding {
+                        owner_user_id: None,
+                        conversation_id: None,
+                        destination_identity: None,
+                        mapping_revision: AGENT_PLAN_REGISTRATION.mapping_revision.to_owned(),
+                    },
+                }),
+            };
+        };
+        Observation::Terminal(ModelResponse {
+            items: vec![NativeStreamItem {
+                item_id: "msg_01".to_owned(),
+                role: StreamItemRole::Assistant,
+                state: StreamItemState::Complete,
+                text: Some("Shorter.".to_owned()),
+                summary: None,
+                call_id: None,
+                arguments: None,
+                refusal: None,
+                hosted_report: None,
+            }],
+            output: Some(ModelOutput {
+                phase: OutputPhase::FinalAnswer,
+                candidate: DecisionCandidate::ProseChange {
+                    text: "Shorter.".to_owned(),
+                },
+                prose_changes: Some(changes),
+            }),
+            usage: ModelUsage::Reported {
+                input_tokens: 40,
+                output_tokens: 12,
+            },
+            cache_use: CacheUse::Unknown,
+            response_reference: Some("resp_1d".to_owned()),
+        })
+    }
+}
+
+/// Completes one Run on `route`. Returns its status, the successor decision kind and Proposal
+/// kind, the Proposals of the Run as matches of the successor decision, the late evidence fact,
+/// and the Attempt roles.
+async fn successor_proposal_facts(
+    route: &SuccessorProseChange,
+    prefix: &str,
+) -> [Option<String>; 6] {
+    let (store, admin) = stores().await;
+    let (scope, _, run_id) = queued_run(
+        &store,
+        prefix,
+        DeploymentDestination::VolcengineAgentPlan {
+            qualification_authorization: None,
+        },
+    )
+    .await;
+    let claim = claim_run(&admin, scope, run_id.clone()).await;
+    complete_agent_run(&store, route, &NoContractFaults, &RuntimeClock, &claim)
+        .await
+        .unwrap();
+    let row = admin
+        .query_one(
+            "SELECT run.status, successor.payload->'decision'->>'kind',
+                    successor.payload->'decision'->'opened_proposal'->>'kind',
+                    (SELECT string_agg(
+                              (proposal.source_decision_id = successor.decision_id)::text, ',')
+                       FROM storyos.proposals AS proposal
+                      WHERE proposal.source_run_id = run.run_id),
+                    decision.payload->'unknown_create_successor'->>'late_evidence_applied',
+                    (SELECT string_agg(attempt.attempt_role, ',' ORDER BY attempt.model_attempt_id)
+                       FROM storyos.model_attempts AS attempt
+                      WHERE attempt.run_id = run.run_id)
+               FROM storyos.agent_runs AS run
+               JOIN storyos.model_attempts AS decision
+                 ON decision.run_id = run.run_id AND decision.attempt_role = 'decision'
+               JOIN storyos.model_attempts AS successor
+                 ON successor.run_id = run.run_id AND successor.attempt_role = 'successor'
+              WHERE run.run_id = $1::text::uuid",
+            &[&run_id],
+        )
+        .await
+        .unwrap();
+    [0, 1, 2, 3, 4, 5].map(|index| row.get(index))
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_successor_prose_change_opens_one_proposal_and_a_late_result_opens_none() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let route = SuccessorProseChange {
+        successor_block: None,
+    };
+
+    assert_eq!(
+        successor_proposal_facts(&route, "1d1").await,
+        [
+            Some("completed".to_owned()),
+            Some("prose_change".to_owned()),
+            Some("present".to_owned()),
+            Some("true".to_owned()),
+            Some("true".to_owned()),
+            Some("decision,retrieval,successor,late_retrieval".to_owned()),
+        ]
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn a_successor_prose_change_of_an_undeclared_target_opens_no_proposal() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let route = SuccessorProseChange {
+        successor_block: Some("018f0000-0000-7000-8000-0000000001d2"),
+    };
+
+    assert_eq!(
+        successor_proposal_facts(&route, "1d2").await,
+        [
+            Some("completed".to_owned()),
+            None,
+            None,
+            None,
+            Some("true".to_owned()),
+            Some("decision,retrieval,successor,late_retrieval".to_owned()),
+        ]
+    );
+}

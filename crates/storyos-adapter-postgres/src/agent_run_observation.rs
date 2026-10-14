@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::agent_run_work::{
     RunPhaseRow, WorkPhase, complete_database_error, requeue_generation, update_run,
 };
+use crate::open_block_proposal::ProseOpening;
 
 /// The validated result of one Create exchange for the active decision Model Attempt.
 pub(crate) struct CreateResult<'a> {
@@ -38,8 +39,6 @@ pub(crate) async fn persist_create_result(
     result: CreateResult<'_>,
     retained_payload: &serde_json::Value,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
-    let author_message = run.author_message.as_str();
-    let chapter_id = run.chapter_id.as_str();
     let (decision_id, hold) = match &result.outcome {
         AgentDecisionOutcome::NoDecision => (None, None),
         AgentDecisionOutcome::Decision {
@@ -51,9 +50,8 @@ pub(crate) async fn persist_create_result(
             (*selected && *advances_continuation).then_some("decision"),
         ),
     };
-    let mut stream_hold = false;
-    let mut locations = None;
-    let opened_proposal = match (decision_id.as_deref(), &result.outcome) {
+    let (opened_proposal, locations, stream_hold) = match (decision_id.as_deref(), &result.outcome)
+    {
         (
             Some(decision_id),
             AgentDecisionOutcome::Decision {
@@ -66,53 +64,23 @@ pub(crate) async fn persist_create_result(
                 ..
             },
         ) => {
-            if let Some(record) = crate::candidate_revision_target::admitted(client, claim).await? {
-                let revised = crate::revise_candidate_generation::apply(
-                    client,
-                    claim,
-                    &record,
-                    produced.as_deref().unwrap_or_default(),
-                )
-                .await?;
-                locations = revised.locations;
-                revised.proposal_id
-            } else if produced.is_none() && author_message.starts_with("Revise this phrase:") {
-                crate::open_inline_proposal::open_selected_inline_change(
-                    client,
-                    claim,
-                    chapter_id,
-                    decision_id,
-                    text,
-                )
-                .await?
-            } else if produced.is_none() && stream_batch_plan(author_message).is_some() {
-                let (proposal_id, work) =
-                    crate::stream_proposal_generation::apply_streamed_proposal(
-                        client,
-                        claim,
-                        chapter_id,
-                        decision_id,
-                        author_message,
-                    )
-                    .await?;
-                stream_hold = matches!(work, crate::stream_proposal_generation::StreamWork::Hold);
-                proposal_id
-            } else {
-                let opened = crate::open_block_proposal::open_selected_prose_change(
-                    client,
-                    claim,
-                    chapter_id,
-                    decision_id,
-                    text,
-                    author_message,
-                    produced.as_deref(),
-                )
-                .await?;
-                locations = opened.locations;
-                opened.proposal_id
-            }
+            let opened = open_selected_proposal(
+                client,
+                claim,
+                run,
+                decision_id,
+                text,
+                produced.as_deref(),
+                ProposalStream::Permitted,
+            )
+            .await?;
+            (
+                opened.opening.proposal_id,
+                opened.opening.locations,
+                opened.stream_hold,
+            )
         }
-        _ => None,
+        _ => (None, None, false),
     };
     let mut payload = retained_payload.clone();
     payload["items"] = merge_items(&retained_payload["items"], result.items);
@@ -216,6 +184,89 @@ pub(crate) async fn persist_create_result(
     Ok(match hold {
         Some(kind) => WorkPhase::Hold(kind),
         None => WorkPhase::Done(CompleteAgentRun::Settled),
+    })
+}
+
+/// Whether a selected prose change may open a streamed Proposal that holds the Run.
+pub(crate) enum ProposalStream {
+    Permitted,
+    /// A successor settles its Run at once, so its Proposal opens whole.
+    Excluded,
+}
+
+/// The Proposal of one selected prose change, and whether its streamed generation holds the Run.
+pub(crate) struct OpenedProposal {
+    pub opening: ProseOpening,
+    pub stream_hold: bool,
+}
+
+/// Opens the Proposal of one selected prose change of the Run.
+pub(crate) async fn open_selected_proposal(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
+    decision_id: &str,
+    text: &str,
+    produced: Option<&[ProseChangeCandidate]>,
+    stream: ProposalStream,
+) -> Result<OpenedProposal, CompleteAgentRunError> {
+    let author_message = run.author_message.as_str();
+    let chapter_id = run.chapter_id.as_str();
+    let opening =
+        if let Some(record) = crate::candidate_revision_target::admitted(client, claim).await? {
+            crate::revise_candidate_generation::apply(
+                client,
+                claim,
+                &record,
+                produced.unwrap_or_default(),
+            )
+            .await?
+        } else if produced.is_none() && author_message.starts_with("Revise this phrase:") {
+            ProseOpening {
+                proposal_id: crate::open_inline_proposal::open_selected_inline_change(
+                    client,
+                    claim,
+                    chapter_id,
+                    decision_id,
+                    text,
+                )
+                .await?,
+                locations: None,
+            }
+        } else if produced.is_none()
+            && matches!(stream, ProposalStream::Permitted)
+            && stream_batch_plan(author_message).is_some()
+        {
+            let (proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
+                client,
+                claim,
+                chapter_id,
+                decision_id,
+                author_message,
+            )
+            .await?;
+            return Ok(OpenedProposal {
+                opening: ProseOpening {
+                    proposal_id,
+                    locations: None,
+                },
+                stream_hold: matches!(work, crate::stream_proposal_generation::StreamWork::Hold),
+            });
+        } else {
+            crate::open_block_proposal::open_selected_prose_change(
+                client,
+                claim,
+                chapter_id,
+                decision_id,
+                text,
+                author_message,
+                produced,
+            )
+            .await?
+        };
+    Ok(OpenedProposal {
+        opening,
+        stream_hold: false,
     })
 }
 

@@ -111,3 +111,7 @@ pub fn validate_agent_decision(
         advances_continuation,
     }
 }
+
+#[cfg(test)]
+#[path = "model_output_tests.rs"]
+mod tests;
