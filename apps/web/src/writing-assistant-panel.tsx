@@ -14,8 +14,8 @@ import {
 } from "./historical-acknowledgement.ts";
 import { AssistantComposer } from "./assistant-composer.tsx";
 import {
-  CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, NO_RESULT_SENTENCE,
-  PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, settledRun, stoppedWithoutResult,
+  CONVERSATION_TOO_LONG_SENTENCE, DESTINATION_REFUSED_SENTENCE, MALFORMED_REPLY_SENTENCE, NO_RESULT_SENTENCE,
+  PREVIOUS_REQUEST_UNRESOLVED_SENTENCE, malformedStructuredReply, settledRun, stoppedWithoutResult,
 } from "./assistant-run-outcome.ts";
 import { ProposalLocationLinks } from "./proposal-location-links.tsx";
 import type { ProposalDestination, ProposalFocus } from "./proposal-navigation.ts";
@@ -157,7 +157,7 @@ function resultText(run: GetAgentRunResponse): string | undefined {
   if (stoppedWithoutResult(run)) return NO_RESULT_SENTENCE;
   switch (run.decision.kind) {
     case "advisory":
-      return run.decision.text;
+      return malformedStructuredReply(run.decision.text) ? MALFORMED_REPLY_SENTENCE : run.decision.text;
     case "prose_change":
       return (run.decision.locations?.length ?? 0) > 0
         ? `这次修改涉及 ${new Set(run.decision.locations!.map(location => location.chapter_id)).size} 个章节、${run.decision.locations!.length} 处文字，具体建议在下方。`
