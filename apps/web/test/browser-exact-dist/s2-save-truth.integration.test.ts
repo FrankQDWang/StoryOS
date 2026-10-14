@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -163,10 +163,7 @@ it("shows pending, saving, and saved without calling local input saved, across C
     || chapterBId === null || chapterBId === undefined) {
     throw new Error("the Project or Chapter identity is missing");
   }
-  await beginTreeAction(root, `li[data-chapter-id="${chapterBId}"]`, "[data-make-current-chapter]");
-  root.querySelector<HTMLButtonElement>(
-    `[data-make-current-chapter="${chapterBId}"]`,
-  )?.click();
+  root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${chapterBId}"]`)?.click();
   await expect.poll(() => {
     const nextRoot = appRoot(frame);
     const nextEditor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);

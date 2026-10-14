@@ -100,7 +100,7 @@ function ProjectReadyView({
   const [candidateTarget, setCandidateTarget] = useState<ProposalFocus>();
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
-  const makeCurrentInFlightRef = useRef(false);
+  const structureInFlightRef = useRef(false);
   const takeOverInFlightRef = useRef(false);
   const currentChapterId = state.project.project.open.kind === "current_chapter"
     ? state.project.project.open.current_chapter_id
@@ -169,9 +169,8 @@ function ProjectReadyView({
     ? command(null).then((result) => ({ kind: "ran" as const, result }))
     : writing.runAfterQuiesce(condition, command);
 
-  const selectChapter = (chapterId: string) => {
-    if (makeCurrentInFlightRef.current) return;
-    if (chapterId === selectedChapterIdRef.current) return;
+  // Without a writer or in an archived Project, a selected Chapter opens read-only.
+  const browseChapter = (chapterId: string) => {
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
     void (async () => {
@@ -209,10 +208,15 @@ function ProjectReadyView({
     })();
   };
 
-  const makeCurrent = (chapterId: string) => {
-    if (chapterId === currentChapterId || state.editor.kind !== "editor-ready" || writing === undefined) return;
-    if (makeCurrentInFlightRef.current) return;
-    makeCurrentInFlightRef.current = true;
+  // The author edits the selected Chapter, so the selection sets the Current Chapter (ADR 0026).
+  const selectChapter = (chapterId: string) => {
+    if (structureInFlightRef.current) return;
+    if (chapterId === selectedChapterIdRef.current) return;
+    if (lifecycle === "archived" || state.editor.kind !== "editor-ready" || writing === undefined) {
+      browseChapter(chapterId);
+      return;
+    }
+    structureInFlightRef.current = true;
     const editorSessionId = state.editor.session.editor_session.editor_session_id;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
@@ -244,7 +248,7 @@ function ProjectReadyView({
           });
           if (switched.effect.kind !== "authoritative_applied"
             && switched.effect.kind !== "no_effect") {
-            setSwitchRecovery("无法设为当前章节。");
+            setSwitchRecovery(chapterSwitchRecoveryMessage("unavailable"));
             return;
           }
           onReopened(await openControlledProject({
@@ -255,17 +259,16 @@ function ProjectReadyView({
           }));
         });
         if (quiet.kind === "refused" && generation === switchGenerationRef.current) {
-          setSwitchRecovery(quiet.reason === "unsettled_input"
-            ? "无法设为当前章节。" : chapterSwitchRecoveryMessage(quiet.reason));
+          setSwitchRecovery(chapterSwitchRecoveryMessage(quiet.reason));
         }
       } catch (error: unknown) {
         setSwitchRecovery(
           historicalAcknowledgementUnavailable(error)
             ? HISTORICAL_ACKNOWLEDGEMENT_MESSAGE
-            : "无法设为当前章节。",
+            : chapterSwitchRecoveryMessage("unavailable"),
         );
       } finally {
-        makeCurrentInFlightRef.current = false;
+        structureInFlightRef.current = false;
       }
     })();
   };
@@ -274,8 +277,8 @@ function ProjectReadyView({
     effect: { kind: string };
   }>) => {
     if (tree === undefined) return;
-    if (makeCurrentInFlightRef.current) return;
-    makeCurrentInFlightRef.current = true;
+    if (structureInFlightRef.current) return;
+    structureInFlightRef.current = true;
     const generation = switchGenerationRef.current + 1;
     switchGenerationRef.current = generation;
     void (async () => {
@@ -314,7 +317,7 @@ function ProjectReadyView({
             : `无法删除${noun}。`,
         );
       } finally {
-        makeCurrentInFlightRef.current = false;
+        structureInFlightRef.current = false;
       }
     })();
   };
@@ -409,9 +412,6 @@ function ProjectReadyView({
               createEnabled={!archived}
               selectedChapterId={selectedChapter.chapter.chapter_id}
               onSelectChapter={selectChapter}
-              currentChapterId={currentChapterId}
-              makeCurrentEnabled={!archived && state.editor.kind === "editor-ready"}
-              onMakeCurrent={makeCurrent}
               onChapterCreated={refreshTree}
               onVolumeUpdated={refreshTree}
               onRemoveChapter={removeChapter}

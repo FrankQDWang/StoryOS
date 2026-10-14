@@ -250,8 +250,6 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       chapterId = (await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]').filter({ hasText: title })
         .getAttribute("data-chapter-id"))!;
       assert.ok(chapterId);
-      await page.locator(`li[data-chapter-id="${chapterId}"] [data-chapter-menu]`).click();
-      await page.locator(`[data-make-current-chapter="${chapterId}"]`).click();
       await editor.waitFor(); await editor.click(); await page.keyboard.insertText(SOURCE);
       await expect.poll(async () => (await getChapter({ ...options, chapterId: chapterId! })).chapter.current_revision.body)
         .toBe(SOURCE);

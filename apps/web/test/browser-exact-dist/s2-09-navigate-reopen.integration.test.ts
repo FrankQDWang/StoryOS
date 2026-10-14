@@ -111,7 +111,7 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
   expect(chapterBEditor === null || chapterBEditor === undefined
     ? undefined : manuscriptBody(chapterBEditor)).toBe("");
   expect(chapterBEditor === null || chapterBEditor === undefined
-    ? undefined : manuscriptIsEditable(chapterBEditor)).toBe(false);
+    ? undefined : manuscriptIsEditable(chapterBEditor)).toBe(true);
   expect(root?.querySelector('[role="alert"]')).toBeNull();
 
   chapterButton(root, "Chapter C")?.click();

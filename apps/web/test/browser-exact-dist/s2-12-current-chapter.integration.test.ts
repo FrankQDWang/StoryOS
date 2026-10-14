@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -60,7 +60,7 @@ function chapterButton(root: Element, title: string): HTMLButtonElement | undefi
   )].find((button) => button.textContent === title);
 }
 
-async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<void> {
+async function typeIntoCurrent(frame: HTMLIFrameElement, text: string, body = text): Promise<void> {
   const root = appRoot(frame);
   const editor = manuscriptEditor(root, applicationWindow(frame));
   const previousRevision = root.querySelector("[data-save-state]")
@@ -81,14 +81,14 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<
       revisionChanged: save?.getAttribute("data-authoritative-revision-id") !== previousRevision,
     };
   }, { timeout: 10_000 }).toEqual({
-    body: text,
+    body,
     saveState: "saved",
     unsettledIntentCount: "0",
     revisionChanged: true,
   });
 }
 
-it("writes in two Chapters, switches current Chapter, and reopens the current Chapter", async () => {
+it("writes in each selected Chapter and reopens the last selected Chapter", async () => {
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist current Chapter";
@@ -157,32 +157,24 @@ it("writes in two Chapters, switches current Chapter, and reopens the current Ch
     || chapterBId === null || chapterBId === undefined) {
     throw new Error("the Project or Chapter identity is missing");
   }
-  await beginTreeAction(root, `li[data-chapter-id="${chapterBId}"]`, "[data-make-current-chapter]");
-  const makeCurrent = root.querySelector<HTMLButtonElement>(
-    `[data-make-current-chapter="${chapterBId}"]`,
-  );
-  makeCurrent?.click();
-  await expect.poll(() => {
-    const nextRoot = appRoot(frame);
-    const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
-    return nextRoot.querySelector("h2")?.textContent === "Chapter B"
-      && editor !== null
-      && editor !== undefined
-      && manuscriptIsEditable(editor);
-  }, { timeout: 15_000 }).toBe(true);
-  const switchedRoot = appRoot(frame);
-  const switchedEditor = manuscriptEditor(switchedRoot, applicationWindow(frame));
-  expect(manuscriptBody(switchedEditor)).toBe("");
-  expect(switchedRoot.querySelector(`[data-make-current-chapter="${chapterBId}"]`)).toBeNull();
+  const selectEditable = async (name: string) => {
+    chapterButton(appRoot(frame), name)?.click();
+    await expect.poll(() => {
+      const nextRoot = appRoot(frame);
+      const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+      return nextRoot.querySelector("h2")?.textContent === name
+        && editor !== null
+        && editor !== undefined
+        && manuscriptIsEditable(editor);
+    }, { timeout: 15_000 }).toBe(true);
+  };
+  await selectEditable("Chapter B");
+  expect(manuscriptBody(manuscriptEditor(appRoot(frame), applicationWindow(frame)))).toBe("");
   await typeIntoCurrent(frame, "Beta prose");
 
-  chapterButton(switchedRoot, "Chapter A")?.click();
-  await expect.poll(() => switchedRoot.querySelector("h2")?.textContent).toBe("Chapter A");
-  const inspectEditor = switchedRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
-  expect(inspectEditor === null || inspectEditor === undefined
-    ? undefined : manuscriptBody(inspectEditor)).toBe("Alpha prose");
-  expect(inspectEditor === null || inspectEditor === undefined
-    ? undefined : manuscriptIsEditable(inspectEditor)).toBe(false);
+  await selectEditable("Chapter A");
+  expect(manuscriptBody(manuscriptEditor(appRoot(frame), applicationWindow(frame)))).toBe("Alpha prose");
+  await typeIntoCurrent(frame, ", again", "Alpha prose, again");
 
   const childWindow = applicationWindow(frame);
   const authoritativeA = await getChapter({
@@ -197,7 +189,7 @@ it("writes in two Chapters, switches current Chapter, and reopens the current Ch
     chapterId: chapterBId,
     fetchImpl: childWindow.fetch.bind(childWindow),
   });
-  expect(authoritativeA.chapter.current_revision.body).toBe("Alpha prose");
+  expect(authoritativeA.chapter.current_revision.body).toBe("Alpha prose, again");
   expect(authoritativeB.chapter.current_revision.body).toBe("Beta prose");
 
   const reopened = nextFrameLoad(frame);
@@ -206,15 +198,9 @@ it("writes in two Chapters, switches current Chapter, and reopens the current Ch
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("project-ready");
-  await beginTreeAction(appRoot(frame), `li[data-chapter-id="${chapterAId}"]`, "[data-make-current-chapter]");
-  await expect.poll(() =>
-    appRoot(frame).querySelector(`[data-make-current-chapter="${chapterAId}"]`) !== null,
-    { timeout: 10_000 },
-  ).toBe(true);
   const reopenedRoot = appRoot(frame);
-  expect(reopenedRoot.querySelector("h2")?.textContent).toBe("Chapter B");
+  expect(reopenedRoot.querySelector("h2")?.textContent).toBe("Chapter A");
   const reopenedEditor = manuscriptEditor(reopenedRoot, applicationWindow(frame));
-  expect(manuscriptBody(reopenedEditor)).toBe("Beta prose");
+  await expect.poll(() => manuscriptBody(reopenedEditor)).toBe("Alpha prose, again");
   expect(manuscriptIsEditable(reopenedEditor)).toBe(true);
-  expect(reopenedRoot.querySelector(`[data-make-current-chapter="${chapterBId}"]`)).toBeNull();
 });

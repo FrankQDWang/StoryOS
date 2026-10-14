@@ -126,8 +126,7 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string, expected:
 }
 
 async function makeCurrent(frame: HTMLIFrameElement, chapterId: string, heading: string): Promise<void> {
-  await beginTreeAction(appRoot(frame), `li[data-chapter-id="${chapterId}"]`, "[data-make-current-chapter]");
-  appRoot(frame).querySelector<HTMLButtonElement>(`[data-make-current-chapter="${chapterId}"]`)?.click();
+  appRoot(frame).querySelector<HTMLButtonElement>(`button[data-chapter-id="${chapterId}"]`)?.click();
   await expect.poll(() => appRoot(frame).querySelector("h2")?.textContent).toBe(heading);
   await waitWritable(frame);
 }
