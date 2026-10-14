@@ -39,3 +39,13 @@ On 2026-10-14, [Show a Result Sentence When the Real Destination Refuses a Reque
 - A live request above the window got HTTP 400 with the native code `InvalidParameter` and a message that starts with `Total tokens of image and text exceed max message tokens` ([evidence record](../research/agent-plan-over-long-input-rejection-2026-10-14.md)). Other parameter errors have the same code, so the Agent Plan adapter reads the start of the message. It reports the rejection as `input_too_long:http_400:InvalidParameter` and keeps no message text.
 - The Host refuses an AgentRun whose Create gets the `input_too_long` condition with `conversation_too_long`. It refuses an AgentRun whose Create gets another rejection with `destination_refused`. The author sees one sentence for each ([ADR 0040](0040-show-assistance-results-not-run-internals-to-the-author.md)). A rejection of a prior response reference keeps its recovery.
 - The same live run found that the route served `doubao-seed-2-1-pro-260915`. The Ark model list gives this version a 1024k window. The documented 262,144-token window above is the window of the earlier version. This section does not change the window fact or the threshold.
+
+## Window of the dated version
+
+On 2026-10-14, [Pin the Served Doubao Model Version and Record Its Context Window](https://github.com/FrankQDWang/StoryOS/issues/1143) added this section. [ADR 0059](0059-pin-a-dated-provider-model-version-in-each-model-registration.md) pins the dated identifier `doubao-seed-2-1-pro-260915`.
+
+- The profile of the dated version records the documented window of 1024K, 1,048,576 tokens, from the Ark model list (updated 2026-10-09). The window keeps documented evidence.
+- With `agent_plan_request_v2`, the threshold of the head Registration `fa15` is (1,048,576 - 32,768) x 80 percent = 812,646 tokens. The rule did not change, so no code changed.
+- An AgentRun that pinned `fa13` or an earlier Registration with a window keeps the window of 262,144 tokens and the threshold of 183,500 tokens.
+- A live probe of approximately 827,800 provider tokens, above the new threshold, was accepted on the dated version ([evidence record](../research/agent-plan-pinned-version-qualification-2026-10-14.md)). No automatic compaction at the new threshold was examined.
+- The statements above with 262,144 tokens and 183,500 tokens apply to the undated identifier `doubao-seed-2.1-pro`.

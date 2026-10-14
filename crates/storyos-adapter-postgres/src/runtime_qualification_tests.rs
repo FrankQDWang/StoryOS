@@ -289,7 +289,7 @@ async fn a_qualified_registration_rebinds_the_project_and_dispatches_each_reques
 
     let route = RequestRoute {
         adapter: ModelAdapter::VolcengineAgentPlanResponses,
-        provider_model_id: "doubao-seed-2.1-pro".to_owned(),
+        provider_model_id: AGENT_PLAN_REGISTRATION.provider_model_id.to_owned(),
         mapping_revision: AGENT_PLAN_REGISTRATION.mapping_revision.to_owned(),
         endpoint: Some(AGENT_PLAN_ENDPOINT.to_owned()),
         credential_reference: Some(storyos_application::CredentialReference(
