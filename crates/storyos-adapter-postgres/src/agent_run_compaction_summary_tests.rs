@@ -183,11 +183,11 @@ fn with_usage(
 }
 
 /// A first response whose reported usage puts the next turn above the threshold. The threshold
-/// is (262,144 - 32,768) x 80 percent = 183,500 tokens.
+/// is (1,048,576 - 32,768) x 80 percent = 812,646 tokens.
 fn near_threshold() -> Vec<serde_json::Value> {
     with_usage(
         streamed("resp_decision", ADVICE),
-        /*input*/ 183_400,
+        /*input*/ 812_500,
         /*output*/ 200,
     )
 }
@@ -542,7 +542,7 @@ async fn a_chain_below_the_threshold_continues_with_no_compaction() {
         .lock()
         .await;
     let (store, admin) = stores().await;
-    // The first response reports 52 tokens, far below the threshold of 183,500 tokens.
+    // The first response reports 52 tokens, far below the threshold of 812,646 tokens.
     let run_id = compact_on_agent_plan(
         &store,
         &admin,
@@ -574,8 +574,8 @@ async fn a_chain_at_the_window_without_an_installed_summary_refuses_as_too_long(
         .lock()
         .await;
     let (store, admin) = stores().await;
-    // The first response reports 229,400 tokens. The window after the output bound is 229,376
-    // tokens. The summary stream drops, so no summary installs.
+    // The first response reports 1,015,900 tokens. The window after the output bound is
+    // 1,015,808 tokens. The summary stream drops, so no summary installs.
     let mut dropped = streamed("resp_dropped", "The author keeps the rain.");
     dropped.truncate(/*len*/ 3);
     let run_id = compact_on_agent_plan(
@@ -585,7 +585,7 @@ async fn a_chain_at_the_window_without_an_installed_summary_refuses_as_too_long(
         vec![
             with_usage(
                 streamed("resp_decision", ADVICE),
-                /*input*/ 229_300,
+                /*input*/ 1_015_800,
                 /*output*/ 100,
             ),
             dropped,
