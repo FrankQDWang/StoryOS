@@ -147,7 +147,15 @@ Ran on `main` `4c29bb6e`, with the instruction of R6 ("请把这一章的两段�
 - Editor: the panel showed "这次修改涉及 1 个章节、2 处文字", and the main editor showed both inline locations with "接受" and "拒绝". The author accepted location 1 (`acceptProposal` → `authoritative_applied`, Acceptance Receipt `authoritative_applied`) and rejected location 2 (`rejectProposalOperations` → `proposal_operations_resolved`, Rejection Receipt `author_declined`, resolution `pending` → `rejected`, Author Action 30). 渡口 has 293 scalars and shows "已保存".
 - Step 5 unknown-create recovery and step 6 queries: pass on `4c29bb6e`. Confirmed reference expiry (R13, R14) is still pending.
 
-After #1151 merges, the takeover part of step 7 runs again with no live request. Step 5 (create interrupt, Retrieve, successor, automatic `late_retrieval`) runs again on the `main` that contains #1148. Planned 3–4 requests, with a cap of 4 more.
+### Step 7, takeover rerun
+
+Ran on `main` `6d511d93` (branch merge `cee1ce88`, release package rebuilt), with no live request. A `storyos-server` without `STORYOS_MODEL_DESTINATION` ran on a new origin (port 8745). The origin had no IndexedDB database, no session storage, and no local storage.
+
+- The new Editor Session showed "接管写作". The takeover applied (`takeOverProjectWriter`, `writer_takeover_applied`, writer generation 4).
+- Each Activity query after the takeover returned 200, and the editor showed "已保存" with no "活动流无法同步".
+- Manual writing saved (`applyAuthorEdit` → `authoritative_applied`), and Undo restored the text (`undoLatestAuthorAction` → `authoritative_applied`).
+- The panel showed "写作助手当前不可用。你仍可以直接写作。".
+- Step 7: pass on `6d511d93`. Step 5 (create interrupt, Retrieve, successor, automatic `late_retrieval`) runs again on the `main` that contains #1148. Planned 3–4 requests, with a cap of 4 more.
 
 ## Observations of #396
 
@@ -161,8 +169,9 @@ After #1151 merges, the takeover part of step 7 runs again with no live request.
 | #1145 | Malformed reply UX | None |
 | #1146 | Outline selection is read-only | None |
 | #1147 | A stale candidate target of a rejected Proposal makes the next send fail with "无法提交请求，请稍后再试。". Work-around: click ordinary prose to clear the focus, then send. | None with the work-around |
-| #1148 | The successor result has no decision | Steps 5 and 6 BLOCK until the rerun |
-| #1151 | Writer takeover leaves the base snapshot id out of `project_snapshots`, so the editor becomes read-only | The takeover part of step 7 BLOCK until the rerun |
+| #1148 | The successor result has no decision | Fixed by PR #1150; the second step 5 rerun on `4c29bb6e` passes |
+| #1161 | A reply that changes only some declared targets gives no Proposal | One live request after #1161 merges |
+| #1151 | Writer takeover leaves the base snapshot id out of `project_snapshots`, so the editor becomes read-only | Fixed by PR #1154 (ADR 0060); the takeover rerun on `6d511d93` passes |
 
 ## Superseded contract text
 
