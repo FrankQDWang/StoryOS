@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 use crate::repository_root;
+use crate::stage_crosswalk::{DeferredHandoff, HandoffEvidence, Hnd003};
 
 use super::{GENERATED_STAGE3_CROSSWALK_PATH, generate_stage3_crosswalk};
 
@@ -75,14 +76,14 @@ fn binding_evidence_paths_exist_in_the_worktree() {
 fn missing_rel_007_is_rejected() {
     let mut bindings = super::BINDINGS.to_vec();
     bindings[0].id = "NOT-REL-007";
-    let handoff = super::HandoffEvidence {
-        hnd_003: super::Hnd003 {
+    let handoff = HandoffEvidence {
+        hnd_003: Hnd003 {
             id: "HND-003",
             evaluated_stage: "Stage 3",
             mandatory_map: "SMAP-STAGE-3",
             disposition: "implementation-evidence-completeness; no EV-SR; no PASS-STAGE",
         },
-        hnd_004: super::DeferredHandoff {
+        hnd_004: DeferredHandoff {
             id: "HND-004",
             status: "not-emitted",
         },
@@ -90,7 +91,9 @@ fn missing_rel_007_is_rejected() {
         forbidden_emissions: &["EV-SR", "PASS-STAGE", "PASS-CLOUD"],
     };
     assert_eq!(
-        super::verify_stage3_record(&bindings, &handoff).unwrap_err(),
+        super::CROSSWALK
+            .verify_record(&bindings, &handoff)
+            .unwrap_err(),
         "Stage 3 binding REL-007 is missing or reordered"
     );
 }

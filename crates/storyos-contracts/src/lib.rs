@@ -96,6 +96,7 @@ mod stage1_provenance;
 mod stage1_selection;
 mod stage2_crosswalk;
 mod stage3_crosswalk;
+mod stage_crosswalk;
 mod web_assets;
 
 pub use release1_project_activity::ProjectActivityKind;
