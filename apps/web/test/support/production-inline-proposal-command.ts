@@ -250,6 +250,8 @@ export async function verifyProductionInlineProposal(context: BrowserContext, or
       chapterId = (await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id]').filter({ hasText: title })
         .getAttribute("data-chapter-id"))!;
       assert.ok(chapterId);
+      // The earlier Chapter stays editable until the switch opens the new Chapter.
+      await expect(page.locator(".editor-panel h2")).toHaveText(title, { timeout: 15_000 });
       await editor.waitFor(); await editor.click(); await page.keyboard.insertText(SOURCE);
       await expect.poll(async () => (await getChapter({ ...options, chapterId: chapterId! })).chapter.current_revision.body)
         .toBe(SOURCE);
