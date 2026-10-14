@@ -44,7 +44,7 @@ An immutable, bounded, sanitized Operational Record created when StoryOS refuses
 _Avoid_: Author Command Admission, rejected request copy, foreign-object audit oracle
 
 **Editor Session**:
-One browser editing session for an exact User and Project Scope, identified by `EditorSessionId` and governed by the current Project writer generation. It owns local continuity and projection state while StoryOS Core and PostgreSQL retain authority.
+One browser editing session for an exact User and Project Scope, identified by `EditorSessionId` and governed by the current Project writer generation. It owns local continuity and projection state while StoryOS Core and PostgreSQL retain authority. Its base snapshot is a persisted Canonical Query Snapshot with the same identity ([ADR 0060](../adr/0060-use-one-snapshot-identity-for-the-editor-session-base-and-its-canonical-query-snapshot.md)).
 _Avoid_: Browser tab as authority, Project identity, server transaction
 
 **Local Edit Journal**:
