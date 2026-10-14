@@ -28,3 +28,10 @@ export async function beginTreeAction(root: ParentNode | null | undefined, rowSe
   row?.querySelector<HTMLButtonElement>("[data-project-menu], [data-create-chapter-menu], [data-chapter-menu]")?.click();
   await expect.poll(() => row?.querySelector<HTMLButtonElement>(action)?.disabled).toBe(false);
 }
+
+/** Selects a Chapter in the outline. A chapter switch loads the outline again, so the click waits for the Chapter. */
+export async function selectTreeChapter(root: ParentNode | null | undefined, chapterId: string) {
+  const selector = `nav[aria-label="稿件目录"] button[data-chapter-id="${chapterId}"]`;
+  await expect.poll(() => root?.querySelector(selector)?.tagName).toBe("BUTTON");
+  root?.querySelector<HTMLButtonElement>(selector)?.click();
+}

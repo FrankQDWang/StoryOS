@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -104,35 +104,31 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
 
   const root = frame.contentDocument?.querySelector("#app");
   expect(root?.querySelector("h2")?.textContent).toBe("Chapter A");
-  chapterButton(root, "Chapter B")?.click();
-  await expect.poll(() => root?.querySelector("h2")?.textContent, { timeout: 10_000 })
-    .toBe("Chapter B");
-  const chapterBEditor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
-  expect(chapterBEditor === null || chapterBEditor === undefined
-    ? undefined : manuscriptBody(chapterBEditor)).toBe("");
-  expect(chapterBEditor === null || chapterBEditor === undefined
-    ? undefined : manuscriptIsEditable(chapterBEditor)).toBe(false);
-  expect(root?.querySelector('[role="alert"]')).toBeNull();
-
-  chapterButton(root, "Chapter C")?.click();
-  await expect.poll(() => root?.querySelector("h2")?.textContent).toBe("Chapter C");
-  const chapterCEditor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
-  expect(chapterCEditor === null || chapterCEditor === undefined
-    ? undefined : manuscriptBody(chapterCEditor)).toBe("");
-
-  chapterButton(root, "Chapter A")?.click();
-  await expect.poll(() => root?.querySelector("h2")?.textContent).toBe("Chapter A");
-  const chapterAEditor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
-  expect(chapterAEditor === null || chapterAEditor === undefined
-    ? undefined : manuscriptBody(chapterAEditor)).toBe("");
+  const chapterIds = new Map(["Chapter A", "Chapter B", "Chapter C"].map((title) =>
+    [title, chapterButton(root, title)?.getAttribute("data-chapter-id") ?? ""]));
+  const select = async (title: string) => {
+    await selectTreeChapter(root, chapterIds.get(title) ?? "");
+    await expect.poll(() => {
+      const editor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+      return {
+        title: root?.querySelector("h2")?.textContent,
+        body: editor === null || editor === undefined ? undefined : manuscriptBody(editor),
+        editable: editor !== null && editor !== undefined && manuscriptIsEditable(editor),
+      };
+    }, { timeout: 15_000 }).toEqual({ title, body: "", editable: true });
+    expect(root?.querySelector('[role="alert"]')).toBeNull();
+  };
+  await select("Chapter B");
+  await select("Chapter C");
+  await select("Chapter A");
 
   const projectId = root?.querySelector("[data-project-id]")?.getAttribute("data-project-id");
-  const chapterBId = chapterButton(root, "Chapter B")?.getAttribute("data-chapter-id");
+  const chapterBId = chapterIds.get("Chapter B");
   const childWindow = frame.contentWindow;
   if (root === null || root === undefined
     || childWindow === null
     || projectId === null || projectId === undefined
-    || chapterBId === null || chapterBId === undefined) {
+    || chapterBId === undefined) {
     throw new Error("the Project or Chapter identity is missing");
   }
   childWindow.localStorage.setItem("current_chapter", chapterBId);

@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -163,10 +163,7 @@ it("shows pending, saving, and saved without calling local input saved, across C
     || chapterBId === null || chapterBId === undefined) {
     throw new Error("the Project or Chapter identity is missing");
   }
-  await beginTreeAction(root, `li[data-chapter-id="${chapterBId}"]`, "[data-make-current-chapter]");
-  root.querySelector<HTMLButtonElement>(
-    `[data-make-current-chapter="${chapterBId}"]`,
-  )?.click();
+  await selectTreeChapter(root, chapterBId);
   await expect.poll(() => {
     const nextRoot = appRoot(frame);
     const nextEditor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
@@ -186,13 +183,15 @@ it("shows pending, saving, and saved without calling local input saved, across C
   await expect.poll(() => manuscriptBody(switchedEditor), { timeout: 10_000 }).toBe("Beta prose");
   await waitSaved(switchedRoot);
 
-  chapterButton(switchedRoot, "Chapter A")?.click();
-  await expect.poll(() => switchedRoot.querySelector("h2")?.textContent).toBe("Chapter A");
-  const inspectEditor = switchedRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
-  expect(inspectEditor === null || inspectEditor === undefined
-    ? undefined : manuscriptBody(inspectEditor)).toBe("Alpha prose");
-  expect(inspectEditor === null || inspectEditor === undefined
-    ? undefined : manuscriptIsEditable(inspectEditor)).toBe(false);
+  await selectTreeChapter(switchedRoot, chapterAId);
+  await expect.poll(() => {
+    const editor = switchedRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+    return {
+      title: switchedRoot.querySelector("h2")?.textContent,
+      body: editor === null ? undefined : manuscriptBody(editor),
+      editable: editor !== null && manuscriptIsEditable(editor),
+    };
+  }, { timeout: 15_000 }).toEqual({ title: "Chapter A", body: "Alpha prose", editable: true });
   expect(saveNode(switchedRoot)?.getAttribute("data-save-state")).toBe("saved");
   expect(saveNode(switchedRoot)?.textContent).toContain("已保存");
 
@@ -212,8 +211,8 @@ it("shows pending, saving, and saved without calling local input saved, across C
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("project-ready");
   const reopenedRoot = appRoot(frame);
-  expect(reopenedRoot.querySelector("h2")?.textContent).toBe("Chapter B");
+  expect(reopenedRoot.querySelector("h2")?.textContent).toBe("Chapter A");
   expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame))))
-    .toBe("Beta prose");
+    .toBe("Alpha prose");
   await waitSaved(reopenedRoot);
 });
