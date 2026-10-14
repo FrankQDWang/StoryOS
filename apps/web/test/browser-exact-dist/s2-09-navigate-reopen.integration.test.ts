@@ -123,12 +123,12 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
   await select("Chapter A");
 
   const projectId = root?.querySelector("[data-project-id]")?.getAttribute("data-project-id");
-  const chapterBId = chapterButton(root, "Chapter B")?.getAttribute("data-chapter-id");
+  const chapterBId = chapterIds.get("Chapter B");
   const childWindow = frame.contentWindow;
   if (root === null || root === undefined
     || childWindow === null
     || projectId === null || projectId === undefined
-    || chapterBId === null || chapterBId === undefined) {
+    || chapterBId === undefined) {
     throw new Error("the Project or Chapter identity is missing");
   }
   childWindow.localStorage.setItem("current_chapter", chapterBId);
