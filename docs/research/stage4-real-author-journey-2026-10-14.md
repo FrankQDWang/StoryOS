@@ -26,6 +26,7 @@ The standing authorization on #362 covers each request. The planned cap started 
 | 11 → 12 | R9 was an automatic `late_retrieval` after the successor. It is product design (S4-04c), not an anomaly. From then on, each plan counts automatic requests. |
 | 12 → 13 | R11 was an automatic Retrieve by the finalizing worker after the cancellation. |
 | 13 → 14 | The confirmed-expiry step needs a Conversation whose latest Attempt settled normally. Conversations 1 and 2 end in an unknown or a cancelled Attempt (see "Confirmed reference expiry"). |
+| 14 → 18 | The step 5 rerun on the `main` that contains #1148: interrupted Create, Retrieve, successor, and the automatic `late_retrieval`. |
 
 | # | Time (UTC) | Run | Kind | Result | Usage in / out |
 | --- | --- | --- | --- | --- | --- |
@@ -36,7 +37,7 @@ The standing authorization on #362 covers each request. The planned cap started 
 | R5 | 06:11 | same | Retrieve by a new worker | The stored original result settled the decision (Advisory) with fence 2. No successor. | 1851 / 294 |
 | R6 | 06:11:53 | `01a13909-dfbe-72c2-adc4-9807fa7239b6` | Create | Worker killed before the stream ended. Attempt `uncertain`. | unknown |
 | R7 | 06:12 | same | Retrieve | Rejected: the response was not stored (404). | — |
-| R8 | 06:12 | same | Successor Create | Valid `prose_change` text, but the Run completed with the decision absent (gap #1148). | 2214 / 1161 |
+| R8 | 06:12 | same | Successor Create | Valid `prose_change` with one change for each of the two declared targets, but the Run completed with the decision absent (gap #1148). | 2214 / 1161 |
 | R9 | 06:13 | same | Automatic `late_retrieval` | Rejected. The predecessor stays unknown, fenced, allowance consumed. | — |
 | — | 06:15 | `01a1390d-846e-79a1-a5c9-8d625db2b7ab` | Refused before dispatch | `execution_refused` / `expiry_rebuild_unknown_create`. No manifest, no request. | — |
 | R10 | 06:26:48 | `01a13917-810c-7fc2-8f6c-6583a1bb5aea` | Create, stream, new Conversation 2 | `cancelAgentRun` through the public Host during the stream: `cancelled`, fence 2. The worker saw `stale_fence`. Attempt `uncertain`. No successor. | unknown |
@@ -44,6 +45,10 @@ The standing authorization on #362 covers each request. The planned cap started 
 | R12 | 06:31:18 | `01a1391b-9459-7af1-a170-755a5e4ca0dc` | Create, new Conversation 3 | Advisory. Response `resp_02179195947923884888bb83e57e5fbf0ee20dce84dcf97ac5b20`. | 457 / 83 |
 | R13 | pending (after 14:06Z) | | Create, continuation with an expired reference | | |
 | R14 | pending | | Automatic rebuild Create in the same Run | | |
+| S1 | 09:26:46 | `01a139bc-494a-7953-82f5-fa8dfed5105a` | Create, stream, new Conversation 4, on `4c29bb6e` | Worker killed when the reference committed. Attempt `uncertain`. | unknown |
+| S2 | 09:27:16 | same | Retrieve | Rejected: the response was not stored. | — |
+| S3 | 09:27 | same | Successor Create | Valid JSON `prose_change` with one change for two declared targets. Core validation gave no decision, so no Proposal opened (see "Rerun after #1148 and #1151"). | 462 / 1160 |
+| S4 | 09:28 | same | Automatic `late_retrieval` | Rejected. Run `completed`, fence 2, allowance consumed. | — |
 
 ## Journey steps
 
@@ -120,7 +125,15 @@ Ran on `f03cebc0`. A second `storyos-server` (port 8744, same disposable databas
 
 ## Rerun after #1148 and #1151
 
-Pending. After #1151 merges, the takeover part of step 7 runs again with no live request. Step 5 (create interrupt, Retrieve, successor, automatic `late_retrieval`) runs again on the `main` that contains #1148. Planned 3–4 requests, with a cap of 4 more.
+### Step 5, first rerun (S1–S4)
+
+Ran on `main` `4c29bb6e` (branch merge `5689ae5c`, release package rebuilt). The new Editor Session took over the writer role; "设为当前章节" on 渡口 then avoided #1151.
+
+- The recovery path ran as planned: the predecessor was fenced, Retrieve was rejected, one successor ran (`same_request` = true, `allowance_consumed` = true), and the automatic `late_retrieval` was rejected.
+- The successor reply was valid JSON, but it had one change (the second paragraph) for the two declared targets of 渡口. `prose_changes_match_targets` requires one change for each declared target, so core validation gave no decision and no Proposal. The panel showed "没有收到这次的结果，正文没有改动。请开始新对话重试。". A normal Create applies the same validation.
+- The instruction asked to expand only the second paragraph. R8 had one change for each target, so #1148 did block R8. This rerun did not yet show a successor Proposal on the live route.
+
+After #1151 merges, the takeover part of step 7 runs again with no live request. Step 5 (create interrupt, Retrieve, successor, automatic `late_retrieval`) runs again on the `main` that contains #1148. Planned 3–4 requests, with a cap of 4 more.
 
 ## Observations of #396
 
