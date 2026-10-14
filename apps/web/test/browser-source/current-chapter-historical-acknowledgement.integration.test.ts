@@ -1,4 +1,3 @@
-import { beginTreeAction } from "../support/inline-chapter-creation.ts";
 import { expect, it } from "vitest";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -127,12 +126,11 @@ it("explains a historical Set Current Chapter acknowledgement and does not retry
     if (loaded.state.kind === "project-ready" && loaded.state.editor.kind === "editor-ready") {
       trackDatabase(loaded.state.editor.database, openDatabases);
     }
-    await beginTreeAction(loaded.root, `li[data-chapter-id="${CHAPTER_B}"]`, "[data-make-current-chapter]");
     await expect.poll(() =>
-      loaded.root.querySelector<HTMLButtonElement>(`[data-make-current-chapter="${CHAPTER_B}"]`)
+      loaded.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)
         !== null
     ).toBe(true);
-    loaded.root.querySelector<HTMLButtonElement>(`[data-make-current-chapter="${CHAPTER_B}"]`)
+    loaded.root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)
       ?.click();
     await expect.poll(() =>
       loaded.root.querySelector('[role="alert"]')?.textContent

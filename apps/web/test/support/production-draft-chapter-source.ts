@@ -27,8 +27,7 @@ export async function verifyProductionDraftChapterSource(page: Page, projectId: 
   const creation = await created.json() as CreateChapterResponse;
   page.off("response", observe);
   assert.ok(creation.effect.kind === "authoritative_applied");
-  await page.locator(`li[data-chapter-id="${creation.effect.chapter_id}"] [data-chapter-menu]`).click();
-  await page.locator(`[data-make-current-chapter="${creation.effect.chapter_id}"]`).click();
+  await page.locator(`button[data-chapter-id="${creation.effect.chapter_id}"]`).click();
   await expect(page.getByRole("heading", { name: "Other Chapter", exact: true })).toBeVisible();
   await expect(source).toContainText(`Source chapter: ${chapter.chapter.title}`);
   await expect(source).toContainText("This edit belongs to another chapter, not the chapter shown here.");
@@ -86,8 +85,7 @@ export async function verifyProductionDraftChapterSource(page: Page, projectId: 
     const [renamed] = await Promise.all([page.waitForResponse((reply) => reply.request().method() === "PATCH"
       && new URL(reply.url()).pathname === sourcePath), rename.press("Enter")]);
     assert.equal(renamed.status(), 200);
-    await page.locator(`li[data-chapter-id="${chapter.chapter.chapter_id}"] [data-chapter-menu]`).click();
-    await page.locator(`[data-make-current-chapter="${chapter.chapter.chapter_id}"]`).click();
+    await page.locator(`button[data-chapter-id="${chapter.chapter.chapter_id}"]`).click();
     await expect(source).toContainText("Source chapter: Renamed source chapter.");
     release(); await completed; await page.unroute(match);
     await expect(source).toContainText("Source chapter: Renamed source chapter.");
