@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, beginTreeAction, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -126,7 +126,7 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string, expected:
 }
 
 async function makeCurrent(frame: HTMLIFrameElement, chapterId: string, heading: string): Promise<void> {
-  appRoot(frame).querySelector<HTMLButtonElement>(`button[data-chapter-id="${chapterId}"]`)?.click();
+  await selectTreeChapter(appRoot(frame), chapterId);
   await expect.poll(() => appRoot(frame).querySelector("h2")?.textContent).toBe(heading);
   await waitWritable(frame);
 }

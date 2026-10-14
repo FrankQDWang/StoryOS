@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -158,7 +158,7 @@ it("writes in each selected Chapter, undoes a chapter switch, and reopens the Cu
     throw new Error("the Project or Chapter identity is missing");
   }
   const selectEditable = async (name: string) => {
-    chapterButton(appRoot(frame), name)?.click();
+    await selectTreeChapter(appRoot(frame), name === "Chapter A" ? chapterAId : chapterBId);
     await expect.poll(() => {
       const nextRoot = appRoot(frame);
       const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);

@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -211,7 +211,7 @@ it("rebuilds Chapter and manuscript statistics after edit, switch, and deletion"
   expect(afterA.getAttribute("data-statistics-counting-profile"))
     .toBe("storyos.statistics.unicode-16.0.0.v1");
 
-  root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${chapterBId}"]`)?.click();
+  await selectTreeChapter(root, chapterBId);
   await expect.poll(() => {
     const nextRoot = appRoot(frame);
     const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);

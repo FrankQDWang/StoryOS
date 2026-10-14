@@ -1,4 +1,4 @@
-import { beginInlineChapterCreation, beginInlineVolumeCreation } from "../support/inline-chapter-creation.ts";
+import { beginInlineChapterCreation, beginInlineVolumeCreation, selectTreeChapter } from "../support/inline-chapter-creation.ts";
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
@@ -197,7 +197,7 @@ it("searches the current Chapter and manuscript with bounded Snapshot identity",
     || chapterBId === null || chapterBId === undefined) {
     throw new Error("the Chapter identity is missing");
   }
-  root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${chapterBId}"]`)?.click();
+  await selectTreeChapter(root, chapterBId);
   await expect.poll(() => {
     const nextRoot = appRoot(frame);
     const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
