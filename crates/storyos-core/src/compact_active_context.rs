@@ -190,9 +190,8 @@ impl CompactionTrigger {
 /// Whether the decision request compacts first. The expected input can reach the threshold, or
 /// the author message can ask the Host fake to compact.
 pub fn compaction_requested(facts: &CompactionRequestFacts<'_>) -> bool {
-    (crate::model_registration(facts.model_registration_revision)
-        .is_some_and(|registration| registration.adapter == crate::ModelAdapter::HostFake)
-        && requests_active_compaction(facts.author_message))
+    // Measurement build of #1143 only: the prefix also compacts on the real route.
+    requests_active_compaction(facts.author_message)
         || compaction_due(&CompactionTrigger::from_facts(facts))
 }
 
