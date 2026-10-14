@@ -1,18 +1,23 @@
 //! The bounded unknown-create successor as a Create request through the Model Gateway.
 
 use storyos_application::{
-    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateRequest, DispatchClaim,
-    Observation, RequestAttempt, RetrievePurpose, RetrieveRequest, WirePayloadProjection,
+    ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError, CreateRequest, DeclaredTarget,
+    DispatchClaim, Observation, RequestAttempt, RetrievePurpose, RetrieveRequest,
+    WirePayloadProjection,
 };
-use storyos_core::{AgentDecisionOutcome, SuccessorPauseReason, validate_agent_decision};
+use storyos_core::{
+    AgentDecisionKind, AgentDecisionOutcome, SuccessorPauseReason, validate_agent_decision,
+};
 use uuid::Uuid;
 
 use crate::agent_run_create_dispatch::PriorContext;
+use crate::agent_run_observation::ProposalStream;
 use crate::agent_run_successor::{
     DecisionRow, SuccessorWork, flag, load_decision, seal, text, unavailable,
     write_decision_payload,
 };
 use crate::agent_run_work::{RunPhaseRow, WorkPhase, update_run};
+use crate::open_block_proposal::ProseOpening;
 
 /// The one successor Create of the fenced predecessor. It repeats the same request, or
 /// re-observes the successor Attempt that a lost claim committed.
@@ -184,11 +189,14 @@ pub(crate) async fn commit(
     }))
 }
 
-/// Records the successor observation. Core validation decides its Agent Decision.
+/// Records the successor observation. Core validation decides its Agent Decision with the
+/// declared targets of the repeated request, and a selected prose change opens its Proposal.
 pub(crate) async fn record(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
+    run: &RunPhaseRow,
     dispatch: &DispatchClaim,
+    request: &CreateRequest,
     observation: Observation,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let mut row = load_decision(client, claim).await?;
@@ -220,7 +228,12 @@ pub(crate) async fn record(
             if let Some(reference) = &response.response_reference {
                 payload["response_reference"] = serde_json::json!(reference);
             }
-            match validate_agent_decision(response.output.as_ref(), &[]) {
+            let declared: Vec<_> = request
+                .declared_targets
+                .iter()
+                .map(DeclaredTarget::location)
+                .collect();
+            match validate_agent_decision(response.output.as_ref(), &declared) {
                 AgentDecisionOutcome::Decision {
                     kind,
                     selected: true,
@@ -228,12 +241,40 @@ pub(crate) async fn record(
                 } => {
                     let decision_id = Uuid::now_v7().to_string();
                     let binding_id = advances_continuation.then(|| Uuid::now_v7().to_string());
+                    let opening = match &kind {
+                        AgentDecisionKind::ProseChange { text, locations } => {
+                            crate::agent_run_observation::open_selected_proposal(
+                                client,
+                                claim,
+                                run,
+                                &decision_id,
+                                text,
+                                locations.as_deref(),
+                                ProposalStream::Excluded,
+                            )
+                            .await?
+                            .opening
+                        }
+                        AgentDecisionKind::Advisory { .. }
+                        | AgentDecisionKind::Clarification { .. } => ProseOpening {
+                            proposal_id: None,
+                            locations: None,
+                        },
+                    };
                     payload["decision"] = crate::agent_run_observation::encode_decision(
                         &kind,
                         &decision_id,
                         /*selected*/ true,
                         advances_continuation,
-                        /*opened_proposal*/ None,
+                        opening.proposal_id.as_deref(),
+                    );
+                    crate::prose_change_decision::encode(
+                        &mut payload,
+                        response
+                            .output
+                            .as_ref()
+                            .and_then(|output| output.prose_changes.as_deref()),
+                        opening.locations.as_deref(),
                     );
                     if let (Some(binding_id), Some(wire)) = (
                         &binding_id,
