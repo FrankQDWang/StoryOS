@@ -167,7 +167,7 @@ impl StageCrosswalk {
         Ok(bytes)
     }
 
-    /// Write the deterministic crosswalk to its checked-in path.
+    /// Write the deterministic crosswalk to its tracked path.
     pub(crate) fn write(&self, repo_root: &Path) -> Result<(), CrosswalkError> {
         let path = repo_root.join(self.generated_path);
         let parent = path.parent().ok_or_else(|| {
@@ -181,7 +181,7 @@ impl StageCrosswalk {
             .map_err(|source| CrosswalkError::Io { path, source })
     }
 
-    /// Check that the checked-in crosswalk equals a fresh deterministic generation.
+    /// Examine whether the tracked crosswalk is equal to a fresh deterministic generation.
     pub(crate) fn check(&self, repo_root: &Path) -> Result<(), CrosswalkError> {
         let path = repo_root.join(self.generated_path);
         let actual = fs::read(&path).map_err(|source| CrosswalkError::Io {

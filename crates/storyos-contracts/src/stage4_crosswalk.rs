@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::stage_crosswalk::{Binding, EvidenceClass, StageCrosswalk};
 use crate::stage1_crosswalk::CrosswalkError;
 
-/// Checked-in deterministic output owned by this module.
+/// Tracked deterministic output that this module owns.
 pub const GENERATED_STAGE4_CROSSWALK_PATH: &str =
     "generated/evidence/stage4-contract-crosswalk.json";
 
@@ -148,12 +148,12 @@ pub fn generate_stage4_crosswalk(repo_root: &Path) -> Result<Vec<u8>, CrosswalkE
     CROSSWALK.generate(repo_root)
 }
 
-/// Write the deterministic Stage 4 contract crosswalk to its checked-in path.
+/// Write the deterministic Stage 4 contract crosswalk to its tracked path.
 pub fn write_stage4_crosswalk(repo_root: &Path) -> Result<(), CrosswalkError> {
     CROSSWALK.write(repo_root)
 }
 
-/// Check that the checked-in Stage 4 crosswalk equals a fresh deterministic generation.
+/// Examine whether the tracked Stage 4 crosswalk is equal to a fresh deterministic generation.
 pub fn check_stage4_crosswalk(repo_root: &Path) -> Result<(), CrosswalkError> {
     CROSSWALK.check(repo_root)
 }
