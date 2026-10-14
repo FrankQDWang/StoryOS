@@ -36,6 +36,9 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       ), takeover_export AS (
         SELECT owner_user_id, project_id FROM storyos.projects
         WHERE owner_user_id = '${USER_A}'::uuid AND title = 'Takeover export reload'
+      ), takeover_activity AS (
+        SELECT owner_user_id, project_id FROM storyos.projects
+        WHERE owner_user_id = '${USER_A}'::uuid AND title = 'Takeover activity resume'
       )
       SELECT json_build_object(
         'prose_request', json_build_object(
@@ -101,6 +104,14 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             WHERE command_kind = 'takeOverProjectWriter'),
           'writer_generations', (SELECT json_agg(writer_generation::text ORDER BY writer_generation)
             FROM storyos.project_writer_generations JOIN takeover_export USING (owner_user_id, project_id))
+        ),
+        'takeover_activity', json_build_object(
+          'project_count', (SELECT count(*) FROM takeover_activity),
+          'takeover_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
+            JOIN takeover_activity USING (owner_user_id, project_id)
+            WHERE command_kind = 'takeOverProjectWriter'),
+          'writer_generations', (SELECT json_agg(writer_generation::text ORDER BY writer_generation)
+            FROM storyos.project_writer_generations JOIN takeover_activity USING (owner_user_id, project_id))
         ),
         'production_host', json_build_object(
           'project_count', (SELECT count(*) FROM production),
@@ -172,6 +183,8 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             AND project_id NOT IN (SELECT project_id FROM composer)
             AND NOT (project_id IN (SELECT project_id FROM takeover_export)
               AND command_kind = 'takeOverProjectWriter')
+            AND NOT (project_id IN (SELECT project_id FROM takeover_activity)
+              AND command_kind = 'takeOverProjectWriter')
             AND NOT (project_id IN (SELECT project_id FROM multi_location)
               AND command_kind IN ('updateProjectAssistance', 'createAgentRun',
                 'acceptProposal', 'rejectProposalOperations', 'replanProposal'))
@@ -239,6 +252,11 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           acceptProposal: 3, rejectProposalOperations: 2, replanProposal: 1 },
       },
       takeover_export: {
+        project_count: 1,
+        takeover_receipt_count: 1,
+        writer_generations: ["1", "2"],
+      },
+      takeover_activity: {
         project_count: 1,
         takeover_receipt_count: 1,
         writer_generations: ["1", "2"],
