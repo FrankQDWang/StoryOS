@@ -93,7 +93,7 @@ Ran on `f03cebc0`.
 
 ### Step 5: interrupt, unknown outcome, recovery, cancellation, expiry
 
-Ran on `f03cebc0`. Verdict: **BLOCK** until #1148 merges, then rerun (see "Rerun after #1148 and #1151").
+Ran on `f03cebc0`. Verdict on `f03cebc0`: **BLOCK** (#1148). The second rerun on `4c29bb6e` passes (see "Rerun after #1148 and #1151").
 
 - Unknown outcome with retrieval (R4, R5): the Attempt stayed `uncertain` until a new worker retrieved the stored response. The original result settled the decision with fence 2, and no successor started.
 - Unknown outcome without a stored response (R6–R9): Retrieve was rejected, the predecessor was fenced first, and one bounded successor ran (`allowance_consumed` = true, `same_request` = true, `context_changed` = false). The successor returned valid `prose_change` text, but the Run completed with no decision and no Proposal. The panel showed the approved sentence "没有收到这次的结果，正文没有改动。请开始新对话重试。". This is gap #1148: `agent_run_successor_dispatch.rs` validates the successor output against no declared targets, so `opened_proposal` is always absent.
@@ -116,7 +116,7 @@ Ran on `f03cebc0`. The queries above cover Runs, Attempts, manifests, Proposals,
 
 - Recovery row `01a1390d-99e3-79d0-ad82-d3aa6b22d692`: disposition `unknown_create`, predecessor Run R6, successor Run `01a1390d-…`.
 - Project export `01a1391e-edc9-7ac0-8104-4f034b16fc7f` (status `ready`, immutable root `sha256:f96f461515d3627b2759ade1cac6c361536381916bb8e6e6ace252d239a98d54`, 76 files, 398,940 bytes) includes `model_attempts` (12 rows), `context_assembly_manifests` (12), `project_destination_grants` (1), `project_external_use_binding_revisions` (1), `processing_destination_identities` (1), and `context_reference_recoveries` (1). The only credential text is the reference `settings:STORYOS_AGENT_PLAN_API_KEY`. No `Authorization`, `Bearer`, or key field occurs.
-- Step 6 is BLOCK together with step 5 until #1148 merges, because the successor Run has no decision to query.
+- On `f03cebc0`, step 6 was BLOCK together with step 5 (#1148), because the successor Run had no decision to query. The second step 5 rerun on `4c29bb6e` gives the successor decision, Proposal, and Receipts to query.
 
 ### Step 7: external model disabled
 
@@ -124,7 +124,7 @@ Ran on `f03cebc0`. A second `storyos-server` (port 8744, same disposable databas
 
 - The panel showed "写作助手当前不可用。你仍可以直接写作。".
 - Manual writing saved (`applyAuthorEdit` → `authoritative_applied`), and Undo applied (`undoLatestAuthorAction` → `authoritative_applied`). My Return key split a paragraph in the wrong place. A second Undo returned `conflicted` / `wrong_target_head` because of that operation sequence, not because of a defect. I joined the paragraph again in the editor, and 雨夜 has its original 138 scalars.
-- Writer takeover: **BLOCK** (#1151). After a writer takeover, the editor became read-only with "活动流无法同步". `takeover.rs` gives the Editor Session base snapshot one new id and persists a different new id in `project_snapshots`, so the Activity query returns 404. Work-around: "设为当前章节" on any Chapter. After #1151 merges, the takeover part of this step runs again on the new `main`. It needs no live request.
+- Writer takeover: **BLOCK** (#1151). After a writer takeover, the editor became read-only with "活动流无法同步". `takeover.rs` gives the Editor Session base snapshot one new id and persists a different new id in `project_snapshots`, so the Activity query returns 404. Work-around: "设为当前章节" on any Chapter. The takeover rerun on `6d511d93` passes (see "Step 7, takeover rerun").
 - The panel sentence, manual save, and Undo results pass.
 - Deterministic support: exact-dist `s2-jrn-001`, `s2-workspace`, `s2-physical-drill`, and browser-source `assistant-stopped-request`.
 
@@ -155,7 +155,7 @@ Ran on `main` `6d511d93` (branch merge `cee1ce88`, release package rebuilt), wit
 - Each Activity query after the takeover returned 200, and the editor showed "已保存" with no "活动流无法同步".
 - Manual writing saved (`applyAuthorEdit` → `authoritative_applied`), and Undo restored the text (`undoLatestAuthorAction` → `authoritative_applied`).
 - The panel showed "写作助手当前不可用。你仍可以直接写作。".
-- Step 7: pass on `6d511d93`. Step 5 (create interrupt, Retrieve, successor, automatic `late_retrieval`) runs again on the `main` that contains #1148. Planned 3–4 requests, with a cap of 4 more.
+- Step 7: pass on `6d511d93`.
 
 ## Observations of #396
 
